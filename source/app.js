@@ -149,69 +149,21 @@ export default function App() {
 		<Box flexDirection="column">
 			<Box flexDirection="column" marginBottom={1}>
 				{messages.map((msg, index) => (
-					<Box key={msg.id} marginBottom={index < messages.length - 1 ? 1 : 0}>
+					<Box key={msg.id} marginBottom={msg.sender === 'approval' ? 1 : 0}>
 						{msg.sender === 'approval' ? (
-							<Box
-								flexDirection="column"
-								borderStyle="round"
-								borderColor="yellow"
-								paddingX={1}
-							>
-								<Box marginBottom={1}>
-									<Text bold color="yellow">
-										🔒 Permission Required
-									</Text>
-								</Box>
-								<Box marginBottom={1}>
-									<Text dimColor>Agent: </Text>
-									<Text color="cyan">{msg.interruption.agent.name}</Text>
-								</Box>
-								<Box marginBottom={1}>
-									<Text dimColor>Tool: </Text>
-									<Text color="magenta">{msg.interruption.name}</Text>
-								</Box>
-								<Box flexDirection="column" marginBottom={1}>
-									<Text dimColor>Arguments:</Text>
-									<Box paddingLeft={2}>
-										<Text color="white">
-											{JSON.stringify(msg.interruption.arguments, null, 2)}
-										</Text>
-									</Box>
-								</Box>
-								<Box>
-									<Text color="green">Approve? </Text>
-									<Text dimColor>
-										(y/Y to approve, any other key to reject)
-									</Text>
-								</Box>
+							<Box flexDirection="column">
+								<Text color="yellow">🔒 {msg.interruption.agent.name} wants to run: <Text bold>{msg.interruption.name}</Text></Text>
+								<Text dimColor>$ {JSON.stringify(msg.interruption.arguments)} <Text color="yellow">(y/n)</Text></Text>
 							</Box>
 						) : msg.sender === 'command' ? (
-							<Box
-								flexDirection="column"
-								borderStyle="round"
-								borderColor={msg.success === false ? 'red' : 'cyan'}
-								paddingX={1}
-							>
-								<Box marginBottom={1}>
-									<Text bold color={msg.success === false ? 'red' : 'cyan'}>
-										🛠️ Command Executed
-									</Text>
-								</Box>
-								<Box marginBottom={1}>
-									<Text dimColor>$ </Text>
-									<Text color="white">{msg.command}</Text>
-								</Box>
-								<Box flexDirection="column">
-									<Text dimColor>Output:</Text>
-									<Text color="white">
-										{msg.output?.trim() ? msg.output : '(no output returned)'}
-									</Text>
-								</Box>
+							<Box flexDirection="column" marginBottom={0.5}>
+								<Text color={msg.success === false ? 'red' : 'cyan'}>$ <Text bold>{msg.command}</Text></Text>
+								<Text color={msg.success === false ? 'red' : 'white'}>{msg.output?.trim() ? msg.output : '(no output)'}</Text>
 							</Box>
 						) : (
-							<Box>
+							<Box marginBottom={0.5}>
 								<Text color={msg.sender === 'user' ? 'blue' : 'green'}>
-									{msg.sender === 'user' ? 'You: ' : 'Bot: '}
+									{msg.sender === 'user' ? '❯ ' : '◄ '}
 								</Text>
 								<Text>{msg.text}</Text>
 							</Box>
@@ -222,13 +174,16 @@ export default function App() {
 
 			{!isProcessing && (
 				<Box>
-					<Text color="blue">You: </Text>
+					<Text color="blue">❯ </Text>
 					<TextInput
 						value={input}
 						onChange={setInput}
 						onSubmit={handleSubmit}
 					/>
 				</Box>
+			)}
+			{isProcessing && (
+				<Text color="gray" dimColor>⟳ processing...</Text>
 			)}
 		</Box>
 	);

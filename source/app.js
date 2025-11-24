@@ -1,12 +1,50 @@
 import React, {useState, useEffect} from 'react';
-import {Box, Text, Newline} from 'ink';
+import {Box, Text} from 'ink';
 import TextInput from 'ink-text-input';
-import { run, RunState } from '@openai/agents';
-import { agent, client } from './agent.js';
+import {run} from '@openai/agents';
+import {agent, client} from './agent.js';
+
+const extractCommandMessages = (items = []) => {
+	return items
+		.filter(
+			item => item.type === 'function_call_result' && item.name === 'bash',
+		)
+		.map((item, index) => {
+			let parsedOutput;
+			if (item.output?.text) {
+				try {
+					parsedOutput = JSON.parse(item.output.text);
+				} catch (error) {
+					parsedOutput = null;
+				}
+			}
+
+			const command =
+				parsedOutput?.command ||
+				parsedOutput?.arguments ||
+				item.arguments ||
+				'Unknown command';
+			const output =
+				parsedOutput?.output ?? item.output?.text ?? 'No output available';
+			const success = parsedOutput?.success;
+
+			return {
+				id: `${Date.now()}-${index}`,
+				sender: 'command',
+				command,
+				output,
+				success,
+			};
+		});
+};
 
 export default function App() {
 	const [messages, setMessages] = useState([
-		{id: 1, sender: 'bot', text: 'Hello! I am your terminal assistant. How can I help you?'},
+		{
+			id: 1,
+			sender: 'bot',
+			text: 'Hello! I am your terminal assistant. How can I help you?',
+		},
 	]);
 	const [input, setInput] = useState('');
 	const [waitingForApproval, setWaitingForApproval] = useState(false);
@@ -19,13 +57,13 @@ export default function App() {
 	useEffect(() => {
 		// Create a server-managed conversation on component mount
 		const initConversation = async () => {
-			const { id } = await client.conversations.create({});
+			const {id} = await client.conversations.create({});
 			setConversationId(id);
 		};
 		initConversation();
 	}, []);
 
-	const processRunResult = async (result) => {
+	const processRunResult = async result => {
 		if (result.interruptions && result.interruptions.length > 0) {
 			setWaitingForApproval(true);
 			setCurrentRunResult(result);
@@ -40,13 +78,54 @@ export default function App() {
 			};
 			setMessages(prev => [...prev, approvalMsg]);
 		} else {
-			// Run completed
+			// console.log('History:', result.history);
+			// Console output
+			/* History: [
+				{type: 'message', role: 'user', content: 'what time is it'},
+				{
+					type: 'function_call',
+					id: 'fc_0c710a68325bca690069248ac83b3c8195be31d5e68ea7226b',
+					callId: 'call_NkM0KTIWeClpKvtJGAj5uvGY',
+					name: 'bash',
+					status: 'completed',
+					arguments: '{"command":"date","needsApproval":false}',
+					providerData: {
+						id: 'fc_0c710a68325bca690069248ac83b3c8195be31d5e68ea7226b',
+						type: 'function_call',
+					},
+				},
+				{
+					type: 'function_call_result',
+					name: 'bash',
+					callId: 'call_NkM0KTIWeClpKvtJGAj5uvGY',
+					status: 'completed',
+					output: {
+						type: 'text',
+						text: '{"command":"date","output":"Mon Nov 24 23:41:46 +07 2025\\n","success":true}',
+					},
+				},
+				{
+					id: 'msg_0c710a68325bca690069248acb6e3c8195aa9f6cf457f90be7',
+					type: 'message',
+					role: 'assistant',
+					content: [[Object]],
+					status: 'completed',
+					providerData: {},
+				},
+			]; */
+			const commandMessages = extractCommandMessages(
+				result.newItems || result.history || [],
+			);
 			const botMessage = {
 				id: Date.now(),
 				sender: 'bot',
 				text: result.finalOutput || 'Done.',
 			};
-			setMessages(prev => [...prev, botMessage]);
+			setMessages(prev => {
+				const withCommands =
+					commandMessages.length > 0 ? [...prev, ...commandMessages] : prev;
+				return [...withCommands, botMessage];
+			});
 			setWaitingForApproval(false);
 			setCurrentRunResult(null);
 			setInterruptionToApprove(null);
@@ -70,6 +149,7 @@ export default function App() {
 				// Approved
 				currentRunResult.state.approve(interruptionToApprove);
 				const nextResult = await run(agent, currentRunResult.state);
+				console.log('After approved:', nextResult.newItems);
 				await processRunResult(nextResult);
 			} else {
 				// Rejected
@@ -83,7 +163,7 @@ export default function App() {
 				if (!conversationId) {
 					throw new Error('Conversation not initialized yet');
 				}
-				const result = await run(agent, value, { conversationId });
+				const result = await run(agent, value, {conversationId});
 				await processRunResult(result);
 			} catch (error) {
 				const errorMessage = {
@@ -103,9 +183,16 @@ export default function App() {
 				{messages.map((msg, index) => (
 					<Box key={msg.id} marginBottom={index < messages.length - 1 ? 1 : 0}>
 						{msg.sender === 'approval' ? (
-							<Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
+							<Box
+								flexDirection="column"
+								borderStyle="round"
+								borderColor="yellow"
+								paddingX={1}
+							>
 								<Box marginBottom={1}>
-									<Text bold color="yellow">🔒 Permission Required</Text>
+									<Text bold color="yellow">
+										🔒 Permission Required
+									</Text>
 								</Box>
 								<Box marginBottom={1}>
 									<Text dimColor>Agent: </Text>
@@ -118,12 +205,39 @@ export default function App() {
 								<Box flexDirection="column" marginBottom={1}>
 									<Text dimColor>Arguments:</Text>
 									<Box paddingLeft={2}>
-										<Text color="white">{JSON.stringify(msg.interruption.arguments, null, 2)}</Text>
+										<Text color="white">
+											{JSON.stringify(msg.interruption.arguments, null, 2)}
+										</Text>
 									</Box>
 								</Box>
 								<Box>
 									<Text color="green">Approve? </Text>
-									<Text dimColor>(y/Y to approve, any other key to reject)</Text>
+									<Text dimColor>
+										(y/Y to approve, any other key to reject)
+									</Text>
+								</Box>
+							</Box>
+						) : msg.sender === 'command' ? (
+							<Box
+								flexDirection="column"
+								borderStyle="round"
+								borderColor={msg.success === false ? 'red' : 'cyan'}
+								paddingX={1}
+							>
+								<Box marginBottom={1}>
+									<Text bold color={msg.success === false ? 'red' : 'cyan'}>
+										🛠️ Command Executed
+									</Text>
+								</Box>
+								<Box marginBottom={1}>
+									<Text dimColor>$ </Text>
+									<Text color="white">{msg.command}</Text>
+								</Box>
+								<Box flexDirection="column">
+									<Text dimColor>Output:</Text>
+									<Text color="white">
+										{msg.output?.trim() ? msg.output : '(no output returned)'}
+									</Text>
 								</Box>
 							</Box>
 						) : (

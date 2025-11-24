@@ -10,29 +10,34 @@ const execPromise = util.promisify(exec);
 export const client = new OpenAI();
 
 const bashTool = tool({
-  name: 'bash',
-  description: 'Execute a bash command',
-  parameters: z.object({
-    command: z.string(),
-  }),
-  // Use AI safety checker to determine if approval is needed
-  needsApproval: async ({ command }) => {
-    const safetyResult = await isSafeCommand(command);
-    // Store the safety result for use in the UI
-    bashTool.lastSafetyCheck = safetyResult;
-    return !safetyResult.safe;
-  },
-  execute: async ({ command }) => {
-    try {
-      const { stdout, stderr } = await execPromise(command);
-      if (stderr) {
-        return `Error: ${stderr}`;
-      }
-      return stdout;
-    } catch (error) {
-      return `Error executing command: ${error.message}`;
-    }
-  },
+	name: 'bash',
+	description:
+		'Execute a bash command. Use this to run terminal commands to help the user. If the command could have side effects, ask for approval first.',
+	parameters: z.object({
+		command: z.string(),
+		needsApproval: z.boolean(),
+	}),
+	needsApproval: async ({command, needsApproval}) => {
+		return needsApproval;
+	},
+	execute: async ({command}) => {
+		try {
+			const {stdout, stderr} = await execPromise(command);
+			const output = stderr ? `Error: ${stderr}` : stdout;
+			// Return structured output that includes the command for transparency
+			return JSON.stringify({
+				command,
+				output,
+				success: !stderr
+			});
+		} catch (error) {
+			return JSON.stringify({
+				command,
+				output: `Error executing command: ${error.message}`,
+				success: false
+			});
+		}
+	},
 });
 
 export const agent = new Agent({

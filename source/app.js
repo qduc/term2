@@ -3,40 +3,7 @@ import {Box, Text} from 'ink';
 import TextInput from 'ink-text-input';
 import {run} from '@openai/agents';
 import {agent, client} from './agent.js';
-
-const extractCommandMessages = (items = []) => {
-	return items
-		.filter(
-			item => item.type === 'function_call_result' && item.name === 'bash',
-		)
-		.map((item, index) => {
-			let parsedOutput;
-			if (item.output?.text) {
-				try {
-					parsedOutput = JSON.parse(item.output.text);
-				} catch (error) {
-					parsedOutput = null;
-				}
-			}
-
-			const command =
-				parsedOutput?.command ||
-				parsedOutput?.arguments ||
-				item.arguments ||
-				'Unknown command';
-			const output =
-				parsedOutput?.output ?? item.output?.text ?? 'No output available';
-			const success = parsedOutput?.success;
-
-			return {
-				id: `${Date.now()}-${index}`,
-				sender: 'command',
-				command,
-				output,
-				success,
-			};
-		});
-};
+import {extractCommandMessages} from './utils/extract-command-messages.js';
 
 export default function App() {
 	const [messages, setMessages] = useState([
@@ -116,6 +83,7 @@ export default function App() {
 			const commandMessages = extractCommandMessages(
 				result.newItems || result.history || [],
 			);
+			// console.log('Command Messages:', commandMessages);
 			const botMessage = {
 				id: Date.now(),
 				sender: 'bot',

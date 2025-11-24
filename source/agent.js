@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { exec } from 'child_process';
 import util from 'util';
 import { OpenAI } from 'openai';
+import { isSafeCommand } from './safety-checker.js';
 
 const execPromise = util.promisify(exec);
 
@@ -14,8 +15,13 @@ const bashTool = tool({
   parameters: z.object({
     command: z.string(),
   }),
-  // Require approval for all commands
-  needsApproval: async () => true,
+  // Use AI safety checker to determine if approval is needed
+  needsApproval: async ({ command }) => {
+    const safetyResult = await isSafeCommand(command);
+    // Store the safety result for use in the UI
+    bashTool.lastSafetyCheck = safetyResult;
+    return !safetyResult.safe;
+  },
   execute: async ({ command }) => {
     try {
       const { stdout, stderr } = await execPromise(command);

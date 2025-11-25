@@ -1,10 +1,31 @@
 import React, {useState} from 'react';
-import {Box, Text} from 'ink';
+import {Box, Text, useInput} from 'ink';
 import TextInput from 'ink-text-input';
 import MarkdownRenderer from './components/MarkdownRenderer.js';
 import {run} from '@openai/agents';
 import {agent} from './agent.js';
 import {extractCommandMessages} from './utils/extract-command-messages.js';
+
+const getCommandFromArgs = args => {
+	if (!args) {
+		return '';
+	}
+
+	if (typeof args === 'string') {
+		try {
+			const parsed = JSON.parse(args);
+			return parsed?.command ?? args;
+		} catch (error) {
+			return args;
+		}
+	}
+
+	if (typeof args === 'object') {
+		return args.command ?? args.arguments ?? JSON.stringify(args);
+	}
+
+	return String(args);
+};
 
 export default function App() {
 	const [messages, setMessages] = useState([
@@ -21,6 +42,34 @@ export default function App() {
 	const [previousResponseId, setPreviousResponseId] = useState(null);
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [liveResponse, setLiveResponse] = useState(null);
+
+	// Handle y/n key presses for approval prompts
+	useInput(async (inputKey, key) => {
+		if (!waitingForApproval || isProcessing) return;
+
+		const answer = inputKey.toLowerCase();
+		if (answer === 'y' || answer === 'n') {
+			// Update the approval message to show the answer inline
+			setMessages(prev =>
+				prev.map(msg =>
+					msg.sender === 'approval' &&
+					msg.interruption === interruptionToApprove
+						? {...msg, answer}
+						: msg,
+				),
+			);
+
+			setIsProcessing(true);
+			if (answer === 'y') {
+				currentRunResult.state.approve(interruptionToApprove);
+			} else {
+				currentRunResult.state.reject(interruptionToApprove);
+			}
+			const nextResult = await run(agent, currentRunResult.state);
+			await processRunResult(nextResult);
+			setIsProcessing(false);
+		}
+	});
 
 	const processRunResult = async (result, finalOutputOverride) => {
 		if (result.interruptions && result.interruptions.length > 0) {
@@ -56,55 +105,46 @@ export default function App() {
 
 	const handleSubmit = async value => {
 		if (!value.trim()) return;
+		// If waiting for approval, ignore text input (handled by useInput)
+		if (waitingForApproval) return;
+
 		const userMessage = {id: Date.now(), sender: 'user', text: value};
 		setMessages(prev => [...prev, userMessage]);
 		setInput('');
 		setIsProcessing(true);
 
-		if (waitingForApproval) {
-			if (value.toLowerCase() === 'y') {
-				currentRunResult.state.approve(interruptionToApprove);
-				const nextResult = await run(agent, currentRunResult.state);
-				await processRunResult(nextResult);
-			} else {
-				currentRunResult.state.reject(interruptionToApprove);
-				const nextResult = await run(agent, currentRunResult.state);
-				await processRunResult(nextResult);
+		try {
+			const stream = await run(agent, value, {
+				previousResponseId,
+				stream: true,
+			});
+
+			const liveMessageId = Date.now();
+			setLiveResponse({id: liveMessageId, sender: 'bot', text: ''});
+
+			const updateLiveText = text => {
+				setLiveResponse(prev =>
+					prev && prev.id === liveMessageId ? {...prev, text} : prev,
+				);
+			};
+
+			let finalOutput = '';
+			const textStream = stream.toTextStream();
+			for await (const chunk of textStream) {
+				finalOutput += chunk;
+				updateLiveText(finalOutput);
 			}
-		} else {
-			try {
-				const stream = await run(agent, value, {
-					previousResponseId,
-					stream: true,
-				});
 
-				const liveMessageId = Date.now();
-				setLiveResponse({id: liveMessageId, sender: 'bot', text: ''});
-
-				const updateLiveText = text => {
-					setLiveResponse(prev =>
-						prev && prev.id === liveMessageId ? {...prev, text} : prev,
-					);
-				};
-
-				let finalOutput = '';
-				const textStream = stream.toTextStream();
-				for await (const chunk of textStream) {
-					finalOutput += chunk;
-					updateLiveText(finalOutput);
-				}
-
-				await stream.completed;
-				setPreviousResponseId(stream.lastResponseId);
-				await processRunResult(stream, finalOutput || undefined);
-			} catch (error) {
-				setMessages(prev => [
-					...prev,
-					{id: Date.now(), sender: 'bot', text: `Error: ${error.message}`},
-				]);
-			} finally {
-				setLiveResponse(null);
-			}
+			await stream.completed;
+			setPreviousResponseId(stream.lastResponseId);
+			await processRunResult(stream, finalOutput || undefined);
+		} catch (error) {
+			setMessages(prev => [
+				...prev,
+				{id: Date.now(), sender: 'bot', text: `Error: ${error.message}`},
+			]);
+		} finally {
+			setLiveResponse(null);
 		}
 
 		setIsProcessing(false);
@@ -118,12 +158,20 @@ export default function App() {
 						{msg.sender === 'approval' ? (
 							<Box flexDirection="column">
 								<Text color="yellow">
-									🔒 {msg.interruption.agent.name} wants to run:{' '}
+									{msg.interruption.agent.name} wants to run:{' '}
 									<Text bold>{msg.interruption.name}</Text>
 								</Text>
 								<Text dimColor>
-									$ {JSON.stringify(msg.interruption.arguments)}{' '}
+									{getCommandFromArgs(msg.interruption.arguments)}
+								</Text>
+								<Text>
 									<Text color="yellow">(y/n)</Text>
+									{msg.answer && (
+										<Text color={msg.answer === 'y' ? 'green' : 'red'}>
+											{' '}
+											{msg.answer}
+										</Text>
+									)}
 								</Text>
 							</Box>
 						) : msg.sender === 'command' ? (
@@ -158,13 +206,10 @@ export default function App() {
 			{liveResponse && (
 				<Box marginBottom={1} flexDirection="column">
 					<MarkdownRenderer>{liveResponse.text || ' '}</MarkdownRenderer>
-					<Text color="gray" dimColor>
-						…streaming
-					</Text>
 				</Box>
 			)}
 
-			{!isProcessing && (
+			{!isProcessing && !waitingForApproval && (
 				<Box>
 					<Text color="blue">❯ </Text>
 					<TextInput

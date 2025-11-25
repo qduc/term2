@@ -27,10 +27,9 @@ const DANGEROUS_PATTERNS = [
 
 /**
  * Check if a command matches dangerous patterns
- * @param {string} command - The command to check
- * @returns {boolean} True if command is dangerous
+ * @returns True if command is dangerous
  */
-export function isDangerousCommand(command) {
+export function isDangerousCommand(command: string): boolean {
 	if (!command || typeof command !== 'string') {
 		return false;
 	}
@@ -41,11 +40,10 @@ export function isDangerousCommand(command) {
 
 /**
  * Validate command safety with multiple checkpoints
- * @param {string} command - The command to validate
- * @returns {boolean} True if command requires approval
- * @throws {Error} If command is invalid
+ * @returns True if command requires approval
+ * @throws If command is invalid
  */
-export function validateCommandSafety(command) {
+export function validateCommandSafety(command: string): boolean {
 	// Check 1: Command must be a non-empty string
 	if (!command || typeof command !== 'string' || command.trim().length === 0) {
 		throw new Error('Command cannot be empty');

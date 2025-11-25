@@ -1,11 +1,11 @@
-import React, {useState} from 'react';
+import React, {FC, useState} from 'react';
 import {Box, Text, useInput} from 'ink';
 import TextInput from 'ink-text-input';
 import MarkdownRenderer from './components/MarkdownRenderer.js';
 import {useConversation} from './hooks/use-conversation.js';
 
-export default function App() {
-	const [input, setInput] = useState('');
+const App: FC = () => {
+	const [input, setInput] = useState<string>('');
 	const {
 		messages,
 		liveResponse,
@@ -16,7 +16,7 @@ export default function App() {
 	} = useConversation();
 
 	// Handle y/n key presses for approval prompts
-	useInput(async inputKey => {
+	useInput(async (inputKey: string) => {
 		if (!waitingForApproval || isProcessing) return;
 
 		const answer = inputKey.toLowerCase();
@@ -25,7 +25,7 @@ export default function App() {
 		}
 	});
 
-	const handleSubmit = async value => {
+	const handleSubmit = async (value: string): Promise<void> => {
 		if (!value.trim()) return;
 		// If waiting for approval, ignore text input (handled by useInput)
 		if (waitingForApproval) return;
@@ -111,4 +111,6 @@ export default function App() {
 			)}
 		</Box>
 	);
-}
+};
+
+export default App;

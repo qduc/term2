@@ -1,11 +1,12 @@
 /**
  * Log command execution for security forensics
  * Only writes to stderr if DEBUG_BASH_TOOL is enabled to avoid polluting Ink UI
- * @param {string} command - The command being executed
- * @param {boolean} isDangerous - Whether the command is flagged as dangerous
- * @param {boolean} approved - Whether the command was approved
  */
-export function logCommandExecution(command, isDangerous, approved) {
+export function logCommandExecution(
+	command: string,
+	isDangerous: boolean,
+	approved: boolean,
+): void {
 	if (!process.env.DEBUG_BASH_TOOL) {
 		return;
 	}
@@ -23,9 +24,8 @@ export function logCommandExecution(command, isDangerous, approved) {
 
 /**
  * Log validation errors for debugging
- * @param {string} message - The error message
  */
-export function logValidationError(message) {
+export function logValidationError(message: string): void {
 	if (!process.env.DEBUG_BASH_TOOL) {
 		return;
 	}

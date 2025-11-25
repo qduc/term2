@@ -1,6 +1,14 @@
 const BASH_TOOL_NAME = 'bash';
 
-const coerceToText = value => {
+interface CommandMessage {
+	id: string;
+	sender: 'command';
+	command: string;
+	output: string;
+	success?: boolean;
+}
+
+const coerceToText = (value: unknown): string => {
 	if (value === null || value === undefined) {
 		return '';
 	}
@@ -14,11 +22,11 @@ const coerceToText = value => {
 	}
 
 	if (typeof value === 'object') {
-		if (typeof value.text === 'string') {
+		if ('text' in value && typeof value.text === 'string') {
 			return value.text;
 		}
 
-		if (typeof value.output === 'string') {
+		if ('output' in value && typeof value.output === 'string') {
 			return value.output;
 		}
 
@@ -32,7 +40,7 @@ const coerceToText = value => {
 	return String(value);
 };
 
-const getOutputText = item => {
+const getOutputText = (item: any): string => {
 	const rawItem = item?.rawItem ?? item;
 	const candidates = [
 		item?.output,
@@ -51,7 +59,7 @@ const getOutputText = item => {
 	return '';
 };
 
-const safeJsonParse = payload => {
+const safeJsonParse = (payload: unknown): any => {
 	if (typeof payload !== 'string') {
 		return null;
 	}
@@ -68,7 +76,9 @@ const safeJsonParse = payload => {
 	}
 };
 
-const normalizeToolItem = item => {
+const normalizeToolItem = (
+	item: any,
+): {toolName: string; arguments: any; outputText: string} | null => {
 	if (!item) {
 		return null;
 	}
@@ -95,31 +105,33 @@ const normalizeToolItem = item => {
 	};
 };
 
-export const extractCommandMessages = (items = []) => {
-	return (items ?? [])
-		.map((item, index) => {
-			const normalizedItem = normalizeToolItem(item);
-			if (!normalizedItem || normalizedItem.toolName !== BASH_TOOL_NAME) {
-				return null;
-			}
+export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
+	const messages: CommandMessage[] = [];
 
-			const parsedOutput = safeJsonParse(normalizedItem.outputText);
-			const command =
-				parsedOutput?.command ??
-				parsedOutput?.arguments ??
-				normalizedItem.arguments ??
-				'Unknown command';
-			const output =
-				parsedOutput?.output ?? normalizedItem.outputText ?? 'No output available';
-			const success = parsedOutput?.success;
+	for (const [index, item] of (items ?? []).entries()) {
+		const normalizedItem = normalizeToolItem(item);
+		if (!normalizedItem || normalizedItem.toolName !== BASH_TOOL_NAME) {
+			continue;
+		}
 
-			return {
-				id: `${Date.now()}-${index}`,
-				sender: 'command',
-				command,
-				output,
-				success,
-			};
-		})
-		.filter(Boolean);
+		const parsedOutput = safeJsonParse(normalizedItem.outputText);
+		const command =
+			parsedOutput?.command ??
+			parsedOutput?.arguments ??
+			normalizedItem.arguments ??
+			'Unknown command';
+		const output =
+			parsedOutput?.output ?? normalizedItem.outputText ?? 'No output available';
+		const success = parsedOutput?.success;
+
+		messages.push({
+			id: `${Date.now()}-${index}`,
+			sender: 'command',
+			command,
+			output,
+			success,
+		});
+	}
+
+	return messages;
 };

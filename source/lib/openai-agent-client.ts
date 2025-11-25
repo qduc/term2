@@ -6,14 +6,17 @@ import {agent} from '../agent.js';
  * Swap this module to change the underlying agent provider without touching the UI.
  */
 export class OpenAIAgentClient {
-	async startStream(userInput, {previousResponseId} = {}) {
+	async startStream(
+		userInput: string,
+		{previousResponseId}: {previousResponseId?: string | null} = {},
+	): Promise<any> {
 		return run(agent, userInput, {
-			previousResponseId,
+			previousResponseId: previousResponseId ?? undefined,
 			stream: true,
 		});
 	}
 
-	async continueRun(state) {
+	async continueRun(state: any): Promise<any> {
 		return run(agent, state);
 	}
 }

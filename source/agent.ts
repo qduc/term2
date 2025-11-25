@@ -25,7 +25,8 @@ const bashTool = tool({
 		try {
 			return params.needsApproval || validateCommandSafety(params.command);
 		} catch (error) {
-			logValidationError(`Validation failed: ${error.message}`);
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			logValidationError(`Validation failed: ${errorMessage}`);
 			return true; // fail-safe: require approval on validation errors
 		}
 	},
@@ -56,9 +57,10 @@ const bashTool = tool({
 			const output = stderr ? `Error: ${stderr}` : stdout;
 			return JSON.stringify({command, output, success: !stderr});
 		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
 			return JSON.stringify({
 				command,
-				output: `Error executing command: ${error.message}`,
+				output: `Error executing command: ${errorMessage}`,
 				success: false,
 			});
 		}

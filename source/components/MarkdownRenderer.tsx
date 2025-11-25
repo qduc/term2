@@ -1,11 +1,15 @@
-import React from 'react';
+import React, {ReactNode} from 'react';
 import {Box, Text} from 'ink';
 import {marked} from 'marked';
 
-export default function MarkdownRenderer({children}) {
-	const tokens = marked.lexer(children);
+interface MarkdownRendererProps {
+	children: ReactNode;
+}
 
-	const renderToken = (token, index) => {
+export default function MarkdownRenderer({children}: MarkdownRendererProps): React.ReactElement {
+	const tokens = marked.lexer(String(children)) as any[];
+
+	const renderToken = (token: any, index: number): React.ReactElement | null => {
 		switch (token.type) {
 			case 'heading':
 				return (
@@ -45,7 +49,7 @@ export default function MarkdownRenderer({children}) {
 						marginBottom={1}
 						marginLeft={2}
 					>
-						{token.items.map((item, idx) =>
+						{token.items.map((item: any, idx: number) =>
 							renderListItem(item, idx, token.ordered, idx),
 						)}
 					</Box>
@@ -58,7 +62,7 @@ export default function MarkdownRenderer({children}) {
 							{'│ '}
 						</Text>
 						<Box flexDirection="column">
-							{token.tokens.map((t, idx) => renderToken(t, idx))}
+							{token.tokens.map((t: any, idx: number) => renderToken(t, idx))}
 						</Box>
 					</Box>
 				);
@@ -78,9 +82,9 @@ export default function MarkdownRenderer({children}) {
 		}
 	};
 
-	const renderListItem = (item, index, ordered, idx) => {
+	const renderListItem = (item: any, index: number, ordered: boolean, idx: number): React.ReactElement => {
 		// Extract text content from the list item
-		const content = item.tokens.map((token, tIdx) => {
+		const content = item.tokens.map((token: any, tIdx: number) => {
 			if (token.type === 'text') {
 				return (
 					<Text key={tIdx}>
@@ -92,7 +96,7 @@ export default function MarkdownRenderer({children}) {
 				// Handle nested lists
 				return (
 					<Box key={tIdx} flexDirection="column" marginLeft={2}>
-						{token.items.map((nestedItem, nIdx) =>
+						{token.items.map((nestedItem: any, nIdx: number) =>
 							renderListItem(nestedItem, nIdx, token.ordered, nIdx),
 						)}
 					</Box>
@@ -109,10 +113,10 @@ export default function MarkdownRenderer({children}) {
 		);
 	};
 
-	const renderInlineTokens = tokens => {
+	const renderInlineTokens = (tokens: any[] | undefined): (React.ReactElement | null)[] | null => {
 		if (!tokens) return null;
 
-		return tokens.map((token, idx) => {
+		return tokens.map((token: any, idx: number): React.ReactElement | null => {
 			switch (token.type) {
 				case 'text':
 					return <Text key={idx}>{token.text}</Text>;
@@ -153,7 +157,7 @@ export default function MarkdownRenderer({children}) {
 
 	return (
 		<Box flexDirection="column">
-			{tokens.map((token, index) => renderToken(token, index))}
+			{tokens.map((token: any, index: number) => renderToken(token, index))}
 		</Box>
 	);
 }

@@ -1,7 +1,48 @@
 import {useCallback, useState} from 'react';
+import type {ConversationService} from '../services/conversation-service.js';
 import {defaultConversationService} from '../services/conversation-service.js';
 
-const INITIAL_BOT_MESSAGE = {
+interface UserMessage {
+	id: number;
+	sender: 'user';
+	text: string;
+}
+
+interface BotMessage {
+	id: number;
+	sender: 'bot';
+	text: string;
+}
+
+interface ApprovalMessage {
+	id: number;
+	sender: 'approval';
+	approval: {
+		agentName: string;
+		toolName: string;
+		argumentsText: string;
+		rawInterruption: any;
+	};
+	answer: string | null;
+}
+
+interface CommandMessage {
+	id: string;
+	sender: 'command';
+	command: string;
+	output: string;
+	success?: boolean;
+}
+
+type Message = UserMessage | BotMessage | ApprovalMessage | CommandMessage;
+
+interface LiveResponse {
+	id: number;
+	sender: 'bot';
+	text: string;
+}
+
+const INITIAL_BOT_MESSAGE: BotMessage = {
 	id: 1,
 	sender: 'bot',
 	text: 'Hello! I am your terminal assistant. How can I help you?',
@@ -9,20 +50,20 @@ const INITIAL_BOT_MESSAGE = {
 
 export const useConversation = ({
 	conversationService = defaultConversationService,
-} = {}) => {
-	const [messages, setMessages] = useState([INITIAL_BOT_MESSAGE]);
-	const [waitingForApproval, setWaitingForApproval] = useState(false);
-	const [pendingApprovalMessageId, setPendingApprovalMessageId] = useState(null);
-	const [isProcessing, setIsProcessing] = useState(false);
-	const [liveResponse, setLiveResponse] = useState(null);
+}: {conversationService?: ConversationService} = {}) => {
+	const [messages, setMessages] = useState<Message[]>([INITIAL_BOT_MESSAGE]);
+	const [waitingForApproval, setWaitingForApproval] = useState<boolean>(false);
+	const [pendingApprovalMessageId, setPendingApprovalMessageId] = useState<number | null>(null);
+	const [isProcessing, setIsProcessing] = useState<boolean>(false);
+	const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
 
-	const applyServiceResult = useCallback(result => {
+	const applyServiceResult = useCallback((result: any) => {
 		if (!result) {
 			return;
 		}
 
 		if (result.type === 'approval_required') {
-			const approvalMessage = {
+			const approvalMessage: ApprovalMessage = {
 				id: Date.now(),
 				sender: 'approval',
 				approval: result.approval,
@@ -35,7 +76,7 @@ export const useConversation = ({
 			return;
 		}
 
-		const botMessage = {
+		const botMessage: BotMessage = {
 			id: Date.now(),
 			sender: 'bot',
 			text: result.finalText,
@@ -53,12 +94,12 @@ export const useConversation = ({
 	}, []);
 
 	const sendUserMessage = useCallback(
-		async value => {
+		async (value: string) => {
 			if (!value.trim()) {
 				return;
 			}
 
-			const userMessage = {id: Date.now(), sender: 'user', text: value};
+			const userMessage: UserMessage = {id: Date.now(), sender: 'user', text: value};
 			setMessages(prev => [...prev, userMessage]);
 			setIsProcessing(true);
 
@@ -76,10 +117,13 @@ export const useConversation = ({
 
 				applyServiceResult(result);
 			} catch (error) {
-				setMessages(prev => [
-					...prev,
-					{id: Date.now(), sender: 'bot', text: `Error: ${error.message}`},
-				]);
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				const botErrorMessage: BotMessage = {
+					id: Date.now(),
+					sender: 'bot',
+					text: `Error: ${errorMessage}`,
+				};
+				setMessages(prev => [...prev, botErrorMessage]);
 			} finally {
 				setLiveResponse(null);
 				setIsProcessing(false);
@@ -89,7 +133,7 @@ export const useConversation = ({
 	);
 
 	const handleApprovalDecision = useCallback(
-		async answer => {
+		async (answer: string) => {
 			if (!waitingForApproval) {
 				return;
 			}
@@ -107,10 +151,13 @@ export const useConversation = ({
 				const result = await conversationService.handleApprovalDecision(answer);
 				applyServiceResult(result);
 			} catch (error) {
-				setMessages(prev => [
-					...prev,
-					{id: Date.now(), sender: 'bot', text: `Error: ${error.message}`},
-				]);
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				const botErrorMessage: BotMessage = {
+					id: Date.now(),
+					sender: 'bot',
+					text: `Error: ${errorMessage}`,
+				};
+				setMessages(prev => [...prev, botErrorMessage]);
 			} finally {
 				setIsProcessing(false);
 			}

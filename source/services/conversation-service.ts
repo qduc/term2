@@ -1,7 +1,32 @@
+import type {OpenAIAgentClient} from '../lib/openai-agent-client.js';
 import {defaultAgentClient} from '../lib/openai-agent-client.js';
 import {extractCommandMessages} from '../utils/extract-command-messages.js';
 
-const getCommandFromArgs = args => {
+interface ApprovalResult {
+	type: 'approval_required';
+	approval: {
+		agentName: string;
+		toolName: string;
+		argumentsText: string;
+		rawInterruption: any;
+	};
+}
+
+interface ResponseResult {
+	type: 'response';
+	commandMessages: Array<{
+		id: string;
+		sender: 'command';
+		command: string;
+		output: string;
+		success?: boolean;
+	}>;
+	finalText: string;
+}
+
+export type ConversationResult = ApprovalResult | ResponseResult;
+
+const getCommandFromArgs = (args: unknown): string => {
 	if (!args) {
 		return '';
 	}
@@ -16,20 +41,27 @@ const getCommandFromArgs = args => {
 	}
 
 	if (typeof args === 'object') {
-		return args.command ?? args.arguments ?? JSON.stringify(args);
+		const cmdFromObject = 'command' in args ? String(args.command) : undefined;
+		const argsFromObject = 'arguments' in args ? String(args.arguments) : undefined;
+		return cmdFromObject ?? argsFromObject ?? JSON.stringify(args);
 	}
 
 	return String(args);
 };
 
 export class ConversationService {
-	constructor({agentClient = defaultAgentClient} = {}) {
+	private agentClient: OpenAIAgentClient;
+	private previousResponseId: string | null = null;
+	private pendingApprovalContext: {state: any; interruption: any} | null = null;
+
+	constructor({agentClient = defaultAgentClient}: {agentClient?: OpenAIAgentClient} = {}) {
 		this.agentClient = agentClient;
-		this.previousResponseId = null;
-		this.pendingApprovalContext = null;
 	}
 
-	async sendMessage(text, {onTextChunk} = {}) {
+	async sendMessage(
+		text: string,
+		{onTextChunk}: {onTextChunk?: (fullText: string, chunk: string) => void} = {},
+	): Promise<ConversationResult> {
 		const stream = await this.agentClient.startStream(text, {
 			previousResponseId: this.previousResponseId,
 		});
@@ -46,7 +78,7 @@ export class ConversationService {
 		return this.#buildResult(stream, finalOutput || undefined);
 	}
 
-	async handleApprovalDecision(answer) {
+	async handleApprovalDecision(answer: string): Promise<ConversationResult | null> {
 		if (!this.pendingApprovalContext) {
 			return null;
 		}
@@ -62,7 +94,7 @@ export class ConversationService {
 		return this.#buildResult(nextResult);
 	}
 
-	#buildResult(result, finalOutputOverride) {
+	#buildResult(result: any, finalOutputOverride?: string): ConversationResult {
 		if (result.interruptions && result.interruptions.length > 0) {
 			const interruption = result.interruptions[0];
 			this.pendingApprovalContext = {state: result.state, interruption};

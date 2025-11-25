@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import React from 'react';
+import type {ReactNode} from 'react';
 import {render} from 'ink';
 import meow from 'meow';
 import App from './app.js';
 
-const cli = meow(
+meow(
 	`
 		Usage
 		  $ term2
@@ -17,4 +18,4 @@ const cli = meow(
 	},
 );
 
-render(<App />);
+render(<App /> as ReactNode);

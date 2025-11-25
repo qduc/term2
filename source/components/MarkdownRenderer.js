@@ -16,14 +16,14 @@ export default function MarkdownRenderer({children}) {
 
 			case 'paragraph':
 				return (
-					<Box key={index} flexDirection="column" marginBottom={0.5}>
-						{renderInlineTokens(token.tokens)}
+					<Box key={index} marginBottom={1}>
+						<Text>{renderInlineTokens(token.tokens)}</Text>
 					</Box>
 				);
 
 			case 'code':
 				return (
-					<Box key={index} flexDirection="column" marginBottom={0.5}>
+					<Box key={index} flexDirection="column" marginBottom={1}>
 						<Text color="yellow" backgroundColor="black">
 							{token.text}
 						</Text>
@@ -39,25 +39,27 @@ export default function MarkdownRenderer({children}) {
 
 			case 'list':
 				return (
-					<Box key={index} flexDirection="column" marginBottom={0.5} marginLeft={2}>
-						{token.items.map((item, idx) => (
-							<Box key={idx} marginBottom={0.25}>
-								<Text>{token.ordered ? `${idx + 1}. ` : '• '}</Text>
-								<Box flexDirection="column">
-									{renderInlineTokens(item.tokens)}
-								</Box>
-							</Box>
-						))}
+					<Box
+						key={index}
+						flexDirection="column"
+						marginBottom={1}
+						marginLeft={2}
+					>
+						{token.items.map((item, idx) =>
+							renderListItem(item, idx, token.ordered, idx),
+						)}
 					</Box>
 				);
 
 			case 'blockquote':
 				return (
-					<Box key={index} flexDirection="column" marginBottom={0.5} marginLeft={2}>
+					<Box key={index} flexDirection="row" marginBottom={1} marginLeft={2}>
 						<Text color="gray" dimColor>
 							{'│ '}
 						</Text>
-						{renderInlineTokens(token.tokens)}
+						<Box flexDirection="column">
+							{token.tokens.map((t, idx) => renderToken(t, idx))}
+						</Box>
 					</Box>
 				);
 
@@ -69,11 +71,42 @@ export default function MarkdownRenderer({children}) {
 				);
 
 			case 'space':
-				return <Box key={index} marginBottom={0.5} />;
+				return <Box key={index} marginBottom={1} />;
 
 			default:
 				return null;
 		}
+	};
+
+	const renderListItem = (item, index, ordered, idx) => {
+		// Extract text content from the list item
+		const content = item.tokens.map((token, tIdx) => {
+			if (token.type === 'text') {
+				return (
+					<Text key={tIdx}>
+						{renderInlineTokens(token.tokens) || token.text}
+					</Text>
+				);
+			}
+			if (token.type === 'list') {
+				// Handle nested lists
+				return (
+					<Box key={tIdx} flexDirection="column" marginLeft={2}>
+						{token.items.map((nestedItem, nIdx) =>
+							renderListItem(nestedItem, nIdx, token.ordered, nIdx),
+						)}
+					</Box>
+				);
+			}
+			return null;
+		});
+
+		return (
+			<Box key={index} flexDirection="row">
+				<Text>{ordered ? `${idx + 1}. ` : '• '}</Text>
+				<Box flexDirection="column">{content}</Box>
+			</Box>
+		);
 	};
 
 	const renderInlineTokens = tokens => {
@@ -87,14 +120,14 @@ export default function MarkdownRenderer({children}) {
 				case 'strong':
 					return (
 						<Text key={idx} bold>
-							{token.text}
+							{renderInlineTokens(token.tokens) || token.text}
 						</Text>
 					);
 
 				case 'em':
 					return (
 						<Text key={idx} italic>
-							{token.text}
+							{renderInlineTokens(token.tokens) || token.text}
 						</Text>
 					);
 

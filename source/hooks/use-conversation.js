@@ -1,27 +1,5 @@
 import {useCallback, useState} from 'react';
-import {defaultAgentClient} from '../lib/openai-agent-client.js';
-import {extractCommandMessages} from '../utils/extract-command-messages.js';
-
-const getCommandFromArgs = args => {
-	if (!args) {
-		return '';
-	}
-
-	if (typeof args === 'string') {
-		try {
-			const parsed = JSON.parse(args);
-			return parsed?.command ?? args;
-		} catch {
-			return args;
-		}
-	}
-
-	if (typeof args === 'object') {
-		return args.command ?? args.arguments ?? JSON.stringify(args);
-	}
-
-	return String(args);
-};
+import {defaultConversationService} from '../services/conversation-service.js';
 
 const INITIAL_BOT_MESSAGE = {
 	id: 1,
@@ -29,52 +7,50 @@ const INITIAL_BOT_MESSAGE = {
 	text: 'Hello! I am your terminal assistant. How can I help you?',
 };
 
-export const useConversation = ({agentClient = defaultAgentClient} = {}) => {
+export const useConversation = ({
+	conversationService = defaultConversationService,
+} = {}) => {
 	const [messages, setMessages] = useState([INITIAL_BOT_MESSAGE]);
 	const [waitingForApproval, setWaitingForApproval] = useState(false);
-	const [currentRunResult, setCurrentRunResult] = useState(null);
-	const [interruptionToApprove, setInterruptionToApprove] = useState(null);
-	const [previousResponseId, setPreviousResponseId] = useState(null);
+	const [pendingApprovalMessageId, setPendingApprovalMessageId] = useState(null);
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [liveResponse, setLiveResponse] = useState(null);
 
-	const processRunResult = useCallback(
-		async (result, finalOutputOverride) => {
-			if (result.interruptions && result.interruptions.length > 0) {
-				const interruption = result.interruptions[0];
-				setWaitingForApproval(true);
-				setCurrentRunResult(result);
-				setInterruptionToApprove(interruption);
+	const applyServiceResult = useCallback(result => {
+		if (!result) {
+			return;
+		}
 
-				const approvalMsg = {
-					id: Date.now(),
-					sender: 'approval',
-					interruption,
-				};
-				setMessages(prev => [...prev, approvalMsg]);
-			} else {
-				const commandMessages = extractCommandMessages(
-					result.newItems || result.history || [],
-				);
-				const botMessage = {
-					id: Date.now(),
-					sender: 'bot',
-					text: finalOutputOverride ?? result.finalOutput ?? 'Done.',
-				};
+		if (result.type === 'approval_required') {
+			const approvalMessage = {
+				id: Date.now(),
+				sender: 'approval',
+				approval: result.approval,
+				answer: null,
+			};
 
-				setMessages(prev => {
-					const withCommands =
-						commandMessages.length > 0 ? [...prev, ...commandMessages] : prev;
-					return [...withCommands, botMessage];
-				});
+			setMessages(prev => [...prev, approvalMessage]);
+			setWaitingForApproval(true);
+			setPendingApprovalMessageId(approvalMessage.id);
+			return;
+		}
 
-				setWaitingForApproval(false);
-				setCurrentRunResult(null);
-				setInterruptionToApprove(null);
-			}
-		},
-		[],
-	);
+		const botMessage = {
+			id: Date.now(),
+			sender: 'bot',
+			text: result.finalText,
+		};
+
+		setMessages(prev => {
+			const withCommands =
+				result.commandMessages.length > 0
+					? [...prev, ...result.commandMessages]
+					: prev;
+			return [...withCommands, botMessage];
+		});
+		setWaitingForApproval(false);
+		setPendingApprovalMessageId(null);
+	}, []);
 
 	const sendUserMessage = useCallback(
 		async value => {
@@ -86,27 +62,19 @@ export const useConversation = ({agentClient = defaultAgentClient} = {}) => {
 			setMessages(prev => [...prev, userMessage]);
 			setIsProcessing(true);
 
+			const liveMessageId = Date.now();
+			setLiveResponse({id: liveMessageId, sender: 'bot', text: ''});
+
 			try {
-				const stream = await agentClient.startStream(value, {previousResponseId});
-				const liveMessageId = Date.now();
-				setLiveResponse({id: liveMessageId, sender: 'bot', text: ''});
+				const result = await conversationService.sendMessage(value, {
+					onTextChunk: text => {
+						setLiveResponse(prev =>
+							prev && prev.id === liveMessageId ? {...prev, text} : prev,
+						);
+					},
+				});
 
-				const updateLiveText = text => {
-					setLiveResponse(prev =>
-						prev && prev.id === liveMessageId ? {...prev, text} : prev,
-					);
-				};
-
-				let finalOutput = '';
-				const textStream = stream.toTextStream();
-				for await (const chunk of textStream) {
-					finalOutput += chunk;
-					updateLiveText(finalOutput);
-				}
-
-				await stream.completed;
-				setPreviousResponseId(stream.lastResponseId);
-				await processRunResult(stream, finalOutput || undefined);
+				applyServiceResult(result);
 			} catch (error) {
 				setMessages(prev => [
 					...prev,
@@ -117,40 +85,41 @@ export const useConversation = ({agentClient = defaultAgentClient} = {}) => {
 				setIsProcessing(false);
 			}
 		},
-		[agentClient, previousResponseId, processRunResult],
+		[conversationService, applyServiceResult],
 	);
 
 	const handleApprovalDecision = useCallback(
 		async answer => {
-			if (!currentRunResult || !interruptionToApprove) {
+			if (!waitingForApproval) {
 				return;
 			}
 
 			setMessages(prev =>
 				prev.map(msg =>
-					msg.sender === 'approval' &&
-					msg.interruption === interruptionToApprove
+					msg.sender === 'approval' && msg.id === pendingApprovalMessageId
 						? {...msg, answer}
 						: msg,
 				),
 			);
 
 			setIsProcessing(true);
-			if (answer === 'y') {
-				currentRunResult.state.approve(interruptionToApprove);
-			} else {
-				currentRunResult.state.reject(interruptionToApprove);
+			try {
+				const result = await conversationService.handleApprovalDecision(answer);
+				applyServiceResult(result);
+			} catch (error) {
+				setMessages(prev => [
+					...prev,
+					{id: Date.now(), sender: 'bot', text: `Error: ${error.message}`},
+				]);
+			} finally {
+				setIsProcessing(false);
 			}
-
-			const nextResult = await agentClient.continueRun(currentRunResult.state);
-			await processRunResult(nextResult);
-			setIsProcessing(false);
 		},
 		[
-			agentClient,
-			currentRunResult,
-			interruptionToApprove,
-			processRunResult,
+			applyServiceResult,
+			conversationService,
+			pendingApprovalMessageId,
+			waitingForApproval,
 		],
 	);
 
@@ -159,9 +128,7 @@ export const useConversation = ({agentClient = defaultAgentClient} = {}) => {
 		liveResponse,
 		waitingForApproval,
 		isProcessing,
-		interruptionToApprove,
 		sendUserMessage,
 		handleApprovalDecision,
-		getCommandFromArgs,
 	};
 };

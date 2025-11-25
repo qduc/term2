@@ -11,7 +11,6 @@ export default function App() {
 		liveResponse,
 		waitingForApproval,
 		isProcessing,
-		getCommandFromArgs,
 		sendUserMessage,
 		handleApprovalDecision,
 	} = useConversation();
@@ -43,11 +42,11 @@ export default function App() {
 						{msg.sender === 'approval' ? (
 							<Box flexDirection="column">
 								<Text color="yellow">
-									{msg.interruption.agent.name} wants to run:{' '}
-									<Text bold>{msg.interruption.name}</Text>
+									{msg.approval.agentName} wants to run:{' '}
+									<Text bold>{msg.approval.toolName}</Text>
 								</Text>
 								<Text dimColor>
-									{getCommandFromArgs(msg.interruption.arguments)}
+									{msg.approval.argumentsText}
 								</Text>
 								<Text>
 									<Text color="yellow">(y/n)</Text>

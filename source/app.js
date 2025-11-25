@@ -110,7 +110,14 @@ export default function App() {
 									$ <Text bold>{msg.command}</Text>
 								</Text>
 								<Text color={msg.success === false ? 'red' : 'white'}>
-									{msg.output?.trim() ? msg.output : '(no output)'}
+									{msg.output?.trim()
+										? (() => {
+												const lines = msg.output.split('\n');
+												return lines.length > 3
+													? lines.slice(0, 3).join('\n') + '\n...'
+													: msg.output;
+										  })()
+										: '(no output)'}
 								</Text>
 							</Box>
 						) : (

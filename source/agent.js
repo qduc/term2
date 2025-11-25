@@ -13,21 +13,24 @@ export const client = new OpenAI();
 const bashTool = tool({
 	name: 'bash',
 	description:
-		'Execute a bash command. Use this to run terminal commands to help the user. Dangerous commands (rm, sudo, chmod, etc.) always require approval.',
+		'Execute a bash command. Use this to run terminal commands. Assert the safety of the command, if the command does not change system state or read sensitive data, set needsApproval to false, otherwise set needsApproval to true and wait for user approval before executing.',
 	parameters: z.object({
 		command: z.string().min(1, 'Command cannot be empty'),
 		needsApproval: z.boolean(),
 	}),
-	needsApproval: async ({command, needsApproval}) => {
+	needsApproval: async (context, params) => {
 		// Layer 2: Business logic validation
 		try {
-			const isDangerous = validateCommandSafety(command);
-			const requiresApproval = needsApproval || isDangerous;
+			// console.log('Context: ', context);
+			// console.log('Params', typeof params, params);
+
+			const isDangerous =
+				params.needsApproval || validateCommandSafety(params.command);
 
 			// Layer 4: Debug logging
-			logCommandExecution(command, isDangerous, requiresApproval);
+			// logCommandExecution(params.command, isDangerous, isDangerous);
 
-			return requiresApproval;
+			return isDangerous;
 		} catch (error) {
 			// Layer 3: Environment guard - fail safe on validation error
 			logValidationError(`Validation failed: ${error.message}`);
@@ -37,11 +40,15 @@ const bashTool = tool({
 	execute: async ({command}) => {
 		try {
 			// Layer 1: Entry point validation - validate before execution
-			if (!command || typeof command !== 'string' || command.trim().length === 0) {
+			if (
+				!command ||
+				typeof command !== 'string' ||
+				command.trim().length === 0
+			) {
 				return JSON.stringify({
 					command,
 					output: 'Error: Command cannot be empty',
-					success: false
+					success: false,
 				});
 			}
 
@@ -50,8 +57,9 @@ const bashTool = tool({
 			if (isDangerousCommand(command)) {
 				return JSON.stringify({
 					command,
-					output: 'Error: Dangerous command blocked. This command requires explicit approval.',
-					success: false
+					output:
+						'Error: Dangerous command blocked. This command requires explicit approval.',
+					success: false,
 				});
 			}
 
@@ -60,13 +68,13 @@ const bashTool = tool({
 			return JSON.stringify({
 				command,
 				output,
-				success: !stderr
+				success: !stderr,
 			});
 		} catch (error) {
 			return JSON.stringify({
 				command,
 				output: `Error executing command: ${error.message}`,
-				success: false
+				success: false,
 			});
 		}
 	},

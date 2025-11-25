@@ -1,6 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import {Box, Text} from 'ink';
 import TextInput from 'ink-text-input';
+import MarkdownRenderer from './components/MarkdownRenderer.js';
 import {run} from '@openai/agents';
 import {agent, client} from './agent.js';
 import {extractCommandMessages} from './utils/extract-command-messages.js';
@@ -152,20 +153,31 @@ export default function App() {
 					<Box key={msg.id} marginBottom={msg.sender === 'approval' ? 1 : 0}>
 						{msg.sender === 'approval' ? (
 							<Box flexDirection="column">
-								<Text color="yellow">🔒 {msg.interruption.agent.name} wants to run: <Text bold>{msg.interruption.name}</Text></Text>
-								<Text dimColor>$ {JSON.stringify(msg.interruption.arguments)} <Text color="yellow">(y/n)</Text></Text>
+								<Text color="yellow">
+									🔒 {msg.interruption.agent.name} wants to run:{' '}
+									<Text bold>{msg.interruption.name}</Text>
+								</Text>
+								<Text dimColor>
+									$ {JSON.stringify(msg.interruption.arguments)}{' '}
+									<Text color="yellow">(y/n)</Text>
+								</Text>
 							</Box>
 						) : msg.sender === 'command' ? (
-							<Box flexDirection="column" marginBottom={0.5}>
-								<Text color={msg.success === false ? 'red' : 'cyan'}>$ <Text bold>{msg.command}</Text></Text>
-								<Text color={msg.success === false ? 'red' : 'white'}>{msg.output?.trim() ? msg.output : '(no output)'}</Text>
+							<Box flexDirection="column" marginBottom={1}>
+								<Text color={msg.success === false ? 'red' : 'cyan'}>
+									$ <Text bold>{msg.command}</Text>
+								</Text>
+								<Text color={msg.success === false ? 'red' : 'white'}>
+									{msg.output?.trim() ? msg.output : '(no output)'}
+								</Text>
 							</Box>
 						) : (
-							<Box marginBottom={0.5}>
-								<Text color={msg.sender === 'user' ? 'blue' : 'green'}>
-									{msg.sender === 'user' ? '❯ ' : '◄ '}
-								</Text>
-								<Text>{msg.text}</Text>
+							<Box marginBottom={1} flexDirection="column">
+								{msg.sender === 'user' ? (
+									<Text color="blue">❯ {msg.text}</Text>
+								) : (
+									<MarkdownRenderer>{msg.text}</MarkdownRenderer>
+								)}
 							</Box>
 						)}
 					</Box>
@@ -183,7 +195,9 @@ export default function App() {
 				</Box>
 			)}
 			{isProcessing && (
-				<Text color="gray" dimColor>⟳ processing...</Text>
+				<Text color="gray" dimColor>
+					⟳ processing...
+				</Text>
 			)}
 		</Box>
 	);

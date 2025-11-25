@@ -20,8 +20,9 @@ export default function App() {
 	const [interruptionToApprove, setInterruptionToApprove] = useState(null);
 	const [previousResponseId, setPreviousResponseId] = useState(null);
 	const [isProcessing, setIsProcessing] = useState(false);
+	const [liveResponse, setLiveResponse] = useState(null);
 
-	const processRunResult = async result => {
+	const processRunResult = async (result, finalOutputOverride) => {
 		if (result.interruptions && result.interruptions.length > 0) {
 			setWaitingForApproval(true);
 			setCurrentRunResult(result);
@@ -40,7 +41,7 @@ export default function App() {
 			const botMessage = {
 				id: Date.now(),
 				sender: 'bot',
-				text: result.finalOutput || 'Done.',
+				text: finalOutputOverride ?? result.finalOutput ?? 'Done.',
 			};
 			setMessages(prev => {
 				const withCommands =
@@ -72,16 +73,37 @@ export default function App() {
 			}
 		} else {
 			try {
-				const result = await run(agent, value, {
+				const stream = await run(agent, value, {
 					previousResponseId,
+					stream: true,
 				});
-				setPreviousResponseId(result.lastResponseId);
-				await processRunResult(result);
+
+				const liveMessageId = Date.now();
+				setLiveResponse({id: liveMessageId, sender: 'bot', text: ''});
+
+				const updateLiveText = text => {
+					setLiveResponse(prev =>
+						prev && prev.id === liveMessageId ? {...prev, text} : prev,
+					);
+				};
+
+				let finalOutput = '';
+				const textStream = stream.toTextStream();
+				for await (const chunk of textStream) {
+					finalOutput += chunk;
+					updateLiveText(finalOutput);
+				}
+
+				await stream.completed;
+				setPreviousResponseId(stream.lastResponseId);
+				await processRunResult(stream, finalOutput || undefined);
 			} catch (error) {
 				setMessages(prev => [
 					...prev,
 					{id: Date.now(), sender: 'bot', text: `Error: ${error.message}`},
 				]);
+			} finally {
+				setLiveResponse(null);
 			}
 		}
 
@@ -132,6 +154,15 @@ export default function App() {
 					</Box>
 				))}
 			</Box>
+
+			{liveResponse && (
+				<Box marginBottom={1} flexDirection="column">
+					<MarkdownRenderer>{liveResponse.text || ' '}</MarkdownRenderer>
+					<Text color="gray" dimColor>
+						…streaming
+					</Text>
+				</Box>
+			)}
 
 			{!isProcessing && (
 				<Box>

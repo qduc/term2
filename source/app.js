@@ -1,9 +1,9 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import {Box, Text} from 'ink';
 import TextInput from 'ink-text-input';
 import MarkdownRenderer from './components/MarkdownRenderer.js';
 import {run} from '@openai/agents';
-import {agent, client} from './agent.js';
+import {agent} from './agent.js';
 import {extractCommandMessages} from './utils/extract-command-messages.js';
 
 export default function App() {
@@ -18,16 +18,8 @@ export default function App() {
 	const [waitingForApproval, setWaitingForApproval] = useState(false);
 	const [currentRunResult, setCurrentRunResult] = useState(null);
 	const [interruptionToApprove, setInterruptionToApprove] = useState(null);
-	const [conversationId, setConversationId] = useState(null);
+	const [previousResponseId, setPreviousResponseId] = useState(null);
 	const [isProcessing, setIsProcessing] = useState(false);
-
-	useEffect(() => {
-		const initConversation = async () => {
-			const {id} = await client.conversations.create({});
-			setConversationId(id);
-		};
-		initConversation();
-	}, []);
 
 	const processRunResult = async result => {
 		if (result.interruptions && result.interruptions.length > 0) {
@@ -80,9 +72,10 @@ export default function App() {
 			}
 		} else {
 			try {
-				if (!conversationId)
-					throw new Error('Conversation not initialized yet');
-				const result = await run(agent, value, {conversationId});
+				const result = await run(agent, value, {
+					previousResponseId,
+				});
+				setPreviousResponseId(result.lastResponseId);
 				await processRunResult(result);
 			} catch (error) {
 				setMessages(prev => [

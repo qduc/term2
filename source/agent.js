@@ -1,5 +1,4 @@
 import {Agent, tool} from '@openai/agents';
-import {Agent, tool} from '@openai/agents';
 import {z} from 'zod';
 import {exec} from 'child_process';
 import util from 'util';

@@ -1,4 +1,10 @@
-import {Agent, run, tool as createTool} from '@openai/agents';
+import {
+	Agent,
+	ModelBehaviorError,
+	UserError,
+	run,
+	tool as createTool,
+} from '@openai/agents';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 
 /**
@@ -16,18 +22,39 @@ export class OpenAIAgentClient {
 		userInput: string,
 		{previousResponseId}: {previousResponseId?: string | null} = {},
 	): Promise<any> {
-		return run(this.#agent, userInput, {
-			previousResponseId: previousResponseId ?? undefined,
-			stream: true,
-		});
+		return this.#executeWithRetry(() =>
+			run(this.#agent, userInput, {
+				previousResponseId: previousResponseId ?? undefined,
+				stream: true,
+			}),
+		);
 	}
 
 	async continueRun(state: any): Promise<any> {
-		return run(this.#agent, state);
+		return this.#executeWithRetry(() => run(this.#agent, state));
 	}
 
 	async continueRunStream(state: any): Promise<any> {
-		return run(this.#agent, state, {stream: true});
+		return this.#executeWithRetry(() =>
+			run(this.#agent, state, { stream: true }),
+		);
+	}
+
+	async #executeWithRetry<T>(
+		operation: () => Promise<T>,
+		retries = 2,
+	): Promise<T> {
+		try {
+			return await operation();
+		} catch (error) {
+			if (
+				retries > 0 &&
+				(error instanceof UserError || error instanceof ModelBehaviorError)
+			) {
+				return this.#executeWithRetry(operation, retries - 1);
+			}
+			throw error;
+		}
 	}
 
 	#createAgent({model}: {model?: string} = {}): Agent {

@@ -14,7 +14,7 @@ const CommandMessage: FC<Props> = ({command, output, success}) => {
 			? (() => {
 					const lines = (output || '').split('\n');
 					return lines.length > 3
-						? lines.slice(0, 3).join('\n') + '\n...'
+						? `${lines.slice(0, 3).join('\n')}\n... (${lines.length - 3} more lines)`
 						: output;
 			  })()
 			: outputText;
@@ -24,7 +24,7 @@ const CommandMessage: FC<Props> = ({command, output, success}) => {
 			<Text color={success === false ? 'red' : 'cyan'}>
 				$ <Text bold>{command}</Text>
 			</Text>
-			<Text color={success === false ? 'red' : 'white'}>{displayed}</Text>
+			<Text color={success === false ? 'red' : 'gray'}>{displayed}</Text>
 		</Box>
 	);
 };

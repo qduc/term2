@@ -4,8 +4,11 @@ import {
 	UserError,
 	run,
 	tool as createTool,
+	shellTool,
+	type Tool,
 } from '@openai/agents';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
+import { LocalShell } from './shell.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -61,7 +64,7 @@ export class OpenAIAgentClient {
 		const {name, instructions, tools: toolDefinitions} = getAgentDefinition();
 		const resolvedModel = model?.trim() || DEFAULT_MODEL;
 
-		const tools = toolDefinitions.map(definition =>
+		const tools: Tool[] = toolDefinitions.map(definition =>
 			createTool({
 				name: definition.name,
 				description: definition.description,
@@ -71,6 +74,16 @@ export class OpenAIAgentClient {
 				execute: async params => definition.execute(params),
 			}),
 		);
+
+		if (resolvedModel === 'gpt-5.1') {
+			const shell = new LocalShell();
+			tools.push(
+				shellTool({
+					shell,
+					needsApproval: true,
+				}),
+			);
+		}
 
 		return new Agent({
 			name,

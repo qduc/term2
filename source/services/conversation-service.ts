@@ -286,12 +286,26 @@ export class ConversationService {
 			const interruption = result.interruptions[0];
 			this.pendingApprovalContext = {state: result.state, interruption};
 
+			let argumentsText = '';
+			let toolName = interruption.name;
+
+			if (interruption.type === 'shell_call') {
+				toolName = 'shell';
+				if (interruption.action?.commands) {
+					argumentsText = Array.isArray(interruption.action.commands)
+						? interruption.action.commands.join('\n')
+						: String(interruption.action.commands);
+				}
+			} else {
+				argumentsText = getCommandFromArgs(interruption.arguments);
+			}
+
 			return {
 				type: 'approval_required',
 				approval: {
 					agentName: interruption.agent?.name ?? 'Agent',
-					toolName: interruption.name,
-					argumentsText: getCommandFromArgs(interruption.arguments),
+					toolName: toolName ?? 'Unknown Tool',
+					argumentsText,
 					rawInterruption: interruption,
 				},
 			};

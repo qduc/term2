@@ -82,36 +82,10 @@ export class ConversationService {
 			previousResponseId: this.previousResponseId,
 		});
 
-		let finalOutput = '';
-		const emittedCommandIds = new Set<string>();
-
-		// Iterate over all stream events to capture both text chunks and command executions
-		for await (const event of stream) {
-			if (event.type === 'raw_model_stream_event') {
-				const data = event.data;
-				if (data.type === 'response.output_text.delta') {
-					finalOutput += data.delta;
-					onTextChunk?.(finalOutput, data.delta);
-				}
-			} else if (event.type === 'run_item_stream_event') {
-				const item = event.item;
-				// Check for completed bash tool calls
-				if (
-					item?.type === 'tool_call_output_item' ||
-					item?.rawItem?.type === 'function_call_output'
-				) {
-					const commandMessages = extractCommandMessages([item]);
-					for (const cmdMsg of commandMessages) {
-						if (!emittedCommandIds.has(cmdMsg.id)) {
-							emittedCommandIds.add(cmdMsg.id);
-							onCommandMessage?.(cmdMsg);
-						}
-					}
-				}
-			}
-		}
-
-		await stream.completed;
+		const {finalOutput, emittedCommandIds} = await this.#consumeStream(stream, {
+			onTextChunk,
+			onCommandMessage,
+		});
 		this.previousResponseId = stream.lastResponseId;
 		// Pass emittedCommandIds so we don't duplicate commands in the final result
 		return this.#buildResult(
@@ -144,41 +118,169 @@ export class ConversationService {
 
 		const stream = await this.agentClient.continueRunStream(state);
 
-		let finalOutput = '';
-		const emittedCommandIds = new Set<string>();
-
-		// Iterate over all stream events to capture both text chunks and command executions
-		for await (const event of stream) {
-			if (event.type === 'raw_model_stream_event') {
-				const data = event.data;
-				if (data.type === 'response.output_text.delta') {
-					finalOutput += data.delta;
-					onTextChunk?.(finalOutput, data.delta);
-				}
-			} else if (event.type === 'run_item_stream_event') {
-				const item = event.item;
-				// Check for completed bash tool calls
-				if (
-					item?.type === 'tool_call_output_item' ||
-					item?.rawItem?.type === 'function_call_output'
-				) {
-					const commandMessages = extractCommandMessages([item]);
-					for (const cmdMsg of commandMessages) {
-						if (!emittedCommandIds.has(cmdMsg.id)) {
-							emittedCommandIds.add(cmdMsg.id);
-							onCommandMessage?.(cmdMsg);
-						}
-					}
-				}
-			}
-		}
-
-		await stream.completed;
+		const {finalOutput, emittedCommandIds} = await this.#consumeStream(stream, {
+			onTextChunk,
+			onCommandMessage,
+		});
 		return this.#buildResult(
 			stream,
 			finalOutput || undefined,
 			emittedCommandIds,
 		);
+	}
+
+	async #consumeStream(
+		stream: any,
+		{
+			onTextChunk,
+			onCommandMessage,
+		}: {
+			onTextChunk?: (fullText: string, chunk: string) => void;
+			onCommandMessage?: (message: CommandMessage) => void;
+		} = {},
+	): Promise<{finalOutput: string; emittedCommandIds: Set<string>}> {
+		let finalOutput = '';
+		const emittedCommandIds = new Set<string>();
+
+		const emitText = (delta: string) => {
+			if (!delta) {
+				return;
+			}
+
+			finalOutput += delta;
+			onTextChunk?.(finalOutput, delta);
+		};
+
+		for await (const event of stream) {
+			this.#emitTextDelta(event, emitText);
+			if (event?.data) {
+				this.#emitTextDelta(event.data, emitText);
+			}
+
+			if (event?.type === 'run_item_stream_event') {
+				this.#emitCommandMessages(
+					[event.item],
+					emittedCommandIds,
+					onCommandMessage,
+				);
+			} else if (
+				event?.type === 'tool_call_output_item' ||
+				event?.rawItem?.type === 'function_call_output'
+			) {
+				this.#emitCommandMessages(
+					[event],
+					emittedCommandIds,
+					onCommandMessage,
+				);
+			}
+		}
+
+		await stream.completed;
+		return {finalOutput, emittedCommandIds};
+	}
+
+	#emitCommandMessages(
+		items: any[] = [],
+		emittedCommandIds: Set<string>,
+		onCommandMessage?: (message: CommandMessage) => void,
+	): void {
+		if (!items?.length || !onCommandMessage) {
+			return;
+		}
+
+		const commandMessages = extractCommandMessages(items);
+		for (const cmdMsg of commandMessages) {
+			if (emittedCommandIds.has(cmdMsg.id)) {
+				continue;
+			}
+
+			emittedCommandIds.add(cmdMsg.id);
+			onCommandMessage(cmdMsg);
+		}
+	}
+
+	#emitTextDelta(
+		payload: any,
+		emitText: (delta: string) => void,
+	): boolean {
+		const deltaText = this.#extractTextDelta(payload);
+		if (!deltaText) {
+			return false;
+		}
+
+		emitText(deltaText);
+		return true;
+	}
+
+	#extractTextDelta(payload: any): string | null {
+		if (payload === null || payload === undefined) {
+			return null;
+		}
+
+		if (typeof payload === 'string') {
+			return payload || null;
+		}
+
+		if (typeof payload !== 'object') {
+			return null;
+		}
+
+		const type = typeof (payload as any).type === 'string' ? payload.type : '';
+		const looksLikeOutput = typeof type === 'string' && type.includes('output_text');
+		const hasOutputProperties = Boolean(
+			(payload as any).delta ??
+			(payload as any).output_text ??
+			(payload as any).text ??
+			(payload as any).content,
+		);
+
+		if (!looksLikeOutput && !hasOutputProperties) {
+			return null;
+		}
+
+		const deltaCandidate =
+			(payload as any).delta ??
+			(payload as any).output_text ??
+			(payload as any).text ??
+			(payload as any).content;
+		const text = this.#coerceToText(deltaCandidate);
+		return text || null;
+	}
+
+	#coerceToText(value: unknown): string {
+		if (value === null || value === undefined) {
+			return '';
+		}
+
+		if (typeof value === 'string') {
+			return value;
+		}
+
+		if (typeof value === 'number' || typeof value === 'boolean') {
+			return String(value);
+		}
+
+		if (Array.isArray(value)) {
+			return value
+				.map(entry => this.#coerceToText(entry))
+				.filter(Boolean)
+				.join('');
+		}
+
+		if (typeof value === 'object') {
+			const record = value as Record<string, unknown>;
+			const candidates = ['text', 'value', 'content', 'delta'];
+			for (const field of candidates) {
+				if (field in record) {
+					const text = this.#coerceToText(record[field]);
+					if (text) {
+						return text;
+					}
+				}
+			}
+		}
+
+		return '';
 	}
 
 	#buildResult(

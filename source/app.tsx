@@ -7,8 +7,13 @@ import MessageList from './components/MessageList.js';
 import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
 import type {SlashCommand} from './components/SlashCommandMenu.js';
+import type {ConversationService} from './services/conversation-service.js';
 
-const App: FC = () => {
+interface AppProps {
+	conversationService?: ConversationService;
+}
+
+const App: FC<AppProps> = ({conversationService}) => {
 	const {exit} = useApp();
 	const [input, setInput] = useState<string>('');
 	const {
@@ -19,7 +24,7 @@ const App: FC = () => {
 		sendUserMessage,
 		handleApprovalDecision,
 		clearConversation,
-	} = useConversation();
+	} = useConversation({conversationService});
 
 	const {navigateUp, navigateDown, addToHistory} = useInputHistory();
 

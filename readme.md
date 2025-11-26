@@ -17,9 +17,9 @@ $ term2 --help
     $ term2
 
   Options
-    --name  Your name
+    -m, --model  Override the default OpenAI model (default: gpt-4.1)
 
   Examples
-    $ term2 --name=Jane
-    Hello, Jane
+    $ term2 -m gpt-4o
+    # launches the assistant using the gpt-4o model
 ```

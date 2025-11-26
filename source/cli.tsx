@@ -4,18 +4,44 @@ import type {ReactNode} from 'react';
 import {render} from 'ink';
 import meow from 'meow';
 import App from './app.js';
+import {createAgent} from './agent.js';
+import {OpenAIAgentClient} from './lib/openai-agent-client.js';
+import {ConversationService} from './services/conversation-service.js';
 
-meow(
+const cli = meow(
 	`
 		Usage
 		  $ term2
 
+		Options
+		  -m, --model  Override the default OpenAI model (e.g. gpt-4o)
+
 		Examples
-		  $ term2
+		  $ term2 -m gpt-4o
 	`,
 	{
 		importMeta: import.meta,
+		flags: {
+			model: {
+				type: 'string',
+				alias: 'm',
+			},
+		},
 	},
 );
 
-render(<App /> as ReactNode);
+const rawModelFlag = cli.flags.model;
+const modelFlag =
+	typeof rawModelFlag === 'string' && rawModelFlag.trim().length > 0
+		? rawModelFlag.trim()
+		: undefined;
+
+const conversationService = modelFlag
+	? new ConversationService({
+			agentClient: new OpenAIAgentClient({
+				agent: createAgent({model: modelFlag}),
+			}),
+		})
+	: undefined;
+
+render(<App conversationService={conversationService} /> as ReactNode);

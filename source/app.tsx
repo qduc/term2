@@ -24,6 +24,8 @@ const App: FC<AppProps> = ({conversationService}) => {
 		sendUserMessage,
 		handleApprovalDecision,
 		clearConversation,
+		setModel,
+		addSystemMessage,
 	} = useConversation({conversationService});
 
 	const {navigateUp, navigateDown, addToHistory} = useInputHistory();
@@ -45,8 +47,21 @@ const App: FC<AppProps> = ({conversationService}) => {
 					exit();
 				},
 			},
+			{
+				name: 'model',
+				description: 'Change the AI model (e.g. /model gpt-4)',
+				action: (args?: string) => {
+					if (!args) {
+						setInput('/model ');
+						return false;
+					}
+					setModel(args);
+					addSystemMessage(`Set model to ${args}`);
+					return true;
+				},
+			},
 		],
-		[clearConversation, exit],
+		[clearConversation, exit, setModel, addSystemMessage],
 	);
 
 	const handleSlashMenuClose = useCallback(() => {

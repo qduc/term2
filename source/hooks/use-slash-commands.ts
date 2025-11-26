@@ -16,9 +16,18 @@ export const useSlashCommands = ({
 
 	const filteredCommands = useMemo(
 		() =>
-			commands.filter(cmd =>
-				cmd.name.toLowerCase().includes(filter.toLowerCase()),
-			),
+			commands.filter(cmd => {
+				const lowerFilter = filter.toLowerCase();
+				const lowerName = cmd.name.toLowerCase();
+
+				// Case 1: Typing the command (e.g. "mod" matches "model")
+				if (!lowerFilter.includes(' ')) {
+					return lowerName.includes(lowerFilter);
+				}
+
+				// Case 2: Command with arguments (e.g. "model gpt-4" matches "model")
+				return lowerFilter.startsWith(lowerName + ' ');
+			}),
 		[commands, filter],
 	);
 
@@ -61,10 +70,13 @@ export const useSlashCommands = ({
 			selectedIndex < filteredCommands.length
 		) {
 			const command = filteredCommands[selectedIndex];
-			close();
-			command?.action();
+			const args = filter.slice(command.name.length).trim();
+			const shouldClose = command?.action(args || undefined);
+			if (shouldClose !== false) {
+				close();
+			}
 		}
-	}, [filteredCommands, selectedIndex, close]);
+	}, [filteredCommands, selectedIndex, close, filter]);
 
 	return {
 		isOpen,

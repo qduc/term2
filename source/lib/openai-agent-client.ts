@@ -22,6 +22,10 @@ export class OpenAIAgentClient {
 		this.#agent = this.#createAgent({model});
 	}
 
+	setModel(model: string): void {
+		this.#agent = this.#createAgent({ model });
+	}
+
 	async startStream(
 		userInput: string,
 		{previousResponseId}: {previousResponseId?: string | null} = {},

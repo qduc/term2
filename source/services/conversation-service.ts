@@ -68,6 +68,10 @@ export class ConversationService {
 		this.pendingApprovalContext = null;
 	}
 
+	setModel(model: string): void {
+		this.agentClient.setModel(model);
+	}
+
 	async sendMessage(
 		text: string,
 		{

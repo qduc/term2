@@ -11,6 +11,10 @@ const ChatMessage: FC<Props> = ({msg}) => {
 		<Box flexDirection="column">
 			{msg.sender === 'user' ? (
 				<Text color="blue">❯ {msg.text}</Text>
+			) : msg.sender === 'system' ? (
+				<Text color="gray" dimColor>
+					{msg.text}
+				</Text>
 			) : (
 				<MarkdownRenderer>{msg.text}</MarkdownRenderer>
 			)}

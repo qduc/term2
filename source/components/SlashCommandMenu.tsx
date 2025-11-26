@@ -4,7 +4,7 @@ import {Box, Text} from 'ink';
 export interface SlashCommand {
 	name: string;
 	description: string;
-	action: () => void;
+	action: (args?: string) => boolean | void;
 }
 
 type Props = {

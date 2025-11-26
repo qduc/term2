@@ -34,7 +34,18 @@ interface CommandMessage {
 	success?: boolean;
 }
 
-type Message = UserMessage | BotMessage | ApprovalMessage | CommandMessage;
+interface SystemMessage {
+	id: number;
+	sender: 'system';
+	text: string;
+}
+
+type Message =
+	| UserMessage
+	| BotMessage
+	| ApprovalMessage
+	| CommandMessage
+	| SystemMessage;
 
 interface LiveResponse {
 	id: number;
@@ -202,6 +213,24 @@ export const useConversation = ({
 		setLiveResponse(null);
 	}, [conversationService]);
 
+	const setModel = useCallback(
+		(model: string) => {
+			conversationService.setModel(model);
+		},
+		[conversationService],
+	);
+
+	const addSystemMessage = useCallback((text: string) => {
+		setMessages(prev => [
+			...prev,
+			{
+				id: Date.now(),
+				sender: 'system',
+				text,
+			},
+		]);
+	}, []);
+
 	return {
 		messages,
 		liveResponse,
@@ -210,5 +239,7 @@ export const useConversation = ({
 		sendUserMessage,
 		handleApprovalDecision,
 		clearConversation,
+		setModel,
+		addSystemMessage,
 	};
 };

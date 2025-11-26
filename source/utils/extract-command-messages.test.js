@@ -1,5 +1,5 @@
 import test from 'ava';
-import {extractCommandMessages} from './source/utils/extract-command-messages.js';
+import {extractCommandMessages} from '../../dist/utils/extract-command-messages.js';
 
 const withStubbedNow = value => {
 	const realNow = Date.now;

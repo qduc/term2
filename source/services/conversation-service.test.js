@@ -1,5 +1,5 @@
 import test from 'ava';
-import {ConversationService} from './source/services/conversation-service.js';
+import {ConversationService} from '../../dist/services/conversation-service.js';
 
 class MockStream {
 	constructor(events) {

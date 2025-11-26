@@ -136,14 +136,14 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 		const output = combinedStdOutput || defaultOutput;
 		const success = parsedOutput?.success;
 
-		// Use a stable ID based on the item's id/callId, or fall back to command hash
+		// Use a stable ID based on the item's id/callId, or fall back to timestamp
 		const rawItem = item?.rawItem ?? item;
 		const stableId =
 			rawItem?.id ??
 			rawItem?.callId ??
 			item?.id ??
 			item?.callId ??
-			`cmd-${index}-${command}`;
+			`${Date.now()}-${index}`;
 
 		messages.push({
 			id: stableId,

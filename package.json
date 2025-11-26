@@ -10,7 +10,8 @@
 	"scripts": {
 		"build": "tsc",
 		"dev": "tsc --watch",
-		"test": "prettier --check . && xo && ava"
+		"test": "ava",
+		"lint": "prettier --check . && xo"
 	},
 	"files": [
 		"dist"
@@ -35,7 +36,7 @@
 		"@types/node": "^24.10.1",
 		"@types/react": "^19.2.7",
 		"@vdemedes/prettier-config": "^2.0.1",
-		"ava": "^5.2.0",
+		"ava": "^6.4.1",
 		"chalk": "^5.2.0",
 		"eslint-config-xo-react": "^0.27.0",
 		"eslint-plugin-react": "^7.32.2",
@@ -56,18 +57,17 @@
 				"source/": "dist/"
 			},
 			"compile": false
-		},
-		"extensions": {
-			"ts": "module",
-			"tsx": "module"
 		}
 	},
 	"xo": {
 		"extends": "xo-react",
 		"prettier": true,
-		"space": true,
+		"ignores": [
+			"**/*.test.js"
+		],
 		"rules": {
-			"react/prop-types": "off"
+			"react/prop-types": "off",
+			"unicorn/expiring-todo-comments": "off"
 		}
 	},
 	"prettier": "@vdemedes/prettier-config"

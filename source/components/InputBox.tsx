@@ -17,6 +17,8 @@ type Props = {
 	onSlashMenuDown: () => void;
 	onSlashMenuSelect: () => void;
 	onSlashMenuFilterChange: (filter: string) => void;
+	onHistoryUp: () => void;
+	onHistoryDown: () => void;
 };
 
 const InputBox: FC<Props> = ({
@@ -33,6 +35,8 @@ const InputBox: FC<Props> = ({
 	onSlashMenuDown,
 	onSlashMenuSelect,
 	onSlashMenuFilterChange,
+	onHistoryUp,
+	onHistoryDown,
 }) => {
 	const [escHintVisible, setEscHintVisible] = useState(false);
 	const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,6 +107,18 @@ const InputBox: FC<Props> = ({
 			}
 		},
 		{isActive: slashMenuOpen},
+	);
+
+	// Handle arrow keys for input history when slash menu is closed
+	useInput(
+		(_input, key) => {
+			if (key.upArrow) {
+				onHistoryUp();
+			} else if (key.downArrow) {
+				onHistoryDown();
+			}
+		},
+		{isActive: !slashMenuOpen},
 	);
 
 	const handleSubmit = (submittedValue: string) => {

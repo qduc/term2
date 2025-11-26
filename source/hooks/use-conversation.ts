@@ -42,18 +42,14 @@ interface LiveResponse {
 	text: string;
 }
 
-const INITIAL_BOT_MESSAGE: BotMessage = {
-	id: 1,
-	sender: 'bot',
-	text: 'Hello! I am your terminal assistant. How can I help you?',
-};
-
 export const useConversation = ({
 	conversationService = defaultConversationService,
 }: {conversationService?: ConversationService} = {}) => {
-	const [messages, setMessages] = useState<Message[]>([INITIAL_BOT_MESSAGE]);
+	const [messages, setMessages] = useState<Message[]>([]);
 	const [waitingForApproval, setWaitingForApproval] = useState<boolean>(false);
-	const [pendingApprovalMessageId, setPendingApprovalMessageId] = useState<number | null>(null);
+	const [pendingApprovalMessageId, setPendingApprovalMessageId] = useState<
+		number | null
+	>(null);
 	const [isProcessing, setIsProcessing] = useState<boolean>(false);
 	const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
 
@@ -99,7 +95,11 @@ export const useConversation = ({
 				return;
 			}
 
-			const userMessage: UserMessage = {id: Date.now(), sender: 'user', text: value};
+			const userMessage: UserMessage = {
+				id: Date.now(),
+				sender: 'user',
+				text: value,
+			};
 			setMessages(prev => [...prev, userMessage]);
 			setIsProcessing(true);
 
@@ -117,7 +117,8 @@ export const useConversation = ({
 
 				applyServiceResult(result);
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error);
+				const errorMessage =
+					error instanceof Error ? error.message : String(error);
 				const botErrorMessage: BotMessage = {
 					id: Date.now(),
 					sender: 'bot',
@@ -151,7 +152,8 @@ export const useConversation = ({
 				const result = await conversationService.handleApprovalDecision(answer);
 				applyServiceResult(result);
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error);
+				const errorMessage =
+					error instanceof Error ? error.message : String(error);
 				const botErrorMessage: BotMessage = {
 					id: Date.now(),
 					sender: 'bot',

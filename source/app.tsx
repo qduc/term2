@@ -2,6 +2,7 @@ import React, {FC, useState, useMemo, useCallback} from 'react';
 import {Box, Text, useApp, useInput} from 'ink';
 import {useConversation} from './hooks/use-conversation.js';
 import {useSlashCommands} from './hooks/use-slash-commands.js';
+import {useInputHistory} from './hooks/use-input-history.js';
 import MessageList from './components/MessageList.js';
 import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
@@ -19,6 +20,8 @@ const App: FC = () => {
 		handleApprovalDecision,
 		clearConversation,
 	} = useConversation();
+
+	const {navigateUp, navigateDown, addToHistory} = useInputHistory();
 
 	// Define slash commands
 	const slashCommands: SlashCommand[] = useMemo(
@@ -75,9 +78,25 @@ const App: FC = () => {
 		// If waiting for approval, ignore text input (handled by useInput)
 		if (waitingForApproval) return;
 
+		// Add to history and reset navigation
+		addToHistory(value);
 		setInput('');
 		await sendUserMessage(value);
 	};
+
+	const handleHistoryUp = useCallback(() => {
+		const historyValue = navigateUp(input);
+		if (historyValue !== null) {
+			setInput(historyValue);
+		}
+	}, [navigateUp, input]);
+
+	const handleHistoryDown = useCallback(() => {
+		const historyValue = navigateDown();
+		if (historyValue !== null) {
+			setInput(historyValue);
+		}
+	}, [navigateDown]);
 
 	return (
 		<Box flexDirection="column">
@@ -100,6 +119,8 @@ const App: FC = () => {
 					onSlashMenuDown={slashMenuDown}
 					onSlashMenuSelect={executeSlashCommand}
 					onSlashMenuFilterChange={updateSlashFilter}
+					onHistoryUp={handleHistoryUp}
+					onHistoryDown={handleHistoryDown}
 				/>
 			)}
 

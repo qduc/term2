@@ -18,7 +18,10 @@ const coerceToText = (value: unknown): string => {
 	}
 
 	if (Array.isArray(value)) {
-		return value.map(part => coerceToText(part)).filter(Boolean).join('\n');
+		return value
+			.map(part => coerceToText(part))
+			.filter(Boolean)
+			.join('\n');
 	}
 
 	if (typeof value === 'object') {

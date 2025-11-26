@@ -2,7 +2,7 @@ import React, {FC} from 'react';
 import {Box, Text} from 'ink';
 
 type Props = {
-  text?: string;
+	text?: string;
 };
 
 /**
@@ -11,11 +11,11 @@ type Props = {
  * The final response will be rendered with full Markdown formatting.
  */
 const LiveResponse: FC<Props> = ({text}) => {
-  return (
-    <Box marginBottom={1} flexDirection="column">
-      <Text>{text || ' '}</Text>
-    </Box>
-  );
+	return (
+		<Box marginBottom={1} flexDirection="column">
+			<Text>{text || ' '}</Text>
+		</Box>
+	);
 };
 
 export default LiveResponse;

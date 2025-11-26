@@ -55,6 +55,7 @@ The app uses the `@openai/agents` SDK with streaming responses and approval inte
 7. Hook updates UI with command messages (showing executed commands and output) and final bot response
 
 **Important**:
+
 - The `previousResponseId` is tracked to maintain conversation context across runs
 - Streaming is enabled via `stream: true` in the run options
 - The bash tool has built-in safety validation (`validateCommandSafety`) and dangerous command blocking
@@ -63,24 +64,31 @@ The app uses the `@openai/agents` SDK with streaming responses and approval inte
 ## Common Commands
 
 ### Build
+
 ```bash
 npm run build
 ```
+
 Compiles TypeScript from `source/` to `dist/` using `tsc`.
 
 ### Development
+
 ```bash
 npm run dev
 ```
+
 Watch mode - auto-rebuilds on TypeScript file changes.
 
 ### Testing
+
 ```bash
 npm test
 ```
+
 Runs the full test suite: Prettier formatting check → XO linting → AVA tests.
 
 To run individual test components:
+
 ```bash
 npx prettier --check .
 npx xo
@@ -88,6 +96,7 @@ npx ava
 ```
 
 ### Run the CLI
+
 ```bash
 node dist/cli.js
 ```

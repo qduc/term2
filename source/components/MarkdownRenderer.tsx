@@ -6,10 +6,15 @@ interface MarkdownRendererProps {
 	children: ReactNode;
 }
 
-export default function MarkdownRenderer({children}: MarkdownRendererProps): React.ReactElement {
+export default function MarkdownRenderer({
+	children,
+}: MarkdownRendererProps): React.ReactElement {
 	const tokens = marked.lexer(String(children)) as any[];
 
-	const renderToken = (token: any, index: number): React.ReactElement | null => {
+	const renderToken = (
+		token: any,
+		index: number,
+	): React.ReactElement | null => {
 		switch (token.type) {
 			case 'heading':
 				return (
@@ -82,7 +87,12 @@ export default function MarkdownRenderer({children}: MarkdownRendererProps): Rea
 		}
 	};
 
-	const renderListItem = (item: any, index: number, ordered: boolean, idx: number): React.ReactElement => {
+	const renderListItem = (
+		item: any,
+		index: number,
+		ordered: boolean,
+		idx: number,
+	): React.ReactElement => {
 		// Extract text content from the list item
 		const content = item.tokens.map((token: any, tIdx: number) => {
 			if (token.type === 'text') {
@@ -113,7 +123,9 @@ export default function MarkdownRenderer({children}: MarkdownRendererProps): Rea
 		);
 	};
 
-	const renderInlineTokens = (tokens: any[] | undefined): (React.ReactElement | null)[] | null => {
+	const renderInlineTokens = (
+		tokens: any[] | undefined,
+	): (React.ReactElement | null)[] | null => {
 		if (!tokens) return null;
 
 		return tokens.map((token: any, idx: number): React.ReactElement | null => {

@@ -167,11 +167,7 @@ export class ConversationService {
 				event?.type === 'tool_call_output_item' ||
 				event?.rawItem?.type === 'function_call_output'
 			) {
-				this.#emitCommandMessages(
-					[event],
-					emittedCommandIds,
-					onCommandMessage,
-				);
+				this.#emitCommandMessages([event], emittedCommandIds, onCommandMessage);
 			}
 		}
 
@@ -199,10 +195,7 @@ export class ConversationService {
 		}
 	}
 
-	#emitTextDelta(
-		payload: any,
-		emitText: (delta: string) => void,
-	): boolean {
+	#emitTextDelta(payload: any, emitText: (delta: string) => void): boolean {
 		const deltaText = this.#extractTextDelta(payload);
 		if (!deltaText) {
 			return false;
@@ -226,12 +219,13 @@ export class ConversationService {
 		}
 
 		const type = typeof (payload as any).type === 'string' ? payload.type : '';
-		const looksLikeOutput = typeof type === 'string' && type.includes('output_text');
+		const looksLikeOutput =
+			typeof type === 'string' && type.includes('output_text');
 		const hasOutputProperties = Boolean(
 			(payload as any).delta ??
-			(payload as any).output_text ??
-			(payload as any).text ??
-			(payload as any).content,
+				(payload as any).output_text ??
+				(payload as any).text ??
+				(payload as any).content,
 		);
 
 		if (!looksLikeOutput && !hasOutputProperties) {

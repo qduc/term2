@@ -70,7 +70,10 @@ class HistoryService {
 		}
 
 		// Remove duplicates (if the same message is already the most recent)
-		if (this.messages.length > 0 && this.messages[this.messages.length - 1] === message) {
+		if (
+			this.messages.length > 0 &&
+			this.messages[this.messages.length - 1] === message
+		) {
 			return;
 		}
 

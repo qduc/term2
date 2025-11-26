@@ -44,7 +44,7 @@ console.log(`Using model: ${usedModel}`);
 const conversationService = modelFlag
 	? new ConversationService({
 			agentClient: new OpenAIAgentClient({model: modelFlag}),
-		})
+	  })
 	: undefined;
 
-render(<App conversationService={conversationService} /> as ReactNode);
+render((<App conversationService={conversationService} />) as ReactNode);

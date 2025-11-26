@@ -28,7 +28,7 @@ console.log('Code block');
 `;
 
 const App = () => {
-    return React.createElement(MarkdownRenderer, {children: sampleMarkdown});
+	return React.createElement(MarkdownRenderer, {children: sampleMarkdown});
 };
 
 render(React.createElement(App));

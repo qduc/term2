@@ -4,7 +4,7 @@ import type {ReactNode} from 'react';
 import {render} from 'ink';
 import meow from 'meow';
 import App from './app.js';
-import {createAgent} from './agent.js';
+import {createAgent, DEFAULT_MODEL} from './agent.js';
 import {OpenAIAgentClient} from './lib/openai-agent-client.js';
 import {ConversationService} from './services/conversation-service.js';
 
@@ -35,6 +35,11 @@ const modelFlag =
 	typeof rawModelFlag === 'string' && rawModelFlag.trim().length > 0
 		? rawModelFlag.trim()
 		: undefined;
+
+const usedModel = modelFlag ?? DEFAULT_MODEL;
+
+// Print which model will be used on startup
+console.log(`Using model: ${usedModel}`);
 
 const conversationService = modelFlag
 	? new ConversationService({

@@ -121,11 +121,22 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 			normalizedItem.arguments ??
 			'Unknown command';
 		const output =
-			parsedOutput?.output ?? normalizedItem.outputText ?? 'No output available';
+			parsedOutput?.output ??
+			normalizedItem.outputText ??
+			'No output available';
 		const success = parsedOutput?.success;
 
+		// Use a stable ID based on the item's id/callId, or fall back to command hash
+		const rawItem = item?.rawItem ?? item;
+		const stableId =
+			rawItem?.id ??
+			rawItem?.callId ??
+			item?.id ??
+			item?.callId ??
+			`cmd-${index}-${command}`;
+
 		messages.push({
-			id: `${Date.now()}-${index}`,
+			id: stableId,
 			sender: 'command',
 			command,
 			output,

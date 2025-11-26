@@ -19,6 +19,10 @@ export class OpenAIAgentClient {
 	async continueRun(state: any): Promise<any> {
 		return run(agent, state);
 	}
+
+	async continueRunStream(state: any): Promise<any> {
+		return run(agent, state, {stream: true});
+	}
 }
 
 export const defaultAgentClient = new OpenAIAgentClient();

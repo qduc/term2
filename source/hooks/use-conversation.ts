@@ -113,6 +113,10 @@ export const useConversation = ({
 							prev && prev.id === liveMessageId ? {...prev, text} : prev,
 						);
 					},
+					onCommandMessage: cmdMsg => {
+						// Add command messages in real-time as they execute
+						setMessages(prev => [...prev, cmdMsg]);
+					},
 				});
 
 				applyServiceResult(result);
@@ -148,8 +152,24 @@ export const useConversation = ({
 			);
 
 			setIsProcessing(true);
+			const liveMessageId = Date.now();
+			setLiveResponse({id: liveMessageId, sender: 'bot', text: ''});
+
 			try {
-				const result = await conversationService.handleApprovalDecision(answer);
+				const result = await conversationService.handleApprovalDecision(
+					answer,
+					{
+						onTextChunk: text => {
+							setLiveResponse(prev =>
+								prev && prev.id === liveMessageId ? {...prev, text} : prev,
+							);
+						},
+						onCommandMessage: cmdMsg => {
+							// Add command messages in real-time as they execute
+							setMessages(prev => [...prev, cmdMsg]);
+						},
+					},
+				);
 				applyServiceResult(result);
 			} catch (error) {
 				const errorMessage =
@@ -161,6 +181,7 @@ export const useConversation = ({
 				};
 				setMessages(prev => [...prev, botErrorMessage]);
 			} finally {
+				setLiveResponse(null);
 				setIsProcessing(false);
 			}
 		},

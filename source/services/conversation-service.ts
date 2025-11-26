@@ -12,15 +12,17 @@ interface ApprovalResult {
 	};
 }
 
+export interface CommandMessage {
+	id: string;
+	sender: 'command';
+	command: string;
+	output: string;
+	success?: boolean;
+}
+
 interface ResponseResult {
 	type: 'response';
-	commandMessages: Array<{
-		id: string;
-		sender: 'command';
-		command: string;
-		output: string;
-		success?: boolean;
-	}>;
+	commandMessages: CommandMessage[];
 	finalText: string;
 }
 
@@ -42,7 +44,8 @@ const getCommandFromArgs = (args: unknown): string => {
 
 	if (typeof args === 'object') {
 		const cmdFromObject = 'command' in args ? String(args.command) : undefined;
-		const argsFromObject = 'arguments' in args ? String(args.arguments) : undefined;
+		const argsFromObject =
+			'arguments' in args ? String(args.arguments) : undefined;
 		return cmdFromObject ?? argsFromObject ?? JSON.stringify(args);
 	}
 
@@ -54,7 +57,9 @@ export class ConversationService {
 	private previousResponseId: string | null = null;
 	private pendingApprovalContext: {state: any; interruption: any} | null = null;
 
-	constructor({agentClient = defaultAgentClient}: {agentClient?: OpenAIAgentClient} = {}) {
+	constructor({
+		agentClient = defaultAgentClient,
+	}: {agentClient?: OpenAIAgentClient} = {}) {
 		this.agentClient = agentClient;
 	}
 
@@ -65,25 +70,67 @@ export class ConversationService {
 
 	async sendMessage(
 		text: string,
-		{onTextChunk}: {onTextChunk?: (fullText: string, chunk: string) => void} = {},
+		{
+			onTextChunk,
+			onCommandMessage,
+		}: {
+			onTextChunk?: (fullText: string, chunk: string) => void;
+			onCommandMessage?: (message: CommandMessage) => void;
+		} = {},
 	): Promise<ConversationResult> {
 		const stream = await this.agentClient.startStream(text, {
 			previousResponseId: this.previousResponseId,
 		});
 
 		let finalOutput = '';
-		const textStream = stream.toTextStream();
-		for await (const chunk of textStream) {
-			finalOutput += chunk;
-			onTextChunk?.(finalOutput, chunk);
+		const emittedCommandIds = new Set<string>();
+
+		// Iterate over all stream events to capture both text chunks and command executions
+		for await (const event of stream) {
+			if (event.type === 'raw_model_stream_event') {
+				const data = event.data;
+				if (data.type === 'response.output_text.delta') {
+					finalOutput += data.delta;
+					onTextChunk?.(finalOutput, data.delta);
+				}
+			} else if (event.type === 'run_item_stream_event') {
+				const item = event.item;
+				// Check for completed bash tool calls
+				if (
+					item?.type === 'tool_call_output_item' ||
+					item?.rawItem?.type === 'function_call_output'
+				) {
+					const commandMessages = extractCommandMessages([item]);
+					for (const cmdMsg of commandMessages) {
+						if (!emittedCommandIds.has(cmdMsg.id)) {
+							emittedCommandIds.add(cmdMsg.id);
+							onCommandMessage?.(cmdMsg);
+						}
+					}
+				}
+			}
 		}
 
 		await stream.completed;
 		this.previousResponseId = stream.lastResponseId;
-		return this.#buildResult(stream, finalOutput || undefined);
+		// Pass emittedCommandIds so we don't duplicate commands in the final result
+		return this.#buildResult(
+			stream,
+			finalOutput || undefined,
+			emittedCommandIds,
+		);
 	}
 
-	async handleApprovalDecision(answer: string): Promise<ConversationResult | null> {
+	async handleApprovalDecision(
+		answer: string,
+		{
+			onTextChunk,
+			onCommandMessage,
+		}: {
+			onTextChunk?: (fullText: string, chunk: string) => void;
+			onCommandMessage?: (message: CommandMessage) => void;
+		} = {},
+	): Promise<ConversationResult | null> {
 		if (!this.pendingApprovalContext) {
 			return null;
 		}
@@ -95,11 +142,50 @@ export class ConversationService {
 			state.reject(interruption);
 		}
 
-		const nextResult = await this.agentClient.continueRun(state);
-		return this.#buildResult(nextResult);
+		const stream = await this.agentClient.continueRunStream(state);
+
+		let finalOutput = '';
+		const emittedCommandIds = new Set<string>();
+
+		// Iterate over all stream events to capture both text chunks and command executions
+		for await (const event of stream) {
+			if (event.type === 'raw_model_stream_event') {
+				const data = event.data;
+				if (data.type === 'response.output_text.delta') {
+					finalOutput += data.delta;
+					onTextChunk?.(finalOutput, data.delta);
+				}
+			} else if (event.type === 'run_item_stream_event') {
+				const item = event.item;
+				// Check for completed bash tool calls
+				if (
+					item?.type === 'tool_call_output_item' ||
+					item?.rawItem?.type === 'function_call_output'
+				) {
+					const commandMessages = extractCommandMessages([item]);
+					for (const cmdMsg of commandMessages) {
+						if (!emittedCommandIds.has(cmdMsg.id)) {
+							emittedCommandIds.add(cmdMsg.id);
+							onCommandMessage?.(cmdMsg);
+						}
+					}
+				}
+			}
+		}
+
+		await stream.completed;
+		return this.#buildResult(
+			stream,
+			finalOutput || undefined,
+			emittedCommandIds,
+		);
 	}
 
-	#buildResult(result: any, finalOutputOverride?: string): ConversationResult {
+	#buildResult(
+		result: any,
+		finalOutputOverride?: string,
+		emittedCommandIds?: Set<string>,
+	): ConversationResult {
 		if (result.interruptions && result.interruptions.length > 0) {
 			const interruption = result.interruptions[0];
 			this.pendingApprovalContext = {state: result.state, interruption};
@@ -117,9 +203,14 @@ export class ConversationService {
 
 		this.pendingApprovalContext = null;
 
-		const commandMessages = extractCommandMessages(
+		const allCommandMessages = extractCommandMessages(
 			result.newItems || result.history || [],
 		);
+
+		// Filter out commands that were already emitted in real-time
+		const commandMessages = emittedCommandIds
+			? allCommandMessages.filter(msg => !emittedCommandIds.has(msg.id))
+			: allCommandMessages;
 
 		return {
 			type: 'response',

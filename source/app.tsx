@@ -1,11 +1,14 @@
-import React, {FC, useState} from 'react';
-import {Box, Text, useInput} from 'ink';
+import React, {FC, useState, useMemo, useCallback} from 'react';
+import {Box, Text, useApp, useInput} from 'ink';
 import {useConversation} from './hooks/use-conversation.js';
+import {useSlashCommands} from './hooks/use-slash-commands.js';
 import MessageList from './components/MessageList.js';
 import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
+import type {SlashCommand} from './components/SlashCommandMenu.js';
 
 const App: FC = () => {
+	const {exit} = useApp();
 	const [input, setInput] = useState<string>('');
 	const {
 		messages,
@@ -14,7 +17,48 @@ const App: FC = () => {
 		isProcessing,
 		sendUserMessage,
 		handleApprovalDecision,
+		clearConversation,
 	} = useConversation();
+
+	// Define slash commands
+	const slashCommands: SlashCommand[] = useMemo(
+		() => [
+			{
+				name: 'clear',
+				description: 'Start a new conversation',
+				action: () => {
+					clearConversation();
+				},
+			},
+			{
+				name: 'quit',
+				description: 'Exit the application',
+				action: () => {
+					exit();
+				},
+			},
+		],
+		[clearConversation, exit],
+	);
+
+	const handleSlashMenuClose = useCallback(() => {
+		setInput('');
+	}, []);
+
+	const {
+		isOpen: slashMenuOpen,
+		filter: slashMenuFilter,
+		selectedIndex: slashMenuSelectedIndex,
+		open: openSlashMenu,
+		close: closeSlashMenu,
+		updateFilter: updateSlashFilter,
+		moveUp: slashMenuUp,
+		moveDown: slashMenuDown,
+		executeSelected: executeSlashCommand,
+	} = useSlashCommands({
+		commands: slashCommands,
+		onClose: handleSlashMenuClose,
+	});
 
 	// Handle y/n key presses for approval prompts
 	useInput(async (inputKey: string) => {
@@ -42,7 +86,21 @@ const App: FC = () => {
 			{liveResponse && <LiveResponse text={liveResponse.text} />}
 
 			{!isProcessing && !waitingForApproval && (
-				<InputBox value={input} onChange={setInput} onSubmit={handleSubmit} />
+				<InputBox
+					value={input}
+					onChange={setInput}
+					onSubmit={handleSubmit}
+					slashCommands={slashCommands}
+					slashMenuOpen={slashMenuOpen}
+					slashMenuSelectedIndex={slashMenuSelectedIndex}
+					slashMenuFilter={slashMenuFilter}
+					onSlashMenuOpen={openSlashMenu}
+					onSlashMenuClose={closeSlashMenu}
+					onSlashMenuUp={slashMenuUp}
+					onSlashMenuDown={slashMenuDown}
+					onSlashMenuSelect={executeSlashCommand}
+					onSlashMenuFilterChange={updateSlashFilter}
+				/>
 			)}
 
 			{isProcessing && (

@@ -58,6 +58,11 @@ export class ConversationService {
 		this.agentClient = agentClient;
 	}
 
+	reset(): void {
+		this.previousResponseId = null;
+		this.pendingApprovalContext = null;
+	}
+
 	async sendMessage(
 		text: string,
 		{onTextChunk}: {onTextChunk?: (fullText: string, chunk: string) => void} = {},

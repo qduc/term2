@@ -170,6 +170,15 @@ export const useConversation = ({
 		],
 	);
 
+	const clearConversation = useCallback(() => {
+		conversationService.reset();
+		setMessages([INITIAL_BOT_MESSAGE]);
+		setWaitingForApproval(false);
+		setPendingApprovalMessageId(null);
+		setIsProcessing(false);
+		setLiveResponse(null);
+	}, [conversationService]);
+
 	return {
 		messages,
 		liveResponse,
@@ -177,5 +186,6 @@ export const useConversation = ({
 		isProcessing,
 		sendUserMessage,
 		handleApprovalDecision,
+		clearConversation,
 	};
 };

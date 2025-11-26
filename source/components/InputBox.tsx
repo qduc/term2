@@ -121,10 +121,14 @@ const InputBox: FC<Props> = ({
 		{isActive: !slashMenuOpen},
 	);
 
+	const [inputKey, setInputKey] = useState(0);
+
 	const handleSubmit = (submittedValue: string) => {
 		if (slashMenuOpen) {
 			// Execute the selected slash command
 			onSlashMenuSelect();
+			// Force remount to ensure cursor moves to the end
+			setInputKey(prev => prev + 1);
 		} else {
 			onSubmit(submittedValue);
 		}
@@ -141,7 +145,12 @@ const InputBox: FC<Props> = ({
 			)}
 			<Box>
 				<Text color="blue">❯ </Text>
-				<TextInput value={value} onChange={onChange} onSubmit={handleSubmit} />
+				<TextInput
+					key={inputKey}
+					value={value}
+					onChange={onChange}
+					onSubmit={handleSubmit}
+				/>
 			</Box>
 			{escHintVisible && (
 				<Text color="gray" dimColor>

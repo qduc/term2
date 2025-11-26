@@ -5,6 +5,7 @@ export interface SlashCommand {
 	name: string;
 	description: string;
 	action: (args?: string) => boolean | void;
+	expectsArgs?: boolean;
 }
 
 type Props = {

@@ -50,6 +50,7 @@ const App: FC<AppProps> = ({conversationService}) => {
 			{
 				name: 'model',
 				description: 'Change the AI model (e.g. /model gpt-4)',
+				expectsArgs: true,
 				action: (args?: string) => {
 					if (!args) {
 						setInput('/model ');
@@ -81,6 +82,7 @@ const App: FC<AppProps> = ({conversationService}) => {
 	} = useSlashCommands({
 		commands: slashCommands,
 		onClose: handleSlashMenuClose,
+		setText: setInput,
 	});
 
 	// Handle y/n key presses for approval prompts

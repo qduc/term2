@@ -4,11 +4,13 @@ import type {SlashCommand} from '../components/SlashCommandMenu.js';
 interface UseSlashCommandsOptions {
 	commands: SlashCommand[];
 	onClose: () => void;
+	setText?: (text: string) => void;
 }
 
 export const useSlashCommands = ({
 	commands,
 	onClose,
+	setText,
 }: UseSlashCommandsOptions) => {
 	const [isOpen, setIsOpen] = useState(false);
 	const [filter, setFilter] = useState('');
@@ -70,13 +72,26 @@ export const useSlashCommands = ({
 			selectedIndex < filteredCommands.length
 		) {
 			const command = filteredCommands[selectedIndex];
+
+			// Handle autocomplete for commands that expect arguments
+			if (command.expectsArgs && setText) {
+				const fullCommandPrefix = `${command.name} `;
+				// If the current filter doesn't start with the command name + space,
+				// it means we haven't fully typed it or added the space yet.
+				// We should autocomplete it.
+				if (!filter.toLowerCase().startsWith(fullCommandPrefix.toLowerCase())) {
+					setText(`/${fullCommandPrefix}`);
+					return;
+				}
+			}
+
 			const args = filter.slice(command.name.length).trim();
 			const shouldClose = command?.action(args || undefined);
 			if (shouldClose !== false) {
 				close();
 			}
 		}
-	}, [filteredCommands, selectedIndex, close, filter]);
+	}, [filteredCommands, selectedIndex, close, filter, setText]);
 
 	return {
 		isOpen,

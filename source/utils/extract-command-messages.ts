@@ -41,18 +41,18 @@ const coerceToText = (value: unknown): string => {
 };
 
 const getOutputText = (item: any): string => {
-	const rawItem = item?.rawItem ?? item;
-	const candidates = [
-		item?.output,
-		rawItem?.output,
-		item?.output?.text,
-		rawItem?.output?.text,
-	];
+	const sources = [item, item?.rawItem];
 
-	for (const candidate of candidates) {
-		const asText = coerceToText(candidate);
-		if (asText) {
-			return asText;
+	for (const source of sources) {
+		if (!source) {
+			continue;
+		}
+
+		for (const candidate of [source.output, source.output?.text]) {
+			const text = coerceToText(candidate);
+			if (text) {
+				return text;
+			}
 		}
 	}
 
@@ -115,15 +115,22 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 		}
 
 		const parsedOutput = safeJsonParse(normalizedItem.outputText);
-		const command =
+		const commandSource =
 			parsedOutput?.command ??
 			parsedOutput?.arguments ??
 			normalizedItem.arguments ??
 			'Unknown command';
-		const output =
+		const command = coerceToText(commandSource) || 'Unknown command';
+		const stdoutText = coerceToText(parsedOutput?.stdout);
+		const stderrText = coerceToText(parsedOutput?.stderr);
+		const defaultOutput =
 			parsedOutput?.output ??
 			normalizedItem.outputText ??
 			'No output available';
+		const combinedStdOutput = [stdoutText, stderrText]
+			.filter(Boolean)
+			.join('\n');
+		const output = combinedStdOutput || defaultOutput;
 		const success = parsedOutput?.success;
 
 		// Use a stable ID based on the item's id/callId, or fall back to command hash

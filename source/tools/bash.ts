@@ -2,10 +2,7 @@ import {tool} from '@openai/agents';
 import {z} from 'zod';
 import {exec} from 'child_process';
 import util from 'util';
-import {
-    isDangerousCommand,
-    validateCommandSafety,
-} from '../utils/command-safety.js';
+import {validateCommandSafety} from '../utils/command-safety.js';
 import {logValidationError} from '../utils/command-logger.js';
 
 const execPromise = util.promisify(exec);
@@ -37,15 +34,6 @@ export const bashTool = tool({
                 return JSON.stringify({
                     command,
                     output: 'Error: Command cannot be empty',
-                    success: false,
-                });
-            }
-
-            if (isDangerousCommand(command)) {
-                return JSON.stringify({
-                    command,
-                    output:
-                        'Error: Dangerous command blocked. This command requires explicit approval.',
                     success: false,
                 });
             }

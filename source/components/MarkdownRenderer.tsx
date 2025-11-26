@@ -1,175 +1,191 @@
-import React, {ReactNode} from 'react';
-import {Box, Text} from 'ink';
-import {marked} from 'marked';
+import React from 'react';
+import { Box, Text, Newline } from 'ink';
+import { marked } from 'marked';
 
-interface MarkdownRendererProps {
-	children: ReactNode;
-}
+// --- Token Renderers ---
 
-export default function MarkdownRenderer({
-	children,
-}: MarkdownRendererProps): React.ReactElement {
-	const tokens = marked.lexer(String(children)) as any[];
+// recursively render inline content (bold, italic, links, etc.)
+const InlineContent = ({ tokens }: { tokens: any[] }) => {
+	if (!tokens) return null;
 
-	const renderToken = (
-		token: any,
-		index: number,
-	): React.ReactElement | null => {
-		switch (token.type) {
-			case 'heading':
+	return (
+	  <>
+		  {tokens.map((token, index) => {
+			  const key = `${token.type}-${index}`;
+
+		  switch (token.type) {
+			  case 'text':
+			  case 'escape':
+				  // Handle nested formatting inside text tokens if marked provides them
+				  if (token.tokens) {
+					  return <InlineContent key={key} tokens={token.tokens} />;
+				  }
+				  return <Text key={key}>{token.text}</Text>;
+
+			case 'strong':
 				return (
-					<Text key={index} bold color="cyan">
-						{'#'.repeat(token.depth)} {token.text}
-					</Text>
-				);
+				<Text key={key} bold>
+					<InlineContent tokens={token.tokens} />
+				</Text>
+			);
 
-			case 'paragraph':
+			case 'em':
 				return (
-					<Box key={index} marginBottom={1}>
-						<Text>{renderInlineTokens(token.tokens)}</Text>
-					</Box>
-				);
-
-			case 'code':
-				return (
-					<Box key={index} flexDirection="column" marginBottom={1}>
-						<Text color="yellow" backgroundColor="black">
-							{token.text}
-						</Text>
-					</Box>
-				);
+				<Text key={key} italic>
+					<InlineContent tokens={token.tokens} />
+				</Text>
+			);
 
 			case 'codespan':
 				return (
-					<Text key={index} color="yellow">
-						{token.text}
-					</Text>
-				);
+				<Text key={key} color="yellow" backgroundColor="#333">
+					{` ${token.text} `}
+				</Text>
+			);
 
-			case 'list':
+			case 'link':
 				return (
-					<Box
-						key={index}
-						flexDirection="column"
-						marginBottom={1}
-						marginLeft={2}
-					>
-						{token.items.map((item: any, idx: number) =>
-							renderListItem(item, idx, token.ordered, idx),
-						)}
-					</Box>
-				);
+				<Text key={key} color="blue" underline>
+					{token.text}
+				</Text>
+			);
 
-			case 'blockquote':
-				return (
-					<Box key={index} flexDirection="row" marginBottom={1} marginLeft={2}>
-						<Text color="gray" dimColor>
-							{'│ '}
-						</Text>
-						<Box flexDirection="column">
-							{token.tokens.map((t: any, idx: number) => renderToken(t, idx))}
-						</Box>
-					</Box>
-				);
+			case 'image':
+				return <Text key={key} color="gray"> [Image: {token.text}] </Text>;
 
-			case 'hr':
-				return (
-					<Text key={index} color="gray">
-						{'─'.repeat(40)}
-					</Text>
-				);
-
-			case 'space':
-				return <Box key={index} marginBottom={1} />;
+			case 'br':
+				return <Newline key={key} />;
 
 			default:
-				return null;
+				return <Text key={key}>{token.raw}</Text>;
 		}
-	};
+	  })}
+	  </>
+  );
+};
 
-	const renderListItem = (
-		item: any,
-		index: number,
-		ordered: boolean,
-		idx: number,
-	): React.ReactElement => {
-		// Extract text content from the list item
-		const content = item.tokens.map((token: any, tIdx: number) => {
-			if (token.type === 'text') {
-				return (
-					<Text key={tIdx}>
-						{renderInlineTokens(token.tokens) || token.text}
-					</Text>
-				);
-			}
-			if (token.type === 'list') {
-				// Handle nested lists
-				return (
-					<Box key={tIdx} flexDirection="column" marginLeft={2}>
-						{token.items.map((nestedItem: any, nIdx: number) =>
-							renderListItem(nestedItem, nIdx, token.ordered, nIdx),
-						)}
-					</Box>
-				);
-			}
-			return null;
-		});
+// Render Block elements (Headings, Paragraphs, Lists)
+const BlockRenderer = ({ token }: { token: any }) => {
+	switch (token.type) {
+		case 'heading':
+			const isMain = token.depth === 1;
+			return (
+		  <Box flexDirection="column" marginTop={1} marginBottom={1}>
+			  <Text
+				  bold
+				  underline={isMain}
+				  color={isMain ? 'green' : 'cyan'}
+			  >
+				  {isMain ? '# ' : '## '}
+				  <InlineContent tokens={token.tokens} />
+			  </Text>
+		  </Box>
+	  );
 
-		return (
-			<Box key={index} flexDirection="row">
-				<Text>{ordered ? `${idx + 1}. ` : '• '}</Text>
-				<Box flexDirection="column">{content}</Box>
+	  case 'paragraph':
+		  return (
+		  <Box marginBottom={1}>
+			  <Text>
+				  <InlineContent tokens={token.tokens} />
+			  </Text>
+		  </Box>
+	  );
+
+	  case 'list':
+		  return (
+		  <Box flexDirection="column" marginBottom={1}>
+			  {token.items.map((item: any, index: number) => (
+				  <BlockRenderer key={index} token={item} />
+			  ))}
+		  </Box>
+	  );
+
+	  case 'list_item':
+		  return (
+		  <Box flexDirection="row">
+			  <Box marginRight={1}>
+				  <Text color="green">•</Text>
+			  </Box>
+			  <Box flexDirection="column">
+				  {/* List items can contain multiple block tokens (like sub-lists or paragraphs) */}
+				  {token.tokens.map((subToken: any, i: number) => {
+					  // If it's just text inside the list item, marked might wrap it in a generic block
+					  if (subToken.type === 'text') {
+						  return <Text key={i}><InlineContent tokens={subToken.tokens} /></Text>
+					  }
+					  return <BlockRenderer key={i} token={subToken} />
+				  })}
+			  </Box>
+		  </Box>
+	  );
+
+	  case 'code':
+		  return (
+		  <Box
+			  borderStyle="round"
+			  borderColor="gray"
+			  paddingX={1}
+			  marginBottom={1}
+			  flexDirection="column"
+		  >
+			  <Text color="yellow">{token.text}</Text>
+		  </Box>
+	  );
+
+	  case 'blockquote':
+		  return (
+		  <Box
+			  paddingLeft={2}
+			  borderStyle="classic"
+			  borderLeft
+			  borderRight={false}
+			  borderTop={false}
+			  borderBottom={false}
+			  borderColor="magenta"
+			  marginBottom={1}
+		  >
+			  <Text italic dimColor>
+				  {/* Blockquotes often contain nested paragraphs */}
+				  {token.tokens.map((t: any, i: number) => <BlockRenderer key={i} token={t} />)}
+			  </Text>
+		  </Box>
+	  );
+
+	  case 'space':
+		  return null;
+
+	  case 'hr':
+		  return (
+			<Box marginY={1}>
+				<Text color="gray">────────────────────────────────────────</Text>
 			</Box>
-		);
-	};
+		)
 
-	const renderInlineTokens = (
-		tokens: any[] | undefined,
-	): (React.ReactElement | null)[] | null => {
-		if (!tokens) return null;
+	  default:
+		  // Fallback for unknown blocks
+		  // console.log(`Unknown token type: ${token.type}`);
+		  return null;
+  }
+};
 
-		return tokens.map((token: any, idx: number): React.ReactElement | null => {
-			switch (token.type) {
-				case 'text':
-					return <Text key={idx}>{token.text}</Text>;
+// --- Main Component ---
 
-				case 'strong':
-					return (
-						<Text key={idx} bold>
-							{renderInlineTokens(token.tokens) || token.text}
-						</Text>
-					);
+interface MarkdownRendererProps {
+	children?: React.ReactNode;
+	tokens?: any[];
+}
 
-				case 'em':
-					return (
-						<Text key={idx} italic>
-							{renderInlineTokens(token.tokens) || token.text}
-						</Text>
-					);
-
-				case 'codespan':
-					return (
-						<Text key={idx} color="yellow">
-							{token.text}
-						</Text>
-					);
-
-				case 'link':
-					return (
-						<Text key={idx} color="blue" underline>
-							{token.text}
-						</Text>
-					);
-
-				default:
-					return null;
-			}
-		});
-	};
+const MarkdownRenderer = ({ children, tokens }: MarkdownRendererProps) => {
+	// Allow passing raw text (which we parse) OR pre-parsed tokens
+	const ast = tokens || marked.lexer(String(children || ''));
 
 	return (
 		<Box flexDirection="column">
-			{tokens.map((token: any, index: number) => renderToken(token, index))}
-		</Box>
-	);
-}
+		  {ast.map((token: any, index: number) => (
+			  <BlockRenderer key={index} token={token} />
+		  ))}
+	  </Box>
+  );
+};
+
+export default MarkdownRenderer;

@@ -1,8 +1,9 @@
 import React, {FC, useState} from 'react';
 import {Box, Text, useInput} from 'ink';
-import TextInput from 'ink-text-input';
-import MarkdownRenderer from './components/MarkdownRenderer.js';
 import {useConversation} from './hooks/use-conversation.js';
+import MessageList from './components/MessageList.js';
+import InputBox from './components/InputBox.js';
+import LiveResponse from './components/LiveResponse.js';
 
 const App: FC = () => {
 	const [input, setInput] = useState<string>('');
@@ -36,72 +37,12 @@ const App: FC = () => {
 
 	return (
 		<Box flexDirection="column">
-			<Box flexDirection="column" marginBottom={1}>
-				{messages.map(msg => (
-					<Box key={msg.id} marginBottom={msg.sender === 'approval' ? 1 : 0}>
-						{msg.sender === 'approval' ? (
-							<Box flexDirection="column">
-								<Text color="yellow">
-									{msg.approval.agentName} wants to run:{' '}
-									<Text bold>{msg.approval.toolName}</Text>
-								</Text>
-								<Text dimColor>
-									{msg.approval.argumentsText}
-								</Text>
-								<Text>
-									<Text color="yellow">(y/n)</Text>
-									{msg.answer && (
-										<Text color={msg.answer === 'y' ? 'green' : 'red'}>
-											{' '}
-											{msg.answer}
-										</Text>
-									)}
-								</Text>
-							</Box>
-						) : msg.sender === 'command' ? (
-							<Box flexDirection="column" marginBottom={1}>
-								<Text color={msg.success === false ? 'red' : 'cyan'}>
-									$ <Text bold>{msg.command}</Text>
-								</Text>
-								<Text color={msg.success === false ? 'red' : 'white'}>
-									{msg.output?.trim()
-										? (() => {
-												const lines = msg.output.split('\n');
-												return lines.length > 3
-													? lines.slice(0, 3).join('\n') + '\n...'
-													: msg.output;
-										  })()
-										: '(no output)'}
-								</Text>
-							</Box>
-						) : (
-							<Box marginBottom={1} flexDirection="column">
-								{msg.sender === 'user' ? (
-									<Text color="blue">❯ {msg.text}</Text>
-								) : (
-									<MarkdownRenderer>{msg.text}</MarkdownRenderer>
-								)}
-							</Box>
-						)}
-					</Box>
-				))}
-			</Box>
+			<MessageList messages={messages} />
 
-			{liveResponse && (
-				<Box marginBottom={1} flexDirection="column">
-					<MarkdownRenderer>{liveResponse.text || ' '}</MarkdownRenderer>
-				</Box>
-			)}
+			{liveResponse && <LiveResponse text={liveResponse.text} />}
 
 			{!isProcessing && !waitingForApproval && (
-				<Box>
-					<Text color="blue">❯ </Text>
-					<TextInput
-						value={input}
-						onChange={setInput}
-						onSubmit={handleSubmit}
-					/>
-				</Box>
+				<InputBox value={input} onChange={setInput} onSubmit={handleSubmit} />
 			)}
 
 			{isProcessing && (

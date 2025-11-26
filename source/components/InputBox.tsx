@@ -1,4 +1,4 @@
-import React, {FC, useEffect} from 'react';
+import React, {FC, useEffect, useState, useRef} from 'react';
 import {Box, Text, useInput} from 'ink';
 import TextInput from 'ink-text-input';
 import SlashCommandMenu, {SlashCommand} from './SlashCommandMenu.js';
@@ -34,6 +34,18 @@ const InputBox: FC<Props> = ({
 	onSlashMenuSelect,
 	onSlashMenuFilterChange,
 }) => {
+	const [escHintVisible, setEscHintVisible] = useState(false);
+	const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	// Cleanup timeout on unmount
+	useEffect(() => {
+		return () => {
+			if (escTimeoutRef.current) {
+				clearTimeout(escTimeoutRef.current);
+			}
+		};
+	}, []);
+
 	// Detect when user types '/' at the start
 	useEffect(() => {
 		if (value === '/' && !slashMenuOpen) {
@@ -50,6 +62,31 @@ const InputBox: FC<Props> = ({
 		onSlashMenuClose,
 		onSlashMenuFilterChange,
 	]);
+
+	// Handle escape key for clearing input (double-press)
+	useInput(
+		(_input, key) => {
+			if (key.escape) {
+				if (escHintVisible) {
+					// Second press - clear the input
+					if (escTimeoutRef.current) {
+						clearTimeout(escTimeoutRef.current);
+						escTimeoutRef.current = null;
+					}
+					setEscHintVisible(false);
+					onChange('');
+				} else {
+					// First press - show hint and start timer
+					setEscHintVisible(true);
+					escTimeoutRef.current = setTimeout(() => {
+						setEscHintVisible(false);
+						escTimeoutRef.current = null;
+					}, 2000);
+				}
+			}
+		},
+		{isActive: !slashMenuOpen},
+	);
 
 	// Handle arrow keys and escape for slash menu
 	useInput(
@@ -90,6 +127,11 @@ const InputBox: FC<Props> = ({
 				<Text color="blue">❯ </Text>
 				<TextInput value={value} onChange={onChange} onSubmit={handleSubmit} />
 			</Box>
+			{escHintVisible && (
+				<Text color="gray" dimColor>
+					Press ESC again to clear input
+				</Text>
+			)}
 		</Box>
 	);
 };

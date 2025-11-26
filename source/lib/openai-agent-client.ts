@@ -1,5 +1,5 @@
-import {run, type Agent} from '@openai/agents';
-import {createAgent, defaultAgent} from '../agent.js';
+import {Agent, run, tool as createTool} from '@openai/agents';
+import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -8,8 +8,8 @@ import {createAgent, defaultAgent} from '../agent.js';
 export class OpenAIAgentClient {
 	#agent: Agent;
 
-	constructor({agent, model}: {agent?: Agent; model?: string} = {}) {
-		this.#agent = agent ?? createAgent({model});
+	constructor({model}: {model?: string} = {}) {
+		this.#agent = this.#createAgent({model});
 	}
 
 	async startStream(
@@ -29,6 +29,29 @@ export class OpenAIAgentClient {
 	async continueRunStream(state: any): Promise<any> {
 		return run(this.#agent, state, {stream: true});
 	}
+
+	#createAgent({model}: {model?: string} = {}): Agent {
+		const {name, instructions, tools: toolDefinitions} = getAgentDefinition();
+		const resolvedModel = model?.trim() || DEFAULT_MODEL;
+
+		const tools = toolDefinitions.map(definition =>
+			createTool({
+				name: definition.name,
+				description: definition.description,
+				parameters: definition.parameters,
+				needsApproval: async (context, params) =>
+					definition.needsApproval(params, context),
+				execute: async params => definition.execute(params),
+			}),
+		);
+
+		return new Agent({
+			name,
+			model: resolvedModel,
+			instructions,
+			tools,
+		});
+	}
 }
 
-export const defaultAgentClient = new OpenAIAgentClient({agent: defaultAgent});
+export const defaultAgentClient = new OpenAIAgentClient();

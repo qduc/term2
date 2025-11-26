@@ -1,9 +1,6 @@
-import {Agent} from '@openai/agents';
-import {OpenAI} from 'openai';
-import {bashTool} from './tools/bash.js';
+import {bashToolDefinition} from './tools/bash.js';
+import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
-
-export const client = new OpenAI();
 
 export const DEFAULT_MODEL = 'gpt-4.1';
 
@@ -14,19 +11,16 @@ const envInfo = `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
 	process.env.SHELL || process.env.COMSPEC || 'unknown'
 }; cwd: ${process.cwd()}`;
 
-export const createAgent = ({
-	model,
-}: {
-	model?: string | null;
-} = {}): Agent => {
-	const resolvedModel = model?.trim() || DEFAULT_MODEL;
+export interface AgentDefinition {
+	name: string;
+	instructions: string;
+	tools: ToolDefinition[];
+}
 
-	return new Agent({
-		name: 'Terminal Assistant',
-		model: resolvedModel,
-		instructions: `${baseInstructions}\n\nEnvironment: ${envInfo}`,
-		tools: [bashTool],
-	});
+const agentDefinition: AgentDefinition = {
+	name: 'Terminal Assistant',
+	instructions: `${baseInstructions}\n\nEnvironment: ${envInfo}`,
+	tools: [bashToolDefinition],
 };
 
-export const defaultAgent = createAgent();
+export const getAgentDefinition = (): AgentDefinition => agentDefinition;

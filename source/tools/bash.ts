@@ -1,21 +1,25 @@
-import {tool} from '@openai/agents';
 import {z} from 'zod';
 import {exec} from 'child_process';
 import util from 'util';
 import {validateCommandSafety} from '../utils/command-safety.js';
 import {logValidationError} from '../utils/command-logger.js';
+import type {ToolDefinition} from './types.js';
 
 const execPromise = util.promisify(exec);
 
-export const bashTool = tool({
+const bashParametersSchema = z.object({
+	command: z.string().min(1, 'Command cannot be empty'),
+	needsApproval: z.boolean(),
+});
+
+export type BashToolParams = z.infer<typeof bashParametersSchema>;
+
+export const bashToolDefinition: ToolDefinition<BashToolParams> = {
 	name: 'bash',
 	description:
 		'Execute a bash command. Use this to run terminal commands. Assert the safety of the command; if the command does not change system state or read sensitive data, set needsApproval to false. Otherwise set needsApproval to true and wait for user approval before executing.',
-	parameters: z.object({
-		command: z.string().min(1, 'Command cannot be empty'),
-		needsApproval: z.boolean(),
-	}),
-	needsApproval: async (_context, params) => {
+	parameters: bashParametersSchema,
+	needsApproval: async params => {
 		try {
 			return params.needsApproval || validateCommandSafety(params.command);
 		} catch (error) {
@@ -56,4 +60,4 @@ export const bashTool = tool({
 			});
 		}
 	},
-});
+};

@@ -4,7 +4,7 @@ import type {ReactNode} from 'react';
 import {render} from 'ink';
 import meow from 'meow';
 import App from './app.js';
-import {createAgent, DEFAULT_MODEL} from './agent.js';
+import {DEFAULT_MODEL} from './agent.js';
 import {OpenAIAgentClient} from './lib/openai-agent-client.js';
 import {ConversationService} from './services/conversation-service.js';
 
@@ -43,9 +43,7 @@ console.log(`Using model: ${usedModel}`);
 
 const conversationService = modelFlag
 	? new ConversationService({
-			agentClient: new OpenAIAgentClient({
-				agent: createAgent({model: modelFlag}),
-			}),
+			agentClient: new OpenAIAgentClient({model: modelFlag}),
 		})
 	: undefined;
 

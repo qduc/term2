@@ -33,6 +33,11 @@ interface TextInputProps {
      * Character to mask input with (e.g. '*' for passwords).
      */
     mask?: string;
+
+    /**
+     * Whether to allow multi-line input.
+     */
+    multiLine?: boolean;
 }
 
 // --- Component ---
@@ -44,6 +49,7 @@ export const TextInput: React.FC<TextInputProps> = ({
     placeholder = '',
     focus = true,
     mask,
+    multiLine = false,
 }) => {
     // Track cursor position locally
     const [cursorOffset, setCursorOffset] = useState(value.length);
@@ -151,7 +157,13 @@ export const TextInput: React.FC<TextInputProps> = ({
                     consumed = 1;
                 } else if (seq === '\r' || seq === '\n') {
                     // Enter
-                    if (onSubmit) onSubmit(value);
+                    if (multiLine) {
+                        const nextValue = value.slice(0, cursorOffset) + '\n' + value.slice(cursorOffset);
+                        onChange(nextValue);
+                        setCursorOffset(cursorOffset + 1);
+                    } else {
+                        if (onSubmit) onSubmit(value);
+                    }
                     consumed = 1;
                 } else if (seq.charCodeAt(0) < 32) {
                     // Control characters
@@ -173,6 +185,8 @@ export const TextInput: React.FC<TextInputProps> = ({
                         const newBefore = lastSpace === -1 ? '' : trimmedBefore.slice(0, lastSpace + 1);
                         onChange(newBefore + after);
                         setCursorOffset(newBefore.length);
+                    } else if (code === 4) { // Ctrl+D
+                        if (onSubmit) onSubmit(value);
                     }
                     consumed = 1;
                 } else {
@@ -193,7 +207,7 @@ export const TextInput: React.FC<TextInputProps> = ({
             stdin.off('data', handleData);
             setRawMode(false);
         };
-    }, [focus, value, cursorOffset, onChange, onSubmit, stdin, setRawMode, isRawModeSupported]);
+    }, [focus, value, cursorOffset, onChange, onSubmit, stdin, setRawMode, isRawModeSupported, multiLine]);
 
     // Rendering Logic
     const displayText = mask ? mask.repeat(value.length) : value;
@@ -209,24 +223,70 @@ export const TextInput: React.FC<TextInputProps> = ({
         );
     }
 
-    // Split text at cursor for styling
-    const textBeforeCursor = displayText.slice(0, cursorOffset);
-    const charAtCursor = displayText.slice(cursorOffset, cursorOffset + 1) || ' ';
-    const textAfterCursor = displayText.slice(cursorOffset + 1);
+    // Check if multi-line
+    if (!displayText.includes('\n')) {
+        // Single line rendering
+        const textBeforeCursor = displayText.slice(0, cursorOffset);
+        const charAtCursor = displayText.slice(cursorOffset, cursorOffset + 1) || ' ';
+        const textAfterCursor = displayText.slice(cursorOffset + 1);
 
-    return (
-        <Box>
-            <Text>{textBeforeCursor}</Text>
-            {focus ? (
-                <Text color="cyan" inverse>
-                    {charAtCursor}
-                </Text>
-            ) : (
-                <Text>{charAtCursor}</Text>
-            )}
-            <Text>{textAfterCursor}</Text>
-        </Box>
-    );
+        return (
+            <Box>
+                <Text>{textBeforeCursor}</Text>
+                {focus ? (
+                    <Text color="cyan" inverse>
+                        {charAtCursor}
+                    </Text>
+                ) : (
+                    <Text>{charAtCursor}</Text>
+                )}
+                <Text>{textAfterCursor}</Text>
+            </Box>
+        );
+    } else {
+        // Multi-line rendering
+        const lines = displayText.split('\n');
+
+        // Calculate cursor position
+        let currentPos = 0;
+        let cursorLine = 0;
+        let cursorCol = 0;
+        for (let i = 0; i < lines.length; i++) {
+            if (cursorOffset <= currentPos + lines[i].length) {
+                cursorLine = i;
+                cursorCol = cursorOffset - currentPos;
+                break;
+            }
+            currentPos += lines[i].length + 1; // +1 for \n
+        }
+
+        return (
+            <Box flexDirection="column">
+                {lines.map((line, index) => {
+                    if (index === cursorLine) {
+                        const before = line.slice(0, cursorCol);
+                        const at = line.slice(cursorCol, cursorCol + 1) || ' ';
+                        const after = line.slice(cursorCol + 1);
+                        return (
+                            <Box key={index}>
+                                <Text>{before}</Text>
+                                {focus ? (
+                                    <Text color="cyan" inverse>
+                                        {at}
+                                    </Text>
+                                ) : (
+                                    <Text>{at}</Text>
+                                )}
+                                <Text>{after}</Text>
+                            </Box>
+                        );
+                    } else {
+                        return <Text key={index}>{line}</Text>;
+                    }
+                })}
+            </Box>
+        );
+    }
 };
 
 export default TextInput;

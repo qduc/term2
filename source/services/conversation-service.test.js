@@ -174,3 +174,109 @@ test('dedupes command messages emitted live from run events', async t => {
 	]);
 	t.deepEqual(result.commandMessages, []);
 });
+
+test('dedupes commands from initial stream when continuation history contains them', async t => {
+	// This test simulates the scenario where:
+	// 1. Initial stream emits command 'ls' before hitting an approval interruption
+	// 2. User approves, continuation stream runs
+	// 3. Continuation stream's history/newItems contains the 'ls' command again
+	// The 'ls' command should NOT be duplicated in the final result
+
+	const lsCommandPayload = JSON.stringify({
+		command: 'ls',
+		stdout: 'file.txt',
+		success: true,
+	});
+	const lsRawItem = {
+		id: 'call-ls-123',
+		type: 'function_call_result',
+		name: 'bash',
+		arguments: JSON.stringify({command: 'ls'}),
+	};
+	const lsCommandItem = {
+		type: 'tool_call_output_item',
+		name: 'bash',
+		output: lsCommandPayload,
+		rawItem: lsRawItem,
+	};
+
+	const sedCommandPayload = JSON.stringify({
+		command: 'sed -n "1,10p" file.txt',
+		stdout: 'content',
+		success: true,
+	});
+	const sedRawItem = {
+		id: 'call-sed-456',
+		type: 'function_call_result',
+		name: 'bash',
+		arguments: JSON.stringify({command: 'sed -n "1,10p" file.txt'}),
+	};
+	const sedCommandItem = {
+		type: 'tool_call_output_item',
+		name: 'bash',
+		output: sedCommandPayload,
+		rawItem: sedRawItem,
+	};
+
+	const interruption = {
+		name: 'bash',
+		agent: {name: 'CLI Agent'},
+		arguments: JSON.stringify({command: 'sed -n "1,10p" file.txt'}),
+	};
+
+	// Initial stream: emits 'ls' command, then hits approval for 'sed'
+	const initialEvents = [{type: 'run_item_stream_event', item: lsCommandItem}];
+	const initialStream = new MockStream(initialEvents);
+	initialStream.interruptions = [interruption];
+	initialStream.state = {
+		approveCalls: [],
+		approve(arg) {
+			this.approveCalls.push(arg);
+		},
+		reject() {},
+	};
+
+	// Continuation stream: emits 'sed' command, history contains BOTH 'ls' and 'sed'
+	const continuationEvents = [{type: 'run_item_stream_event', item: sedCommandItem}];
+	const continuationStream = new MockStream(continuationEvents);
+	continuationStream.finalOutput = 'Done';
+	// Simulate that the continuation stream's history contains both commands
+	continuationStream.history = [lsCommandItem, sedCommandItem];
+
+	const mockClient = {
+		async startStream() {
+			return initialStream;
+		},
+		async continueRunStream() {
+			return continuationStream;
+		},
+	};
+
+	const emittedCommands = [];
+	const service = new ConversationService({agentClient: mockClient});
+
+	// Send initial message - should emit 'ls' and return approval_required
+	const approvalResult = await service.sendMessage('run commands', {
+		onCommandMessage(message) {
+			emittedCommands.push(message);
+		},
+	});
+
+	t.is(approvalResult.type, 'approval_required');
+	t.is(emittedCommands.length, 1);
+	t.is(emittedCommands[0].id, 'call-ls-123');
+
+	// Handle approval - should emit 'sed' but NOT duplicate 'ls'
+	const finalResult = await service.handleApprovalDecision('y', {
+		onCommandMessage(message) {
+			emittedCommands.push(message);
+		},
+	});
+
+	t.is(finalResult.type, 'response');
+	// Only 'sed' should be emitted during continuation
+	t.is(emittedCommands.length, 2);
+	t.is(emittedCommands[1].id, 'call-sed-456');
+	// Final result should have no additional commands since both were emitted live
+	t.deepEqual(finalResult.commandMessages, []);
+});

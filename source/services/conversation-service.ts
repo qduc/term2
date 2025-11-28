@@ -63,7 +63,11 @@ const getCommandFromArgs = (args: unknown): string => {
 export class ConversationService {
 	private agentClient: OpenAIAgentClient;
 	private previousResponseId: string | null = null;
-	private pendingApprovalContext: {state: any; interruption: any} | null = null;
+	private pendingApprovalContext: {
+		state: any;
+		interruption: any;
+		emittedCommandIds: Set<string>;
+	} | null = null;
 
 	constructor({
 		agentClient = defaultAgentClient,
@@ -121,7 +125,8 @@ export class ConversationService {
 			return null;
 		}
 
-		const {state, interruption} = this.pendingApprovalContext;
+		const {state, interruption, emittedCommandIds: previouslyEmittedIds} =
+			this.pendingApprovalContext;
 		if (answer === 'y') {
 			state.approve(interruption);
 		} else {
@@ -134,10 +139,15 @@ export class ConversationService {
 			onTextChunk,
 			onCommandMessage,
 		});
+
+		// Merge previously emitted command IDs with newly emitted ones
+		// This prevents duplicates when result.history contains commands from the initial stream
+		const allEmittedIds = new Set([...previouslyEmittedIds, ...emittedCommandIds]);
+
 		return this.#buildResult(
 			stream,
 			finalOutput || undefined,
-			emittedCommandIds,
+			allEmittedIds,
 		);
 	}
 
@@ -296,7 +306,11 @@ export class ConversationService {
 	): ConversationResult {
 		if (result.interruptions && result.interruptions.length > 0) {
 			const interruption = result.interruptions[0];
-			this.pendingApprovalContext = {state: result.state, interruption};
+			this.pendingApprovalContext = {
+				state: result.state,
+				interruption,
+				emittedCommandIds: emittedCommandIds ?? new Set(),
+			};
 
 			let argumentsText = '';
 			const toolName = interruption.name;

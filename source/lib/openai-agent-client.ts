@@ -4,12 +4,10 @@ import {
 	UserError,
 	run,
 	tool as createTool,
-	shellTool,
 	webSearchTool,
 	type Tool,
 } from '@openai/agents';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
-import { LocalShell } from './shell.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -67,8 +65,8 @@ export class OpenAIAgentClient {
 	}
 
 	#createAgent({model}: {model?: string} = {}): Agent {
-		const {name, instructions, tools: toolDefinitions} = getAgentDefinition();
 		const resolvedModel = model?.trim() || DEFAULT_MODEL;
+		const {name, instructions, tools: toolDefinitions} = getAgentDefinition(resolvedModel);
 
 		const tools: Tool[] = toolDefinitions.map(definition =>
 			createTool({
@@ -83,16 +81,6 @@ export class OpenAIAgentClient {
 
 		// Add web search tool
 		tools.push(webSearchTool());
-
-		if (resolvedModel === 'gpt-5.1') {
-			const shell = new LocalShell();
-			tools.push(
-				shellTool({
-					shell,
-					needsApproval: true,
-				}),
-			);
-		}
 
 		return new Agent({
 			name,

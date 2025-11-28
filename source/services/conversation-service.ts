@@ -36,6 +36,10 @@ const getCommandFromArgs = (args: unknown): string => {
 	if (typeof args === 'string') {
 		try {
 			const parsed = JSON.parse(args);
+			// Handle shell tool's commands array
+			if (Array.isArray(parsed?.commands)) {
+				return parsed.commands.join('\n');
+			}
 			return parsed?.command ?? args;
 		} catch {
 			return args;
@@ -43,6 +47,10 @@ const getCommandFromArgs = (args: unknown): string => {
 	}
 
 	if (typeof args === 'object') {
+		// Handle shell tool's commands array
+		if ('commands' in args && Array.isArray(args.commands)) {
+			return (args.commands as string[]).join('\n');
+		}
 		const cmdFromObject = 'command' in args ? String(args.command) : undefined;
 		const argsFromObject =
 			'arguments' in args ? String(args.arguments) : undefined;
@@ -291,10 +299,11 @@ export class ConversationService {
 			this.pendingApprovalContext = {state: result.state, interruption};
 
 			let argumentsText = '';
-			let toolName = interruption.name;
+			const toolName = interruption.name;
 
+			// For shell_call (built-in shell tool), extract commands from action
+			// For function tools (bash, shell), extract from arguments
 			if (interruption.type === 'shell_call') {
-				toolName = 'shell';
 				if (interruption.action?.commands) {
 					argumentsText = Array.isArray(interruption.action.commands)
 						? interruption.action.commands.join('\n')

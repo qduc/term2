@@ -1,5 +1,6 @@
 import {bashToolDefinition} from './tools/bash.js';
 import {applyPatchToolDefinition} from './tools/apply-patch.js';
+import {shellToolDefinition} from './tools/shell.js';
 import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
@@ -23,12 +24,26 @@ export interface AgentDefinition {
 	name: string;
 	instructions: string;
 	tools: ToolDefinition[];
+	model: string;
 }
 
-const agentDefinition: AgentDefinition = {
-	name: 'Terminal Assistant',
-	instructions: `${baseInstructions}\n\nEnvironment: ${envInfo}`,
-	tools: [bashToolDefinition, applyPatchToolDefinition],
-};
+/**
+ * Returns the agent definition with appropriate tools based on the model.
+ * For gpt-5.1, includes the shell tool which is optimized for that model.
+ * For other models, uses the standard bash tool.
+ */
+export const getAgentDefinition = (model?: string): AgentDefinition => {
+	const resolvedModel = model?.trim() || DEFAULT_MODEL;
+	const isGpt51 = resolvedModel === 'gpt-5.1';
 
-export const getAgentDefinition = (): AgentDefinition => agentDefinition;
+	// For gpt-5.1, use shell tool; for others, use bash tool
+	// const commandTool = isGpt51 ? shellToolDefinition : bashToolDefinition;
+	const commandTool = shellToolDefinition;
+
+	return {
+		name: 'Terminal Assistant',
+		instructions: `${baseInstructions}\n\nEnvironment: ${envInfo}`,
+		tools: [commandTool, applyPatchToolDefinition],
+		model: resolvedModel,
+	};
+};

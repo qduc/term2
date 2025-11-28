@@ -5,6 +5,7 @@ import {
 	run,
 	tool as createTool,
 	shellTool,
+	webSearchTool,
 	type Tool,
 } from '@openai/agents';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
@@ -74,6 +75,9 @@ export class OpenAIAgentClient {
 				execute: async params => definition.execute(params),
 			}),
 		);
+
+		// Add web search tool
+		tools.push(webSearchTool());
 
 		if (resolvedModel === 'gpt-5.1') {
 			const shell = new LocalShell();

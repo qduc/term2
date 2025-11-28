@@ -227,7 +227,6 @@ export const TextInput: React.FC<TextInputProps> = ({
 
     // Rendering Logic
     const displayText = mask ? mask.repeat(value.length) : value;
-
     // If empty, show placeholder
     if (value.length === 0 && placeholder) {
         return (
@@ -239,70 +238,95 @@ export const TextInput: React.FC<TextInputProps> = ({
         );
     }
 
-    // Check if multi-line
-    if (!displayText.includes('\n')) {
-        // Single line rendering
-        const textBeforeCursor = displayText.slice(0, cursorOffset);
-        const charAtCursor = displayText.slice(cursorOffset, cursorOffset + 1) || ' ';
-        const textAfterCursor = displayText.slice(cursorOffset + 1);
+    // Helper: simple word-wrap preserving spaces when possible
+    const wrapText = (text: string, width: number): string[] => {
+        if (width <= 1) return [text];
+        const parts = text.split(/(\s+)/);
+        const lines: string[] = [];
+        let current = '';
 
-        return (
-            <Box>
-                <Text>{textBeforeCursor}</Text>
-                {focus ? (
-                    <Text color="cyan" inverse>
-                        {charAtCursor}
-                    </Text>
-                ) : (
-                    <Text>{charAtCursor}</Text>
-                )}
-                <Text>{textAfterCursor}</Text>
-            </Box>
-        );
-    } else {
-        // Multi-line rendering
-        const lines = displayText.split('\n');
-
-        // Calculate cursor position
-        let currentPos = 0;
-        let cursorLine = 0;
-        let cursorCol = 0;
-        for (let i = 0; i < lines.length; i++) {
-            if (cursorOffset <= currentPos + lines[i].length) {
-                cursorLine = i;
-                cursorCol = cursorOffset - currentPos;
-                break;
+        for (const part of parts) {
+            if (part.length === 0) continue;
+            if (current.length + part.length <= width) {
+                current += part;
+            } else {
+                if (current.length > 0) {
+                    lines.push(current);
+                }
+                // If the part itself is longer than width, break it
+                if (part.length > width) {
+                    for (let i = 0; i < part.length; i += width) {
+                        lines.push(part.slice(i, i + width));
+                    }
+                    current = '';
+                } else {
+                    current = part;
+                }
             }
-            currentPos += lines[i].length + 1; // +1 for \n
         }
 
-        return (
-            <Box flexDirection="column">
-                {lines.map((line, index) => {
-                    if (index === cursorLine) {
-                        const before = line.slice(0, cursorCol);
-                        const at = line.slice(cursorCol, cursorCol + 1) || ' ';
-                        const after = line.slice(cursorCol + 1);
-                        return (
-                            <Box key={index}>
-                                <Text>{before}</Text>
-                                {focus ? (
-                                    <Text color="cyan" inverse>
-                                        {at}
-                                    </Text>
-                                ) : (
-                                    <Text>{at}</Text>
-                                )}
-                                <Text>{after}</Text>
-                            </Box>
-                        );
-                    } else {
-                        return <Text key={index}>{line}</Text>;
-                    }
-                })}
-            </Box>
-        );
+        if (current.length > 0) lines.push(current);
+        if (lines.length === 0) lines.push('');
+        return lines;
+    };
+
+    // Determine display lines: either explicit newlines or wrapped lines
+    const termWidth = Math.max(1, process.stdout?.columns ?? 80);
+    let lines: string[];
+    const hasNewlines = displayText.includes('\n');
+    if (hasNewlines) {
+        lines = displayText.split('\n');
+    } else {
+        lines = wrapText(displayText, termWidth);
     }
+
+    // Calculate cursor position across the lines
+    let currentPos = 0;
+    let cursorLine = 0;
+    let cursorCol = 0;
+    for (let i = 0; i < lines.length; i++) {
+        const lineLen = lines[i].length;
+        if (cursorOffset <= currentPos + lineLen) {
+            cursorLine = i;
+            cursorCol = cursorOffset - currentPos;
+            break;
+        }
+        // If original text had explicit newlines, account for the '\n' char
+        currentPos += hasNewlines ? lineLen + 1 : lineLen;
+    }
+
+    // If cursor wasn't assigned (cursor at very end), put it at final position
+    if (cursorOffset === value.length && (cursorLine === 0 && cursorCol === 0) && lines.length > 0) {
+        cursorLine = lines.length - 1;
+        cursorCol = lines[lines.length - 1].length;
+    }
+
+    return (
+        <Box flexDirection="column">
+            {lines.map((line, index) => {
+                if (index === cursorLine) {
+                    const before = line.slice(0, cursorCol);
+                    const at = line.slice(cursorCol, cursorCol + 1) || ' ';
+                    const after = line.slice(cursorCol + 1);
+                    return (
+                        <Box key={index}>
+                            <Text>{before}</Text>
+                            {focus ? (
+                                <Text color="cyan" inverse>
+                                    {at}
+                                </Text>
+                            ) : (
+                                <Text>{at}</Text>
+                            )}
+                            <Text>{after}</Text>
+                        </Box>
+                    );
+                } else {
+                    return <Text key={index}>{line}</Text>;
+                }
+            })}
+        </Box>
+    );
 };
 
 export default TextInput;

@@ -114,8 +114,10 @@ const InputBox: FC<Props> = ({
 		(_input, key) => {
 			if (key.upArrow) {
 				onHistoryUp();
+				setInputKey(prev => prev + 1);
 			} else if (key.downArrow) {
 				onHistoryDown();
+				setInputKey(prev => prev + 1);
 			}
 		},
 		{isActive: !slashMenuOpen},

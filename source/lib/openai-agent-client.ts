@@ -13,11 +13,14 @@ import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
  * Minimal adapter that isolates usage of @openai/agents.
  * Swap this module to change the underlying agent provider without touching the UI.
  */
-export class OpenAIAgentClient {
+	export class OpenAIAgentClient {
 	#agent: Agent;
 
-	constructor({model}: {model?: string} = {}) {
-		this.#agent = this.#createAgent({model});
+	constructor({
+		model,
+		reasoningEffort,
+	}: {model?: string; reasoningEffort?: string} = {}) {
+		this.#agent = this.#createAgent({model, reasoningEffort});
 	}
 
 	setModel(model: string): void {
@@ -64,7 +67,10 @@ export class OpenAIAgentClient {
 		}
 	}
 
-	#createAgent({model}: {model?: string} = {}): Agent {
+	#createAgent({
+		model,
+		reasoningEffort,
+	}: {model?: string; reasoningEffort?: string} = {}): Agent {
 		const resolvedModel = model?.trim() || DEFAULT_MODEL;
 		const {name, instructions, tools: toolDefinitions} = getAgentDefinition(resolvedModel);
 
@@ -82,12 +88,23 @@ export class OpenAIAgentClient {
 		// Add web search tool
 		tools.push(webSearchTool());
 
-		return new Agent({
+		const agent = new Agent({
 			name,
 			model: resolvedModel,
 			instructions,
 			tools,
 		});
+
+		if (reasoningEffort) {
+			// @ts-expect-error: reasoning_effort is supported by reasoning models
+			agent.defaultRunOptions = {
+				...(agent.defaultRunOptions || {}),
+				// Pass through to underlying client for models that support it
+				reasoning: {effort: reasoningEffort},
+			};
+		}
+
+		return agent;
 	}
 }
 

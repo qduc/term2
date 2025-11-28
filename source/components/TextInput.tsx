@@ -190,11 +190,27 @@ export const TextInput: React.FC<TextInputProps> = ({
                     }
                     consumed = 1;
                 } else {
-                    // Printable character
-                    const nextValue = value.slice(0, cursorOffset) + seq[0] + value.slice(cursorOffset);
-                    onChange(nextValue);
-                    setCursorOffset(cursorOffset + 1);
-                    consumed = 1;
+                    // Printable characters (support for paste by inserting multiple at once)
+                    const printableChars = [];
+                    for (let i = 0; i < seq.length; i++) {
+                        const char = seq[i];
+                        const code = char.charCodeAt(0);
+                        if (code >= 32 && code !== 127) { // printable ASCII, exclude DEL
+                            printableChars.push(char);
+                        } else {
+                            break;
+                        }
+                    }
+                    if (printableChars.length > 0) {
+                        const printable = printableChars.join('');
+                        const nextValue = value.slice(0, cursorOffset) + printable + value.slice(cursorOffset);
+                        onChange(nextValue);
+                        setCursorOffset(cursorOffset + printable.length);
+                        consumed = printableChars.length;
+                    } else {
+                        // Unknown or non-printable, consume 1 to avoid getting stuck
+                        consumed = 1;
+                    }
                 }
 
                 bufferRef.current = bufferRef.current.slice(consumed);

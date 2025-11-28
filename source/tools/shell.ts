@@ -15,6 +15,85 @@ const shellParametersSchema = z.object({
 
 export type ShellToolParams = z.infer<typeof shellParametersSchema>;
 
+/**
+ * Configuration for output trimming limits.
+ * Output will be trimmed if it exceeds either limit.
+ */
+export interface OutputTrimConfig {
+	/** Maximum number of lines before trimming (default: 1000) */
+	maxLines: number;
+	/** Maximum size in bytes before trimming (default: 100KB) */
+	maxBytes: number;
+}
+
+/** Default trim configuration */
+export const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
+	maxLines: 1000,
+	maxBytes: 100 * 1024, // 100KB
+};
+
+/** Current trim configuration (can be modified at runtime) */
+let trimConfig: OutputTrimConfig = {...DEFAULT_TRIM_CONFIG};
+
+/**
+ * Set the output trim configuration.
+ */
+export function setTrimConfig(config: Partial<OutputTrimConfig>): void {
+	trimConfig = {...trimConfig, ...config};
+}
+
+/**
+ * Get the current trim configuration.
+ */
+export function getTrimConfig(): OutputTrimConfig {
+	return {...trimConfig};
+}
+
+/**
+ * Trim output by keeping the beginning and end, removing the middle.
+ * Returns the original output if it doesn't exceed limits.
+ */
+function trimOutput(output: string): string {
+	const lines = output.split('\n');
+	const byteSize = Buffer.byteLength(output, 'utf8');
+
+	const exceedsLines = lines.length > trimConfig.maxLines;
+	const exceedsBytes = byteSize > trimConfig.maxBytes;
+
+	if (!exceedsLines && !exceedsBytes) {
+		return output;
+	}
+
+	// Calculate how many lines to keep at beginning and end
+	// Keep 40% at the beginning, 40% at the end, trim 20% from the middle
+	const keepLines = Math.floor(trimConfig.maxLines * 0.4);
+
+	// If exceeds bytes but not lines, calculate lines to keep based on byte limit
+	let effectiveKeepLines = keepLines;
+	if (exceedsBytes && !exceedsLines) {
+		// Estimate average bytes per line and calculate how many lines fit
+		const avgBytesPerLine = byteSize / lines.length;
+		const maxLinesForBytes = Math.floor(trimConfig.maxBytes / avgBytesPerLine);
+		effectiveKeepLines = Math.floor(maxLinesForBytes * 0.4);
+	}
+
+	// Ensure we keep at least some lines
+	effectiveKeepLines = Math.max(effectiveKeepLines, 10);
+
+	if (lines.length <= effectiveKeepLines * 2) {
+		// Not enough lines to meaningfully trim
+		return output;
+	}
+
+	const headLines = lines.slice(0, effectiveKeepLines);
+	const tailLines = lines.slice(-effectiveKeepLines);
+	const trimmedCount = lines.length - effectiveKeepLines * 2;
+
+	const trimMessage = `\n... [${trimmedCount} lines trimmed] ...\n`;
+
+	return headLines.join('\n') + trimMessage + tailLines.join('\n');
+}
+
 interface ShellCommandResult {
 	command: string;
 	stdout: string;
@@ -92,8 +171,8 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 
 			output.push({
 				command,
-				stdout,
-				stderr,
+				stdout: trimOutput(stdout),
+				stderr: trimOutput(stderr),
 				outcome,
 			});
 

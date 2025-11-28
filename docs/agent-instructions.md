@@ -10,4 +10,4 @@ Use web search only when information is missing locally.
 
 - Ask before destructive actions.
 
-- Summarize progress after each phase.
+- Summarize progress after each phase. Avoid outputting long code snippets when summarizing, output just the most relevant parts.

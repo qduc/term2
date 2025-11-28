@@ -1,0 +1,120 @@
+import {z} from 'zod';
+import {readFile, writeFile, mkdir, rm} from 'fs/promises';
+import path from 'path';
+import {applyDiff} from '@openai/agents';
+import type {ToolDefinition} from './types.js';
+
+const applyPatchParametersSchema = z.object({
+	type: z.enum(['create_file', 'update_file', 'delete_file']),
+	path: z.string().min(1, 'File path cannot be empty'),
+	diff: z.string().describe('Unified diff content for create/update operations'),
+});
+
+export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;
+
+/**
+ * Resolves a relative path and ensures it's within the workspace
+ */
+function resolveWorkspacePath(relativePath: string): string {
+	const workspaceRoot = process.cwd();
+	const resolved = path.resolve(workspaceRoot, relativePath);
+
+	if (!resolved.startsWith(workspaceRoot)) {
+		throw new Error(`Operation outside workspace: ${relativePath}`);
+	}
+
+	return resolved;
+}
+
+export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
+	name: 'apply_patch',
+	description:
+		'Apply file changes using unified diff format. Supports creating, updating, and deleting files. ' +
+		'For create_file and update_file operations, provide a unified diff. ' +
+		'The diff format should use +/- prefixes for added/removed lines. ' +
+		'Example diff:\n' +
+		'```\n' +
+		'-old line\n' +
+		'+new line\n' +
+		'```',
+	parameters: applyPatchParametersSchema,
+	needsApproval: async () => {
+		// File modifications always require approval
+		return true;
+	},
+	execute: async params => {
+		try {
+			const {type, path: filePath, diff} = params;
+			const targetPath = resolveWorkspacePath(filePath);
+
+			switch (type) {
+				case 'create_file': {
+					// Ensure parent directory exists
+					await mkdir(path.dirname(targetPath), {recursive: true});
+
+					// Apply diff to empty content for new file
+					const content = applyDiff('', diff, 'create');
+					await writeFile(targetPath, content, 'utf8');
+
+					return JSON.stringify({
+						success: true,
+						operation: 'create_file',
+						path: filePath,
+						message: `Created ${filePath}`,
+					});
+				}
+
+				case 'update_file': {
+					// Read existing file
+					let original: string;
+					try {
+						original = await readFile(targetPath, 'utf8');
+					} catch (error: any) {
+						if (error?.code === 'ENOENT') {
+							return JSON.stringify({
+								success: false,
+								error: `Cannot update missing file: ${filePath}`,
+							});
+						}
+
+						throw error;
+					}
+
+					// Apply diff to existing content
+					const patched = applyDiff(original, diff);
+					await writeFile(targetPath, patched, 'utf8');
+
+					return JSON.stringify({
+						success: true,
+						operation: 'update_file',
+						path: filePath,
+						message: `Updated ${filePath}`,
+					});
+				}
+
+				case 'delete_file': {
+					await rm(targetPath, {force: true});
+
+					return JSON.stringify({
+						success: true,
+						operation: 'delete_file',
+						path: filePath,
+						message: `Deleted ${filePath}`,
+					});
+				}
+
+				default: {
+					return JSON.stringify({
+						success: false,
+						error: `Unknown operation type: ${type}`,
+					});
+				}
+			}
+		} catch (error: any) {
+			return JSON.stringify({
+				success: false,
+				error: error.message || String(error),
+			});
+		}
+	},
+};

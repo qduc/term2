@@ -34,6 +34,7 @@ export class OpenAIAgentClient {
 			run(this.#agent, userInput, {
 				previousResponseId: previousResponseId ?? undefined,
 				stream: true,
+				maxTurns: 20,
 			}),
 		);
 	}
@@ -44,7 +45,7 @@ export class OpenAIAgentClient {
 
 	async continueRunStream(state: any): Promise<any> {
 		return this.#executeWithRetry(() =>
-			run(this.#agent, state, { stream: true }),
+			run(this.#agent, state, { stream: true, maxTurns: 20 }),
 		);
 	}
 

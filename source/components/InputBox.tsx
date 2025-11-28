@@ -1,6 +1,6 @@
 import React, {FC, useEffect, useState, useRef} from 'react';
 import {Box, Text, useInput} from 'ink';
-import TextInput from 'ink-text-input';
+import TextInput from './TextInput.js';
 import SlashCommandMenu, {SlashCommand} from './SlashCommandMenu.js';
 
 type Props = {

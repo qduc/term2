@@ -121,36 +121,42 @@ const App: FC<AppProps> = ({conversationService}) => {
 	}, [navigateDown]);
 
 	return (
-		<Box flexDirection="column">
-			<MessageList messages={messages} />
+		<Box flexDirection="column" flexGrow={1}>
+			{/* Main content area grows to fill available vertical space */}
+			<Box flexDirection="column" flexGrow={1}>
+				<MessageList messages={messages} />
 
-			{liveResponse && <LiveResponse text={liveResponse.text} />}
+				{liveResponse && <LiveResponse text={liveResponse.text} />}
+			</Box>
 
-			{!isProcessing && !waitingForApproval && (
-				<InputBox
-					value={input}
-					onChange={setInput}
-					onSubmit={handleSubmit}
-					slashCommands={slashCommands}
-					slashMenuOpen={slashMenuOpen}
-					slashMenuSelectedIndex={slashMenuSelectedIndex}
-					slashMenuFilter={slashMenuFilter}
-					onSlashMenuOpen={openSlashMenu}
-					onSlashMenuClose={closeSlashMenu}
-					onSlashMenuUp={slashMenuUp}
-					onSlashMenuDown={slashMenuDown}
-					onSlashMenuSelect={executeSlashCommand}
-					onSlashMenuFilterChange={updateSlashFilter}
-					onHistoryUp={handleHistoryUp}
-					onHistoryDown={handleHistoryDown}
-				/>
-			)}
+			{/* Fixed bottom area for input / status */}
+			<Box flexDirection="column">
+				{!isProcessing && !waitingForApproval && (
+					<InputBox
+						value={input}
+						onChange={setInput}
+						onSubmit={handleSubmit}
+						slashCommands={slashCommands}
+						slashMenuOpen={slashMenuOpen}
+						slashMenuSelectedIndex={slashMenuSelectedIndex}
+						slashMenuFilter={slashMenuFilter}
+						onSlashMenuOpen={openSlashMenu}
+						onSlashMenuClose={closeSlashMenu}
+						onSlashMenuUp={slashMenuUp}
+						onSlashMenuDown={slashMenuDown}
+						onSlashMenuSelect={executeSlashCommand}
+						onSlashMenuFilterChange={updateSlashFilter}
+						onHistoryUp={handleHistoryUp}
+						onHistoryDown={handleHistoryDown}
+					/>
+				)}
 
-			{isProcessing && (
-				<Text color="gray" dimColor>
-					⟳ processing...
-				</Text>
-			)}
+				{isProcessing && (
+					<Text color="gray" dimColor>
+						⟳ processing...
+					</Text>
+				)}
+			</Box>
 		</Box>
 	);
 };

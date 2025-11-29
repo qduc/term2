@@ -1,17 +1,12 @@
 import {z} from 'zod';
-import {exec, type ExecException} from 'child_process';
+import {exec} from 'child_process';
+import util from 'util';
 import process from 'process';
 import {validateCommandSafety} from '../utils/command-safety.js';
 import {logValidationError} from '../utils/command-logger.js';
 import type {ToolDefinition} from './types.js';
 
-function bufferToString(output: string | Buffer | undefined): string {
-	if (typeof output === 'string') {
-		return output;
-	}
-
-	return output?.toString('utf8') ?? '';
-}
+const execPromise = util.promisify(exec);
 
 /** Default trim configuration */
 export const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
@@ -61,38 +56,6 @@ export interface OutputTrimConfig {
 
 /** Current trim configuration (can be modified at runtime) */
 let trimConfig: OutputTrimConfig = {...DEFAULT_TRIM_CONFIG};
-
-/**
- * Run a shell command while immediately closing stdin so tools like ripgrep
- * don't wait for user input and incorrectly fall back to stdin scanning.
- */
-async function execWithoutInput(
-	command: string,
-	options: Parameters<typeof exec>[1],
-): Promise<{stdout: string; stderr: string}> {
-	return new Promise((resolve, reject) => {
-		const child = exec(command, options, (error, stdout, stderr) => {
-			if (error) {
-				const execError = error as ExecException & {
-					stdout?: string;
-					stderr?: string;
-				};
-				execError.stdout = bufferToString(stdout);
-				execError.stderr = bufferToString(stderr);
-				reject(execError);
-				return;
-			}
-
-			resolve({
-				stdout: bufferToString(stdout),
-				stderr: bufferToString(stderr),
-			});
-		});
-
-		// Close stdin immediately to signal that no interactive input is available.
-		child.stdin?.end();
-	});
-}
 
 /**
  * Set the output trim configuration.
@@ -215,7 +178,7 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 			};
 
 			try {
-				const result = await execWithoutInput(command, {
+				const result = await execPromise(command, {
 					cwd,
 					timeout,
 					maxBuffer: 1024 * 1024, // 1MB max buffer

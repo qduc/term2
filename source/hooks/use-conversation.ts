@@ -132,14 +132,17 @@ export const useConversation = ({
 			const finalText = remainingText?.trim()
 				? remainingText
 				: result.finalText;
-			const finalReasoningText =
-				remainingReasoningText || result.reasoningText;
+			// Only use result.reasoningText if nothing was flushed yet
+			// When textWasFlushed is true, reasoning was already flushed before commands
+			const finalReasoningText = textWasFlushed
+				? remainingReasoningText
+				: remainingReasoningText || result.reasoningText;
 
 			setMessages(prev => {
 				const messagesToAdd: Message[] = [];
 
 				// Add reasoning as a separate message if it exists and wasn't flushed
-				if (finalReasoningText?.trim() && !textWasFlushed) {
+				if (finalReasoningText?.trim()) {
 					const reasoningMessage: ReasoningMessage = {
 						id: Date.now(),
 						sender: 'reasoning',

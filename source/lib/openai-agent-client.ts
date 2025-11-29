@@ -96,9 +96,8 @@ import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 		});
 
 		if (reasoningEffort) {
-			// @ts-expect-error: reasoning_effort is supported by reasoning models
-			agent.defaultRunOptions = {
-				...(agent.defaultRunOptions || {}),
+			(agent as any).defaultRunOptions = {
+				...((agent as any).defaultRunOptions || {}),
 				// Pass through to underlying client for models that support it
 				reasoning: {effort: reasoningEffort},
 			};

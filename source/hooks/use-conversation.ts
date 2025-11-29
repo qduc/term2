@@ -64,41 +64,63 @@ export const useConversation = ({
 	const [isProcessing, setIsProcessing] = useState<boolean>(false);
 	const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
 
-	const applyServiceResult = useCallback((result: any) => {
-		if (!result) {
-			return;
-		}
+	const applyServiceResult = useCallback(
+		(result: any, remainingText?: string, textWasFlushed?: boolean) => {
+			if (!result) {
+				return;
+			}
 
-		if (result.type === 'approval_required') {
-			const approvalMessage: ApprovalMessage = {
-				id: Date.now(),
-				sender: 'approval',
-				approval: result.approval,
-				answer: null,
-			};
+			if (result.type === 'approval_required') {
+				// Flush any remaining text before showing approval prompt
+				if (remainingText?.trim() && !textWasFlushed) {
+					const textMessage: BotMessage = {
+						id: Date.now(),
+						sender: 'bot',
+						text: remainingText,
+					};
+					setMessages(prev => [...prev, textMessage]);
+				}
 
-			setMessages(prev => [...prev, approvalMessage]);
-			setWaitingForApproval(true);
-			setPendingApprovalMessageId(approvalMessage.id);
-			return;
-		}
+				const approvalMessage: ApprovalMessage = {
+					id: Date.now(),
+					sender: 'approval',
+					approval: result.approval,
+					answer: null,
+				};
 
-		const botMessage: BotMessage = {
-			id: Date.now(),
-			sender: 'bot',
-			text: result.finalText,
-		};
+				setMessages(prev => [...prev, approvalMessage]);
+				setWaitingForApproval(true);
+				setPendingApprovalMessageId(approvalMessage.id);
+				return;
+			}
 
-		setMessages(prev => {
-			const withCommands =
-				result.commandMessages.length > 0
-					? [...prev, ...result.commandMessages]
-					: prev;
-			return [...withCommands, botMessage];
-		});
-		setWaitingForApproval(false);
-		setPendingApprovalMessageId(null);
-	}, []);
+			// If text was already flushed before command messages, don't add it again
+			// Only add final text if there's new text after the commands
+			const shouldAddBotMessage = !textWasFlushed || remainingText?.trim();
+			const finalText = remainingText?.trim() ? remainingText : result.finalText;
+
+			setMessages(prev => {
+				const withCommands =
+					result.commandMessages.length > 0
+						? [...prev, ...result.commandMessages]
+						: prev;
+
+				if (shouldAddBotMessage && finalText) {
+					const botMessage: BotMessage = {
+						id: Date.now(),
+						sender: 'bot',
+						text: finalText,
+					};
+					return [...withCommands, botMessage];
+				}
+
+				return withCommands;
+			});
+			setWaitingForApproval(false);
+			setPendingApprovalMessageId(null);
+		},
+		[],
+	);
 
 	const sendUserMessage = useCallback(
 		async (value: string) => {
@@ -117,20 +139,40 @@ export const useConversation = ({
 			const liveMessageId = Date.now();
 			setLiveResponse({id: liveMessageId, sender: 'bot', text: ''});
 
+			// Track accumulated text so we can flush it before command messages
+			let accumulatedText = '';
+			let textWasFlushed = false;
+
 			try {
 				const result = await conversationService.sendMessage(value, {
-					onTextChunk: text => {
+					onTextChunk: (fullText, chunk = '') => {
+						accumulatedText += chunk;
 						setLiveResponse(prev =>
-							prev && prev.id === liveMessageId ? {...prev, text} : prev,
+							prev && prev.id === liveMessageId ? {...prev, text: fullText} : prev,
 						);
 					},
 					onCommandMessage: cmdMsg => {
+						// Before adding command message, flush any accumulated text as a bot message
+						// This preserves the order: text before tool calls appears before command output
+						if (accumulatedText.trim()) {
+							const textMessage: BotMessage = {
+								id: Date.now(),
+								sender: 'bot',
+								text: accumulatedText,
+							};
+							setMessages(prev => [...prev, textMessage]);
+							accumulatedText = '';
+							textWasFlushed = true;
+							// Clear live response since we've committed the text
+							setLiveResponse(null);
+						}
+
 						// Add command messages in real-time as they execute
 						setMessages(prev => [...prev, cmdMsg]);
 					},
 				});
 
-				applyServiceResult(result);
+				applyServiceResult(result, accumulatedText, textWasFlushed);
 			} catch (error) {
 				const errorMessage =
 					error instanceof Error ? error.message : String(error);
@@ -166,22 +208,42 @@ export const useConversation = ({
 			const liveMessageId = Date.now();
 			setLiveResponse({id: liveMessageId, sender: 'bot', text: ''});
 
+			// Track accumulated text so we can flush it before command messages
+			let accumulatedText = '';
+			let textWasFlushed = false;
+
 			try {
 				const result = await conversationService.handleApprovalDecision(
 					answer,
 					{
-						onTextChunk: text => {
+						onTextChunk: (fullText, chunk = '') => {
+							accumulatedText += chunk;
 							setLiveResponse(prev =>
-								prev && prev.id === liveMessageId ? {...prev, text} : prev,
+								prev && prev.id === liveMessageId ? {...prev, text: fullText} : prev,
 							);
 						},
 						onCommandMessage: cmdMsg => {
+							// Before adding command message, flush any accumulated text as a bot message
+							// This preserves the order: text before tool calls appears before command output
+							if (accumulatedText.trim()) {
+								const textMessage: BotMessage = {
+									id: Date.now(),
+									sender: 'bot',
+									text: accumulatedText,
+								};
+								setMessages(prev => [...prev, textMessage]);
+								accumulatedText = '';
+								textWasFlushed = true;
+								// Clear live response since we've committed the text
+								setLiveResponse(null);
+							}
+
 							// Add command messages in real-time as they execute
 							setMessages(prev => [...prev, cmdMsg]);
 						},
 					},
 				);
-				applyServiceResult(result);
+				applyServiceResult(result, accumulatedText, textWasFlushed);
 			} catch (error) {
 				const errorMessage =
 					error instanceof Error ? error.message : String(error);

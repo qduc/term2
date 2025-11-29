@@ -7,7 +7,9 @@ import type {ToolDefinition} from './types.js';
 const applyPatchParametersSchema = z.object({
 	type: z.enum(['create_file', 'update_file', 'delete_file']),
 	path: z.string().min(1, 'File path cannot be empty'),
-	diff: z.string().describe('Unified diff content for create/update operations'),
+	diff: z
+		.string()
+		.describe('Unified diff content for create/update operations'),
 });
 
 export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;

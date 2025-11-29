@@ -33,6 +33,7 @@ term2
 You'll see a chat interface. Type your message and press Enter. The AI will respond and may suggest bash commands to help you. If a command needs to run, you'll be asked to approve it with `y` (yes) or `n` (no).
 
 Examples of what you can ask:
+
 - "What files are in my current directory?"
 - "Show me my git status"
 - "Create a backup of my documents folder"

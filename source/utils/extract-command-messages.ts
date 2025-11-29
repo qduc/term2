@@ -172,8 +172,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 					.join('\n');
 				const output = combinedOutput || 'No output';
 				const outcome = cmdResult?.outcome;
-				const success =
-					outcome?.type === 'exit' && outcome?.exitCode === 0;
+				const success = outcome?.type === 'exit' && outcome?.exitCode === 0;
 
 				const rawItem = item?.rawItem ?? item;
 				const baseId =

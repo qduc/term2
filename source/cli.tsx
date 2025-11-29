@@ -47,8 +47,15 @@ const reasoningEffort =
 		? rawReasoningFlag.trim()
 		: undefined;
 
-const validReasoningEfforts = ['none', 'minimal', 'low', 'medium', 'high', null] as const;
-type ModelSettingsReasoningEffort = typeof validReasoningEfforts[number];
+const validReasoningEfforts = [
+	'none',
+	'minimal',
+	'low',
+	'medium',
+	'high',
+	null,
+] as const;
+type ModelSettingsReasoningEffort = (typeof validReasoningEfforts)[number];
 
 const validatedReasoningEffort: ModelSettingsReasoningEffort | undefined =
 	reasoningEffort && validReasoningEfforts.includes(reasoningEffort as any)
@@ -58,7 +65,9 @@ const validatedReasoningEffort: ModelSettingsReasoningEffort | undefined =
 // Print which model and reasoning effort will be used on startup
 console.log(
 	`Using model: ${usedModel}` +
-		(validatedReasoningEffort ? ` with reasoning effort: ${validatedReasoningEffort}` : ''),
+		(validatedReasoningEffort
+			? ` with reasoning effort: ${validatedReasoningEffort}`
+			: ''),
 );
 
 const conversationService = new ConversationService({

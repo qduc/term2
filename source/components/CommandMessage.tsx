@@ -14,7 +14,9 @@ const CommandMessage: FC<Props> = ({command, output, success}) => {
 			? (() => {
 					const lines = (output || '').split('\n');
 					return lines.length > 3
-						? `${lines.slice(0, 3).join('\n')}\n... (${lines.length - 3} more lines)`
+						? `${lines.slice(0, 3).join('\n')}\n... (${
+								lines.length - 3
+						  } more lines)`
 						: output;
 			  })()
 			: outputText;

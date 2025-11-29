@@ -237,7 +237,9 @@ test('dedupes commands from initial stream when continuation history contains th
 	};
 
 	// Continuation stream: emits 'sed' command, history contains BOTH 'ls' and 'sed'
-	const continuationEvents = [{type: 'run_item_stream_event', item: sedCommandItem}];
+	const continuationEvents = [
+		{type: 'run_item_stream_event', item: sedCommandItem},
+	];
 	const continuationStream = new MockStream(continuationEvents);
 	continuationStream.finalOutput = 'Done';
 	// Simulate that the continuation stream's history contains both commands

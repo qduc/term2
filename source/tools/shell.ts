@@ -28,8 +28,8 @@ export interface OutputTrimConfig {
 
 /** Default trim configuration */
 export const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
-	maxLines: 1000,
-	maxBytes: 100 * 1024, // 100KB
+	maxLines: 100,
+	maxBytes: 1 * 1024, // 1KB
 };
 
 /** Current trim configuration (can be modified at runtime) */

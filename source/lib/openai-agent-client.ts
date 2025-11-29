@@ -7,26 +7,30 @@ import {
 	webSearchTool,
 	type Tool,
 } from '@openai/agents';
+import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
  * Swap this module to change the underlying agent provider without touching the UI.
  */
-	export class OpenAIAgentClient {
+export class OpenAIAgentClient {
 	#agent: Agent;
-	#reasoningEffort?: string;
+	#reasoningEffort?: ModelSettingsReasoningEffort;
 
 	constructor({
 		model,
 		reasoningEffort,
-	}: {model?: string; reasoningEffort?: string} = {}) {
+	}: {model?: string; reasoningEffort?: ModelSettingsReasoningEffort} = {}) {
 		this.#reasoningEffort = reasoningEffort;
 		this.#agent = this.#createAgent({model, reasoningEffort});
 	}
 
 	setModel(model: string): void {
-		this.#agent = this.#createAgent({ model, reasoningEffort: this.#reasoningEffort });
+		this.#agent = this.#createAgent({
+			model,
+			reasoningEffort: this.#reasoningEffort,
+		});
 	}
 
 	async startStream(
@@ -48,7 +52,7 @@ import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 
 	async continueRunStream(state: any): Promise<any> {
 		return this.#executeWithRetry(() =>
-			run(this.#agent, state, { stream: true, maxTurns: 20 }),
+			run(this.#agent, state, {stream: true, maxTurns: 20}),
 		);
 	}
 
@@ -72,11 +76,16 @@ import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 	#createAgent({
 		model,
 		reasoningEffort,
-	}: {model?: string; reasoningEffort?: string} = {}): Agent {
+	}: {
+		model?: string;
+		reasoningEffort?: ModelSettingsReasoningEffort;
+	} = {}): Agent {
 		const resolvedModel = model?.trim() || DEFAULT_MODEL;
-		const {name, instructions, tools: toolDefinitions} = getAgentDefinition(resolvedModel);
-
-		console.log('Creating agent with reasoning effort: ', reasoningEffort);
+		const {
+			name,
+			instructions,
+			tools: toolDefinitions,
+		} = getAgentDefinition(resolvedModel);
 
 		const tools: Tool[] = toolDefinitions.map(definition =>
 			createTool({
@@ -90,11 +99,18 @@ import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 		);
 
 		// Add web search tool
-		tools.push(webSearchTool());
+		if (reasoningEffort !== 'minimal') {
+			tools.push(webSearchTool());
+		}
 
 		const agent = new Agent({
 			name,
 			model: resolvedModel,
+			modelSettings: {
+				reasoning: {
+					effort: reasoningEffort,
+				},
+			},
 			instructions,
 			tools,
 		});

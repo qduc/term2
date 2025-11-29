@@ -284,3 +284,168 @@ test('dedupes commands from initial stream when continuation history contains th
 	// Final result should have no additional commands since both were emitted live
 	t.deepEqual(finalResult.commandMessages, []);
 });
+
+test('reset() clears conversation state', async t => {
+	const streams = [new MockStream([]), new MockStream([])];
+	streams[0].lastResponseId = 'resp-1';
+
+	const startCalls = [];
+	const mockClient = {
+		async startStream(text, options) {
+			startCalls.push({text, options});
+			return streams[startCalls.length - 1];
+		},
+	};
+
+	const service = new ConversationService({agentClient: mockClient});
+	await service.sendMessage('first');
+
+	service.reset();
+
+	await service.sendMessage('second');
+
+	t.deepEqual(startCalls[1].options, {previousResponseId: null});
+});
+
+test('setModel() delegates to agent client', t => {
+	let setModelCalledWith = null;
+	const mockClient = {
+		setModel(model) {
+			setModelCalledWith = model;
+		},
+	};
+
+	const service = new ConversationService({agentClient: mockClient});
+	service.setModel('gpt-4');
+
+	t.is(setModelCalledWith, 'gpt-4');
+});
+
+test('abort() delegates to agent client and clears pending approval', async t => {
+	let abortCalled = false;
+	const mockClient = {
+		abort() {
+			abortCalled = true;
+		},
+		async startStream() {
+			const stream = new MockStream([]);
+			stream.interruptions = [
+				{
+					name: 'bash',
+					agent: {name: 'CLI Agent'},
+					arguments: JSON.stringify({command: 'echo hi'}),
+				},
+			];
+			return stream;
+		},
+	};
+
+	const service = new ConversationService({agentClient: mockClient});
+	// Trigger a pending approval
+	await service.sendMessage('run command');
+
+	service.abort();
+
+	t.true(abortCalled);
+
+	const result = await service.handleApprovalDecision('y');
+	t.is(result, null);
+});
+
+test('handleApprovalDecision() rejects interruption when answer is n', async t => {
+	const interruption = {
+		name: 'bash',
+		agent: {name: 'CLI Agent'},
+		arguments: JSON.stringify({command: 'echo hi'}),
+	};
+
+	const initialStream = new MockStream([]);
+	initialStream.interruptions = [interruption];
+	initialStream.state = {
+		approveCalls: [],
+		rejectCalls: [],
+		approve(arg) {
+			this.approveCalls.push(arg);
+		},
+		reject(arg) {
+			this.rejectCalls.push(arg);
+		},
+	};
+
+	const continuationStream = new MockStream([
+		{type: 'response.output_text.delta', delta: 'Rejected run'},
+	]);
+	continuationStream.finalOutput = 'Rejected run';
+
+	const mockClient = {
+		async startStream() {
+			return initialStream;
+		},
+		async continueRunStream() {
+			return continuationStream;
+		},
+	};
+
+	const service = new ConversationService({agentClient: mockClient});
+	await service.sendMessage('run command');
+
+	const finalResult = await service.handleApprovalDecision('n');
+
+	t.is(finalResult.type, 'response');
+	t.deepEqual(initialStream.state.approveCalls, []);
+	t.deepEqual(initialStream.state.rejectCalls, [interruption]);
+});
+
+test('handleApprovalDecision() returns null when no pending approval', async t => {
+	const service = new ConversationService({agentClient: {}});
+	const result = await service.handleApprovalDecision('y');
+	t.is(result, null);
+});
+
+test('emits live reasoning chunks', async t => {
+	t.plan(3);
+
+	const events = [
+		{
+			type: 'run_item_stream_event',
+			name: 'reasoning_item_created',
+			item: {
+				type: 'reasoning_item',
+				rawItem: {
+					content: [{type: 'text', text: 'Thinking...'}],
+				},
+			},
+		},
+		{
+			type: 'run_item_stream_event',
+			name: 'reasoning_item_created',
+			item: {
+				type: 'reasoning_item',
+				rawItem: {
+					content: [{type: 'text', text: ' Still thinking.'}],
+				},
+			},
+		},
+	];
+
+	const mockClient = {
+		async startStream() {
+			return new MockStream(events);
+		},
+	};
+
+	const chunks = [];
+	const service = new ConversationService({agentClient: mockClient});
+	const result = await service.sendMessage('hi', {
+		onReasoningChunk(full, chunk) {
+			chunks.push({full, chunk});
+		},
+	});
+
+	t.deepEqual(chunks, [
+		{full: 'Thinking...', chunk: 'Thinking...'},
+		{full: 'Thinking... Still thinking.', chunk: ' Still thinking.'},
+	]);
+	t.is(result.type, 'response');
+	t.is(result.reasoningText, 'Thinking... Still thinking.');
+});

@@ -15,16 +15,18 @@ import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
  */
 	export class OpenAIAgentClient {
 	#agent: Agent;
+	#reasoningEffort?: string;
 
 	constructor({
 		model,
 		reasoningEffort,
 	}: {model?: string; reasoningEffort?: string} = {}) {
+		this.#reasoningEffort = reasoningEffort;
 		this.#agent = this.#createAgent({model, reasoningEffort});
 	}
 
 	setModel(model: string): void {
-		this.#agent = this.#createAgent({ model });
+		this.#agent = this.#createAgent({ model, reasoningEffort: this.#reasoningEffort });
 	}
 
 	async startStream(
@@ -74,6 +76,8 @@ import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 		const resolvedModel = model?.trim() || DEFAULT_MODEL;
 		const {name, instructions, tools: toolDefinitions} = getAgentDefinition(resolvedModel);
 
+		console.log('Creating agent with reasoning effort: ', reasoningEffort);
+
 		const tools: Tool[] = toolDefinitions.map(definition =>
 			createTool({
 				name: definition.name,
@@ -106,5 +110,3 @@ import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 		return agent;
 	}
 }
-
-export const defaultAgentClient = new OpenAIAgentClient();

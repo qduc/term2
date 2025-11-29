@@ -1,6 +1,5 @@
 import {useCallback, useState} from 'react';
 import type {ConversationService} from '../services/conversation-service.js';
-import {defaultConversationService} from '../services/conversation-service.js';
 
 interface UserMessage {
 	id: number;
@@ -54,8 +53,10 @@ interface LiveResponse {
 }
 
 export const useConversation = ({
-	conversationService = defaultConversationService,
-}: {conversationService?: ConversationService} = {}) => {
+	conversationService,
+}: {
+	conversationService: ConversationService;
+}) => {
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [waitingForApproval, setWaitingForApproval] = useState<boolean>(false);
 	const [pendingApprovalMessageId, setPendingApprovalMessageId] = useState<
@@ -97,7 +98,9 @@ export const useConversation = ({
 			// If text was already flushed before command messages, don't add it again
 			// Only add final text if there's new text after the commands
 			const shouldAddBotMessage = !textWasFlushed || remainingText?.trim();
-			const finalText = remainingText?.trim() ? remainingText : result.finalText;
+			const finalText = remainingText?.trim()
+				? remainingText
+				: result.finalText;
 
 			setMessages(prev => {
 				const withCommands =
@@ -148,7 +151,9 @@ export const useConversation = ({
 					onTextChunk: (fullText, chunk = '') => {
 						accumulatedText += chunk;
 						setLiveResponse(prev =>
-							prev && prev.id === liveMessageId ? {...prev, text: fullText} : prev,
+							prev && prev.id === liveMessageId
+								? {...prev, text: fullText}
+								: prev,
 						);
 					},
 					onCommandMessage: cmdMsg => {
@@ -219,7 +224,9 @@ export const useConversation = ({
 						onTextChunk: (fullText, chunk = '') => {
 							accumulatedText += chunk;
 							setLiveResponse(prev =>
-								prev && prev.id === liveMessageId ? {...prev, text: fullText} : prev,
+								prev && prev.id === liveMessageId
+									? {...prev, text: fullText}
+									: prev,
 							);
 						},
 						onCommandMessage: cmdMsg => {

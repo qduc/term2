@@ -10,7 +10,7 @@ import type {SlashCommand} from './components/SlashCommandMenu.js';
 import type {ConversationService} from './services/conversation-service.js';
 
 interface AppProps {
-	conversationService?: ConversationService;
+	conversationService: ConversationService;
 }
 
 const App: FC<AppProps> = ({conversationService}) => {

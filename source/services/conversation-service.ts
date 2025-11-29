@@ -1,5 +1,4 @@
 import type {OpenAIAgentClient} from '../lib/openai-agent-client.js';
-import {defaultAgentClient} from '../lib/openai-agent-client.js';
 import {extractCommandMessages} from '../utils/extract-command-messages.js';
 
 interface ApprovalResult {
@@ -69,9 +68,7 @@ export class ConversationService {
 		emittedCommandIds: Set<string>;
 	} | null = null;
 
-	constructor({
-		agentClient = defaultAgentClient,
-	}: {agentClient?: OpenAIAgentClient} = {}) {
+	constructor({agentClient}: {agentClient: OpenAIAgentClient}) {
 		this.agentClient = agentClient;
 	}
 
@@ -125,8 +122,11 @@ export class ConversationService {
 			return null;
 		}
 
-		const {state, interruption, emittedCommandIds: previouslyEmittedIds} =
-			this.pendingApprovalContext;
+		const {
+			state,
+			interruption,
+			emittedCommandIds: previouslyEmittedIds,
+		} = this.pendingApprovalContext;
 		if (answer === 'y') {
 			state.approve(interruption);
 		} else {
@@ -142,13 +142,12 @@ export class ConversationService {
 
 		// Merge previously emitted command IDs with newly emitted ones
 		// This prevents duplicates when result.history contains commands from the initial stream
-		const allEmittedIds = new Set([...previouslyEmittedIds, ...emittedCommandIds]);
+		const allEmittedIds = new Set([
+			...previouslyEmittedIds,
+			...emittedCommandIds,
+		]);
 
-		return this.#buildResult(
-			stream,
-			finalOutput || undefined,
-			allEmittedIds,
-		);
+		return this.#buildResult(stream, finalOutput || undefined, allEmittedIds);
 	}
 
 	async #consumeStream(
@@ -356,5 +355,3 @@ export class ConversationService {
 		};
 	}
 }
-
-export const defaultConversationService = new ConversationService();

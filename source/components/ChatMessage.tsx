@@ -15,17 +15,12 @@ const ChatMessage: FC<Props> = ({msg}) => {
 				<Text color="gray" dimColor>
 					{msg.text}
 				</Text>
+			) : msg.sender === 'reasoning' ? (
+				<Text color="gray" dimColor>
+					{msg.text}
+				</Text>
 			) : (
-				<>
-					{msg.reasoningText && (
-						<Box marginBottom={1}>
-							<Text color="gray" dimColor>
-								{msg.reasoningText}
-							</Text>
-						</Box>
-					)}
-					<MarkdownRenderer>{msg.text}</MarkdownRenderer>
-				</>
+				<MarkdownRenderer>{msg.text}</MarkdownRenderer>
 			)}
 		</Box>
 	);

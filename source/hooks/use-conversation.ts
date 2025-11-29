@@ -40,12 +40,19 @@ interface SystemMessage {
 	text: string;
 }
 
+interface ReasoningMessage {
+	id: number;
+	sender: 'reasoning';
+	text: string;
+}
+
 type Message =
 	| UserMessage
 	| BotMessage
 	| ApprovalMessage
 	| CommandMessage
-	| SystemMessage;
+	| SystemMessage
+	| ReasoningMessage;
 
 interface LiveResponse {
 	id: number;
@@ -69,31 +76,50 @@ export const useConversation = ({
 	const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
 
 	const applyServiceResult = useCallback(
-		(result: any, remainingText?: string, remainingReasoningText?: string, textWasFlushed?: boolean) => {
+		(
+			result: any,
+			remainingText?: string,
+			remainingReasoningText?: string,
+			textWasFlushed?: boolean,
+		) => {
 			if (!result) {
 				return;
 			}
 
 			if (result.type === 'approval_required') {
-				// Flush any remaining text before showing approval prompt
+				// Flush reasoning and text separately before showing approval prompt
+				const messagesToAdd: Message[] = [];
+
+				if (remainingReasoningText?.trim() && !textWasFlushed) {
+					const reasoningMessage: ReasoningMessage = {
+						id: Date.now(),
+						sender: 'reasoning',
+						text: remainingReasoningText,
+					};
+					messagesToAdd.push(reasoningMessage);
+				}
+
 				if (remainingText?.trim() && !textWasFlushed) {
 					const textMessage: BotMessage = {
-						id: Date.now(),
+						id: Date.now() + 1,
 						sender: 'bot',
 						text: remainingText,
-						reasoningText: remainingReasoningText,
 					};
-					setMessages(prev => [...prev, textMessage]);
+					messagesToAdd.push(textMessage);
 				}
 
 				const approvalMessage: ApprovalMessage = {
-					id: Date.now(),
+					id: Date.now() + 2,
 					sender: 'approval',
 					approval: result.approval,
 					answer: null,
 				};
 
-				setMessages(prev => [...prev, approvalMessage]);
+				setMessages(prev => [
+					...prev,
+					...messagesToAdd,
+					approvalMessage,
+				]);
 				setWaitingForApproval(true);
 				setPendingApprovalMessageId(approvalMessage.id);
 				return;
@@ -106,20 +132,32 @@ export const useConversation = ({
 			const finalText = remainingText?.trim()
 				? remainingText
 				: result.finalText;
-			const finalReasoningText = remainingReasoningText || result.reasoningText;
+			const finalReasoningText =
+				remainingReasoningText || result.reasoningText;
 
 			setMessages(prev => {
+				const messagesToAdd: Message[] = [];
+
+				// Add reasoning as a separate message if it exists and wasn't flushed
+				if (finalReasoningText?.trim() && !textWasFlushed) {
+					const reasoningMessage: ReasoningMessage = {
+						id: Date.now(),
+						sender: 'reasoning',
+						text: finalReasoningText,
+					};
+					messagesToAdd.push(reasoningMessage);
+				}
+
 				const withCommands =
 					result.commandMessages.length > 0
-						? [...prev, ...result.commandMessages]
-						: prev;
+						? [...prev, ...messagesToAdd, ...result.commandMessages]
+						: [...prev, ...messagesToAdd];
 
 				if (shouldAddBotMessage && finalText) {
 					const botMessage: BotMessage = {
-						id: Date.now(),
+						id: Date.now() + 1,
 						sender: 'bot',
 						text: finalText,
-						reasoningText: finalReasoningText,
 					};
 					return [...withCommands, botMessage];
 				}
@@ -178,19 +216,33 @@ export const useConversation = ({
 						);
 					},
 					onCommandMessage: cmdMsg => {
-						// Before adding command message, flush any accumulated text as a bot message
-						// This preserves the order: text before tool calls appears before command output
+						// Before adding command message, flush reasoning and text separately
+						// This preserves the order: reasoning -> command -> response text
+						const messagesToAdd: Message[] = [];
+
+						if (accumulatedReasoningText.trim()) {
+							const reasoningMessage: ReasoningMessage = {
+								id: Date.now(),
+								sender: 'reasoning',
+								text: accumulatedReasoningText,
+							};
+							messagesToAdd.push(reasoningMessage);
+							accumulatedReasoningText = '';
+						}
+
 						if (accumulatedText.trim()) {
 							const textMessage: BotMessage = {
-								id: Date.now(),
+								id: Date.now() + 1,
 								sender: 'bot',
 								text: accumulatedText,
-								reasoningText: accumulatedReasoningText,
 							};
-							setMessages(prev => [...prev, textMessage]);
+							messagesToAdd.push(textMessage);
 							accumulatedText = '';
-							accumulatedReasoningText = '';
 							textWasFlushed = true;
+						}
+
+						if (messagesToAdd.length > 0) {
+							setMessages(prev => [...prev, ...messagesToAdd]);
 							// Clear live response since we've committed the text
 							setLiveResponse(null);
 						}
@@ -200,7 +252,12 @@ export const useConversation = ({
 					},
 				});
 
-				applyServiceResult(result, accumulatedText, accumulatedReasoningText, textWasFlushed);
+				applyServiceResult(
+					result,
+					accumulatedText,
+					accumulatedReasoningText,
+					textWasFlushed,
+				);
 			} catch (error) {
 				const errorMessage =
 					error instanceof Error ? error.message : String(error);
@@ -271,19 +328,36 @@ export const useConversation = ({
 							);
 						},
 						onCommandMessage: cmdMsg => {
-							// Before adding command message, flush any accumulated text as a bot message
-							// This preserves the order: text before tool calls appears before command output
+							// Before adding command message, flush reasoning and text separately
+							// This preserves the order: reasoning -> command -> response text
+							const messagesToAdd: Message[] = [];
+
+							if (accumulatedReasoningText.trim()) {
+								const reasoningMessage: ReasoningMessage = {
+									id: Date.now(),
+									sender: 'reasoning',
+									text: accumulatedReasoningText,
+								};
+								messagesToAdd.push(reasoningMessage);
+								accumulatedReasoningText = '';
+							}
+
 							if (accumulatedText.trim()) {
 								const textMessage: BotMessage = {
-									id: Date.now(),
+									id: Date.now() + 1,
 									sender: 'bot',
 									text: accumulatedText,
-									reasoningText: accumulatedReasoningText,
 								};
-								setMessages(prev => [...prev, textMessage]);
+								messagesToAdd.push(textMessage);
 								accumulatedText = '';
-								accumulatedReasoningText = '';
 								textWasFlushed = true;
+							}
+
+							if (messagesToAdd.length > 0) {
+								setMessages(prev => [
+									...prev,
+									...messagesToAdd,
+								]);
 								// Clear live response since we've committed the text
 								setLiveResponse(null);
 							}
@@ -293,7 +367,12 @@ export const useConversation = ({
 						},
 					},
 				);
-				applyServiceResult(result, accumulatedText, accumulatedReasoningText, textWasFlushed);
+				applyServiceResult(
+					result,
+					accumulatedText,
+					accumulatedReasoningText,
+					textWasFlushed,
+				);
 			} catch (error) {
 				const errorMessage =
 					error instanceof Error ? error.message : String(error);

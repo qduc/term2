@@ -1,4 +1,4 @@
-import React, {FC, useState, useMemo, useCallback} from 'react';
+import React, {FC, useState, useMemo, useCallback, useEffect} from 'react';
 import {Box, Text, useApp, useInput} from 'ink';
 import {useConversation} from './hooks/use-conversation.js';
 import {useSlashCommands} from './hooks/use-slash-commands.js';
@@ -29,6 +29,18 @@ const App: FC<AppProps> = ({conversationService}) => {
 	} = useConversation({conversationService});
 
 	const {navigateUp, navigateDown, addToHistory} = useInputHistory();
+
+	const [dotCount, setDotCount] = useState(1);
+
+	useEffect(() => {
+		if (!isProcessing) return;
+
+		const interval = setInterval(() => {
+			setDotCount(prev => prev === 3 ? 1 : prev + 1);
+		}, 500);
+
+		return () => clearInterval(interval);
+	}, [isProcessing]);
 
 	// Define slash commands
 	const slashCommands: SlashCommand[] = useMemo(
@@ -153,7 +165,7 @@ const App: FC<AppProps> = ({conversationService}) => {
 
 				{isProcessing && (
 					<Text color="gray" dimColor>
-						⟳ processing...
+						processing{'.'.repeat(dotCount)}
 					</Text>
 				)}
 			</Box>

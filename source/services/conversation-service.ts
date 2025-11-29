@@ -23,6 +23,7 @@ interface ResponseResult {
 	type: 'response';
 	commandMessages: CommandMessage[];
 	finalText: string;
+	reasoningText?: string;
 }
 
 export type ConversationResult = ApprovalResult | ResponseResult;
@@ -98,7 +99,7 @@ export class ConversationService {
 			previousResponseId: this.previousResponseId,
 		});
 
-		const {finalOutput, emittedCommandIds} = await this.#consumeStream(
+		const {finalOutput, reasoningOutput, emittedCommandIds} = await this.#consumeStream(
 			stream,
 			{
 				onTextChunk,
@@ -111,6 +112,7 @@ export class ConversationService {
 		return this.#buildResult(
 			stream,
 			finalOutput || undefined,
+			reasoningOutput || undefined,
 			emittedCommandIds,
 		);
 	}
@@ -144,7 +146,7 @@ export class ConversationService {
 
 		const stream = await this.agentClient.continueRunStream(state);
 
-		const {finalOutput, emittedCommandIds} = await this.#consumeStream(
+		const {finalOutput, reasoningOutput, emittedCommandIds} = await this.#consumeStream(
 			stream,
 			{
 				onTextChunk,
@@ -163,6 +165,7 @@ export class ConversationService {
 		return this.#buildResult(
 			stream,
 			finalOutput || undefined,
+			reasoningOutput || undefined,
 			allEmittedIds,
 		);
 	}
@@ -178,7 +181,7 @@ export class ConversationService {
 			onReasoningChunk?: (fullText: string, chunk: string) => void;
 			onCommandMessage?: (message: CommandMessage) => void;
 		} = {},
-	): Promise<{finalOutput: string; emittedCommandIds: Set<string>}> {
+	): Promise<{finalOutput: string; reasoningOutput: string; emittedCommandIds: Set<string>}> {
 		let finalOutput = '';
 		let reasoningOutput = '';
 		const emittedCommandIds = new Set<string>();
@@ -207,12 +210,15 @@ export class ConversationService {
 				this.#emitTextDelta(event.data, emitText);
 			}
 
-			// Handle reasoning items - extract and emit reasoning text
+			// Handle reasoning items - look for reasoning_item_created event
 			if (
 				event?.type === 'run_item_stream_event' &&
+				event?.name === 'reasoning_item_created' &&
 				event.item?.type === 'reasoning_item'
 			) {
 				const reasoningItem = event.item;
+
+				// Extract and emit reasoning text from content array
 				if (
 					reasoningItem.rawItem?.content &&
 					Array.isArray(reasoningItem.rawItem.content)
@@ -246,7 +252,7 @@ export class ConversationService {
 		}
 
 		await stream.completed;
-		return {finalOutput, emittedCommandIds};
+		return {finalOutput, reasoningOutput, emittedCommandIds};
 	}
 
 	#emitCommandMessages(
@@ -355,6 +361,7 @@ export class ConversationService {
 	#buildResult(
 		result: any,
 		finalOutputOverride?: string,
+		reasoningOutputOverride?: string,
 		emittedCommandIds?: Set<string>,
 	): ConversationResult {
 		if (result.interruptions && result.interruptions.length > 0) {
@@ -406,6 +413,7 @@ export class ConversationService {
 			type: 'response',
 			commandMessages,
 			finalText: finalOutputOverride ?? result.finalOutput ?? 'Done.',
+			reasoningText: reasoningOutputOverride,
 		};
 	}
 }

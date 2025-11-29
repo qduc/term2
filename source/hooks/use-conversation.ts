@@ -11,6 +11,7 @@ interface BotMessage {
 	id: number;
 	sender: 'bot';
 	text: string;
+	reasoningText?: string;
 }
 
 interface ApprovalMessage {
@@ -68,7 +69,7 @@ export const useConversation = ({
 	const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
 
 	const applyServiceResult = useCallback(
-		(result: any, remainingText?: string, textWasFlushed?: boolean) => {
+		(result: any, remainingText?: string, remainingReasoningText?: string, textWasFlushed?: boolean) => {
 			if (!result) {
 				return;
 			}
@@ -80,6 +81,7 @@ export const useConversation = ({
 						id: Date.now(),
 						sender: 'bot',
 						text: remainingText,
+						reasoningText: remainingReasoningText,
 					};
 					setMessages(prev => [...prev, textMessage]);
 				}
@@ -104,6 +106,7 @@ export const useConversation = ({
 			const finalText = remainingText?.trim()
 				? remainingText
 				: result.finalText;
+			const finalReasoningText = remainingReasoningText || result.reasoningText;
 
 			setMessages(prev => {
 				const withCommands =
@@ -116,6 +119,7 @@ export const useConversation = ({
 						id: Date.now(),
 						sender: 'bot',
 						text: finalText,
+						reasoningText: finalReasoningText,
 					};
 					return [...withCommands, botMessage];
 				}
@@ -152,6 +156,7 @@ export const useConversation = ({
 
 			// Track accumulated text so we can flush it before command messages
 			let accumulatedText = '';
+			let accumulatedReasoningText = '';
 			let textWasFlushed = false;
 
 			try {
@@ -165,6 +170,7 @@ export const useConversation = ({
 						);
 					},
 					onReasoningChunk: fullReasoningText => {
+						accumulatedReasoningText = fullReasoningText;
 						setLiveResponse(prev =>
 							prev && prev.id === liveMessageId
 								? {...prev, reasoningText: fullReasoningText}
@@ -179,9 +185,11 @@ export const useConversation = ({
 								id: Date.now(),
 								sender: 'bot',
 								text: accumulatedText,
+								reasoningText: accumulatedReasoningText,
 							};
 							setMessages(prev => [...prev, textMessage]);
 							accumulatedText = '';
+							accumulatedReasoningText = '';
 							textWasFlushed = true;
 							// Clear live response since we've committed the text
 							setLiveResponse(null);
@@ -192,7 +200,7 @@ export const useConversation = ({
 					},
 				});
 
-				applyServiceResult(result, accumulatedText, textWasFlushed);
+				applyServiceResult(result, accumulatedText, accumulatedReasoningText, textWasFlushed);
 			} catch (error) {
 				const errorMessage =
 					error instanceof Error ? error.message : String(error);
@@ -236,6 +244,7 @@ export const useConversation = ({
 
 			// Track accumulated text so we can flush it before command messages
 			let accumulatedText = '';
+			let accumulatedReasoningText = '';
 			let textWasFlushed = false;
 
 			try {
@@ -251,6 +260,7 @@ export const useConversation = ({
 							);
 						},
 						onReasoningChunk: fullReasoningText => {
+							accumulatedReasoningText = fullReasoningText;
 							setLiveResponse(prev =>
 								prev && prev.id === liveMessageId
 									? {
@@ -268,9 +278,11 @@ export const useConversation = ({
 									id: Date.now(),
 									sender: 'bot',
 									text: accumulatedText,
+									reasoningText: accumulatedReasoningText,
 								};
 								setMessages(prev => [...prev, textMessage]);
 								accumulatedText = '';
+								accumulatedReasoningText = '';
 								textWasFlushed = true;
 								// Clear live response since we've committed the text
 								setLiveResponse(null);
@@ -281,7 +293,7 @@ export const useConversation = ({
 						},
 					},
 				);
-				applyServiceResult(result, accumulatedText, textWasFlushed);
+				applyServiceResult(result, accumulatedText, accumulatedReasoningText, textWasFlushed);
 			} catch (error) {
 				const errorMessage =
 					error instanceof Error ? error.message : String(error);

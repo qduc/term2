@@ -198,6 +198,7 @@ export const useConversation = ({
 			// Track accumulated text so we can flush it before command messages
 			let accumulatedText = '';
 			let accumulatedReasoningText = '';
+			let flushedReasoningLength = 0; // Track how much reasoning has been flushed
 			let textWasFlushed = false;
 
 			try {
@@ -211,10 +212,13 @@ export const useConversation = ({
 						);
 					},
 					onReasoningChunk: fullReasoningText => {
-						accumulatedReasoningText = fullReasoningText;
+						// Only show reasoning text after what was already flushed
+						const newReasoningText =
+							fullReasoningText.slice(flushedReasoningLength);
+						accumulatedReasoningText = newReasoningText;
 						setLiveResponse(prev =>
 							prev && prev.id === liveMessageId
-								? {...prev, reasoningText: fullReasoningText}
+								? {...prev, reasoningText: newReasoningText}
 								: prev,
 						);
 					},
@@ -230,6 +234,8 @@ export const useConversation = ({
 								text: accumulatedReasoningText,
 							};
 							messagesToAdd.push(reasoningMessage);
+							// Track how much reasoning we've flushed so we don't show it again
+							flushedReasoningLength += accumulatedReasoningText.length;
 							accumulatedReasoningText = '';
 						}
 
@@ -305,6 +311,7 @@ export const useConversation = ({
 			// Track accumulated text so we can flush it before command messages
 			let accumulatedText = '';
 			let accumulatedReasoningText = '';
+			let flushedReasoningLength = 0; // Track how much reasoning has been flushed
 			let textWasFlushed = false;
 
 			try {
@@ -320,12 +327,15 @@ export const useConversation = ({
 							);
 						},
 						onReasoningChunk: fullReasoningText => {
-							accumulatedReasoningText = fullReasoningText;
+							// Only show reasoning text after what was already flushed
+							const newReasoningText =
+								fullReasoningText.slice(flushedReasoningLength);
+							accumulatedReasoningText = newReasoningText;
 							setLiveResponse(prev =>
 								prev && prev.id === liveMessageId
 									? {
 											...prev,
-											reasoningText: fullReasoningText,
+											reasoningText: newReasoningText,
 									  }
 									: prev,
 							);
@@ -342,6 +352,9 @@ export const useConversation = ({
 									text: accumulatedReasoningText,
 								};
 								messagesToAdd.push(reasoningMessage);
+								// Track how much reasoning we've flushed so we don't show it again
+								flushedReasoningLength +=
+									accumulatedReasoningText.length;
 								accumulatedReasoningText = '';
 							}
 

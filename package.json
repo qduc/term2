@@ -21,12 +21,11 @@
 	"dependencies": {
 		"@openai/agents": "^0.3.3",
 		"env-paths": "^3.0.0",
-		"ink": "^4.1.0",
-		"ink-text-input": "^5.0.1",
+		"ink": "^6.5.1",
 		"marked": "^17.0.1",
 		"meow": "^11.0.0",
 		"openai": "^6.9.1",
-		"react": "^18.2.0",
+		"react": "^19.0.0",
 		"zod": "^4.1.13"
 	},
 	"devDependencies": {
@@ -36,7 +35,7 @@
 		"@types/env-paths": "^1.0.2",
 		"@types/marked": "^5.0.2",
 		"@types/node": "^24.10.1",
-		"@types/react": "^19.2.7",
+		"@types/react": "^19.0.0",
 		"@vdemedes/prettier-config": "^2.0.1",
 		"ava": "^6.4.1",
 		"chalk": "^5.2.0",
@@ -44,7 +43,7 @@
 		"eslint-plugin-react": "^7.32.2",
 		"eslint-plugin-react-hooks": "^4.6.0",
 		"import-jsx": "^5.0.0",
-		"ink-testing-library": "^3.0.0",
+		"ink-testing-library": "^4.0.0",
 		"prettier": "^2.8.7",
 		"tsx": "^4.20.6",
 		"typescript": "^5.9.3"

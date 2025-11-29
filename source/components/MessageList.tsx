@@ -16,7 +16,7 @@ const MessageList: FC<Props> = ({messages}) => {
 				// Tighten spacing between messages from the same sender (no extra gap),
 				// but keep a small gap when the sender changes so different participants
 				// remain recognizable.
-				const marginBottom =
+				const marginTop =
 					msg.sender === 'approval'
 						? 1
 						: prev && prev.sender === msg.sender
@@ -24,7 +24,7 @@ const MessageList: FC<Props> = ({messages}) => {
 						: 1;
 
 				return (
-					<Box key={msg.id} marginBottom={marginBottom}>
+					<Box key={msg.id} marginTop={marginTop}>
 						{msg.sender === 'approval' ? (
 							<Box flexDirection="column">
 								<ApprovalPrompt approval={msg.approval} />

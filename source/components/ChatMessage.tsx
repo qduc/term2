@@ -18,9 +18,11 @@ const ChatMessage: FC<Props> = ({msg}) => {
 			) : (
 				<>
 					{msg.reasoningText && (
-						<Text color="gray" dimColor>
-							{msg.reasoningText}
-						</Text>
+						<Box marginBottom={1}>
+							<Text color="gray" dimColor>
+								{msg.reasoningText}
+							</Text>
+						</Box>
 					)}
 					<MarkdownRenderer>{msg.text}</MarkdownRenderer>
 				</>

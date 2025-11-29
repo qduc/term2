@@ -110,6 +110,7 @@ export class OpenAIAgentClient {
 			modelSettings: {
 				reasoning: {
 					effort: reasoningEffort,
+					summary: 'auto',
 				},
 			},
 			instructions,

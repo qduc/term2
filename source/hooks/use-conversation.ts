@@ -50,6 +50,7 @@ interface LiveResponse {
 	id: number;
 	sender: 'bot';
 	text: string;
+	reasoningText: string;
 }
 
 export const useConversation = ({
@@ -142,7 +143,12 @@ export const useConversation = ({
 			setIsProcessing(true);
 
 			const liveMessageId = Date.now();
-			setLiveResponse({id: liveMessageId, sender: 'bot', text: ''});
+			setLiveResponse({
+				id: liveMessageId,
+				sender: 'bot',
+				text: '',
+				reasoningText: '',
+			});
 
 			// Track accumulated text so we can flush it before command messages
 			let accumulatedText = '';
@@ -155,6 +161,13 @@ export const useConversation = ({
 						setLiveResponse(prev =>
 							prev && prev.id === liveMessageId
 								? {...prev, text: fullText}
+								: prev,
+						);
+					},
+					onReasoningChunk: fullReasoningText => {
+						setLiveResponse(prev =>
+							prev && prev.id === liveMessageId
+								? {...prev, reasoningText: fullReasoningText}
 								: prev,
 						);
 					},
@@ -214,7 +227,12 @@ export const useConversation = ({
 
 			setIsProcessing(true);
 			const liveMessageId = Date.now();
-			setLiveResponse({id: liveMessageId, sender: 'bot', text: ''});
+			setLiveResponse({
+				id: liveMessageId,
+				sender: 'bot',
+				text: '',
+				reasoningText: '',
+			});
 
 			// Track accumulated text so we can flush it before command messages
 			let accumulatedText = '';
@@ -229,6 +247,16 @@ export const useConversation = ({
 							setLiveResponse(prev =>
 								prev && prev.id === liveMessageId
 									? {...prev, text: fullText}
+									: prev,
+							);
+						},
+						onReasoningChunk: fullReasoningText => {
+							setLiveResponse(prev =>
+								prev && prev.id === liveMessageId
+									? {
+											...prev,
+											reasoningText: fullReasoningText,
+									  }
 									: prev,
 							);
 						},

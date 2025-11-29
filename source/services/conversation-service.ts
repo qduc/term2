@@ -86,9 +86,11 @@ export class ConversationService {
 		text: string,
 		{
 			onTextChunk,
+			onReasoningChunk,
 			onCommandMessage,
 		}: {
 			onTextChunk?: (fullText: string, chunk: string) => void;
+			onReasoningChunk?: (fullText: string, chunk: string) => void;
 			onCommandMessage?: (message: CommandMessage) => void;
 		} = {},
 	): Promise<ConversationResult> {
@@ -100,6 +102,7 @@ export class ConversationService {
 			stream,
 			{
 				onTextChunk,
+				onReasoningChunk,
 				onCommandMessage,
 			},
 		);
@@ -116,9 +119,11 @@ export class ConversationService {
 		answer: string,
 		{
 			onTextChunk,
+			onReasoningChunk,
 			onCommandMessage,
 		}: {
 			onTextChunk?: (fullText: string, chunk: string) => void;
+			onReasoningChunk?: (fullText: string, chunk: string) => void;
 			onCommandMessage?: (message: CommandMessage) => void;
 		} = {},
 	): Promise<ConversationResult | null> {
@@ -143,6 +148,7 @@ export class ConversationService {
 			stream,
 			{
 				onTextChunk,
+				onReasoningChunk,
 				onCommandMessage,
 			},
 		);
@@ -165,13 +171,16 @@ export class ConversationService {
 		stream: any,
 		{
 			onTextChunk,
+			onReasoningChunk,
 			onCommandMessage,
 		}: {
 			onTextChunk?: (fullText: string, chunk: string) => void;
+			onReasoningChunk?: (fullText: string, chunk: string) => void;
 			onCommandMessage?: (message: CommandMessage) => void;
 		} = {},
 	): Promise<{finalOutput: string; emittedCommandIds: Set<string>}> {
 		let finalOutput = '';
+		let reasoningOutput = '';
 		const emittedCommandIds = new Set<string>();
 
 		const emitText = (delta: string) => {
@@ -183,13 +192,42 @@ export class ConversationService {
 			onTextChunk?.(finalOutput, delta);
 		};
 
+		const emitReasoning = (delta: string) => {
+			if (!delta) {
+				return;
+			}
+
+			reasoningOutput += delta;
+			onReasoningChunk?.(reasoningOutput, delta);
+		};
+
 		for await (const event of stream) {
 			this.#emitTextDelta(event, emitText);
 			if (event?.data) {
 				this.#emitTextDelta(event.data, emitText);
 			}
 
+			// Handle reasoning items - extract and emit reasoning text
+			if (
+				event?.type === 'run_item_stream_event' &&
+				event.item?.type === 'reasoning_item'
+			) {
+				const reasoningItem = event.item;
+				if (
+					reasoningItem.rawItem?.content &&
+					Array.isArray(reasoningItem.rawItem.content)
+				) {
+					for (const contentItem of reasoningItem.rawItem.content) {
+						if (contentItem.text) {
+							emitReasoning(contentItem.text);
+						}
+					}
+				}
+			}
+
 			if (event?.type === 'run_item_stream_event') {
+				// console.log(JSON.stringify(event.item));
+
 				this.#emitCommandMessages(
 					[event.item],
 					emittedCommandIds,

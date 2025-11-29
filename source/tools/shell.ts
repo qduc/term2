@@ -8,10 +8,35 @@ import type {ToolDefinition} from './types.js';
 
 const execPromise = util.promisify(exec);
 
+/** Default trim configuration */
+export const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
+	maxLines: 1000,
+	maxCharacters: 10000,
+};
+
 const shellParametersSchema = z.object({
 	commands: z
 		.array(z.string().min(1))
-		.min(1, 'At least one command required'),
+		.min(1, 'At least one command required')
+		.describe('Array of shell commands to execute sequentially, one command per entry.'),
+	timeout_ms: z
+		.number()
+		.int()
+		.positive()
+		.optional()
+		.default(DEFAULT_TRIM_CONFIG.maxCharacters)
+		.describe(
+			'Optional timeout in milliseconds for each command. Defaults to 120000 ms (2 minutes) if not specified.',
+		),
+	max_output_length: z
+		.number()
+		.int()
+		.positive()
+		.optional()
+		.default(DEFAULT_TRIM_CONFIG.maxCharacters)
+		.describe(
+			'Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to 10000 characters if not specified.',
+		),
 	needsApproval: z.boolean(),
 });
 
@@ -24,15 +49,9 @@ export type ShellToolParams = z.infer<typeof shellParametersSchema>;
 export interface OutputTrimConfig {
 	/** Maximum number of lines before trimming (default: 1000) */
 	maxLines: number;
-	/** Maximum size in bytes before trimming (default: 100KB) */
-	maxBytes: number;
+	/** Maximum size in characters before trimming (default: 10000) */
+	maxCharacters: number;
 }
-
-/** Default trim configuration */
-export const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
-	maxLines: 200,
-	maxBytes: 10 * 1024, // 10KB
-};
 
 /** Current trim configuration (can be modified at runtime) */
 let trimConfig: OutputTrimConfig = {...DEFAULT_TRIM_CONFIG};
@@ -51,18 +70,17 @@ export function getTrimConfig(): OutputTrimConfig {
 	return {...trimConfig};
 }
 
-/**
- * Trim output by keeping the beginning and end, removing the middle.
- * Returns the original output if it doesn't exceed limits.
- */
-function trimOutput(output: string): string {
+function trimOutput(output: string, maxOutputLength?: number): string {
 	const lines = output.split('\n');
-	const byteSize = Buffer.byteLength(output, 'utf8');
+	const charLength = output.length;
+
+	// Use provided maxOutputLength or fall back to trimConfig.maxCharacters
+	const maxCharacters = maxOutputLength ?? trimConfig.maxCharacters;
 
 	const exceedsLines = lines.length > trimConfig.maxLines;
-	const exceedsBytes = byteSize > trimConfig.maxBytes;
+	const exceedsCharacters = charLength > maxCharacters;
 
-	if (!exceedsLines && !exceedsBytes) {
+	if (!exceedsLines && !exceedsCharacters) {
 		return output;
 	}
 
@@ -70,15 +88,15 @@ function trimOutput(output: string): string {
 	// Keep 40% at the beginning, 40% at the end, trim 20% from the middle
 	const keepLines = Math.floor(trimConfig.maxLines * 0.4);
 
-	// If exceeds bytes but not lines, calculate lines to keep based on byte limit
+	// If exceeds characters but not lines, calculate lines to keep based on character limit
 	let effectiveKeepLines = keepLines;
-	if (exceedsBytes && !exceedsLines) {
-		// Estimate average bytes per line and calculate how many lines fit
-		const avgBytesPerLine = byteSize / lines.length;
-		const maxLinesForBytes = Math.floor(
-			trimConfig.maxBytes / avgBytesPerLine,
+	if (exceedsCharacters && !exceedsLines) {
+		// Estimate average characters per line and calculate how many lines fit
+		const avgCharsPerLine = charLength / lines.length;
+		const maxLinesForChars = Math.floor(
+			maxCharacters / avgCharsPerLine,
 		);
-		effectiveKeepLines = Math.floor(maxLinesForBytes * 0.4);
+		effectiveKeepLines = Math.floor(maxLinesForChars * 0.4);
 	}
 
 	// Ensure we keep at least some lines
@@ -142,9 +160,12 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 			return true; // fail-safe: require approval on validation errors
 		}
 	},
-	execute: async ({commands}) => {
+	execute: async ({commands, timeout_ms, max_output_length}) => {
 		const cwd = process.cwd();
 		const output: ShellCommandResult[] = [];
+
+		// Use provided values or defaults
+		const timeout = timeout_ms ?? 120000; // Default: 2 minutes
 
 		for (const command of commands) {
 			let stdout = '';
@@ -158,7 +179,7 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 			try {
 				const result = await execPromise(command, {
 					cwd,
-					timeout: 120000, // 2 minute timeout
+					timeout,
 					maxBuffer: 1024 * 1024, // 1MB max buffer
 				});
 				stdout = result.stdout;
@@ -175,8 +196,8 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 
 			output.push({
 				command,
-				stdout: trimOutput(stdout),
-				stderr: trimOutput(stderr),
+				stdout: trimOutput(stdout, max_output_length),
+				stderr: trimOutput(stderr, max_output_length),
 				outcome,
 			});
 

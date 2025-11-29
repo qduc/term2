@@ -18,6 +18,7 @@ const shellParametersSchema = z.object({
 	commands: z
 		.array(z.string().min(1))
 		.min(1, 'At least one command required')
+		.max(3, 'The maximum number of parallel commands is 3')
 		.describe('Array of shell commands to execute sequentially, one command per entry.'),
 	timeout_ms: z
 		.number()

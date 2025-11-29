@@ -163,6 +163,8 @@ export class ConversationService {
 			},
 		);
 
+		this.previousResponseId = stream.lastResponseId;
+
 		// Merge previously emitted command IDs with newly emitted ones
 		// This prevents duplicates when result.history contains commands from the initial stream
 		const allEmittedIds = new Set([

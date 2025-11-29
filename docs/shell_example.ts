@@ -30,14 +30,12 @@ class LocalShell implements Shell {
 				exitCode: 0,
 			};
 			try {
-				const {stdout: localStdout, stderr: localStderr} = await execAsync(
-					command,
-					{
+				const {stdout: localStdout, stderr: localStderr} =
+					await execAsync(command, {
 						cwd: this.cwd,
 						timeout: action.timeoutMs,
 						maxBuffer: action.maxOutputLength,
-					},
-				);
+					});
 				stdout = localStdout;
 				stderr = localStderr;
 			} catch (error: any) {
@@ -120,7 +118,9 @@ async function main() {
 	await withTrace('shell-tool-example', async () => {
 		const result = await run(agent, 'Show the Node.js version.');
 
-		console.log(`${chalk.bold('Agent:')} ${chalk.cyan(result.finalOutput)}`);
+		console.log(
+			`${chalk.bold('Agent:')} ${chalk.cyan(result.finalOutput)}`,
+		);
 	});
 }
 

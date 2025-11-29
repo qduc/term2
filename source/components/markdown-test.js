@@ -72,7 +72,11 @@ const BlockRenderer = ({token}) => {
 			const isMain = token.depth === 1;
 			return (
 				<Box flexDirection="column" marginTop={1} marginBottom={1}>
-					<Text bold underline={isMain} color={isMain ? 'green' : 'cyan'}>
+					<Text
+						bold
+						underline={isMain}
+						color={isMain ? 'green' : 'cyan'}
+					>
 						{isMain ? '# ' : '## '}
 						<InlineContent tokens={token.tokens} />
 					</Text>
@@ -110,7 +114,9 @@ const BlockRenderer = ({token}) => {
 							if (subToken.type === 'text') {
 								return (
 									<Text key={i}>
-										<InlineContent tokens={subToken.tokens} />
+										<InlineContent
+											tokens={subToken.tokens}
+										/>
 									</Text>
 								);
 							}
@@ -160,7 +166,9 @@ const BlockRenderer = ({token}) => {
 		case 'hr':
 			return (
 				<Box marginY={1}>
-					<Text color="gray">────────────────────────────────────────</Text>
+					<Text color="gray">
+						────────────────────────────────────────
+					</Text>
 				</Box>
 			);
 

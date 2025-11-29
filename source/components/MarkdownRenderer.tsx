@@ -18,7 +18,12 @@ const InlineContent = ({tokens}: {tokens: any[]}) => {
 					case 'escape':
 						// Handle nested formatting inside text tokens if marked provides them
 						if (token.tokens) {
-							return <InlineContent key={key} tokens={token.tokens} />;
+							return (
+								<InlineContent
+									key={key}
+									tokens={token.tokens}
+								/>
+							);
 						}
 						return <Text key={key}>{token.text}</Text>;
 
@@ -38,7 +43,11 @@ const InlineContent = ({tokens}: {tokens: any[]}) => {
 
 					case 'codespan':
 						return (
-							<Text key={key} color="yellow" backgroundColor="#333">
+							<Text
+								key={key}
+								color="yellow"
+								backgroundColor="#333"
+							>
 								{` ${token.text} `}
 							</Text>
 						);
@@ -76,7 +85,11 @@ const BlockRenderer = ({token}: {token: any}) => {
 			const isMain = token.depth === 1;
 			return (
 				<Box flexDirection="column" marginTop={1} marginBottom={1}>
-					<Text bold underline={isMain} color={isMain ? 'green' : 'cyan'}>
+					<Text
+						bold
+						underline={isMain}
+						color={isMain ? 'green' : 'cyan'}
+					>
 						{isMain ? '# ' : '## '}
 						<InlineContent tokens={token.tokens} />
 					</Text>
@@ -114,7 +127,9 @@ const BlockRenderer = ({token}: {token: any}) => {
 							if (subToken.type === 'text') {
 								return (
 									<Text key={i}>
-										<InlineContent tokens={subToken.tokens} />
+										<InlineContent
+											tokens={subToken.tokens}
+										/>
 									</Text>
 								);
 							}
@@ -164,7 +179,9 @@ const BlockRenderer = ({token}: {token: any}) => {
 		case 'hr':
 			return (
 				<Box marginY={1}>
-					<Text color="gray">────────────────────────────────────────</Text>
+					<Text color="gray">
+						────────────────────────────────────────
+					</Text>
 				</Box>
 			);
 

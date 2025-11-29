@@ -34,10 +34,10 @@ You'll see a chat interface. Type your message and press Enter. The AI will resp
 
 Examples of what you can ask:
 
-- "What files are in my current directory?"
-- "Show me my git status"
-- "Create a backup of my documents folder"
-- "What's using port 3000?"
+-   "What files are in my current directory?"
+-   "Show me my git status"
+-   "Create a backup of my documents folder"
+-   "What's using port 3000?"
 
 ## Options
 
@@ -50,6 +50,6 @@ The default model is gpt-4.1.
 
 ## Tips
 
-- The assistant won't run dangerous commands without your approval
-- You can reject any command by pressing 'n' when prompted
-- Press Ctrl+C to exit the chat at any time
+-   The assistant won't run dangerous commands without your approval
+-   You can reject any command by pressing 'n' when prompted
+-   Press Ctrl+C to exit the chat at any time

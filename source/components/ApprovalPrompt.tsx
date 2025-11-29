@@ -66,7 +66,9 @@ const ApplyPatchPrompt: FC<{args: ApplyPatchArgs}> = ({args}) => {
 
 const ApprovalPrompt: FC<Props> = ({approval}) => {
 	// Try to parse and render apply_patch arguments nicely
-	let content: React.ReactNode = <Text dimColor>{approval.argumentsText}</Text>;
+	let content: React.ReactNode = (
+		<Text dimColor>{approval.argumentsText}</Text>
+	);
 
 	if (approval.toolName === 'apply_patch') {
 		try {
@@ -80,7 +82,8 @@ const ApprovalPrompt: FC<Props> = ({approval}) => {
 	return (
 		<Box flexDirection="column">
 			<Text color="yellow">
-				{approval.agentName} wants to run: <Text bold>{approval.toolName}</Text>
+				{approval.agentName} wants to run:{' '}
+				<Text bold>{approval.toolName}</Text>
 			</Text>
 			{content}
 			<Text>

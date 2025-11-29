@@ -30,7 +30,13 @@ const MessageList: FC<Props> = ({messages}) => {
 								<ApprovalPrompt approval={msg.approval} />
 								<Text>
 									{msg.answer && (
-										<Text color={msg.answer === 'y' ? 'green' : 'red'}>
+										<Text
+											color={
+												msg.answer === 'y'
+													? 'green'
+													: 'red'
+											}
+										>
 											{' '}
 											{msg.answer}
 										</Text>

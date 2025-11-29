@@ -30,7 +30,9 @@ class HistoryService {
 			if (fs.existsSync(HISTORY_FILE)) {
 				const data = fs.readFileSync(HISTORY_FILE, 'utf-8');
 				const parsed = JSON.parse(data) as HistoryData;
-				this.messages = Array.isArray(parsed.messages) ? parsed.messages : [];
+				this.messages = Array.isArray(parsed.messages)
+					? parsed.messages
+					: [];
 			}
 		} catch (error) {
 			// If we can't load history, start with empty array
@@ -54,7 +56,11 @@ class HistoryService {
 				messages: this.messages,
 			};
 
-			fs.writeFileSync(HISTORY_FILE, JSON.stringify(data, null, 2), 'utf-8');
+			fs.writeFileSync(
+				HISTORY_FILE,
+				JSON.stringify(data, null, 2),
+				'utf-8',
+			);
 		} catch (error) {
 			console.error('Failed to save history:', error);
 		}

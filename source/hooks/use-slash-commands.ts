@@ -79,7 +79,11 @@ export const useSlashCommands = ({
 				// If the current filter doesn't start with the command name + space,
 				// it means we haven't fully typed it or added the space yet.
 				// We should autocomplete it.
-				if (!filter.toLowerCase().startsWith(fullCommandPrefix.toLowerCase())) {
+				if (
+					!filter
+						.toLowerCase()
+						.startsWith(fullCommandPrefix.toLowerCase())
+				) {
 					setText(`/${fullCommandPrefix}`);
 					return;
 				}

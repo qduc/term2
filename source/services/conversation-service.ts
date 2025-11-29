@@ -50,7 +50,8 @@ const getCommandFromArgs = (args: unknown): string => {
 		if ('commands' in args && Array.isArray(args.commands)) {
 			return (args.commands as string[]).join('\n');
 		}
-		const cmdFromObject = 'command' in args ? String(args.command) : undefined;
+		const cmdFromObject =
+			'command' in args ? String(args.command) : undefined;
 		const argsFromObject =
 			'arguments' in args ? String(args.arguments) : undefined;
 		return cmdFromObject ?? argsFromObject ?? JSON.stringify(args);
@@ -95,10 +96,13 @@ export class ConversationService {
 			previousResponseId: this.previousResponseId,
 		});
 
-		const {finalOutput, emittedCommandIds} = await this.#consumeStream(stream, {
-			onTextChunk,
-			onCommandMessage,
-		});
+		const {finalOutput, emittedCommandIds} = await this.#consumeStream(
+			stream,
+			{
+				onTextChunk,
+				onCommandMessage,
+			},
+		);
 		this.previousResponseId = stream.lastResponseId;
 		// Pass emittedCommandIds so we don't duplicate commands in the final result
 		return this.#buildResult(
@@ -135,10 +139,13 @@ export class ConversationService {
 
 		const stream = await this.agentClient.continueRunStream(state);
 
-		const {finalOutput, emittedCommandIds} = await this.#consumeStream(stream, {
-			onTextChunk,
-			onCommandMessage,
-		});
+		const {finalOutput, emittedCommandIds} = await this.#consumeStream(
+			stream,
+			{
+				onTextChunk,
+				onCommandMessage,
+			},
+		);
 
 		// Merge previously emitted command IDs with newly emitted ones
 		// This prevents duplicates when result.history contains commands from the initial stream
@@ -147,7 +154,11 @@ export class ConversationService {
 			...emittedCommandIds,
 		]);
 
-		return this.#buildResult(stream, finalOutput || undefined, allEmittedIds);
+		return this.#buildResult(
+			stream,
+			finalOutput || undefined,
+			allEmittedIds,
+		);
 	}
 
 	async #consumeStream(
@@ -188,7 +199,11 @@ export class ConversationService {
 				event?.type === 'tool_call_output_item' ||
 				event?.rawItem?.type === 'function_call_output'
 			) {
-				this.#emitCommandMessages([event], emittedCommandIds, onCommandMessage);
+				this.#emitCommandMessages(
+					[event],
+					emittedCommandIds,
+					onCommandMessage,
+				);
 			}
 		}
 
@@ -239,7 +254,8 @@ export class ConversationService {
 			return null;
 		}
 
-		const type = typeof (payload as any).type === 'string' ? payload.type : '';
+		const type =
+			typeof (payload as any).type === 'string' ? payload.type : '';
 		const looksLikeOutput =
 			typeof type === 'string' && type.includes('output_text');
 		const hasOutputProperties = Boolean(

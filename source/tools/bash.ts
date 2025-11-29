@@ -21,7 +21,9 @@ export const bashToolDefinition: ToolDefinition<BashToolParams> = {
 	parameters: bashParametersSchema,
 	needsApproval: async params => {
 		try {
-			return params.needsApproval || validateCommandSafety(params.command);
+			return (
+				params.needsApproval || validateCommandSafety(params.command)
+			);
 		} catch (error) {
 			const errorMessage =
 				error instanceof Error ? error.message : String(error);

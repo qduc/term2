@@ -225,7 +225,9 @@ test('dedupes commands from initial stream when continuation history contains th
 	};
 
 	// Initial stream: emits 'ls' command, then hits approval for 'sed'
-	const initialEvents = [{type: 'run_item_stream_event', item: lsCommandItem}];
+	const initialEvents = [
+		{type: 'run_item_stream_event', item: lsCommandItem},
+	];
 	const initialStream = new MockStream(initialEvents);
 	initialStream.interruptions = [interruption];
 	initialStream.state = {

@@ -65,7 +65,8 @@ export class OpenAIAgentClient {
 		} catch (error) {
 			if (
 				retries > 0 &&
-				(error instanceof UserError || error instanceof ModelBehaviorError)
+				(error instanceof UserError ||
+					error instanceof ModelBehaviorError)
 			) {
 				return this.#executeWithRetry(operation, retries - 1);
 			}

@@ -36,7 +36,7 @@ const App: FC<AppProps> = ({conversationService}) => {
 		if (!isProcessing) return;
 
 		const interval = setInterval(() => {
-			setDotCount(prev => prev === 3 ? 1 : prev + 1);
+			setDotCount(prev => (prev === 3 ? 1 : prev + 1));
 		}, 500);
 
 		return () => clearInterval(interval);

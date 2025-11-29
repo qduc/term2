@@ -9,7 +9,9 @@ import type {ToolDefinition} from './types.js';
 const execPromise = util.promisify(exec);
 
 const shellParametersSchema = z.object({
-	commands: z.array(z.string().min(1)).min(1, 'At least one command required'),
+	commands: z
+		.array(z.string().min(1))
+		.min(1, 'At least one command required'),
 	needsApproval: z.boolean(),
 });
 
@@ -73,7 +75,9 @@ function trimOutput(output: string): string {
 	if (exceedsBytes && !exceedsLines) {
 		// Estimate average bytes per line and calculate how many lines fit
 		const avgBytesPerLine = byteSize / lines.length;
-		const maxLinesForBytes = Math.floor(trimConfig.maxBytes / avgBytesPerLine);
+		const maxLinesForBytes = Math.floor(
+			trimConfig.maxBytes / avgBytesPerLine,
+		);
 		effectiveKeepLines = Math.floor(maxLinesForBytes * 0.4);
 	}
 

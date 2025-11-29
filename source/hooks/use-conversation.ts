@@ -58,7 +58,8 @@ export const useConversation = ({
 	conversationService: ConversationService;
 }) => {
 	const [messages, setMessages] = useState<Message[]>([]);
-	const [waitingForApproval, setWaitingForApproval] = useState<boolean>(false);
+	const [waitingForApproval, setWaitingForApproval] =
+		useState<boolean>(false);
 	const [pendingApprovalMessageId, setPendingApprovalMessageId] = useState<
 		number | null
 	>(null);
@@ -97,7 +98,8 @@ export const useConversation = ({
 
 			// If text was already flushed before command messages, don't add it again
 			// Only add final text if there's new text after the commands
-			const shouldAddBotMessage = !textWasFlushed || remainingText?.trim();
+			const shouldAddBotMessage =
+				!textWasFlushed || remainingText?.trim();
 			const finalText = remainingText?.trim()
 				? remainingText
 				: result.finalText;
@@ -203,7 +205,8 @@ export const useConversation = ({
 
 			setMessages(prev =>
 				prev.map(msg =>
-					msg.sender === 'approval' && msg.id === pendingApprovalMessageId
+					msg.sender === 'approval' &&
+					msg.id === pendingApprovalMessageId
 						? {...msg, answer}
 						: msg,
 				),

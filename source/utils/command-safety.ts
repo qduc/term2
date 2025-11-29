@@ -45,7 +45,11 @@ export function isDangerousCommand(command: string): boolean {
  */
 export function validateCommandSafety(command: string): boolean {
 	// Check 1: Command must be a non-empty string
-	if (!command || typeof command !== 'string' || command.trim().length === 0) {
+	if (
+		!command ||
+		typeof command !== 'string' ||
+		command.trim().length === 0
+	) {
 		throw new Error('Command cannot be empty');
 	}
 

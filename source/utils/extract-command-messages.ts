@@ -90,7 +90,8 @@ const normalizeToolItem = (
 	const rawItem = item.rawItem ?? item;
 	const type = item.type ?? rawItem?.type;
 	const isFunctionResult =
-		type === 'function_call_result' || rawItem?.type === 'function_call_result';
+		type === 'function_call_result' ||
+		rawItem?.type === 'function_call_result';
 	const isToolCallOutput = type === 'tool_call_output_item';
 
 	if (!isFunctionResult && !isToolCallOutput) {
@@ -172,7 +173,8 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 					.join('\n');
 				const output = combinedOutput || 'No output';
 				const outcome = cmdResult?.outcome;
-				const success = outcome?.type === 'exit' && outcome?.exitCode === 0;
+				const success =
+					outcome?.type === 'exit' && outcome?.exitCode === 0;
 
 				const rawItem = item?.rawItem ?? item;
 				const baseId =

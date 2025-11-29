@@ -5,9 +5,15 @@ type Props = {
 	command: string;
 	output?: string;
 	success?: boolean | null;
+	failureReason?: string;
 };
 
-const CommandMessage: FC<Props> = ({command, output, success}) => {
+const CommandMessage: FC<Props> = ({
+	command,
+	output,
+	success,
+	failureReason,
+}) => {
 	const outputText = output?.trim() ? output : '(no output)';
 	const displayed =
 		outputText && outputText !== '(no output)'
@@ -26,6 +32,7 @@ const CommandMessage: FC<Props> = ({command, output, success}) => {
 			<Text color={success === false ? 'red' : 'cyan'}>
 				$ <Text bold>{command}</Text>
 			</Text>
+			{failureReason && <Text color="red">Error: {failureReason}</Text>}
 			<Text color={success === false ? 'red' : 'gray'}>{displayed}</Text>
 		</Box>
 	);

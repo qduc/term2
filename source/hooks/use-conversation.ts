@@ -32,6 +32,7 @@ interface CommandMessage {
 	command: string;
 	output: string;
 	success?: boolean;
+	failureReason?: string;
 }
 
 interface SystemMessage {

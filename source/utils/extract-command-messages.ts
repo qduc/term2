@@ -7,6 +7,7 @@ interface CommandMessage {
 	command: string;
 	output: string;
 	success?: boolean;
+	failureReason?: string;
 }
 
 const coerceToText = (value: unknown): string => {
@@ -176,6 +177,11 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 				const success =
 					outcome?.type === 'exit' && outcome?.exitCode === 0;
 
+				let failureReason: string | undefined;
+				if (outcome && outcome.type !== 'exit') {
+					failureReason = outcome.type;
+				}
+
 				const rawItem = item?.rawItem ?? item;
 				const baseId =
 					rawItem?.id ??
@@ -191,6 +197,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 					command,
 					output,
 					success,
+					failureReason,
 				});
 			}
 			continue;

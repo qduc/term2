@@ -48,6 +48,7 @@ const MessageList: FC<Props> = ({messages}) => {
 								command={msg.command}
 								output={msg.output}
 								success={msg.success}
+								failureReason={msg.failureReason}
 							/>
 						) : (
 							<ChatMessage msg={msg} />

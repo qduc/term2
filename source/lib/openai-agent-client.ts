@@ -17,6 +17,7 @@ import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 export class OpenAIAgentClient {
 	#agent: Agent;
 	#reasoningEffort?: ModelSettingsReasoningEffort;
+	#currentAbortController: AbortController | null = null;
 
 	constructor({
 		model,
@@ -33,26 +34,50 @@ export class OpenAIAgentClient {
 		});
 	}
 
+	/**
+	 * Abort the current running stream/operation
+	 */
+	abort(): void {
+		if (this.#currentAbortController) {
+			this.#currentAbortController.abort();
+			this.#currentAbortController = null;
+		}
+	}
+
 	async startStream(
 		userInput: string,
 		{previousResponseId}: {previousResponseId?: string | null} = {},
 	): Promise<any> {
+		// Abort any previous operation
+		this.abort();
+		this.#currentAbortController = new AbortController();
+		const signal = this.#currentAbortController.signal;
+
 		return this.#executeWithRetry(() =>
 			run(this.#agent, userInput, {
 				previousResponseId: previousResponseId ?? undefined,
 				stream: true,
 				maxTurns: 20,
+				signal,
 			}),
 		);
 	}
 
 	async continueRun(state: any): Promise<any> {
-		return this.#executeWithRetry(() => run(this.#agent, state));
+		this.abort();
+		this.#currentAbortController = new AbortController();
+		const signal = this.#currentAbortController.signal;
+
+		return this.#executeWithRetry(() => run(this.#agent, state, {signal}));
 	}
 
 	async continueRunStream(state: any): Promise<any> {
+		this.abort();
+		this.#currentAbortController = new AbortController();
+		const signal = this.#currentAbortController.signal;
+
 		return this.#executeWithRetry(() =>
-			run(this.#agent, state, {stream: true, maxTurns: 20}),
+			run(this.#agent, state, {stream: true, maxTurns: 20, signal}),
 		);
 	}
 

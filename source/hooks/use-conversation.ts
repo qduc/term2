@@ -420,6 +420,14 @@ export const useConversation = ({
 		setLiveResponse(null);
 	}, [conversationService]);
 
+	const stopProcessing = useCallback(() => {
+		conversationService.abort();
+		setWaitingForApproval(false);
+		setPendingApprovalMessageId(null);
+		setIsProcessing(false);
+		setLiveResponse(null);
+	}, [conversationService]);
+
 	const setModel = useCallback(
 		(model: string) => {
 			conversationService.setModel(model);
@@ -446,6 +454,7 @@ export const useConversation = ({
 		sendUserMessage,
 		handleApprovalDecision,
 		clearConversation,
+		stopProcessing,
 		setModel,
 		addSystemMessage,
 	};

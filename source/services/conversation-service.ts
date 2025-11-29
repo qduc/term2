@@ -83,6 +83,14 @@ export class ConversationService {
 		this.agentClient.setModel(model);
 	}
 
+	/**
+	 * Abort the current running operation
+	 */
+	abort(): void {
+		this.agentClient.abort();
+		this.pendingApprovalContext = null;
+	}
+
 	async sendMessage(
 		text: string,
 		{

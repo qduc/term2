@@ -8,6 +8,11 @@ import {DEFAULT_MODEL} from './agent.js';
 import {OpenAIAgentClient} from './lib/openai-agent-client.js';
 import {ConversationService} from './services/conversation-service.js';
 
+// Global Ctrl+C handler for immediate exit
+process.on('SIGINT', () => {
+	process.exit(0);
+});
+
 const cli = meow(
 	`
 		Usage

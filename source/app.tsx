@@ -24,6 +24,7 @@ const App: FC<AppProps> = ({conversationService}) => {
 		sendUserMessage,
 		handleApprovalDecision,
 		clearConversation,
+		stopProcessing,
 		setModel,
 		addSystemMessage,
 	} = useConversation({conversationService});
@@ -95,6 +96,21 @@ const App: FC<AppProps> = ({conversationService}) => {
 		commands: slashCommands,
 		onClose: handleSlashMenuClose,
 		setText: setInput,
+	});
+
+	// Handle Ctrl+C to exit immediately
+	useInput((_input: string, key) => {
+		if (key.ctrl && _input === 'c') {
+			exit();
+		}
+	});
+
+	// Handle Esc to stop processing
+	useInput((_input: string, key) => {
+		if (key.escape && (isProcessing || waitingForApproval)) {
+			stopProcessing();
+			addSystemMessage('Stopped');
+		}
 	});
 
 	// Handle y/n key presses for approval prompts

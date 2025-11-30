@@ -1,5 +1,6 @@
 const BASH_TOOL_NAME = 'bash';
 const SHELL_TOOL_NAME = 'shell';
+const SEARCH_TOOL_NAME = 'search';
 
 interface CommandMessage {
 	id: string;
@@ -200,6 +201,47 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 					failureReason,
 				});
 			}
+			continue;
+		}
+
+		// Handle search tool
+		if (normalizedItem.toolName === SEARCH_TOOL_NAME) {
+			console.log(normalizedItem);
+			const args = normalizedItem.arguments;
+			const pattern = args?.pattern ?? '';
+			const searchPath = args?.path ?? '.';
+
+			const parts = [`search "${pattern}"`, `"${searchPath}"`];
+
+			if (args?.case_sensitive) {
+				parts.push('--case-sensitive');
+			}
+			if (args?.file_pattern) {
+				parts.push(`--include "${args.file_pattern}"`);
+			}
+			if (args?.exclude_pattern) {
+				parts.push(`--exclude "${args.exclude_pattern}"`);
+			}
+
+			const command = parts.join(' ');
+			const output = normalizedItem.outputText || 'No output';
+			const success = true;
+
+			const rawItem = item?.rawItem ?? item;
+			const stableId =
+				rawItem?.id ??
+				rawItem?.callId ??
+				item?.id ??
+				item?.callId ??
+				`${Date.now()}-${index}`;
+
+			messages.push({
+				id: stableId,
+				sender: 'command',
+				command,
+				output,
+				success,
+			});
 			continue;
 		}
 	}

@@ -1,3 +1,4 @@
+import {searchToolDefinition} from './tools/search.js';
 import {applyPatchToolDefinition} from './tools/apply-patch.js';
 import {shellToolDefinition} from './tools/shell.js';
 import type {ToolDefinition} from './tools/types.js';
@@ -35,7 +36,11 @@ export const getAgentDefinition = (model?: string): AgentDefinition => {
 	return {
 		name: 'Terminal Assistant',
 		instructions: `${baseInstructions}\n\nEnvironment: ${envInfo}`,
-		tools: [shellToolDefinition, applyPatchToolDefinition],
+		tools: [
+			shellToolDefinition,
+			applyPatchToolDefinition,
+			searchToolDefinition,
+		],
 		model: resolvedModel,
 	};
 };

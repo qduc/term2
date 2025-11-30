@@ -38,6 +38,16 @@ interface TextInputProps {
 	 * Whether to allow multi-line input.
 	 */
 	multiLine?: boolean;
+
+	/**
+	 * Called whenever the cursor offset changes.
+	 */
+	onCursorChange?: (offset: number) => void;
+
+	/**
+	 * Optional external cursor override.
+	 */
+	cursorOverride?: number;
 }
 
 // --- Component ---
@@ -50,6 +60,8 @@ export const TextInput: React.FC<TextInputProps> = ({
 	focus = true,
 	mask,
 	multiLine = false,
+	onCursorChange,
+	cursorOverride,
 }) => {
 	// Track cursor position locally
 	const [cursorOffset, setCursorOffset] = useState(value.length);
@@ -58,6 +70,19 @@ export const TextInput: React.FC<TextInputProps> = ({
 	useEffect(() => {
 		setCursorOffset(prev => Math.min(prev, value.length));
 	}, [value]);
+
+	useEffect(() => {
+		if (typeof cursorOverride === 'number') {
+			const nextOffset = Math.max(0, Math.min(cursorOverride, value.length));
+			setCursorOffset(nextOffset);
+		}
+	}, [cursorOverride, value.length]);
+
+	useEffect(() => {
+		if (onCursorChange) {
+			onCursorChange(cursorOffset);
+		}
+	}, [cursorOffset, onCursorChange]);
 
 	const {stdin, setRawMode, isRawModeSupported} = useStdin();
 	const bufferRef = useRef('');

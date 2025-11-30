@@ -1,7 +1,9 @@
-import React, {FC, useEffect, useState, useRef} from 'react';
+import React, {FC, useEffect, useState, useRef, useMemo} from 'react';
 import {Box, Text, useInput} from 'ink';
 import TextInput from './TextInput.js';
 import SlashCommandMenu, {SlashCommand} from './SlashCommandMenu.js';
+import PathSelectionMenu from './PathSelectionMenu.js';
+import type {PathCompletionItem} from '../hooks/use-path-completion.js';
 
 type Props = {
 	value: string;
@@ -19,6 +21,19 @@ type Props = {
 	onSlashMenuFilterChange: (filter: string) => void;
 	onHistoryUp: () => void;
 	onHistoryDown: () => void;
+	pathMenuOpen: boolean;
+	pathMenuItems: PathCompletionItem[];
+	pathMenuSelectedIndex: number;
+	pathMenuQuery: string;
+	pathMenuLoading: boolean;
+	pathMenuError: string | null;
+	pathMenuTriggerIndex: number | null;
+	onPathMenuOpen: (triggerIndex: number, initialQuery: string) => void;
+	onPathMenuClose: () => void;
+	onPathMenuFilterChange: (value: string) => void;
+	onPathMenuUp: () => void;
+	onPathMenuDown: () => void;
+	getPathMenuSelection: () => PathCompletionItem | undefined;
 };
 
 const InputBox: FC<Props> = ({
@@ -37,9 +52,24 @@ const InputBox: FC<Props> = ({
 	onSlashMenuFilterChange,
 	onHistoryUp,
 	onHistoryDown,
+	pathMenuOpen,
+	pathMenuItems,
+	pathMenuSelectedIndex,
+	pathMenuQuery,
+	pathMenuLoading,
+	pathMenuError,
+	pathMenuTriggerIndex,
+	onPathMenuOpen,
+	onPathMenuClose,
+	onPathMenuFilterChange,
+	onPathMenuUp,
+	onPathMenuDown,
+	getPathMenuSelection,
 }) => {
 	const [escHintVisible, setEscHintVisible] = useState(false);
 	const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const [cursorOffset, setCursorOffset] = useState(value.length);
+	const [cursorOverride, setCursorOverride] = useState<number | null>(null);
 
 	// Cleanup timeout on unmount
 	useEffect(() => {
@@ -49,6 +79,12 @@ const InputBox: FC<Props> = ({
 			}
 		};
 	}, []);
+
+	useEffect(() => {
+		if (cursorOverride !== null && cursorOverride === cursorOffset) {
+			setCursorOverride(null);
+		}
+	}, [cursorOverride, cursorOffset]);
 
 	// Detect when user types '/' at the start
 	useEffect(() => {
@@ -89,7 +125,7 @@ const InputBox: FC<Props> = ({
 				}
 			}
 		},
-		{isActive: !slashMenuOpen},
+		{isActive: !slashMenuOpen && !pathMenuOpen},
 	);
 
 	// Handle arrow keys and escape for slash menu
@@ -120,12 +156,72 @@ const InputBox: FC<Props> = ({
 				setInputKey(prev => prev + 1);
 			}
 		},
-		{isActive: !slashMenuOpen},
+		{isActive: !slashMenuOpen && !pathMenuOpen},
+	);
+
+	// Handle input when path menu is open
+	useInput(
+		(_input, key) => {
+			if (!pathMenuOpen) return;
+
+			if (key.upArrow) {
+				onPathMenuUp();
+			} else if (key.downArrow) {
+				onPathMenuDown();
+			} else if (key.escape) {
+				clearActivePathTrigger();
+			} else if (key.tab) {
+				insertSelectedPath(false);
+			}
+		},
+		{isActive: pathMenuOpen},
 	);
 
 	const [inputKey, setInputKey] = useState(0);
 
+	const insertSelectedPath = (appendTrailingSpace: boolean): boolean => {
+		if (!pathMenuOpen || pathMenuTriggerIndex === null) {
+			return false;
+		}
+
+		const selection = getPathMenuSelection();
+		if (!selection) {
+			return false;
+		}
+
+		const safeCursor = Math.min(cursorOffset, value.length);
+		const before = value.slice(0, pathMenuTriggerIndex);
+		const after = value.slice(safeCursor);
+		const displayPath =
+			selection.type === 'directory'
+				? `${selection.path}/`
+				: selection.path;
+		const suffix = appendTrailingSpace ? ' ' : '';
+		const nextValue = `${before}${displayPath}${suffix}${after}`;
+		onChange(nextValue);
+		const nextCursor = before.length + displayPath.length + suffix.length;
+		setCursorOverride(nextCursor);
+		onPathMenuClose();
+		return true;
+	};
+
+	const clearActivePathTrigger = () => {
+		if (pathMenuTriggerIndex === null) return;
+		const safeCursor = Math.min(cursorOffset, value.length);
+		const before = value.slice(0, pathMenuTriggerIndex);
+		const after = value.slice(safeCursor);
+		onChange(before + after);
+		setCursorOverride(pathMenuTriggerIndex);
+		onPathMenuClose();
+	};
+
 	const handleSubmit = (submittedValue: string) => {
+		if (pathMenuOpen) {
+			const inserted = insertSelectedPath(true);
+			if (inserted) {
+				return;
+			}
+		}
 		if (slashMenuOpen) {
 			// Execute the selected slash command
 			onSlashMenuSelect();
@@ -136,8 +232,56 @@ const InputBox: FC<Props> = ({
 		}
 	};
 
+	const stopCharRegex = useMemo(() => /[\s,;:()\[\]{}<>]/, []);
+
+	useEffect(() => {
+		if (slashMenuOpen) {
+			if (pathMenuOpen) {
+				onPathMenuClose();
+			}
+			return;
+		}
+
+		const trigger = findPathTrigger(value, cursorOffset, stopCharRegex);
+		if (!trigger) {
+			if (pathMenuOpen) {
+				onPathMenuClose();
+			}
+			return;
+		}
+
+		if (!pathMenuOpen || pathMenuTriggerIndex !== trigger.start) {
+			onPathMenuOpen(trigger.start, trigger.query);
+			return;
+		}
+
+		if (pathMenuQuery !== trigger.query) {
+			onPathMenuFilterChange(trigger.query);
+		}
+	}, [
+		value,
+		cursorOffset,
+		slashMenuOpen,
+		pathMenuOpen,
+		pathMenuTriggerIndex,
+		pathMenuQuery,
+		onPathMenuClose,
+		onPathMenuOpen,
+		onPathMenuFilterChange,
+		stopCharRegex,
+	]);
+
 	return (
 		<Box flexDirection="column">
+			{pathMenuOpen && (
+				<PathSelectionMenu
+					items={pathMenuItems}
+					selectedIndex={pathMenuSelectedIndex}
+					query={pathMenuQuery}
+					loading={pathMenuLoading}
+					error={pathMenuError}
+				/>
+			)}
 			{slashMenuOpen && (
 				<SlashCommandMenu
 					commands={slashCommands}
@@ -152,6 +296,8 @@ const InputBox: FC<Props> = ({
 					value={value}
 					onChange={onChange}
 					onSubmit={handleSubmit}
+					onCursorChange={setCursorOffset}
+					cursorOverride={cursorOverride ?? undefined}
 				/>
 			</Box>
 			{escHintVisible && (
@@ -164,3 +310,31 @@ const InputBox: FC<Props> = ({
 };
 
 export default InputBox;
+
+const whitespaceRegex = /\s/;
+
+const findPathTrigger = (
+	text: string,
+	cursor: number,
+	stopChars: RegExp,
+): {start: number; query: string} | null => {
+	if (cursor <= 0 || cursor > text.length) {
+		return null;
+	}
+
+	for (let index = cursor - 1; index >= 0; index -= 1) {
+		const char = text[index];
+		if (char === '@') {
+			const query = text.slice(index + 1, cursor);
+			if (whitespaceRegex.test(query)) {
+				return null;
+			}
+			return {start: index, query};
+		}
+		if (stopChars.test(char)) {
+			break;
+		}
+	}
+
+	return null;
+};

@@ -3,6 +3,7 @@ import {Box, Text, useApp, useInput} from 'ink';
 import {useConversation} from './hooks/use-conversation.js';
 import {useSlashCommands} from './hooks/use-slash-commands.js';
 import {useInputHistory} from './hooks/use-input-history.js';
+import {usePathCompletion} from './hooks/use-path-completion.js';
 import MessageList from './components/MessageList.js';
 import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
@@ -98,6 +99,22 @@ const App: FC<AppProps> = ({conversationService}) => {
 		setText: setInput,
 	});
 
+	const {
+		isOpen: pathMenuOpen,
+		filteredEntries: pathMenuItems,
+		selectedIndex: pathMenuSelectedIndex,
+		query: pathMenuQuery,
+		loading: pathMenuLoading,
+		error: pathMenuError,
+		triggerIndex: pathMenuTriggerIndex,
+		open: openPathMenu,
+		close: closePathMenu,
+		updateQuery: updatePathMenuQuery,
+		moveUp: pathMenuUp,
+		moveDown: pathMenuDown,
+		getSelectedItem,
+	} = usePathCompletion();
+
 	// Handle Ctrl+C to exit immediately
 	useInput((_input: string, key) => {
 		if (key.ctrl && _input === 'c') {
@@ -176,6 +193,19 @@ const App: FC<AppProps> = ({conversationService}) => {
 						onSlashMenuFilterChange={updateSlashFilter}
 						onHistoryUp={handleHistoryUp}
 						onHistoryDown={handleHistoryDown}
+						pathMenuOpen={pathMenuOpen}
+						pathMenuItems={pathMenuItems}
+						pathMenuSelectedIndex={pathMenuSelectedIndex}
+						pathMenuQuery={pathMenuQuery}
+						pathMenuLoading={pathMenuLoading}
+						pathMenuError={pathMenuError}
+						pathMenuTriggerIndex={pathMenuTriggerIndex}
+						onPathMenuOpen={openPathMenu}
+						onPathMenuClose={closePathMenu}
+						onPathMenuFilterChange={updatePathMenuQuery}
+						onPathMenuUp={pathMenuUp}
+						onPathMenuDown={pathMenuDown}
+						getPathMenuSelection={getSelectedItem}
 					/>
 				)}
 

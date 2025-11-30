@@ -58,14 +58,15 @@ export const searchToolDefinition: ToolDefinition<SearchToolParams> = {
 		'Search for text in the codebase using ripgrep (rg) if available, falling back to grep. Useful for exploring code, finding usages, etc.',
 	parameters: searchParametersSchema,
 	needsApproval: () => false, // Search is read-only and safe
-	execute: async ({
-		pattern,
-		path,
-		case_sensitive,
-		file_pattern,
-		exclude_pattern,
-		max_results,
-	}) => {
+    execute: async (params) => {
+        const {
+            pattern,
+            path,
+            case_sensitive,
+            file_pattern,
+            exclude_pattern,
+            max_results,
+        } = params;
 		const useRg = await checkRgAvailability();
 		let command = '';
 
@@ -119,11 +120,17 @@ export const searchToolDefinition: ToolDefinition<SearchToolParams> = {
 					? `\n... (${lines.length - limit} more matches found)`
 					: '';
 
-			return result + trimmedMessage;
+            return JSON.stringify({
+                arguments: params,
+                output: result + trimmedMessage,
+            });
 		} catch (error: any) {
 			// grep/rg returns exit code 1 if no matches found, which execPromise treats as error
 			if (error.code === 1) {
-				return 'No matches found.';
+                return JSON.stringify({
+                    arguments: params,
+                    output: 'No matches found.',
+                });
 			}
 			throw new Error(`Search failed: ${error.message}`);
 		}

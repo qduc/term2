@@ -68,11 +68,12 @@ const validatedReasoningEffort: ModelSettingsReasoningEffort | undefined =
 		: undefined;
 
 // Print which model and reasoning effort will be used on startup
-console.log(
+process.stderr.write(
 	`Using model: ${usedModel}` +
 		(validatedReasoningEffort
 			? ` with reasoning effort: ${validatedReasoningEffort}`
-			: ''),
+		: '') +
+	'\n',
 );
 
 const conversationService = new ConversationService({

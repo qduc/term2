@@ -206,8 +206,8 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 
 		// Handle search tool
 		if (normalizedItem.toolName === SEARCH_TOOL_NAME) {
-			console.log(normalizedItem);
-			const args = normalizedItem.arguments;
+			const parsedOutput = safeJsonParse(normalizedItem.outputText);
+			const args = normalizedItem.arguments ?? parsedOutput?.arguments;
 			const pattern = args?.pattern ?? '';
 			const searchPath = args?.path ?? '.';
 
@@ -224,7 +224,8 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 			}
 
 			const command = parts.join(' ');
-			const output = normalizedItem.outputText || 'No output';
+			const output =
+				parsedOutput?.output ?? normalizedItem.outputText ?? 'No output';
 			const success = true;
 
 			const rawItem = item?.rawItem ?? item;

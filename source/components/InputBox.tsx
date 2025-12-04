@@ -1,9 +1,12 @@
-import React, {FC, useEffect, useState, useRef, useMemo} from 'react';
+import React, {FC, useEffect, useState, useRef, useCallback} from 'react';
 import {Box, Text, useInput} from 'ink';
 import TextInput from './TextInput.js';
 import SlashCommandMenu, {SlashCommand} from './SlashCommandMenu.js';
 import PathSelectionMenu from './PathSelectionMenu.js';
 import type {PathCompletionItem} from '../hooks/use-path-completion.js';
+
+// Constants
+const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 
 type Props = {
 	value: string;
@@ -179,33 +182,44 @@ const InputBox: FC<Props> = ({
 
 	const [inputKey, setInputKey] = useState(0);
 
-	const insertSelectedPath = (appendTrailingSpace: boolean): boolean => {
-		if (!pathMenuOpen || pathMenuTriggerIndex === null) {
-			return false;
-		}
+	const insertSelectedPath = useCallback(
+		(appendTrailingSpace: boolean): boolean => {
+			if (!pathMenuOpen || pathMenuTriggerIndex === null) {
+				return false;
+			}
 
-		const selection = getPathMenuSelection();
-		if (!selection) {
-			return false;
-		}
+			const selection = getPathMenuSelection();
+			if (!selection) {
+				return false;
+			}
 
-		const safeCursor = Math.min(cursorOffset, value.length);
-		const before = value.slice(0, pathMenuTriggerIndex);
-		const after = value.slice(safeCursor);
-		const displayPath =
-			selection.type === 'directory'
-				? `${selection.path}/`
-				: selection.path;
-		const suffix = appendTrailingSpace ? ' ' : '';
-		const nextValue = `${before}${displayPath}${suffix}${after}`;
-		onChange(nextValue);
-		const nextCursor = before.length + displayPath.length + suffix.length;
-		setCursorOverride(nextCursor);
-		onPathMenuClose();
-		return true;
-	};
+			const safeCursor = Math.min(cursorOffset, value.length);
+			const before = value.slice(0, pathMenuTriggerIndex);
+			const after = value.slice(safeCursor);
+			const displayPath =
+				selection.type === 'directory'
+					? `${selection.path}/`
+					: selection.path;
+			const suffix = appendTrailingSpace ? ' ' : '';
+			const nextValue = `${before}${displayPath}${suffix}${after}`;
+			onChange(nextValue);
+			const nextCursor = before.length + displayPath.length + suffix.length;
+			setCursorOverride(nextCursor);
+			onPathMenuClose();
+			return true;
+		},
+		[
+			pathMenuOpen,
+			pathMenuTriggerIndex,
+			getPathMenuSelection,
+			cursorOffset,
+			value,
+			onChange,
+			onPathMenuClose,
+		],
+	);
 
-	const clearActivePathTrigger = () => {
+	const clearActivePathTrigger = useCallback(() => {
 		if (pathMenuTriggerIndex === null) return;
 		const safeCursor = Math.min(cursorOffset, value.length);
 		const before = value.slice(0, pathMenuTriggerIndex);
@@ -213,26 +227,27 @@ const InputBox: FC<Props> = ({
 		onChange(before + after);
 		setCursorOverride(pathMenuTriggerIndex);
 		onPathMenuClose();
-	};
+	}, [pathMenuTriggerIndex, cursorOffset, value, onChange, onPathMenuClose]);
 
-	const handleSubmit = (submittedValue: string) => {
-		if (pathMenuOpen) {
-			const inserted = insertSelectedPath(true);
-			if (inserted) {
-				return;
+	const handleSubmit = useCallback(
+		(submittedValue: string) => {
+			if (pathMenuOpen) {
+				const inserted = insertSelectedPath(true);
+				if (inserted) {
+					return;
+				}
 			}
-		}
-		if (slashMenuOpen) {
-			// Execute the selected slash command
-			onSlashMenuSelect();
-			// Force remount to ensure cursor moves to the end
-			setInputKey(prev => prev + 1);
-		} else {
-			onSubmit(submittedValue);
-		}
-	};
-
-	const stopCharRegex = useMemo(() => /[\s,;:()\[\]{}<>]/, []);
+			if (slashMenuOpen) {
+				// Execute the selected slash command
+				onSlashMenuSelect();
+				// Force remount to ensure cursor moves to the end
+				setInputKey(prev => prev + 1);
+			} else {
+				onSubmit(submittedValue);
+			}
+		},
+		[pathMenuOpen, slashMenuOpen, onSlashMenuSelect, onSubmit, insertSelectedPath],
+	);
 
 	useEffect(() => {
 		if (slashMenuOpen) {
@@ -242,7 +257,7 @@ const InputBox: FC<Props> = ({
 			return;
 		}
 
-		const trigger = findPathTrigger(value, cursorOffset, stopCharRegex);
+		const trigger = findPathTrigger(value, cursorOffset, STOP_CHAR_REGEX);
 		if (!trigger) {
 			if (pathMenuOpen) {
 				onPathMenuClose();
@@ -268,7 +283,6 @@ const InputBox: FC<Props> = ({
 		onPathMenuClose,
 		onPathMenuOpen,
 		onPathMenuFilterChange,
-		stopCharRegex,
 	]);
 
 	return (

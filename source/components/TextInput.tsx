@@ -78,11 +78,17 @@ export const TextInput: React.FC<TextInputProps> = ({
 		}
 	}, [cursorOverride, value.length]);
 
+	// Use a ref to avoid dependency on onCursorChange callback
+	const onCursorChangeRef = useRef(onCursorChange);
 	useEffect(() => {
-		if (onCursorChange) {
-			onCursorChange(cursorOffset);
+		onCursorChangeRef.current = onCursorChange;
+	}, [onCursorChange]);
+
+	useEffect(() => {
+		if (onCursorChangeRef.current) {
+			onCursorChangeRef.current(cursorOffset);
 		}
-	}, [cursorOffset, onCursorChange]);
+	}, [cursorOffset]);
 
 	const {stdin, setRawMode, isRawModeSupported} = useStdin();
 	const bufferRef = useRef('');

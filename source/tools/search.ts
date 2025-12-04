@@ -1,6 +1,13 @@
 import {z} from 'zod';
 import {exec} from 'child_process';
 import util from 'util';
+import {
+	trimOutput,
+	setTrimConfig,
+	getTrimConfig,
+	DEFAULT_TRIM_CONFIG,
+	type OutputTrimConfig,
+} from '../utils/output-trim.js';
 import type {ToolDefinition} from './types.js';
 
 const execPromise = util.promisify(exec);
@@ -38,6 +45,9 @@ const searchParametersSchema = z.object({
 });
 
 export type SearchToolParams = z.infer<typeof searchParametersSchema>;
+
+// Re-export trim utilities for backwards compatibility
+export {setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG, type OutputTrimConfig};
 
 let hasRg: boolean | null = null;
 
@@ -111,18 +121,11 @@ export const searchToolDefinition: ToolDefinition<SearchToolParams> = {
 				maxBuffer: 10 * 1024 * 1024, // 10MB buffer
 			});
 
-			const lines = stdout.trim().split('\n');
-			const limitedLines = lines.slice(0, limit);
-			const result = limitedLines.join('\n');
-
-			const trimmedMessage =
-				lines.length > limit
-					? `\n... (${lines.length - limit} more matches found)`
-					: '';
+			const result = trimOutput(stdout.trim(), limit);
 
             return JSON.stringify({
                 arguments: params,
-                output: result + trimmedMessage,
+                output: result,
             });
 		} catch (error: any) {
 			// grep/rg returns exit code 1 if no matches found, which execPromise treats as error

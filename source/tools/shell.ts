@@ -4,15 +4,16 @@ import util from 'util';
 import process from 'process';
 import {validateCommandSafety} from '../utils/command-safety.js';
 import {logValidationError} from '../utils/command-logger.js';
+import {
+	trimOutput,
+	setTrimConfig,
+	getTrimConfig,
+	DEFAULT_TRIM_CONFIG,
+	type OutputTrimConfig,
+} from '../utils/output-trim.js';
 import type {ToolDefinition} from './types.js';
 
 const execPromise = util.promisify(exec);
-
-/** Default trim configuration */
-export const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
-	maxLines: 1000,
-	maxCharacters: 10000,
-};
 
 const shellParametersSchema = z.object({
 	commands: z
@@ -43,79 +44,8 @@ const shellParametersSchema = z.object({
 
 export type ShellToolParams = z.infer<typeof shellParametersSchema>;
 
-/**
- * Configuration for output trimming limits.
- * Output will be trimmed if it exceeds either limit.
- */
-export interface OutputTrimConfig {
-	/** Maximum number of lines before trimming (default: 1000) */
-	maxLines: number;
-	/** Maximum size in characters before trimming (default: 10000) */
-	maxCharacters: number;
-}
-
-/** Current trim configuration (can be modified at runtime) */
-let trimConfig: OutputTrimConfig = {...DEFAULT_TRIM_CONFIG};
-
-/**
- * Set the output trim configuration.
- */
-export function setTrimConfig(config: Partial<OutputTrimConfig>): void {
-	trimConfig = {...trimConfig, ...config};
-}
-
-/**
- * Get the current trim configuration.
- */
-export function getTrimConfig(): OutputTrimConfig {
-	return {...trimConfig};
-}
-
-function trimOutput(output: string, maxOutputLength?: number): string {
-	const lines = output.split('\n');
-	const charLength = output.length;
-
-	// Use provided maxOutputLength or fall back to trimConfig.maxCharacters
-	const maxCharacters = maxOutputLength ?? trimConfig.maxCharacters;
-
-	const exceedsLines = lines.length > trimConfig.maxLines;
-	const exceedsCharacters = charLength > maxCharacters;
-
-	if (!exceedsLines && !exceedsCharacters) {
-		return output;
-	}
-
-	// Calculate how many lines to keep at beginning and end
-	// Keep 40% at the beginning, 40% at the end, trim 20% from the middle
-	const keepLines = Math.floor(trimConfig.maxLines * 0.4);
-
-	// If exceeds characters but not lines, calculate lines to keep based on character limit
-	let effectiveKeepLines = keepLines;
-	if (exceedsCharacters && !exceedsLines) {
-		// Estimate average characters per line and calculate how many lines fit
-		const avgCharsPerLine = charLength / lines.length;
-		const maxLinesForChars = Math.floor(
-			maxCharacters / avgCharsPerLine,
-		);
-		effectiveKeepLines = Math.floor(maxLinesForChars * 0.4);
-	}
-
-	// Ensure we keep at least some lines
-	effectiveKeepLines = Math.max(effectiveKeepLines, 10);
-
-	if (lines.length <= effectiveKeepLines * 2) {
-		// Not enough lines to meaningfully trim
-		return output;
-	}
-
-	const headLines = lines.slice(0, effectiveKeepLines);
-	const tailLines = lines.slice(-effectiveKeepLines);
-	const trimmedCount = lines.length - effectiveKeepLines * 2;
-
-	const trimMessage = `\n... [${trimmedCount} lines trimmed] ...\n`;
-
-	return headLines.join('\n') + trimMessage + tailLines.join('\n');
-}
+// Re-export trim utilities for backwards compatibility
+export {setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG, type OutputTrimConfig};
 
 interface ShellCommandResult {
 	command: string;
@@ -197,8 +127,8 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 
 			output.push({
 				command,
-				stdout: trimOutput(stdout, max_output_length),
-				stderr: trimOutput(stderr, max_output_length),
+				stdout: trimOutput(stdout, undefined, max_output_length),
+				stderr: trimOutput(stderr, undefined, max_output_length),
 				outcome,
 			});
 

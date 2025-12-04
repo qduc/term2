@@ -200,4 +200,26 @@ test('pasting CRLF multi-paragraph text preserves newlines', async t => {
   t.true(frame.includes('|para1\\n\\npara2'));
 });
 
+test('fast typing preserves all characters', async t => {
+  // This test reproduces the "missing first letter" bug.
+  // When typing "a b", if the component re-renders and toggles raw mode
+  // between " " and "b", "b" might be lost.
+  const {stdin, lastFrame} = render(
+    React.createElement(Controlled, {initial: ''})
+  );
+
+  // Simulate fast typing by calling write sequentially without awaiting re-renders
+  stdin.write('a');
+  stdin.write(' ');
+  stdin.write('b');
+  stdin.write(' ');
+  stdin.write('c');
+
+  await new Promise(r => setTimeout(r, 50));
+
+  const frame = stripAnsi(lastFrame());
+  // If the bug exists, this often results in "a c" or " b" instead of "a b c"
+  t.true(frame.includes('|a b c'));
+});
+
 // Note: interactive key handling is covered indirectly via submit test above.

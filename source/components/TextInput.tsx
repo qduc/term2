@@ -86,6 +86,17 @@ export const TextInput: React.FC<TextInputProps> = ({
 
 	const {stdin, setRawMode, isRawModeSupported} = useStdin();
 	const bufferRef = useRef('');
+	const cursorOffsetRef = useRef(cursorOffset);
+	const valueRef = useRef(value);
+
+	// Keep refs in sync with props/state
+	useEffect(() => {
+		cursorOffsetRef.current = cursorOffset;
+	}, [cursorOffset]);
+
+	useEffect(() => {
+		valueRef.current = value;
+	}, [value]);
 
 	useEffect(() => {
 		if (!isRawModeSupported || !focus) return;
@@ -98,8 +109,8 @@ export const TextInput: React.FC<TextInputProps> = ({
 
 			// Use local state to track changes within the same event loop
 			// to avoid stale state issues when processing multiple sequences (e.g. paste)
-			let currentCursorOffset = cursorOffset;
-			let currentValue = value;
+			let currentCursorOffset = cursorOffsetRef.current;
+			let currentValue = valueRef.current;
 			let valueChanged = false;
 			let cursorChanged = false;
 
@@ -331,8 +342,12 @@ export const TextInput: React.FC<TextInputProps> = ({
 				bufferRef.current = bufferRef.current.slice(consumed);
 			}
 
-			if (valueChanged) onChange(currentValue);
-			if (cursorChanged && currentCursorOffset !== cursorOffset) {
+			if (valueChanged) {
+				valueRef.current = currentValue;
+				onChange(currentValue);
+			}
+			if (cursorChanged && currentCursorOffset !== cursorOffsetRef.current) {
+				cursorOffsetRef.current = currentCursorOffset;
 				setCursorOffset(currentCursorOffset);
 			}
 		};
@@ -345,8 +360,6 @@ export const TextInput: React.FC<TextInputProps> = ({
 		};
 	}, [
 		focus,
-		value,
-		cursorOffset,
 		onChange,
 		onSubmit,
 		stdin,

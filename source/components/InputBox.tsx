@@ -294,6 +294,7 @@ const InputBox: FC<Props> = ({
 				<TextInput
 					key={inputKey}
 					value={value}
+					multiLine={true}
 					onChange={onChange}
 					onSubmit={handleSubmit}
 					onCursorChange={setCursorOffset}

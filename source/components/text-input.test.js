@@ -3,7 +3,7 @@ import React, {useState} from 'react';
 import {Box, Text} from 'ink';
 import {render} from 'ink-testing-library';
 // Import the built component (tests run against compiled files)
-import {TextInput} from '../dist/components/TextInput.js';
+import {TextInput} from '../../dist/components/TextInput.js';
 
 const stripAnsi = s => s.replaceAll(/\u001B\[[0-9;]*m/g, '');
 
@@ -144,6 +144,60 @@ test('enter triggers onSubmit in single-line mode', t => {
   );
   stdin.write('\r');
   t.is(submitted, 'done');
+});
+
+test('enter triggers onSubmit in multi-line mode', t => {
+  let submitted;
+  const {stdin} = render(
+    React.createElement(Controlled, {
+      initial: 'multi',
+      multiLine: true,
+      onSubmitSpy: v => (submitted = v),
+    })
+  );
+  stdin.write('\r');
+  t.is(submitted, 'multi');
+});
+
+test('Ctrl+J inserts newline in multi-line mode', async t => {
+  const {stdin, lastFrame} = render(
+    React.createElement(Controlled, {
+      initial: 'line1',
+      multiLine: true,
+    })
+  );
+  stdin.write('\n');
+  await new Promise(r => setTimeout(r, 10));
+  const frame = stripAnsi(lastFrame());
+  t.true(frame.includes('|line1\\n'));
+});
+
+test('pasting multi-paragraph text works', async t => {
+  const {stdin, lastFrame} = render(
+    React.createElement(Controlled, {
+      initial: '',
+      multiLine: true,
+    })
+  );
+  stdin.write('p1\n\np2');
+  await new Promise(r => setTimeout(r, 10));
+  const frame = stripAnsi(lastFrame());
+  t.true(frame.includes('|p1\\n\\np2'));
+});
+
+test('pasting CRLF multi-paragraph text preserves newlines', async t => {
+  const {stdin, lastFrame} = render(
+    React.createElement(Controlled, {
+      initial: '',
+      multiLine: true,
+    })
+  );
+  // Simulate Windows-style newlines (CRLF)
+  stdin.write('para1\r\n\r\npara2');
+  await new Promise(r => setTimeout(r, 10));
+  const frame = stripAnsi(lastFrame());
+  // Expect normalized to \n with blank line preserved
+  t.true(frame.includes('|para1\\n\\npara2'));
 });
 
 // Note: interactive key handling is covered indirectly via submit test above.

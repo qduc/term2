@@ -96,6 +96,13 @@ export const TextInput: React.FC<TextInputProps> = ({
 			const chunk = data.toString();
 			bufferRef.current += chunk;
 
+			// Use local state to track changes within the same event loop
+			// to avoid stale state issues when processing multiple sequences (e.g. paste)
+			let currentCursorOffset = cursorOffset;
+			let currentValue = value;
+			let valueChanged = false;
+			let cursorChanged = false;
+
 			// Process complete sequences
 			while (bufferRef.current.length > 0) {
 				const seq = bufferRef.current;
@@ -112,33 +119,39 @@ export const TextInput: React.FC<TextInputProps> = ({
 						// CSI Sequence
 						if (seq === '\x1b[H' || seq.startsWith('\x1b[1~')) {
 							// Home
-							setCursorOffset(0);
+							currentCursorOffset = 0;
+							cursorChanged = true;
 							consumed = seq === '\x1b[H' ? 3 : 4;
 						} else if (
 							seq === '\x1b[F' ||
 							seq.startsWith('\x1b[4~')
 						) {
 							// End
-							setCursorOffset(value.length);
+							currentCursorOffset = currentValue.length;
+							cursorChanged = true;
 							consumed = seq === '\x1b[F' ? 3 : 4;
 						} else if (seq.startsWith('\x1b[3~')) {
 							// Delete
-							if (cursorOffset < value.length) {
+							if (currentCursorOffset < currentValue.length) {
 								const nextValue =
-									value.slice(0, cursorOffset) +
-									value.slice(cursorOffset + 1);
-								onChange(nextValue);
+									currentValue.slice(0, currentCursorOffset) +
+									currentValue.slice(currentCursorOffset + 1);
+								currentValue = nextValue;
+								valueChanged = true;
 							}
 							consumed = 4;
 						} else if (seq.startsWith('\x1b[D')) {
 							// Left arrow
-							setCursorOffset(Math.max(0, cursorOffset - 1));
+							currentCursorOffset = Math.max(0, currentCursorOffset - 1);
+							cursorChanged = true;
 							consumed = 3;
 						} else if (seq.startsWith('\x1b[C')) {
 							// Right arrow
-							setCursorOffset(
-								Math.min(value.length, cursorOffset + 1),
+							currentCursorOffset = Math.min(
+								currentValue.length,
+								currentCursorOffset + 1,
 							);
+							cursorChanged = true;
 							consumed = 3;
 						} else {
 							// Unknown or incomplete CSI sequence
@@ -168,18 +181,23 @@ export const TextInput: React.FC<TextInputProps> = ({
 						const code = seq[2];
 						if (code === 'D') {
 							// Left
-							setCursorOffset(Math.max(0, cursorOffset - 1));
+							currentCursorOffset = Math.max(0, currentCursorOffset - 1);
+							cursorChanged = true;
 						} else if (code === 'C') {
 							// Right
-							setCursorOffset(
-								Math.min(value.length, cursorOffset + 1),
+							currentCursorOffset = Math.min(
+								currentValue.length,
+								currentCursorOffset + 1,
 							);
+							cursorChanged = true;
 						} else if (code === 'H') {
 							// Home
-							setCursorOffset(0);
+							currentCursorOffset = 0;
+							cursorChanged = true;
 						} else if (code === 'F') {
 							// End
-							setCursorOffset(value.length);
+							currentCursorOffset = currentValue.length;
+							cursorChanged = true;
 						}
 						consumed = 3;
 					} else {
@@ -188,45 +206,78 @@ export const TextInput: React.FC<TextInputProps> = ({
 					}
 				} else if (seq === '\x7f' || seq === '\b') {
 					// Backspace
-					if (cursorOffset > 0) {
-						const splitIndex = cursorOffset - 1;
+					if (currentCursorOffset > 0) {
+						const splitIndex = currentCursorOffset - 1;
 						const nextValue =
-							value.slice(0, splitIndex) +
-							value.slice(splitIndex + 1);
-						onChange(nextValue);
-						setCursorOffset(Math.max(0, cursorOffset - 1));
+							currentValue.slice(0, splitIndex) +
+							currentValue.slice(splitIndex + 1);
+						currentValue = nextValue;
+						valueChanged = true;
+						currentCursorOffset = Math.max(0, currentCursorOffset - 1);
+						cursorChanged = true;
 					}
 					consumed = 1;
-				} else if (seq === '\r' || seq === '\n') {
-					// Enter
-					if (multiLine) {
-						const nextValue =
-							value.slice(0, cursorOffset) +
-							'\n' +
-							value.slice(cursorOffset);
-						onChange(nextValue);
-						setCursorOffset(cursorOffset + 1);
+				} else if (seq[0] === '\r') {
+					// Handle carriage return: could be Enter, paste, or CRLF
+					const isCRLF = bufferRef.current.startsWith('\r\n');
+					const isSingleCR = seq === '\r' && !isCRLF;
+
+					if (isSingleCR) {
+						if (onSubmit) {
+							// Plain Enter: submit
+							onSubmit(currentValue);
+							consumed = 1;
+						} else if (multiLine) {
+							// Insert newline if no submit handler
+							const nextValue =
+								currentValue.slice(0, currentCursorOffset) +
+								'\n' +
+								currentValue.slice(currentCursorOffset);
+							currentValue = nextValue;
+							valueChanged = true;
+							currentCursorOffset += 1;
+							cursorChanged = true;
+							consumed = 1;
+						} else {
+							// Single-line, no submit: ignore
+							consumed = 1;
+						}
 					} else {
-						if (onSubmit) onSubmit(value);
+						// Likely part of a paste or CRLF sequence; normalize to \n in multiLine
+						if (multiLine) {
+							const nextValue =
+								currentValue.slice(0, currentCursorOffset) +
+								'\n' +
+								currentValue.slice(currentCursorOffset);
+							currentValue = nextValue;
+							valueChanged = true;
+							currentCursorOffset += 1;
+							cursorChanged = true;
+						}
+						// If CRLF, consume both to avoid double newline
+						consumed = isCRLF ? 2 : 1;
 					}
-					consumed = 1;
-				} else if (seq.charCodeAt(0) < 32) {
+				} else if (seq.charCodeAt(0) < 32 && seq !== '\n') {
 					// Control characters
 					const code = seq.charCodeAt(0);
 					if (code === 1) {
 						// Ctrl+A (Home)
-						setCursorOffset(0);
+						currentCursorOffset = 0;
+						cursorChanged = true;
 					} else if (code === 5) {
 						// Ctrl+E (End)
-						setCursorOffset(value.length);
+						currentCursorOffset = currentValue.length;
+						cursorChanged = true;
 					} else if (code === 21) {
 						// Ctrl+U (Clear line)
-						onChange('');
-						setCursorOffset(0);
+						currentValue = '';
+						valueChanged = true;
+						currentCursorOffset = 0;
+						cursorChanged = true;
 					} else if (code === 23) {
 						// Ctrl+W (Delete word)
-						const before = value.slice(0, cursorOffset);
-						const after = value.slice(cursorOffset);
+						const before = currentValue.slice(0, currentCursorOffset);
+						const after = currentValue.slice(currentCursorOffset);
 						// Remove trailing spaces
 						const trimmedBefore = before.replace(/\s+$/, '');
 						// Find last space
@@ -235,11 +286,13 @@ export const TextInput: React.FC<TextInputProps> = ({
 							lastSpace === -1
 								? ''
 								: trimmedBefore.slice(0, lastSpace + 1);
-						onChange(newBefore + after);
-						setCursorOffset(newBefore.length);
+						currentValue = newBefore + after;
+						valueChanged = true;
+						currentCursorOffset = newBefore.length;
+						cursorChanged = true;
 					} else if (code === 4) {
 						// Ctrl+D
-						if (onSubmit) onSubmit(value);
+						if (onSubmit) onSubmit(currentValue);
 					}
 					consumed = 1;
 				} else {
@@ -248,8 +301,11 @@ export const TextInput: React.FC<TextInputProps> = ({
 					for (let i = 0; i < seq.length; i++) {
 						const char = seq[i];
 						const code = char.charCodeAt(0);
-						if (code >= 32 && code !== 127) {
-							// printable ASCII, exclude DEL
+						if (
+							(code >= 32 && code !== 127) ||
+							(multiLine && code === 10)
+						) {
+							// printable ASCII, exclude DEL. Allow \n (Ctrl+J) if multiLine.
 							printableChars.push(char);
 						} else {
 							break;
@@ -258,11 +314,13 @@ export const TextInput: React.FC<TextInputProps> = ({
 					if (printableChars.length > 0) {
 						const printable = printableChars.join('');
 						const nextValue =
-							value.slice(0, cursorOffset) +
+							currentValue.slice(0, currentCursorOffset) +
 							printable +
-							value.slice(cursorOffset);
-						onChange(nextValue);
-						setCursorOffset(cursorOffset + printable.length);
+							currentValue.slice(currentCursorOffset);
+						currentValue = nextValue;
+						valueChanged = true;
+						currentCursorOffset += printable.length;
+						cursorChanged = true;
 						consumed = printableChars.length;
 					} else {
 						// Unknown or non-printable, consume 1 to avoid getting stuck
@@ -271,6 +329,11 @@ export const TextInput: React.FC<TextInputProps> = ({
 				}
 
 				bufferRef.current = bufferRef.current.slice(consumed);
+			}
+
+			if (valueChanged) onChange(currentValue);
+			if (cursorChanged && currentCursorOffset !== cursorOffset) {
+				setCursorOffset(currentCursorOffset);
 			}
 		};
 

@@ -7,6 +7,7 @@ import type {PathCompletionItem} from '../hooks/use-path-completion.js';
 
 // Constants
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
+const TERMINAL_PADDING = 3;
 
 type Props = {
 	value: string;
@@ -73,6 +74,24 @@ const InputBox: FC<Props> = ({
 	const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [cursorOffset, setCursorOffset] = useState(value.length);
 	const [cursorOverride, setCursorOverride] = useState<number | null>(null);
+	const [terminalWidth, setTerminalWidth] = useState(0);
+
+	// Set terminal width on first start and listen for terminal resize events
+	useEffect(() => {
+		const calculateTerminalWidth = () =>
+			Math.max(0, (process.stdout.columns ?? 0) - TERMINAL_PADDING);
+
+		setTerminalWidth(calculateTerminalWidth());
+
+		const handleResize = () => {
+			setTerminalWidth(calculateTerminalWidth());
+		};
+
+		process.stdout.on('resize', handleResize);
+		return () => {
+			process.stdout.off('resize', handleResize);
+		};
+	}, []);
 
 	// Cleanup timeout on unmount
 	useEffect(() => {
@@ -203,7 +222,8 @@ const InputBox: FC<Props> = ({
 			const suffix = appendTrailingSpace ? ' ' : '';
 			const nextValue = `${before}${displayPath}${suffix}${after}`;
 			onChange(nextValue);
-			const nextCursor = before.length + displayPath.length + suffix.length;
+			const nextCursor =
+				before.length + displayPath.length + suffix.length;
 			setCursorOverride(nextCursor);
 			onPathMenuClose();
 			return true;
@@ -246,7 +266,13 @@ const InputBox: FC<Props> = ({
 				onSubmit(submittedValue);
 			}
 		},
-		[pathMenuOpen, slashMenuOpen, onSlashMenuSelect, onSubmit, insertSelectedPath],
+		[
+			pathMenuOpen,
+			slashMenuOpen,
+			onSlashMenuSelect,
+			onSubmit,
+			insertSelectedPath,
+		],
 	);
 
 	useEffect(() => {
@@ -307,6 +333,7 @@ const InputBox: FC<Props> = ({
 				<Text color="blue">❯ </Text>
 				<MultilineInput
 					value={value}
+					width={terminalWidth}
 					onChange={onChange}
 					onSubmit={handleSubmit}
 					onCursorChange={setCursorOffset}

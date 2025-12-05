@@ -150,16 +150,12 @@ const InputBox: FC<Props> = ({
 		{isActive: !slashMenuOpen && !pathMenuOpen},
 	);
 
-	// Handle arrow keys and escape for slash menu
+	// Handle escape for slash menu (arrow keys now handled via onBoundaryArrow)
 	useInput(
 		(_input, key) => {
 			if (!slashMenuOpen) return;
 
-			if (key.upArrow) {
-				onSlashMenuUp();
-			} else if (key.downArrow) {
-				onSlashMenuDown();
-			} else if (key.escape) {
+			if (key.escape) {
 				onChange('');
 				onSlashMenuClose();
 			}
@@ -167,30 +163,12 @@ const InputBox: FC<Props> = ({
 		{isActive: slashMenuOpen},
 	);
 
-	// Handle arrow keys for input history when slash menu is closed
-	useInput(
-		(_input, key) => {
-			if (key.upArrow) {
-				onHistoryUp();
-				setInputKey(prev => prev + 1);
-			} else if (key.downArrow) {
-				onHistoryDown();
-				setInputKey(prev => prev + 1);
-			}
-		},
-		{isActive: !slashMenuOpen && !pathMenuOpen},
-	);
-
-	// Handle input when path menu is open
+	// Handle escape and tab for path menu (arrow keys now handled via onBoundaryArrow)
 	useInput(
 		(_input, key) => {
 			if (!pathMenuOpen) return;
 
-			if (key.upArrow) {
-				onPathMenuUp();
-			} else if (key.downArrow) {
-				onPathMenuDown();
-			} else if (key.escape) {
+			if (key.escape) {
 				clearActivePathTrigger();
 			} else if (key.tab) {
 				insertSelectedPath(false);
@@ -200,6 +178,46 @@ const InputBox: FC<Props> = ({
 	);
 
 	const [, setInputKey] = useState(0);
+
+	// Handle boundary arrow keys from MultilineInput
+	const handleBoundaryArrow = useCallback(
+		(direction: 'up' | 'down' | 'left' | 'right') => {
+			if (slashMenuOpen) {
+				// Slash menu navigation
+				if (direction === 'up') {
+					onSlashMenuUp();
+				} else if (direction === 'down') {
+					onSlashMenuDown();
+				}
+			} else if (pathMenuOpen) {
+				// Path menu navigation
+				if (direction === 'up') {
+					onPathMenuUp();
+				} else if (direction === 'down') {
+					onPathMenuDown();
+				}
+			} else {
+				// History navigation (when no menu is open)
+				if (direction === 'up') {
+					onHistoryUp();
+					setInputKey(prev => prev + 1);
+				} else if (direction === 'down') {
+					onHistoryDown();
+					setInputKey(prev => prev + 1);
+				}
+			}
+		},
+		[
+			slashMenuOpen,
+			pathMenuOpen,
+			onSlashMenuUp,
+			onSlashMenuDown,
+			onPathMenuUp,
+			onPathMenuDown,
+			onHistoryUp,
+			onHistoryDown,
+		],
+	);
 
 	const insertSelectedPath = useCallback(
 		(appendTrailingSpace: boolean): boolean => {
@@ -338,6 +356,7 @@ const InputBox: FC<Props> = ({
 					onSubmit={handleSubmit}
 					onCursorChange={setCursorOffset}
 					cursorOverride={cursorOverride ?? undefined}
+					onBoundaryArrow={handleBoundaryArrow}
 				/>
 			</Box>
 			{escHintVisible && (

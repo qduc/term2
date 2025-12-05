@@ -80,7 +80,7 @@ const App: FC<AppProps> = ({conversationService}) => {
 	);
 
 	const handleSlashMenuClose = useCallback(() => {
-		setInput('');
+		// Don't clear input here - let the caller decide if input should be cleared
 	}, []);
 
 	const {

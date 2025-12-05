@@ -1,6 +1,6 @@
 import React, {FC, useEffect, useState, useRef, useCallback} from 'react';
 import {Box, Text, useInput} from 'ink';
-import TextInput from './TextInput.js';
+import { MultilineInput } from 'ink-prompt';
 import SlashCommandMenu, {SlashCommand} from './SlashCommandMenu.js';
 import PathSelectionMenu from './PathSelectionMenu.js';
 import type {PathCompletionItem} from '../hooks/use-path-completion.js';
@@ -180,7 +180,7 @@ const InputBox: FC<Props> = ({
 		{isActive: pathMenuOpen},
 	);
 
-	const [inputKey, setInputKey] = useState(0);
+	const [, setInputKey] = useState(0);
 
 	const insertSelectedPath = useCallback(
 		(appendTrailingSpace: boolean): boolean => {
@@ -305,10 +305,8 @@ const InputBox: FC<Props> = ({
 			)}
 			<Box>
 				<Text color="blue">❯ </Text>
-				<TextInput
-					key={inputKey}
+				<MultilineInput
 					value={value}
-					multiLine={true}
 					onChange={onChange}
 					onSubmit={handleSubmit}
 					onCursorChange={setCursorOffset}

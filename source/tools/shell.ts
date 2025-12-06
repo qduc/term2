@@ -2,8 +2,10 @@ import {z} from 'zod';
 import {exec} from 'child_process';
 import util from 'util';
 import process from 'process';
+import {randomUUID} from 'node:crypto';
 import {validateCommandSafety} from '../utils/command-safety.js';
 import {logValidationError} from '../utils/command-logger.js';
+import {loggingService} from '../services/logging-service.js';
 import {
 	trimOutput,
 	setTrimConfig,
@@ -71,78 +73,123 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 	parameters: shellParametersSchema,
 	needsApproval: async params => {
 		try {
-			// If agent says approval is needed, require it
-			if (params.needsApproval) {
-				return true;
-			}
+			const isDangerous = params.needsApproval || params.commands.some(cmd => validateCommandSafety(cmd));
 
-			// Check each command for safety
-			for (const command of params.commands) {
-				if (validateCommandSafety(command)) {
-					return true;
-				}
-			}
+			// Log security event for all shell commands with dangerous flag
+			loggingService.security('Shell tool needsApproval check', {
+				commands: params.commands.map(cmd => cmd.substring(0, 100)), // Truncate for safety
+				isDangerous,
+				needsApprovalRequested: params.needsApproval,
+			});
 
-			return false;
+			return isDangerous;
 		} catch (error) {
 			const errorMessage =
 				error instanceof Error ? error.message : String(error);
 			logValidationError(`Validation failed: ${errorMessage}`);
+			loggingService.error('Shell tool validation error', {
+				error: errorMessage,
+				commands: params.commands.map(cmd => cmd.substring(0, 100)),
+			});
 			return true; // fail-safe: require approval on validation errors
 		}
 	},
 	execute: async ({commands, timeout_ms, max_output_length}) => {
 		const cwd = process.cwd();
 		const output: ShellCommandResult[] = [];
+		const correlationId = randomUUID();
 
-		// Use provided values or defaults
-		const timeout = timeout_ms ?? 120000; // Default: 2 minutes
+		// Set correlation ID for tracking related operations
+		loggingService.setCorrelationId(correlationId);
 
-		for (const command of commands) {
-			let stdout = '';
-			let stderr = '';
-			let exitCode: number | null = 0;
-			let outcome: ShellCommandResult['outcome'] = {
-				type: 'exit',
-				exitCode: 0,
-			};
+		try {
+			// Use provided values or defaults
+			const timeout = timeout_ms ?? 120000; // Default: 2 minutes
 
-			try {
-				const result = await execPromise(command, {
-					cwd,
-					timeout,
-					maxBuffer: 1024 * 1024, // 1MB max buffer
-				});
-				stdout = result.stdout;
-				stderr = result.stderr;
-			} catch (error: any) {
-				exitCode = typeof error?.code === 'number' ? error.code : null;
-				stdout = error?.stdout ?? '';
-				stderr = error?.stderr ?? '';
-				outcome =
-					error?.killed || error?.signal === 'SIGTERM'
-						? {type: 'timeout'}
-						: {type: 'exit', exitCode};
-			}
-
-			output.push({
-				command,
-				stdout: trimOutput(stdout, undefined, max_output_length),
-				stderr: trimOutput(stderr, undefined, max_output_length),
-				outcome,
+			loggingService.info('Shell command execution started', {
+				commandCount: commands.length,
+				timeout,
+				workingDirectory: cwd,
+				maxOutputLength: max_output_length,
 			});
 
-			// Stop on timeout
-			if (outcome.type === 'timeout') {
-				break;
-			}
-		}
+			for (const command of commands) {
+				let stdout = '';
+				let stderr = '';
+				let exitCode: number | null = 0;
+				let outcome: ShellCommandResult['outcome'] = {
+					type: 'exit',
+					exitCode: 0,
+				};
 
-		return JSON.stringify({
-			output,
-			providerData: {
-				working_directory: cwd,
-			},
-		});
+				try {
+					const result = await execPromise(command, {
+						cwd,
+						timeout,
+						maxBuffer: 1024 * 1024, // 1MB max buffer
+					});
+					stdout = result.stdout;
+					stderr = result.stderr;
+
+					loggingService.debug('Shell command executed successfully', {
+						command: command.substring(0, 100),
+						exitCode: 0,
+						stdoutLength: stdout.length,
+						stderrLength: stderr.length,
+					});
+				} catch (error: any) {
+					exitCode = typeof error?.code === 'number' ? error.code : null;
+					stdout = error?.stdout ?? '';
+					stderr = error?.stderr ?? '';
+					outcome =
+						error?.killed || error?.signal === 'SIGTERM'
+							? {type: 'timeout'}
+							: {type: 'exit', exitCode};
+
+					if (outcome.type === 'timeout') {
+						loggingService.warn('Shell command timeout', {
+							command: command.substring(0, 100),
+							timeout,
+						});
+					} else {
+						loggingService.debug('Shell command execution failed', {
+							command: command.substring(0, 100),
+							exitCode,
+							errorMessage: error?.message ?? String(error),
+							stderrLength: stderr.length,
+						});
+					}
+				}
+
+				output.push({
+					command,
+					stdout: trimOutput(stdout, undefined, max_output_length),
+					stderr: trimOutput(stderr, undefined, max_output_length),
+					outcome,
+				});
+
+				// Stop on timeout
+				if (outcome.type === 'timeout') {
+					break;
+				}
+			}
+
+			loggingService.info('Shell command execution completed', {
+				commandCount: commands.length,
+				successCount: output.filter(cmd => cmd.outcome.type === 'exit' && cmd.outcome.exitCode === 0).length,
+				failureCount: output.filter(cmd => cmd.outcome.type === 'exit' && cmd.outcome.exitCode !== 0).length,
+				timeoutCount: output.filter(cmd => cmd.outcome.type === 'timeout').length,
+			});
+
+			return JSON.stringify({
+				output,
+				providerData: {
+					working_directory: cwd,
+				},
+			});
+		} finally {
+			// Always clear correlation ID
+			loggingService.clearCorrelationId();
+		}
 	},
 };

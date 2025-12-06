@@ -5,6 +5,7 @@ import {
 	refreshWorkspaceEntries,
 	type PathEntry,
 } from '../services/file-service.js';
+import {loggingService} from '../services/logging-service.js';
 
 export type PathCompletionItem = PathEntry;
 
@@ -35,7 +36,9 @@ export const usePathCompletion = () => {
 
 	useEffect(() => {
 		loadEntries().catch(error => {
-			console.error('Failed to load workspace entries', error);
+			loggingService.error('Failed to load workspace entries', {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		});
 	}, [loadEntries]);
 

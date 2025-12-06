@@ -3,6 +3,7 @@ import {promises as fs} from 'node:fs';
 import fg from 'fast-glob';
 import {default as createIgnore, type Ignore} from 'ignore';
 import type {Entry} from 'fast-glob';
+import {loggingService} from './logging-service.js';
 
 export type PathEntry = {
 	path: string;
@@ -39,7 +40,10 @@ const ensureIgnoreMatcher = async (): Promise<Ignore> => {
 				matcher.add(gitignoreContents);
 			} catch (error: unknown) {
 				if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-					console.warn('Failed to read .gitignore:', error);
+					loggingService.warn('Failed to read .gitignore', {
+						error: error instanceof Error ? error.message : String(error),
+						path: GITIGNORE_PATH,
+					});
 				}
 			}
 			return matcher;

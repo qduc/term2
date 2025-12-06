@@ -8,7 +8,9 @@ import {
 	type Tool,
 } from '@openai/agents';
 import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
+import {randomUUID} from 'node:crypto';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
+import {loggingService} from '../services/logging-service.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -18,6 +20,7 @@ export class OpenAIAgentClient {
 	#agent: Agent;
 	#reasoningEffort?: ModelSettingsReasoningEffort;
 	#currentAbortController: AbortController | null = null;
+	#currentCorrelationId: string | null = null;
 
 	constructor({
 		model,
@@ -25,6 +28,10 @@ export class OpenAIAgentClient {
 	}: {model?: string; reasoningEffort?: ModelSettingsReasoningEffort} = {}) {
 		this.#reasoningEffort = reasoningEffort;
 		this.#agent = this.#createAgent({model, reasoningEffort});
+		loggingService.info('OpenAI Agent Client initialized', {
+			model: model || DEFAULT_MODEL,
+			reasoningEffort: reasoningEffort || 'standard',
+		});
 	}
 
 	setModel(model: string): void {
@@ -42,6 +49,11 @@ export class OpenAIAgentClient {
 			this.#currentAbortController.abort();
 			this.#currentAbortController = null;
 		}
+		if (this.#currentCorrelationId) {
+			loggingService.clearCorrelationId();
+			this.#currentCorrelationId = null;
+		}
+		loggingService.debug('Agent operation aborted');
 	}
 
 	async startStream(
@@ -50,17 +62,37 @@ export class OpenAIAgentClient {
 	): Promise<any> {
 		// Abort any previous operation
 		this.abort();
+
+		// Create correlation ID for this stream
+		this.#currentCorrelationId = randomUUID();
+		loggingService.setCorrelationId(this.#currentCorrelationId);
+
 		this.#currentAbortController = new AbortController();
 		const signal = this.#currentAbortController.signal;
 
-		return this.#executeWithRetry(() =>
-			run(this.#agent, userInput, {
-				previousResponseId: previousResponseId ?? undefined,
-				stream: true,
-				maxTurns: 20,
-				signal,
-			}),
-		);
+		loggingService.info('Agent stream started', {
+			inputLength: userInput.length,
+			hasPreviousResponseId: !!previousResponseId,
+		});
+
+		try {
+			const result = await this.#executeWithRetry(() =>
+				run(this.#agent, userInput, {
+					previousResponseId: previousResponseId ?? undefined,
+					stream: true,
+					maxTurns: 20,
+					signal,
+				}),
+			);
+			loggingService.debug('Agent stream completed successfully');
+			return result;
+		} catch (error: any) {
+			loggingService.error('Agent stream failed', {
+				error: error instanceof Error ? error.message : String(error),
+				inputLength: userInput.length,
+			});
+			throw error;
+		}
 	}
 
 	async continueRun(state: any): Promise<any> {
@@ -93,6 +125,11 @@ export class OpenAIAgentClient {
 				(error instanceof UserError ||
 					error instanceof ModelBehaviorError)
 			) {
+				loggingService.warn('Agent operation retry', {
+					errorType: error.constructor.name,
+					retriesRemaining: retries - 1,
+					errorMessage: error instanceof Error ? error.message : String(error),
+				});
 				return this.#executeWithRetry(operation, retries - 1);
 			}
 			throw error;

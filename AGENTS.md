@@ -42,6 +42,7 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 - **`source/services/`** - Business logic independent of React
   - `conversation-service.ts` - Agent runs and approval flow
   - `history-service.ts` - Persistent input history storage
+  - `logging-service.ts` - Winston-based logging with security audit trails
 
 ### Agent & Tools
 - **`source/agent.ts`** - Configures the OpenAI agent with available tools
@@ -94,6 +95,55 @@ npx ava               # Unit tests
 - **Tool Approval**: Tools like `shell.ts` validate commands and can require user approval before execution
 - **Streaming**: Responses and reasoning stream in real-time for responsive UX
 - **Input History**: Persisted to `~/.local/state/term2/history.json`, navigable with arrow keys
+- **Logging**: Winston-based system logs shell commands, API calls, and errors to `~/.local/state/term2/logs/`
+
+## Logging
+
+Term2 includes a robust logging system for debugging and security auditing:
+
+### Log Locations
+- **Linux/macOS**: `~/.local/state/term2/logs/term2-YYYY-MM-DD.log`
+- **Windows**: `%APPDATA%\term2\logs\term2-YYYY-MM-DD.log`
+
+### Environment Variables
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `LOG_LEVEL` | `info` | Minimum log level: error, warn, info, debug, security |
+| `DISABLE_LOGGING` | `false` | Disable file logging |
+| `LOG_FILE_OPERATIONS` | `true` | Enable apply-patch operation logging |
+| `DEBUG_LOGGING` | unset | Enable console output in production |
+
+### What Gets Logged
+- **Security events**: Shell command execution with danger flags
+- **Command execution**: Start, completion, failures, timeouts (with truncated output)
+- **API operations**: OpenAI client initialization, stream operations, retries, errors
+- **File operations**: File create/update/delete operations (when enabled)
+- **System errors**: File I/O failures, workspace entry loading errors
+
+### Viewing Logs
+```bash
+npm run logs:view    # Stream logs with jq filtering
+npm run logs:clean   # Remove all log files
+tail -f ~/.local/state/term2/logs/term2-$(date +%Y-%m-%d).log | jq .
+```
+
+### Log Format
+Logs are JSON-formatted with timestamps, correlation IDs for tracing related operations, and structured metadata:
+```json
+{
+  "timestamp": "2025-12-06 17:49:30",
+  "level": "info",
+  "message": "Shell command execution started",
+  "commandCount": 1,
+  "timeout": 120000,
+  "correlationId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### Log Retention
+- Maximum file size: 10MB per day
+- Retention period: 14 days
+- Automatic rotation based on date and size
 
 ## Where to Look
 

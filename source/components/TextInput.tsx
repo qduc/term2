@@ -314,7 +314,7 @@ export const TextInput: React.FC<TextInputProps> = ({
 					consumed = 1;
 				} else {
 					// Printable characters (support for paste by inserting multiple at once)
-					const printableChars = [];
+					const printableChars: string[] = [];
 					for (let i = 0; i < seq.length; i++) {
 						const char = seq[i];
 						const code = char.charCodeAt(0);

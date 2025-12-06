@@ -13,13 +13,17 @@
 		"build": "tsc",
 		"dev": "tsc --watch",
 		"test": "ava",
-		"lint": "prettier --check ."
+		"test:logging": "ava source/services/logging-service.test.js",
+		"lint": "prettier --check .",
+		"logs:view": "tail -f ~/.local/state/term2/logs/term2-$(date +%Y-%m-%d).log | jq .",
+		"logs:clean": "rm -rf ~/.local/state/term2/logs/*"
 	},
 	"files": [
 		"dist"
 	],
 	"dependencies": {
 		"@openai/agents": "^0.3.3",
+		"bash-parser": "^0.5.0",
 		"env-paths": "^3.0.0",
 		"fast-glob": "^3.3.2",
 		"fuse.js": "^7.0.0",
@@ -29,8 +33,9 @@
 		"marked": "^17.0.1",
 		"meow": "^11.0.0",
 		"openai": "^6.9.1",
-		"bash-parser": "^0.5.0",
 		"react": "^19.0.0",
+		"winston": "^3.18.3",
+		"winston-daily-rotate-file": "^5.0.0",
 		"zod": "^4.1.13"
 	},
 	"devDependencies": {
@@ -41,6 +46,7 @@
 		"@types/marked": "^5.0.2",
 		"@types/node": "^24.10.1",
 		"@types/react": "^19.0.0",
+		"@types/winston": "^2.4.4",
 		"@vdemedes/prettier-config": "^2.0.1",
 		"ava": "^6.4.1",
 		"chalk": "^5.2.0",

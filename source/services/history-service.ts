@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
+import {loggingService} from './logging-service.js';
 
 const paths = envPaths('term2');
 // Use log directory for state/history files (on Linux: ~/.local/state/term2-nodejs)
@@ -36,7 +37,10 @@ class HistoryService {
 			}
 		} catch (error) {
 			// If we can't load history, start with empty array
-			console.error('Failed to load history:', error);
+			loggingService.error('Failed to load history', {
+				error: error instanceof Error ? error.message : String(error),
+				filePath: HISTORY_FILE,
+			});
 			this.messages = [];
 		}
 	}
@@ -62,7 +66,11 @@ class HistoryService {
 				'utf-8',
 			);
 		} catch (error) {
-			console.error('Failed to save history:', error);
+			loggingService.error('Failed to save history', {
+				error: error instanceof Error ? error.message : String(error),
+				filePath: HISTORY_FILE,
+				messageCount: this.messages.length,
+			});
 		}
 	}
 

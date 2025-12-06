@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {readFile, writeFile, mkdir, rm} from 'fs/promises';
 import path from 'path';
 import {applyDiff} from '@openai/agents';
+import {loggingService} from '../services/logging-service.js';
 import type {ToolDefinition} from './types.js';
 
 const applyPatchParametersSchema = z.object({
@@ -45,9 +46,18 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
 		return true;
 	},
 	execute: async params => {
+		const enableFileLogging = process.env.LOG_FILE_OPERATIONS !== 'false';
+
 		try {
 			const {type, path: filePath, diff} = params;
 			const targetPath = resolveWorkspacePath(filePath);
+
+			if (enableFileLogging) {
+				loggingService.info(`File operation started: ${type}`, {
+					path: filePath,
+					targetPath,
+				});
+			}
 
 			switch (type) {
 				case 'create_file': {
@@ -57,6 +67,13 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
 					// Apply diff to empty content for new file
 					const content = applyDiff('', diff, 'create');
 					await writeFile(targetPath, content, 'utf8');
+
+					if (enableFileLogging) {
+						loggingService.info('File created', {
+							path: filePath,
+							contentLength: content.length,
+						});
+					}
 
 					return JSON.stringify({
 						success: true,
@@ -73,6 +90,12 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
 						original = await readFile(targetPath, 'utf8');
 					} catch (error: any) {
 						if (error?.code === 'ENOENT') {
+							if (enableFileLogging) {
+								loggingService.error('Cannot update missing file', {
+									path: filePath,
+									targetPath,
+								});
+							}
 							return JSON.stringify({
 								success: false,
 								error: `Cannot update missing file: ${filePath}`,
@@ -86,6 +109,14 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
 					const patched = applyDiff(original, diff);
 					await writeFile(targetPath, patched, 'utf8');
 
+					if (enableFileLogging) {
+						loggingService.info('File updated', {
+							path: filePath,
+							originalLength: original.length,
+							patchedLength: patched.length,
+						});
+					}
+
 					return JSON.stringify({
 						success: true,
 						operation: 'update_file',
@@ -96,6 +127,13 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
 
 				case 'delete_file': {
 					await rm(targetPath, {force: true});
+
+					if (enableFileLogging) {
+						loggingService.info('File deleted', {
+							path: filePath,
+							targetPath,
+						});
+					}
 
 					return JSON.stringify({
 						success: true,
@@ -113,6 +151,13 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
 				}
 			}
 		} catch (error: any) {
+			if (enableFileLogging) {
+				loggingService.error('File operation failed', {
+					type: params.type,
+					path: params.path,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
 			return JSON.stringify({
 				success: false,
 				error: error.message || String(error),

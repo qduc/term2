@@ -10,7 +10,7 @@ const stripAnsi = s => s.replaceAll(/\u001B\[[0-9;]*m/g, '');
 
 test('renders plain text', t => {
 	const {lastFrame} = render(
-		React.createElement(MarkdownRenderer, null, 'Hello world')
+		React.createElement(MarkdownRenderer, null, 'Hello world'),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('Hello world'));
@@ -26,7 +26,7 @@ test('renders empty string', t => {
 
 test('renders bold text', t => {
 	const {lastFrame} = render(
-		React.createElement(MarkdownRenderer, null, 'This is **bold** text')
+		React.createElement(MarkdownRenderer, null, 'This is **bold** text'),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('bold'));
@@ -35,7 +35,7 @@ test('renders bold text', t => {
 
 test('renders italic text', t => {
 	const {lastFrame} = render(
-		React.createElement(MarkdownRenderer, null, 'This is *italic* text')
+		React.createElement(MarkdownRenderer, null, 'This is *italic* text'),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('italic'));
@@ -47,8 +47,8 @@ test('renders inline code', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'Run `npm install` to start'
-		)
+			'Run `npm install` to start',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('npm install'));
@@ -59,8 +59,8 @@ test('renders links', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'Visit [example](https://example.com)'
-		)
+			'Visit [example](https://example.com)',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('example'));
@@ -68,11 +68,7 @@ test('renders links', t => {
 
 test('renders images as text placeholder', t => {
 	const {lastFrame} = render(
-		React.createElement(
-			MarkdownRenderer,
-			null,
-			'![alt text](image.png)'
-		)
+		React.createElement(MarkdownRenderer, null, '![alt text](image.png)'),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('[Image: alt text]'));
@@ -83,8 +79,8 @@ test('renders combined inline formatting', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'**bold** and *italic* and `code`'
-		)
+			'**bold** and *italic* and `code`',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('bold'));
@@ -96,7 +92,7 @@ test('renders combined inline formatting', t => {
 
 test('renders H1 heading', t => {
 	const {lastFrame} = render(
-		React.createElement(MarkdownRenderer, null, '# Main Title')
+		React.createElement(MarkdownRenderer, null, '# Main Title'),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('# Main Title'));
@@ -104,7 +100,7 @@ test('renders H1 heading', t => {
 
 test('renders H2 heading', t => {
 	const {lastFrame} = render(
-		React.createElement(MarkdownRenderer, null, '## Subtitle')
+		React.createElement(MarkdownRenderer, null, '## Subtitle'),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('## Subtitle'));
@@ -112,7 +108,7 @@ test('renders H2 heading', t => {
 
 test('renders H3+ headings', t => {
 	const {lastFrame} = render(
-		React.createElement(MarkdownRenderer, null, '### Section')
+		React.createElement(MarkdownRenderer, null, '### Section'),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('## Section'));
@@ -125,8 +121,8 @@ test('renders multiple paragraphs', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'First paragraph\n\nSecond paragraph'
-		)
+			'First paragraph\n\nSecond paragraph',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('First paragraph'));
@@ -140,8 +136,8 @@ test('renders unordered list', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'- Item 1\n- Item 2\n- Item 3'
-		)
+			'- Item 1\n- Item 2\n- Item 3',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('Item 1'));
@@ -156,8 +152,8 @@ test('renders ordered list', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'1. First\n2. Second\n3. Third'
-		)
+			'1. First\n2. Second\n3. Third',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('First'));
@@ -170,8 +166,8 @@ test('renders nested lists', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'- Parent\n  - Child 1\n  - Child 2'
-		)
+			'- Parent\n  - Child 1\n  - Child 2',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('Parent'));
@@ -184,8 +180,8 @@ test('renders list with inline formatting', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'- **Bold** item\n- *Italic* item'
-		)
+			'- **Bold** item\n- *Italic* item',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('Bold'));
@@ -199,8 +195,8 @@ test('renders fenced code block', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'```\nconst x = 1;\nconsole.log(x);\n```'
-		)
+			'```\nconst x = 1;\nconsole.log(x);\n```',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('const x = 1;'));
@@ -212,8 +208,8 @@ test('renders code block with language', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'```javascript\nfunction test() {}\n```'
-		)
+			'```javascript\nfunction test() {}\n```',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('function test() {}'));
@@ -224,8 +220,8 @@ test('renders indented code block', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'    const x = 1;\n    const y = 2;'
-		)
+			'    const x = 1;\n    const y = 2;',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('const x = 1;'));
@@ -241,8 +237,8 @@ test.skip('renders blockquote', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'> This is a quote\n> with multiple lines'
-		)
+			'> This is a quote\n> with multiple lines',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('This is a quote'));
@@ -254,8 +250,8 @@ test.skip('renders nested blockquote', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'> Outer quote\n>> Nested quote'
-		)
+			'> Outer quote\n>> Nested quote',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('Outer quote'));
@@ -266,11 +262,7 @@ test.skip('renders nested blockquote', t => {
 
 test('renders horizontal rule', t => {
 	const {lastFrame} = render(
-		React.createElement(
-			MarkdownRenderer,
-			null,
-			'Before\n\n---\n\nAfter'
-		)
+		React.createElement(MarkdownRenderer, null, 'Before\n\n---\n\nAfter'),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('Before'));
@@ -299,7 +291,7 @@ code block
 Final paragraph with \`inline code\``;
 
 	const {lastFrame} = render(
-		React.createElement(MarkdownRenderer, null, markdown)
+		React.createElement(MarkdownRenderer, null, markdown),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('Title'));
@@ -326,9 +318,7 @@ test('accepts pre-parsed tokens instead of children', t => {
 		},
 	];
 
-	const {lastFrame} = render(
-		React.createElement(MarkdownRenderer, {tokens})
-	);
+	const {lastFrame} = render(React.createElement(MarkdownRenderer, {tokens}));
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('Custom tokens'));
 });
@@ -337,11 +327,7 @@ test('accepts pre-parsed tokens instead of children', t => {
 
 test('handles line breaks', t => {
 	const {lastFrame} = render(
-		React.createElement(
-			MarkdownRenderer,
-			null,
-			'Line 1  \nLine 2'
-		)
+		React.createElement(MarkdownRenderer, null, 'Line 1  \nLine 2'),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('Line 1'));
@@ -353,8 +339,8 @@ test('escapes special characters', t => {
 		React.createElement(
 			MarkdownRenderer,
 			null,
-			'\\*not bold\\* and \\`not code\\`'
-		)
+			'\\*not bold\\* and \\`not code\\`',
+		),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('*not bold*'));
@@ -369,7 +355,7 @@ test('handles mixed list types', t => {
 2. Ordered 2`;
 
 	const {lastFrame} = render(
-		React.createElement(MarkdownRenderer, null, markdown)
+		React.createElement(MarkdownRenderer, null, markdown),
 	);
 	const frame = stripAnsi(lastFrame());
 	t.true(frame.includes('Unordered 1'));

@@ -67,7 +67,8 @@ const PathSelectionMenu: FC<Props> = ({
 				flexDirection="column"
 			>
 				<Text color="gray" dimColor>
-					@{query || '*'} · {items.length} suggestion{items.length === 1 ? '' : 's'}
+					@{query || '*'} · {items.length} suggestion
+					{items.length === 1 ? '' : 's'}
 				</Text>
 				{items.map((item, index) => {
 					const isSelected = index === selectedIndex;
@@ -78,14 +79,15 @@ const PathSelectionMenu: FC<Props> = ({
 								color={isSelected ? 'cyan' : undefined}
 								inverse={isSelected}
 							>
-								 {icon} {item.path}
+								{icon} {item.path}
 							</Text>
 						</Box>
 					);
 				})}
 			</Box>
 			<Text color="gray" dimColor>
-				Enter → insert with space · Tab → insert w/o trailing space · Esc → cancel
+				Enter → insert with space · Tab → insert w/o trailing space ·
+				Esc → cancel
 			</Text>
 		</Box>
 	);

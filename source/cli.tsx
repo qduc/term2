@@ -89,10 +89,12 @@ const usedReasoningEffort = settings.get('agent.reasoningEffort');
 // Print which model and reasoning effort will be used on startup
 process.stderr.write(
 	`Using model: ${usedModel}` +
-		(usedReasoningEffort && usedReasoningEffort !== 'none' && usedReasoningEffort !== 'default'
+		(usedReasoningEffort &&
+		usedReasoningEffort !== 'none' &&
+		usedReasoningEffort !== 'default'
 			? ` with reasoning effort: ${usedReasoningEffort}`
 			: '') +
-	'\n',
+		'\n',
 );
 
 const conversationService = new ConversationService({

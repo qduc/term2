@@ -125,14 +125,12 @@ export class ConversationService {
 			previousResponseId: this.previousResponseId,
 		});
 
-		const {finalOutput, reasoningOutput, emittedCommandIds} = await this.#consumeStream(
-			stream,
-			{
+		const {finalOutput, reasoningOutput, emittedCommandIds} =
+			await this.#consumeStream(stream, {
 				onTextChunk,
 				onReasoningChunk,
 				onCommandMessage,
-			},
-		);
+			});
 		this.previousResponseId = stream.lastResponseId;
 		this.debugLog('sendMessage_streamConsumed', {
 			finalOutputLength: finalOutput.length,
@@ -183,14 +181,12 @@ export class ConversationService {
 
 		const stream = await this.agentClient.continueRunStream(state);
 
-		const {finalOutput, reasoningOutput, emittedCommandIds} = await this.#consumeStream(
-			stream,
-			{
+		const {finalOutput, reasoningOutput, emittedCommandIds} =
+			await this.#consumeStream(stream, {
 				onTextChunk,
 				onReasoningChunk,
 				onCommandMessage,
-			},
-		);
+			});
 
 		this.previousResponseId = stream.lastResponseId;
 		this.debugLog('handleApprovalDecision_streamConsumed', {
@@ -226,7 +222,11 @@ export class ConversationService {
 			onReasoningChunk?: (fullText: string, chunk: string) => void;
 			onCommandMessage?: (message: CommandMessage) => void;
 		} = {},
-	): Promise<{finalOutput: string; reasoningOutput: string; emittedCommandIds: Set<string>}> {
+	): Promise<{
+		finalOutput: string;
+		reasoningOutput: string;
+		emittedCommandIds: Set<string>;
+	}> {
 		let finalOutput = '';
 		let reasoningOutput = '';
 		const emittedCommandIds = new Set<string>();

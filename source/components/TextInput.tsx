@@ -73,7 +73,10 @@ export const TextInput: React.FC<TextInputProps> = ({
 
 	useEffect(() => {
 		if (typeof cursorOverride === 'number') {
-			const nextOffset = Math.max(0, Math.min(cursorOverride, value.length));
+			const nextOffset = Math.max(
+				0,
+				Math.min(cursorOverride, value.length),
+			);
 			setCursorOffset(nextOffset);
 		}
 	}, [cursorOverride, value.length]);
@@ -159,7 +162,10 @@ export const TextInput: React.FC<TextInputProps> = ({
 							consumed = 4;
 						} else if (seq.startsWith('\x1b[D')) {
 							// Left arrow
-							currentCursorOffset = Math.max(0, currentCursorOffset - 1);
+							currentCursorOffset = Math.max(
+								0,
+								currentCursorOffset - 1,
+							);
 							cursorChanged = true;
 							consumed = 3;
 						} else if (seq.startsWith('\x1b[C')) {
@@ -198,7 +204,10 @@ export const TextInput: React.FC<TextInputProps> = ({
 						const code = seq[2];
 						if (code === 'D') {
 							// Left
-							currentCursorOffset = Math.max(0, currentCursorOffset - 1);
+							currentCursorOffset = Math.max(
+								0,
+								currentCursorOffset - 1,
+							);
 							cursorChanged = true;
 						} else if (code === 'C') {
 							// Right
@@ -230,7 +239,10 @@ export const TextInput: React.FC<TextInputProps> = ({
 							currentValue.slice(splitIndex + 1);
 						currentValue = nextValue;
 						valueChanged = true;
-						currentCursorOffset = Math.max(0, currentCursorOffset - 1);
+						currentCursorOffset = Math.max(
+							0,
+							currentCursorOffset - 1,
+						);
 						cursorChanged = true;
 					}
 					consumed = 1;
@@ -293,7 +305,10 @@ export const TextInput: React.FC<TextInputProps> = ({
 						cursorChanged = true;
 					} else if (code === 23) {
 						// Ctrl+W (Delete word)
-						const before = currentValue.slice(0, currentCursorOffset);
+						const before = currentValue.slice(
+							0,
+							currentCursorOffset,
+						);
 						const after = currentValue.slice(currentCursorOffset);
 						// Remove trailing spaces
 						const trimmedBefore = before.replace(/\s+$/, '');
@@ -352,7 +367,10 @@ export const TextInput: React.FC<TextInputProps> = ({
 				valueRef.current = currentValue;
 				onChange(currentValue);
 			}
-			if (cursorChanged && currentCursorOffset !== cursorOffsetRef.current) {
+			if (
+				cursorChanged &&
+				currentCursorOffset !== cursorOffsetRef.current
+			) {
 				cursorOffsetRef.current = currentCursorOffset;
 				setCursorOffset(currentCursorOffset);
 			}

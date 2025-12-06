@@ -23,7 +23,9 @@ const shellParametersSchema = z.object({
 		.array(z.string().min(1))
 		.min(1, 'At least one command required')
 		.max(3, 'The maximum number of parallel commands is 3')
-		.describe('Array of shell commands to execute sequentially, one command per entry.'),
+		.describe(
+			'Array of shell commands to execute sequentially, one command per entry.',
+		),
 	timeout_ms: z
 		.number()
 		.int()
@@ -48,7 +50,12 @@ const shellParametersSchema = z.object({
 export type ShellToolParams = z.infer<typeof shellParametersSchema>;
 
 // Re-export trim utilities for backwards compatibility
-export {setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG, type OutputTrimConfig};
+export {
+	setTrimConfig,
+	getTrimConfig,
+	DEFAULT_TRIM_CONFIG,
+	type OutputTrimConfig,
+};
 
 interface ShellCommandResult {
 	command: string;
@@ -74,7 +81,9 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 	parameters: shellParametersSchema,
 	needsApproval: async params => {
 		try {
-			const isDangerous = params.needsApproval || params.commands.some(cmd => validateCommandSafety(cmd));
+			const isDangerous =
+				params.needsApproval ||
+				params.commands.some(cmd => validateCommandSafety(cmd));
 
 			// Log security event for all shell commands with dangerous flag
 			loggingService.security('Shell tool needsApproval check', {
@@ -106,7 +115,9 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 		try {
 			// Use provided values or settings defaults or hardcoded defaults
 			const timeout = timeout_ms ?? settingsService.get('shell.timeout');
-			const maxOutputLength = max_output_length ?? settingsService.get('shell.maxOutputChars');
+			const maxOutputLength =
+				max_output_length ??
+				settingsService.get('shell.maxOutputChars');
 
 			loggingService.info('Shell command execution started', {
 				commandCount: commands.length,
@@ -133,14 +144,18 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 					stdout = result.stdout;
 					stderr = result.stderr;
 
-					loggingService.debug('Shell command executed successfully', {
-						command: command.substring(0, 100),
-						exitCode: 0,
-						stdoutLength: stdout.length,
-						stderrLength: stderr.length,
-					});
+					loggingService.debug(
+						'Shell command executed successfully',
+						{
+							command: command.substring(0, 100),
+							exitCode: 0,
+							stdoutLength: stdout.length,
+							stderrLength: stderr.length,
+						},
+					);
 				} catch (error: any) {
-					exitCode = typeof error?.code === 'number' ? error.code : null;
+					exitCode =
+						typeof error?.code === 'number' ? error.code : null;
 					stdout = error?.stdout ?? '';
 					stderr = error?.stderr ?? '';
 					outcome =
@@ -165,10 +180,10 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 
 				output.push({
 					command,
-				stdout: trimOutput(stdout, undefined, maxOutputLength),
-				stderr: trimOutput(stderr, undefined, maxOutputLength),
-				outcome,
-			});
+					stdout: trimOutput(stdout, undefined, maxOutputLength),
+					stderr: trimOutput(stderr, undefined, maxOutputLength),
+					outcome,
+				});
 				if (outcome.type === 'timeout') {
 					break;
 				}
@@ -176,9 +191,19 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 
 			loggingService.info('Shell command execution completed', {
 				commandCount: commands.length,
-				successCount: output.filter(cmd => cmd.outcome.type === 'exit' && cmd.outcome.exitCode === 0).length,
-				failureCount: output.filter(cmd => cmd.outcome.type === 'exit' && cmd.outcome.exitCode !== 0).length,
-				timeoutCount: output.filter(cmd => cmd.outcome.type === 'timeout').length,
+				successCount: output.filter(
+					cmd =>
+						cmd.outcome.type === 'exit' &&
+						cmd.outcome.exitCode === 0,
+				).length,
+				failureCount: output.filter(
+					cmd =>
+						cmd.outcome.type === 'exit' &&
+						cmd.outcome.exitCode !== 0,
+				).length,
+				timeoutCount: output.filter(
+					cmd => cmd.outcome.type === 'timeout',
+				).length,
 			});
 
 			return JSON.stringify({

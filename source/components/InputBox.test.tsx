@@ -175,12 +175,8 @@ test('path completion updates should not cause excessive renders', t => {
 	const initialRenderCount = renderCount;
 
 	// Continue typing after @
-	rerender(
-		<TestWrapper value="@sr" pathMenuOpen={true} triggerIndex={0} />,
-	);
-	rerender(
-		<TestWrapper value="@src" pathMenuOpen={true} triggerIndex={0} />,
-	);
+	rerender(<TestWrapper value="@sr" pathMenuOpen={true} triggerIndex={0} />);
+	rerender(<TestWrapper value="@src" pathMenuOpen={true} triggerIndex={0} />);
 
 	// Should not create render loops (2 updates = ~2 renders)
 	const maxExpectedRenders = initialRenderCount + 3; // Small margin

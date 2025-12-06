@@ -1,6 +1,6 @@
 import React, {FC, useEffect, useState, useRef, useCallback} from 'react';
 import {Box, Text, useInput} from 'ink';
-import { MultilineInput } from 'ink-prompt';
+import {MultilineInput} from 'ink-prompt';
 import SlashCommandMenu, {SlashCommand} from './SlashCommandMenu.js';
 import PathSelectionMenu from './PathSelectionMenu.js';
 import type {PathCompletionItem} from '../hooks/use-path-completion.js';

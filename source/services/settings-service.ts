@@ -400,12 +400,15 @@ export class SettingsService {
 
 			if (!validated.success) {
 				if (!this.disableLogging) {
-					loggingService.warn('Settings file contains invalid values', {
-						errors: validated.error.issues.map(issue => ({
-							path: issue.path.join('.'),
-							message: issue.message,
-						})),
-					});
+					loggingService.warn(
+						'Settings file contains invalid values',
+						{
+							errors: validated.error.issues.map(issue => ({
+								path: issue.path.join('.'),
+								message: issue.message,
+							})),
+						},
+					);
 				}
 
 				// Return empty object to trigger defaults
@@ -416,7 +419,8 @@ export class SettingsService {
 		} catch (error: any) {
 			if (!this.disableLogging) {
 				loggingService.error('Failed to load settings file', {
-					error: error instanceof Error ? error.message : String(error),
+					error:
+						error instanceof Error ? error.message : String(error),
 					settingsFile: path.join(this.settingsDir, 'settings.json'),
 				});
 			}
@@ -445,7 +449,8 @@ export class SettingsService {
 		} catch (error: any) {
 			if (!this.disableLogging) {
 				loggingService.error('Failed to save settings file', {
-					error: error instanceof Error ? error.message : String(error),
+					error:
+						error instanceof Error ? error.message : String(error),
 					settingsFile: path.join(this.settingsDir, 'settings.json'),
 				});
 			}
@@ -500,7 +505,8 @@ export class SettingsService {
 			agent: result.agent || JSON.parse(JSON.stringify(defaults.agent)),
 			shell: result.shell || JSON.parse(JSON.stringify(defaults.shell)),
 			ui: result.ui || JSON.parse(JSON.stringify(defaults.ui)),
-			logging: result.logging || JSON.parse(JSON.stringify(defaults.logging)),
+			logging:
+				result.logging || JSON.parse(JSON.stringify(defaults.logging)),
 		};
 
 		// Validate final result
@@ -518,12 +524,15 @@ export class SettingsService {
 
 		// If validation fails, return defaults
 		if (!this.disableLogging) {
-			loggingService.warn('Final merged settings failed validation, using defaults', {
-				errors: validated.error.issues.map(issue => ({
-					path: issue.path.join('.'),
-					message: issue.message,
-				})),
-			});
+			loggingService.warn(
+				'Final merged settings failed validation, using defaults',
+				{
+					errors: validated.error.issues.map(issue => ({
+						path: issue.path.join('.'),
+						message: issue.message,
+					})),
+				},
+			);
 		}
 
 		return defaults;

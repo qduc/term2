@@ -47,7 +47,12 @@ const searchParametersSchema = z.object({
 export type SearchToolParams = z.infer<typeof searchParametersSchema>;
 
 // Re-export trim utilities for backwards compatibility
-export {setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG, type OutputTrimConfig};
+export {
+	setTrimConfig,
+	getTrimConfig,
+	DEFAULT_TRIM_CONFIG,
+	type OutputTrimConfig,
+};
 
 let hasRg: boolean | null = null;
 
@@ -68,15 +73,15 @@ export const searchToolDefinition: ToolDefinition<SearchToolParams> = {
 		'Search for text in the codebase using ripgrep (rg) if available, falling back to grep. Useful for exploring code, finding usages, etc.',
 	parameters: searchParametersSchema,
 	needsApproval: () => false, // Search is read-only and safe
-    execute: async (params) => {
-        const {
-            pattern,
-            path,
-            case_sensitive,
-            file_pattern,
-            exclude_pattern,
-            max_results,
-        } = params;
+	execute: async params => {
+		const {
+			pattern,
+			path,
+			case_sensitive,
+			file_pattern,
+			exclude_pattern,
+			max_results,
+		} = params;
 		const useRg = await checkRgAvailability();
 		let command = '';
 
@@ -123,17 +128,17 @@ export const searchToolDefinition: ToolDefinition<SearchToolParams> = {
 
 			const result = trimOutput(stdout.trim(), limit);
 
-            return JSON.stringify({
-                arguments: params,
-                output: result,
-            });
+			return JSON.stringify({
+				arguments: params,
+				output: result,
+			});
 		} catch (error: any) {
 			// grep/rg returns exit code 1 if no matches found, which execPromise treats as error
 			if (error.code === 1) {
-                return JSON.stringify({
-                    arguments: params,
-                    output: 'No matches found.',
-                });
+				return JSON.stringify({
+					arguments: params,
+					output: 'No matches found.',
+				});
 			}
 			throw new Error(`Search failed: ${error.message}`);
 		}

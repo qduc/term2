@@ -73,48 +73,52 @@ const App: FC<AppProps> = ({conversationService}) => {
 	);
 
 	// Define slash commands
-	const slashCommands: SlashCommand[] = useMemo(
-		() => {
-			const settingsCommand = createSettingsCommand({
-				settingsService,
-				addSystemMessage,
-				applyRuntimeSetting,
-			});
+	const slashCommands: SlashCommand[] = useMemo(() => {
+		const settingsCommand = createSettingsCommand({
+			settingsService,
+			addSystemMessage,
+			applyRuntimeSetting,
+		});
 
-			return [
-				{
-					name: 'clear',
-					description: 'Start a new conversation',
-					action: () => {
-						clearConversation();
-					},
+		return [
+			{
+				name: 'clear',
+				description: 'Start a new conversation',
+				action: () => {
+					clearConversation();
 				},
-				{
-					name: 'quit',
-					description: 'Exit the application',
-					action: () => {
-						exit();
-					},
+			},
+			{
+				name: 'quit',
+				description: 'Exit the application',
+				action: () => {
+					exit();
 				},
-				{
-					name: 'model',
-					description: 'Change the AI model (e.g. /model gpt-4)',
-					expectsArgs: true,
-					action: (args?: string) => {
-						if (!args) {
-							setInput('/model ');
-							return false;
-						}
-						setModel(args);
-						addSystemMessage(`Set model to ${args}`);
-						return true;
-					},
+			},
+			{
+				name: 'model',
+				description: 'Change the AI model (e.g. /model gpt-4)',
+				expectsArgs: true,
+				action: (args?: string) => {
+					if (!args) {
+						setInput('/model ');
+						return false;
+					}
+					setModel(args);
+					addSystemMessage(`Set model to ${args}`);
+					return true;
 				},
-				settingsCommand,
-			];
-		},
-		[addSystemMessage, applyRuntimeSetting, clearConversation, exit, setModel, setInput],
-	);
+			},
+			settingsCommand,
+		];
+	}, [
+		addSystemMessage,
+		applyRuntimeSetting,
+		clearConversation,
+		exit,
+		setModel,
+		setInput,
+	]);
 
 	const handleSlashMenuClose = useCallback(() => {
 		// Don't clear input here - let the caller decide if input should be cleared

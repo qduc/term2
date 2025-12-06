@@ -225,7 +225,9 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 
 			const command = parts.join(' ');
 			const output =
-				parsedOutput?.output ?? normalizedItem.outputText ?? 'No output';
+				parsedOutput?.output ??
+				normalizedItem.outputText ??
+				'No output';
 			const success = true;
 
 			const rawItem = item?.rawItem ?? item;

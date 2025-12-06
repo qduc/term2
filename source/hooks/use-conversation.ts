@@ -190,18 +190,19 @@ export const useConversation = ({
 						accumulatedText += chunk;
 						setLiveResponse(prev =>
 							prev && prev.id === liveMessageId
-								? { ...prev, text: accumulatedText }
+								? {...prev, text: accumulatedText}
 								: {
-									id: liveMessageId,
-									sender: 'bot',
-									text: accumulatedText,
-								},
+										id: liveMessageId,
+										sender: 'bot',
+										text: accumulatedText,
+								  },
 						);
 					},
 					onReasoningChunk: fullReasoningText => {
 						// Only show reasoning text after what was already flushed
-						const newReasoningText =
-							fullReasoningText.slice(flushedReasoningLength);
+						const newReasoningText = fullReasoningText.slice(
+							flushedReasoningLength,
+						);
 						accumulatedReasoningText = newReasoningText;
 
 						if (!newReasoningText.trim()) return;
@@ -237,7 +238,8 @@ export const useConversation = ({
 						if (accumulatedReasoningText.trim()) {
 							// Reasoning is already in messages via stream updates.
 							// We just need to track what we've "flushed" (sealed) so next reasoning chunks start fresh.
-							flushedReasoningLength += accumulatedReasoningText.length;
+							flushedReasoningLength +=
+								accumulatedReasoningText.length;
 							accumulatedReasoningText = '';
 							currentReasoningMessageId = null; // Reset for potential post-command reasoning
 						}
@@ -325,18 +327,19 @@ export const useConversation = ({
 							accumulatedText += chunk;
 							setLiveResponse(prev =>
 								prev && prev.id === liveMessageId
-									? { ...prev, text: accumulatedText }
+									? {...prev, text: accumulatedText}
 									: {
-										id: liveMessageId,
-										sender: 'bot',
-										text: accumulatedText,
-									},
+											id: liveMessageId,
+											sender: 'bot',
+											text: accumulatedText,
+									  },
 							);
 						},
 						onReasoningChunk: fullReasoningText => {
 							// Only show reasoning text after what was already flushed
-							const newReasoningText =
-								fullReasoningText.slice(flushedReasoningLength);
+							const newReasoningText = fullReasoningText.slice(
+								flushedReasoningLength,
+							);
 							accumulatedReasoningText = newReasoningText;
 
 							if (!newReasoningText.trim()) return;

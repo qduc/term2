@@ -21,19 +21,31 @@ export function parseSettingValue(raw: string): any {
 export function formatSettingsSummary(settings: SettingsWithSources): string {
 	const lines: string[] = [];
 	const entries: Array<{key: string; value: any; source: string}> = [
-		{key: 'agent.model', value: settings.agent.model.value, source: settings.agent.model.source},
+		{
+			key: 'agent.model',
+			value: settings.agent.model.value,
+			source: settings.agent.model.source,
+		},
 		{
 			key: 'agent.reasoningEffort',
 			value: settings.agent.reasoningEffort.value,
 			source: settings.agent.reasoningEffort.source,
 		},
-		{key: 'agent.maxTurns', value: settings.agent.maxTurns.value, source: settings.agent.maxTurns.source},
+		{
+			key: 'agent.maxTurns',
+			value: settings.agent.maxTurns.value,
+			source: settings.agent.maxTurns.source,
+		},
 		{
 			key: 'agent.retryAttempts',
 			value: settings.agent.retryAttempts.value,
 			source: settings.agent.retryAttempts.source,
 		},
-		{key: 'shell.timeout', value: settings.shell.timeout.value, source: settings.shell.timeout.source},
+		{
+			key: 'shell.timeout',
+			value: settings.shell.timeout.value,
+			source: settings.shell.timeout.source,
+		},
 		{
 			key: 'shell.maxOutputLines',
 			value: settings.shell.maxOutputLines.value,
@@ -44,8 +56,16 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
 			value: settings.shell.maxOutputChars.value,
 			source: settings.shell.maxOutputChars.source,
 		},
-		{key: 'ui.historySize', value: settings.ui.historySize.value, source: settings.ui.historySize.source},
-		{key: 'logging.logLevel', value: settings.logging.logLevel.value, source: settings.logging.logLevel.source},
+		{
+			key: 'ui.historySize',
+			value: settings.ui.historySize.value,
+			source: settings.ui.historySize.source,
+		},
+		{
+			key: 'logging.logLevel',
+			value: settings.logging.logLevel.value,
+			source: settings.logging.logLevel.source,
+		},
 	];
 
 	for (const entry of entries) {
@@ -97,7 +117,10 @@ export function createSettingsCommand({
 
 				// Apply runtime effects if applicable after reset
 				const resetValue = settingsService.get(keyToReset);
-				if (applyRuntimeSetting && settingsService.isRuntimeModifiable(keyToReset)) {
+				if (
+					applyRuntimeSetting &&
+					settingsService.isRuntimeModifiable(keyToReset)
+				) {
 					applyRuntimeSetting(keyToReset, resetValue);
 				}
 				return true;
@@ -108,7 +131,9 @@ export function createSettingsCommand({
 			const parsedValue = parseSettingValue(rawValue);
 
 			if (!settingsService.isRuntimeModifiable(key)) {
-				addSystemMessage(`Cannot modify '${key}' at runtime. Restart required.`);
+				addSystemMessage(
+					`Cannot modify '${key}' at runtime. Restart required.`,
+				);
 				return true;
 			}
 

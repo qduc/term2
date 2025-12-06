@@ -14,7 +14,8 @@
 		"build": "tsc",
 		"dev": "tsc --watch",
 		"test": "ava",
-		"lint": "prettier --check ."
+		"lint": "prettier --check .",
+		"lint-fix": "prettier --write ."
 	},
 	"files": [
 		"dist"

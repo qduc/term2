@@ -36,8 +36,7 @@ const createDeps = (overrides = {}) => {
 		get: key => overrides.values?.[key] ?? 'value-for-' + key,
 		getSource: key => overrides.sources?.[key] ?? 'default',
 		reset: key => resetCalls.push(key),
-		isRuntimeModifiable:
-			overrides.isRuntimeModifiable || (() => true),
+		isRuntimeModifiable: overrides.isRuntimeModifiable || (() => true),
 		set: (key, value) => setCalls.push({key, value}),
 		...overrides.settingsService,
 	};

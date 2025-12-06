@@ -36,12 +36,18 @@ const ensureIgnoreMatcher = async (): Promise<Ignore> => {
 			const matcher = (createIgnore as unknown as () => Ignore)();
 			matcher.add(DEFAULT_IGNORES);
 			try {
-				const gitignoreContents = await fs.readFile(GITIGNORE_PATH, 'utf8');
+				const gitignoreContents = await fs.readFile(
+					GITIGNORE_PATH,
+					'utf8',
+				);
 				matcher.add(gitignoreContents);
 			} catch (error: unknown) {
 				if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
 					loggingService.warn('Failed to read .gitignore', {
-						error: error instanceof Error ? error.message : String(error),
+						error:
+							error instanceof Error
+								? error.message
+								: String(error),
 						path: GITIGNORE_PATH,
 					});
 				}
@@ -79,10 +85,11 @@ const loadWorkspaceEntries = async (): Promise<PathEntry[]> => {
 				type: entryType,
 			};
 		})
-		.filter(entry =>
-			!matcher.ignores(
-				entry.type === 'directory' ? `${entry.path}/` : entry.path,
-			),
+		.filter(
+			entry =>
+				!matcher.ignores(
+					entry.type === 'directory' ? `${entry.path}/` : entry.path,
+				),
 		);
 
 	return sortEntries(entries);

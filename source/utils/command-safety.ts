@@ -5,18 +5,50 @@ import {loggingService} from '../services/logging-service.js';
 // 1. CONSTANTS
 // Note: 'sed' is useful for read-only transformations. We allow it by default
 // but add guards below to prevent in-place edits (-i) and unapproved redirections.
-const ALLOWED_COMMANDS = new Set(['ls', 'pwd', 'grep', 'cat', 'echo', 'head', 'tail', 'sed']);
+const ALLOWED_COMMANDS = new Set([
+	'ls',
+	'pwd',
+	'grep',
+	'cat',
+	'echo',
+	'head',
+	'tail',
+	'sed',
+]);
 const BLOCKED_COMMANDS = new Set([
 	// Filesystem
-	'rm', 'rmdir', 'mkfs', 'dd', 'mv', 'cp',
+	'rm',
+	'rmdir',
+	'mkfs',
+	'dd',
+	'mv',
+	'cp',
 	// System
-	'sudo', 'su', 'chmod', 'chown', 'shutdown', 'reboot',
+	'sudo',
+	'su',
+	'chmod',
+	'chown',
+	'shutdown',
+	'reboot',
 	// Network/Web
-	'curl', 'wget', 'ssh', 'scp', 'netstat',
+	'curl',
+	'wget',
+	'ssh',
+	'scp',
+	'netstat',
 	// Package Managers / installers
-	'apt', 'yum', 'npm', 'yarn', 'pnpm', 'pip', 'gem',
+	'apt',
+	'yum',
+	'npm',
+	'yarn',
+	'pnpm',
+	'pip',
+	'gem',
 	// Dangerous wrappers / misc
-	'eval', 'exec', 'kill', 'killall'
+	'eval',
+	'exec',
+	'kill',
+	'killall',
 ]);
 
 /* legacy containsDangerousCommand removed — replaced by classifyCommand + path analysis */
@@ -41,7 +73,9 @@ function extractWordText(word: any): string | undefined {
 	if (typeof word.content === 'string') return word.content;
 	if (word.parameter) return `$${word.parameter}`;
 	if (Array.isArray(word.parts)) {
-		return word.parts.map((part: any) => extractWordText(part) ?? '').join('');
+		return word.parts
+			.map((part: any) => extractWordText(part) ?? '')
+			.join('');
 	}
 	return undefined;
 }
@@ -59,32 +93,58 @@ function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
 	) {
 		const sliced = candidate.replace(/^~/, '').replace(/^\$\{?HOME\}?/, '');
 		// Check for dotfiles after home prefix
-		if (/^\/\.\w+/.test(sliced) || sliced.includes('/.ssh') || sliced.includes('/.env')) {
-			loggingService.security('Path risk: home dotfile', {path: candidate});
+		if (
+			/^\/\.\w+/.test(sliced) ||
+			sliced.includes('/.ssh') ||
+			sliced.includes('/.env')
+		) {
+			loggingService.security('Path risk: home dotfile', {
+				path: candidate,
+			});
 			return SafetyStatus.RED;
 		}
 	}
 
 	// RED: Absolute System Paths
 	if (path.isAbsolute(candidate)) {
-		const SYSTEM_PATHS = ['/etc', '/dev', '/proc', '/var', '/usr', '/boot', '/bin'];
+		const SYSTEM_PATHS = [
+			'/etc',
+			'/dev',
+			'/proc',
+			'/var',
+			'/usr',
+			'/boot',
+			'/bin',
+		];
 		if (SYSTEM_PATHS.some(sys => candidate.startsWith(sys))) {
-			loggingService.security('Path risk: absolute system path', {path: candidate});
+			loggingService.security('Path risk: absolute system path', {
+				path: candidate,
+			});
 			return SafetyStatus.RED;
 		}
 		// Home dotfiles when absolute
-		if (/^\/(home|Users)\/[^/]+\/\.\w+/.test(candidate) || candidate.includes('/.ssh') || candidate.includes('/.gitconfig')) {
-			loggingService.security('Path risk: absolute home dotfile', {path: candidate});
+		if (
+			/^\/(home|Users)\/[^/]+\/\.\w+/.test(candidate) ||
+			candidate.includes('/.ssh') ||
+			candidate.includes('/.gitconfig')
+		) {
+			loggingService.security('Path risk: absolute home dotfile', {
+				path: candidate,
+			});
 			return SafetyStatus.RED;
 		}
 		// Other absolute paths are suspicious -> audit
-		loggingService.security('Path risk: absolute non-system path', {path: candidate});
+		loggingService.security('Path risk: absolute non-system path', {
+			path: candidate,
+		});
 		return SafetyStatus.YELLOW;
 	}
 
 	// RED: Directory Traversal
 	if (candidate.includes('..')) {
-		loggingService.security('Path risk: directory traversal detected', {path: candidate});
+		loggingService.security('Path risk: directory traversal detected', {
+			path: candidate,
+		});
 		return SafetyStatus.RED;
 	}
 
@@ -98,7 +158,9 @@ function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
 	// Sensitive extensions
 	const SENSITIVE_EXTENSIONS = ['.env', '.pem', '.key', '.json'];
 	if (SENSITIVE_EXTENSIONS.some(ext => filename.endsWith(ext))) {
-		loggingService.security('Path risk: sensitive extension', {path: candidate});
+		loggingService.security('Path risk: sensitive extension', {
+			path: candidate,
+		});
 		return SafetyStatus.YELLOW;
 	}
 
@@ -112,14 +174,20 @@ export function classifyCommand(commandString: string): SafetyStatus {
 	try {
 		const reasons: string[] = [];
 		const truncatedCommand = commandString.substring(0, 200);
-		loggingService.security('Classifying command safety', {command: truncatedCommand});
+		loggingService.security('Classifying command safety', {
+			command: truncatedCommand,
+		});
 		const ast = parse(commandString, {mode: 'bash'});
 		let worstStatus: SafetyStatus = SafetyStatus.GREEN;
 
 		function upgradeStatus(s: SafetyStatus, reason?: string) {
 			if (worstStatus === SafetyStatus.RED) return;
 			if (s === SafetyStatus.RED) worstStatus = SafetyStatus.RED;
-			else if (s === SafetyStatus.YELLOW && worstStatus === SafetyStatus.GREEN) worstStatus = SafetyStatus.YELLOW;
+			else if (
+				s === SafetyStatus.YELLOW &&
+				worstStatus === SafetyStatus.GREEN
+			)
+				worstStatus = SafetyStatus.YELLOW;
 			if (reason) reasons.push(`${s}: ${reason}`);
 		}
 
@@ -129,14 +197,24 @@ export function classifyCommand(commandString: string): SafetyStatus {
 			if (Array.isArray(node)) return node.forEach(traverse);
 
 			if (node.type === 'Command') {
-				const name = node.name?.text || (node.name && node.name.parts && node.name.parts.map((p: any) => p.text).join(''));
+				const name =
+					node.name?.text ||
+					(node.name &&
+						node.name.parts &&
+						node.name.parts.map((p: any) => p.text).join(''));
 				if (typeof name === 'string') {
 					if (BLOCKED_COMMANDS.has(name)) {
-						upgradeStatus(SafetyStatus.RED, `blocked command: ${name}`);
+						upgradeStatus(
+							SafetyStatus.RED,
+							`blocked command: ${name}`,
+						);
 						return;
 					}
 					if (!ALLOWED_COMMANDS.has(name)) {
-						upgradeStatus(SafetyStatus.YELLOW, `unknown or unlisted command: ${name}`);
+						upgradeStatus(
+							SafetyStatus.YELLOW,
+							`unknown or unlisted command: ${name}`,
+						);
 					}
 				}
 
@@ -171,7 +249,10 @@ export function classifyCommand(commandString: string): SafetyStatus {
 							const fileText = extractWordText(arg.file ?? arg);
 							const op = arg.op?.text || arg.op;
 
-							if (cmdName === 'sed' && (op === '>' || op === '>>')) {
+							if (
+								cmdName === 'sed' &&
+								(op === '>' || op === '>>')
+							) {
 								upgradeStatus(
 									SafetyStatus.YELLOW,
 									`sed with output redirection to ${
@@ -298,17 +379,28 @@ export function classifyCommand(commandString: string): SafetyStatus {
  * Throws for invalid/empty inputs OR hard-blocked RED classifications.
  */
 export function validateCommandSafety(command: string): boolean {
-	if (!command || typeof command !== 'string' || command.trim().length === 0) {
+	if (
+		!command ||
+		typeof command !== 'string' ||
+		command.trim().length === 0
+	) {
 		throw new Error('Command cannot be empty');
 	}
-	loggingService.security('Validating command safety', {command: command.substring(0, 200)});
+	loggingService.security('Validating command safety', {
+		command: command.substring(0, 200),
+	});
 	const status = classifyCommand(command);
 
 	if (status === SafetyStatus.RED) {
-		loggingService.security('Command validation failed: RED (forbidden)', {command: command.substring(0, 200)});
+		loggingService.security('Command validation failed: RED (forbidden)', {
+			command: command.substring(0, 200),
+		});
 		throw new Error('Command classified as RED (forbidden)');
 	}
 
-	loggingService.security('Validation result', {command: command.substring(0, 200), status});
+	loggingService.security('Validation result', {
+		command: command.substring(0, 200),
+		status,
+	});
 	return status === SafetyStatus.YELLOW;
 }

@@ -91,10 +91,13 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
 					} catch (error: any) {
 						if (error?.code === 'ENOENT') {
 							if (enableFileLogging) {
-								loggingService.error('Cannot update missing file', {
-									path: filePath,
-									targetPath,
-								});
+								loggingService.error(
+									'Cannot update missing file',
+									{
+										path: filePath,
+										targetPath,
+									},
+								);
 							}
 							return JSON.stringify({
 								success: false,
@@ -155,7 +158,8 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
 				loggingService.error('File operation failed', {
 					type: params.type,
 					path: params.path,
-					error: error instanceof Error ? error.message : String(error),
+					error:
+						error instanceof Error ? error.message : String(error),
 				});
 			}
 			return JSON.stringify({

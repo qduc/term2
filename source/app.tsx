@@ -208,7 +208,7 @@ const App: FC<AppProps> = ({conversationService}) => {
 			<Box flexDirection="column" flexGrow={1}>
 				<MessageList messages={messages} />
 
-				{liveResponse && <LiveResponse text={liveResponse.text} reasoningText={liveResponse.reasoningText} />}
+				{liveResponse && <LiveResponse text={liveResponse.text} />}
 			</Box>
 
 			{/* Fixed bottom area for input / status */}

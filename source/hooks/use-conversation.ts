@@ -59,7 +59,6 @@ interface LiveResponse {
 	id: number;
 	sender: 'bot';
 	text: string;
-	reasoningText: string;
 }
 
 export const useConversation = ({
@@ -92,12 +91,9 @@ export const useConversation = ({
 				const messagesToAdd: Message[] = [];
 
 				if (remainingReasoningText?.trim() && !textWasFlushed) {
-					const reasoningMessage: ReasoningMessage = {
-						id: Date.now(),
-						sender: 'reasoning',
-						text: remainingReasoningText,
-					};
-					messagesToAdd.push(reasoningMessage);
+					// Ensure reasoning is captured if not already streamed (edge case)
+					// But with new logic, it should be in messages.
+					// We'll leave this empty or remove it as reasoning is handled via stream
 				}
 
 				if (remainingText?.trim() && !textWasFlushed) {
@@ -133,24 +129,10 @@ export const useConversation = ({
 			const finalText = remainingText?.trim()
 				? remainingText
 				: result.finalText;
-			// Only use result.reasoningText if nothing was flushed yet
-			// When textWasFlushed is true, reasoning was already flushed before commands
-			const finalReasoningText = textWasFlushed
-				? remainingReasoningText
-				: remainingReasoningText || result.reasoningText;
 
 			setMessages(prev => {
 				const messagesToAdd: Message[] = [];
-
-				// Add reasoning as a separate message if it exists and wasn't flushed
-				if (finalReasoningText?.trim()) {
-					const reasoningMessage: ReasoningMessage = {
-						id: Date.now(),
-						sender: 'reasoning',
-						text: finalReasoningText,
-					};
-					messagesToAdd.push(reasoningMessage);
-				}
+				// Reasoning is now streamed directly to messages, so we don't need to add it here
 
 				const withCommands =
 					result.commandMessages.length > 0
@@ -193,7 +175,6 @@ export const useConversation = ({
 				id: liveMessageId,
 				sender: 'bot',
 				text: '',
-				reasoningText: '',
 			});
 
 			// Track accumulated text so we can flush it before command messages
@@ -204,12 +185,16 @@ export const useConversation = ({
 
 			try {
 				const result = await conversationService.sendMessage(value, {
-					onTextChunk: (fullText, chunk = '') => {
+					onTextChunk: (_fullText, chunk = '') => {
 						accumulatedText += chunk;
 						setLiveResponse(prev =>
 							prev && prev.id === liveMessageId
-								? {...prev, text: fullText}
-								: prev,
+								? { ...prev, text: accumulatedText }
+								: {
+									id: liveMessageId,
+									sender: 'bot',
+									text: accumulatedText,
+								},
 						);
 					},
 					onReasoningChunk: fullReasoningText => {
@@ -217,11 +202,35 @@ export const useConversation = ({
 						const newReasoningText =
 							fullReasoningText.slice(flushedReasoningLength);
 						accumulatedReasoningText = newReasoningText;
-						setLiveResponse(prev =>
-							prev && prev.id === liveMessageId
-								? {...prev, reasoningText: newReasoningText}
-								: prev,
-						);
+
+						setMessages(prev => {
+							const lastMsg = prev[prev.length - 1];
+							// If the last message is a reasoning message, update it
+							if (lastMsg && lastMsg.sender === 'reasoning') {
+								// We need to be careful not to modify the previous reasoning block if we started a new one
+								// But since we track flushedReasoningLength, newReasoningText corresponds to the current block.
+								// If we just flushed (in onCommandMessage), lastMsg would be a command, so we'd fall to the else block.
+								const newMessages = [...prev];
+								newMessages[newMessages.length - 1] = {
+									...lastMsg,
+									text: newReasoningText,
+								};
+								return newMessages;
+							} else {
+								// Otherwise start a new reasoning message
+								if (newReasoningText.trim()) {
+									return [
+										...prev,
+										{
+											id: Date.now(),
+											sender: 'reasoning',
+											text: newReasoningText,
+										},
+									];
+								}
+								return prev;
+							}
+						});
 					},
 					onCommandMessage: cmdMsg => {
 						// Before adding command message, flush reasoning and text separately
@@ -229,13 +238,8 @@ export const useConversation = ({
 						const messagesToAdd: Message[] = [];
 
 						if (accumulatedReasoningText.trim()) {
-							const reasoningMessage: ReasoningMessage = {
-								id: Date.now(),
-								sender: 'reasoning',
-								text: accumulatedReasoningText,
-							};
-							messagesToAdd.push(reasoningMessage);
-							// Track how much reasoning we've flushed so we don't show it again
+							// Reasoning is already in messages via stream updates.
+							// We just need to track what we've "flushed" (sealed) so next reasoning chunks start fresh.
 							flushedReasoningLength += accumulatedReasoningText.length;
 							accumulatedReasoningText = '';
 						}
@@ -306,7 +310,6 @@ export const useConversation = ({
 				id: liveMessageId,
 				sender: 'bot',
 				text: '',
-				reasoningText: '',
 			});
 
 			// Track accumulated text so we can flush it before command messages
@@ -319,12 +322,16 @@ export const useConversation = ({
 				const result = await conversationService.handleApprovalDecision(
 					answer,
 					{
-						onTextChunk: (fullText, chunk = '') => {
+						onTextChunk: (_fullText, chunk = '') => {
 							accumulatedText += chunk;
 							setLiveResponse(prev =>
 								prev && prev.id === liveMessageId
-									? {...prev, text: fullText}
-									: prev,
+									? { ...prev, text: accumulatedText }
+									: {
+										id: liveMessageId,
+										sender: 'bot',
+										text: accumulatedText,
+									},
 							);
 						},
 						onReasoningChunk: fullReasoningText => {
@@ -332,14 +339,30 @@ export const useConversation = ({
 							const newReasoningText =
 								fullReasoningText.slice(flushedReasoningLength);
 							accumulatedReasoningText = newReasoningText;
-							setLiveResponse(prev =>
-								prev && prev.id === liveMessageId
-									? {
+
+							setMessages(prev => {
+								const lastMsg = prev[prev.length - 1];
+								if (lastMsg && lastMsg.sender === 'reasoning') {
+									const newMessages = [...prev];
+									newMessages[newMessages.length - 1] = {
+										...lastMsg,
+										text: newReasoningText,
+									};
+									return newMessages;
+								} else {
+									if (newReasoningText.trim()) {
+										return [
 											...prev,
-											reasoningText: newReasoningText,
-									  }
-									: prev,
-							);
+											{
+												id: Date.now(),
+												sender: 'reasoning',
+												text: newReasoningText,
+											},
+										];
+									}
+									return prev;
+								}
+							});
 						},
 						onCommandMessage: cmdMsg => {
 							// Before adding command message, flush reasoning and text separately
@@ -347,13 +370,7 @@ export const useConversation = ({
 							const messagesToAdd: Message[] = [];
 
 							if (accumulatedReasoningText.trim()) {
-								const reasoningMessage: ReasoningMessage = {
-									id: Date.now(),
-									sender: 'reasoning',
-									text: accumulatedReasoningText,
-								};
-								messagesToAdd.push(reasoningMessage);
-								// Track how much reasoning we've flushed so we don't show it again
+								// Reasoning is already in messages via stream updates
 								flushedReasoningLength +=
 									accumulatedReasoningText.length;
 								accumulatedReasoningText = '';

@@ -1,5 +1,6 @@
 import type {OpenAIAgentClient} from '../lib/openai-agent-client.js';
 import {extractCommandMessages} from '../utils/extract-command-messages.js';
+import {loggingService} from './logging-service.js';
 
 interface ApprovalResult {
 	type: 'approval_required';
@@ -69,6 +70,11 @@ export class ConversationService {
 		interruption: any;
 		emittedCommandIds: Set<string>;
 	} | null = null;
+	private textDeltaCount = 0;
+	private reasoningDeltaCount = 0;
+	private debugLog = (stage: string, data: any) => {
+		loggingService.debug(`[REASONING] ${stage}`, data);
+	};
 
 	constructor({agentClient}: {agentClient: OpenAIAgentClient}) {
 		this.agentClient = agentClient;
@@ -109,6 +115,12 @@ export class ConversationService {
 			onCommandMessage?: (message: CommandMessage) => void;
 		} = {},
 	): Promise<ConversationResult> {
+		this.debugLog('sendMessage_start', {
+			hasOnTextChunk: !!onTextChunk,
+			hasOnReasoningChunk: !!onReasoningChunk,
+			hasOnCommandMessage: !!onCommandMessage,
+		});
+
 		const stream = await this.agentClient.startStream(text, {
 			previousResponseId: this.previousResponseId,
 		});
@@ -122,6 +134,11 @@ export class ConversationService {
 			},
 		);
 		this.previousResponseId = stream.lastResponseId;
+		this.debugLog('sendMessage_streamConsumed', {
+			finalOutputLength: finalOutput.length,
+			reasoningOutputLength: reasoningOutput.length,
+			emittedCommandCount: emittedCommandIds.size,
+		});
 		// Pass emittedCommandIds so we don't duplicate commands in the final result
 		return this.#buildResult(
 			stream,
@@ -143,6 +160,12 @@ export class ConversationService {
 			onCommandMessage?: (message: CommandMessage) => void;
 		} = {},
 	): Promise<ConversationResult | null> {
+		this.debugLog('handleApprovalDecision_start', {
+			hasPendingContext: !!this.pendingApprovalContext,
+			answer,
+			hasOnReasoningChunk: !!onReasoningChunk,
+		});
+
 		if (!this.pendingApprovalContext) {
 			return null;
 		}
@@ -170,6 +193,12 @@ export class ConversationService {
 		);
 
 		this.previousResponseId = stream.lastResponseId;
+		this.debugLog('handleApprovalDecision_streamConsumed', {
+			finalOutputLength: finalOutput.length,
+			reasoningOutputLength: reasoningOutput.length,
+			previouslyEmittedCount: previouslyEmittedIds.size,
+			newlyEmittedCount: emittedCommandIds.size,
+		});
 
 		// Merge previously emitted command IDs with newly emitted ones
 		// This prevents duplicates when result.history contains commands from the initial stream
@@ -201,6 +230,14 @@ export class ConversationService {
 		let finalOutput = '';
 		let reasoningOutput = '';
 		const emittedCommandIds = new Set<string>();
+		this.textDeltaCount = 0;
+		this.reasoningDeltaCount = 0;
+
+		this.debugLog('consumeStream_start', {
+			hasOnTextChunk: !!onTextChunk,
+			hasOnReasoningChunk: !!onReasoningChunk,
+			hasOnCommandMessage: !!onCommandMessage,
+		});
 
 		const emitText = (delta: string) => {
 			if (!delta) {
@@ -208,6 +245,7 @@ export class ConversationService {
 			}
 
 			finalOutput += delta;
+			this.textDeltaCount++;
 			onTextChunk?.(finalOutput, delta);
 		};
 
@@ -217,10 +255,18 @@ export class ConversationService {
 			}
 
 			reasoningOutput += delta;
+			this.reasoningDeltaCount++;
 			onReasoningChunk?.(reasoningOutput, delta);
 		};
 
 		for await (const event of stream) {
+			// Log event type for ordering understanding
+			this.debugLog('stream_event_received', {
+				eventType: event?.type,
+				eventName: event?.name,
+				hasData: !!event?.data,
+			});
+
 			this.#emitTextDelta(event, emitText);
 			if (event?.data) {
 				this.#emitTextDelta(event.data, emitText);
@@ -233,6 +279,12 @@ export class ConversationService {
 				event.item?.type === 'reasoning_item'
 			) {
 				const reasoningItem = event.item;
+				this.debugLog('reasoning_item_detected', {
+					hasRawItem: !!reasoningItem.rawItem,
+					hasContent: !!reasoningItem.rawItem?.content,
+					isArray: Array.isArray(reasoningItem.rawItem?.content),
+					contentLength: reasoningItem.rawItem?.content?.length,
+				});
 
 				// Extract and emit reasoning text from content array
 				if (
@@ -241,6 +293,10 @@ export class ConversationService {
 				) {
 					for (const contentItem of reasoningItem.rawItem.content) {
 						if (contentItem.text) {
+							this.debugLog('reasoning_text_extracted', {
+								textLength: contentItem.text.length,
+								preview: contentItem.text.substring(0, 100),
+							});
 							emitReasoning(contentItem.text);
 						}
 					}
@@ -248,7 +304,10 @@ export class ConversationService {
 			}
 
 			if (event?.type === 'run_item_stream_event') {
-				// console.log(JSON.stringify(event.item));
+				this.debugLog('command_message_event', {
+					eventName: event?.name,
+					itemType: event?.item?.type,
+				});
 
 				this.#emitCommandMessages(
 					[event.item],
@@ -259,6 +318,11 @@ export class ConversationService {
 				event?.type === 'tool_call_output_item' ||
 				event?.rawItem?.type === 'function_call_output'
 			) {
+				this.debugLog('tool_output_event', {
+					eventType: event?.type,
+					rawItemType: event?.rawItem?.type,
+				});
+
 				this.#emitCommandMessages(
 					[event],
 					emittedCommandIds,
@@ -268,6 +332,13 @@ export class ConversationService {
 		}
 
 		await stream.completed;
+		this.debugLog('consumeStream_complete', {
+			finalOutputLength: finalOutput.length,
+			reasoningOutputLength: reasoningOutput.length,
+			textDeltaCount: this.textDeltaCount,
+			reasoningDeltaCount: this.reasoningDeltaCount,
+			emittedCommandCount: emittedCommandIds.size,
+		});
 		return {finalOutput, reasoningOutput, emittedCommandIds};
 	}
 
@@ -281,13 +352,26 @@ export class ConversationService {
 		}
 
 		const commandMessages = extractCommandMessages(items);
+		let emittedCount = 0;
+		let skippedCount = 0;
+
 		for (const cmdMsg of commandMessages) {
 			if (emittedCommandIds.has(cmdMsg.id)) {
+				skippedCount++;
 				continue;
 			}
 
 			emittedCommandIds.add(cmdMsg.id);
 			onCommandMessage(cmdMsg);
+			emittedCount++;
+		}
+
+		if (commandMessages.length > 0) {
+			this.debugLog('emitCommandMessages', {
+				totalExtracted: commandMessages.length,
+				emitted: emittedCount,
+				skipped: skippedCount,
+			});
 		}
 	}
 
@@ -380,6 +464,12 @@ export class ConversationService {
 		reasoningOutputOverride?: string,
 		emittedCommandIds?: Set<string>,
 	): ConversationResult {
+		this.debugLog('buildResult_start', {
+			hasInterruptions: !!result.interruptions?.length,
+			finalOutputOverrideLength: finalOutputOverride?.length,
+			reasoningOutputOverrideLength: reasoningOutputOverride?.length,
+		});
+
 		if (result.interruptions && result.interruptions.length > 0) {
 			const interruption = result.interruptions[0];
 			this.pendingApprovalContext = {
@@ -403,6 +493,11 @@ export class ConversationService {
 				argumentsText = getCommandFromArgs(interruption.arguments);
 			}
 
+			this.debugLog('buildResult_approval_required', {
+				toolName,
+				argumentsTextLength: argumentsText.length,
+			});
+
 			return {
 				type: 'approval_required',
 				approval: {
@@ -425,11 +520,22 @@ export class ConversationService {
 			? allCommandMessages.filter(msg => !emittedCommandIds.has(msg.id))
 			: allCommandMessages;
 
-		return {
-			type: 'response',
+		const response = {
+			type: 'response' as const,
 			commandMessages,
 			finalText: finalOutputOverride ?? result.finalOutput ?? 'Done.',
 			reasoningText: reasoningOutputOverride,
 		};
+
+		this.debugLog('buildResult_response', {
+			hasReasoningText: !!response.reasoningText,
+			reasoningTextLength: response.reasoningText?.length,
+			finalTextLength: response.finalText.length,
+			totalCommandsExtracted: allCommandMessages.length,
+			commandMessagesAfterFilter: commandMessages.length,
+			emittedCommandIdsCount: emittedCommandIds?.size,
+		});
+
+		return response;
 	}
 }

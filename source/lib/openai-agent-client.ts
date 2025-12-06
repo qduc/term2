@@ -18,6 +18,7 @@ import {loggingService} from '../services/logging-service.js';
  */
 export class OpenAIAgentClient {
 	#agent: Agent;
+	#model!: string;
 	#reasoningEffort?: ModelSettingsReasoningEffort;
 	#maxTurns: number;
 	#retryAttempts: number;
@@ -51,6 +52,14 @@ export class OpenAIAgentClient {
 		this.#agent = this.#createAgent({
 			model,
 			reasoningEffort: this.#reasoningEffort,
+		});
+	}
+
+	setReasoningEffort(effort?: ModelSettingsReasoningEffort): void {
+		this.#reasoningEffort = effort;
+		this.#agent = this.#createAgent({
+			model: this.#model,
+			reasoningEffort: effort,
 		});
 	}
 
@@ -157,6 +166,7 @@ export class OpenAIAgentClient {
 		reasoningEffort?: ModelSettingsReasoningEffort;
 	} = {}): Agent {
 		const resolvedModel = model?.trim() || DEFAULT_MODEL;
+		this.#model = resolvedModel;
 		const {
 			name,
 			instructions,

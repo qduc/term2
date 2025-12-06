@@ -9,6 +9,9 @@ import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
 import type {SlashCommand} from './components/SlashCommandMenu.js';
 import type {ConversationService} from './services/conversation-service.js';
+import {settingsService} from './services/settings-service.js';
+import {createSettingsCommand} from './utils/settings-command.js';
+import {setTrimConfig} from './utils/output-trim.js';
 
 interface AppProps {
 	conversationService: ConversationService;
@@ -27,6 +30,7 @@ const App: FC<AppProps> = ({conversationService}) => {
 		clearConversation,
 		stopProcessing,
 		setModel,
+		setReasoningEffort,
 		addSystemMessage,
 	} = useConversation({conversationService});
 
@@ -44,39 +48,72 @@ const App: FC<AppProps> = ({conversationService}) => {
 		return () => clearInterval(interval);
 	}, [isProcessing]);
 
+	const applyRuntimeSetting = useCallback(
+		(key: string, value: any) => {
+			if (key === 'agent.model') {
+				setModel(String(value));
+				return;
+			}
+
+			if (key === 'agent.reasoningEffort') {
+				setReasoningEffort(value);
+				return;
+			}
+
+			if (key === 'shell.maxOutputLines') {
+				setTrimConfig({maxLines: Number(value)});
+				return;
+			}
+
+			if (key === 'shell.maxOutputChars') {
+				setTrimConfig({maxCharacters: Number(value)});
+			}
+		},
+		[setModel, setReasoningEffort],
+	);
+
 	// Define slash commands
 	const slashCommands: SlashCommand[] = useMemo(
-		() => [
-			{
-				name: 'clear',
-				description: 'Start a new conversation',
-				action: () => {
-					clearConversation();
+		() => {
+			const settingsCommand = createSettingsCommand({
+				settingsService,
+				addSystemMessage,
+				applyRuntimeSetting,
+			});
+
+			return [
+				{
+					name: 'clear',
+					description: 'Start a new conversation',
+					action: () => {
+						clearConversation();
+					},
 				},
-			},
-			{
-				name: 'quit',
-				description: 'Exit the application',
-				action: () => {
-					exit();
+				{
+					name: 'quit',
+					description: 'Exit the application',
+					action: () => {
+						exit();
+					},
 				},
-			},
-			{
-				name: 'model',
-				description: 'Change the AI model (e.g. /model gpt-4)',
-				expectsArgs: true,
-				action: (args?: string) => {
-					if (!args) {
-						setInput('/model ');
-						return false;
-					}
-					setModel(args);
-					addSystemMessage(`Set model to ${args}`);
-					return true;
+				{
+					name: 'model',
+					description: 'Change the AI model (e.g. /model gpt-4)',
+					expectsArgs: true,
+					action: (args?: string) => {
+						if (!args) {
+							setInput('/model ');
+							return false;
+						}
+						setModel(args);
+						addSystemMessage(`Set model to ${args}`);
+						return true;
+					},
 				},
-			},
-		],
-		[clearConversation, exit, setModel, addSystemMessage],
+				settingsCommand,
+			];
+		},
+		[addSystemMessage, applyRuntimeSetting, clearConversation, exit, setModel, setInput],
 	);
 
 	const handleSlashMenuClose = useCallback(() => {

@@ -10,13 +10,11 @@
 		"node": ">=16"
 	},
 	"scripts": {
+		"start": "node dist/cli.js",
 		"build": "tsc",
 		"dev": "tsc --watch",
 		"test": "ava",
-		"test:logging": "ava source/services/logging-service.test.js",
-		"lint": "prettier --check .",
-		"logs:view": "tail -f ~/.local/state/term2/logs/term2-$(date +%Y-%m-%d).log | jq .",
-		"logs:clean": "rm -rf ~/.local/state/term2/logs/*"
+		"lint": "prettier --check ."
 	},
 	"files": [
 		"dist"

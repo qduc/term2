@@ -40,7 +40,7 @@ const SettingsSchema = z.object({
 });
 
 // Type definitions
-interface SettingsData {
+export interface SettingsData {
 	agent: z.infer<typeof AgentSettingsSchema>;
 	shell: z.infer<typeof ShellSettingsSchema>;
 	ui: z.infer<typeof UISettingsSchema>;
@@ -48,13 +48,12 @@ interface SettingsData {
 }
 
 type SettingSource = 'cli' | 'env' | 'config' | 'default';
-
-interface SettingWithSource<T = any> {
+export interface SettingWithSource<T = any> {
 	value: T;
 	source: SettingSource;
 }
 
-interface SettingsWithSources {
+export interface SettingsWithSources {
 	agent: {
 		model: SettingWithSource<string>;
 		reasoningEffort: SettingWithSource<string>;

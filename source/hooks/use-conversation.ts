@@ -436,6 +436,13 @@ export const useConversation = ({
 		[conversationService],
 	);
 
+	const setReasoningEffort = useCallback(
+		(effort: any) => {
+			(conversationService as any).setReasoningEffort?.(effort);
+		},
+		[conversationService],
+	);
+
 	const addSystemMessage = useCallback((text: string) => {
 		setMessages(prev => [
 			...prev,
@@ -457,6 +464,7 @@ export const useConversation = ({
 		clearConversation,
 		stopProcessing,
 		setModel,
+		setReasoningEffort,
 		addSystemMessage,
 	};
 };

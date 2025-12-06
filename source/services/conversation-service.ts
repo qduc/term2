@@ -83,6 +83,12 @@ export class ConversationService {
 		this.agentClient.setModel(model);
 	}
 
+	setReasoningEffort(effort: any): void {
+		if (typeof this.agentClient.setReasoningEffort === 'function') {
+			this.agentClient.setReasoningEffort(effort);
+		}
+	}
+
 	/**
 	 * Abort the current running operation
 	 */

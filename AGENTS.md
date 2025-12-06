@@ -94,8 +94,8 @@ npx ava               # Unit tests
 - **Message Types**: UserMessage, BotMessage, ReasoningMessage, ApprovalMessage, CommandMessage, SystemMessage
 - **Tool Approval**: Tools like `shell.ts` validate commands and can require user approval before execution
 - **Streaming**: Responses and reasoning stream in real-time for responsive UX
-- **Input History**: Persisted to `~/.local/state/term2/history.json`, navigable with arrow keys
-- **Logging**: Winston-based system logs shell commands, API calls, and errors to `~/.local/state/term2/logs/`
+- **Input History**: Persisted to `~/Library/Logs/term2-nodejs/history.json` (macOS) or `~/.local/state/term2/history.json` (Linux), navigable with arrow keys
+- **Logging**: Winston-based system logs shell commands, API calls, and errors to `~/Library/Logs/term2-nodejs/logs/` (macOS) or `~/.local/state/term2/logs/` (Linux)
 - **Settings**: Centralized configuration system with hierarchical precedence (CLI > Env > Config > Defaults)
 
 ## Configuration System
@@ -103,9 +103,13 @@ npx ava               # Unit tests
 Term2 uses a centralized settings service with XDG-compliant storage and flexible precedence.
 
 ### Settings File
-- **Location**: `~/.local/state/term2/settings.json`
+- **Location**:
+  - **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
+  - **Linux**: `~/.local/state/term2/settings.json`
+  - **Windows**: `%APPDATA%\term2\settings.json`
 - **Format**: JSON with validated schema
 - **Precedence**: CLI flags > Environment variables > Config file > Defaults
+- **Note**: File is created on-demand when you first save settings. Until then, default settings are used.
 
 ### Supported Settings
 
@@ -182,7 +186,8 @@ LOG_LEVEL=debug                   # Set log level
 Term2 includes a robust logging system for debugging and security auditing:
 
 ### Log Locations
-- **Linux/macOS**: `~/.local/state/term2/logs/term2-YYYY-MM-DD.log`
+- **Linux**: `~/.local/state/term2/logs/term2-YYYY-MM-DD.log`
+- **macOS**: `~/Library/Logs/term2-nodejs/logs/term2-YYYY-MM-DD.log` (or use env-paths for exact location)
 - **Windows**: `%APPDATA%\term2\logs\term2-YYYY-MM-DD.log`
 
 ### Environment Variables
@@ -202,9 +207,12 @@ Term2 includes a robust logging system for debugging and security auditing:
 
 ### Viewing Logs
 ```bash
-npm run logs:view    # Stream logs with jq filtering
-npm run logs:clean   # Remove all log files
-tail -f ~/.local/state/term2/logs/term2-$(date +%Y-%m-%d).log | jq .
+npm run logs:view    # Stream logs with jq filtering (cross-platform)
+npm run logs:clean   # Remove all log files (cross-platform)
+```
+If you need to inspect the path manually, run a quick Node command to discover the env-paths location:
+```bash
+node -e "import envPaths from 'env-paths'; console.log(envPaths('term2').log)"
 ```
 
 ### Log Format
@@ -234,7 +242,7 @@ Logs are JSON-formatted with timestamps, correlation IDs for tracing related ope
 - **Debugging message flow?** → Check `conversation-service.ts`
 - **Styling/Output format?** → Components use Ink for terminal UI
 - **Adding a new setting?** → `source/services/settings-service.ts` (update schema and defaults)
-- **Modifying configuration?** → Edit `~/.local/state/term2/settings.json` or use CLI flags
+- **Modifying configuration?** → Edit `~/Library/Logs/term2-nodejs/settings.json` (macOS) or `~/.local/state/term2/settings.json` (Linux), or use environment variables / CLI flags
 
 ## Resources
 

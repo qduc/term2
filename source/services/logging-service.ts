@@ -2,6 +2,7 @@ import * as winston from 'winston';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import envPaths from 'env-paths';
+import DailyRotateFile from 'winston-daily-rotate-file';
 
 const LOG_LEVELS = {
 	error: 0,
@@ -80,7 +81,6 @@ export class LoggingService {
 					);
 				} else {
 					// File transport with daily rotation
-					const DailyRotateFile = require('winston-daily-rotate-file');
 					const fileTransport = new DailyRotateFile({
 						dirname: finalLogDir,
 						filename: 'term2-%DATE%.log',

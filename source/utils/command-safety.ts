@@ -78,7 +78,7 @@ function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
 			return SafetyStatus.RED;
 		}
 		// Other absolute paths are suspicious -> audit
-		loggingService.debug('Path risk: absolute non-system path', {path: candidate});
+		loggingService.security('Path risk: absolute non-system path', {path: candidate});
 		return SafetyStatus.YELLOW;
 	}
 
@@ -91,14 +91,14 @@ function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
 	// Hidden files -> YELLOW
 	const filename = path.basename(candidate);
 	if (filename.startsWith('.')) {
-		loggingService.debug('Path risk: hidden file', {path: candidate});
+		loggingService.security('Path risk: hidden file', {path: candidate});
 		return SafetyStatus.YELLOW;
 	}
 
 	// Sensitive extensions
 	const SENSITIVE_EXTENSIONS = ['.env', '.pem', '.key', '.json'];
 	if (SENSITIVE_EXTENSIONS.some(ext => filename.endsWith(ext))) {
-		loggingService.debug('Path risk: sensitive extension', {path: candidate});
+		loggingService.security('Path risk: sensitive extension', {path: candidate});
 		return SafetyStatus.YELLOW;
 	}
 
@@ -112,7 +112,7 @@ export function classifyCommand(commandString: string): SafetyStatus {
 	try {
 		const reasons: string[] = [];
 		const truncatedCommand = commandString.substring(0, 200);
-		loggingService.debug('Classifying command safety', {command: truncatedCommand});
+		loggingService.security('Classifying command safety', {command: truncatedCommand});
 		const ast = parse(commandString, {mode: 'bash'});
 		let worstStatus: SafetyStatus = SafetyStatus.GREEN;
 
@@ -275,7 +275,7 @@ export function classifyCommand(commandString: string): SafetyStatus {
 			(ast.commands as any[]).forEach(traverse);
 		}
 
-		loggingService.debug('Command classification result', {
+		loggingService.security('Command classification result', {
 			command: truncatedCommand,
 			status: worstStatus,
 			reasons,
@@ -301,7 +301,7 @@ export function validateCommandSafety(command: string): boolean {
 	if (!command || typeof command !== 'string' || command.trim().length === 0) {
 		throw new Error('Command cannot be empty');
 	}
-	loggingService.debug('Validating command safety', {command: command.substring(0, 200)});
+	loggingService.security('Validating command safety', {command: command.substring(0, 200)});
 	const status = classifyCommand(command);
 
 	if (status === SafetyStatus.RED) {
@@ -309,6 +309,6 @@ export function validateCommandSafety(command: string): boolean {
 		throw new Error('Command classified as RED (forbidden)');
 	}
 
-	loggingService.debug('Validation result', {command: command.substring(0, 200), status});
+	loggingService.security('Validation result', {command: command.substring(0, 200), status});
 	return status === SafetyStatus.YELLOW;
 }

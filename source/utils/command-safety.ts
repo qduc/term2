@@ -3,7 +3,9 @@ import path from 'path';
 import {loggingService} from '../services/logging-service.js';
 
 // 1. CONSTANTS
-const ALLOWED_COMMANDS = new Set(['ls', 'pwd', 'grep', 'cat', 'echo', 'head', 'tail']);
+// Note: 'sed' is useful for read-only transformations. We allow it by default
+// but add guards below to prevent in-place edits (-i) and unapproved redirections.
+const ALLOWED_COMMANDS = new Set(['ls', 'pwd', 'grep', 'cat', 'echo', 'head', 'tail', 'sed']);
 const BLOCKED_COMMANDS = new Set([
 	// Filesystem
 	'rm', 'rmdir', 'mkfs', 'dd', 'mv', 'cp',
@@ -138,21 +140,65 @@ export function classifyCommand(commandString: string): SafetyStatus {
 					}
 				}
 
+				const cmdName = typeof name === 'string' ? name : undefined;
+
 				if (node.suffix) {
 					for (const arg of node.suffix) {
-						// handle redirects explicitly
+						// Redirects: analyze path risk. For `sed`, mark any redirect at least YELLOW
 						if (arg?.type === 'Redirect') {
 							const fileText = extractWordText(arg.file ?? arg);
+							if (cmdName === 'sed')
+								upgradeStatus(
+									SafetyStatus.YELLOW,
+									`sed with redirection to ${
+										fileText ?? '<unknown>'
+									}`,
+								);
 							const pathStatus = analyzePathRisk(fileText);
-							upgradeStatus(pathStatus, `redirect to ${fileText ?? '<unknown>'}`);
+							upgradeStatus(
+								pathStatus,
+								`redirect to ${fileText ?? '<unknown>'}`,
+							);
 							continue;
 						}
 
 						const argText = extractWordText(arg);
-						if (argText && argText.startsWith('-')) continue; // flags are ignored
+						// Flags are normally ignored, but for `sed` the -i flag is dangerous
+						// because it performs in-place edits. Detect -i and variants (e.g. -i, -i.bak, -i'')
+						if (argText && argText.startsWith('-')) {
+							if (cmdName === 'sed' && argText.startsWith('-i')) {
+								upgradeStatus(
+									SafetyStatus.RED,
+									`sed in-place edit detected: ${argText}`,
+								);
+								continue;
+							}
+							continue; // other flags ignored
+						}
+
 						const pathStatus = analyzePathRisk(argText);
+						// For `sed`, any explicit filename argument (non-flag) should at least
+						// require approval since it reads/writes files — escalate to YELLOW
+						if (cmdName === 'sed' && argText) {
+							if (pathStatus === SafetyStatus.RED)
+								upgradeStatus(
+									pathStatus,
+									`sed file argument ${argText}`,
+								);
+							else
+								upgradeStatus(
+									SafetyStatus.YELLOW,
+									`sed file argument ${argText}`,
+								);
+							continue;
+						}
+
 						// Unknown/opaque args fall back to YELLOW
-						if (!argText) upgradeStatus(SafetyStatus.YELLOW, 'opaque or unparseable argument');
+						if (!argText)
+							upgradeStatus(
+								SafetyStatus.YELLOW,
+								'opaque or unparseable argument',
+							);
 						else upgradeStatus(pathStatus, `argument ${argText}`);
 					}
 				}

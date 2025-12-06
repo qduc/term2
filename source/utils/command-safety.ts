@@ -1,6 +1,8 @@
 import parse from 'bash-parser';
+import path from 'path';
 
-// The set of binary names strictly forbidden from automatic execution
+// 1. CONSTANTS
+const ALLOWED_COMMANDS = new Set(['ls', 'pwd', 'grep', 'cat', 'echo', 'head', 'tail']);
 const BLOCKED_COMMANDS = new Set([
 	// Filesystem
 	'rm', 'rmdir', 'mkfs', 'dd', 'mv', 'cp',
@@ -14,89 +16,183 @@ const BLOCKED_COMMANDS = new Set([
 	'eval', 'exec', 'kill', 'killall'
 ]);
 
-/**
- * Recursively inspects an AST node to find dangerous commands.
- */
-function containsDangerousCommand(node: any): boolean {
-	if (!node) return false;
-
-	if (Array.isArray(node)) {
-		return node.some(containsDangerousCommand);
-	}
-
-	// Direct command like `rm -rf /`
-	if (node.type === 'Command') {
-		const name = node.name?.text || (node.name && node.name.parts && node.name.parts.map((p: any) => p.text).join(''));
-		if (typeof name === 'string' && BLOCKED_COMMANDS.has(name)) {
-			return true;
-		}
-
-		// Check arguments' suffix for nested substitutions and subshells
-		if (node.suffix && node.suffix.some((s: any) => containsDangerousCommand(s))) {
-			return true;
-		}
-
-		return false;
-	}
-
-	// Logical expressions (&&, ||)
-	if (node.type === 'LogicalExpression') {
-		return containsDangerousCommand(node.left) || containsDangerousCommand(node.right);
-	}
-
-	// Pipelines (cmd1 | cmd2)
-	if (node.type === 'Pipeline') {
-		return (node.commands || []).some((c: any) => containsDangerousCommand(c));
-	}
-
-	// Subshells ( ... )
-	if (node.type === 'Subshell') {
-		return containsDangerousCommand(node.list);
-	}
-
-	// `$( ... )` or backticks
-	if (node.type === 'CommandSubstitution') {
-		return (node.commands || []).some((c: any) => containsDangerousCommand(c));
-	}
-
-	// Script / program top-level
-	if (node.type === 'Script' || node.type === 'Program') {
-		return (node.commands || []).some((c: any) => containsDangerousCommand(c));
-	}
-
-	// Generic traversal for unknown node shapes
-	for (const key of Object.keys(node)) {
-		const v = (node as any)[key];
-		if (typeof v === 'object' && v !== null) {
-			if (containsDangerousCommand(v)) return true;
-		}
-	}
-
-	return false;
-}
+/* legacy containsDangerousCommand removed — replaced by classifyCommand + path analysis */
 
 /**
  * Validate command safety using an AST parser.
  * Returns true when a command requires user approval.
  * Throws for invalid/empty inputs.
  */
+export enum SafetyStatus {
+	GREEN = 'GREEN',
+	YELLOW = 'YELLOW',
+	RED = 'RED',
+}
+
+// Extract a best-effort string for a word/arg node, including expansions.
+function extractWordText(word: any): string | undefined {
+	if (!word) return undefined;
+	if (typeof word === 'string') return word;
+	if (typeof word.text === 'string') return word.text;
+	if (typeof word.value === 'string') return word.value;
+	if (typeof word.content === 'string') return word.content;
+	if (word.parameter) return `$${word.parameter}`;
+	if (Array.isArray(word.parts)) {
+		return word.parts.map((part: any) => extractWordText(part) ?? '').join('');
+	}
+	return undefined;
+}
+
+// 2. PATH ANALYSIS HELPER
+function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
+	const candidate = inputPath?.trim();
+	if (!candidate) return SafetyStatus.GREEN;
+
+	// RED: Explicit home-dotfiles (.ssh, .env, etc.) even before expansion
+	if (
+		candidate.startsWith('~') ||
+		candidate.startsWith('$HOME') ||
+		candidate.startsWith('${HOME}')
+	) {
+		const sliced = candidate.replace(/^~/, '').replace(/^\$\{?HOME\}?/, '');
+		// Check for dotfiles after home prefix
+		if (/^\/\.\w+/.test(sliced) || sliced.includes('/.ssh') || sliced.includes('/.env')) {
+			return SafetyStatus.RED;
+		}
+	}
+
+	// RED: Absolute System Paths
+	if (path.isAbsolute(candidate)) {
+		const SYSTEM_PATHS = ['/etc', '/dev', '/proc', '/var', '/usr', '/boot', '/bin'];
+		if (SYSTEM_PATHS.some(sys => candidate.startsWith(sys))) {
+			return SafetyStatus.RED;
+		}
+		// Home dotfiles when absolute
+		if (/^\/(home|Users)\/[^/]+\/\.\w+/.test(candidate) || candidate.includes('/.ssh') || candidate.includes('/.gitconfig')) {
+			return SafetyStatus.RED;
+		}
+		// Other absolute paths are suspicious -> audit
+		return SafetyStatus.YELLOW;
+	}
+
+	// RED: Directory Traversal
+	if (candidate.includes('..')) return SafetyStatus.RED;
+
+	// Hidden files -> YELLOW
+	const filename = path.basename(candidate);
+	if (filename.startsWith('.')) return SafetyStatus.YELLOW;
+
+	// Sensitive extensions
+	const SENSITIVE_EXTENSIONS = ['.env', '.pem', '.key', '.json'];
+	if (SENSITIVE_EXTENSIONS.some(ext => filename.endsWith(ext))) return SafetyStatus.YELLOW;
+
+	return SafetyStatus.GREEN;
+}
+
+/**
+ * Classify command into a SafetyStatus (GREEN/YELLOW/RED)
+ */
+export function classifyCommand(commandString: string): SafetyStatus {
+	try {
+		const ast = parse(commandString, {mode: 'bash'});
+		let worstStatus: SafetyStatus = SafetyStatus.GREEN;
+
+		function upgradeStatus(s: SafetyStatus) {
+			if (worstStatus === SafetyStatus.RED) return;
+			if (s === SafetyStatus.RED) worstStatus = SafetyStatus.RED;
+			else if (s === SafetyStatus.YELLOW && worstStatus === SafetyStatus.GREEN) worstStatus = SafetyStatus.YELLOW;
+		}
+
+		function traverse(node: any): void {
+			if (!node) return;
+
+			if (Array.isArray(node)) return node.forEach(traverse);
+
+			if (node.type === 'Command') {
+				const name = node.name?.text || (node.name && node.name.parts && node.name.parts.map((p: any) => p.text).join(''));
+				if (typeof name === 'string') {
+					if (BLOCKED_COMMANDS.has(name)) {
+						upgradeStatus(SafetyStatus.RED);
+						return;
+					}
+					if (!ALLOWED_COMMANDS.has(name)) {
+						upgradeStatus(SafetyStatus.YELLOW);
+					}
+				}
+
+				if (node.suffix) {
+					for (const arg of node.suffix) {
+						// handle redirects explicitly
+						if (arg?.type === 'Redirect') {
+							const fileText = extractWordText(arg.file ?? arg);
+							upgradeStatus(analyzePathRisk(fileText));
+							continue;
+						}
+
+						const argText = extractWordText(arg);
+						if (argText && argText.startsWith('-')) continue; // flags are ignored
+						const pathStatus = analyzePathRisk(argText);
+						// Unknown/opaque args fall back to YELLOW
+						if (!argText) upgradeStatus(SafetyStatus.YELLOW);
+						upgradeStatus(pathStatus);
+					}
+				}
+			}
+
+			// recurse common shapes
+			if (node.type === 'LogicalExpression') {
+				traverse(node.left);
+				traverse(node.right);
+				return;
+			}
+			if (node.type === 'Pipeline') {
+				(node.commands || []).forEach(traverse);
+				return;
+			}
+			if (node.type === 'Subshell') {
+				traverse(node.list);
+				return;
+			}
+			if (node.type === 'CommandSubstitution') {
+				(node.commands || []).forEach(traverse);
+				return;
+			}
+			if (node.type === 'Script' || node.type === 'Program') {
+				(node.commands || []).forEach(traverse);
+				return;
+			}
+
+			for (const k of Object.keys(node)) {
+				const v = node[k];
+				if (v && typeof v === 'object') traverse(v);
+			}
+		}
+
+		if (ast && ast.commands) {
+			(ast.commands as any[]).forEach(traverse);
+		}
+
+		return worstStatus;
+	} catch (e) {
+		// Fail-safe: unparsable -> audit
+		return SafetyStatus.YELLOW;
+	}
+}
+
+/**
+ * Validate command safety using an AST parser.
+ * Returns true when a command requires user approval.
+ * Throws for invalid/empty inputs OR hard-blocked RED classifications.
+ */
 export function validateCommandSafety(command: string): boolean {
 	if (!command || typeof command !== 'string' || command.trim().length === 0) {
 		throw new Error('Command cannot be empty');
 	}
+	const status = classifyCommand(command);
 
-	try {
-		const ast = parse(command, {mode: 'bash'});
-
-		if (ast && ast.commands) {
-			return (ast.commands as any[]).some(node => containsDangerousCommand(node));
-		}
-
-		return false;
-	} catch (err) {
-		// Fail-closed: unknown / unparsable commands require manual approval
-		// eslint-disable-next-line no-console
-		console.warn('Command parsing failed, requiring manual approval:', err);
-		return true;
+	if (status === SafetyStatus.RED) {
+		throw new Error('Command classified as RED (forbidden)');
 	}
+
+	return status === SafetyStatus.YELLOW;
 }

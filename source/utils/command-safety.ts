@@ -143,17 +143,43 @@ export function classifyCommand(commandString: string): SafetyStatus {
 				const cmdName = typeof name === 'string' ? name : undefined;
 
 				if (node.suffix) {
+					let hasOutputRedirect = false;
+					let hasInPlaceEdit = false;
+
+					// First pass: detect dangerous sed patterns
 					for (const arg of node.suffix) {
-						// Redirects: analyze path risk. For `sed`, mark any redirect at least YELLOW
+						if (arg?.type === 'Redirect') {
+							// Check if it's an output redirect (>, >>)
+							const op = arg.op?.text || arg.op;
+							if (op === '>' || op === '>>') {
+								hasOutputRedirect = true;
+							}
+						}
+
+						const argText = extractWordText(arg);
+						if (argText && argText.startsWith('-')) {
+							if (cmdName === 'sed' && argText.startsWith('-i')) {
+								hasInPlaceEdit = true;
+							}
+						}
+					}
+
+					// Second pass: classify arguments
+					for (const arg of node.suffix) {
+						// Redirects: analyze path risk. For `sed`, only mark output redirects as YELLOW
 						if (arg?.type === 'Redirect') {
 							const fileText = extractWordText(arg.file ?? arg);
-							if (cmdName === 'sed')
+							const op = arg.op?.text || arg.op;
+
+							if (cmdName === 'sed' && (op === '>' || op === '>>')) {
 								upgradeStatus(
 									SafetyStatus.YELLOW,
-									`sed with redirection to ${
+									`sed with output redirection to ${
 										fileText ?? '<unknown>'
 									}`,
 								);
+							}
+
 							const pathStatus = analyzePathRisk(fileText);
 							upgradeStatus(
 								pathStatus,
@@ -177,19 +203,31 @@ export function classifyCommand(commandString: string): SafetyStatus {
 						}
 
 						const pathStatus = analyzePathRisk(argText);
-						// For `sed`, any explicit filename argument (non-flag) should at least
-						// require approval since it reads/writes files — escalate to YELLOW
+						// For `sed`, file arguments are only risky if combined with dangerous operations
 						if (cmdName === 'sed' && argText) {
-							if (pathStatus === SafetyStatus.RED)
-								upgradeStatus(
-									pathStatus,
-									`sed file argument ${argText}`,
-								);
-							else
-								upgradeStatus(
-									SafetyStatus.YELLOW,
-									`sed file argument ${argText}`,
-								);
+							// If there's an in-place edit or output redirect, path risk matters
+							// Otherwise, reading files with sed is safe (GREEN)
+							if (hasInPlaceEdit || hasOutputRedirect) {
+								if (pathStatus === SafetyStatus.RED)
+									upgradeStatus(
+										pathStatus,
+										`sed file argument ${argText}`,
+									);
+								else
+									upgradeStatus(
+										SafetyStatus.YELLOW,
+										`sed file argument ${argText}`,
+									);
+							} else {
+								// Read-only sed: only escalate if path itself is risky
+								if (pathStatus !== SafetyStatus.GREEN) {
+									upgradeStatus(
+										pathStatus,
+										`sed file argument ${argText}`,
+									);
+								}
+								// Otherwise GREEN - read-only sed is safe
+							}
 							continue;
 						}
 

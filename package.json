@@ -44,7 +44,6 @@
 		"@types/marked": "^5.0.2",
 		"@types/node": "^24.10.1",
 		"@types/react": "^19.0.0",
-		"@types/winston": "^2.4.4",
 		"@vdemedes/prettier-config": "^2.0.1",
 		"ava": "^6.4.1",
 		"chalk": "^5.2.0",

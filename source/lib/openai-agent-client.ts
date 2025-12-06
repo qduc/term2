@@ -19,7 +19,8 @@ import {loggingService} from '../services/logging-service.js';
 export class OpenAIAgentClient {
 	#agent: Agent;
 	#model!: string;
-	#reasoningEffort?: ModelSettingsReasoningEffort;
+	// Accept 'default' here to denote 'do not pass this param; use API default'
+	#reasoningEffort?: ModelSettingsReasoningEffort | 'default';
 	#maxTurns: number;
 	#retryAttempts: number;
 	#currentAbortController: AbortController | null = null;
@@ -32,7 +33,7 @@ export class OpenAIAgentClient {
 		retryAttempts,
 	}: {
 		model?: string;
-		reasoningEffort?: ModelSettingsReasoningEffort;
+		reasoningEffort?: ModelSettingsReasoningEffort | 'default';
 		maxTurns?: number;
 		retryAttempts?: number;
 	} = {}) {
@@ -42,7 +43,7 @@ export class OpenAIAgentClient {
 		this.#agent = this.#createAgent({model, reasoningEffort});
 		loggingService.info('OpenAI Agent Client initialized', {
 			model: model || DEFAULT_MODEL,
-			reasoningEffort: reasoningEffort || 'standard',
+			reasoningEffort: reasoningEffort ?? 'default',
 			maxTurns: this.#maxTurns,
 			retryAttempts: this.#retryAttempts,
 		});
@@ -55,7 +56,9 @@ export class OpenAIAgentClient {
 		});
 	}
 
-	setReasoningEffort(effort?: ModelSettingsReasoningEffort): void {
+	setReasoningEffort(
+		effort?: ModelSettingsReasoningEffort | 'default',
+	): void {
 		this.#reasoningEffort = effort;
 		this.#agent = this.#createAgent({
 			model: this.#model,
@@ -131,7 +134,11 @@ export class OpenAIAgentClient {
 		const signal = this.#currentAbortController.signal;
 
 		return this.#executeWithRetry(() =>
-			run(this.#agent, state, {stream: true, maxTurns: this.#maxTurns, signal}),
+			run(this.#agent, state, {
+				stream: true,
+				maxTurns: this.#maxTurns,
+				signal,
+			}),
 		);
 	}
 
@@ -150,7 +157,8 @@ export class OpenAIAgentClient {
 				loggingService.warn('Agent operation retry', {
 					errorType: error.constructor.name,
 					retriesRemaining: retries - 1,
-					errorMessage: error instanceof Error ? error.message : String(error),
+					errorMessage:
+						error instanceof Error ? error.message : String(error),
 				});
 				return this.#executeWithRetry(operation, retries - 1);
 			}
@@ -163,7 +171,7 @@ export class OpenAIAgentClient {
 		reasoningEffort,
 	}: {
 		model?: string;
-		reasoningEffort?: ModelSettingsReasoningEffort;
+		reasoningEffort?: ModelSettingsReasoningEffort | 'default';
 	} = {}): Agent {
 		const resolvedModel = model?.trim() || DEFAULT_MODEL;
 		this.#model = resolvedModel;
@@ -184,25 +192,36 @@ export class OpenAIAgentClient {
 			}),
 		);
 
-		// Add web search tool
+		// Add web search tool. If the user explicitly selected 'minimal' we
+		// disable it; if they selected 'default', we don't influence the
+		// decision and leave the web tool enabled.
 		if (reasoningEffort !== 'minimal') {
 			tools.push(webSearchTool());
+		}
+
+		// Build modelSettings only if an explicit effort value (other than
+		// 'default') was provided. 'default' means we should not pass the
+		// effort param and allow the underlying API to choose the default.
+		const modelSettings: any = {};
+		if (reasoningEffort && reasoningEffort !== 'default') {
+			modelSettings.reasoning = {
+				effort: reasoningEffort,
+				summary: 'auto',
+			};
 		}
 
 		const agent = new Agent({
 			name,
 			model: resolvedModel,
-			modelSettings: {
-				reasoning: {
-					effort: reasoningEffort,
-					summary: 'auto',
-				},
-			},
+			...(Object.keys(modelSettings).length > 0 ? {modelSettings} : {}),
 			instructions,
 			tools,
 		});
 
-		if (reasoningEffort) {
+		// Only add defaultRunOptions if an explicit effort is set (not
+		// 'default'). This ensures the API receives the param only when
+		// intended.
+		if (reasoningEffort && reasoningEffort !== 'default') {
 			(agent as any).defaultRunOptions = {
 				...((agent as any).defaultRunOptions || {}),
 				// Pass through to underlying client for models that support it

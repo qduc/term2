@@ -9,9 +9,11 @@ const paths = envPaths('term2');
 // Define schemas for validation
 const AgentSettingsSchema = z.object({
 	model: z.string().min(1).default('gpt-5.1'),
+	// 'default' signals we should *not* explicitly pass a reasoningEffort
+	// to the API, allowing it to decide what to use.
 	reasoningEffort: z
-		.enum(['none', 'minimal', 'low', 'medium', 'high'])
-		.default('none'),
+		.enum(['default', 'none', 'minimal', 'low', 'medium', 'high'])
+		.default('default'),
 	maxTurns: z.number().int().positive().default(20),
 	retryAttempts: z.number().int().nonnegative().default(2),
 });
@@ -87,7 +89,7 @@ const RUNTIME_MODIFIABLE_SETTINGS = new Set([
 const DEFAULT_SETTINGS: SettingsData = {
 	agent: {
 		model: 'gpt-5.1',
-		reasoningEffort: 'none',
+		reasoningEffort: 'default',
 		maxTurns: 20,
 		retryAttempts: 2,
 	},
@@ -142,10 +144,16 @@ export class SettingsService {
 				fs.mkdirSync(this.settingsDir, {recursive: true});
 			} catch (error: any) {
 				if (!this.disableLogging) {
-					loggingService.error('Failed to create settings directory', {
-						error: error instanceof Error ? error.message : String(error),
-						path: this.settingsDir,
-					});
+					loggingService.error(
+						'Failed to create settings directory',
+						{
+							error:
+								error instanceof Error
+									? error.message
+									: String(error),
+							path: this.settingsDir,
+						},
+					);
 				}
 			}
 		}
@@ -155,11 +163,30 @@ export class SettingsService {
 		this.settings = this.merge(DEFAULT_SETTINGS, fileConfig, env, cli);
 		this.trackSources(DEFAULT_SETTINGS, fileConfig, env, cli);
 
+		// Apply logging level from settings to the logging service so it respects settings
+		try {
+			loggingService.setLogLevel(this.settings.logging.logLevel);
+		} catch (error: any) {
+			if (!this.disableLogging) {
+				loggingService.warn(
+					'Failed to apply logging level from settings',
+					{
+						error:
+							error instanceof Error
+								? error.message
+								: String(error),
+						loggingLevel: this.settings.logging.logLevel,
+					},
+				);
+			}
+		}
+
 		if (!this.disableLogging) {
 			loggingService.info('SettingsService initialized', {
 				cliOverrides: Object.keys(this.flattenSettings(cli)).length > 0,
 				envOverrides: Object.keys(this.flattenSettings(env)).length > 0,
-				configOverrides: Object.keys(this.flattenSettings(fileConfig)).length > 0,
+				configOverrides:
+					Object.keys(this.flattenSettings(fileConfig)).length > 0,
 			});
 		}
 	}
@@ -225,6 +252,26 @@ export class SettingsService {
 
 		// Track source as 'cli' for runtime-set values
 		this.sources.set(key, 'cli');
+
+		// If we're changing the logging level, update the logging service runtime
+		if (key === 'logging.logLevel') {
+			try {
+				loggingService.setLogLevel(value);
+			} catch (err: any) {
+				if (!this.disableLogging) {
+					loggingService.warn(
+						'Failed to update logging level at runtime',
+						{
+							error:
+								err instanceof Error
+									? err.message
+									: String(err),
+							loggingLevel: value,
+						},
+					);
+				}
+			}
+		}
 
 		// Persist to file
 		this.saveToFile();

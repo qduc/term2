@@ -147,6 +147,51 @@ export class LoggingService {
 	}
 
 	/**
+	 * Return the current effective log level for the logger
+	 */
+	getLogLevel(): string {
+		try {
+			return (this.logger as any).level || 'info';
+		} catch (error: any) {
+			return 'info';
+		}
+	}
+
+	/**
+	 * Set the current log level at runtime; updates logger and all transports
+	 */
+	setLogLevel(level: string): void {
+		if (!Object.prototype.hasOwnProperty.call(LOG_LEVELS, level)) {
+			// If invalid, ignore
+			if (process.env.DEBUG_LOGGING) {
+				console.error(`[LoggingService] Invalid log level: ${level}`);
+			}
+			return;
+		}
+
+		try {
+			(this.logger as any).level = level;
+
+			// Update each transport's level as well
+			this.logger.transports.forEach((t: any) => {
+				try {
+					t.level = level;
+				} catch (err: any) {
+					// ignore
+				}
+			});
+		} catch (error: any) {
+			if (process.env.DEBUG_LOGGING) {
+				console.error(
+					`[LoggingService] Failed to set log level: ${
+						(error as Error).message
+					}`,
+				);
+			}
+		}
+	}
+
+	/**
 	 * Log error-level message
 	 */
 	error(message: string, meta?: Record<string, any>): void {
@@ -195,7 +240,11 @@ export class LoggingService {
 		this.correlationId = undefined;
 	}
 
-	private log(level: string, message: string, meta?: Record<string, any>): void {
+	private log(
+		level: string,
+		message: string,
+		meta?: Record<string, any>,
+	): void {
 		try {
 			const metadata = {
 				...meta,

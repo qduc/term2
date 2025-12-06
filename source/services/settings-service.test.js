@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {SettingsService} from '../../dist/services/settings-service.js';
+import {loggingService} from '../../dist/services/logging-service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_BASE_DIR = path.join(__dirname, '../../test-settings');
@@ -39,7 +40,7 @@ test('SettingsService initializes with defaults', async t => {
 
 	t.truthy(service);
 	t.is(service.get('agent.model'), 'gpt-5.1');
-	t.is(service.get('agent.reasoningEffort'), 'none');
+	t.is(service.get('agent.reasoningEffort'), 'default');
 	t.is(service.get('agent.maxTurns'), 20);
 	t.is(service.get('agent.retryAttempts'), 2);
 	t.is(service.get('shell.timeout'), 120000);
@@ -184,7 +185,8 @@ test('set() throws for startup-only settings', async t => {
 	});
 
 	t.true(
-		error.message.includes('Cannot modify') && error.message.includes('at runtime'),
+		error.message.includes('Cannot modify') &&
+			error.message.includes('at runtime'),
 	);
 });
 
@@ -259,8 +261,38 @@ test('getAll() returns all settings with sources', async t => {
 	t.truthy(all.logging);
 	t.is(all.agent.model.value, 'gpt-4o');
 	t.is(all.agent.model.source, 'cli');
-	t.is(all.agent.reasoningEffort.value, 'none');
+	t.is(all.agent.reasoningEffort.value, 'default');
 	t.is(all.agent.reasoningEffort.source, 'default');
+});
+
+test('SettingsService initialization applies logging.logLevel to loggingService', async t => {
+	const settingsDir = getTestSettingsDir();
+	const service = new SettingsService({
+		settingsDir,
+		disableLogging: true,
+		cli: {
+			logging: {logLevel: 'debug'},
+		},
+	});
+
+	t.is(service.get('logging.logLevel'), 'debug');
+	t.is(loggingService.getLogLevel(), 'debug');
+});
+
+test('SettingsService runtime set updates loggingService', async t => {
+	const settingsDir = getTestSettingsDir();
+	const service = new SettingsService({
+		settingsDir,
+		disableLogging: true,
+	});
+
+	// Initially default
+	t.is(service.get('logging.logLevel'), 'info');
+
+	service.set('logging.logLevel', 'debug');
+
+	t.is(service.get('logging.logLevel'), 'debug');
+	t.is(loggingService.getLogLevel(), 'debug');
 });
 
 test('gracefully degrades on invalid config file', async t => {
@@ -426,7 +458,7 @@ test('deep merges partial settings from multiple sources', async t => {
 	t.is(service.get('agent.model'), 'cli-model');
 
 	// Default for agent.reasoningEffort since not in CLI
-	t.is(service.get('agent.reasoningEffort'), 'none');
+	t.is(service.get('agent.reasoningEffort'), 'default');
 
 	// Env should override for shell.timeout
 	t.is(service.get('shell.timeout'), 60000);
@@ -472,7 +504,7 @@ test('validates enum values', async t => {
 	});
 
 	// Should fall back to default for invalid enum
-	t.is(service.get('agent.reasoningEffort'), 'none');
+	t.is(service.get('agent.reasoningEffort'), 'default');
 });
 
 test('respects disableLogging flag', async t => {

@@ -8,7 +8,7 @@ import {
 const baseSettings = {
 	agent: {
 		model: {value: 'gpt-5.1', source: 'default'},
-		reasoningEffort: {value: 'none', source: 'default'},
+		reasoningEffort: {value: 'default', source: 'default'},
 		maxTurns: {value: 20, source: 'default'},
 		retryAttempts: {value: 2, source: 'default'},
 	},

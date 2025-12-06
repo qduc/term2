@@ -52,6 +52,7 @@ const reasoningEffort =
 		: undefined;
 
 const validReasoningEfforts = [
+	'default',
 	'none',
 	'minimal',
 	'low',
@@ -88,7 +89,7 @@ const usedReasoningEffort = settings.get('agent.reasoningEffort');
 // Print which model and reasoning effort will be used on startup
 process.stderr.write(
 	`Using model: ${usedModel}` +
-		(usedReasoningEffort && usedReasoningEffort !== 'none'
+		(usedReasoningEffort && usedReasoningEffort !== 'none' && usedReasoningEffort !== 'default'
 			? ` with reasoning effort: ${usedReasoningEffort}`
 			: '') +
 	'\n',

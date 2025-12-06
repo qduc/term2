@@ -116,7 +116,7 @@ Term2 uses a centralized settings service with XDG-compliant storage and flexibl
 | Setting | Default | Runtime? | Purpose |
 |---------|---------|----------|---------|
 | `agent.model` | `gpt-5.1` | ✓ Yes | OpenAI model to use |
-| `agent.reasoningEffort` | `none` | ✓ Yes | Reasoning effort for reasoning models (`none`, `minimal`, `low`, `medium`, `high`) |
+| `agent.reasoningEffort` | `default` | ✓ Yes | Reasoning effort for reasoning models (`default`, `none`, `minimal`, `low`, `medium`, `high`) |
 | `agent.maxTurns` | `20` | ✗ Startup | Maximum turns per agent run |
 | `agent.retryAttempts` | `2` | ✗ Startup | Retry attempts for failed operations |
 | `shell.timeout` | `120000` | ✓ Yes | Shell command timeout in milliseconds |

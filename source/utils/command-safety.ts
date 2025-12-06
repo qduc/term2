@@ -1,62 +1,102 @@
-// Dangerous command patterns that always require approval
-const DANGEROUS_PATTERNS = [
-	// Destructive operations
-	/\b(rm|rmdir)\b/i,
-	/\b(dd|mkfs|fsck)\b/i,
-	/\bfind\b.*\b(delete|exec rm)\b/i,
-	/\b(mv|cp)\b.*[&|;]\s*(rm|dd)\b/i,
+import parse from 'bash-parser';
 
-	// System modifications
-	/\b(sudo|chmod|chown|chgrp)\b/i,
-	/\b(killall|kill -9)\b/i,
-	/\b(shutdown|reboot|halt)\b/i,
-
-	// Package/system changes
-	/\b(apt|yum|brew|npm|pip|gem)\b.*(remove|uninstall|autoremove|purge)\b/i,
-	/\b(npm|yarn|pnpm)\b.*(install|add)\b.*(--save|--global|--force)\b/i,
-
-	// Credential/data exposure
-	/\b(curl|wget)\b.*(http|ftp)/i,
-	/\becho\b.*(password|secret|token|key)/i,
-	/\b(cat|grep)\b.*\/etc\/(shadow|passwd|sudoers)/i,
-
-	// Network operations
-	/\b(iptables|ufw|firewall)\b/i,
-	/\b(netstat|ss|nc|ncat|telnet|ssh)\b/i,
-];
+// The set of binary names strictly forbidden from automatic execution
+const BLOCKED_COMMANDS = new Set([
+	// Filesystem
+	'rm', 'rmdir', 'mkfs', 'dd', 'mv', 'cp',
+	// System
+	'sudo', 'su', 'chmod', 'chown', 'shutdown', 'reboot',
+	// Network/Web
+	'curl', 'wget', 'ssh', 'scp', 'netstat',
+	// Package Managers / installers
+	'apt', 'yum', 'npm', 'yarn', 'pnpm', 'pip', 'gem',
+	// Dangerous wrappers / misc
+	'eval', 'exec', 'kill', 'killall'
+]);
 
 /**
- * Check if a command matches dangerous patterns
- * @returns True if command is dangerous
+ * Recursively inspects an AST node to find dangerous commands.
  */
-export function isDangerousCommand(command: string): boolean {
-	if (!command || typeof command !== 'string') {
+function containsDangerousCommand(node: any): boolean {
+	if (!node) return false;
+
+	if (Array.isArray(node)) {
+		return node.some(containsDangerousCommand);
+	}
+
+	// Direct command like `rm -rf /`
+	if (node.type === 'Command') {
+		const name = node.name?.text || (node.name && node.name.parts && node.name.parts.map((p: any) => p.text).join(''));
+		if (typeof name === 'string' && BLOCKED_COMMANDS.has(name)) {
+			return true;
+		}
+
+		// Check arguments' suffix for nested substitutions and subshells
+		if (node.suffix && node.suffix.some((s: any) => containsDangerousCommand(s))) {
+			return true;
+		}
+
 		return false;
 	}
 
-	const trimmed = command.trim();
-	return DANGEROUS_PATTERNS.some(pattern => pattern.test(trimmed));
-}
-
-/**
- * Validate command safety with multiple checkpoints
- * @returns True if command requires approval
- * @throws If command is invalid
- */
-export function validateCommandSafety(command: string): boolean {
-	// Check 1: Command must be a non-empty string
-	if (
-		!command ||
-		typeof command !== 'string' ||
-		command.trim().length === 0
-	) {
-		throw new Error('Command cannot be empty');
+	// Logical expressions (&&, ||)
+	if (node.type === 'LogicalExpression') {
+		return containsDangerousCommand(node.left) || containsDangerousCommand(node.right);
 	}
 
-	// Check 2: Check if command is dangerous
-	if (isDangerousCommand(command)) {
-		return true; // Always requires approval
+	// Pipelines (cmd1 | cmd2)
+	if (node.type === 'Pipeline') {
+		return (node.commands || []).some((c: any) => containsDangerousCommand(c));
+	}
+
+	// Subshells ( ... )
+	if (node.type === 'Subshell') {
+		return containsDangerousCommand(node.list);
+	}
+
+	// `$( ... )` or backticks
+	if (node.type === 'CommandSubstitution') {
+		return (node.commands || []).some((c: any) => containsDangerousCommand(c));
+	}
+
+	// Script / program top-level
+	if (node.type === 'Script' || node.type === 'Program') {
+		return (node.commands || []).some((c: any) => containsDangerousCommand(c));
+	}
+
+	// Generic traversal for unknown node shapes
+	for (const key of Object.keys(node)) {
+		const v = (node as any)[key];
+		if (typeof v === 'object' && v !== null) {
+			if (containsDangerousCommand(v)) return true;
+		}
 	}
 
 	return false;
+}
+
+/**
+ * Validate command safety using an AST parser.
+ * Returns true when a command requires user approval.
+ * Throws for invalid/empty inputs.
+ */
+export function validateCommandSafety(command: string): boolean {
+	if (!command || typeof command !== 'string' || command.trim().length === 0) {
+		throw new Error('Command cannot be empty');
+	}
+
+	try {
+		const ast = parse(command, {mode: 'bash'});
+
+		if (ast && ast.commands) {
+			return (ast.commands as any[]).some(node => containsDangerousCommand(node));
+		}
+
+		return false;
+	} catch (err) {
+		// Fail-closed: unknown / unparsable commands require manual approval
+		// eslint-disable-next-line no-console
+		console.warn('Command parsing failed, requiring manual approval:', err);
+		return true;
+	}
 }

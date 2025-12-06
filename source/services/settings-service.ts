@@ -159,6 +159,8 @@ export class SettingsService {
 		}
 
 		// Load settings with precedence: CLI > Env > Config > Default
+		const settingsFilePath = path.join(this.settingsDir, 'settings.json');
+		const configFileExisted = fs.existsSync(settingsFilePath);
 		const fileConfig = this.loadFromFile();
 		this.settings = this.merge(DEFAULT_SETTINGS, fileConfig, env, cli);
 		this.trackSources(DEFAULT_SETTINGS, fileConfig, env, cli);
@@ -188,6 +190,18 @@ export class SettingsService {
 				configOverrides:
 					Object.keys(this.flattenSettings(fileConfig)).length > 0,
 			});
+		}
+
+		// If there was no config file on disk, persist the current merged settings so
+		// users get a settings.json created at startup (rather than waiting for a
+		// manual change). saveToFile is safe and handles errors/logging internally.
+		if (!configFileExisted) {
+			this.saveToFile();
+			if (!this.disableLogging) {
+				loggingService.info('Created settings file at startup', {
+					settingsFile: settingsFilePath,
+				});
+			}
 		}
 	}
 

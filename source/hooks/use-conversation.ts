@@ -182,6 +182,7 @@ export const useConversation = ({
 			let accumulatedReasoningText = '';
 			let flushedReasoningLength = 0; // Track how much reasoning has been flushed
 			let textWasFlushed = false;
+			let currentReasoningMessageId: number | null = null; // Track current reasoning message ID
 
 			try {
 				const result = await conversationService.sendMessage(value, {
@@ -203,33 +204,29 @@ export const useConversation = ({
 							fullReasoningText.slice(flushedReasoningLength);
 						accumulatedReasoningText = newReasoningText;
 
+						if (!newReasoningText.trim()) return;
+
 						setMessages(prev => {
-							const lastMsg = prev[prev.length - 1];
-							// If the last message is a reasoning message, update it
-							if (lastMsg && lastMsg.sender === 'reasoning') {
-								// We need to be careful not to modify the previous reasoning block if we started a new one
-								// But since we track flushedReasoningLength, newReasoningText corresponds to the current block.
-								// If we just flushed (in onCommandMessage), lastMsg would be a command, so we'd fall to the else block.
-								const newMessages = [...prev];
-								newMessages[newMessages.length - 1] = {
-									...lastMsg,
-									text: newReasoningText,
-								};
-								return newMessages;
-							} else {
-								// Otherwise start a new reasoning message
-								if (newReasoningText.trim()) {
-									return [
-										...prev,
-										{
-											id: Date.now(),
-											sender: 'reasoning',
-											text: newReasoningText,
-										},
-									];
-								}
-								return prev;
+							// If we already have a reasoning message for this turn, update it by ID
+							if (currentReasoningMessageId !== null) {
+								return prev.map(msg =>
+									msg.id === currentReasoningMessageId
+										? {...msg, text: newReasoningText}
+										: msg,
+								);
 							}
+
+							// First chunk - create new reasoning message and store its ID
+							const newId = Date.now();
+							currentReasoningMessageId = newId;
+							return [
+								...prev,
+								{
+									id: newId,
+									sender: 'reasoning',
+									text: newReasoningText,
+								},
+							];
 						});
 					},
 					onCommandMessage: cmdMsg => {
@@ -242,6 +239,7 @@ export const useConversation = ({
 							// We just need to track what we've "flushed" (sealed) so next reasoning chunks start fresh.
 							flushedReasoningLength += accumulatedReasoningText.length;
 							accumulatedReasoningText = '';
+							currentReasoningMessageId = null; // Reset for potential post-command reasoning
 						}
 
 						if (accumulatedText.trim()) {
@@ -317,6 +315,7 @@ export const useConversation = ({
 			let accumulatedReasoningText = '';
 			let flushedReasoningLength = 0; // Track how much reasoning has been flushed
 			let textWasFlushed = false;
+			let currentReasoningMessageId: number | null = null; // Track current reasoning message ID
 
 			try {
 				const result = await conversationService.handleApprovalDecision(
@@ -340,28 +339,29 @@ export const useConversation = ({
 								fullReasoningText.slice(flushedReasoningLength);
 							accumulatedReasoningText = newReasoningText;
 
+							if (!newReasoningText.trim()) return;
+
 							setMessages(prev => {
-								const lastMsg = prev[prev.length - 1];
-								if (lastMsg && lastMsg.sender === 'reasoning') {
-									const newMessages = [...prev];
-									newMessages[newMessages.length - 1] = {
-										...lastMsg,
-										text: newReasoningText,
-									};
-									return newMessages;
-								} else {
-									if (newReasoningText.trim()) {
-										return [
-											...prev,
-											{
-												id: Date.now(),
-												sender: 'reasoning',
-												text: newReasoningText,
-											},
-										];
-									}
-									return prev;
+								// If we already have a reasoning message for this turn, update it by ID
+								if (currentReasoningMessageId !== null) {
+									return prev.map(msg =>
+										msg.id === currentReasoningMessageId
+											? {...msg, text: newReasoningText}
+											: msg,
+									);
 								}
+
+								// First chunk - create new reasoning message and store its ID
+								const newId = Date.now();
+								currentReasoningMessageId = newId;
+								return [
+									...prev,
+									{
+										id: newId,
+										sender: 'reasoning',
+										text: newReasoningText,
+									},
+								];
 							});
 						},
 						onCommandMessage: cmdMsg => {
@@ -374,6 +374,7 @@ export const useConversation = ({
 								flushedReasoningLength +=
 									accumulatedReasoningText.length;
 								accumulatedReasoningText = '';
+								currentReasoningMessageId = null; // Reset for potential post-command reasoning
 							}
 
 							if (accumulatedText.trim()) {

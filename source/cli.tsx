@@ -4,9 +4,9 @@ import type {ReactNode} from 'react';
 import {render} from 'ink';
 import meow from 'meow';
 import App from './app.js';
-import {DEFAULT_MODEL} from './agent.js';
 import {OpenAIAgentClient} from './lib/openai-agent-client.js';
 import {ConversationService} from './services/conversation-service.js';
+import {SettingsService} from './services/settings-service.js';
 
 // Global Ctrl+C handler for immediate exit
 process.on('SIGINT', () => {
@@ -46,7 +46,6 @@ const modelFlag =
 	typeof rawModelFlag === 'string' && rawModelFlag.trim().length > 0
 		? rawModelFlag.trim()
 		: undefined;
-const usedModel = modelFlag ?? DEFAULT_MODEL;
 const reasoningEffort =
 	typeof rawReasoningFlag === 'string' && rawReasoningFlag.trim().length > 0
 		? rawReasoningFlag.trim()
@@ -67,19 +66,40 @@ const validatedReasoningEffort: ModelSettingsReasoningEffort | undefined =
 		? (reasoningEffort as ModelSettingsReasoningEffort)
 		: undefined;
 
+// Apply CLI overrides to settings service
+const cliOverrides: any = {};
+if (modelFlag) {
+	cliOverrides.agent = {model: modelFlag};
+}
+
+if (validatedReasoningEffort) {
+	cliOverrides.agent = {
+		...cliOverrides.agent,
+		reasoningEffort: validatedReasoningEffort,
+	};
+}
+
+const settings = new SettingsService({
+	cli: Object.keys(cliOverrides).length > 0 ? cliOverrides : undefined,
+});
+const usedModel = settings.get('agent.model');
+const usedReasoningEffort = settings.get('agent.reasoningEffort');
+
 // Print which model and reasoning effort will be used on startup
 process.stderr.write(
 	`Using model: ${usedModel}` +
-		(validatedReasoningEffort
-			? ` with reasoning effort: ${validatedReasoningEffort}`
-		: '') +
+		(usedReasoningEffort && usedReasoningEffort !== 'none'
+			? ` with reasoning effort: ${usedReasoningEffort}`
+			: '') +
 	'\n',
 );
 
 const conversationService = new ConversationService({
 	agentClient: new OpenAIAgentClient({
 		model: usedModel,
-		reasoningEffort: validatedReasoningEffort,
+		reasoningEffort: usedReasoningEffort as ModelSettingsReasoningEffort,
+		maxTurns: settings.get('agent.maxTurns'),
+		retryAttempts: settings.get('agent.retryAttempts'),
 	}),
 });
 

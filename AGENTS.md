@@ -96,6 +96,86 @@ npx ava               # Unit tests
 - **Streaming**: Responses and reasoning stream in real-time for responsive UX
 - **Input History**: Persisted to `~/.local/state/term2/history.json`, navigable with arrow keys
 - **Logging**: Winston-based system logs shell commands, API calls, and errors to `~/.local/state/term2/logs/`
+- **Settings**: Centralized configuration system with hierarchical precedence (CLI > Env > Config > Defaults)
+
+## Configuration System
+
+Term2 uses a centralized settings service with XDG-compliant storage and flexible precedence.
+
+### Settings File
+- **Location**: `~/.local/state/term2/settings.json`
+- **Format**: JSON with validated schema
+- **Precedence**: CLI flags > Environment variables > Config file > Defaults
+
+### Supported Settings
+
+| Setting | Default | Runtime? | Purpose |
+|---------|---------|----------|---------|
+| `agent.model` | `gpt-5.1` | ✓ Yes | OpenAI model to use |
+| `agent.reasoningEffort` | `none` | ✓ Yes | Reasoning effort for reasoning models (`none`, `minimal`, `low`, `medium`, `high`) |
+| `agent.maxTurns` | `20` | ✗ Startup | Maximum turns per agent run |
+| `agent.retryAttempts` | `2` | ✗ Startup | Retry attempts for failed operations |
+| `shell.timeout` | `120000` | ✓ Yes | Shell command timeout in milliseconds |
+| `shell.maxOutputLines` | `1000` | ✓ Yes | Maximum lines of command output |
+| `shell.maxOutputChars` | `10000` | ✓ Yes | Maximum characters of command output |
+| `ui.historySize` | `1000` | ✗ Startup | Maximum input history entries |
+| `logging.logLevel` | `info` | ✓ Yes | Log level (`error`, `warn`, `info`, `security`, `debug`) |
+
+### Environment Variables
+
+Override settings via environment variables:
+
+```bash
+OPENAI_MODEL=gpt-4o              # Set model
+REASONING_EFFORT=medium           # Set reasoning effort
+MAX_TURNS=30                       # Set max turns (requires restart)
+RETRY_ATTEMPTS=3                  # Set retry attempts (requires restart)
+SHELL_TIMEOUT=60000               # Set shell timeout
+MAX_OUTPUT_LINES=2000             # Set max output lines
+MAX_OUTPUT_CHARS=20000            # Set max output chars
+HISTORY_SIZE=2000                 # Set history size (requires restart)
+LOG_LEVEL=debug                   # Set log level
+```
+
+### Example Config File
+
+```json
+{
+  "agent": {
+    "model": "gpt-4o",
+    "reasoningEffort": "medium",
+    "maxTurns": 30,
+    "retryAttempts": 3
+  },
+  "shell": {
+    "timeout": 60000,
+    "maxOutputLines": 2000,
+    "maxOutputChars": 20000
+  },
+  "ui": {
+    "historySize": 2000
+  },
+  "logging": {
+    "logLevel": "debug"
+  }
+}
+```
+
+### Runtime vs Startup-Only Settings
+
+**Runtime-modifiable** settings can be changed during execution and are persisted immediately:
+- `agent.model` - Change model mid-session
+- `agent.reasoningEffort` - Adjust reasoning level
+- `shell.timeout` - Adjust command timeouts
+- `shell.maxOutputLines` - Adjust output truncation
+- `shell.maxOutputChars` - Adjust output truncation
+- `logging.logLevel` - Adjust logging verbosity
+
+**Startup-only** settings require a restart to take effect:
+- `agent.maxTurns` - Recreates agent
+- `agent.retryAttempts` - Used during initialization
+- `ui.historySize` - Affects history loading
+- (Future: other settings requiring structural changes)
 
 ## Logging
 
@@ -153,6 +233,8 @@ Logs are JSON-formatted with timestamps, correlation IDs for tracing related ope
 - **Changing the UI?** → Components in `source/components/`
 - **Debugging message flow?** → Check `conversation-service.ts`
 - **Styling/Output format?** → Components use Ink for terminal UI
+- **Adding a new setting?** → `source/services/settings-service.ts` (update schema and defaults)
+- **Modifying configuration?** → Edit `~/.local/state/term2/settings.json` or use CLI flags
 
 ## Resources
 

@@ -19,18 +19,31 @@ import {loggingService} from '../services/logging-service.js';
 export class OpenAIAgentClient {
 	#agent: Agent;
 	#reasoningEffort?: ModelSettingsReasoningEffort;
+	#maxTurns: number;
+	#retryAttempts: number;
 	#currentAbortController: AbortController | null = null;
 	#currentCorrelationId: string | null = null;
 
 	constructor({
 		model,
 		reasoningEffort,
-	}: {model?: string; reasoningEffort?: ModelSettingsReasoningEffort} = {}) {
+		maxTurns,
+		retryAttempts,
+	}: {
+		model?: string;
+		reasoningEffort?: ModelSettingsReasoningEffort;
+		maxTurns?: number;
+		retryAttempts?: number;
+	} = {}) {
 		this.#reasoningEffort = reasoningEffort;
+		this.#maxTurns = maxTurns ?? 20;
+		this.#retryAttempts = retryAttempts ?? 2;
 		this.#agent = this.#createAgent({model, reasoningEffort});
 		loggingService.info('OpenAI Agent Client initialized', {
 			model: model || DEFAULT_MODEL,
 			reasoningEffort: reasoningEffort || 'standard',
+			maxTurns: this.#maxTurns,
+			retryAttempts: this.#retryAttempts,
 		});
 	}
 
@@ -80,7 +93,7 @@ export class OpenAIAgentClient {
 				run(this.#agent, userInput, {
 					previousResponseId: previousResponseId ?? undefined,
 					stream: true,
-					maxTurns: 20,
+					maxTurns: this.#maxTurns,
 					signal,
 				}),
 			);
@@ -109,13 +122,13 @@ export class OpenAIAgentClient {
 		const signal = this.#currentAbortController.signal;
 
 		return this.#executeWithRetry(() =>
-			run(this.#agent, state, {stream: true, maxTurns: 20, signal}),
+			run(this.#agent, state, {stream: true, maxTurns: this.#maxTurns, signal}),
 		);
 	}
 
 	async #executeWithRetry<T>(
 		operation: () => Promise<T>,
-		retries = 2,
+		retries = this.#retryAttempts,
 	): Promise<T> {
 		try {
 			return await operation();

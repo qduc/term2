@@ -6,6 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {validateCommandSafety} from '../utils/command-safety.js';
 import {logValidationError} from '../utils/command-logger.js';
 import {loggingService} from '../services/logging-service.js';
+import {settingsService} from '../services/settings-service.js';
 import {
 	trimOutput,
 	setTrimConfig,
@@ -103,14 +104,15 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 		loggingService.setCorrelationId(correlationId);
 
 		try {
-			// Use provided values or defaults
-			const timeout = timeout_ms ?? 120000; // Default: 2 minutes
+			// Use provided values or settings defaults or hardcoded defaults
+			const timeout = timeout_ms ?? settingsService.get('shell.timeout');
+			const maxOutputLength = max_output_length ?? settingsService.get('shell.maxOutputChars');
 
 			loggingService.info('Shell command execution started', {
 				commandCount: commands.length,
 				timeout,
 				workingDirectory: cwd,
-				maxOutputLength: max_output_length,
+				maxOutputLength,
 			});
 
 			for (const command of commands) {
@@ -163,12 +165,10 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 
 				output.push({
 					command,
-					stdout: trimOutput(stdout, undefined, max_output_length),
-					stderr: trimOutput(stderr, undefined, max_output_length),
-					outcome,
-				});
-
-				// Stop on timeout
+				stdout: trimOutput(stdout, undefined, maxOutputLength),
+				stderr: trimOutput(stderr, undefined, maxOutputLength),
+				outcome,
+			});
 				if (outcome.type === 'timeout') {
 					break;
 				}

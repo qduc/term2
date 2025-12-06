@@ -2,11 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
 import {loggingService} from './logging-service.js';
+import {settingsService} from './settings-service.js';
 
 const paths = envPaths('term2');
 // Use log directory for state/history files (on Linux: ~/.local/state/term2-nodejs)
 const HISTORY_FILE = path.join(paths.log, 'history.json');
-const MAX_HISTORY_SIZE = 1000;
+const MAX_HISTORY_SIZE = settingsService.get('ui.historySize');
 
 interface HistoryData {
 	messages: string[];

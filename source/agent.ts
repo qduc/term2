@@ -9,38 +9,38 @@ import path from 'path';
 export const DEFAULT_MODEL = 'gpt-5.1';
 
 const baseInstructions = fs
-	.readFileSync(
-		path.join(import.meta.dirname, '../docs/agent-instructions.md'),
-		'utf-8',
-	)
-	.replace(/^# Agent Instructions\n+/, '')
-	.trim();
+    .readFileSync(
+        path.join(import.meta.dirname, '../docs/agent-instructions.md'),
+        'utf-8',
+    )
+    .replace(/^# Agent Instructions\n+/, '')
+    .trim();
 
 const envInfo = `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
-	process.env.SHELL || process.env.COMSPEC || 'unknown'
+    process.env.SHELL || process.env.COMSPEC || 'unknown'
 }; cwd: ${process.cwd()}`;
 
 export interface AgentDefinition {
-	name: string;
-	instructions: string;
-	tools: ToolDefinition[];
-	model: string;
+    name: string;
+    instructions: string;
+    tools: ToolDefinition[];
+    model: string;
 }
 
 /**
  * Returns the agent definition with appropriate tools based on the model.
  */
 export const getAgentDefinition = (model?: string): AgentDefinition => {
-	const resolvedModel = model?.trim() || DEFAULT_MODEL;
+    const resolvedModel = model?.trim() || DEFAULT_MODEL;
 
-	return {
-		name: 'Terminal Assistant',
-		instructions: `${baseInstructions}\n\nEnvironment: ${envInfo}`,
-		tools: [
-			shellToolDefinition,
-			applyPatchToolDefinition,
-			searchToolDefinition,
-		],
-		model: resolvedModel,
-	};
+    return {
+        name: 'Terminal Assistant',
+        instructions: `${baseInstructions}\n\nEnvironment: ${envInfo}`,
+        tools: [
+            shellToolDefinition,
+            applyPatchToolDefinition,
+            searchToolDefinition,
+        ],
+        model: resolvedModel,
+    };
 };

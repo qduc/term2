@@ -2,7 +2,7 @@ import React, {FC} from 'react';
 import {Box, Text} from 'ink';
 
 type Props = {
-	text?: string;
+    text?: string;
 };
 
 /**
@@ -12,11 +12,11 @@ type Props = {
  * Reasoning text is displayed in light gray before the main response.
  */
 const LiveResponse: FC<Props> = ({text}) => {
-	return (
-		<Box marginBottom={1} flexDirection="column">
-			<Text>{text || ' '}</Text>
-		</Box>
-	);
+    return (
+        <Box marginBottom={1} flexDirection="column">
+            <Text>{text || ' '}</Text>
+        </Box>
+    );
 };
 
 export default LiveResponse;

@@ -3,32 +3,32 @@
  * Only writes to stderr if DEBUG_BASH_TOOL is enabled to avoid polluting Ink UI
  */
 export function logCommandExecution(
-	command: string,
-	isDangerous: boolean,
-	approved: boolean,
+    command: string,
+    isDangerous: boolean,
+    approved: boolean,
 ): void {
-	if (!process.env.DEBUG_BASH_TOOL) {
-		return;
-	}
+    if (!process.env.DEBUG_BASH_TOOL) {
+        return;
+    }
 
-	const timestamp = new Date().toISOString();
-	const context = {
-		timestamp,
-		command: command.substring(0, 100), // Truncate for safety
-		isDangerous,
-		approved,
-		env: process.env.NODE_ENV || 'production',
-	};
-	console.error(`[BASH_TOOL_LOG] ${JSON.stringify(context)}`);
+    const timestamp = new Date().toISOString();
+    const context = {
+        timestamp,
+        command: command.substring(0, 100), // Truncate for safety
+        isDangerous,
+        approved,
+        env: process.env.NODE_ENV || 'production',
+    };
+    console.error(`[BASH_TOOL_LOG] ${JSON.stringify(context)}`);
 }
 
 /**
  * Log validation errors for debugging
  */
 export function logValidationError(message: string): void {
-	if (!process.env.DEBUG_BASH_TOOL) {
-		return;
-	}
+    if (!process.env.DEBUG_BASH_TOOL) {
+        return;
+    }
 
-	console.error(`[BASH_TOOL_ERROR] ${message}`);
+    console.error(`[BASH_TOOL_ERROR] ${message}`);
 }

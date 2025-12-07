@@ -154,23 +154,23 @@ LOG_LEVEL=debug                   # Set log level
 
 ```json
 {
-	"agent": {
-		"model": "gpt-4o",
-		"reasoningEffort": "medium",
-		"maxTurns": 30,
-		"retryAttempts": 3
-	},
-	"shell": {
-		"timeout": 60000,
-		"maxOutputLines": 2000,
-		"maxOutputChars": 20000
-	},
-	"ui": {
-		"historySize": 2000
-	},
-	"logging": {
-		"logLevel": "debug"
-	}
+    "agent": {
+        "model": "gpt-4o",
+        "reasoningEffort": "medium",
+        "maxTurns": 30,
+        "retryAttempts": 3
+    },
+    "shell": {
+        "timeout": 60000,
+        "maxOutputLines": 2000,
+        "maxOutputChars": 20000
+    },
+    "ui": {
+        "historySize": 2000
+    },
+    "logging": {
+        "logLevel": "debug"
+    }
 }
 ```
 
@@ -238,12 +238,12 @@ Logs are JSON-formatted with timestamps, correlation IDs for tracing related ope
 
 ```json
 {
-	"timestamp": "2025-12-06 17:49:30",
-	"level": "info",
-	"message": "Shell command execution started",
-	"commandCount": 1,
-	"timeout": 120000,
-	"correlationId": "550e8400-e29b-41d4-a716-446655440000"
+    "timestamp": "2025-12-06 17:49:30",
+    "level": "info",
+    "message": "Shell command execution started",
+    "commandCount": 1,
+    "timeout": 120000,
+    "correlationId": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 

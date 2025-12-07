@@ -10,7 +10,7 @@ const HISTORY_FILE = path.join(paths.log, 'history.json');
 const MAX_HISTORY_SIZE = settingsService.get('ui.historySize');
 
 interface HistoryData {
-	messages: string[];
+    messages: string[];
 }
 
 /**
@@ -18,104 +18,104 @@ interface HistoryData {
  * Saves messages to XDG state directory (~/.local/state/term2/history.json on Linux).
  */
 class HistoryService {
-	private messages: string[] = [];
+    private messages: string[] = [];
 
-	constructor() {
-		this.load();
-	}
+    constructor() {
+        this.load();
+    }
 
-	/**
-	 * Load history from disk
-	 */
-	private load(): void {
-		try {
-			if (fs.existsSync(HISTORY_FILE)) {
-				const data = fs.readFileSync(HISTORY_FILE, 'utf-8');
-				const parsed = JSON.parse(data) as HistoryData;
-				this.messages = Array.isArray(parsed.messages)
-					? parsed.messages
-					: [];
-			}
-		} catch (error) {
-			// If we can't load history, start with empty array
-			loggingService.error('Failed to load history', {
-				error: error instanceof Error ? error.message : String(error),
-				filePath: HISTORY_FILE,
-			});
-			this.messages = [];
-		}
-	}
+    /**
+     * Load history from disk
+     */
+    private load(): void {
+        try {
+            if (fs.existsSync(HISTORY_FILE)) {
+                const data = fs.readFileSync(HISTORY_FILE, 'utf-8');
+                const parsed = JSON.parse(data) as HistoryData;
+                this.messages = Array.isArray(parsed.messages)
+                    ? parsed.messages
+                    : [];
+            }
+        } catch (error) {
+            // If we can't load history, start with empty array
+            loggingService.error('Failed to load history', {
+                error: error instanceof Error ? error.message : String(error),
+                filePath: HISTORY_FILE,
+            });
+            this.messages = [];
+        }
+    }
 
-	/**
-	 * Save history to disk
-	 */
-	private save(): void {
-		try {
-			// Ensure directory exists
-			const dir = path.dirname(HISTORY_FILE);
-			if (!fs.existsSync(dir)) {
-				fs.mkdirSync(dir, {recursive: true});
-			}
+    /**
+     * Save history to disk
+     */
+    private save(): void {
+        try {
+            // Ensure directory exists
+            const dir = path.dirname(HISTORY_FILE);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, {recursive: true});
+            }
 
-			const data: HistoryData = {
-				messages: this.messages,
-			};
+            const data: HistoryData = {
+                messages: this.messages,
+            };
 
-			fs.writeFileSync(
-				HISTORY_FILE,
-				JSON.stringify(data, null, 2),
-				'utf-8',
-			);
-		} catch (error) {
-			loggingService.error('Failed to save history', {
-				error: error instanceof Error ? error.message : String(error),
-				filePath: HISTORY_FILE,
-				messageCount: this.messages.length,
-			});
-		}
-	}
+            fs.writeFileSync(
+                HISTORY_FILE,
+                JSON.stringify(data, null, 2),
+                'utf-8',
+            );
+        } catch (error) {
+            loggingService.error('Failed to save history', {
+                error: error instanceof Error ? error.message : String(error),
+                filePath: HISTORY_FILE,
+                messageCount: this.messages.length,
+            });
+        }
+    }
 
-	/**
-	 * Add a message to history
-	 */
-	addMessage(message: string): void {
-		// Don't add empty or duplicate messages
-		if (!message.trim()) {
-			return;
-		}
+    /**
+     * Add a message to history
+     */
+    addMessage(message: string): void {
+        // Don't add empty or duplicate messages
+        if (!message.trim()) {
+            return;
+        }
 
-		// Remove duplicates (if the same message is already the most recent)
-		if (
-			this.messages.length > 0 &&
-			this.messages[this.messages.length - 1] === message
-		) {
-			return;
-		}
+        // Remove duplicates (if the same message is already the most recent)
+        if (
+            this.messages.length > 0 &&
+            this.messages[this.messages.length - 1] === message
+        ) {
+            return;
+        }
 
-		this.messages.push(message);
+        this.messages.push(message);
 
-		// Trim history if it exceeds max size
-		if (this.messages.length > MAX_HISTORY_SIZE) {
-			this.messages = this.messages.slice(-MAX_HISTORY_SIZE);
-		}
+        // Trim history if it exceeds max size
+        if (this.messages.length > MAX_HISTORY_SIZE) {
+            this.messages = this.messages.slice(-MAX_HISTORY_SIZE);
+        }
 
-		this.save();
-	}
+        this.save();
+    }
 
-	/**
-	 * Get all messages
-	 */
-	getMessages(): string[] {
-		return [...this.messages];
-	}
+    /**
+     * Get all messages
+     */
+    getMessages(): string[] {
+        return [...this.messages];
+    }
 
-	/**
-	 * Clear all history
-	 */
-	clear(): void {
-		this.messages = [];
-		this.save();
-	}
+    /**
+     * Clear all history
+     */
+    clear(): void {
+        this.messages = [];
+        this.save();
+    }
 }
 
 export const historyService = new HistoryService();

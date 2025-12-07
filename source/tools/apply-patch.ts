@@ -6,11 +6,11 @@ import {loggingService} from '../services/logging-service.js';
 import type {ToolDefinition} from './types.js';
 
 const applyPatchParametersSchema = z.object({
-	type: z.enum(['create_file', 'update_file', 'delete_file']),
-	path: z.string().min(1, 'File path cannot be empty'),
-	diff: z
-		.string()
-		.describe('Unified diff content for create/update operations'),
+    type: z.enum(['create_file', 'update_file', 'delete_file']),
+    path: z.string().min(1, 'File path cannot be empty'),
+    diff: z
+        .string()
+        .describe('Unified diff content for create/update operations'),
 });
 
 export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;
@@ -19,153 +19,153 @@ export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;
  * Resolves a relative path and ensures it's within the workspace
  */
 function resolveWorkspacePath(relativePath: string): string {
-	const workspaceRoot = process.cwd();
-	const resolved = path.resolve(workspaceRoot, relativePath);
+    const workspaceRoot = process.cwd();
+    const resolved = path.resolve(workspaceRoot, relativePath);
 
-	if (!resolved.startsWith(workspaceRoot)) {
-		throw new Error(`Operation outside workspace: ${relativePath}`);
-	}
+    if (!resolved.startsWith(workspaceRoot)) {
+        throw new Error(`Operation outside workspace: ${relativePath}`);
+    }
 
-	return resolved;
+    return resolved;
 }
 
 export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
-	name: 'apply_patch',
-	description:
-		'Apply file changes using unified diff format. Supports creating, updating, and deleting files. ' +
-		'For create_file and update_file operations, provide a unified diff. ' +
-		'The diff format should use +/- prefixes for added/removed lines. ' +
-		'Example diff:\n' +
-		'```\n' +
-		'-old line\n' +
-		'+new line\n' +
-		'```',
-	parameters: applyPatchParametersSchema,
-	needsApproval: async () => {
-		// File modifications always require approval
-		return true;
-	},
-	execute: async params => {
-		const enableFileLogging = process.env.LOG_FILE_OPERATIONS !== 'false';
+    name: 'apply_patch',
+    description:
+        'Apply file changes using unified diff format. Supports creating, updating, and deleting files. ' +
+        'For create_file and update_file operations, provide a unified diff. ' +
+        'The diff format should use +/- prefixes for added/removed lines. ' +
+        'Example diff:\n' +
+        '```\n' +
+        '-old line\n' +
+        '+new line\n' +
+        '```',
+    parameters: applyPatchParametersSchema,
+    needsApproval: async () => {
+        // File modifications always require approval
+        return true;
+    },
+    execute: async params => {
+        const enableFileLogging = process.env.LOG_FILE_OPERATIONS !== 'false';
 
-		try {
-			const {type, path: filePath, diff} = params;
-			const targetPath = resolveWorkspacePath(filePath);
+        try {
+            const {type, path: filePath, diff} = params;
+            const targetPath = resolveWorkspacePath(filePath);
 
-			if (enableFileLogging) {
-				loggingService.info(`File operation started: ${type}`, {
-					path: filePath,
-					targetPath,
-				});
-			}
+            if (enableFileLogging) {
+                loggingService.info(`File operation started: ${type}`, {
+                    path: filePath,
+                    targetPath,
+                });
+            }
 
-			switch (type) {
-				case 'create_file': {
-					// Ensure parent directory exists
-					await mkdir(path.dirname(targetPath), {recursive: true});
+            switch (type) {
+                case 'create_file': {
+                    // Ensure parent directory exists
+                    await mkdir(path.dirname(targetPath), {recursive: true});
 
-					// Apply diff to empty content for new file
-					const content = applyDiff('', diff, 'create');
-					await writeFile(targetPath, content, 'utf8');
+                    // Apply diff to empty content for new file
+                    const content = applyDiff('', diff, 'create');
+                    await writeFile(targetPath, content, 'utf8');
 
-					if (enableFileLogging) {
-						loggingService.info('File created', {
-							path: filePath,
-							contentLength: content.length,
-						});
-					}
+                    if (enableFileLogging) {
+                        loggingService.info('File created', {
+                            path: filePath,
+                            contentLength: content.length,
+                        });
+                    }
 
-					return JSON.stringify({
-						success: true,
-						operation: 'create_file',
-						path: filePath,
-						message: `Created ${filePath}`,
-					});
-				}
+                    return JSON.stringify({
+                        success: true,
+                        operation: 'create_file',
+                        path: filePath,
+                        message: `Created ${filePath}`,
+                    });
+                }
 
-				case 'update_file': {
-					// Read existing file
-					let original: string;
-					try {
-						original = await readFile(targetPath, 'utf8');
-					} catch (error: any) {
-						if (error?.code === 'ENOENT') {
-							if (enableFileLogging) {
-								loggingService.error(
-									'Cannot update missing file',
-									{
-										path: filePath,
-										targetPath,
-									},
-								);
-							}
-							return JSON.stringify({
-								success: false,
-								error: `Cannot update missing file: ${filePath}`,
-							});
-						}
+                case 'update_file': {
+                    // Read existing file
+                    let original: string;
+                    try {
+                        original = await readFile(targetPath, 'utf8');
+                    } catch (error: any) {
+                        if (error?.code === 'ENOENT') {
+                            if (enableFileLogging) {
+                                loggingService.error(
+                                    'Cannot update missing file',
+                                    {
+                                        path: filePath,
+                                        targetPath,
+                                    },
+                                );
+                            }
+                            return JSON.stringify({
+                                success: false,
+                                error: `Cannot update missing file: ${filePath}`,
+                            });
+                        }
 
-						throw error;
-					}
+                        throw error;
+                    }
 
-					// Apply diff to existing content
-					const patched = applyDiff(original, diff);
-					await writeFile(targetPath, patched, 'utf8');
+                    // Apply diff to existing content
+                    const patched = applyDiff(original, diff);
+                    await writeFile(targetPath, patched, 'utf8');
 
-					if (enableFileLogging) {
-						loggingService.info('File updated', {
-							path: filePath,
-							originalLength: original.length,
-							patchedLength: patched.length,
-						});
-					}
+                    if (enableFileLogging) {
+                        loggingService.info('File updated', {
+                            path: filePath,
+                            originalLength: original.length,
+                            patchedLength: patched.length,
+                        });
+                    }
 
-					return JSON.stringify({
-						success: true,
-						operation: 'update_file',
-						path: filePath,
-						message: `Updated ${filePath}`,
-					});
-				}
+                    return JSON.stringify({
+                        success: true,
+                        operation: 'update_file',
+                        path: filePath,
+                        message: `Updated ${filePath}`,
+                    });
+                }
 
-				case 'delete_file': {
-					await rm(targetPath, {force: true});
+                case 'delete_file': {
+                    await rm(targetPath, {force: true});
 
-					if (enableFileLogging) {
-						loggingService.info('File deleted', {
-							path: filePath,
-							targetPath,
-						});
-					}
+                    if (enableFileLogging) {
+                        loggingService.info('File deleted', {
+                            path: filePath,
+                            targetPath,
+                        });
+                    }
 
-					return JSON.stringify({
-						success: true,
-						operation: 'delete_file',
-						path: filePath,
-						message: `Deleted ${filePath}`,
-					});
-				}
+                    return JSON.stringify({
+                        success: true,
+                        operation: 'delete_file',
+                        path: filePath,
+                        message: `Deleted ${filePath}`,
+                    });
+                }
 
-				default: {
-					return JSON.stringify({
-						success: false,
-						error: `Unknown operation type: ${type}`,
-					});
-				}
-			}
-		} catch (error: any) {
-			if (enableFileLogging) {
-				loggingService.error('File operation failed', {
-					type: params.type,
-					path: params.path,
-					error:
-						error instanceof Error ? error.message : String(error),
-				});
-			}
-			return JSON.stringify({
-				success: false,
-				error: error.message || String(error),
-			});
-		}
-	},
+                default: {
+                    return JSON.stringify({
+                        success: false,
+                        error: `Unknown operation type: ${type}`,
+                    });
+                }
+            }
+        } catch (error: any) {
+            if (enableFileLogging) {
+                loggingService.error('File operation failed', {
+                    type: params.type,
+                    path: params.path,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                });
+            }
+            return JSON.stringify({
+                success: false,
+                error: error.message || String(error),
+            });
+        }
+    },
 };

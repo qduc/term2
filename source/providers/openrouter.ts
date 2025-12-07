@@ -7,9 +7,45 @@ import {
 } from '@openai/agents-core';
 
 // Minimal OpenRouter Chat Completions client implementing the Agents Core Model interface.
+//
+// IMPORTANT for custom provider implementers:
+// The OpenAI Agents SDK has strict requirements for both ModelResponse structure AND stream event types.
+// Incorrect event types or missing fields will cause runtime errors.
+//
+// Required stream event types (from @openai/agents-core/dist/types/protocol):
+// - 'output_text_delta' - for streaming text chunks (NOT 'response.output_text.delta')
+//   { type: 'output_text_delta', delta: string }
+//
+// - 'response_done' - for final response completion (NOT 'response.completed')
+//   { type: 'response_done', response: { id: string, usage: {...}, output: [...] } }
+//   REQUIRED fields in response:
+//     - id: string (response identifier)
+//     - usage.inputTokens: number (cannot be undefined)
+//     - usage.outputTokens: number (cannot be undefined)
+//     - usage.totalTokens: number (cannot be undefined)
+//     - output: array of AssistantMessageItem (see below)
+//
+// - 'response_started' - for response start (optional)
+//
+// See detailed comments below for ModelResponse.output structure requirements.
 
 const OPENROUTER_BASE_URL =
     process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
+
+// Convert OpenRouter usage format to OpenAI Agents SDK format
+function normalizeUsage(openRouterUsage: any): {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+} {
+    // OpenRouter returns: { prompt_tokens, completion_tokens, total_tokens }
+    // SDK expects: { inputTokens, outputTokens, totalTokens }
+    return {
+        inputTokens: openRouterUsage?.prompt_tokens ?? 0,
+        outputTokens: openRouterUsage?.completion_tokens ?? 0,
+        totalTokens: openRouterUsage?.total_tokens ?? 0,
+    };
+}
 
 function buildMessagesFromRequest(req: ModelRequest): any[] {
     const messages: any[] = [];
@@ -115,13 +151,30 @@ class OpenRouterModel implements Model {
         const content = choice?.message?.content ?? '';
 
         const usage = json?.usage || {};
+        // IMPORTANT: The Agents SDK expects a specific structure for ModelResponse.output:
+        // - Each item must be an AssistantMessageItem with:
+        //   - type: 'message' (optional but recommended)
+        //   - role: 'assistant'
+        //   - status: 'completed' | 'in_progress' | 'incomplete' (REQUIRED)
+        //   - content: ARRAY of content objects (NOT a plain string)
+        // - Content objects must have:
+        //   - type: 'output_text'
+        //   - text: the actual string content
+        // Failing to include 'status' or using plain strings for 'content' will cause
+        // "Model did not produce a final response" errors.
         const response: ModelResponse = {
             usage,
             output: [
                 {
                     type: 'message',
                     role: 'assistant',
-                    content,
+                    status: 'completed',
+                    content: [
+                        {
+                            type: 'output_text',
+                            text: content,
+                        },
+                    ],
                 } as any,
             ],
             responseId: json?.id,
@@ -152,10 +205,20 @@ class OpenRouterModel implements Model {
         const decoder = new TextDecoder();
         let buffer = '';
         let accumulated = '';
+        let responseId = 'unknown'; // Will be updated from stream chunks
+        let usageData: any = null; // Will be updated if usage info is in stream
         if (!reader) {
-            // Fallback to non-stream
+            // Fallback to non-stream - call getResponse which handles ModelResponse format,
+            // but we need to wrap it in the correct response_done event format
             const full = await this.getResponse(request);
-            yield {type: 'response.completed', response: full} as any;
+            yield {
+                type: 'response_done',
+                response: {
+                    id: full.responseId || 'unknown',
+                    usage: normalizeUsage(full.usage),
+                    output: full.output,
+                },
+            } as any;
             return;
         }
         while (true) {
@@ -170,28 +233,55 @@ class OpenRouterModel implements Model {
                 if (line.startsWith('data:')) {
                     const data = line.slice(5).trim();
                     if (data === '[DONE]') {
-                        const full: ModelResponse = {
-                            usage: {},
-                            output: [
-                                {
-                                    type: 'message',
-                                    role: 'assistant',
-                                    content: accumulated,
-                                } as any,
-                            ],
+                        // See comment above getResponse() for explanation of this structure.
+                        // For streaming responses, the final ModelResponse must follow the same
+                        // format with status: 'completed' and content as an array.
+                        // IMPORTANT: The stream event type must be 'response_done' (not 'response.completed')
+                        // IMPORTANT: The response_done event REQUIRES:
+                        //   - response.id (string)
+                        //   - response.usage.inputTokens (number)
+                        //   - response.usage.outputTokens (number)
+                        //   - response.usage.totalTokens (number)
+                        yield {
+                            type: 'response_done',
+                            response: {
+                                id: responseId,
+                                usage: normalizeUsage(usageData),
+                                output: [
+                                    {
+                                        type: 'message',
+                                        role: 'assistant',
+                                        status: 'completed',
+                                        content: [
+                                            {
+                                                type: 'output_text',
+                                                text: accumulated,
+                                            },
+                                        ],
+                                    } as any,
+                                ],
+                            },
                         } as any;
-                        yield {type: 'response.completed', response: full} as any;
                         return;
                     }
                     try {
                         const json = JSON.parse(data);
+                        // Capture response ID from first chunk
+                        if (json?.id && responseId === 'unknown') {
+                            responseId = json.id;
+                        }
+                        // Capture usage data if present (some providers send it in final chunk)
+                        if (json?.usage) {
+                            usageData = json.usage;
+                        }
                         const delta =
                             json?.choices?.[0]?.delta?.content ?? '';
                         if (delta) {
                             accumulated += delta;
-                            // Emit a minimal text delta event
+                            // Emit a text delta event
+                            // IMPORTANT: The event type must be 'output_text_delta' (not 'response.output_text.delta')
                             yield {
-                                type: 'response.output_text.delta',
+                                type: 'output_text_delta',
                                 delta,
                             } as any;
                         }
@@ -201,14 +291,27 @@ class OpenRouterModel implements Model {
                 }
             }
         }
-        // End without [DONE]
-        const full: ModelResponse = {
-            usage: {},
-            output: [
-                {type: 'message', role: 'assistant', content: accumulated} as any,
-            ],
+        // End without [DONE] - same structure required as above
+        yield {
+            type: 'response_done',
+            response: {
+                id: responseId,
+                usage: normalizeUsage(usageData),
+                output: [
+                    {
+                        type: 'message',
+                        role: 'assistant',
+                        status: 'completed',
+                        content: [
+                            {
+                                type: 'output_text',
+                                text: accumulated,
+                            },
+                        ],
+                    } as any,
+                ],
+            },
         } as any;
-        yield {type: 'response.completed', response: full} as any;
     }
 
     #resolveModelFromRequest(req: ModelRequest): string | undefined {

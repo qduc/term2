@@ -7,10 +7,13 @@ import {
     webSearchTool,
     type Tool,
 } from '@openai/agents';
+import {setDefaultModelProvider} from '@openai/agents-core';
+import {OpenRouterProvider} from '../providers/openrouter.js';
 import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
 import {randomUUID} from 'node:crypto';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 import {loggingService} from '../services/logging-service.js';
+import {settingsService} from '../services/settings-service.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -21,6 +24,7 @@ export class OpenAIAgentClient {
     #model!: string;
     // Accept 'default' here to denote 'do not pass this param; use API default'
     #reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+    #provider: string;
     #maxTurns: number;
     #retryAttempts: number;
     #currentAbortController: AbortController | null = null;
@@ -38,6 +42,7 @@ export class OpenAIAgentClient {
         retryAttempts?: number;
     } = {}) {
         this.#reasoningEffort = reasoningEffort;
+        this.#provider = settingsService.get<string>('agent.provider') || 'openai';
         this.#maxTurns = maxTurns ?? 20;
         this.#retryAttempts = retryAttempts ?? 2;
         this.#agent = this.#createAgent({model, reasoningEffort});
@@ -63,6 +68,14 @@ export class OpenAIAgentClient {
         this.#agent = this.#createAgent({
             model: this.#model,
             reasoningEffort: effort,
+        });
+    }
+
+    setProvider(provider: string): void {
+        this.#provider = provider;
+        this.#agent = this.#createAgent({
+            model: this.#model,
+            reasoningEffort: this.#reasoningEffort,
         });
     }
 
@@ -207,6 +220,14 @@ export class OpenAIAgentClient {
                 effort: reasoningEffort,
                 summary: 'auto',
             };
+        }
+
+        // Switch to OpenRouter provider based on config setting
+        if (
+            this.#provider === 'openrouter' &&
+            process.env.OPENROUTER_API_KEY
+        ) {
+            setDefaultModelProvider(new OpenRouterProvider());
         }
 
         const agent = new Agent({

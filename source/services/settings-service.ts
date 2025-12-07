@@ -16,6 +16,10 @@ const AgentSettingsSchema = z.object({
         .default('default'),
     maxTurns: z.number().int().positive().default(20),
     retryAttempts: z.number().int().nonnegative().default(2),
+    provider: z
+        .enum(['openai', 'openrouter'])
+        .default('openai')
+        .describe('Provider to use for the agent'),
 });
 
 const ShellSettingsSchema = z.object({
@@ -61,6 +65,7 @@ export interface SettingsWithSources {
         reasoningEffort: SettingWithSource<string>;
         maxTurns: SettingWithSource<number>;
         retryAttempts: SettingWithSource<number>;
+        provider: SettingWithSource<string>;
     };
     shell: {
         timeout: SettingWithSource<number>;
@@ -75,14 +80,32 @@ export interface SettingsWithSources {
     };
 }
 
+/**
+ * Centralized list of all setting keys for consistency across the app.
+ * Used by settings command UI and other components to avoid duplication.
+ */
+export const SETTING_KEYS = {
+    AGENT_MODEL: 'agent.model',
+    AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
+    AGENT_PROVIDER: 'agent.provider',
+    AGENT_MAX_TURNS: 'agent.maxTurns',
+    AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
+    SHELL_TIMEOUT: 'shell.timeout',
+    SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
+    SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
+    UI_HISTORY_SIZE: 'ui.historySize',
+    LOGGING_LOG_LEVEL: 'logging.logLevel',
+} as const;
+
 // Define which settings are modifiable at runtime
-const RUNTIME_MODIFIABLE_SETTINGS = new Set([
-    'agent.model',
-    'agent.reasoningEffort',
-    'shell.timeout',
-    'shell.maxOutputLines',
-    'shell.maxOutputChars',
-    'logging.logLevel',
+const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
+    SETTING_KEYS.AGENT_MODEL,
+    SETTING_KEYS.AGENT_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_PROVIDER,
+    SETTING_KEYS.SHELL_TIMEOUT,
+    SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
+    SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
+    SETTING_KEYS.LOGGING_LOG_LEVEL,
 ]);
 
 // Default settings
@@ -92,6 +115,7 @@ const DEFAULT_SETTINGS: SettingsData = {
         reasoningEffort: 'default',
         maxTurns: 20,
         retryAttempts: 2,
+        provider: 'openai',
     },
     shell: {
         timeout: 120000,
@@ -161,7 +185,7 @@ export class SettingsService {
         // Load settings with precedence: CLI > Env > Config > Default
         const settingsFilePath = path.join(this.settingsDir, 'settings.json');
         const configFileExisted = fs.existsSync(settingsFilePath);
-        const fileConfig = this.loadFromFile();
+        const {validated: fileConfig, raw: rawFileConfig} = this.loadFromFile();
         this.settings = this.merge(DEFAULT_SETTINGS, fileConfig, env, cli);
         this.trackSources(DEFAULT_SETTINGS, fileConfig, env, cli);
 
@@ -192,15 +216,31 @@ export class SettingsService {
             });
         }
 
+        // Check if file config is missing any keys that exist in defaults
+        // Use raw file config (pre-Zod) to detect missing keys since Zod adds defaults
+        const shouldUpdateFile =
+            configFileExisted &&
+            this.hasMissingKeys(rawFileConfig, DEFAULT_SETTINGS);
+
         // If there was no config file on disk, persist the current merged settings so
         // users get a settings.json created at startup (rather than waiting for a
         // manual change). saveToFile is safe and handles errors/logging internally.
-        if (!configFileExisted) {
+        // Also update the file if new settings have been added since the file was created.
+        if (!configFileExisted || shouldUpdateFile) {
             this.saveToFile();
             if (!this.disableLogging) {
-                loggingService.info('Created settings file at startup', {
-                    settingsFile: settingsFilePath,
-                });
+                if (!configFileExisted) {
+                    loggingService.info('Created settings file at startup', {
+                        settingsFile: settingsFilePath,
+                    });
+                } else {
+                    loggingService.info(
+                        'Updated settings file with new default values',
+                        {
+                            settingsFile: settingsFilePath,
+                        },
+                    );
+                }
             }
         }
     }
@@ -351,6 +391,10 @@ export class SettingsService {
                     value: this.settings.agent.retryAttempts,
                     source: this.getSource('agent.retryAttempts'),
                 },
+                provider: {
+                    value: this.settings.agent.provider,
+                    source: this.getSource('agent.provider'),
+                },
             },
             shell: {
                 timeout: {
@@ -383,13 +427,17 @@ export class SettingsService {
 
     /**
      * Load settings from file
+     * Returns both raw (pre-Zod) and validated data
      */
-    private loadFromFile(): Partial<SettingsData> {
+    private loadFromFile(): {
+        validated: Partial<SettingsData>;
+        raw: any;
+    } {
         try {
             const settingsFile = path.join(this.settingsDir, 'settings.json');
 
             if (!fs.existsSync(settingsFile)) {
-                return {};
+                return {validated: {}, raw: {}};
             }
 
             const content = fs.readFileSync(settingsFile, 'utf-8');
@@ -412,10 +460,10 @@ export class SettingsService {
                 }
 
                 // Return empty object to trigger defaults
-                return {};
+                return {validated: {}, raw: parsed};
             }
 
-            return validated.data;
+            return {validated: validated.data, raw: parsed};
         } catch (error: any) {
             if (!this.disableLogging) {
                 loggingService.error('Failed to load settings file', {
@@ -425,7 +473,7 @@ export class SettingsService {
                 });
             }
 
-            return {};
+            return {validated: {}, raw: {}};
         }
     }
 
@@ -455,6 +503,38 @@ export class SettingsService {
                 });
             }
         }
+    }
+
+    /**
+     * Check if target object is missing any keys that exist in source
+     */
+    private hasMissingKeys(target: any, source: any): boolean {
+        for (const key in source) {
+            if (!source.hasOwnProperty(key)) continue;
+
+            if (!(key in target)) {
+                return true;
+            }
+
+            const sourceValue = source[key];
+            const targetValue = target[key];
+
+            // Recursively check nested objects
+            if (
+                sourceValue &&
+                typeof sourceValue === 'object' &&
+                !Array.isArray(sourceValue) &&
+                targetValue &&
+                typeof targetValue === 'object' &&
+                !Array.isArray(targetValue)
+            ) {
+                if (this.hasMissingKeys(targetValue, sourceValue)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

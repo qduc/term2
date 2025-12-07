@@ -114,7 +114,7 @@ Term2 uses a centralized settings service with XDG-compliant storage and flexibl
 
 -   **Location**:
     -   **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
-    -   **Linux**: `~/.local/state/term2/settings.json`
+    -   **Linux**: `~/.local/state/term2-nodejs/settings.json`
     -   **Windows**: `%APPDATA%\term2\settings.json`
 -   **Format**: JSON with validated schema
 -   **Precedence**: CLI flags > Environment variables > Config file > Defaults
@@ -262,7 +262,7 @@ Logs are JSON-formatted with timestamps, correlation IDs for tracing related ope
 -   **Debugging message flow?** → Check `conversation-service.ts`
 -   **Styling/Output format?** → Components use Ink for terminal UI
 -   **Adding a new setting?** → `source/services/settings-service.ts` (update schema and defaults)
--   **Modifying configuration?** → Edit `~/Library/Logs/term2-nodejs/settings.json` (macOS) or `~/.local/state/term2/settings.json` (Linux), or use environment variables / CLI flags
+-   **Modifying configuration?** → Edit `~/Library/Logs/term2-nodejs/settings.json` (macOS) or `~/.local/state/term2-nodejs/settings.json` (Linux), or use environment variables / CLI flags
 
 ## Resources
 

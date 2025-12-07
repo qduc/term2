@@ -130,6 +130,12 @@ export class ConversationService {
         }
     }
 
+    setProvider(provider: string): void {
+        if (typeof this.agentClient.setProvider === 'function') {
+            (this.agentClient as any).setProvider(provider);
+        }
+    }
+
     /**
      * Abort the current running operation
      */

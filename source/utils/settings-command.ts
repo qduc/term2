@@ -3,6 +3,7 @@ import type {
     SettingsService,
     SettingsWithSources,
 } from '../services/settings-service.js';
+import {SETTING_KEYS} from '../services/settings-service.js';
 
 export function parseSettingValue(raw: string): any {
     const value = raw.trim();
@@ -22,47 +23,52 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
     const lines: string[] = [];
     const entries: Array<{key: string; value: any; source: string}> = [
         {
-            key: 'agent.model',
+            key: SETTING_KEYS.AGENT_MODEL,
             value: settings.agent.model.value,
             source: settings.agent.model.source,
         },
         {
-            key: 'agent.reasoningEffort',
+            key: SETTING_KEYS.AGENT_REASONING_EFFORT,
             value: settings.agent.reasoningEffort.value,
             source: settings.agent.reasoningEffort.source,
         },
         {
-            key: 'agent.maxTurns',
+            key: SETTING_KEYS.AGENT_PROVIDER,
+            value: settings.agent.provider.value,
+            source: settings.agent.provider.source,
+        },
+        {
+            key: SETTING_KEYS.AGENT_MAX_TURNS,
             value: settings.agent.maxTurns.value,
             source: settings.agent.maxTurns.source,
         },
         {
-            key: 'agent.retryAttempts',
+            key: SETTING_KEYS.AGENT_RETRY_ATTEMPTS,
             value: settings.agent.retryAttempts.value,
             source: settings.agent.retryAttempts.source,
         },
         {
-            key: 'shell.timeout',
+            key: SETTING_KEYS.SHELL_TIMEOUT,
             value: settings.shell.timeout.value,
             source: settings.shell.timeout.source,
         },
         {
-            key: 'shell.maxOutputLines',
+            key: SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
             value: settings.shell.maxOutputLines.value,
             source: settings.shell.maxOutputLines.source,
         },
         {
-            key: 'shell.maxOutputChars',
+            key: SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
             value: settings.shell.maxOutputChars.value,
             source: settings.shell.maxOutputChars.source,
         },
         {
-            key: 'ui.historySize',
+            key: SETTING_KEYS.UI_HISTORY_SIZE,
             value: settings.ui.historySize.value,
             source: settings.ui.historySize.source,
         },
         {
-            key: 'logging.logLevel',
+            key: SETTING_KEYS.LOGGING_LOG_LEVEL,
             value: settings.logging.logLevel.value,
             source: settings.logging.logLevel.source,
         },

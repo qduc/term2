@@ -519,3 +519,90 @@ test('respects disableLogging flag', async t => {
     // Should not throw
     t.pass();
 });
+
+test('updates config file when new settings are added', async t => {
+    const settingsDir = getTestSettingsDir();
+    const configFile = path.join(settingsDir, 'settings.json');
+
+    // Create a minimal config file without the 'provider' field
+    if (!fs.existsSync(settingsDir)) {
+        fs.mkdirSync(settingsDir, {recursive: true});
+    }
+
+    fs.writeFileSync(
+        configFile,
+        JSON.stringify({
+            agent: {
+                model: 'gpt-4o',
+                reasoningEffort: 'default',
+                maxTurns: 20,
+                retryAttempts: 2,
+                // Note: provider field is missing
+            },
+        }),
+        'utf-8',
+    );
+
+    // Initialize service - it should detect missing 'provider' and update the file
+    const service = new SettingsService({
+        settingsDir,
+        disableLogging: true,
+    });
+
+    // Verify service has the provider setting with default value
+    t.is(service.get('agent.provider'), 'openai');
+
+    // Verify the file was updated with the new setting
+    const updatedContent = fs.readFileSync(configFile, 'utf-8');
+    const updatedConfig = JSON.parse(updatedContent);
+
+    t.is(updatedConfig.agent.provider, 'openai');
+});
+
+test('does not update config file when no new settings are added', async t => {
+    const settingsDir = getTestSettingsDir();
+    const configFile = path.join(settingsDir, 'settings.json');
+
+    // Create a complete config file with all current settings
+    if (!fs.existsSync(settingsDir)) {
+        fs.mkdirSync(settingsDir, {recursive: true});
+    }
+
+    const originalConfig = {
+        agent: {
+            model: 'gpt-4o',
+            reasoningEffort: 'default',
+            maxTurns: 20,
+            retryAttempts: 2,
+            provider: 'openai',
+        },
+        shell: {
+            timeout: 120000,
+            maxOutputLines: 1000,
+            maxOutputChars: 10000,
+        },
+        ui: {
+            historySize: 1000,
+        },
+        logging: {
+            logLevel: 'info',
+        },
+    };
+
+    fs.writeFileSync(configFile, JSON.stringify(originalConfig), 'utf-8');
+    const originalModTime = fs.statSync(configFile).mtime.getTime();
+
+    // Wait a bit to ensure time difference would be detectable
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Initialize service - it should NOT update the file since all settings are present
+    new SettingsService({
+        settingsDir,
+        disableLogging: true,
+    });
+
+    const newModTime = fs.statSync(configFile).mtime.getTime();
+
+    // File modification time should be the same or within a small margin (not updated)
+    t.is(originalModTime, newModTime);
+});

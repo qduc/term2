@@ -60,6 +60,16 @@ const App: FC<AppProps> = ({conversationService}) => {
                 return;
             }
 
+            if (key === 'agent.provider') {
+                // Provider changes require the agent to be recreated, which happens
+                // via the conversation service's setProvider method
+                const setProvider = (conversationService as any).setProvider;
+                if (typeof setProvider === 'function') {
+                    setProvider.call(conversationService, value);
+                }
+                return;
+            }
+
             if (key === 'shell.maxOutputLines') {
                 setTrimConfig({maxLines: Number(value)});
                 return;
@@ -69,7 +79,7 @@ const App: FC<AppProps> = ({conversationService}) => {
                 setTrimConfig({maxCharacters: Number(value)});
             }
         },
-        [setModel, setReasoningEffort],
+        [setModel, setReasoningEffort, conversationService],
     );
 
     // Define slash commands

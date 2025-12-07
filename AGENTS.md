@@ -105,6 +105,19 @@ npx ava               # Unit tests
 -   **Input History**: Persisted to `~/Library/Logs/term2-nodejs/history.json` (macOS) or `~/.local/state/term2/history.json` (Linux), navigable with arrow keys
 -   **Logging**: Winston-based system logs shell commands, API calls, and errors to `~/Library/Logs/term2-nodejs/logs/` (macOS) or `~/.local/state/term2/logs/` (Linux)
 -   **Settings**: Centralized configuration system with hierarchical precedence (CLI > Env > Config > Defaults)
+-   **Pure Functions**: Core logic separated from side effects for testability and maintainability (see Architecture Patterns below)
+
+## Architecture Patterns
+
+### Pure Functions for Complex UI Logic
+
+For complex state management (multiple menus, input parsing, etc.), **extract decision logic into pure functions** that return discriminated unions, then handle side effects separately.
+
+**Examples**: `determineActiveMenu()` in `InputBox.tsx`, `parseInput()` in `app.tsx`
+
+**Why**: Testable with table-driven tests, prevents race conditions, explicit state transitions
+
+**When**: Multiple mutually-exclusive states, complex conditionals, need comprehensive test coverage
 
 ## Configuration System
 

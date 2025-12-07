@@ -4,6 +4,7 @@ import {useConversation} from './hooks/use-conversation.js';
 import {useSlashCommands} from './hooks/use-slash-commands.js';
 import {useInputHistory} from './hooks/use-input-history.js';
 import {usePathCompletion} from './hooks/use-path-completion.js';
+import { useSettingsCompletion } from './hooks/use-settings-completion.js';
 import MessageList from './components/MessageList.js';
 import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
@@ -12,6 +13,23 @@ import type {ConversationService} from './services/conversation-service.js';
 import {settingsService} from './services/settings-service.js';
 import {createSettingsCommand} from './utils/settings-command.js';
 import {setTrimConfig} from './utils/output-trim.js';
+
+// Pure function to parse slash commands
+type ParsedInput =
+	| {type: 'slash-command'; commandName: string; args: string}
+	| {type: 'message'; text: string};
+
+function parseInput(value: string): ParsedInput {
+	if (!value.startsWith('/')) {
+		return {type: 'message', text: value};
+	}
+
+	const commandLine = value.slice(1); // Remove leading '/'
+	const [commandName, ...argsParts] = commandLine.split(/\s+/);
+	const args = argsParts.join(' ');
+
+	return {type: 'slash-command', commandName, args};
+}
 
 interface AppProps {
     conversationService: ConversationService;
@@ -88,6 +106,7 @@ const App: FC<AppProps> = ({conversationService}) => {
             settingsService,
             addSystemMessage,
             applyRuntimeSetting,
+            setInput,
         });
 
         return [
@@ -166,6 +185,18 @@ const App: FC<AppProps> = ({conversationService}) => {
         getSelectedItem,
     } = usePathCompletion();
 
+    const {
+        isOpen: settingsMenuOpen,
+        filteredEntries: settingsMenuItems,
+        selectedIndex: settingsMenuSelectedIndex,
+        open: openSettingsMenu,
+        close: closeSettingsMenu,
+        updateQuery: updateSettingsMenuQuery,
+        moveUp: settingsMenuUp,
+        moveDown: settingsMenuDown,
+        getSelectedItem: getSettingsMenuSelection,
+    } = useSettingsCompletion();
+
     // Handle Ctrl+C to exit immediately
     useInput((_input: string, key) => {
         if (key.ctrl && _input === 'c') {
@@ -196,7 +227,39 @@ const App: FC<AppProps> = ({conversationService}) => {
         // If waiting for approval, ignore text input (handled by useInput)
         if (waitingForApproval) return;
 
-        // Add to history and reset navigation
+        // Parse the input to determine what to do
+        const parsed = parseInput(value);
+
+        switch (parsed.type) {
+            case 'slash-command': {
+                // Find matching command
+                const command = slashCommands.find(
+                    cmd => cmd.name === parsed.commandName,
+                );
+                if (command) {
+                    // Execute the command
+                    const shouldClearInput = command.action(parsed.args || undefined);
+                    addToHistory(value);
+
+                    // Clear input unless command returned false
+                    if (shouldClearInput !== false) {
+                        setInput('');
+                    }
+                    return;
+                }
+                // Command not found, fall through to send as message
+                break;
+            }
+
+            case 'message':
+                // Regular message, send to AI agent
+                addToHistory(value);
+                setInput('');
+                await sendUserMessage(value);
+                return;
+        }
+
+        // Fallback: unknown slash command, send as message
         addToHistory(value);
         setInput('');
         await sendUserMessage(value);
@@ -257,6 +320,15 @@ const App: FC<AppProps> = ({conversationService}) => {
                         onPathMenuUp={pathMenuUp}
                         onPathMenuDown={pathMenuDown}
                         getPathMenuSelection={getSelectedItem}
+                        settingsMenuOpen={settingsMenuOpen}
+                        settingsMenuItems={settingsMenuItems}
+                        settingsMenuSelectedIndex={settingsMenuSelectedIndex}
+                        onSettingsMenuOpen={openSettingsMenu}
+                        onSettingsMenuClose={closeSettingsMenu}
+                        onSettingsMenuFilterChange={updateSettingsMenuQuery}
+                        onSettingsMenuUp={settingsMenuUp}
+                        onSettingsMenuDown={settingsMenuDown}
+                        getSettingsMenuSelection={getSettingsMenuSelection}
                     />
                 )}
 

@@ -62,14 +62,17 @@ test('formatSettingsSummary renders values with sources', t => {
     t.true(summary.includes('logging.logLevel: info (default)'));
 });
 
-test('viewing all settings sends a summary message', t => {
+test('viewing all settings with no args prompts for autocomplete', t => {
     const deps = createDeps();
+    let inputValue = '';
+    deps.setInput = (value) => { inputValue = value; };
     const command = createSettingsCommand(deps);
-    command.action();
+    const result = command.action();
 
-    t.is(deps.messages.length, 1);
-    t.true(deps.messages[0].includes('agent.model'));
-    t.true(deps.messages[0].includes('shell.timeout'));
+    // Should set input to '/settings ' and return false to keep input active
+    t.is(result, false);
+    t.is(inputValue, '/settings ');
+    t.is(deps.messages.length, 0); // No message sent
 });
 
 test('viewing a single setting shows value and source', t => {

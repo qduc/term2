@@ -13,7 +13,7 @@
 		"start": "node dist/cli.js",
 		"build": "tsc",
 		"dev": "tsc --watch",
-		"test": "ava",
+		"test": "tsc && ava",
 		"lint": "prettier --check .",
 		"lint-fix": "prettier --write ."
 	},

@@ -3,11 +3,48 @@ import {Box, Text, useInput} from 'ink';
 import {MultilineInput} from 'ink-prompt';
 import SlashCommandMenu, {SlashCommand} from './SlashCommandMenu.js';
 import PathSelectionMenu from './PathSelectionMenu.js';
+import SettingsSelectionMenu from './SettingsSelectionMenu.js';
 import type {PathCompletionItem} from '../hooks/use-path-completion.js';
+import type { SettingCompletionItem } from '../hooks/use-settings-completion.js';
 
 // Constants
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 const TERMINAL_PADDING = 3;
+const SETTINGS_TRIGGER = '/settings ';
+
+// Pure function to determine which menu should be active
+type ActiveMenu =
+	| { type: 'none' }
+	| { type: 'slash' }
+	| { type: 'settings'; query: string; startIndex: number }
+	| { type: 'path'; trigger: { start: number; query: string } };
+
+function determineActiveMenu(
+	value: string,
+	cursorOffset: number,
+): ActiveMenu {
+	// Priority 1: Settings menu (most specific)
+	if (value.startsWith(SETTINGS_TRIGGER)) {
+		return {
+			type: 'settings',
+			query: value.slice(SETTINGS_TRIGGER.length),
+			startIndex: SETTINGS_TRIGGER.length,
+		};
+	}
+
+	// Priority 2: Slash menu (less specific)
+	if (value.startsWith('/')) {
+		return { type: 'slash' };
+	}
+
+	// Priority 3: Path menu (fallback)
+	const pathTrigger = findPathTrigger(value, cursorOffset, STOP_CHAR_REGEX);
+	if (pathTrigger) {
+		return { type: 'path', trigger: pathTrigger };
+	}
+
+	return { type: 'none' };
+}
 
 type Props = {
     value: string;
@@ -38,6 +75,15 @@ type Props = {
     onPathMenuUp: () => void;
     onPathMenuDown: () => void;
     getPathMenuSelection: () => PathCompletionItem | undefined;
+    settingsMenuOpen: boolean;
+    settingsMenuItems: SettingCompletionItem[];
+    settingsMenuSelectedIndex: number;
+    onSettingsMenuOpen: (start: number, query: string) => void;
+    onSettingsMenuClose: () => void;
+    onSettingsMenuFilterChange: (query: string) => void;
+    onSettingsMenuUp: () => void;
+    onSettingsMenuDown: () => void;
+    getSettingsMenuSelection: () => SettingCompletionItem | undefined;
 };
 
 const InputBox: FC<Props> = ({
@@ -69,6 +115,15 @@ const InputBox: FC<Props> = ({
     onPathMenuUp,
     onPathMenuDown,
     getPathMenuSelection,
+    settingsMenuOpen,
+    settingsMenuItems,
+    settingsMenuSelectedIndex,
+    onSettingsMenuOpen,
+    onSettingsMenuClose,
+    onSettingsMenuFilterChange,
+    onSettingsMenuUp,
+    onSettingsMenuDown,
+    getSettingsMenuSelection,
 }) => {
     const [escHintVisible, setEscHintVisible] = useState(false);
     const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -108,21 +163,68 @@ const InputBox: FC<Props> = ({
         }
     }, [cursorOverride, cursorOffset]);
 
-    // Detect when user types '/' at the start
+    // Sync menu states based on pure derivation of which menu should be active
     useEffect(() => {
-        if (value === '/' && !slashMenuOpen) {
-            onSlashMenuOpen();
-        } else if (value.startsWith('/') && slashMenuOpen) {
-            onSlashMenuFilterChange(value);
-        } else if (!value.startsWith('/') && slashMenuOpen) {
-            onSlashMenuClose();
+        const activeMenu = determineActiveMenu(value, cursorOffset);
+
+        switch (activeMenu.type) {
+            case 'settings':
+                // Open settings menu, close others
+                if (!settingsMenuOpen) {
+                    onSettingsMenuOpen(activeMenu.startIndex, activeMenu.query);
+                } else {
+                    onSettingsMenuFilterChange(activeMenu.query);
+                }
+                if (slashMenuOpen) onSlashMenuClose();
+                if (pathMenuOpen) onPathMenuClose();
+                break;
+
+            case 'slash':
+                // Open slash menu, close others
+                if (!slashMenuOpen) {
+                    onSlashMenuOpen();
+                } else {
+                    onSlashMenuFilterChange(value);
+                }
+                if (settingsMenuOpen) onSettingsMenuClose();
+                if (pathMenuOpen) onPathMenuClose();
+                break;
+
+            case 'path':
+                // Open path menu, close others
+                if (!pathMenuOpen || pathMenuTriggerIndex !== activeMenu.trigger.start) {
+                    onPathMenuOpen(activeMenu.trigger.start, activeMenu.trigger.query);
+                } else if (pathMenuQuery !== activeMenu.trigger.query) {
+                    onPathMenuFilterChange(activeMenu.trigger.query);
+                }
+                if (slashMenuOpen) onSlashMenuClose();
+                if (settingsMenuOpen) onSettingsMenuClose();
+                break;
+
+            case 'none':
+                // Close all menus
+                if (slashMenuOpen) onSlashMenuClose();
+                if (settingsMenuOpen) onSettingsMenuClose();
+                if (pathMenuOpen) onPathMenuClose();
+                break;
         }
     }, [
         value,
+        cursorOffset,
         slashMenuOpen,
+        pathMenuOpen,
+        settingsMenuOpen,
+        pathMenuTriggerIndex,
+        pathMenuQuery,
         onSlashMenuOpen,
         onSlashMenuClose,
         onSlashMenuFilterChange,
+        onPathMenuOpen,
+        onPathMenuClose,
+        onPathMenuFilterChange,
+        onSettingsMenuOpen,
+        onSettingsMenuClose,
+        onSettingsMenuFilterChange,
     ]);
 
     // Handle escape key for clearing input (double-press)
@@ -147,7 +249,7 @@ const InputBox: FC<Props> = ({
                 }
             }
         },
-        {isActive: !slashMenuOpen && !pathMenuOpen},
+        { isActive: !slashMenuOpen && !pathMenuOpen && !settingsMenuOpen },
     );
 
     // Handle escape for slash menu (arrow keys now handled via onBoundaryArrow)
@@ -161,6 +263,25 @@ const InputBox: FC<Props> = ({
             }
         },
         {isActive: slashMenuOpen},
+    );
+
+    // Handle escape/tab for settings menu
+    useInput(
+        (_input, key) => {
+            if (!settingsMenuOpen) return;
+
+            if (key.escape) {
+                onSettingsMenuClose();
+            } else if (key.tab || key.return) {
+                // Determine selection behavior
+                // (Enter logic is also in handleSubmit, but Tab needs to be here)
+                // Actually, let's keep Enter in handleSubmit to be consistent
+                if (key.tab) {
+                    insertSelectedSetting();
+                }
+            }
+        },
+        { isActive: settingsMenuOpen },
     );
 
     // Handle escape and tab for path menu (arrow keys now handled via onBoundaryArrow)
@@ -189,6 +310,13 @@ const InputBox: FC<Props> = ({
                 } else if (direction === 'down') {
                     onSlashMenuDown();
                 }
+            } else if (settingsMenuOpen) {
+                // Settings menu navigation
+                if (direction === 'up') {
+                    onSettingsMenuUp();
+                } else if (direction === 'down') {
+                    onSettingsMenuDown();
+                }
             } else if (pathMenuOpen) {
                 // Path menu navigation
                 if (direction === 'up') {
@@ -210,10 +338,13 @@ const InputBox: FC<Props> = ({
         [
             slashMenuOpen,
             pathMenuOpen,
+            settingsMenuOpen,
             onSlashMenuUp,
             onSlashMenuDown,
             onPathMenuUp,
             onPathMenuDown,
+            onSettingsMenuUp,
+            onSettingsMenuDown,
             onHistoryUp,
             onHistoryDown,
         ],
@@ -257,6 +388,24 @@ const InputBox: FC<Props> = ({
         ],
     );
 
+    const insertSelectedSetting = useCallback((): boolean => {
+        if (!settingsMenuOpen) return false;
+
+        const selection = getSettingsMenuSelection();
+        if (!selection) return false;
+
+        // Pattern: /settings <key>
+        // value is like "/settings ag"
+        const SETTINGS_TRIGGER = '/settings ';
+        if (!value.startsWith(SETTINGS_TRIGGER)) return false;
+
+        const newValue = SETTINGS_TRIGGER + selection.key + ' ';
+        onChange(newValue);
+        setCursorOverride(newValue.length);
+        onSettingsMenuClose();
+        return true;
+    }, [settingsMenuOpen, getSettingsMenuSelection, value, onChange, onSettingsMenuClose]);
+
     const clearActivePathTrigger = useCallback(() => {
         if (pathMenuTriggerIndex === null) return;
         const safeCursor = Math.min(cursorOffset, value.length);
@@ -275,6 +424,22 @@ const InputBox: FC<Props> = ({
                     return;
                 }
             }
+            if (settingsMenuOpen) {
+                // Check if user has a complete command (key + value)
+                // Pattern: /settings <key> <value>
+                const parts = submittedValue.slice(SETTINGS_TRIGGER.length).trim().split(/\s+/);
+                if (parts.length >= 2) {
+                    // Complete command, execute it
+                    onSubmit(submittedValue);
+                    return;
+                }
+
+                // Only autocomplete if just selecting the key
+                const inserted = insertSelectedSetting();
+                if (inserted) {
+                    return;
+                }
+            }
             if (slashMenuOpen) {
                 // Execute the selected slash command
                 onSlashMenuSelect();
@@ -286,48 +451,15 @@ const InputBox: FC<Props> = ({
         },
         [
             pathMenuOpen,
+            settingsMenuOpen,
             slashMenuOpen,
             onSlashMenuSelect,
             onSubmit,
             insertSelectedPath,
+            insertSelectedSetting,
         ],
     );
 
-    useEffect(() => {
-        if (slashMenuOpen) {
-            if (pathMenuOpen) {
-                onPathMenuClose();
-            }
-            return;
-        }
-
-        const trigger = findPathTrigger(value, cursorOffset, STOP_CHAR_REGEX);
-        if (!trigger) {
-            if (pathMenuOpen) {
-                onPathMenuClose();
-            }
-            return;
-        }
-
-        if (!pathMenuOpen || pathMenuTriggerIndex !== trigger.start) {
-            onPathMenuOpen(trigger.start, trigger.query);
-            return;
-        }
-
-        if (pathMenuQuery !== trigger.query) {
-            onPathMenuFilterChange(trigger.query);
-        }
-    }, [
-        value,
-        cursorOffset,
-        slashMenuOpen,
-        pathMenuOpen,
-        pathMenuTriggerIndex,
-        pathMenuQuery,
-        onPathMenuClose,
-        onPathMenuOpen,
-        onPathMenuFilterChange,
-    ]);
 
     return (
         <Box flexDirection="column">
@@ -345,6 +477,12 @@ const InputBox: FC<Props> = ({
                     commands={slashCommands}
                     selectedIndex={slashMenuSelectedIndex}
                     filter={slashMenuFilter}
+                />
+            )}
+            {settingsMenuOpen && (
+                <SettingsSelectionMenu
+                    items={settingsMenuItems}
+                    selectedIndex={settingsMenuSelectedIndex}
                 />
             )}
             <Box>

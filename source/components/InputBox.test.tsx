@@ -4,6 +4,7 @@ import {render} from 'ink-testing-library';
 import InputBox from './InputBox.js';
 import type {SlashCommand} from './SlashCommandMenu.js';
 import type {PathCompletionItem} from '../hooks/use-path-completion.js';
+import type {SettingCompletionItem} from '../hooks/use-settings-completion.js';
 
 // Mock slash commands
 const mockSlashCommands: SlashCommand[] = [
@@ -41,6 +42,15 @@ const defaultProps = {
     onPathMenuUp: () => {},
     onPathMenuDown: () => {},
     getPathMenuSelection: () => undefined,
+    settingsMenuOpen: false,
+    settingsMenuItems: [] as SettingCompletionItem[],
+    settingsMenuSelectedIndex: 0,
+    onSettingsMenuOpen: () => {},
+    onSettingsMenuClose: () => {},
+    onSettingsMenuFilterChange: () => {},
+    onSettingsMenuUp: () => {},
+    onSettingsMenuDown: () => {},
+    getSettingsMenuSelection: () => undefined,
 };
 
 test('callback functions should remain stable across re-renders', t => {

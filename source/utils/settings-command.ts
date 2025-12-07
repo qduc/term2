@@ -85,13 +85,14 @@ interface CreateSettingsCommandDeps {
     settingsService: SettingsService;
     addSystemMessage: (message: string) => void;
     applyRuntimeSetting?: (key: string, value: any) => void;
-    setInput?: (value: string) => void;
+    setInput: (value: string) => void;
 }
 
 export function createSettingsCommand({
     settingsService,
     addSystemMessage,
     applyRuntimeSetting,
+    setInput,
 }: CreateSettingsCommandDeps): SlashCommand {
     return {
         name: 'settings',
@@ -100,11 +101,10 @@ export function createSettingsCommand({
         action: (args?: string) => {
             const trimmedArgs = args?.trim() ?? '';
 
-            // No args: show all settings
+            // No args: prompt for setting name with autocomplete
             if (!trimmedArgs) {
-                const all = settingsService.getAll();
-                addSystemMessage(formatSettingsSummary(all));
-                return true;
+                setInput('/settings ');
+                return false;
             }
 
             const parts = trimmedArgs.split(/\s+/).filter(Boolean);

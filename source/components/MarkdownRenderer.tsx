@@ -120,7 +120,7 @@ const BlockRenderer = ({token}: {token: any}) => {
                     <Box marginRight={1}>
                         <Text color="green">•</Text>
                     </Box>
-                    <Box flexDirection="column">
+                    <Box flexDirection="column" flexGrow={1}>
                         {/* List items can contain multiple block tokens (like sub-lists or paragraphs) */}
                         {token.tokens.map((subToken: any, i: number) => {
                             // If it's just text inside the list item, marked might wrap it in a generic block

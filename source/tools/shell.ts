@@ -121,6 +121,7 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 
             loggingService.info('Shell command execution started', {
                 commandCount: commands.length,
+                commands,
                 timeout,
                 workingDirectory: cwd,
                 maxOutputLength,

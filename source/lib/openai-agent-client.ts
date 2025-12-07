@@ -109,7 +109,6 @@ export class OpenAIAgentClient {
                     signal,
                 }),
             );
-            loggingService.debug('Agent stream completed successfully');
             return result;
         } catch (error: any) {
             loggingService.error('Agent stream failed', {

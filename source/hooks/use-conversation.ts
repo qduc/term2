@@ -76,6 +76,49 @@ export const useConversation = ({
     const [isProcessing, setIsProcessing] = useState<boolean>(false);
     const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
 
+    // Helper to log events with deduplication
+    const createEventLogger = () => {
+        let lastEventType: string | null = null;
+        let eventCount = 0;
+        let eventSequence: string[] = [];
+
+        const logDeduplicated = (eventType: string) => {
+            if (eventType !== lastEventType) {
+                if (lastEventType !== null) {
+                    loggingService.debug('Conversation event sequence', {
+                        event: lastEventType,
+                        count: eventCount,
+                        sequenceLength: eventSequence.length,
+                        sequence: eventSequence,
+                    });
+                }
+                lastEventType = eventType;
+                eventCount = 1;
+                if (!eventSequence.includes(eventType)) {
+                    eventSequence.push(eventType);
+                }
+            } else {
+                eventCount++;
+            }
+        };
+
+        const flush = () => {
+            if (lastEventType !== null) {
+                loggingService.debug('Conversation event sequence final', {
+                    event: lastEventType,
+                    count: eventCount,
+                    sequenceLength: eventSequence.length,
+                    sequence: eventSequence,
+                });
+                lastEventType = null;
+                eventCount = 0;
+                eventSequence = [];
+            }
+        };
+
+        return {logDeduplicated, flush};
+    };
+
     const applyServiceResult = useCallback(
         (
             result: any,
@@ -185,38 +228,13 @@ export const useConversation = ({
             let textWasFlushed = false;
             let currentReasoningMessageId: number | null = null; // Track current reasoning message ID
 
-            // Event logging for debugging
-            let lastEventType: string | null = null;
-            let eventCount = 0;
-            const logEvent = (eventType: string) => {
-                if (eventType !== lastEventType) {
-                    if (lastEventType !== null) {
-                        loggingService.debug('Conversation event', {
-                            event: lastEventType,
-                            count: eventCount,
-                        });
-                    }
-                    lastEventType = eventType;
-                    eventCount = 1;
-                } else {
-                    eventCount++;
-                }
-            };
-            const flushLog = () => {
-                if (lastEventType !== null) {
-                    loggingService.debug('Conversation event', {
-                        event: lastEventType,
-                        count: eventCount,
-                    });
-                    lastEventType = null;
-                    eventCount = 0;
-                }
-            };
+            // Create event logger with deduplication for this message send
+            const {logDeduplicated, flush: flushLog} = createEventLogger();
 
             try {
                 const result = await conversationService.sendMessage(value, {
                     onTextChunk: (_fullText, chunk = '') => {
-                        logEvent('onTextChunk');
+                        logDeduplicated('onTextChunk');
                         accumulatedText += chunk;
                         setLiveResponse(prev =>
                             prev && prev.id === liveMessageId
@@ -229,7 +247,7 @@ export const useConversation = ({
                         );
                     },
                     onReasoningChunk: fullReasoningText => {
-                        logEvent('onReasoningChunk');
+                        logDeduplicated('onReasoningChunk');
                         // Only show reasoning text after what was already flushed
                         const newReasoningText = fullReasoningText.slice(
                             flushedReasoningLength,
@@ -262,7 +280,7 @@ export const useConversation = ({
                         });
                     },
                     onCommandMessage: cmdMsg => {
-                        logEvent('onCommandMessage');
+                        logDeduplicated('onCommandMessage');
                         // Before adding command message, flush reasoning and text separately
                         // This preserves the order: reasoning -> command -> response text
                         const messagesToAdd: Message[] = [];
@@ -314,6 +332,7 @@ export const useConversation = ({
                 };
                 setMessages(prev => [...prev, botErrorMessage]);
             } finally {
+                flushLog();
                 setLiveResponse(null);
                 setIsProcessing(false);
             }
@@ -351,11 +370,15 @@ export const useConversation = ({
             let textWasFlushed = false;
             let currentReasoningMessageId: number | null = null; // Track current reasoning message ID
 
+            // Create event logger with deduplication for this approval decision
+            const {logDeduplicated, flush: flushLog} = createEventLogger();
+
             try {
                 const result = await conversationService.handleApprovalDecision(
                     answer,
                     {
                         onTextChunk: (_fullText, chunk = '') => {
+                            logDeduplicated('onTextChunk');
                             accumulatedText += chunk;
                             setLiveResponse(prev =>
                                 prev && prev.id === liveMessageId
@@ -368,6 +391,7 @@ export const useConversation = ({
                             );
                         },
                         onReasoningChunk: fullReasoningText => {
+                            logDeduplicated('onReasoningChunk');
                             // Only show reasoning text after what was already flushed
                             const newReasoningText = fullReasoningText.slice(
                                 flushedReasoningLength,
@@ -400,6 +424,7 @@ export const useConversation = ({
                             });
                         },
                         onCommandMessage: cmdMsg => {
+                            logDeduplicated('onCommandMessage');
                             // Before adding command message, flush reasoning and text separately
                             // This preserves the order: reasoning -> command -> response text
                             const messagesToAdd: Message[] = [];
@@ -453,6 +478,7 @@ export const useConversation = ({
                 };
                 setMessages(prev => [...prev, botErrorMessage]);
             } finally {
+                flushLog();
                 setLiveResponse(null);
                 setIsProcessing(false);
             }

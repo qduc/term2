@@ -426,12 +426,43 @@ class OpenRouterModel implements Model {
             }),
         });
 
-        // Build output array with message and tool calls
+        // Build output array with message, reasoning, and tool calls
         const output: any[] = [];
 
-        // Add assistant message only if there's text content OR reasoning
+        // Add reasoning items as separate output items (if present)
+        if (reasoningDetails && Array.isArray(reasoningDetails)) {
+            for (const reasoningItem of reasoningDetails) {
+                if (reasoningItem.type === 'reasoning.summary' && reasoningItem.summary) {
+                    output.push({
+                        type: 'reasoning',
+                        id: reasoningItem.id || `reasoning-${Date.now()}`,
+                        content: [
+                            {
+                                type: 'input_text',
+                                text: reasoningItem.summary,
+                                providerData: {
+                                    format: reasoningItem.format,
+                                    index: reasoningItem.index,
+                                },
+                            },
+                        ],
+                        providerData: reasoningItem,
+                    } as any);
+                } else if (reasoningItem.type === 'reasoning.encrypted') {
+                    // Store encrypted reasoning in providerData only
+                    output.push({
+                        type: 'reasoning',
+                        id: reasoningItem.id || `reasoning-encrypted-${Date.now()}`,
+                        content: [],
+                        providerData: reasoningItem,
+                    } as any);
+                }
+            }
+        }
+
+        // Add assistant message only if there's text content
         // (Don't add empty message when there are only tool calls)
-        if (textContent || reasoningDetails) {
+        if (textContent) {
             output.push({
                 type: 'message',
                 role: 'assistant',
@@ -442,9 +473,6 @@ class OpenRouterModel implements Model {
                         text: textContent,
                     },
                 ],
-                ...(reasoningDetails
-                    ? {reasoning_details: reasoningDetails}
-                    : {}),
             } as any);
         }
 
@@ -649,9 +677,40 @@ class OpenRouterModel implements Model {
     ): any[] {
         const output: any[] = [];
 
-        // Add assistant message only if there's text content OR reasoning
+        // Add reasoning items as separate output items (if present)
+        if (reasoningDetails && Array.isArray(reasoningDetails)) {
+            for (const reasoningItem of reasoningDetails) {
+                if (reasoningItem.type === 'reasoning.summary' && reasoningItem.summary) {
+                    output.push({
+                        type: 'reasoning',
+                        id: reasoningItem.id || `reasoning-${Date.now()}`,
+                        content: [
+                            {
+                                type: 'input_text',
+                                text: reasoningItem.summary,
+                                providerData: {
+                                    format: reasoningItem.format,
+                                    index: reasoningItem.index,
+                                },
+                            },
+                        ],
+                        providerData: reasoningItem,
+                    } as any);
+                } else if (reasoningItem.type === 'reasoning.encrypted') {
+                    // Store encrypted reasoning in providerData only
+                    output.push({
+                        type: 'reasoning',
+                        id: reasoningItem.id || `reasoning-encrypted-${Date.now()}`,
+                        content: [],
+                        providerData: reasoningItem,
+                    } as any);
+                }
+            }
+        }
+
+        // Add assistant message only if there's text content
         // (Don't add empty message when there are only tool calls)
-        if (accumulated || reasoningDetails) {
+        if (accumulated) {
             output.push({
                 type: 'message',
                 role: 'assistant',
@@ -662,9 +721,6 @@ class OpenRouterModel implements Model {
                         text: accumulated,
                     },
                 ],
-                ...(reasoningDetails
-                    ? {reasoning_details: reasoningDetails}
-                    : {}),
             } as any);
         }
 

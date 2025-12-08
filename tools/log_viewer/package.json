@@ -1,0 +1,23 @@
+{
+	"name": "term2-log-viewer",
+	"version": "0.1.0",
+	"description": "Small log viewer service to browse logs in the logs/ folder",
+	"main": "src/server.js",
+	"scripts": {
+		"start": "node src/server.js",
+		"dev": "node src/server.js"
+	},
+	"keywords": [
+		"logs",
+		"viewer",
+		"tail",
+		"express"
+	],
+	"license": "MIT",
+	"dependencies": {
+		"cors": "^2.8.5",
+		"express": "^4.18.2",
+		"dayjs": "^1.11.9",
+		"env-paths": "^3.0.0"
+	}
+}

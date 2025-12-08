@@ -18,12 +18,6 @@ import {
 //
 // - 'response_done' - for final response completion (NOT 'response.completed')
 //   { type: 'response_done', response: { id: string, usage: {...}, output: [...] } }
-//   REQUIRED fields in response:
-//     - id: string (response identifier)
-//     - usage.inputTokens: number (cannot be undefined)
-//     - usage.outputTokens: number (cannot be undefined)
-//     - usage.totalTokens: number (cannot be undefined)
-//     - output: array of AssistantMessageItem (see below)
 //
 // - 'response_started' - for response start (optional)
 //

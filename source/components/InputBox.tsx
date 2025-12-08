@@ -78,14 +78,17 @@ const InputBox: FC<Props> = ({
 
     // Trigger Detection
     useEffect(() => {
-        // Only detect triggers if we are in text mode (or upgrading specificity?)
-        // Actually, if we are in text mode, check for triggers.
-        if (mode !== 'text') return;
+        // Allow trigger detection in all modes to enable menu transitions
 
         // Priority 1: Settings
         if (value.startsWith(SETTINGS_TRIGGER) && cursorOffset >= SETTINGS_TRIGGER.length) {
             settings.open(SETTINGS_TRIGGER.length);
             return;
+        }
+
+        // If no settings match, close settings menu if it was open
+        if (mode === 'settings_completion') {
+            settings.close();
         }
 
         // Priority 2: Slash (only if at start)
@@ -101,12 +104,22 @@ const InputBox: FC<Props> = ({
             return;
         }
 
+        // If no slash match, close slash menu if it was open
+        if (mode === 'slash_commands') {
+            slash.close();
+        }
+
         // Priority 3: Path
         // We need to find the trigger '@' or similar backward from cursor
         const pathTrigger = findPathTrigger(value, cursorOffset, STOP_CHAR_REGEX);
         if (pathTrigger) {
             path.open(pathTrigger.start);
             return;
+        }
+
+        // If no path match, close path menu if it was open
+        if (mode === 'path_completion') {
+            path.close();
         }
 
     }, [value, cursorOffset, mode, slash, path, settings]);

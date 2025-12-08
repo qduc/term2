@@ -118,6 +118,9 @@ export class ConversationService {
     reset(): void {
         this.previousResponseId = null;
         this.pendingApprovalContext = null;
+        if (typeof (this.agentClient as any).clearConversations === 'function') {
+            (this.agentClient as any).clearConversations();
+        }
     }
 
     setModel(model: string): void {

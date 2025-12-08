@@ -575,6 +575,7 @@ test('does not update config file when no new settings are added', async t => {
             maxTurns: 20,
             retryAttempts: 2,
             provider: 'openai',
+            openrouter: {},
         },
         shell: {
             timeout: 120000,
@@ -586,6 +587,20 @@ test('does not update config file when no new settings are added', async t => {
         },
         logging: {
             logLevel: 'info',
+            disableLogging: false,
+            debugLogging: false,
+        },
+        environment: {
+            nodeEnv: undefined,
+        },
+        app: {
+            shellPath: undefined,
+        },
+        tools: {
+            logFileOperations: true,
+        },
+        debug: {
+            debugBashTool: false,
         },
     };
 
@@ -604,5 +619,43 @@ test('does not update config file when no new settings are added', async t => {
     const newModTime = fs.statSync(configFile).mtime.getTime();
 
     // File modification time should be the same or within a small margin (not updated)
+    t.is(originalModTime, newModTime);
+});
+
+test('does not update config file when format differs but content is same', async t => {
+    const settingsDir = getTestSettingsDir();
+    const configFile = path.join(settingsDir, 'settings.json');
+
+    // Create directory
+    if (!fs.existsSync(settingsDir)) {
+        fs.mkdirSync(settingsDir, {recursive: true});
+    }
+
+    // Write config with compact JSON (no formatting, different key order)
+    const compactConfig = {
+        agent: {model: 'gpt-4o', reasoningEffort: 'default', maxTurns: 20, retryAttempts: 2, provider: 'openai', openrouter: {}},
+        shell: {timeout: 120000, maxOutputLines: 1000, maxOutputChars: 10000},
+        ui: {historySize: 1000},
+        logging: {logLevel: 'info', disableLogging: false, debugLogging: false},
+        environment: {nodeEnv: undefined},
+        app: {shellPath: undefined},
+        tools: {logFileOperations: true},
+        debug: {debugBashTool: false},
+    };
+
+    fs.writeFileSync(configFile, JSON.stringify(compactConfig), 'utf-8');
+    const originalModTime = fs.statSync(configFile).mtime.getTime();
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Initialize service - it should NOT update the file even though format differs
+    new SettingsService({
+        settingsDir,
+        disableLogging: true,
+    });
+
+    const newModTime = fs.statSync(configFile).mtime.getTime();
+
+    // File modification time should be the same (not updated despite format difference)
     t.is(originalModTime, newModTime);
 });

@@ -5,9 +5,48 @@ import {
     type ModelResponse,
     type ResponseStreamEvent,
 } from '@openai/agents-core';
+import {randomUUID} from 'node:crypto';
 import {settingsService} from '../services/settings-service.js';
+import {loggingService as logger} from '../services/logging-service.js';
 
 // Minimal OpenRouter Chat Completions client implementing the Agents Core Model interface.
+//
+// MODELREQUEST TO OPENROUTER MAPPING GUIDE:
+//
+// This provider maps all properties of the OpenAI Agents SDK's ModelRequest interface
+// to OpenRouter's Chat Completions API format. Below is the complete mapping:
+//
+// ✓ FULLY COMPATIBLE (mapped directly):
+//   - systemInstructions → {role: "system", content: string}
+//   - input (string) → {role: "user", content: string}
+//   - input (array) → {role: "user", content: string} (text items concatenated)
+//   - modelSettings.temperature → temperature
+//   - modelSettings.topP → top_p
+//   - modelSettings.maxTokens → max_tokens
+//   - modelSettings.topK → top_k
+//   - modelSettings.frequencyPenalty → frequency_penalty
+//   - modelSettings.presencePenalty → presence_penalty
+//   - tools (function tools only) → tools array with function definitions
+//   - signal → fetch() signal for cancellation
+//
+// ⚠ PARTIALLY SUPPORTED (requires transformation):
+//   - input (image/document items) - skipped, text items extracted
+//   - outputType - basic JSON mode only, not JSON Schema
+//
+// ✗ NOT SUPPORTED (ignored):
+//   - previousResponseId - OpenRouter doesn't support response chaining
+//   - conversationId - no conversation state API; manage history manually
+//   - handoffs - SDK-specific multi-agent feature
+//   - prompt - no prompt template storage
+//   - overridePromptModel - only relevant with prompt templates
+//   - modelSettings.seed - OpenAI-specific reproducibility
+//   - modelSettings.truncation - OpenAI-specific strategy
+//   - modelSettings.store - OpenAI prompt/response caching
+//   - modelSettings.promptCacheRetention - OpenAI cache control
+//   - modelSettings.responseFormatJsonSchema - OpenAI-specific
+//   - tracing - used locally, not sent to API
+//   - toolsExplicitlyProvided - internal SDK flag
+//   - SDK-specific tools (ShellTool, ComputerTool) - filtered out
 //
 // IMPORTANT for custom provider implementers:
 // The OpenAI Agents SDK has strict requirements for both ModelResponse structure AND stream event types.
@@ -28,6 +67,17 @@ const OPENROUTER_BASE_URL =
     settingsService.get<string>('agent.openrouter.baseUrl') ||
     'https://openrouter.ai/api/v1';
 
+const conversationHistory = new Map<string, any[]>();
+
+function clearOpenRouterConversations(conversationId?: string): void {
+    if (conversationId) {
+        conversationHistory.delete(conversationId);
+        return;
+    }
+
+    conversationHistory.clear();
+}
+
 // Convert OpenRouter usage format to OpenAI Agents SDK format
 function normalizeUsage(openRouterUsage: any): {
     inputTokens: number;
@@ -43,28 +93,207 @@ function normalizeUsage(openRouterUsage: any): {
     };
 }
 
-function buildMessagesFromRequest(req: ModelRequest): any[] {
+function convertAgentItemToOpenRouterMessage(item: any): any | null {
+    if (!item) {
+        return null;
+    }
+
+    if (item.type === 'input_text' && typeof item.text === 'string') {
+        return {role: 'user', content: item.text};
+    }
+
+    if (item.role === 'assistant' && item.type === 'message') {
+        const message: any = {role: 'assistant'};
+        if (Array.isArray(item.content)) {
+            const textContent = item.content
+                .filter((c: any) => c?.type === 'output_text' && c?.text)
+                .map((c: any) => c.text)
+                .join('');
+            if (textContent) {
+                message.content = textContent;
+            }
+        }
+
+        if (item.reasoning_details) {
+            message.reasoning_details = item.reasoning_details;
+        }
+
+        if (item.tool_calls) {
+            message.tool_calls = item.tool_calls;
+            message.content = null;
+        }
+
+        return message;
+    }
+
+    // Handle explicit user messages included in array-form inputs
+    if (item.role === 'user' && item.type === 'message') {
+        if (typeof item.content === 'string') {
+            return {role: 'user', content: item.content};
+        }
+
+        if (Array.isArray(item.content)) {
+            const textContent = item.content
+                .filter((c: any) => (c?.type === 'input_text' || c?.type === 'output_text') && c?.text)
+                .map((c: any) => c.text)
+                .join('');
+            if (textContent) {
+                return {role: 'user', content: textContent};
+            }
+        }
+    }
+
+    const rawItem = item.rawItem || item;
+
+    if (
+        rawItem?.type === 'function_call' ||
+        rawItem?.type === 'function_call_output'
+    ) {
+        return {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+                {
+                    id: rawItem.callId || rawItem.id,
+                    type: 'function',
+                    function: {
+                        name: rawItem.name,
+                        arguments:
+                            rawItem.arguments ??
+                            (rawItem.args ? JSON.stringify(rawItem.args) : ''),
+                    },
+                },
+            ],
+        };
+    }
+
+    if (
+        rawItem?.type === 'function_call_result' ||
+        rawItem?.type === 'function_call_output_result'
+    ) {
+        let outputContent = '';
+        if (typeof rawItem.output === 'string') {
+            outputContent = rawItem.output;
+        } else if (rawItem.output && typeof rawItem.output === 'object') {
+            outputContent = JSON.stringify(rawItem.output);
+        }
+
+        return {
+            role: 'tool',
+            tool_call_id: rawItem.callId || rawItem.id,
+            content: outputContent,
+        };
+    }
+
+    return null;
+}
+
+function buildMessagesFromRequest(
+    req: ModelRequest,
+    conversationId: string | null,
+): {messages: any[]; currentTurnMessages: any[]} {
     const messages: any[] = [];
+    const currentTurnMessages: any[] = [];
+
     if (req.systemInstructions && req.systemInstructions.trim().length > 0) {
         messages.push({role: 'system', content: req.systemInstructions});
     }
 
-    // Support only simple text input for now; if array, join text parts.
+    if (conversationId && conversationHistory.has(conversationId)) {
+        messages.push(...(conversationHistory.get(conversationId) || []));
+    }
+
     if (typeof req.input === 'string') {
-        messages.push({role: 'user', content: req.input});
+        const userMessage = {role: 'user', content: req.input};
+        messages.push(userMessage);
+        currentTurnMessages.push(userMessage);
     } else if (Array.isArray(req.input)) {
-        const textParts: string[] = [];
         for (const item of req.input as any[]) {
-            // best effort: handle text items
-            if (item?.type === 'input_text' && typeof item?.text === 'string') {
-                textParts.push(item.text);
+            const converted = convertAgentItemToOpenRouterMessage(item);
+            if (converted) {
+                messages.push(converted);
+                currentTurnMessages.push(converted);
             }
         }
-        if (textParts.length > 0) {
-            messages.push({role: 'user', content: textParts.join('\n')});
+    }
+
+    return {messages, currentTurnMessages};
+}
+
+// Extract function tools from ModelRequest tools array
+// SDK Property: tools (SerializedTool[])
+// OpenRouter Mapping: tools array in request body with function definitions
+function extractFunctionToolsFromRequest(req: ModelRequest): any[] {
+    if (!req.tools || req.tools.length === 0) {
+        return [];
+    }
+
+    const functionTools: any[] = [];
+
+    for (const tool of req.tools as any[]) {
+        if (tool.type === 'function') {
+            functionTools.push({
+                type: 'function',
+                function: {
+                    name: tool.name,
+                    description: tool.description,
+                    parameters: tool.parameters,
+                    strict: tool.strict,
+                },
+            });
         }
     }
-    return messages;
+
+    return functionTools;
+}
+
+// Map ModelSettings to OpenRouter request parameters
+// SDK Property: modelSettings (ModelSettings)
+// OpenRouter Mapping: Direct parameter mapping
+function extractModelSettingsForRequest(settings: any): any {
+    const body: any = {};
+
+    if (settings) {
+        // Temperature: Supported by both SDK and OpenRouter
+        if (settings.temperature != null) body.temperature = settings.temperature;
+
+        // Top P: Supported by both (SDK uses topP, OpenRouter uses top_p)
+        if (settings.topP != null) body.top_p = settings.topP;
+
+        // Max Tokens: Supported by both (SDK uses maxTokens, OpenRouter uses max_tokens)
+        if (settings.maxTokens != null) body.max_tokens = settings.maxTokens;
+
+        // Top K: Supported by some models via OpenRouter
+        if (settings.topK != null) body.top_k = settings.topK;
+
+        // Frequency Penalty: OpenAI standard parameter
+        if (settings.frequencyPenalty != null) body.frequency_penalty = settings.frequencyPenalty;
+
+        // Presence Penalty: OpenAI standard parameter
+        if (settings.presencePenalty != null) body.presence_penalty = settings.presencePenalty;
+
+        const reasoningEffort =
+            settings.reasoningEffort ?? settings.reasoning?.effort;
+        const normalizedEffort =
+            reasoningEffort === 'default' ? 'medium' : reasoningEffort;
+
+        if (normalizedEffort && normalizedEffort !== 'none') {
+            body.reasoning = {
+                ...(settings.reasoning ?? {}),
+                effort: normalizedEffort,
+            };
+        }
+
+        // NOTE: The following ModelSettings properties are OpenAI-specific and NOT sent to OpenRouter:
+        // - seed: OpenAI reproducibility feature
+        // - truncation: OpenAI-specific truncation strategy
+        // - store: OpenAI prompt/response caching
+        // - promptCacheRetention: OpenAI cache control
+        // - responseFormat: Partially supported (basic JSON mode only, not JSON schema)
+        // - responseFormatJsonSchema: OpenAI-specific (not all models support)
+    }
+
+    return body;
 }
 
 async function callOpenRouter({
@@ -74,6 +303,7 @@ async function callOpenRouter({
     stream,
     signal,
     settings,
+    tools,
 }: {
     apiKey: string;
     model: string;
@@ -81,6 +311,7 @@ async function callOpenRouter({
     stream: boolean;
     signal?: AbortSignal;
     settings?: any;
+    tools?: any[];
 }): Promise<Response> {
     const url = `${OPENROUTER_BASE_URL}/chat/completions`;
     const body: any = {
@@ -88,10 +319,16 @@ async function callOpenRouter({
         messages,
         stream,
     };
-    if (settings) {
-        if (settings.temperature != null) body.temperature = settings.temperature;
-        if (settings.topP != null) body.top_p = settings.topP;
-        if (settings.maxTokens != null) body.max_tokens = settings.maxTokens;
+
+    // Merge settings into request body
+    const settingsParams = extractModelSettingsForRequest(settings);
+    Object.assign(body, settingsParams);
+
+    // Add tools if provided
+    const functionTools = tools ?? [];
+    body.tools = functionTools;
+    if (functionTools.length > 0) {
+        body.tool_choice = 'auto'; // Let model choose when to use tools
     }
 
     const res = await fetch(url, {
@@ -125,6 +362,7 @@ async function callOpenRouter({
 class OpenRouterModel implements Model {
     name: string;
     #modelId: string;
+    #conversationHistory = conversationHistory;
     constructor(modelId?: string) {
         this.name = 'OpenRouter';
         this.#modelId =
@@ -138,7 +376,19 @@ class OpenRouterModel implements Model {
         if (!apiKey) {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
-        const messages = buildMessagesFromRequest(request);
+        const conversationId = request.previousResponseId ?? null;
+        const {messages, currentTurnMessages} = buildMessagesFromRequest(
+            request,
+            conversationId,
+        );
+
+        logger.debug('OpenRouter message', {messages});
+
+        // Extract function tools from ModelRequest
+        // SDK Property: tools (SerializedTool[])
+        // Note: SDK-specific tools (shell, computer, etc.) are filtered out here
+        const tools = extractFunctionToolsFromRequest(request);
+
         const res = await callOpenRouter({
             apiKey,
             model: this.#resolveModelFromRequest(request) || this.#modelId,
@@ -146,23 +396,33 @@ class OpenRouterModel implements Model {
             stream: false,
             signal: request.signal,
             settings: request.modelSettings,
+            tools,
         });
         const json: any = await res.json();
         const choice = json?.choices?.[0];
-        const content = choice?.message?.content ?? '';
+        const contentFromChoice = choice?.message?.content ?? '';
+        const textContent =
+            typeof contentFromChoice === 'string'
+                ? contentFromChoice
+                : JSON.stringify(contentFromChoice);
 
-        const usage = json?.usage || {};
-        // IMPORTANT: The Agents SDK expects a specific structure for ModelResponse.output:
-        // - Each item must be an AssistantMessageItem with:
-        //   - type: 'message' (optional but recommended)
-        //   - role: 'assistant'
-        //   - status: 'completed' | 'in_progress' | 'incomplete' (REQUIRED)
-        //   - content: ARRAY of content objects (NOT a plain string)
-        // - Content objects must have:
-        //   - type: 'output_text'
-        //   - text: the actual string content
-        // Failing to include 'status' or using plain strings for 'content' will cause
-        // "Model did not produce a final response" errors.
+        const responseId = json?.id ?? conversationId ?? randomUUID();
+
+        const usage = normalizeUsage(json?.usage || {}) as any;
+        const reasoningDetails = choice?.message?.reasoning_details;
+        const toolCalls = choice?.message?.tool_calls;
+
+        this.#storeConversationTurn({
+            conversationId,
+            responseId,
+            currentTurnMessages,
+            assistantMessage: this.#buildAssistantHistoryMessage({
+                content: textContent,
+                reasoningDetails,
+                toolCalls,
+            }),
+        });
+
         const response: ModelResponse = {
             usage,
             output: [
@@ -173,12 +433,15 @@ class OpenRouterModel implements Model {
                     content: [
                         {
                             type: 'output_text',
-                            text: content,
+                            text: textContent,
                         },
                     ],
+                    ...(reasoningDetails
+                        ? {reasoning_details: reasoningDetails}
+                        : {}),
                 } as any,
             ],
-            responseId: json?.id,
+            responseId,
             providerData: json,
         };
         return response;
@@ -191,7 +454,14 @@ class OpenRouterModel implements Model {
         if (!apiKey) {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
-        const messages = buildMessagesFromRequest(request);
+        const conversationId = request.previousResponseId ?? null;
+        const {messages, currentTurnMessages} = buildMessagesFromRequest(
+            request,
+            conversationId,
+        );
+
+        const tools = extractFunctionToolsFromRequest(request);
+
         const res = await callOpenRouter({
             apiKey,
             model: this.#resolveModelFromRequest(request) || this.#modelId,
@@ -199,18 +469,18 @@ class OpenRouterModel implements Model {
             stream: true,
             signal: request.signal,
             settings: request.modelSettings,
+            tools,
         });
 
-        // OpenRouter streaming returns SSE with lines starting with "data: {...}"
         const reader = res.body?.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
         let accumulated = '';
-        let responseId = 'unknown'; // Will be updated from stream chunks
-        let usageData: any = null; // Will be updated if usage info is in stream
+        let responseId = conversationId ?? 'unknown';
+        let usageData: any = null;
+        const accumulatedReasoning: any[] = [];
+        const accumulatedToolCalls: any[] = [];
         if (!reader) {
-            // Fallback to non-stream - call getResponse which handles ModelResponse format,
-            // but we need to wrap it in the correct response_done event format
             const full = await this.getResponse(request);
             yield {
                 type: 'response_done',
@@ -234,15 +504,27 @@ class OpenRouterModel implements Model {
                 if (line.startsWith('data:')) {
                     const data = line.slice(5).trim();
                     if (data === '[DONE]') {
-                        // See comment above getResponse() for explanation of this structure.
-                        // For streaming responses, the final ModelResponse must follow the same
-                        // format with status: 'completed' and content as an array.
-                        // IMPORTANT: The stream event type must be 'response_done' (not 'response.completed')
-                        // IMPORTANT: The response_done event REQUIRES:
-                        //   - response.id (string)
-                        //   - response.usage.inputTokens (number)
-                        //   - response.usage.outputTokens (number)
-                        //   - response.usage.totalTokens (number)
+                        if (!responseId || responseId === 'unknown') {
+                            responseId = conversationId ?? randomUUID();
+                        }
+                        const reasoningDetails =
+                            accumulatedReasoning.length > 0
+                                ? accumulatedReasoning
+                                : undefined;
+
+                        this.#storeConversationTurn({
+                            conversationId,
+                            responseId,
+                            currentTurnMessages,
+                            assistantMessage: this.#buildAssistantHistoryMessage(
+                                {
+                                    content: accumulated,
+                                    reasoningDetails,
+                                    toolCalls: accumulatedToolCalls,
+                                },
+                            ),
+                        });
+
                         yield {
                             type: 'response_done',
                             response: {
@@ -259,6 +541,9 @@ class OpenRouterModel implements Model {
                                                 text: accumulated,
                                             },
                                         ],
+                                        ...(reasoningDetails
+                                            ? {reasoning_details: reasoningDetails}
+                                            : {}),
                                     } as any,
                                 ],
                             },
@@ -267,20 +552,30 @@ class OpenRouterModel implements Model {
                     }
                     try {
                         const json = JSON.parse(data);
-                        // Capture response ID from first chunk
                         if (json?.id && responseId === 'unknown') {
                             responseId = json.id;
                         }
-                        // Capture usage data if present (some providers send it in final chunk)
                         if (json?.usage) {
                             usageData = json.usage;
+                        }
+                        const reasoningDetails =
+                            json?.choices?.[0]?.delta?.reasoning_details;
+                        if (reasoningDetails) {
+                            if (Array.isArray(reasoningDetails)) {
+                                accumulatedReasoning.push(...reasoningDetails);
+                            } else {
+                                accumulatedReasoning.push(reasoningDetails);
+                            }
+                        }
+                        const deltaToolCalls =
+                            json?.choices?.[0]?.delta?.tool_calls;
+                        if (deltaToolCalls) {
+                            this.#mergeToolCalls(accumulatedToolCalls, deltaToolCalls);
                         }
                         const delta =
                             json?.choices?.[0]?.delta?.content ?? '';
                         if (delta) {
                             accumulated += delta;
-                            // Emit a text delta event
-                            // IMPORTANT: The event type must be 'output_text_delta' (not 'response.output_text.delta')
                             yield {
                                 type: 'output_text_delta',
                                 delta,
@@ -292,7 +587,24 @@ class OpenRouterModel implements Model {
                 }
             }
         }
-        // End without [DONE] - same structure required as above
+        const reasoningDetails =
+            accumulatedReasoning.length > 0 ? accumulatedReasoning : undefined;
+
+        if (!responseId || responseId === 'unknown') {
+            responseId = conversationId ?? randomUUID();
+        }
+
+        this.#storeConversationTurn({
+            conversationId,
+            responseId,
+            currentTurnMessages,
+            assistantMessage: this.#buildAssistantHistoryMessage({
+                content: accumulated,
+                reasoningDetails,
+                toolCalls: accumulatedToolCalls,
+            }),
+        });
+
         yield {
             type: 'response_done',
             response: {
@@ -309,10 +621,114 @@ class OpenRouterModel implements Model {
                                 text: accumulated,
                             },
                         ],
+                        ...(reasoningDetails
+                            ? {reasoning_details: reasoningDetails}
+                            : {}),
                     } as any,
                 ],
             },
         } as any;
+    }
+
+    #buildAssistantHistoryMessage({
+        content,
+        reasoningDetails,
+        toolCalls,
+    }: {
+        content: string;
+        reasoningDetails?: any;
+        toolCalls?: any[];
+    }): any {
+        const assistantMessage: any = {
+            role: 'assistant',
+        };
+
+        if (toolCalls && toolCalls.length > 0) {
+            assistantMessage.tool_calls = toolCalls;
+            assistantMessage.content = null;
+        } else {
+            assistantMessage.content = content;
+        }
+
+        if (reasoningDetails) {
+            assistantMessage.reasoning_details = reasoningDetails;
+        }
+
+        return assistantMessage;
+    }
+
+    #mergeToolCalls(accumulated: any[], deltas: any[]): void {
+        for (const delta of deltas) {
+            const index = delta.index ?? accumulated.length;
+            const existing =
+                accumulated[index] ??
+                ({
+                    id: delta.id,
+                    type: delta.type,
+                    function: {name: '', arguments: ''},
+                } as any);
+
+            if (delta.id) existing.id = delta.id;
+            if (delta.type) existing.type = delta.type;
+            if (delta.function?.name) {
+                existing.function = existing.function || {};
+                existing.function.name = delta.function.name;
+            }
+            if (delta.function?.arguments) {
+                existing.function = existing.function || {};
+                existing.function.arguments =
+                    (existing.function.arguments || '') +
+                    delta.function.arguments;
+            }
+
+            accumulated[index] = existing;
+        }
+    }
+
+    #storeConversationTurn({
+        conversationId,
+        responseId,
+        currentTurnMessages,
+        assistantMessage,
+    }: {
+        conversationId: string | null;
+        responseId?: string | null;
+        currentTurnMessages: any[];
+        assistantMessage: any;
+    }): void {
+        const baseHistory =
+            (conversationId ? this.#conversationHistory.get(conversationId) : []) ||
+            [];
+        const mergedHistory = [
+            ...baseHistory,
+            ...currentTurnMessages.filter(Boolean),
+        ];
+
+        if (assistantMessage) {
+            mergedHistory.push(assistantMessage);
+        }
+
+        const targetId =
+            (responseId && responseId !== 'unknown' ? responseId : null) ||
+            conversationId ||
+            randomUUID();
+        if (!targetId) {
+            return;
+        }
+
+        this.#conversationHistory.set(targetId, mergedHistory);
+        if (conversationId && conversationId !== targetId) {
+            this.#conversationHistory.set(conversationId, mergedHistory);
+        }
+    }
+
+    clearConversation(conversationId: string | null): void {
+        if (!conversationId) return;
+        this.#conversationHistory.delete(conversationId);
+    }
+
+    clearAllConversations(): void {
+        this.#conversationHistory.clear();
     }
 
     #resolveModelFromRequest(req: ModelRequest): string | undefined {
@@ -329,4 +745,8 @@ class OpenRouterProvider implements ModelProvider {
     }
 }
 
-export {OpenRouterModel, OpenRouterProvider};
+export {
+    OpenRouterModel,
+    OpenRouterProvider,
+    clearOpenRouterConversations,
+};

@@ -307,6 +307,25 @@ test('reset() clears conversation state', async t => {
     t.deepEqual(startCalls[1].options, {previousResponseId: null});
 });
 
+test('reset() clears provider conversations when supported', async t => {
+    let clearCalls = 0;
+    const mockClient = {
+        clearConversations() {
+            clearCalls++;
+        },
+        async startStream() {
+            return new MockStream([]);
+        },
+    };
+
+    const service = new ConversationService({agentClient: mockClient});
+    await service.sendMessage('first message');
+
+    service.reset();
+
+    t.is(clearCalls, 1);
+});
+
 test('setModel() delegates to agent client', t => {
     let setModelCalledWith = null;
     const mockClient = {

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
 import {z} from 'zod';
+import deepEqual from 'fast-deep-equal';
 import {loggingService} from './logging-service.js';
 
 const paths = envPaths('term2');
@@ -304,21 +305,22 @@ export class SettingsService {
         // users get a settings.json created at startup (rather than waiting for a
         // manual change). saveToFile is safe and handles errors/logging internally.
         // Also update the file if new settings have been added since the file was created.
-        if (!configFileExisted || shouldUpdateFile) {
+        if (!configFileExisted) {
             this.saveToFile();
             if (!this.disableLogging) {
-                if (!configFileExisted) {
-                    loggingService.info('Created settings file at startup', {
+                loggingService.info('Created settings file at startup', {
+                    settingsFile: settingsFilePath,
+                });
+            }
+        } else if (shouldUpdateFile) {
+            this.saveToFile();
+            if (!this.disableLogging) {
+                loggingService.info(
+                    'Updated settings file with new default values',
+                    {
                         settingsFile: settingsFilePath,
-                    });
-                } else {
-                    loggingService.info(
-                        'Updated settings file with new default values',
-                        {
-                            settingsFile: settingsFilePath,
-                        },
-                    );
-                }
+                    },
+                );
             }
         }
     }
@@ -603,11 +605,28 @@ export class SettingsService {
                 fs.mkdirSync(this.settingsDir, {recursive: true});
             }
 
-            fs.writeFileSync(
-                settingsFile,
-                JSON.stringify(this.settings, null, 2),
-                'utf-8',
-            );
+            const newContent = JSON.stringify(this.settings, null, 2);
+
+            // Only write if file doesn't exist or content has changed
+            // Compare parsed objects rather than string content to avoid false positives
+            // from formatting differences
+            if (fs.existsSync(settingsFile)) {
+                try {
+                    const existingContent = fs.readFileSync(settingsFile, 'utf-8');
+                    const existingParsed = JSON.parse(existingContent);
+
+                    // Deep equality check that ignores formatting and key order
+                    // Uses fast-deep-equal library for robust comparison
+                    if (deepEqual(existingParsed, this.settings)) {
+                        return; // No changes, don't write
+                    }
+                } catch (parseError) {
+                    // If we can't parse the existing file, write the new content anyway
+                    // This handles corrupted files gracefully
+                }
+            }
+
+            fs.writeFileSync(settingsFile, newContent, 'utf-8');
         } catch (error: any) {
             if (!this.disableLogging) {
                 loggingService.error('Failed to save settings file', {

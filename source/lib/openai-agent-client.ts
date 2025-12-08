@@ -8,7 +8,10 @@ import {
     type Tool,
 } from '@openai/agents';
 import {setDefaultModelProvider} from '@openai/agents-core';
-import {OpenRouterProvider} from '../providers/openrouter.js';
+import {
+    clearOpenRouterConversations,
+    OpenRouterProvider,
+} from '../providers/openrouter.js';
 import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
 import {randomUUID} from 'node:crypto';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
@@ -92,6 +95,12 @@ export class OpenAIAgentClient {
             this.#currentCorrelationId = null;
         }
         loggingService.debug('Agent operation aborted');
+    }
+
+    clearConversations(): void {
+        if (this.#provider === 'openrouter') {
+            clearOpenRouterConversations();
+        }
     }
 
     async startStream(

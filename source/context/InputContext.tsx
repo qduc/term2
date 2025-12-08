@@ -1,4 +1,4 @@
-import React, {createContext, useContext, useState, ReactNode, useCallback} from 'react';
+import React, {createContext, useContext, useState, ReactNode} from 'react';
 
 export type InputMode = 'text' | 'slash_commands' | 'path_completion' | 'settings_completion';
 

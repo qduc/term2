@@ -8,6 +8,35 @@ interface UseSlashCommandsOptions {
     // setText is no longer needed as we use context
 }
 
+// Pure functions exported for testing
+export function filterCommands(commands: SlashCommand[], filter: string): SlashCommand[] {
+    return commands.filter(cmd => {
+        const lowerFilter = filter.toLowerCase();
+        const lowerName = cmd.name.toLowerCase();
+
+        // Case 1: Typing the command (e.g. "mod" matches "model")
+        if (!lowerFilter.includes(' ')) {
+            return lowerName.includes(lowerFilter);
+        }
+
+        // Case 2: Command with arguments (e.g. "model gpt-4" matches "model")
+        return lowerFilter.startsWith(lowerName + ' ');
+    });
+}
+
+export function shouldAutocomplete(command: SlashCommand, filter: string): boolean {
+    if (!command.expectsArgs) {
+        return false;
+    }
+
+    const fullCommandPrefix = `${command.name} `;
+    return !filter.toLowerCase().startsWith(fullCommandPrefix.toLowerCase());
+}
+
+export function extractCommandArgs(filter: string, commandName: string): string {
+    return filter.slice(commandName.length).trim();
+}
+
 export const useSlashCommands = ({
     commands,
     onClose,
@@ -21,19 +50,7 @@ export const useSlashCommands = ({
     const filter = isOpen ? (input.startsWith('/') ? input.slice(1) : input) : '';
 
     const filteredCommands = useMemo(
-        () =>
-            commands.filter(cmd => {
-                const lowerFilter = filter.toLowerCase();
-                const lowerName = cmd.name.toLowerCase();
-
-                // Case 1: Typing the command (e.g. "mod" matches "model")
-                if (!lowerFilter.includes(' ')) {
-                    return lowerName.includes(lowerFilter);
-                }
-
-                // Case 2: Command with arguments (e.g. "model gpt-4" matches "model")
-                return lowerFilter.startsWith(lowerName + ' ');
-            }),
+        () => filterCommands(commands, filter),
         [commands, filter],
     );
 
@@ -71,22 +88,12 @@ export const useSlashCommands = ({
             const command = filteredCommands[selectedIndex];
 
             // Handle autocomplete for commands that expect arguments
-            if (command.expectsArgs) {
-                const fullCommandPrefix = `${command.name} `;
-                // If the current filter doesn't start with the command name,
-                // it means we haven't fully typed it or added the space yet.
-                // We should autocomplete it.
-                if (
-                    !filter
-                        .toLowerCase()
-                        .startsWith(fullCommandPrefix.toLowerCase())
-                ) {
-                    setInput(`/${fullCommandPrefix}`);
-                    return;
-                }
+            if (shouldAutocomplete(command, filter)) {
+                setInput(`/${command.name} `);
+                return;
             }
 
-            const args = filter.slice(command.name.length).trim();
+            const args = extractCommandArgs(filter, command.name);
             const shouldClose = command?.action(args || undefined);
             if (shouldClose !== false) {
                 close();

@@ -21,12 +21,43 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
     [SETTING_KEYS.LOGGING_LOG_LEVEL]: 'Logging level (debug, info, warn, error)',
 };
 
-const ALL_SETTINGS: SettingCompletionItem[] = Object.values(SETTING_KEYS).map(key => ({
-    key,
-    description: SETTING_DESCRIPTIONS[key] || '',
-}));
-
 const MAX_RESULTS = 10;
+
+// Pure functions exported for testing
+export function buildSettingsList(
+    settingKeys: typeof SETTING_KEYS,
+    descriptions: Record<string, string>
+): SettingCompletionItem[] {
+    return Object.values(settingKeys).map(key => ({
+        key,
+        description: descriptions[key] || '',
+    }));
+}
+
+export function filterSettingsByQuery(
+    settings: SettingCompletionItem[],
+    query: string,
+    fuseInstance: Fuse<SettingCompletionItem>,
+    maxResults: number = 10
+): SettingCompletionItem[] {
+    if (!query.trim()) {
+        return settings.slice(0, maxResults);
+    }
+
+    return fuseInstance
+        .search(query.trim())
+        .map(result => result.item)
+        .slice(0, maxResults);
+}
+
+export function clampIndex(currentIndex: number, arrayLength: number): number {
+    if (arrayLength === 0) {
+        return 0;
+    }
+    return Math.min(currentIndex, arrayLength - 1);
+}
+
+const ALL_SETTINGS: SettingCompletionItem[] = buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS);
 
 export const useSettingsCompletion = () => {
     const { mode, setMode, input, triggerIndex, setTriggerIndex } = useInputContext();
@@ -51,23 +82,11 @@ export const useSettingsCompletion = () => {
     }, []);
 
     const filteredEntries = useMemo(() => {
-        if (!query.trim()) {
-            return ALL_SETTINGS.slice(0, MAX_RESULTS);
-        }
-
-        return fuse
-            .search(query.trim())
-            .map(result => result.item)
-            .slice(0, MAX_RESULTS);
+        return filterSettingsByQuery(ALL_SETTINGS, query, fuse, MAX_RESULTS);
     }, [fuse, query]);
 
     useEffect(() => {
-        setSelectedIndex(prev => {
-            if (filteredEntries.length === 0) {
-                return 0;
-            }
-            return Math.min(prev, filteredEntries.length - 1);
-        });
+        setSelectedIndex(prev => clampIndex(prev, filteredEntries.length));
     }, [filteredEntries.length]);
 
     const open = useCallback((startIndex: number, _initialQuery = '') => {
@@ -108,7 +127,7 @@ export const useSettingsCompletion = () => {
         if (filteredEntries.length === 0) {
             return undefined;
         }
-        const safeIndex = Math.min(selectedIndex, filteredEntries.length - 1);
+        const safeIndex = clampIndex(selectedIndex, filteredEntries.length);
         return filteredEntries[safeIndex];
     }, [filteredEntries, selectedIndex]);
 

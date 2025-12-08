@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import Fuse from 'fuse.js';
 import {SETTING_KEYS} from '../services/settings-service.js';
+import { useInputContext } from '../context/InputContext.js';
 
 export type SettingCompletionItem = {
     key: string;
@@ -28,10 +29,18 @@ const ALL_SETTINGS: SettingCompletionItem[] = Object.values(SETTING_KEYS).map(ke
 const MAX_RESULTS = 10;
 
 export const useSettingsCompletion = () => {
-    const [isOpen, setIsOpen] = useState(false);
-    // The index in the input string where the setting key starts
-    const [triggerIndex, setTriggerIndex] = useState<number | null>(null);
-    const [query, setQuery] = useState('');
+    const { mode, setMode, input, triggerIndex, setTriggerIndex } = useInputContext();
+
+    const isOpen = mode === 'settings_completion';
+
+    // Derive query from input + triggerIndex
+    const query = useMemo(() => {
+        if (!isOpen || triggerIndex === null) return '';
+        // triggerIndex is the end of "/settings " prefix
+        if (triggerIndex > input.length) return '';
+        return input.slice(triggerIndex);
+    }, [isOpen, triggerIndex, input]);
+
     const [selectedIndex, setSelectedIndex] = useState(0);
 
     const fuse = useMemo(() => {
@@ -61,24 +70,21 @@ export const useSettingsCompletion = () => {
         });
     }, [filteredEntries.length]);
 
-    const open = useCallback((startIndex: number, initialQuery = '') => {
-        setIsOpen(true);
+    const open = useCallback((startIndex: number, _initialQuery = '') => {
+        setMode('settings_completion');
         setTriggerIndex(startIndex);
-        setQuery(initialQuery);
         setSelectedIndex(0);
-    }, []);
+    }, [setMode, setTriggerIndex]);
 
     const close = useCallback(() => {
-        setIsOpen(false);
-        setTriggerIndex(null);
-        setQuery('');
-        setSelectedIndex(0);
-    }, []);
+        if (mode === 'settings_completion') {
+            setMode('text');
+            setTriggerIndex(null);
+            setSelectedIndex(0);
+        }
+    }, [mode, setMode, setTriggerIndex]);
 
-    const updateQuery = useCallback((nextQuery: string) => {
-        setQuery(nextQuery);
-        setSelectedIndex(0);
-    }, []);
+    // updateQuery removed as it is derived
 
     const moveUp = useCallback(() => {
         setSelectedIndex(prev => {
@@ -114,7 +120,7 @@ export const useSettingsCompletion = () => {
         selectedIndex,
         open,
         close,
-        updateQuery,
+        // updateQuery,
         moveUp,
         moveDown,
         getSelectedItem,

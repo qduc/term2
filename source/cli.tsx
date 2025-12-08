@@ -106,4 +106,12 @@ const conversationService = new ConversationService({
     }),
 });
 
-render((<App conversationService={conversationService} />) as ReactNode);
+import { InputProvider } from './context/InputContext.js';
+
+render(
+    (
+        <InputProvider>
+            <App conversationService={conversationService} />
+        </InputProvider>
+    ) as ReactNode,
+);

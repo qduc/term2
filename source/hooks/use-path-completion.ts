@@ -6,15 +6,37 @@ import {
     type PathEntry,
 } from '../services/file-service.js';
 import {loggingService} from '../services/logging-service.js';
+import { useInputContext } from '../context/InputContext.js';
 
 export type PathCompletionItem = PathEntry;
 
 const MAX_RESULTS = 12;
 
 export const usePathCompletion = () => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [triggerIndex, setTriggerIndex] = useState<number | null>(null);
-    const [query, setQuery] = useState('');
+    const {
+        mode,
+        setMode,
+        input,
+        triggerIndex,
+        setTriggerIndex,
+        cursorOffset,
+    } = useInputContext();
+
+    const isOpen = mode === 'path_completion';
+
+    // Derive query from input + triggerIndex + cursorOffset
+    const query = useMemo(() => {
+        if (!isOpen || triggerIndex === null) return '';
+        // Assuming trigger is '@', the query is after that
+        // Safety check to ensure we don't slice weirdly
+        if (triggerIndex >= input.length) return '';
+        const end = Math.min(cursorOffset, input.length);
+        // +1 to skip the '@' or whatever trigger char
+        // Wait, InputBox passed the query. `findPathTrigger` logic:
+        // if char === '@', query = text.slice(index + 1, cursor)
+        return input.slice(triggerIndex + 1, end);
+    }, [isOpen, triggerIndex, input, cursorOffset]);
+
     const [entries, setEntries] = useState<PathEntry[]>([]);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -70,24 +92,22 @@ export const usePathCompletion = () => {
         });
     }, [filteredEntries.length]);
 
-    const open = useCallback((startIndex: number, initialQuery = '') => {
-        setIsOpen(true);
+    const open = useCallback((startIndex: number, _initialQuery = '') => {
+        setMode('path_completion');
         setTriggerIndex(startIndex);
-        setQuery(initialQuery);
         setSelectedIndex(0);
-    }, []);
+        // initialQuery is ignored because we derive it
+    }, [setMode, setTriggerIndex]);
 
     const close = useCallback(() => {
-        setIsOpen(false);
-        setTriggerIndex(null);
-        setQuery('');
-        setSelectedIndex(0);
-    }, []);
+        if (mode === 'path_completion') {
+            setMode('text');
+            setTriggerIndex(null);
+            setSelectedIndex(0);
+        }
+    }, [mode, setMode, setTriggerIndex]);
 
-    const updateQuery = useCallback((nextQuery: string) => {
-        setQuery(nextQuery);
-        setSelectedIndex(0);
-    }, []);
+    // updateQuery removed
 
     const moveUp = useCallback(() => {
         setSelectedIndex(prev => {
@@ -131,7 +151,7 @@ export const usePathCompletion = () => {
 
     return {
         isOpen,
-        triggerIndex,
+        triggerIndex, // Still needed by consumers? Yes
         query,
         entries,
         filteredEntries,
@@ -140,7 +160,7 @@ export const usePathCompletion = () => {
         error,
         open,
         close,
-        updateQuery,
+        // updateQuery removed
         moveUp,
         moveDown,
         getSelectedItem,

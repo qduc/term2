@@ -61,7 +61,7 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 
 -   **`source/components/`** - React Ink components
     -   `MessageList.tsx`, `ChatMessage.tsx` - Display conversation
-    -   `InputBox.tsx`, `TextInput.tsx` - User input
+    -   `InputBox.tsx` - User input
     -   `LiveResponse.tsx` - Stream agent responses in real-time
     -   `ApprovalPrompt.tsx` - Y/N prompt for tool approval
     -   `CommandMessage.tsx` - Show executed commands and output

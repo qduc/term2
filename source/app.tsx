@@ -1,10 +1,9 @@
 import React, {FC, useState, useMemo, useCallback, useEffect} from 'react';
+import { useInputContext } from './context/InputContext.js';
+
 import {Box, Text, useApp, useInput} from 'ink';
-import {useConversation} from './hooks/use-conversation.js';
-import {useSlashCommands} from './hooks/use-slash-commands.js';
-import {useInputHistory} from './hooks/use-input-history.js';
-import {usePathCompletion} from './hooks/use-path-completion.js';
-import { useSettingsCompletion } from './hooks/use-settings-completion.js';
+import { useConversation } from './hooks/use-conversation.js';
+import { useInputHistory } from './hooks/use-input-history.js';
 import MessageList from './components/MessageList.js';
 import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
@@ -37,7 +36,7 @@ interface AppProps {
 
 const App: FC<AppProps> = ({conversationService}) => {
     const {exit} = useApp();
-    const [input, setInput] = useState<string>('');
+    const { input, setInput } = useInputContext();
     const {
         messages,
         liveResponse,
@@ -149,54 +148,6 @@ const App: FC<AppProps> = ({conversationService}) => {
         setInput,
     ]);
 
-    const handleSlashMenuClose = useCallback(() => {
-        // Don't clear input here - let the caller decide if input should be cleared
-    }, []);
-
-    const {
-        isOpen: slashMenuOpen,
-        filter: slashMenuFilter,
-        selectedIndex: slashMenuSelectedIndex,
-        open: openSlashMenu,
-        close: closeSlashMenu,
-        updateFilter: updateSlashFilter,
-        moveUp: slashMenuUp,
-        moveDown: slashMenuDown,
-        executeSelected: executeSlashCommand,
-    } = useSlashCommands({
-        commands: slashCommands,
-        onClose: handleSlashMenuClose,
-        setText: setInput,
-    });
-
-    const {
-        isOpen: pathMenuOpen,
-        filteredEntries: pathMenuItems,
-        selectedIndex: pathMenuSelectedIndex,
-        query: pathMenuQuery,
-        loading: pathMenuLoading,
-        error: pathMenuError,
-        triggerIndex: pathMenuTriggerIndex,
-        open: openPathMenu,
-        close: closePathMenu,
-        updateQuery: updatePathMenuQuery,
-        moveUp: pathMenuUp,
-        moveDown: pathMenuDown,
-        getSelectedItem,
-    } = usePathCompletion();
-
-    const {
-        isOpen: settingsMenuOpen,
-        filteredEntries: settingsMenuItems,
-        selectedIndex: settingsMenuSelectedIndex,
-        open: openSettingsMenu,
-        close: closeSettingsMenu,
-        updateQuery: updateSettingsMenuQuery,
-        moveUp: settingsMenuUp,
-        moveDown: settingsMenuDown,
-        getSelectedItem: getSettingsMenuSelection,
-    } = useSettingsCompletion();
-
     // Handle Ctrl+C to exit immediately
     useInput((_input: string, key) => {
         if (key.ctrl && _input === 'c') {
@@ -270,14 +221,14 @@ const App: FC<AppProps> = ({conversationService}) => {
         if (historyValue !== null) {
             setInput(historyValue);
         }
-    }, [navigateUp, input]);
+    }, [navigateUp, input, setInput]);
 
     const handleHistoryDown = useCallback(() => {
         const historyValue = navigateDown();
         if (historyValue !== null) {
             setInput(historyValue);
         }
-    }, [navigateDown]);
+    }, [navigateDown, setInput]);
 
     return (
         <Box flexDirection="column" flexGrow={1}>
@@ -292,43 +243,10 @@ const App: FC<AppProps> = ({conversationService}) => {
             <Box flexDirection="column">
                 {!isProcessing && !waitingForApproval && (
                     <InputBox
-                        value={input}
-                        onChange={setInput}
                         onSubmit={handleSubmit}
                         slashCommands={slashCommands}
-                        slashMenuOpen={slashMenuOpen}
-                        slashMenuSelectedIndex={slashMenuSelectedIndex}
-                        slashMenuFilter={slashMenuFilter}
-                        onSlashMenuOpen={openSlashMenu}
-                        onSlashMenuClose={closeSlashMenu}
-                        onSlashMenuUp={slashMenuUp}
-                        onSlashMenuDown={slashMenuDown}
-                        onSlashMenuSelect={executeSlashCommand}
-                        onSlashMenuFilterChange={updateSlashFilter}
                         onHistoryUp={handleHistoryUp}
                         onHistoryDown={handleHistoryDown}
-                        pathMenuOpen={pathMenuOpen}
-                        pathMenuItems={pathMenuItems}
-                        pathMenuSelectedIndex={pathMenuSelectedIndex}
-                        pathMenuQuery={pathMenuQuery}
-                        pathMenuLoading={pathMenuLoading}
-                        pathMenuError={pathMenuError}
-                        pathMenuTriggerIndex={pathMenuTriggerIndex}
-                        onPathMenuOpen={openPathMenu}
-                        onPathMenuClose={closePathMenu}
-                        onPathMenuFilterChange={updatePathMenuQuery}
-                        onPathMenuUp={pathMenuUp}
-                        onPathMenuDown={pathMenuDown}
-                        getPathMenuSelection={getSelectedItem}
-                        settingsMenuOpen={settingsMenuOpen}
-                        settingsMenuItems={settingsMenuItems}
-                        settingsMenuSelectedIndex={settingsMenuSelectedIndex}
-                        onSettingsMenuOpen={openSettingsMenu}
-                        onSettingsMenuClose={closeSettingsMenu}
-                        onSettingsMenuFilterChange={updateSettingsMenuQuery}
-                        onSettingsMenuUp={settingsMenuUp}
-                        onSettingsMenuDown={settingsMenuDown}
-                        getSettingsMenuSelection={getSettingsMenuSelection}
                     />
                 )}
 

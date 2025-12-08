@@ -1,20 +1,24 @@
 import {useState, useCallback, useMemo} from 'react';
 import type {SlashCommand} from '../components/SlashCommandMenu.js';
+import { useInputContext } from '../context/InputContext.js';
 
 interface UseSlashCommandsOptions {
     commands: SlashCommand[];
     onClose: () => void;
-    setText?: (text: string) => void;
+    // setText is no longer needed as we use context
 }
 
 export const useSlashCommands = ({
     commands,
     onClose,
-    setText,
 }: UseSlashCommandsOptions) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [filter, setFilter] = useState('');
+    const { mode, setMode, input, setInput } = useInputContext();
     const [selectedIndex, setSelectedIndex] = useState(0);
+
+    const isOpen = mode === 'slash_commands';
+
+    // Derive filter from input directly
+    const filter = isOpen ? (input.startsWith('/') ? input.slice(1) : input) : '';
 
     const filteredCommands = useMemo(
         () =>
@@ -34,25 +38,18 @@ export const useSlashCommands = ({
     );
 
     const open = useCallback(() => {
-        setIsOpen(true);
-        setFilter('');
+        setMode('slash_commands');
         setSelectedIndex(0);
-    }, []);
+    }, [setMode]);
 
     const close = useCallback(() => {
-        setIsOpen(false);
-        setFilter('');
-        setSelectedIndex(0);
-        onClose();
-    }, [onClose]);
+        if (mode === 'slash_commands') {
+            setMode('text');
+            onClose();
+        }
+    }, [mode, setMode, onClose]);
 
-    const updateFilter = useCallback((value: string) => {
-        // Remove the leading '/' if present
-        const filterValue = value.startsWith('/') ? value.slice(1) : value;
-        setFilter(filterValue);
-        // Reset selection if filter changes
-        setSelectedIndex(0);
-    }, []);
+    // No need for updateFilter anymore, it reacts to input changes automatically
 
     const moveUp = useCallback(() => {
         setSelectedIndex(prev =>
@@ -74,9 +71,9 @@ export const useSlashCommands = ({
             const command = filteredCommands[selectedIndex];
 
             // Handle autocomplete for commands that expect arguments
-            if (command.expectsArgs && setText) {
+            if (command.expectsArgs) {
                 const fullCommandPrefix = `${command.name} `;
-                // If the current filter doesn't start with the command name + space,
+                // If the current filter doesn't start with the command name,
                 // it means we haven't fully typed it or added the space yet.
                 // We should autocomplete it.
                 if (
@@ -84,7 +81,7 @@ export const useSlashCommands = ({
                         .toLowerCase()
                         .startsWith(fullCommandPrefix.toLowerCase())
                 ) {
-                    setText(`/${fullCommandPrefix}`);
+                    setInput(`/${fullCommandPrefix}`);
                     return;
                 }
             }
@@ -95,7 +92,7 @@ export const useSlashCommands = ({
                 close();
             }
         }
-    }, [filteredCommands, selectedIndex, close, filter, setText]);
+    }, [filteredCommands, selectedIndex, close, filter, setInput]);
 
     return {
         isOpen,
@@ -104,7 +101,7 @@ export const useSlashCommands = ({
         filteredCommands,
         open,
         close,
-        updateFilter,
+        // updateFilter removed
         moveUp,
         moveDown,
         executeSelected,

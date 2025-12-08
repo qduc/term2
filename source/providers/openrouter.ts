@@ -432,31 +432,39 @@ class OpenRouterModel implements Model {
         // Add reasoning items as separate output items (if present)
         if (reasoningDetails && Array.isArray(reasoningDetails)) {
             for (const reasoningItem of reasoningDetails) {
-                if (reasoningItem.type === 'reasoning.summary' && reasoningItem.summary) {
-                    output.push({
-                        type: 'reasoning',
-                        id: reasoningItem.id || `reasoning-${Date.now()}`,
-                        content: [
-                            {
-                                type: 'input_text',
-                                text: reasoningItem.summary,
-                                providerData: {
-                                    format: reasoningItem.format,
-                                    index: reasoningItem.index,
-                                },
-                            },
-                        ],
-                        providerData: reasoningItem,
-                    } as any);
+                const outputItem: any = {
+                    type: 'reasoning',
+                    id: reasoningItem.id || `reasoning-${Date.now()}-${reasoningItem.index || 0}`,
+                    content: [],
+                    providerData: reasoningItem,
+                };
+
+                // Handle different reasoning types
+                if (reasoningItem.type === 'reasoning.text' && reasoningItem.text) {
+                    outputItem.content.push({
+                        type: 'input_text',
+                        text: reasoningItem.text,
+                        providerData: {
+                            format: reasoningItem.format,
+                            index: reasoningItem.index,
+                        },
+                    });
+                } else if (reasoningItem.type === 'reasoning.summary' && reasoningItem.summary) {
+                    outputItem.content.push({
+                        type: 'input_text',
+                        text: reasoningItem.summary,
+                        providerData: {
+                            format: reasoningItem.format,
+                            index: reasoningItem.index,
+                        },
+                    });
                 } else if (reasoningItem.type === 'reasoning.encrypted') {
-                    // Store encrypted reasoning in providerData only
-                    output.push({
-                        type: 'reasoning',
-                        id: reasoningItem.id || `reasoning-encrypted-${Date.now()}`,
-                        content: [],
-                        providerData: reasoningItem,
-                    } as any);
+                    // Encrypted reasoning has no text content, only providerData
+                    outputItem.content = [];
                 }
+                // For any other reasoning types, store in providerData and leave content empty
+
+                output.push(outputItem);
             }
         }
 
@@ -680,31 +688,39 @@ class OpenRouterModel implements Model {
         // Add reasoning items as separate output items (if present)
         if (reasoningDetails && Array.isArray(reasoningDetails)) {
             for (const reasoningItem of reasoningDetails) {
-                if (reasoningItem.type === 'reasoning.summary' && reasoningItem.summary) {
-                    output.push({
-                        type: 'reasoning',
-                        id: reasoningItem.id || `reasoning-${Date.now()}`,
-                        content: [
-                            {
-                                type: 'input_text',
-                                text: reasoningItem.summary,
-                                providerData: {
-                                    format: reasoningItem.format,
-                                    index: reasoningItem.index,
-                                },
-                            },
-                        ],
-                        providerData: reasoningItem,
-                    } as any);
+                const outputItem: any = {
+                    type: 'reasoning',
+                    id: reasoningItem.id || `reasoning-${Date.now()}-${reasoningItem.index || 0}`,
+                    content: [],
+                    providerData: reasoningItem,
+                };
+
+                // Handle different reasoning types
+                if (reasoningItem.type === 'reasoning.text' && reasoningItem.text) {
+                    outputItem.content.push({
+                        type: 'input_text',
+                        text: reasoningItem.text,
+                        providerData: {
+                            format: reasoningItem.format,
+                            index: reasoningItem.index,
+                        },
+                    });
+                } else if (reasoningItem.type === 'reasoning.summary' && reasoningItem.summary) {
+                    outputItem.content.push({
+                        type: 'input_text',
+                        text: reasoningItem.summary,
+                        providerData: {
+                            format: reasoningItem.format,
+                            index: reasoningItem.index,
+                        },
+                    });
                 } else if (reasoningItem.type === 'reasoning.encrypted') {
-                    // Store encrypted reasoning in providerData only
-                    output.push({
-                        type: 'reasoning',
-                        id: reasoningItem.id || `reasoning-encrypted-${Date.now()}`,
-                        content: [],
-                        providerData: reasoningItem,
-                    } as any);
+                    // Encrypted reasoning has no text content, only providerData
+                    outputItem.content = [];
                 }
+                // For any other reasoning types, store in providerData and leave content empty
+
+                output.push(outputItem);
             }
         }
 

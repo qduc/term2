@@ -110,7 +110,7 @@ test.serial('streams reasoning details and stores assistant history', async t =>
         start(controller) {
             controller.enqueue(
                 encoder.encode(
-                    'data: {"id":"resp-stream","choices":[{"delta":{"content":"Hello","reasoning_details":[{"type":"text","text":"step1"}]}}]}\n',
+                    'data: {"id":"resp-stream","choices":[{"delta":{"content":"Hello","reasoning_details":[{"type":"reasoning.text","text":"step1","format":null,"index":0}]}}]}\n',
                 ),
             );
             controller.enqueue(
@@ -154,11 +154,15 @@ test.serial('streams reasoning details and stores assistant history', async t =>
 
     const doneEvent = streamedEvents.find(event => event.type === 'response_done');
     t.truthy(doneEvent);
-    t.is(
-        doneEvent.response.output[0].reasoning_details?.[0]?.text,
-        'step1',
-    );
-    t.is(doneEvent.response.output[0].content[0].text, 'Hello!');
+
+    // First output item should be reasoning
+    const reasoningOutput = doneEvent.response.output[0];
+    t.is(reasoningOutput.type, 'reasoning');
+    t.is(reasoningOutput.content[0].text, 'step1');
+    t.is(reasoningOutput.providerData.type, 'reasoning.text');
+
+    // Second output item should be the message
+    t.is(doneEvent.response.output[1].content[0].text, 'Hello!');
 
     await model.getResponse({
         systemInstructions: 'system message',
@@ -172,6 +176,7 @@ test.serial('streams reasoning details and stores assistant history', async t =>
     );
 
     t.truthy(assistantHistory);
+    t.is(assistantHistory.reasoning_details[0].type, 'reasoning.text');
     t.is(assistantHistory.reasoning_details[0].text, 'step1');
 });
 
@@ -199,4 +204,169 @@ test.serial('converts user message items in array inputs', async t => {
         {role: 'system', content: 'system message'},
         {role: 'user', content: 'hi'},
     ]);
+});
+
+test.serial('handles summary reasoning details', async t => {
+    const requests: any[] = [];
+
+    globalThis.fetch = async (_url, options: any) => {
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return createJsonResponse({
+            id: 'resp-summary',
+            choices: [
+                {
+                    message: {
+                        content: '1 + 1 equals 2.\n\nThis is the fundamental rule of addition in basic arithmetic, where adding 1 to 1 results in 2. For example, if you have one apple and get one more, you have two apples.',
+                        reasoning: 'First, the user asked "What is 1 + 1", which is a simple math question.\n',
+                        reasoning_details: [
+                            {
+                                format: 'xai-responses-v1',
+                                index: 0,
+                                type: 'reasoning.summary',
+                                summary: 'First, the user asked "What is 1 + 1", which is a simple math question.\n',
+                            },
+                        ],
+                    },
+                },
+            ],
+            usage: {prompt_tokens: 10, completion_tokens: 50, total_tokens: 60},
+        });
+    };
+
+    const model = new OpenRouterModel('mock-model');
+    const response = await model.getResponse({
+        systemInstructions: 'system message',
+        input: 'What is 1 + 1',
+    } as any);
+
+    // Should have two output items: reasoning and message
+    t.is(response.output.length, 2);
+
+    // First item should be summary reasoning
+    const reasoningOutput = response.output[0];
+    t.is(reasoningOutput.type, 'reasoning');
+    t.is(reasoningOutput.content.length, 1);
+    t.is(reasoningOutput.content[0].type, 'input_text');
+    t.is(reasoningOutput.content[0].text, 'First, the user asked "What is 1 + 1", which is a simple math question.\n');
+    t.is(reasoningOutput.providerData.type, 'reasoning.summary');
+    t.is(reasoningOutput.providerData.format, 'xai-responses-v1');
+    t.is(reasoningOutput.providerData.summary, 'First, the user asked "What is 1 + 1", which is a simple math question.\n');
+
+    // Second item should be the message
+    t.is(response.output[1].type, 'message');
+    t.truthy(response.output[1].content[0].text.includes('1 + 1 equals 2'));
+});
+
+test.serial('handles encrypted reasoning details', async t => {
+    const requests: any[] = [];
+
+    globalThis.fetch = async (_url, options: any) => {
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return createJsonResponse({
+            id: 'resp-encrypted',
+            choices: [
+                {
+                    message: {
+                        content: 'Response with encrypted reasoning',
+                        reasoning_details: [
+                            {
+                                id: 'rs_05c9be144fb3fa3b016936cb941e48819183e63b141a094cac',
+                                format: 'openai-responses-v1',
+                                index: 0,
+                                type: 'reasoning.encrypted',
+                                data: 'gAAAAABpNsuVfXBOvLwub1...',
+                            },
+                        ],
+                    },
+                },
+            ],
+            usage: {prompt_tokens: 10, completion_tokens: 20, total_tokens: 30},
+        });
+    };
+
+    const model = new OpenRouterModel('mock-model');
+    const response = await model.getResponse({
+        systemInstructions: 'system message',
+        input: 'Test encrypted reasoning',
+    } as any);
+
+    // Should have two output items: reasoning and message
+    t.is(response.output.length, 2);
+
+    // First item should be encrypted reasoning
+    const reasoningOutput = response.output[0];
+    t.is(reasoningOutput.type, 'reasoning');
+    t.deepEqual(reasoningOutput.content, []); // No displayable content for encrypted
+    t.is(reasoningOutput.providerData.type, 'reasoning.encrypted');
+    t.is(reasoningOutput.providerData.id, 'rs_05c9be144fb3fa3b016936cb941e48819183e63b141a094cac');
+    t.is(reasoningOutput.providerData.format, 'openai-responses-v1');
+    t.is(reasoningOutput.providerData.data, 'gAAAAABpNsuVfXBOvLwub1...');
+
+    // Second item should be the message
+    t.is(response.output[1].type, 'message');
+    t.is(response.output[1].content[0].text, 'Response with encrypted reasoning');
+});
+
+test.serial('handles mixed reasoning types (summary + encrypted)', async t => {
+    const requests: any[] = [];
+
+    globalThis.fetch = async (_url, options: any) => {
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return createJsonResponse({
+            id: 'resp-mixed',
+            choices: [
+                {
+                    message: {
+                        content: '1 + 1 equals 2.\n\nThis is the fundamental rule of addition.',
+                        reasoning: 'First, the user asked "What is 1 + 1", which is a simple math question.\n',
+                        reasoning_details: [
+                            {
+                                format: 'xai-responses-v1',
+                                index: 0,
+                                type: 'reasoning.summary',
+                                summary: 'First, the user asked "What is 1 + 1", which is a simple math question.\n',
+                            },
+                            {
+                                id: 'rs_b908e80d-7948-923b-a82b-0a61eba37a92',
+                                format: 'xai-responses-v1',
+                                index: 1,
+                                type: 'reasoning.encrypted',
+                                data: 'zDzBlL2u7sDbq1l6rOpNL',
+                            },
+                        ],
+                    },
+                },
+            ],
+            usage: {prompt_tokens: 10, completion_tokens: 50, total_tokens: 60},
+        });
+    };
+
+    const model = new OpenRouterModel('mock-model');
+    const response = await model.getResponse({
+        systemInstructions: 'system message',
+        input: 'What is 1 + 1',
+    } as any);
+
+    // Should have three output items: summary reasoning, encrypted reasoning, and message
+    t.is(response.output.length, 3);
+
+    // First item should be summary reasoning
+    const summaryOutput = response.output[0];
+    t.is(summaryOutput.type, 'reasoning');
+    t.is(summaryOutput.content[0].text, 'First, the user asked "What is 1 + 1", which is a simple math question.\n');
+    t.is(summaryOutput.providerData.type, 'reasoning.summary');
+
+    // Second item should be encrypted reasoning
+    const encryptedOutput = response.output[1];
+    t.is(encryptedOutput.type, 'reasoning');
+    t.deepEqual(encryptedOutput.content, []); // No displayable content
+    t.is(encryptedOutput.providerData.type, 'reasoning.encrypted');
+    t.is(encryptedOutput.providerData.data, 'zDzBlL2u7sDbq1l6rOpNL');
+
+    // Third item should be the message
+    t.is(response.output[2].type, 'message');
+    t.truthy(response.output[2].content[0].text.includes('1 + 1 equals 2'));
 });

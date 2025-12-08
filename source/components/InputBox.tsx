@@ -37,6 +37,7 @@ const InputBox: FC<Props> = ({
 
     const [escHintVisible, setEscHintVisible] = useState(false);
     const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const escPressedRef = useRef(false);
     const [cursorOverride, setCursorOverride] = useState<number | null>(null);
     const [terminalWidth, setTerminalWidth] = useState(0);
 
@@ -78,6 +79,11 @@ const InputBox: FC<Props> = ({
 
     // Trigger Detection
     useEffect(() => {
+        if (escPressedRef.current) {
+            escPressedRef.current = false;
+            return;
+        }
+
         // Allow trigger detection in all modes to enable menu transitions
 
         // Priority 1: Settings
@@ -131,6 +137,7 @@ const InputBox: FC<Props> = ({
         if (key.escape) {
             if (mode !== 'text') {
                 // Close menu
+                escPressedRef.current = true;
                 setMode('text');
                 return;
             }

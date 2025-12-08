@@ -17,6 +17,7 @@ interface LoggingServiceConfig {
     logLevel?: string;
     disableLogging?: boolean;
     console?: boolean;
+    debugLogging?: boolean;
 }
 
 /**
@@ -33,14 +34,18 @@ interface LoggingServiceConfig {
 export class LoggingService {
     private logger: winston.Logger;
     private correlationId: string | undefined;
+    private debugLogging: boolean;
 
     constructor(config: LoggingServiceConfig = {}) {
         const {
             logDir,
-            logLevel = process.env.LOG_LEVEL || 'info',
-            disableLogging = process.env.DISABLE_LOGGING === 'true',
-            console: enableConsole = process.env.DEBUG_LOGGING !== undefined,
+            logLevel = 'info',
+            disableLogging = false,
+            console: enableConsole = false,
+            debugLogging = false,
         } = config;
+
+        this.debugLogging = debugLogging;
 
         // Determine log directory
         const finalLogDir = logDir || path.join(envPaths('term2').log, 'logs');
@@ -53,7 +58,7 @@ export class LoggingService {
                 }
             } catch (error: any) {
                 // Graceful degradation: log creation errors to stderr only
-                if (process.env.DEBUG_LOGGING) {
+                if (this.debugLogging) {
                     console.error(
                         `[LoggingService] Failed to create log directory: ${error.message}`,
                     );
@@ -66,44 +71,29 @@ export class LoggingService {
 
         if (!disableLogging) {
             try {
-                // Check if we should use daily rotation (default) or simple file (testing)
-                const useSimpleFile = process.env.NODE_ENV === 'test';
+                // File transport with daily rotation
+                const fileTransport = new DailyRotateFile({
+                    dirname: finalLogDir,
+                    filename: 'term2-%DATE%.log',
+                    datePattern: 'YYYY-MM-DD',
+                    maxSize: '10m',
+                    maxFiles: '14d',
+                    format: winston.format.json(),
+                    level: logLevel,
+                });
 
-                if (useSimpleFile) {
-                    // Simple file transport for testing
-                    transports.push(
-                        new winston.transports.File({
-                            dirname: finalLogDir,
-                            filename: 'term2.log',
-                            format: winston.format.json(),
-                            level: logLevel,
-                        }),
-                    );
-                } else {
-                    // File transport with daily rotation
-                    const fileTransport = new DailyRotateFile({
-                        dirname: finalLogDir,
-                        filename: 'term2-%DATE%.log',
-                        datePattern: 'YYYY-MM-DD',
-                        maxSize: '10m',
-                        maxFiles: '14d',
-                        format: winston.format.json(),
-                        level: logLevel,
-                    });
+                // Handle transport errors gracefully
+                fileTransport.on('error', (error: any) => {
+                    if (this.debugLogging) {
+                        console.error(
+                            `[LoggingService] File transport error: ${error.message}`,
+                        );
+                    }
+                });
 
-                    // Handle transport errors gracefully
-                    fileTransport.on('error', (error: any) => {
-                        if (process.env.DEBUG_LOGGING) {
-                            console.error(
-                                `[LoggingService] File transport error: ${error.message}`,
-                            );
-                        }
-                    });
-
-                    transports.push(fileTransport);
-                }
+                transports.push(fileTransport);
             } catch (error: any) {
-                if (process.env.DEBUG_LOGGING) {
+                if (this.debugLogging) {
                     console.error(
                         `[LoggingService] Failed to configure file transport: ${error.message}`,
                     );
@@ -163,7 +153,7 @@ export class LoggingService {
     setLogLevel(level: string): void {
         if (!Object.prototype.hasOwnProperty.call(LOG_LEVELS, level)) {
             // If invalid, ignore
-            if (process.env.DEBUG_LOGGING) {
+            if (this.debugLogging) {
                 console.error(`[LoggingService] Invalid log level: ${level}`);
             }
             return;
@@ -181,7 +171,7 @@ export class LoggingService {
                 }
             });
         } catch (error: any) {
-            if (process.env.DEBUG_LOGGING) {
+            if (this.debugLogging) {
                 console.error(
                     `[LoggingService] Failed to set log level: ${
                         (error as Error).message
@@ -254,7 +244,7 @@ export class LoggingService {
             (this.logger as any)[level](message, metadata);
         } catch (error: any) {
             // Gracefully handle logging errors
-            if (process.env.DEBUG_LOGGING) {
+            if (this.debugLogging) {
                 console.error(
                     `[LoggingService] Error logging message: ${error.message}`,
                 );

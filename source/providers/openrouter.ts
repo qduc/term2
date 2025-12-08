@@ -5,6 +5,7 @@ import {
     type ModelResponse,
     type ResponseStreamEvent,
 } from '@openai/agents-core';
+import {settingsService} from '../services/settings-service.js';
 
 // Minimal OpenRouter Chat Completions client implementing the Agents Core Model interface.
 //
@@ -24,7 +25,8 @@ import {
 // See detailed comments below for ModelResponse.output structure requirements.
 
 const OPENROUTER_BASE_URL =
-    process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
+    settingsService.get<string>('agent.openrouter.baseUrl') ||
+    'https://openrouter.ai/api/v1';
 
 // Convert OpenRouter usage format to OpenAI Agents SDK format
 function normalizeUsage(openRouterUsage: any): {
@@ -97,8 +99,11 @@ async function callOpenRouter({
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${apiKey}`,
-            'HTTP-Referer': process.env.OPENROUTER_REFERRER || 'http://localhost',
-            'X-Title': process.env.OPENROUTER_TITLE || 'term2',
+            'HTTP-Referer':
+                settingsService.get<string>('agent.openrouter.referrer') ||
+                'http://localhost',
+            'X-Title':
+                settingsService.get<string>('agent.openrouter.title') || 'term2',
         },
         body: JSON.stringify(body),
         signal,
@@ -123,11 +128,13 @@ class OpenRouterModel implements Model {
     constructor(modelId?: string) {
         this.name = 'OpenRouter';
         this.#modelId =
-            modelId || process.env.OPENROUTER_MODEL || 'openrouter/auto';
+            modelId ||
+            settingsService.get<string>('agent.openrouter.model') ||
+            'openrouter/auto';
     }
 
     async getResponse(request: ModelRequest): Promise<ModelResponse> {
-        const apiKey = process.env.OPENROUTER_API_KEY;
+        const apiKey = settingsService.get<string>('agent.openrouter.apiKey');
         if (!apiKey) {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
@@ -180,7 +187,7 @@ class OpenRouterModel implements Model {
     async *getStreamedResponse(
         request: ModelRequest,
     ): AsyncIterable<ResponseStreamEvent> {
-        const apiKey = process.env.OPENROUTER_API_KEY;
+        const apiKey = settingsService.get<string>('agent.openrouter.apiKey');
         if (!apiKey) {
             throw new Error('OPENROUTER_API_KEY is not set');
         }

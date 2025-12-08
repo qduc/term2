@@ -20,6 +20,15 @@ const AgentSettingsSchema = z.object({
         .enum(['openai', 'openrouter'])
         .default('openai')
         .describe('Provider to use for the agent'),
+    openrouter: z
+        .object({
+            apiKey: z.string().optional(),
+            model: z.string().optional(),
+            baseUrl: z.string().url().optional(),
+            referrer: z.string().optional(),
+            title: z.string().optional(),
+        })
+        .optional(),
 });
 
 const ShellSettingsSchema = z.object({
@@ -36,6 +45,24 @@ const LoggingSettingsSchema = z.object({
     logLevel: z
         .enum(['error', 'warn', 'info', 'security', 'debug'])
         .default('info'),
+    disableLogging: z.boolean().optional().default(false),
+    debugLogging: z.boolean().optional().default(false),
+});
+
+const EnvironmentSettingsSchema = z.object({
+    nodeEnv: z.string().optional(),
+});
+
+const AppSettingsSchema = z.object({
+    shellPath: z.string().optional(),
+});
+
+const ToolsSettingsSchema = z.object({
+    logFileOperations: z.boolean().optional().default(true),
+});
+
+const DebugSettingsSchema = z.object({
+    debugBashTool: z.boolean().optional().default(false),
 });
 
 const SettingsSchema = z.object({
@@ -43,6 +70,10 @@ const SettingsSchema = z.object({
     shell: ShellSettingsSchema.optional(),
     ui: UISettingsSchema.optional(),
     logging: LoggingSettingsSchema.optional(),
+    environment: EnvironmentSettingsSchema.optional(),
+    app: AppSettingsSchema.optional(),
+    tools: ToolsSettingsSchema.optional(),
+    debug: DebugSettingsSchema.optional(),
 });
 
 // Type definitions
@@ -51,6 +82,10 @@ export interface SettingsData {
     shell: z.infer<typeof ShellSettingsSchema>;
     ui: z.infer<typeof UISettingsSchema>;
     logging: z.infer<typeof LoggingSettingsSchema>;
+    environment: z.infer<typeof EnvironmentSettingsSchema>;
+    app: z.infer<typeof AppSettingsSchema>;
+    tools: z.infer<typeof ToolsSettingsSchema>;
+    debug: z.infer<typeof DebugSettingsSchema>;
 }
 
 type SettingSource = 'cli' | 'env' | 'config' | 'default';
@@ -66,6 +101,7 @@ export interface SettingsWithSources {
         maxTurns: SettingWithSource<number>;
         retryAttempts: SettingWithSource<number>;
         provider: SettingWithSource<string>;
+        openrouter: SettingWithSource<any>;
     };
     shell: {
         timeout: SettingWithSource<number>;
@@ -77,6 +113,20 @@ export interface SettingsWithSources {
     };
     logging: {
         logLevel: SettingWithSource<string>;
+        disableLogging: SettingWithSource<boolean>;
+        debugLogging: SettingWithSource<boolean>;
+    };
+    environment: {
+        nodeEnv: SettingWithSource<string | undefined>;
+    };
+    app: {
+        shellPath: SettingWithSource<string | undefined>;
+    };
+    tools: {
+        logFileOperations: SettingWithSource<boolean>;
+    };
+    debug: {
+        debugBashTool: SettingWithSource<boolean>;
     };
 }
 
@@ -90,11 +140,22 @@ export const SETTING_KEYS = {
     AGENT_PROVIDER: 'agent.provider',
     AGENT_MAX_TURNS: 'agent.maxTurns',
     AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
+    AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
+    AGENT_OPENROUTER_MODEL: 'agent.openrouter.model',
+    AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl',
+    AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer',
+    AGENT_OPENROUTER_TITLE: 'agent.openrouter.title',
     SHELL_TIMEOUT: 'shell.timeout',
     SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
     SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
     UI_HISTORY_SIZE: 'ui.historySize',
     LOGGING_LOG_LEVEL: 'logging.logLevel',
+    LOGGING_DISABLE: 'logging.disableLogging',
+    LOGGING_DEBUG: 'logging.debugLogging',
+    ENV_NODE_ENV: 'environment.nodeEnv',
+    APP_SHELL_PATH: 'app.shellPath',
+    TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
+    DEBUG_BASH_TOOL: 'debug.debugBashTool',
 } as const;
 
 // Define which settings are modifiable at runtime
@@ -116,6 +177,9 @@ const DEFAULT_SETTINGS: SettingsData = {
         maxTurns: 20,
         retryAttempts: 2,
         provider: 'openai',
+        openrouter: {
+            // defaults empty; can be provided via env or config
+        } as any,
     },
     shell: {
         timeout: 120000,
@@ -127,6 +191,20 @@ const DEFAULT_SETTINGS: SettingsData = {
     },
     logging: {
         logLevel: 'info',
+        disableLogging: false,
+        debugLogging: false,
+    },
+    environment: {
+        nodeEnv: undefined,
+    },
+    app: {
+        shellPath: undefined,
+    },
+    tools: {
+        logFileOperations: true,
+    },
+    debug: {
+        debugBashTool: false,
     },
 };
 
@@ -153,7 +231,7 @@ export class SettingsService {
     }) {
         const {
             settingsDir = path.join(paths.log),
-            disableLogging = process.env.DISABLE_LOGGING === 'true',
+            disableLogging = false,
             cli = {},
             env = {},
         } = options ?? {};
@@ -395,6 +473,10 @@ export class SettingsService {
                     value: this.settings.agent.provider,
                     source: this.getSource('agent.provider'),
                 },
+                openrouter: {
+                    value: this.settings.agent.openrouter,
+                    source: this.getSource('agent.openrouter'),
+                },
             },
             shell: {
                 timeout: {
@@ -420,6 +502,38 @@ export class SettingsService {
                 logLevel: {
                     value: this.settings.logging.logLevel,
                     source: this.getSource('logging.logLevel'),
+                },
+                disableLogging: {
+                    value: this.settings.logging.disableLogging,
+                    source: this.getSource('logging.disableLogging'),
+                },
+                debugLogging: {
+                    value: this.settings.logging.debugLogging,
+                    source: this.getSource('logging.debugLogging'),
+                },
+            },
+            environment: {
+                nodeEnv: {
+                    value: this.settings.environment.nodeEnv,
+                    source: this.getSource('environment.nodeEnv'),
+                },
+            },
+            app: {
+                shellPath: {
+                    value: this.settings.app.shellPath,
+                    source: this.getSource('app.shellPath'),
+                },
+            },
+            tools: {
+                logFileOperations: {
+                    value: this.settings.tools.logFileOperations,
+                    source: this.getSource('tools.logFileOperations'),
+                },
+            },
+            debug: {
+                debugBashTool: {
+                    value: this.settings.debug.debugBashTool,
+                    source: this.getSource('debug.debugBashTool'),
                 },
             },
         };
@@ -587,6 +701,12 @@ export class SettingsService {
             ui: result.ui || JSON.parse(JSON.stringify(defaults.ui)),
             logging:
                 result.logging || JSON.parse(JSON.stringify(defaults.logging)),
+            environment:
+                result.environment ||
+                JSON.parse(JSON.stringify(defaults.environment)),
+            app: result.app || JSON.parse(JSON.stringify(defaults.app)),
+            tools: result.tools || JSON.parse(JSON.stringify(defaults.tools)),
+            debug: result.debug || JSON.parse(JSON.stringify(defaults.debug)),
         };
 
         // Validate final result
@@ -599,6 +719,10 @@ export class SettingsService {
                 shell: merged.shell,
                 ui: merged.ui,
                 logging: merged.logging,
+                environment: merged.environment,
+                app: merged.app,
+                tools: merged.tools,
+                debug: merged.debug,
             };
         }
 
@@ -675,4 +799,49 @@ export class SettingsService {
 /**
  * Singleton instance for convenience
  */
-export const settingsService = new SettingsService();
+// Build environment-derived overrides once at startup to preserve legacy env behavior
+function buildEnvOverrides(): Partial<SettingsData> {
+    const env = (typeof process !== 'undefined' ? process.env : {}) as any;
+    const openrouter: any = {};
+    if (env.OPENROUTER_API_KEY) openrouter.apiKey = env.OPENROUTER_API_KEY;
+    if (env.OPENROUTER_MODEL) openrouter.model = env.OPENROUTER_MODEL;
+    if (env.OPENROUTER_BASE_URL) openrouter.baseUrl = env.OPENROUTER_BASE_URL;
+    if (env.OPENROUTER_REFERRER) openrouter.referrer = env.OPENROUTER_REFERRER;
+    if (env.OPENROUTER_TITLE) openrouter.title = env.OPENROUTER_TITLE;
+
+    const logging: any = {};
+    if (env.LOG_LEVEL) logging.logLevel = env.LOG_LEVEL;
+    if (env.DISABLE_LOGGING !== undefined)
+        logging.disableLogging = String(env.DISABLE_LOGGING) === 'true';
+    if (env.DEBUG_LOGGING !== undefined) logging.debugLogging = true;
+
+    const environment: any = {
+        nodeEnv: env.NODE_ENV,
+    };
+
+    const app: any = {
+        shellPath: env.SHELL || env.COMSPEC,
+    };
+
+    const tools: any = {};
+    if (env.LOG_FILE_OPERATIONS !== undefined)
+        tools.logFileOperations = String(env.LOG_FILE_OPERATIONS) !== 'false';
+
+    const debug: any = {};
+    if (env.DEBUG_BASH_TOOL !== undefined) debug.debugBashTool = true;
+
+    const agent: any = {openrouter};
+
+    return {
+        agent,
+        logging,
+        environment,
+        app,
+        tools,
+        debug,
+    } as Partial<SettingsData>;
+}
+
+export const settingsService = new SettingsService({
+    env: buildEnvOverrides(),
+});

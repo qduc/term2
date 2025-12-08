@@ -225,7 +225,7 @@ export class OpenAIAgentClient {
         // Switch to OpenRouter provider based on config setting
         if (
             this.#provider === 'openrouter' &&
-            process.env.OPENROUTER_API_KEY
+            settingsService.get<string>('agent.openrouter.apiKey')
         ) {
             setDefaultModelProvider(new OpenRouterProvider());
         }

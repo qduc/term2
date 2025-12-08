@@ -3,6 +3,7 @@ import {readFile, writeFile, mkdir, rm} from 'fs/promises';
 import path from 'path';
 import {applyDiff} from '@openai/agents';
 import {loggingService} from '../services/logging-service.js';
+import {settingsService} from '../services/settings-service.js';
 import type {ToolDefinition} from './types.js';
 
 const applyPatchParametersSchema = z.object({
@@ -46,7 +47,8 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
         return true;
     },
     execute: async params => {
-        const enableFileLogging = process.env.LOG_FILE_OPERATIONS !== 'false';
+        const enableFileLogging =
+            settingsService.get<boolean>('tools.logFileOperations') !== false;
 
         try {
             const {type, path: filePath, diff} = params;

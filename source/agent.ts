@@ -5,6 +5,7 @@ import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import {settingsService} from './services/settings-service.js';
 
 export const DEFAULT_MODEL = 'gpt-5.1';
 
@@ -17,7 +18,7 @@ const baseInstructions = fs
     .trim();
 
 const envInfo = `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
-    process.env.SHELL || process.env.COMSPEC || 'unknown'
+    settingsService.get<string>('app.shellPath') || 'unknown'
 }; cwd: ${process.cwd()}`;
 
 export interface AgentDefinition {

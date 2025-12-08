@@ -7,7 +7,10 @@ import {
 } from '@openai/agents-core';
 import {randomUUID} from 'node:crypto';
 import {settingsService} from '../services/settings-service.js';
-import {loggingService as logger} from '../services/logging-service.js';
+import {
+	loggingService,
+	loggingService as logger,
+} from '../services/logging-service.js';
 
 // Minimal OpenRouter Chat Completions client implementing the Agents Core Model interface.
 //
@@ -423,24 +426,47 @@ class OpenRouterModel implements Model {
             }),
         });
 
+        // Build output array with message and tool calls
+        const output: any[] = [];
+
+        // Add assistant message only if there's text content OR reasoning
+        // (Don't add empty message when there are only tool calls)
+        if (textContent || reasoningDetails) {
+            output.push({
+                type: 'message',
+                role: 'assistant',
+                status: 'completed',
+                content: [
+                    {
+                        type: 'output_text',
+                        text: textContent,
+                    },
+                ],
+                ...(reasoningDetails
+                    ? {reasoning_details: reasoningDetails}
+                    : {}),
+            } as any);
+        }
+
+        // Add tool calls as separate output items
+        // Note: Non-streaming response has OpenRouter format with nested function object
+        if (toolCalls && toolCalls.length > 0) {
+            for (const toolCall of toolCalls) {
+                if (toolCall.type === 'function') {
+                    output.push({
+                        type: 'function_call',
+                        callId: toolCall.id,
+                        name: toolCall.function.name,
+                        arguments: toolCall.function.arguments,
+                        status: 'completed',
+                    } as any);
+                }
+            }
+        }
+
         const response: ModelResponse = {
             usage,
-            output: [
-                {
-                    type: 'message',
-                    role: 'assistant',
-                    status: 'completed',
-                    content: [
-                        {
-                            type: 'output_text',
-                            text: textContent,
-                        },
-                    ],
-                    ...(reasoningDetails
-                        ? {reasoning_details: reasoningDetails}
-                        : {}),
-                } as any,
-            ],
+            output,
             responseId,
             providerData: json,
         };
@@ -461,6 +487,14 @@ class OpenRouterModel implements Model {
         );
 
         const tools = extractFunctionToolsFromRequest(request);
+
+        loggingService.debug('OpenRouter stream start', {
+            conversationId,
+            messageCount: Array.isArray(messages) ? messages.length : 0,
+            messages,
+            toolsCount: Array.isArray(tools) ? tools.length : 0,
+            tools,
+        });
 
         const res = await callOpenRouter({
             apiKey,
@@ -530,22 +564,11 @@ class OpenRouterModel implements Model {
                             response: {
                                 id: responseId,
                                 usage: normalizeUsage(usageData),
-                                output: [
-                                    {
-                                        type: 'message',
-                                        role: 'assistant',
-                                        status: 'completed',
-                                        content: [
-                                            {
-                                                type: 'output_text',
-                                                text: accumulated,
-                                            },
-                                        ],
-                                        ...(reasoningDetails
-                                            ? {reasoning_details: reasoningDetails}
-                                            : {}),
-                                    } as any,
-                                ],
+                                output: this.#buildStreamOutput(
+                                    accumulated,
+                                    reasoningDetails,
+                                    accumulatedToolCalls,
+                                ),
                             },
                         } as any;
                         return;
@@ -610,24 +633,58 @@ class OpenRouterModel implements Model {
             response: {
                 id: responseId,
                 usage: normalizeUsage(usageData),
-                output: [
-                    {
-                        type: 'message',
-                        role: 'assistant',
-                        status: 'completed',
-                        content: [
-                            {
-                                type: 'output_text',
-                                text: accumulated,
-                            },
-                        ],
-                        ...(reasoningDetails
-                            ? {reasoning_details: reasoningDetails}
-                            : {}),
-                    } as any,
-                ],
+                output: this.#buildStreamOutput(
+                    accumulated,
+                    reasoningDetails,
+                    accumulatedToolCalls,
+                ),
             },
         } as any;
+    }
+
+    #buildStreamOutput(
+        accumulated: string,
+        reasoningDetails?: any,
+        toolCalls?: any[],
+    ): any[] {
+        const output: any[] = [];
+
+        // Add assistant message only if there's text content OR reasoning
+        // (Don't add empty message when there are only tool calls)
+        if (accumulated || reasoningDetails) {
+            output.push({
+                type: 'message',
+                role: 'assistant',
+                status: 'completed',
+                content: [
+                    {
+                        type: 'output_text',
+                        text: accumulated,
+                    },
+                ],
+                ...(reasoningDetails
+                    ? {reasoning_details: reasoningDetails}
+                    : {}),
+            } as any);
+        }
+
+        // Add tool calls as separate output items
+        // Note: Streaming response has SDK format with flat structure
+        if (toolCalls && toolCalls.length > 0) {
+            for (const toolCall of toolCalls) {
+                if (toolCall.type === 'function_call') {
+                    output.push({
+                        type: 'function_call',
+                        callId: toolCall.callId,
+                        name: toolCall.name,
+                        arguments: toolCall.arguments,
+                        status: 'completed',
+                    } as any);
+                }
+            }
+        }
+
+        return output;
     }
 
     #buildAssistantHistoryMessage({
@@ -644,7 +701,22 @@ class OpenRouterModel implements Model {
         };
 
         if (toolCalls && toolCalls.length > 0) {
-            assistantMessage.tool_calls = toolCalls;
+            // Convert SDK format (type: 'function_call') to OpenRouter format (type: 'function')
+            assistantMessage.tool_calls = toolCalls.map((tc) => {
+                if (tc.type === 'function_call') {
+                    // SDK format -> OpenRouter format
+                    return {
+                        id: tc.callId,
+                        type: 'function',
+                        function: {
+                            name: tc.name,
+                            arguments: tc.arguments,
+                        },
+                    };
+                }
+                // Already in OpenRouter format
+                return tc;
+            });
             assistantMessage.content = null;
         } else {
             assistantMessage.content = content;
@@ -663,22 +735,23 @@ class OpenRouterModel implements Model {
             const existing =
                 accumulated[index] ??
                 ({
-                    id: delta.id,
-                    type: delta.type,
-                    function: {name: '', arguments: ''},
+                    type: 'function_call',
+                    callId: '',
+                    name: '',
+                    arguments: '',
                 } as any);
 
-            if (delta.id) existing.id = delta.id;
-            if (delta.type) existing.type = delta.type;
+            // Accumulate the callId (id comes in deltas)
+            if (delta.id) {
+                existing.callId += delta.id;
+            }
+
+            // Accumulate function name and arguments
             if (delta.function?.name) {
-                existing.function = existing.function || {};
-                existing.function.name = delta.function.name;
+                existing.name += delta.function.name;
             }
             if (delta.function?.arguments) {
-                existing.function = existing.function || {};
-                existing.function.arguments =
-                    (existing.function.arguments || '') +
-                    delta.function.arguments;
+                existing.arguments += delta.function.arguments;
             }
 
             accumulated[index] = existing;

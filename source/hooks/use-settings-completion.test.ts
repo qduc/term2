@@ -59,16 +59,55 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
 test('buildSettingsList - creates list from keys and descriptions', t => {
 	const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
-	t.is(result.length, Object.keys(MOCK_SETTING_KEYS).length);
+	// Should exclude 5 sensitive settings by default
+	const expectedCount = Object.keys(MOCK_SETTING_KEYS).length - 5;
+	t.is(result.length, expectedCount);
 	t.true(result.every(item => typeof item.key === 'string'));
 	t.true(result.every(item => item.description !== undefined));
 });
 
-test('buildSettingsList - includes all setting keys', t => {
+test('buildSettingsList - excludes sensitive settings by default', t => {
+	const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
+	const keys = new Set(result.map(item => item.key));
+
+	// Should not include sensitive settings
+	t.false(keys.has('agent.openrouter.apiKey'));
+	t.false(keys.has('agent.openrouter.baseUrl'));
+	t.false(keys.has('agent.openrouter.referrer'));
+	t.false(keys.has('agent.openrouter.title'));
+	t.false(keys.has('app.shellPath'));
+
+	// Should include non-sensitive settings
+	t.true(keys.has('agent.model'));
+	t.true(keys.has('agent.openrouter.model'));
+	t.true(keys.has('shell.timeout'));
+});
+
+test('buildSettingsList - can include sensitive settings when requested', t => {
+	const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS, false);
+	const keys = new Set(result.map(item => item.key));
+
+	// Should include all settings when excludeSensitive is false
+	t.is(result.length, Object.keys(MOCK_SETTING_KEYS).length);
+	t.true(keys.has('agent.openrouter.apiKey'));
+	t.true(keys.has('app.shellPath'));
+});
+
+test('buildSettingsList - includes all non-sensitive setting keys', t => {
 	const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 	const keys = result.map(item => item.key);
 
-	for (const settingKey of Object.values(MOCK_SETTING_KEYS)) {
+	// Check specific non-sensitive keys that should be included
+	const nonSensitiveKeys = [
+		'agent.model',
+		'agent.reasoningEffort',
+		'agent.provider',
+		'agent.openrouter.model',
+		'shell.timeout',
+		'logging.logLevel',
+	];
+
+	for (const settingKey of nonSensitiveKeys) {
 		t.true(keys.includes(settingKey), `Missing key: ${settingKey}`);
 	}
 });
@@ -98,7 +137,9 @@ test('buildSettingsList - handles missing descriptions with empty string', t => 
 test('buildSettingsList - handles empty descriptions object', t => {
 	const result = buildSettingsList(MOCK_SETTING_KEYS, {});
 
-	t.is(result.length, Object.keys(MOCK_SETTING_KEYS).length);
+	// Should exclude sensitive settings
+	const expectedCount = Object.keys(MOCK_SETTING_KEYS).length - 5;
+	t.is(result.length, expectedCount);
 	t.true(result.every(item => item.description === ''));
 });
 

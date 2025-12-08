@@ -123,6 +123,18 @@ For complex state management (multiple menus, input parsing, etc.), **extract de
 
 Term2 uses a centralized settings service with XDG-compliant storage and flexible precedence.
 
+### Sensitive Settings
+
+Some settings contain sensitive data (API keys, system paths) and **are never saved to the config file**. They can only be configured via environment variables:
+
+-   **`agent.openrouter.apiKey`** - OpenRouter API key (env: `OPENROUTER_API_KEY`)
+-   **`agent.openrouter.baseUrl`** - OpenRouter base URL (env: `OPENROUTER_BASE_URL`)
+-   **`agent.openrouter.referrer`** - OpenRouter referrer (env: `OPENROUTER_REFERRER`)
+-   **`agent.openrouter.title`** - OpenRouter app title (env: `OPENROUTER_TITLE`)
+-   **`app.shellPath`** - Shell path (env: `SHELL` or `COMSPEC`)
+
+These values are loaded into memory at startup from environment variables and remain accessible at runtime, but are **never written to disk**. Attempting to modify these settings via the `set()` or `reset()` methods will throw an error.
+
 ### Settings File
 
 -   **Location**:
@@ -132,6 +144,7 @@ Term2 uses a centralized settings service with XDG-compliant storage and flexibl
 -   **Format**: JSON with validated schema
 -   **Precedence**: CLI flags > Environment variables > Config file > Defaults
 -   **Note**: File is created on-demand when you first save settings. Until then, default settings are used.
+-   **Security**: Sensitive settings are filtered out before saving to disk
 
 ### Supported Settings
 
@@ -152,15 +165,32 @@ Term2 uses a centralized settings service with XDG-compliant storage and flexibl
 Override settings via environment variables:
 
 ```bash
+# OpenAI / Agent Settings
 OPENAI_MODEL=gpt-4o              # Set model
 REASONING_EFFORT=medium           # Set reasoning effort
 MAX_TURNS=30                       # Set max turns (requires restart)
 RETRY_ATTEMPTS=3                  # Set retry attempts (requires restart)
+
+# OpenRouter Settings (Sensitive - env only)
+OPENROUTER_API_KEY=sk-...         # OpenRouter API key
+OPENROUTER_MODEL=gpt-4            # OpenRouter model
+OPENROUTER_BASE_URL=https://...   # OpenRouter base URL
+OPENROUTER_REFERRER=myapp         # OpenRouter referrer
+OPENROUTER_TITLE="My App"         # OpenRouter app title
+
+# Shell Settings
 SHELL_TIMEOUT=60000               # Set shell timeout
 MAX_OUTPUT_LINES=2000             # Set max output lines
 MAX_OUTPUT_CHARS=20000            # Set max output chars
+
+# UI Settings
 HISTORY_SIZE=2000                 # Set history size (requires restart)
+
+# Logging Settings
 LOG_LEVEL=debug                   # Set log level
+
+# System Settings (Sensitive - env only)
+SHELL=/bin/bash                   # Shell path
 ```
 
 ### Example Config File
@@ -171,7 +201,11 @@ LOG_LEVEL=debug                   # Set log level
         "model": "gpt-4o",
         "reasoningEffort": "medium",
         "maxTurns": 30,
-        "retryAttempts": 3
+        "retryAttempts": 3,
+        "provider": "openai",
+        "openrouter": {
+            "model": "gpt-4"
+        }
     },
     "shell": {
         "timeout": 60000,
@@ -186,6 +220,8 @@ LOG_LEVEL=debug                   # Set log level
     }
 }
 ```
+
+**Note**: Sensitive fields (`apiKey`, `baseUrl`, `referrer`, `title`, `shellPath`) are never saved to this file.
 
 ### Runtime vs Startup-Only Settings
 

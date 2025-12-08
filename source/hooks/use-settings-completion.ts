@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import Fuse from 'fuse.js';
-import {SETTING_KEYS} from '../services/settings-service.js';
+import {SETTING_KEYS, SENSITIVE_SETTINGS} from '../services/settings-service.js';
 import { useInputContext } from '../context/InputContext.js';
 
 export type SettingCompletionItem = {
@@ -23,15 +23,27 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
 
 const MAX_RESULTS = 10;
 
+/**
+ * Get the set of sensitive setting keys that should not appear in the UI
+ */
+function getSensitiveSettingKeysSet(): Set<string> {
+    return new Set(Object.values(SENSITIVE_SETTINGS));
+}
+
 // Pure functions exported for testing
 export function buildSettingsList(
     settingKeys: typeof SETTING_KEYS,
-    descriptions: Record<string, string>
+    descriptions: Record<string, string>,
+    excludeSensitive: boolean = true
 ): SettingCompletionItem[] {
-    return Object.values(settingKeys).map(key => ({
-        key,
-        description: descriptions[key] || '',
-    }));
+    const sensitiveKeys = excludeSensitive ? getSensitiveSettingKeysSet() : new Set<string>();
+
+    return Object.values(settingKeys)
+        .filter(key => !sensitiveKeys.has(key))
+        .map(key => ({
+            key,
+            description: descriptions[key] || '',
+        }));
 }
 
 export function filterSettingsByQuery(

@@ -66,6 +66,18 @@ const DebugSettingsSchema = z.object({
     debugBashTool: z.boolean().optional().default(false),
 });
 
+/**
+ * Settings that are sensitive and should NEVER be saved to disk.
+ * These are only loaded from environment variables.
+ */
+const SENSITIVE_SETTING_KEYS = new Set<string>([
+    'agent.openrouter.apiKey',
+    'agent.openrouter.baseUrl',
+    'agent.openrouter.referrer',
+    'agent.openrouter.title',
+    'app.shellPath',
+]);
+
 const SettingsSchema = z.object({
     agent: AgentSettingsSchema.optional(),
     shell: ShellSettingsSchema.optional(),
@@ -141,11 +153,11 @@ export const SETTING_KEYS = {
     AGENT_PROVIDER: 'agent.provider',
     AGENT_MAX_TURNS: 'agent.maxTurns',
     AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
-    AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
+    AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey', // Sensitive - env only
     AGENT_OPENROUTER_MODEL: 'agent.openrouter.model',
-    AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl',
-    AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer',
-    AGENT_OPENROUTER_TITLE: 'agent.openrouter.title',
+    AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
+    AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer', // Sensitive - env only
+    AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only
     SHELL_TIMEOUT: 'shell.timeout',
     SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
     SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
@@ -154,7 +166,7 @@ export const SETTING_KEYS = {
     LOGGING_DISABLE: 'logging.disableLogging',
     LOGGING_DEBUG: 'logging.debugLogging',
     ENV_NODE_ENV: 'environment.nodeEnv',
-    APP_SHELL_PATH: 'app.shellPath',
+    APP_SHELL_PATH: 'app.shellPath', // Sensitive - env only
     TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
     DEBUG_BASH_TOOL: 'debug.debugBashTool',
 } as const;
@@ -169,6 +181,9 @@ const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
     SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
     SETTING_KEYS.LOGGING_LOG_LEVEL,
 ]);
+
+// Note: Sensitive settings are NOT in RUNTIME_MODIFIABLE_SETTINGS because they
+// cannot be modified at all - they can only be set via environment variables at startup.
 
 // Default settings
 const DEFAULT_SETTINGS: SettingsData = {
@@ -358,10 +373,24 @@ export class SettingsService {
     }
 
     /**
+     * Check if a setting is sensitive and should not be saved to disk
+     */
+    isSensitive(key: string): boolean {
+        return SENSITIVE_SETTING_KEYS.has(key);
+    }
+
+    /**
      * Set a setting value (runtime modification)
-     * Only runtime-modifiable settings can be changed
+     * Only runtime-modifiable settings can be changed.
+     * Sensitive settings cannot be modified (must come from environment).
      */
     set(key: string, value: any): void {
+        if (this.isSensitive(key)) {
+            throw new Error(
+                `Cannot modify '${key}' - it is a sensitive setting that can only be configured via environment variables.`,
+            );
+        }
+
         if (!this.isRuntimeModifiable(key)) {
             throw new Error(
                 `Cannot modify '${key}' at runtime. Requires restart.`,
@@ -412,9 +441,16 @@ export class SettingsService {
     }
 
     /**
-     * Reset a setting to its default value
+     * Reset a setting to its default value.
+     * Sensitive settings cannot be reset as they should only come from env.
      */
     reset(key?: string): void {
+        if (key && this.isSensitive(key)) {
+            throw new Error(
+                `Cannot reset '${key}' - it is a sensitive setting that can only be configured via environment variables.`,
+            );
+        }
+
         if (key) {
             // Reset specific setting
             const keys = key.split('.');
@@ -594,7 +630,7 @@ export class SettingsService {
     }
 
     /**
-     * Save settings to file
+     * Save settings to file, excluding sensitive values
      */
     private saveToFile(): void {
         try {
@@ -605,7 +641,9 @@ export class SettingsService {
                 fs.mkdirSync(this.settingsDir, {recursive: true});
             }
 
-            const newContent = JSON.stringify(this.settings, null, 2);
+            // Filter out sensitive settings before saving to disk
+            const settingsToSave = this.stripSensitiveSettings(this.settings);
+            const newContent = JSON.stringify(settingsToSave, null, 2);
 
             // Only write if file doesn't exist or content has changed
             // Compare parsed objects rather than string content to avoid false positives
@@ -636,6 +674,32 @@ export class SettingsService {
                 });
             }
         }
+    }
+
+    /**
+     * Remove sensitive settings that should never be persisted to disk
+     */
+    private stripSensitiveSettings(settings: SettingsData): Partial<SettingsData> {
+        const cleaned = JSON.parse(JSON.stringify(settings));
+
+        // Remove sensitive openrouter fields (keep non-secret config)
+        if (cleaned.agent?.openrouter) {
+            delete cleaned.agent.openrouter.apiKey;
+            delete cleaned.agent.openrouter.baseUrl;
+            delete cleaned.agent.openrouter.referrer;
+            delete cleaned.agent.openrouter.title;
+            // Only keep model if it's set (it's not sensitive)
+            if (Object.keys(cleaned.agent.openrouter).length === 0) {
+                delete cleaned.agent.openrouter;
+            }
+        }
+
+        // Remove sensitive app settings
+        if (cleaned.app) {
+            delete cleaned.app.shellPath;
+        }
+
+        return cleaned;
     }
 
     /**
@@ -864,3 +928,15 @@ function buildEnvOverrides(): Partial<SettingsData> {
 export const settingsService = new SettingsService({
     env: buildEnvOverrides(),
 });
+
+/**
+ * Publicly exported list of sensitive settings for UI/CLI components to use.
+ * These settings should only be configured via environment variables.
+ */
+export const SENSITIVE_SETTINGS = {
+    AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
+    AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl',
+    AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer',
+    AGENT_OPENROUTER_TITLE: 'agent.openrouter.title',
+    APP_SHELL_PATH: 'app.shellPath',
+} as const;

@@ -659,3 +659,138 @@ test('does not update config file when format differs but content is same', asyn
     // File modification time should be the same (not updated despite format difference)
     t.is(originalModTime, newModTime);
 });
+test('isSensitive() identifies sensitive settings', async t => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({
+        settingsDir,
+        disableLogging: true,
+    });
+
+    // Sensitive settings
+    t.true(service.isSensitive('agent.openrouter.apiKey'));
+    t.true(service.isSensitive('agent.openrouter.baseUrl'));
+    t.true(service.isSensitive('agent.openrouter.referrer'));
+    t.true(service.isSensitive('agent.openrouter.title'));
+    t.true(service.isSensitive('app.shellPath'));
+
+    // Non-sensitive settings
+    t.false(service.isSensitive('agent.model'));
+    t.false(service.isSensitive('agent.openrouter.model'));
+    t.false(service.isSensitive('shell.timeout'));
+    t.false(service.isSensitive('logging.logLevel'));
+});
+
+test('set() throws for sensitive settings', async t => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({
+        settingsDir,
+        disableLogging: true,
+    });
+
+    const error = t.throws(
+        () => {
+            service.set('agent.openrouter.apiKey', 'sk-secret-key');
+        },
+        {instanceOf: Error}
+    );
+    t.true(
+        error.message.includes('sensitive setting'),
+        'Error should mention sensitive setting'
+    );
+});
+
+test('reset() throws for sensitive settings', async t => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({
+        settingsDir,
+        disableLogging: true,
+    });
+
+    const error = t.throws(
+        () => {
+            service.reset('agent.openrouter.apiKey');
+        },
+        {instanceOf: Error}
+    );
+    t.true(
+        error.message.includes('sensitive setting'),
+        'Error should mention sensitive setting'
+    );
+});
+
+test('sensitive settings are never saved to config file', async t => {
+    const settingsDir = getTestSettingsDir();
+
+    if (!fs.existsSync(settingsDir)) {
+        fs.mkdirSync(settingsDir, {recursive: true});
+    }
+
+    // Initialize with sensitive env values
+    new SettingsService({
+        settingsDir,
+        disableLogging: true,
+        env: {
+            agent: {
+                openrouter: {
+                    apiKey: 'sk-secret-key',
+                    baseUrl: 'https://internal.api.com',
+                    referrer: 'internal-app',
+                    title: 'My Secret App',
+                    model: 'gpt-4', // NOT sensitive
+                },
+            },
+            app: {
+                shellPath: '/bin/bash',
+            },
+        },
+    });
+
+    // Read the saved config file
+    const configFile = path.join(settingsDir, 'settings.json');
+    const content = fs.readFileSync(configFile, 'utf-8');
+    const config = JSON.parse(content);
+
+    // Verify sensitive values are NOT in the file
+    t.falsy(config.agent?.openrouter?.apiKey, 'apiKey should not be saved');
+    t.falsy(config.agent?.openrouter?.baseUrl, 'baseUrl should not be saved');
+    t.falsy(config.agent?.openrouter?.referrer, 'referrer should not be saved');
+    t.falsy(config.agent?.openrouter?.title, 'title should not be saved');
+    t.falsy(config.app?.shellPath, 'shellPath should not be saved');
+
+    // Verify non-sensitive openrouter values ARE saved
+    t.is(config.agent?.openrouter?.model, 'gpt-4', 'model should be saved');
+});
+
+test('sensitive settings loaded from env are accessible at runtime', async t => {
+    const settingsDir = getTestSettingsDir();
+
+    const service = new SettingsService({
+        settingsDir,
+        disableLogging: true,
+        env: {
+            agent: {
+                openrouter: {
+                    apiKey: 'sk-secret-key',
+                    baseUrl: 'https://internal.api.com',
+                },
+            },
+            app: {
+                shellPath: '/bin/bash',
+            },
+        },
+    });
+
+    // Verify sensitive values ARE accessible at runtime
+    t.is(service.get('agent.openrouter.apiKey'), 'sk-secret-key');
+    t.is(service.get('agent.openrouter.baseUrl'), 'https://internal.api.com');
+    t.is(service.get('app.shellPath'), '/bin/bash');
+
+    // But they should not be in the saved file
+    const configFile = path.join(settingsDir, 'settings.json');
+    const content = fs.readFileSync(configFile, 'utf-8');
+    const config = JSON.parse(content);
+
+    t.falsy(config.agent?.openrouter?.apiKey);
+    t.falsy(config.agent?.openrouter?.baseUrl);
+    t.falsy(config.app?.shellPath);
+});

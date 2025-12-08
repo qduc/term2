@@ -120,6 +120,44 @@ test('buildSettingsList - maps descriptions correctly', t => {
 	}
 });
 
+test('buildSettingsList - includes current values when provided', t => {
+	const mockGetCurrentValue = (key: string): string | number | boolean => {
+		const values: Record<string, string | number | boolean> = {
+			'agent.model': 'gpt-4o',
+			'shell.timeout': 120000,
+			'logging.logLevel': 'info',
+		};
+		return values[key] ?? 'default';
+	};
+
+	const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS, true, mockGetCurrentValue);
+
+	const agentModel = result.find(item => item.key === 'agent.model');
+	const shellTimeout = result.find(item => item.key === 'shell.timeout');
+	const logLevel = result.find(item => item.key === 'logging.logLevel');
+
+	t.is(agentModel?.currentValue, 'gpt-4o');
+	t.is(shellTimeout?.currentValue, 120000);
+	t.is(logLevel?.currentValue, 'info');
+});
+
+test('buildSettingsList - handles missing current values', t => {
+	const mockGetCurrentValue = (key: string): string | number | boolean | undefined => {
+		if (key === 'agent.model') {
+			return 'gpt-4o';
+		}
+		return undefined;
+	};
+
+	const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS, true, mockGetCurrentValue);
+
+	const agentModel = result.find(item => item.key === 'agent.model');
+	const shellTimeout = result.find(item => item.key === 'shell.timeout');
+
+	t.is(agentModel?.currentValue, 'gpt-4o');
+	t.is(shellTimeout?.currentValue, undefined);
+});
+
 test('buildSettingsList - handles missing descriptions with empty string', t => {
 	const incompleteDescriptions = {
 		'agent.model': 'Model description',

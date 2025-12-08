@@ -32,6 +32,12 @@ const SettingsSelectionMenu: FC<Props> = ({items, selectedIndex}) => {
                     >
                         {item.key}
                     </Text>
+                    {item.currentValue !== undefined && (
+                        <Text color="yellow">
+                            {' '}
+                            = {String(item.currentValue)}
+                        </Text>
+                    )}
                     {item.description && (
                         <Text color="gray" dimColor>
                             {' '}

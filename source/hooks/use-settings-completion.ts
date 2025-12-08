@@ -1,11 +1,12 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import Fuse from 'fuse.js';
-import {SETTING_KEYS, SENSITIVE_SETTINGS} from '../services/settings-service.js';
+import {SETTING_KEYS, SENSITIVE_SETTINGS, settingsService} from '../services/settings-service.js';
 import { useInputContext } from '../context/InputContext.js';
 
 export type SettingCompletionItem = {
     key: string;
     description?: string;
+    currentValue?: string | number | boolean;
 };
 
 const SETTING_DESCRIPTIONS: Record<string, string> = {
@@ -30,11 +31,28 @@ function getSensitiveSettingKeysSet(): Set<string> {
     return new Set(Object.values(SENSITIVE_SETTINGS));
 }
 
+/**
+ * Get the current value of a setting for display in the menu
+ */
+function getCurrentSettingValue(key: string): string | number | boolean | undefined {
+    try {
+        const value = settingsService.get(key);
+        // Format the value for display
+        if (typeof value === 'object') {
+            return JSON.stringify(value);
+        }
+        return value;
+    } catch {
+        return undefined;
+    }
+}
+
 // Pure functions exported for testing
 export function buildSettingsList(
     settingKeys: typeof SETTING_KEYS,
     descriptions: Record<string, string>,
-    excludeSensitive: boolean = true
+    excludeSensitive: boolean = true,
+    getCurrentValue?: (key: string) => string | number | boolean | undefined
 ): SettingCompletionItem[] {
     const sensitiveKeys = excludeSensitive ? getSensitiveSettingKeysSet() : new Set<string>();
 
@@ -43,6 +61,7 @@ export function buildSettingsList(
         .map(key => ({
             key,
             description: descriptions[key] || '',
+            currentValue: getCurrentValue?.(key),
         }));
 }
 
@@ -69,7 +88,12 @@ export function clampIndex(currentIndex: number, arrayLength: number): number {
     return Math.min(currentIndex, arrayLength - 1);
 }
 
-const ALL_SETTINGS: SettingCompletionItem[] = buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS);
+const ALL_SETTINGS: SettingCompletionItem[] = buildSettingsList(
+    SETTING_KEYS,
+    SETTING_DESCRIPTIONS,
+    true,
+    getCurrentSettingValue
+);
 
 export const useSettingsCompletion = () => {
     const { mode, setMode, input, triggerIndex, setTriggerIndex } = useInputContext();

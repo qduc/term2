@@ -55,9 +55,12 @@ export const useSlashCommands = ({
     );
 
     const open = useCallback(() => {
+        // Avoid resetting selection when already open to preserve
+        // keyboard navigation (up/down arrows) state between renders.
+        if (mode === 'slash_commands') return;
         setMode('slash_commands');
         setSelectedIndex(0);
-    }, [setMode]);
+    }, [mode, setMode]);
 
     const close = useCallback(() => {
         if (mode === 'slash_commands') {

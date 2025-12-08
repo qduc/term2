@@ -93,11 +93,13 @@ export const usePathCompletion = () => {
     }, [filteredEntries.length]);
 
     const open = useCallback((startIndex: number, _initialQuery = '') => {
+        // Preserve selection when already open to avoid resetting on re-renders
+        if (mode === 'path_completion') return;
         setMode('path_completion');
         setTriggerIndex(startIndex);
         setSelectedIndex(0);
         // initialQuery is ignored because we derive it
-    }, [setMode, setTriggerIndex]);
+    }, [mode, setMode, setTriggerIndex]);
 
     const close = useCallback(() => {
         if (mode === 'path_completion') {

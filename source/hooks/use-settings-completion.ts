@@ -90,10 +90,12 @@ export const useSettingsCompletion = () => {
     }, [filteredEntries.length]);
 
     const open = useCallback((startIndex: number, _initialQuery = '') => {
+        // If already in settings mode, do not reset selection.
+        if (mode === 'settings_completion') return;
         setMode('settings_completion');
         setTriggerIndex(startIndex);
         setSelectedIndex(0);
-    }, [setMode, setTriggerIndex]);
+    }, [mode, setMode, setTriggerIndex]);
 
     const close = useCallback(() => {
         if (mode === 'settings_completion') {

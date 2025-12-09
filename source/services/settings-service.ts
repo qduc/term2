@@ -254,6 +254,7 @@ export class SettingsService {
     private sources: Map<string, SettingSource>;
     private settingsDir: string;
     private disableLogging: boolean;
+    private listeners: Set<(key?: string) => void> = new Set();
 
     constructor(options?: {
         settingsDir?: string;
@@ -454,6 +455,8 @@ export class SettingsService {
 
         // Persist to file
         this.saveToFile();
+
+        this.notifyChange(key);
     }
 
     /**
@@ -499,6 +502,33 @@ export class SettingsService {
         }
 
         this.saveToFile();
+
+        this.notifyChange(key);
+    }
+
+    /**
+     * Subscribe to changes; returns an unsubscribe function.
+     */
+    onChange(listener: (key?: string) => void): () => void {
+        this.listeners.add(listener);
+        return () => {
+            this.listeners.delete(listener);
+        };
+    }
+
+    private notifyChange(changedKey?: string): void {
+        for (const listener of this.listeners) {
+            try {
+                listener(changedKey);
+            } catch (error: any) {
+                if (!this.disableLogging) {
+                    loggingService.warn('Settings change listener threw', {
+                        error: error instanceof Error ? error.message : String(error),
+                        changedKey,
+                    });
+                }
+            }
+        }
     }
 
     /**

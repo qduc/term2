@@ -88,13 +88,6 @@ export function clampIndex(currentIndex: number, arrayLength: number): number {
     return Math.min(currentIndex, arrayLength - 1);
 }
 
-const ALL_SETTINGS: SettingCompletionItem[] = buildSettingsList(
-    SETTING_KEYS,
-    SETTING_DESCRIPTIONS,
-    true,
-    getCurrentSettingValue
-);
-
 export const useSettingsCompletion = () => {
     const { mode, setMode, input, triggerIndex, setTriggerIndex } = useInputContext();
 
@@ -109,17 +102,35 @@ export const useSettingsCompletion = () => {
     }, [isOpen, triggerIndex, input]);
 
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const [settingsVersion, setSettingsVersion] = useState(0);
+
+    // Refresh the list whenever a setting changes so currentValue stays accurate
+    useEffect(() => {
+        const unsubscribe = settingsService.onChange(() => {
+            setSettingsVersion(prev => prev + 1);
+        });
+        return unsubscribe;
+    }, []);
+
+    const allSettings = useMemo(() => {
+        return buildSettingsList(
+            SETTING_KEYS,
+            SETTING_DESCRIPTIONS,
+            true,
+            getCurrentSettingValue
+        );
+    }, [settingsVersion]);
 
     const fuse = useMemo(() => {
-        return new Fuse(ALL_SETTINGS, {
+        return new Fuse(allSettings, {
             keys: ['key', 'description'],
             threshold: 0.4,
         });
-    }, []);
+    }, [allSettings]);
 
     const filteredEntries = useMemo(() => {
-        return filterSettingsByQuery(ALL_SETTINGS, query, fuse, MAX_RESULTS);
-    }, [fuse, query]);
+        return filterSettingsByQuery(allSettings, query, fuse, MAX_RESULTS);
+    }, [allSettings, fuse, query]);
 
     useEffect(() => {
         setSelectedIndex(prev => clampIndex(prev, filteredEntries.length));

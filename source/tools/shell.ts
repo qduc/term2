@@ -20,12 +20,9 @@ const execPromise = util.promisify(exec);
 
 const shellParametersSchema = z.object({
     commands: z
-        .array(z.string().min(1))
-        .min(1, 'At least one command required')
-        .max(3, 'The maximum number of parallel commands is 3')
-        .describe(
-            'Array of shell commands to execute sequentially, one command per entry.',
-        ),
+        .string()
+        .min(1)
+        .describe('Single shell command to execute.'),
     timeout_ms: z
         .number()
         .int()
@@ -66,16 +63,15 @@ interface ShellCommandResult {
 export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
     name: 'shell',
     description:
-        'Execute shell commands. Use this to run terminal commands. The commands will be executed sequentially. Assert the safety of the commands; if they do not change system state or read sensitive data, set needsApproval to false. Otherwise set needsApproval to true and wait for user approval before executing.',
+        'Execute a single shell command. Use this to run a terminal command. Assert the safety of the command; if it does not change system state or read sensitive data, set needsApproval to false. Otherwise set needsApproval to true and wait for user approval before executing.',
     parameters: shellParametersSchema,
     needsApproval: async params => {
         try {
-            const isDangerous =
-                params.commands.some(cmd => validateCommandSafety(cmd));
+            const isDangerous = validateCommandSafety(params.commands);
 
             // Log security event for all shell commands with dangerous flag
             loggingService.security('Shell tool needsApproval check', {
-                commands: params.commands.map(cmd => cmd.substring(0, 100)), // Truncate for safety
+                commands: [params.commands.substring(0, 100)], // Truncate for safety
                 isDangerous,
             });
 
@@ -86,7 +82,7 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
             logValidationError(`Validation failed: ${errorMessage}`);
             loggingService.error('Shell tool validation error', {
                 error: errorMessage,
-                commands: params.commands.map(cmd => cmd.substring(0, 100)),
+                commands: [params.commands.substring(0, 100)],
             });
             return true; // fail-safe: require approval on validation errors
         }
@@ -107,78 +103,70 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
                 settingsService.get('shell.maxOutputChars');
 
             loggingService.info('Shell command execution started', {
-                commandCount: commands.length,
-                commands,
+                commandCount: 1,
+                commands: [commands],
                 timeout,
                 workingDirectory: cwd,
                 maxOutputLength,
             });
 
-            for (const command of commands) {
-                let stdout = '';
-                let stderr = '';
-                let exitCode: number | null = 0;
-                let outcome: ShellCommandResult['outcome'] = {
-                    type: 'exit',
-                    exitCode: 0,
-                };
+            const command = commands;
+            let stdout = '';
+            let stderr = '';
+            let exitCode: number | null = 0;
+            let outcome: ShellCommandResult['outcome'] = {
+                type: 'exit',
+                exitCode: 0,
+            };
 
-                try {
-                    const result = await execPromise(command, {
-                        cwd,
-                        timeout,
-                        maxBuffer: 1024 * 1024, // 1MB max buffer
-                    });
-                    stdout = result.stdout;
-                    stderr = result.stderr;
-
-                    loggingService.debug(
-                        'Shell command executed successfully',
-                        {
-                            command: command.substring(0, 100),
-                            exitCode: 0,
-                            stdoutLength: stdout.length,
-                            stderrLength: stderr.length,
-                        },
-                    );
-                } catch (error: any) {
-                    exitCode =
-                        typeof error?.code === 'number' ? error.code : null;
-                    stdout = error?.stdout ?? '';
-                    stderr = error?.stderr ?? '';
-                    outcome =
-                        error?.killed || error?.signal === 'SIGTERM'
-                            ? {type: 'timeout'}
-                            : {type: 'exit', exitCode};
-
-                    if (outcome.type === 'timeout') {
-                        loggingService.warn('Shell command timeout', {
-                            command: command.substring(0, 100),
-                            timeout,
-                        });
-                    } else {
-                        loggingService.debug('Shell command execution failed', {
-                            command: command.substring(0, 100),
-                            exitCode,
-                            errorMessage: error?.message ?? String(error),
-                            stderrLength: stderr.length,
-                        });
-                    }
-                }
-
-                output.push({
-                    command,
-                    stdout: trimOutput(stdout, undefined, maxOutputLength),
-                    stderr: trimOutput(stderr, undefined, maxOutputLength),
-                    outcome,
+            try {
+                const result = await execPromise(command, {
+                    cwd,
+                    timeout,
+                    maxBuffer: 1024 * 1024, // 1MB max buffer
                 });
+                stdout = result.stdout;
+                stderr = result.stderr;
+
+                loggingService.debug('Shell command executed successfully', {
+                    command: command.substring(0, 100),
+                    exitCode: 0,
+                    stdoutLength: stdout.length,
+                    stderrLength: stderr.length,
+                });
+            } catch (error: any) {
+                exitCode = typeof error?.code === 'number' ? error.code : null;
+                stdout = error?.stdout ?? '';
+                stderr = error?.stderr ?? '';
+                outcome =
+                    error?.killed || error?.signal === 'SIGTERM'
+                        ? {type: 'timeout'}
+                        : {type: 'exit', exitCode};
+
                 if (outcome.type === 'timeout') {
-                    break;
+                    loggingService.warn('Shell command timeout', {
+                        command: command.substring(0, 100),
+                        timeout,
+                    });
+                } else {
+                    loggingService.debug('Shell command execution failed', {
+                        command: command.substring(0, 100),
+                        exitCode,
+                        errorMessage: error?.message ?? String(error),
+                        stderrLength: stderr.length,
+                    });
                 }
             }
 
+            output.push({
+                command,
+                stdout: trimOutput(stdout, undefined, maxOutputLength),
+                stderr: trimOutput(stderr, undefined, maxOutputLength),
+                outcome,
+            });
+
             loggingService.info('Shell command execution completed', {
-                commandCount: commands.length,
+                commandCount: 1,
                 successCount: output.filter(
                     cmd =>
                         cmd.outcome.type === 'exit' &&

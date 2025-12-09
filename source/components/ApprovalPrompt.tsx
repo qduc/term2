@@ -11,6 +11,12 @@ type ApplyPatchArgs = {
     diff?: string;
 };
 
+type ShellArgs = {
+    commands: string;
+    timeout_ms?: number;
+    max_output_length?: number;
+};
+
 const operationLabels: Record<string, {label: string; color: string}> = {
     create_file: {label: 'CREATE', color: 'green'},
     update_file: {label: 'UPDATE', color: 'yellow'},
@@ -74,8 +80,29 @@ const ApplyPatchPrompt: FC<{args: ApplyPatchArgs}> = ({args}) => {
     );
 };
 
+const ShellPrompt: FC<{args: ShellArgs}> = ({args}) => {
+    return (
+        <Box flexDirection="column" marginLeft={2}>
+            <Box>
+                <Text color="cyan" bold>Command: </Text>
+                <Text>{args.commands}</Text>
+            </Box>
+            {args.timeout_ms && (
+                <Box>
+                    <Text dimColor>Timeout: {args.timeout_ms}ms</Text>
+                </Box>
+            )}
+            {args.max_output_length && (
+                <Box>
+                    <Text dimColor>Max output: {args.max_output_length} chars</Text>
+                </Box>
+            )}
+        </Box>
+    );
+};
+
 const ApprovalPrompt: FC<Props> = ({approval}) => {
-    // Try to parse and render apply_patch arguments nicely
+    // Try to parse and render arguments nicely based on tool type
     let content: React.ReactNode = (
         <Text dimColor>{approval.argumentsText}</Text>
     );
@@ -84,6 +111,13 @@ const ApprovalPrompt: FC<Props> = ({approval}) => {
         try {
             const args: ApplyPatchArgs = JSON.parse(approval.argumentsText);
             content = <ApplyPatchPrompt args={args} />;
+        } catch {
+            // Fall back to raw JSON if parsing fails
+        }
+    } else if (approval.toolName === 'shell') {
+        try {
+            const args: ShellArgs = JSON.parse(approval.argumentsText);
+            content = <ShellPrompt args={args} />;
         } catch {
             // Fall back to raw JSON if parsing fails
         }

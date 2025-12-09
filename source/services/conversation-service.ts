@@ -83,12 +83,6 @@ export class ConversationService {
     private eventTypeCount = 0;
     private consecutiveToolFailures = 0;
     private logStreamEvent = (eventType: string, eventData: any) => {
-        if (eventType === 'raw_model_stream_event') {
-			loggingService.debug('Stream event', {
-				eventType,
-				...eventData,
-			});
-		}
 		if (eventData.item) {
 			eventType = eventData.item.type;
 			eventData = eventData.item.rawItem;

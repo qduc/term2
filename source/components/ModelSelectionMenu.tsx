@@ -6,9 +6,50 @@ type Props = {
     items: ModelInfo[];
     selectedIndex: number;
     query: string;
-    provider?: string | null;
+    provider?: 'openai' | 'openrouter' | null;
     loading?: boolean;
     error?: string | null;
+};
+
+const ProviderTabs: FC<{activeProvider?: 'openai' | 'openrouter' | null}> = ({
+    activeProvider,
+}) => {
+    const providers: Array<{id: 'openai' | 'openrouter'; label: string}> = [
+        {id: 'openai', label: 'OpenAI'},
+        {id: 'openrouter', label: 'OpenRouter'},
+    ];
+
+    return (
+        <Box justifyContent="space-between">
+            <Box>
+                {providers.map((provider, index) => {
+                    const isActive = provider.id === activeProvider;
+                    return (
+                        <Box key={provider.id}>
+                            <Text
+                                inverse={isActive}
+                                color={isActive ? 'magenta' : 'gray'}
+                                bold={isActive}
+                                dimColor={!isActive}
+                            >
+                                {' '}
+                                {provider.label}
+                                {' '}
+                            </Text>
+                            {index < providers.length - 1 && (
+                                <Text color="gray" dimColor>
+                                    {' │ '}
+                                </Text>
+                            )}
+                        </Box>
+                    );
+                })}
+            </Box>
+            <Text color="gray" dimColor>
+                Tab → switch provider
+            </Text>
+        </Box>
+    );
 };
 
 const ModelSelectionMenu: FC<Props> = ({
@@ -49,6 +90,7 @@ const ModelSelectionMenu: FC<Props> = ({
 
     return (
         <Box flexDirection="column">
+            <ProviderTabs activeProvider={provider} />
             <Box
                 borderStyle="round"
                 borderColor="magenta"
@@ -56,8 +98,7 @@ const ModelSelectionMenu: FC<Props> = ({
                 flexDirection="column"
             >
                 <Text color="gray" dimColor>
-                    {provider ? `${provider} models` : 'Models'} · {items.length} suggestion
-                    {items.length === 1 ? '' : 's'}
+                    {items.length} suggestion{items.length === 1 ? '' : 's'}
                 </Text>
                 {items.map((item, index) => {
                     const isSelected = index === selectedIndex;
@@ -81,7 +122,7 @@ const ModelSelectionMenu: FC<Props> = ({
                 })}
             </Box>
             <Text color="gray" dimColor>
-                Enter → set model · Tab → insert and keep editing · Esc → cancel
+                Enter → set model · Esc → cancel
             </Text>
         </Box>
     );

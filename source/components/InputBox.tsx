@@ -202,7 +202,7 @@ const InputBox: FC<Props> = ({
 
         if (mode === 'model_selection') {
             if (key.tab && !key.shift) {
-                insertSelectedModel(false);
+                models.toggleProvider();
             }
         }
     });

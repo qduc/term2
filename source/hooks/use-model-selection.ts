@@ -31,18 +31,23 @@ export const useModelSelection = () => {
     }, [isOpen, triggerIndex, input, cursorOffset]);
 
     useEffect(() => {
-        if (!isOpen) return;
-
-        const load = async () => {
-            setLoading(true);
-            setError(null);
+        if (isOpen) {
             const providerSetting = settingsService.get<'openai' | 'openrouter'>(
                 'agent.provider',
             );
             setProvider(providerSetting);
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen || !provider) return;
+
+        const load = async () => {
+            setLoading(true);
+            setError(null);
 
             try {
-                const fetched = await fetchModels(providerSetting);
+                const fetched = await fetchModels(provider);
                 setModels(fetched);
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
@@ -58,7 +63,7 @@ export const useModelSelection = () => {
             setError(message);
             setLoading(false);
         });
-    }, [isOpen]);
+    }, [isOpen, provider]);
 
     const filteredModels = useMemo(() => {
         return filterModels(models, query, MAX_RESULTS);
@@ -106,6 +111,10 @@ export const useModelSelection = () => {
         return filteredModels[safeIndex];
     }, [filteredModels, selectedIndex]);
 
+    const toggleProvider = useCallback(() => {
+        setProvider(prev => (prev === 'openai' ? 'openrouter' : 'openai'));
+    }, []);
+
     return {
         isOpen,
         triggerIndex,
@@ -120,5 +129,6 @@ export const useModelSelection = () => {
         moveUp,
         moveDown,
         getSelectedItem,
+        toggleProvider,
     };
 };

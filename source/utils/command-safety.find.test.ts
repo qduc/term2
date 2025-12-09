@@ -3,7 +3,7 @@ import {
 	classifyCommand,
 	SafetyStatus,
 	validateCommandSafety,
-} from './command-safety.js';
+} from './command-safety/index.js';
 
 // ============================================================================
 // GREEN: Safe read-only find commands

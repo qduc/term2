@@ -3,7 +3,7 @@ import {exec} from 'child_process';
 import util from 'util';
 import process from 'process';
 import {randomUUID} from 'node:crypto';
-import {validateCommandSafety} from '../utils/command-safety.js';
+import {validateCommandSafety} from '../utils/command-safety/index.js';
 import {logValidationError} from '../utils/command-logger.js';
 import {loggingService} from '../services/logging-service.js';
 import {settingsService} from '../services/settings-service.js';

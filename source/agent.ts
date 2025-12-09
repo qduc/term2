@@ -16,9 +16,23 @@ const ANTHROPIC_PROMPT = 'anthropic.md';
 const GPT_PROMPT = 'gpt-5.md';
 const CODEX_PROMPT = 'codex.md';
 
+function getTopLevelEntries(cwd: string, limit = 50): string {
+    try {
+        const entries = fs.readdirSync(cwd, { withFileTypes: true });
+        const names = entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
+        const shown = names.slice(0, limit);
+        const more = names.length > limit ? `, ...(+${names.length - limit} more)` : '';
+        return shown.join(', ') + more;
+    } catch (e: any) {
+        return `failed to read: ${e.message}`;
+    }
+}
+
 const envInfo = `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
     settingsService.get<string>('app.shellPath') || 'unknown'
-}; cwd: ${process.cwd()}`;
+}; cwd: ${process.cwd()}; top-level: ${getTopLevelEntries(process.cwd())}`;
+
+const contextReminder = 'If there is a file named AGENTS.md in project root. You must read it to understand what you are working with'
 
 export interface AgentDefinition {
     name: string;
@@ -62,7 +76,7 @@ export const getAgentDefinition = (model?: string): AgentDefinition => {
 
     return {
         name: 'Terminal Assistant',
-        instructions: `${prompt}\n\nEnvironment: ${envInfo}`,
+        instructions: `${prompt}\n\nEnvironment: ${envInfo}\n\n${contextReminder}`,
         tools: [
             shellToolDefinition,
             applyPatchToolDefinition,

@@ -175,14 +175,64 @@ export class ConversationService {
         } = {},
     ): Promise<ConversationResult> {
         try {
-            // If there's an aborted approval, clear it and start fresh with the user's new message
-            // The user's message is a new input, not a continuation of the rejected tool call
+            // If there's an aborted approval, we need to resolve it first
+            // The user's message is a new input, but the agent is stuck waiting for tool output
             if (this.abortedApprovalContext) {
-                loggingService.debug('Clearing aborted approval, treating user message as new input', {
+                loggingService.debug('Resolving aborted approval before processing new message', {
                     message: text,
                 });
+
+                let currentContext: {
+                    state: any;
+                    interruption: any;
+                    emittedCommandIds: Set<string>;
+                } | null = this.abortedApprovalContext;
                 this.abortedApprovalContext = null;
-                // Fall through to normal message flow below
+
+                let attempts = 0;
+                const maxAttempts = 3;
+
+                while (currentContext && attempts < maxAttempts) {
+                    const {state, interruption} = currentContext;
+                    state.reject(interruption);
+
+                    try {
+                        const stream = await this.agentClient.continueRunStream(state, {
+                            previousResponseId: this.previousResponseId,
+                        });
+
+                        // Consume the stream silently to update state
+                        await this.#consumeStream(stream);
+                        this.previousResponseId = stream.lastResponseId;
+
+                        if (stream.interruptions && stream.interruptions.length > 0) {
+                            // Another interruption occurred
+                            const newInterruption = stream.interruptions[0];
+                            currentContext = {
+                                state: stream.state,
+                                interruption: newInterruption,
+                                emittedCommandIds: new Set(),
+                            };
+                            attempts++;
+                            loggingService.debug('Aborted approval resolution resulted in another interruption', {
+                                attempts,
+                                tool: newInterruption.name
+                            });
+                        } else {
+                            currentContext = null; // Resolved!
+                        }
+                    } catch (error) {
+                        loggingService.warn('Error resolving aborted approval', {
+                            error: error instanceof Error ? error.message : String(error)
+                        });
+                        // Break loop on error to avoid infinite loops or further errors
+                        break;
+                    }
+                }
+
+                if (currentContext) {
+                    loggingService.warn('Could not fully resolve aborted approvals after max attempts. Proceeding anyway.');
+                }
             }
 
             // Normal message flow

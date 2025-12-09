@@ -1,6 +1,8 @@
 import type {OpenAIAgentClient} from '../lib/openai-agent-client.js';
 import {extractCommandMessages} from '../utils/extract-command-messages.js';
 import {loggingService} from './logging-service.js';
+import {settingsService} from './settings-service.js';
+import {PatchValidationError} from '../tools/apply-patch.js';
 
 interface ApprovalResult {
     type: 'approval_required';
@@ -70,10 +72,16 @@ export class ConversationService {
         interruption: any;
         emittedCommandIds: Set<string>;
     } | null = null;
+    private abortedApprovalContext: {
+        state: any;
+        interruption: any;
+        emittedCommandIds: Set<string>;
+    } | null = null;
     private textDeltaCount = 0;
     private reasoningDeltaCount = 0;
     private lastEventType: string | null = null;
     private eventTypeCount = 0;
+    private consecutiveToolFailures = 0;
     private logStreamEvent = (eventType: string, eventData: any) => {
         if (eventData.item) {
 			eventType = eventData.item.type;
@@ -118,6 +126,8 @@ export class ConversationService {
     reset(): void {
         this.previousResponseId = null;
         this.pendingApprovalContext = null;
+        this.abortedApprovalContext = null;
+        this.consecutiveToolFailures = 0;
         if (typeof (this.agentClient as any).clearConversations === 'function') {
             (this.agentClient as any).clearConversations();
         }
@@ -144,7 +154,12 @@ export class ConversationService {
      */
     abort(): void {
         this.agentClient.abort();
-        this.pendingApprovalContext = null;
+        // Save pending approval context so we can handle it in the next message
+        if (this.pendingApprovalContext) {
+            this.abortedApprovalContext = this.pendingApprovalContext;
+            this.pendingApprovalContext = null;
+            loggingService.debug('Aborted approval - will handle rejection on next message');
+        }
     }
 
     async sendMessage(
@@ -159,24 +174,96 @@ export class ConversationService {
             onCommandMessage?: (message: CommandMessage) => void;
         } = {},
     ): Promise<ConversationResult> {
-        const stream = await this.agentClient.startStream(text, {
-            previousResponseId: this.previousResponseId,
-        });
+        try {
+            // If there's an aborted approval, handle it first by rejecting with the user's message
+            if (this.abortedApprovalContext) {
+                loggingService.debug('Handling aborted approval with user message as rejection reason', {
+                    message: text,
+                });
 
-        const {finalOutput, reasoningOutput, emittedCommandIds} =
-            await this.#consumeStream(stream, {
-                onTextChunk,
-                onReasoningChunk,
-                onCommandMessage,
+                const {state, interruption, emittedCommandIds: previouslyEmittedIds} = this.abortedApprovalContext;
+                this.abortedApprovalContext = null;
+
+                // Reject the interruption with the user's message as the reason
+                state.reject(interruption, `User cancelled with message: ${text}`);
+
+                const stream = await this.agentClient.continueRunStream(state);
+
+                const {finalOutput, reasoningOutput, emittedCommandIds} =
+                    await this.#consumeStream(stream, {
+                        onTextChunk,
+                        onReasoningChunk,
+                        onCommandMessage,
+                    });
+                this.previousResponseId = stream.lastResponseId;
+
+                // Reset failure counter on successful completion
+                this.consecutiveToolFailures = 0;
+
+                // Merge previously emitted command IDs with newly emitted ones
+                const allEmittedIds = new Set([
+                    ...previouslyEmittedIds,
+                    ...emittedCommandIds,
+                ]);
+
+                return this.#buildResult(
+                    stream,
+                    finalOutput || undefined,
+                    reasoningOutput || undefined,
+                    allEmittedIds,
+                );
+            }
+
+            // Normal message flow
+            const stream = await this.agentClient.startStream(text, {
+                previousResponseId: this.previousResponseId,
             });
-        this.previousResponseId = stream.lastResponseId;
-        // Pass emittedCommandIds so we don't duplicate commands in the final result
-        return this.#buildResult(
-            stream,
-            finalOutput || undefined,
-            reasoningOutput || undefined,
-            emittedCommandIds,
-        );
+
+            const {finalOutput, reasoningOutput, emittedCommandIds} =
+                await this.#consumeStream(stream, {
+                    onTextChunk,
+                    onReasoningChunk,
+                    onCommandMessage,
+                });
+            this.previousResponseId = stream.lastResponseId;
+
+            // Reset failure counter on successful completion
+            this.consecutiveToolFailures = 0;
+
+            // Pass emittedCommandIds so we don't duplicate commands in the final result
+            return this.#buildResult(
+                stream,
+                finalOutput || undefined,
+                reasoningOutput || undefined,
+                emittedCommandIds,
+            );
+        } catch (error) {
+            // Track consecutive tool failures
+            if (error instanceof PatchValidationError) {
+                this.consecutiveToolFailures++;
+                const maxFailures = settingsService.get<number>('agent.maxConsecutiveToolFailures');
+
+                loggingService.error('Patch validation failed', {
+                    consecutiveFailures: this.consecutiveToolFailures,
+                    maxAllowed: maxFailures,
+                    filePath: error.filePath,
+                    error: error.message,
+                });
+
+                if (this.consecutiveToolFailures >= maxFailures) {
+                    loggingService.security('Aborting due to consecutive tool failures', {
+                        consecutiveFailures: this.consecutiveToolFailures,
+                        maxAllowed: maxFailures,
+                    });
+                    this.consecutiveToolFailures = 0; // Reset after abort
+                    throw new Error(
+                        `Agent aborted after ${maxFailures} consecutive malformed patches. ` +
+                        `The agent is generating invalid diffs repeatedly. Please check the agent's behavior or contact support.`
+                    );
+                }
+            }
+            throw error;
+        }
     }
 
     async handleApprovalDecision(
@@ -206,30 +293,61 @@ export class ConversationService {
             state.reject(interruption);
         }
 
-        const stream = await this.agentClient.continueRunStream(state);
+        try {
+            const stream = await this.agentClient.continueRunStream(state);
 
-        const {finalOutput, reasoningOutput, emittedCommandIds} =
-            await this.#consumeStream(stream, {
-                onTextChunk,
-                onReasoningChunk,
-                onCommandMessage,
-            });
+            const {finalOutput, reasoningOutput, emittedCommandIds} =
+                await this.#consumeStream(stream, {
+                    onTextChunk,
+                    onReasoningChunk,
+                    onCommandMessage,
+                });
 
-        this.previousResponseId = stream.lastResponseId;
+            this.previousResponseId = stream.lastResponseId;
 
-        // Merge previously emitted command IDs with newly emitted ones
-        // This prevents duplicates when result.history contains commands from the initial stream
-        const allEmittedIds = new Set([
-            ...previouslyEmittedIds,
-            ...emittedCommandIds,
-        ]);
+            // Reset failure counter on successful completion
+            this.consecutiveToolFailures = 0;
 
-        return this.#buildResult(
-            stream,
-            finalOutput || undefined,
-            reasoningOutput || undefined,
-            allEmittedIds,
-        );
+            // Merge previously emitted command IDs with newly emitted ones
+            // This prevents duplicates when result.history contains commands from the initial stream
+            const allEmittedIds = new Set([
+                ...previouslyEmittedIds,
+                ...emittedCommandIds,
+            ]);
+
+            return this.#buildResult(
+                stream,
+                finalOutput || undefined,
+                reasoningOutput || undefined,
+                allEmittedIds,
+            );
+        } catch (error) {
+            // Track consecutive tool failures
+            if (error instanceof PatchValidationError) {
+                this.consecutiveToolFailures++;
+                const maxFailures = settingsService.get<number>('agent.maxConsecutiveToolFailures');
+
+                loggingService.error('Patch validation failed', {
+                    consecutiveFailures: this.consecutiveToolFailures,
+                    maxAllowed: maxFailures,
+                    filePath: error.filePath,
+                    error: error.message,
+                });
+
+                if (this.consecutiveToolFailures >= maxFailures) {
+                    loggingService.security('Aborting due to consecutive tool failures', {
+                        consecutiveFailures: this.consecutiveToolFailures,
+                        maxAllowed: maxFailures,
+                    });
+                    this.consecutiveToolFailures = 0; // Reset after abort
+                    throw new Error(
+                        `Agent aborted after ${maxFailures} consecutive malformed patches. ` +
+                        `The agent is generating invalid diffs repeatedly. Please check the agent's behavior or contact support.`
+                    );
+                }
+            }
+            throw error;
+        }
     }
 
     async #consumeStream(

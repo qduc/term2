@@ -6,6 +6,16 @@ import {loggingService} from '../services/logging-service.js';
 import {settingsService} from '../services/settings-service.js';
 import type {ToolDefinition} from './types.js';
 
+/**
+ * Error thrown when patch validation fails (malformed diff)
+ */
+export class PatchValidationError extends Error {
+    constructor(message: string, public filePath: string) {
+        super(message);
+        this.name = 'PatchValidationError';
+    }
+}
+
 const applyPatchParametersSchema = z.object({
     type: z.enum(['create_file', 'update_file', 'delete_file']),
     path: z.string().min(1, 'File path cannot be empty'),
@@ -45,7 +55,37 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
     needsApproval: async params => {
         try {
             const mode = settingsService.get<'default' | 'edit'>('app.mode');
-            const {type, path: filePath} = params;
+            const {type, path: filePath, diff} = params;
+
+            // Validate diff syntax by attempting a dry-run (before approval)
+            if (type === 'create_file' || type === 'update_file') {
+                try {
+                    if (type === 'create_file') {
+                        // Dry-run: apply diff to empty content for new file
+                        applyDiff('', diff, 'create');
+                    } else {
+                        // Dry-run: read existing file and test diff application
+                        const targetPath = resolveWorkspacePath(filePath);
+                        const original = await readFile(targetPath, 'utf8');
+                        applyDiff(original, diff);
+                    }
+                    loggingService.info('apply_patch validation passed', {
+                        type,
+                        path: filePath,
+                    });
+                } catch (diffError: any) {
+                    // Diff validation failed - reject immediately without user approval
+                    loggingService.error('apply_patch validation failed', {
+                        type,
+                        path: filePath,
+                        error: diffError?.message || String(diffError),
+                    });
+                    throw new PatchValidationError(
+                        `Invalid diff: ${diffError?.message || String(diffError)}`,
+                        filePath
+                    );
+                }
+            }
 
             // Deletions ALWAYS require approval per policy
             if (type === 'delete_file') {
@@ -109,7 +149,7 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
     },
     execute: async params => {
         const enableFileLogging =
-            settingsService.get<boolean>('tools.logFileOperations') !== false;
+            settingsService.get<boolean>('tools.logFileOperations');
 
         try {
             const {type, path: filePath, diff} = params;

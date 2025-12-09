@@ -86,17 +86,6 @@ const settings = new SettingsService({
 const usedModel = settings.get('agent.model');
 const usedReasoningEffort = settings.get('agent.reasoningEffort');
 
-// Print which model and reasoning effort will be used on startup
-process.stderr.write(
-    `Using model: ${usedModel}` +
-        (usedReasoningEffort &&
-        usedReasoningEffort !== 'none' &&
-        usedReasoningEffort !== 'default'
-            ? ` with reasoning effort: ${usedReasoningEffort}`
-            : '') +
-        '\n',
-);
-
 const conversationService = new ConversationService({
     agentClient: new OpenAIAgentClient({
         model: usedModel,

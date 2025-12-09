@@ -4,6 +4,7 @@ import { useInputContext } from './context/InputContext.js';
 import {Box, Text, useApp, useInput} from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
 import { useInputHistory } from './hooks/use-input-history.js';
+import Banner from './components/Banner.js';
 import MessageList from './components/MessageList.js';
 import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
@@ -246,6 +247,7 @@ const App: FC<AppProps> = ({conversationService}) => {
 
     return (
         <Box flexDirection="column" flexGrow={1}>
+            <Banner />
             {/* Main content area grows to fill available vertical space */}
             <Box flexDirection="column" flexGrow={1}>
                 <MessageList messages={messages} />

@@ -54,7 +54,7 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 -   **`source/agent.ts`** - Configures the OpenAI agent with available tools
 -   **`source/tools/`** - Tool implementations
     -   `shell.ts` - Execute commands (with safety validation and approval)
-    -   `apply-patch.ts` - Modify files using unified diff format
+    -   `apply-patch.ts` - Modify files using unified diff format (with pre-approval validation and consecutive failure tracking)
     -   `types.ts` - Shared tool type definitions
 
 ### UI Components
@@ -81,10 +81,13 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 3. Service calls the OpenAI agent via `openai-agent-client.ts`
 4. Agent response streams back in real-time:
     - Text and reasoning displayed by `LiveResponse.tsx`
-    - Tool requests (shell/apply-patch) pause for approval
+    - Tool requests (shell/apply-patch) are validated before approval
+    - Invalid patches are rejected immediately (dry-run validation)
+    - Valid tool requests pause for approval
 5. User approves/rejects via `ApprovalPrompt.tsx`
 6. Service executes the tool or continues streaming
 7. Final response appears in `MessageList.tsx`
+8. Consecutive tool failures trigger automatic abort after threshold
 
 ## Testing & Quality
 
@@ -101,6 +104,8 @@ npx ava               # Unit tests
 
 -   **Message Types**: UserMessage, BotMessage, ReasoningMessage, ApprovalMessage, CommandMessage, SystemMessage
 -   **Tool Approval**: Tools like `shell.ts` validate commands and can require user approval before execution
+-   **Patch Validation**: The `apply-patch` tool performs dry-run validation before requesting approval, rejecting malformed diffs immediately
+-   **Failure Tracking**: Consecutive tool failures are tracked; after N failures (configurable, default: 3), the agent automatically aborts to prevent infinite retry loops
 -   **Streaming**: Responses and reasoning stream in real-time for responsive UX
 -   **Input History**: Persisted to `~/Library/Logs/term2-nodejs/history.json` (macOS) or `~/.local/state/term2/history.json` (Linux), navigable with arrow keys
 -   **Logging**: Winston-based system logs shell commands, API calls, and errors to `~/Library/Logs/term2-nodejs/logs/` (macOS) or `~/.local/state/term2/logs/` (Linux)
@@ -148,17 +153,18 @@ These values are loaded into memory at startup from environment variables and re
 
 ### Supported Settings
 
-| Setting                 | Default   | Runtime?  | Purpose                                                                                       |
-| ----------------------- | --------- | --------- | --------------------------------------------------------------------------------------------- |
-| `agent.model`           | `gpt-5.1` | ✓ Yes     | OpenAI model to use                                                                           |
-| `agent.reasoningEffort` | `default` | ✓ Yes     | Reasoning effort for reasoning models (`default`, `none`, `minimal`, `low`, `medium`, `high`) |
-| `agent.maxTurns`        | `20`      | ✗ Startup | Maximum turns per agent run                                                                   |
-| `agent.retryAttempts`   | `2`       | ✗ Startup | Retry attempts for failed operations                                                          |
-| `shell.timeout`         | `120000`  | ✓ Yes     | Shell command timeout in milliseconds                                                         |
-| `shell.maxOutputLines`  | `1000`    | ✓ Yes     | Maximum lines of command output                                                               |
-| `shell.maxOutputChars`  | `10000`   | ✓ Yes     | Maximum characters of command output                                                          |
-| `ui.historySize`        | `1000`    | ✗ Startup | Maximum input history entries                                                                 |
-| `logging.logLevel`      | `info`    | ✓ Yes     | Log level (`error`, `warn`, `info`, `security`, `debug`)                                      |
+| Setting                            | Default   | Runtime?  | Purpose                                                                                       |
+| ---------------------------------- | --------- | --------- | --------------------------------------------------------------------------------------------- |
+| `agent.model`                      | `gpt-5.1` | ✓ Yes     | OpenAI model to use                                                                           |
+| `agent.reasoningEffort`            | `default` | ✓ Yes     | Reasoning effort for reasoning models (`default`, `none`, `minimal`, `low`, `medium`, `high`) |
+| `agent.maxTurns`                   | `20`      | ✗ Startup | Maximum turns per agent run                                                                   |
+| `agent.retryAttempts`              | `2`       | ✗ Startup | Retry attempts for failed operations                                                          |
+| `agent.maxConsecutiveToolFailures` | `3`       | ✗ Startup | Maximum consecutive malformed patches before aborting                                         |
+| `shell.timeout`                    | `120000`  | ✓ Yes     | Shell command timeout in milliseconds                                                         |
+| `shell.maxOutputLines`             | `1000`    | ✓ Yes     | Maximum lines of command output                                                               |
+| `shell.maxOutputChars`             | `10000`   | ✓ Yes     | Maximum characters of command output                                                          |
+| `ui.historySize`                   | `1000`    | ✗ Startup | Maximum input history entries                                                                 |
+| `logging.logLevel`                 | `info`    | ✓ Yes     | Log level (`error`, `warn`, `info`, `security`, `debug`)                                      |
 
 ### Environment Variables
 

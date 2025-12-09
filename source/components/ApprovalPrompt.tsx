@@ -18,34 +18,44 @@ const operationLabels: Record<string, {label: string; color: string}> = {
 };
 
 const DiffView: FC<{diff: string}> = ({diff}) => {
-    const lines = diff.split('\n');
-    const maxLines = 30;
-    const truncated = lines.length > maxLines;
-    const displayLines = truncated ? lines.slice(0, maxLines) : lines;
+    try {
+        const lines = diff.split('\n');
+        const maxLines = 30;
+        const truncated = lines.length > maxLines;
+        const displayLines = truncated ? lines.slice(0, maxLines) : lines;
 
-    return (
-        <Box flexDirection="column" marginLeft={2}>
-            {displayLines.map((line, i) => {
-                let color: string | undefined;
-                if (line.startsWith('+')) {
-                    color = 'green';
-                } else if (line.startsWith('-')) {
-                    color = 'red';
-                } else if (line.startsWith('@@')) {
-                    color = 'cyan';
-                }
+        return (
+            <Box flexDirection="column" marginLeft={2}>
+                {displayLines.map((line, i) => {
+                    let color: string | undefined;
+                    if (line.startsWith('+')) {
+                        color = 'green';
+                    } else if (line.startsWith('-')) {
+                        color = 'red';
+                    } else if (line.startsWith('@@')) {
+                        color = 'cyan';
+                    }
 
-                return (
-                    <Text key={i} color={color} dimColor={!color}>
-                        {line}
-                    </Text>
-                );
-            })}
-            {truncated && (
-                <Text dimColor>... ({lines.length - maxLines} more lines)</Text>
-            )}
-        </Box>
-    );
+                    return (
+                        <Text key={i} color={color} dimColor={!color}>
+                            {line}
+                        </Text>
+                    );
+                })}
+                {truncated && (
+                    <Text dimColor>... ({lines.length - maxLines} more lines)</Text>
+                )}
+            </Box>
+        );
+    } catch (error) {
+        return (
+            <Box marginLeft={2}>
+                <Text color="red" dimColor>
+                    [Failed to render diff preview]
+                </Text>
+            </Box>
+        );
+    }
 };
 
 const ApplyPatchPrompt: FC<{args: ApplyPatchArgs}> = ({args}) => {

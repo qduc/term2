@@ -15,8 +15,9 @@ const AgentSettingsSchema = z.object({
     reasoningEffort: z
         .enum(['default', 'none', 'minimal', 'low', 'medium', 'high'])
         .default('default'),
-    maxTurns: z.number().int().positive().default(20),
+    maxTurns: z.number().int().positive().default(100),
     retryAttempts: z.number().int().nonnegative().default(2),
+    maxConsecutiveToolFailures: z.number().int().positive().default(3),
     provider: z
         .enum(['openai', 'openrouter'])
         .default('openai')
@@ -117,6 +118,7 @@ export interface SettingsWithSources {
         reasoningEffort: SettingWithSource<string>;
         maxTurns: SettingWithSource<number>;
         retryAttempts: SettingWithSource<number>;
+        maxConsecutiveToolFailures: SettingWithSource<number>;
         provider: SettingWithSource<string>;
         openrouter: SettingWithSource<any>;
     };
@@ -158,6 +160,7 @@ export const SETTING_KEYS = {
     AGENT_PROVIDER: 'agent.provider',
     AGENT_MAX_TURNS: 'agent.maxTurns',
     AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
+    AGENT_MAX_CONSECUTIVE_TOOL_FAILURES: 'agent.maxConsecutiveToolFailures',
     AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey', // Sensitive - env only
     AGENT_OPENROUTER_MODEL: 'agent.openrouter.model',
     AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
@@ -192,19 +195,18 @@ const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
 // Note: Sensitive settings are NOT in RUNTIME_MODIFIABLE_SETTINGS because they
 // cannot be modified at all - they can only be set via environment variables at startup.
 
-// Some defaulted keys are optional to persist; their absence in config should
-// not trigger auto-rewrite of settings.json.
-const OPTIONAL_DEFAULT_KEYS = new Set<string>([
-    'app.mode',
-]);
+// Runtime-only settings: app.mode - modifiable at runtime but never persisted to disk
+// Some settings with default values are optional to persist
+const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
 
 // Default settings
 const DEFAULT_SETTINGS: SettingsData = {
     agent: {
         model: 'gpt-5.1',
         reasoningEffort: 'default',
-        maxTurns: 20,
+        maxTurns: 100,
         retryAttempts: 2,
+        maxConsecutiveToolFailures: 3,
         provider: 'openai',
         openrouter: {
             // defaults empty; can be provided via env or config
@@ -521,6 +523,10 @@ export class SettingsService {
                     value: this.settings.agent.retryAttempts,
                     source: this.getSource('agent.retryAttempts'),
                 },
+                maxConsecutiveToolFailures: {
+                    value: this.settings.agent.maxConsecutiveToolFailures,
+                    source: this.getSource('agent.maxConsecutiveToolFailures'),
+                },
                 provider: {
                     value: this.settings.agent.provider,
                     source: this.getSource('agent.provider'),
@@ -715,6 +721,7 @@ export class SettingsService {
         // Remove sensitive app settings
         if (cleaned.app) {
             delete cleaned.app.shellPath;
+            delete cleaned.app.mode;
         }
 
         return cleaned;

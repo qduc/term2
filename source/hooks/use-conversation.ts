@@ -156,13 +156,14 @@ export const useConversation = ({
                     answer: null,
                 };
 
+                setPendingApprovalMessageId(approvalMessage.id);
                 setMessages(prev => [
                     ...prev,
                     ...messagesToAdd,
                     approvalMessage,
                 ]);
+                // Set waiting state AFTER adding approval message to ensure proper render order
                 setWaitingForApproval(true);
-                setPendingApprovalMessageId(approvalMessage.id);
                 return;
             }
 
@@ -323,6 +324,10 @@ export const useConversation = ({
                     textWasFlushed,
                 );
             } catch (error) {
+                loggingService.error('Error in sendUserMessage', {
+                    error: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined,
+                });
                 const errorMessage =
                     error instanceof Error ? error.message : String(error);
                 const botErrorMessage: BotMessage = {
@@ -332,9 +337,12 @@ export const useConversation = ({
                 };
                 setMessages(prev => [...prev, botErrorMessage]);
             } finally {
+                loggingService.debug('sendUserMessage finally block - resetting state');
                 flushLog();
                 setLiveResponse(null);
                 setIsProcessing(false);
+                // Don't reset waitingForApproval here - it's set by applyServiceResult
+                // and should only be cleared by handleApprovalDecision or stopProcessing
             }
         },
         [conversationService, applyServiceResult],
@@ -469,6 +477,10 @@ export const useConversation = ({
                     textWasFlushed,
                 );
             } catch (error) {
+                loggingService.error('Error in handleApprovalDecision', {
+                    error: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined,
+                });
                 const errorMessage =
                     error instanceof Error ? error.message : String(error);
                 const botErrorMessage: BotMessage = {
@@ -478,9 +490,13 @@ export const useConversation = ({
                 };
                 setMessages(prev => [...prev, botErrorMessage]);
             } finally {
+                loggingService.debug('handleApprovalDecision finally block - resetting state');
                 flushLog();
                 setLiveResponse(null);
                 setIsProcessing(false);
+                // Don't reset approval state here - if the result is another approval_required,
+                // applyServiceResult will set waitingForApproval=true, but this finally block
+                // would immediately clear it, causing the input box to reappear
             }
         },
         [

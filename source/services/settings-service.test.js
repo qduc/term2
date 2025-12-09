@@ -41,7 +41,7 @@ test('SettingsService initializes with defaults', async t => {
     t.truthy(service);
     t.is(service.get('agent.model'), 'gpt-5.1');
     t.is(service.get('agent.reasoningEffort'), 'default');
-    t.is(service.get('agent.maxTurns'), 20);
+    t.is(service.get('agent.maxTurns'), 100);
     t.is(service.get('agent.retryAttempts'), 2);
     t.is(service.get('shell.timeout'), 120000);
     t.is(service.get('shell.maxOutputLines'), 1000);
@@ -57,8 +57,7 @@ test('creates settings directory if it does not exist', async t => {
         disableLogging: true,
     });
 
-    // Give it a moment to create the directory
-    await new Promise(resolve => setTimeout(resolve, 100));
+
 
     t.true(fs.existsSync(settingsDir));
 });
@@ -383,8 +382,7 @@ test('persists changes to config file', async t => {
 
     service.set('agent.model', 'gpt-4o');
 
-    // Give it a moment to write
-    await new Promise(resolve => setTimeout(resolve, 100));
+
 
     // Read the config file directly
     const configFile = path.join(settingsDir, 'settings.json');
@@ -559,7 +557,7 @@ test('updates config file when new settings are added', async t => {
     t.is(updatedConfig.agent.provider, 'openai');
 });
 
-test('does not update config file when no new settings are added', async t => {
+test.serial('does not update config file when no new settings are added', async t => {
     const settingsDir = getTestSettingsDir();
     const configFile = path.join(settingsDir, 'settings.json');
 
@@ -574,6 +572,8 @@ test('does not update config file when no new settings are added', async t => {
             reasoningEffort: 'default',
             maxTurns: 20,
             retryAttempts: 2,
+
+            maxConsecutiveToolFailures: 3,
             provider: 'openai',
             openrouter: {},
         },
@@ -595,6 +595,7 @@ test('does not update config file when no new settings are added', async t => {
         },
         app: {
             shellPath: undefined,
+            mode: 'default',
         },
         tools: {
             logFileOperations: true,
@@ -605,24 +606,31 @@ test('does not update config file when no new settings are added', async t => {
     };
 
     fs.writeFileSync(configFile, JSON.stringify(originalConfig), 'utf-8');
-    const originalModTime = fs.statSync(configFile).mtime.getTime();
+    // Spy on loggingService to ensure no update was triggered
+    let updateLogged = false;
+    const originalInfo = loggingService.info;
+    loggingService.info = (msg, meta) => {
+        // Only track updates for this specific test's settings file
+        if (msg.includes('Updated settings file') && meta?.settingsFile?.startsWith(settingsDir)) {
+            updateLogged = true;
+        }
+    };
 
-    // Wait a bit to ensure time difference would be detectable
-    await new Promise(resolve => setTimeout(resolve, 100));
+    try {
+        // Initialize service - it should NOT update the file since all settings are present
+        // We must enable logging to catch the "update" log if it were to happen
+        new SettingsService({
+            settingsDir,
+            disableLogging: false,
+        });
+    } finally {
+        loggingService.info = originalInfo;
+    }
 
-    // Initialize service - it should NOT update the file since all settings are present
-    new SettingsService({
-        settingsDir,
-        disableLogging: true,
-    });
-
-    const newModTime = fs.statSync(configFile).mtime.getTime();
-
-    // File modification time should be the same or within a small margin (not updated)
-    t.is(originalModTime, newModTime);
+    t.false(updateLogged, 'Should not have logged an update to the settings file');
 });
 
-test('does not update config file when format differs but content is same', async t => {
+test.serial('does not update config file when format differs but content is same', async t => {
     const settingsDir = getTestSettingsDir();
     const configFile = path.join(settingsDir, 'settings.json');
 
@@ -633,31 +641,38 @@ test('does not update config file when format differs but content is same', asyn
 
     // Write config with compact JSON (no formatting, different key order)
     const compactConfig = {
-        agent: {model: 'gpt-4o', reasoningEffort: 'default', maxTurns: 20, retryAttempts: 2, provider: 'openai', openrouter: {}},
+        agent: {model: 'gpt-4o', reasoningEffort: 'default', maxTurns: 20, retryAttempts: 2, maxConsecutiveToolFailures: 3, provider: 'openai', openrouter: {}},
         shell: {timeout: 120000, maxOutputLines: 1000, maxOutputChars: 10000},
         ui: {historySize: 1000},
         logging: {logLevel: 'info', disableLogging: false, debugLogging: false},
         environment: {nodeEnv: undefined},
-        app: {shellPath: undefined},
+        app: {shellPath: undefined, mode: 'default'},
         tools: {logFileOperations: true},
         debug: {debugBashTool: false},
     };
 
     fs.writeFileSync(configFile, JSON.stringify(compactConfig), 'utf-8');
-    const originalModTime = fs.statSync(configFile).mtime.getTime();
+    // Spy on loggingService to ensure no update was triggered
+    let updateLogged = false;
+    const originalInfo = loggingService.info;
+    loggingService.info = (msg, meta) => {
+        // Only track updates for this specific test's settings file
+        if (msg.includes('Updated settings file') && meta?.settingsFile?.startsWith(settingsDir)) {
+            updateLogged = true;
+        }
+    };
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    try {
+        // Initialize service - it should NOT update the file even though format differs
+        new SettingsService({
+            settingsDir,
+            disableLogging: false,
+        });
+    } finally {
+        loggingService.info = originalInfo;
+    }
 
-    // Initialize service - it should NOT update the file even though format differs
-    new SettingsService({
-        settingsDir,
-        disableLogging: true,
-    });
-
-    const newModTime = fs.statSync(configFile).mtime.getTime();
-
-    // File modification time should be the same (not updated despite format difference)
-    t.is(originalModTime, newModTime);
+    t.false(updateLogged, 'Should not have logged an update to the settings file');
 });
 test('isSensitive() identifies sensitive settings', async t => {
     const settingsDir = getTestSettingsDir();

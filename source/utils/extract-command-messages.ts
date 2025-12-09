@@ -1,4 +1,3 @@
-const BASH_TOOL_NAME = 'bash';
 const SHELL_TOOL_NAME = 'shell';
 const SEARCH_TOOL_NAME = 'search';
 
@@ -118,45 +117,6 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
     for (const [index, item] of (items ?? []).entries()) {
         const normalizedItem = normalizeToolItem(item);
         if (!normalizedItem) {
-            continue;
-        }
-
-        // Handle bash tool
-        if (normalizedItem.toolName === BASH_TOOL_NAME) {
-            const parsedOutput = safeJsonParse(normalizedItem.outputText);
-            const commandSource =
-                parsedOutput?.command ??
-                parsedOutput?.arguments ??
-                normalizedItem.arguments ??
-                'Unknown command';
-            const command = coerceToText(commandSource) || 'Unknown command';
-            const stdoutText = coerceToText(parsedOutput?.stdout);
-            const stderrText = coerceToText(parsedOutput?.stderr);
-            const defaultOutput =
-                parsedOutput?.output ??
-                normalizedItem.outputText ??
-                'No output available';
-            const combinedStdOutput = [stdoutText, stderrText]
-                .filter(Boolean)
-                .join('\n');
-            const output = combinedStdOutput || defaultOutput;
-            const success = parsedOutput?.success;
-
-            const rawItem = item?.rawItem ?? item;
-            const stableId =
-                rawItem?.id ??
-                rawItem?.callId ??
-                item?.id ??
-                item?.callId ??
-                `${Date.now()}-${index}`;
-
-            messages.push({
-                id: stableId,
-                sender: 'command',
-                command,
-                output,
-                success,
-            });
             continue;
         }
 

@@ -32,7 +32,17 @@ const envInfo = `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
     settingsService.get<string>('app.shellPath') || 'unknown'
 }; cwd: ${process.cwd()}; top-level: ${getTopLevelEntries(process.cwd())}`;
 
-const contextReminder = 'If there is a file named AGENTS.md in project root. You must read it to understand what you are working with'
+function getAgentsInstructions(): string {
+    const agentsPath = path.join(process.cwd(), 'AGENTS.md');
+    if (!fs.existsSync(agentsPath)) return '';
+
+    try {
+        const contents = fs.readFileSync(agentsPath, 'utf-8').trim();
+        return `\n\nAGENTS.md contents:\n${contents}`;
+    } catch (e: any) {
+        return `\n\nFailed to read AGENTS.md: ${e.message}`;
+    }
+}
 
 export interface AgentDefinition {
     name: string;
@@ -76,7 +86,7 @@ export const getAgentDefinition = (model?: string): AgentDefinition => {
 
     return {
         name: 'Terminal Assistant',
-        instructions: `${prompt}\n\nEnvironment: ${envInfo}\n\n${contextReminder}`,
+        instructions: `${prompt}\n\nEnvironment: ${envInfo}${getAgentsInstructions()}`,
         tools: [
             shellToolDefinition,
             applyPatchToolDefinition,

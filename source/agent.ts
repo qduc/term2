@@ -1,4 +1,4 @@
-import {searchToolDefinition} from './tools/search.js';
+import {grepToolDefinition} from './tools/grep.js';
 import {applyPatchToolDefinition} from './tools/apply-patch.js';
 import {shellToolDefinition} from './tools/shell.js';
 import type {ToolDefinition} from './tools/types.js';
@@ -80,7 +80,7 @@ export const getAgentDefinition = (model?: string): AgentDefinition => {
         tools: [
             shellToolDefinition,
             applyPatchToolDefinition,
-            searchToolDefinition,
+            grepToolDefinition,
         ],
         model: resolvedModel,
     };

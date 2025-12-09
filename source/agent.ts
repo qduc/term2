@@ -7,16 +7,14 @@ import fs from 'fs';
 import path from 'path';
 import {settingsService} from './services/settings-service.js';
 
-export const DEFAULT_MODEL = 'gpt-5.1';
-const BASE_INSTRUCTION_PATH = path.join(import.meta.dirname, '../prompts/default.md')
+export const DEFAULT_MODEL = settingsService.get<string>('agent.model');
 
-const baseInstructions = fs
-    .readFileSync(
-        BASE_INSTRUCTION_PATH,
-        'utf-8',
-    )
-    .replace(/^# Agent Instructions\n+/, '')
-    .trim();
+const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts')
+
+const DEFAULT_PROMPT = 'default.md';
+const ANTHROPIC_PROMPT = 'anthropic.md';
+const GPT_PROMPT = 'gpt-5.md';
+const CODEX_PROMPT = 'codex.md';
 
 const envInfo = `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
     settingsService.get<string>('app.shellPath') || 'unknown'
@@ -29,15 +27,42 @@ export interface AgentDefinition {
     model: string;
 }
 
+function getPromptPath(model: string): string {
+	const normalizedModel = model.trim().toLowerCase();
+
+	if (normalizedModel.includes('sonnet') || normalizedModel.includes('haiku'))
+		return path.join(BASE_PROMPT_PATH, ANTHROPIC_PROMPT);
+	if (normalizedModel.includes('gpt-5') && normalizedModel.includes('codex'))
+		return path.join(BASE_PROMPT_PATH, CODEX_PROMPT);
+	if (normalizedModel.includes('gpt-5'))
+		return path.join(BASE_PROMPT_PATH, GPT_PROMPT);
+
+	return path.join(BASE_PROMPT_PATH, DEFAULT_PROMPT);
+}
+
+function resolvePrompt(promptPath: string): string {
+	try {
+		return fs.readFileSync(promptPath, 'utf-8').trim();
+	} catch (e: any) {
+		throw new Error(`Failed to read prompt file at ${promptPath}: ${e.message}`);
+	}
+}
+
 /**
  * Returns the agent definition with appropriate tools based on the model.
  */
 export const getAgentDefinition = (model?: string): AgentDefinition => {
     const resolvedModel = model?.trim() || DEFAULT_MODEL;
 
+	if (!resolvedModel)
+		throw new Error('Model cannot be undefined or empty');
+
+	const promptPath = getPromptPath(resolvedModel);
+	const prompt = resolvePrompt(promptPath);
+
     return {
         name: 'Terminal Assistant',
-        instructions: `${baseInstructions}\n\nEnvironment: ${envInfo}`,
+        instructions: `${prompt}\n\nEnvironment: ${envInfo}`,
         tools: [
             shellToolDefinition,
             applyPatchToolDefinition,

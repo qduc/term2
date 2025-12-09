@@ -11,11 +11,12 @@
 	},
 	"scripts": {
 		"start": "node dist/cli.js",
-		"build": "tsc",
+		"build": "tsc && npm run post-build",
 		"dev": "tsc --watch",
 		"test": "tsc && ava",
 		"lint": "prettier --check .",
-		"lint-fix": "prettier --write ."
+		"lint-fix": "prettier --write .",
+		"post-build": "cp -r source/prompts dist/prompts"
 	},
 	"files": [
 		"dist"

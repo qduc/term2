@@ -2,8 +2,10 @@ import React, {FC} from 'react';
 import SlashCommandMenu, {SlashCommand} from '../SlashCommandMenu.js';
 import PathSelectionMenu from '../PathSelectionMenu.js';
 import SettingsSelectionMenu from '../SettingsSelectionMenu.js';
+import ModelSelectionMenu from '../ModelSelectionMenu.js';
 import type {PathCompletionItem} from '../../hooks/use-path-completion.js';
 import type {SettingCompletionItem} from '../../hooks/use-settings-completion.js';
+import type {ModelInfo} from '../../services/model-service.js';
 
 interface PopupManagerProps {
     slash: {
@@ -20,6 +22,15 @@ interface PopupManagerProps {
         loading: boolean;
         error: string | null;
     };
+    models: {
+        isOpen: boolean;
+        items: ModelInfo[];
+        selectedIndex: number;
+        query: string;
+        loading: boolean;
+        error: string | null;
+        provider?: string | null;
+    };
     settings: {
         isOpen: boolean;
         items: SettingCompletionItem[];
@@ -30,10 +41,21 @@ interface PopupManagerProps {
 export const PopupManager: FC<PopupManagerProps> = ({
     slash,
     path,
+    models,
     settings,
 }) => {
     return (
         <>
+            {models.isOpen && (
+                <ModelSelectionMenu
+                    items={models.items}
+                    selectedIndex={models.selectedIndex}
+                    query={models.query}
+                    loading={models.loading}
+                    error={models.error}
+                    provider={models.provider}
+                />
+            )}
             {path.isOpen && (
                 <PathSelectionMenu
                     items={path.items}

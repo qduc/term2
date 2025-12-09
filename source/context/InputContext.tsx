@@ -1,6 +1,11 @@
 import React, {createContext, useContext, useState, ReactNode} from 'react';
 
-export type InputMode = 'text' | 'slash_commands' | 'path_completion' | 'settings_completion';
+export type InputMode =
+    | 'text'
+    | 'slash_commands'
+    | 'path_completion'
+    | 'settings_completion'
+    | 'model_selection';
 
 interface InputContextType {
     input: string;

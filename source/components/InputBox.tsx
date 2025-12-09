@@ -5,6 +5,7 @@ import { useInputContext } from '../context/InputContext.js';
 import { useSlashCommands } from '../hooks/use-slash-commands.js';
 import { usePathCompletion } from '../hooks/use-path-completion.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
+import { useModelSelection, MODEL_TRIGGER, MODEL_CMD_TRIGGER } from '../hooks/use-model-selection.js';
 import { PopupManager } from './Input/PopupManager.js';
 import type { SlashCommand } from './SlashCommandMenu.js';
 
@@ -51,6 +52,7 @@ const InputBox: FC<Props> = ({
 
     const path = usePathCompletion();
     const settings = useSettingsCompletion();
+    const models = useModelSelection();
 
     // Set terminal width
     useEffect(() => {
@@ -85,6 +87,21 @@ const InputBox: FC<Props> = ({
         }
 
         // Allow trigger detection in all modes to enable menu transitions
+
+        // Priority 0: Model selection for agent.model
+        if (value.startsWith(MODEL_TRIGGER) && cursorOffset >= MODEL_TRIGGER.length) {
+            models.open(MODEL_TRIGGER.length);
+            return;
+        }
+
+        if (value.startsWith(MODEL_CMD_TRIGGER) && cursorOffset >= MODEL_CMD_TRIGGER.length) {
+            models.open(MODEL_CMD_TRIGGER.length);
+            return;
+        }
+
+        if (mode === 'model_selection') {
+            models.close();
+        }
 
         // Priority 1: Settings
         if (value.startsWith(SETTINGS_TRIGGER) && cursorOffset >= SETTINGS_TRIGGER.length) {
@@ -128,7 +145,7 @@ const InputBox: FC<Props> = ({
             path.close();
         }
 
-    }, [value, cursorOffset, mode, slash, path, settings]);
+    }, [value, cursorOffset, mode, slash, path, settings, models]);
 
 
     // Handle inputs based on mode
@@ -182,6 +199,12 @@ const InputBox: FC<Props> = ({
                 insertSelectedSetting();
             }
         }
+
+        if (mode === 'model_selection') {
+            if (key.tab && !key.shift) {
+                insertSelectedModel(false);
+            }
+        }
     });
 
     const [, setInputKey] = useState(0);
@@ -197,6 +220,9 @@ const InputBox: FC<Props> = ({
             } else if (mode === 'path_completion') {
                 if (direction === 'up') path.moveUp();
                 if (direction === 'down') path.moveDown();
+            } else if (mode === 'model_selection') {
+                if (direction === 'up') models.moveUp();
+                if (direction === 'down') models.moveDown();
             } else {
                 // History
                 if (direction === 'up') {
@@ -208,7 +234,7 @@ const InputBox: FC<Props> = ({
                 }
             }
         },
-        [mode, slash, settings, path, onHistoryUp, onHistoryDown]
+        [mode, slash, settings, path, models, onHistoryUp, onHistoryDown]
     );
 
     const insertSelectedPath = useCallback(
@@ -251,6 +277,28 @@ const InputBox: FC<Props> = ({
         return true;
     }, [settings, value, onChange]);
 
+    const insertSelectedModel = useCallback(
+        (submitAfterInsert: boolean): boolean => {
+            const selection = models.getSelectedItem();
+            const triggerIdx = models.triggerIndex;
+
+            if (!selection || triggerIdx === null) return false;
+
+            const before = value.slice(0, triggerIdx);
+            const nextValue = `${before}${selection.id}${submitAfterInsert ? '' : ' '}`;
+            onChange(nextValue);
+            setCursorOverride(nextValue.length);
+            models.close();
+
+            if (submitAfterInsert) {
+                onSubmit(nextValue);
+            }
+
+            return true;
+        },
+        [models, value, onChange, onSubmit]
+    );
+
     const handleWrapperSubmit = useCallback((submittedValue: string) => {
         if (mode === 'path_completion') {
             if (insertSelectedPath(true)) return;
@@ -264,6 +312,9 @@ const InputBox: FC<Props> = ({
              }
             if (insertSelectedSetting()) return;
         }
+        if (mode === 'model_selection') {
+            if (insertSelectedModel(true)) return;
+        }
         if (mode === 'slash_commands') {
             slash.executeSelected();
             setInputKey(prev => prev + 1);
@@ -271,7 +322,7 @@ const InputBox: FC<Props> = ({
         }
 
         onSubmit(submittedValue);
-    }, [mode, onSubmit, insertSelectedPath, insertSelectedSetting, slash]);
+    }, [mode, onSubmit, insertSelectedPath, insertSelectedSetting, insertSelectedModel, slash]);
 
 
     return (
@@ -290,6 +341,15 @@ const InputBox: FC<Props> = ({
                     query: path.query,
                     loading: path.loading,
                     error: path.error
+                }}
+                models={{
+                    isOpen: models.isOpen,
+                    items: models.filteredModels,
+                    selectedIndex: models.selectedIndex,
+                    query: models.query,
+                    loading: models.loading,
+                    error: models.error,
+                    provider: models.provider
                 }}
                 settings={{
                     isOpen: settings.isOpen,

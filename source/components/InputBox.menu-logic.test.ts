@@ -3,11 +3,13 @@ import test from 'ava';
 // Copy of the pure function for testing (in real code, export from InputBox.tsx)
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 const SETTINGS_TRIGGER = '/settings ';
+const MODEL_TRIGGER = '/settings agent.model ';
 
 type ActiveMenu =
 	| {type: 'none'}
 	| {type: 'slash'}
 	| {type: 'settings'; query: string; startIndex: number}
+	| {type: 'model'; query: string; startIndex: number}
 	| {type: 'path'; trigger: {start: number; query: string}};
 
 const whitespaceRegex = /\s/;
@@ -44,6 +46,15 @@ function determineActiveMenu(
 	value: string,
 	cursorOffset: number,
 ): ActiveMenu {
+	// Priority 0: Model selection (more specific than settings)
+	if (value.startsWith(MODEL_TRIGGER) && cursorOffset >= MODEL_TRIGGER.length) {
+		return {
+			type: 'model',
+			query: value.slice(MODEL_TRIGGER.length, cursorOffset),
+			startIndex: MODEL_TRIGGER.length,
+		};
+	}
+
 	// Priority 1: Settings menu (most specific)
 	if (value.startsWith(SETTINGS_TRIGGER)) {
 		return {
@@ -88,6 +99,15 @@ test('determineActiveMenu - priority 1: settings menu', t => {
 			input: '/settings ag',
 			cursor: 12,
 			expected: {type: 'settings', query: 'ag', startIndex: 10},
+		},
+		{
+			input: '/settings agent.model value',
+			cursor: '/settings agent.model value'.length,
+			expected: {
+				type: 'model',
+				query: 'value',
+				startIndex: MODEL_TRIGGER.length,
+			},
 		},
 	];
 
@@ -166,6 +186,13 @@ test('determineActiveMenu - priority enforcement', t => {
 		type: 'settings',
 		query: '',
 		startIndex: 10,
+	});
+
+	// Model takes priority over settings when full trigger present
+	t.deepEqual(determineActiveMenu('/settings agent.model ', MODEL_TRIGGER.length), {
+		type: 'model',
+		query: '',
+		startIndex: MODEL_TRIGGER.length,
 	});
 
 	// Slash takes priority over path (edge case: /@ would be slash, not path)

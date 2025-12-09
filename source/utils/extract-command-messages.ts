@@ -1,5 +1,6 @@
 const SHELL_TOOL_NAME = 'shell';
 const SEARCH_TOOL_NAME = 'search';
+const APPLY_PATCH_TOOL_NAME = 'apply_patch';
 
 interface CommandMessage {
     id: string;
@@ -159,6 +160,41 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                     output,
                     success,
                     failureReason,
+                });
+            }
+            continue;
+        }
+
+        // Handle apply_patch tool
+        if (normalizedItem.toolName === APPLY_PATCH_TOOL_NAME) {
+            const parsedOutput = safeJsonParse(normalizedItem.outputText);
+            const patchOutputItems = parsedOutput?.output ?? [];
+
+            // Apply patch tool can have multiple operation outputs
+            for (const [patchIndex, patchResult] of patchOutputItems.entries()) {
+                const args = normalizedItem.arguments ?? {};
+                const operationType = args?.type ?? patchResult?.operation ?? 'unknown';
+                const filePath = args?.path ?? patchResult?.path ?? 'unknown';
+
+                const command = `apply_patch ${operationType} ${filePath}`;
+                const output = patchResult?.message ?? patchResult?.error ?? 'No output';
+                const success = patchResult?.success ?? false;
+
+                const rawItem = item?.rawItem ?? item;
+                const baseId =
+                    rawItem?.id ??
+                    rawItem?.callId ??
+                    item?.id ??
+                    item?.callId ??
+                    `${Date.now()}-${index}`;
+                const stableId = `${baseId}-${patchIndex}`;
+
+                messages.push({
+                    id: stableId,
+                    sender: 'command',
+                    command,
+                    output,
+                    success,
                 });
             }
             continue;

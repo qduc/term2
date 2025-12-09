@@ -148,6 +148,9 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
             });
             return true;
         } catch (error: any) {
+            if (error instanceof PatchValidationError) {
+                throw error;
+            }
             loggingService.error('apply_patch needsApproval error', {
                 error: error?.message || String(error),
             });
@@ -191,10 +194,14 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                     }
 
                     return JSON.stringify({
-                        success: true,
-                        operation: 'create_file',
-                        path: filePath,
-                        message: `Created ${filePath}`,
+                        output: [
+                            {
+                                success: true,
+                                operation: 'create_file',
+                                path: filePath,
+                                message: `Created ${filePath}`,
+                            },
+                        ],
                     });
                 }
 
@@ -215,8 +222,12 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                                 );
                             }
                             return JSON.stringify({
-                                success: false,
-                                error: `Cannot update missing file: ${filePath}`,
+                                output: [
+                                    {
+                                        success: false,
+                                        error: `Cannot update missing file: ${filePath}`,
+                                    },
+                                ],
                             });
                         }
 
@@ -240,10 +251,14 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                     }
 
                     return JSON.stringify({
-                        success: true,
-                        operation: 'update_file',
-                        path: filePath,
-                        message: `Updated ${filePath}`,
+                        output: [
+                            {
+                                success: true,
+                                operation: 'update_file',
+                                path: filePath,
+                                message: `Updated ${filePath}`,
+                            },
+                        ],
                     });
                 }
 
@@ -262,17 +277,25 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                     }
 
                     return JSON.stringify({
-                        success: true,
-                        operation: 'delete_file',
-                        path: filePath,
-                        message: `Deleted ${filePath}`,
+                        output: [
+                            {
+                                success: true,
+                                operation: 'delete_file',
+                                path: filePath,
+                                message: `Deleted ${filePath}`,
+                            },
+                        ],
                     });
                 }
 
                 default: {
                     return JSON.stringify({
-                        success: false,
-                        error: `Unknown operation type: ${type}`,
+                        output: [
+                            {
+                                success: false,
+                                error: `Unknown operation type: ${type}`,
+                            },
+                        ],
                     });
                 }
             }
@@ -286,8 +309,12 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                 });
             }
             return JSON.stringify({
-                success: false,
-                error: error.message || String(error),
+                output: [
+                    {
+                        success: false,
+                        error: error.message || String(error),
+                    },
+                ],
             });
         }
     },

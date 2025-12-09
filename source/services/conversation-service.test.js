@@ -436,24 +436,25 @@ test('handleApprovalDecision() returns null when no pending approval', async t =
 test('emits live reasoning chunks', async t => {
     t.plan(3);
 
+    // Reasoning is now streamed via model events carrying reasoning_summary_text deltas
     const events = [
         {
-            type: 'run_item_stream_event',
-            name: 'reasoning_item_created',
-            item: {
-                type: 'reasoning_item',
-                rawItem: {
-                    content: [{type: 'text', text: 'Thinking...'}],
+            type: 'response.output_text.delta',
+            data: {
+                type: 'model',
+                event: {
+                    type: 'response.reasoning_summary_text.delta',
+                    delta: 'Thinking...',
                 },
             },
         },
         {
-            type: 'run_item_stream_event',
-            name: 'reasoning_item_created',
-            item: {
-                type: 'reasoning_item',
-                rawItem: {
-                    content: [{type: 'text', text: ' Still thinking.'}],
+            type: 'response.output_text.delta',
+            data: {
+                type: 'model',
+                event: {
+                    type: 'response.reasoning_summary_text.delta',
+                    delta: ' Still thinking.',
                 },
             },
         },

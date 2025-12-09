@@ -387,6 +387,19 @@ export class ConversationService {
 
             // Handle reasoning items - look for reasoning_item_created event
             const reasoningDelta = (() => {
+                // OpenAI style
+                const data = event?.data;
+                if (data && typeof data === 'object' && (data as any).type === 'model') {
+                    const eventDetail = (data as any).event;
+                    if (
+                        eventDetail && typeof eventDetail === 'object' &&
+                        eventDetail.type === 'response.reasoning_summary_text.delta'
+                    ) {
+                        return eventDetail.delta ?? '';
+                    }
+                }
+
+                // OpenRouter style
                 const choices = event?.data?.event?.choices;
                 if (!choices) return '';
                 if (Array.isArray(choices)) {

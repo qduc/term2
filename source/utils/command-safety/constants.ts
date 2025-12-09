@@ -5,6 +5,7 @@ export const ALLOWED_COMMANDS = new Set([
     'ls',
     'pwd',
     'grep',
+    'rg',
     'cat',
     'echo',
     'head',

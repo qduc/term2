@@ -16,7 +16,8 @@
 		"test": "tsc && ava",
 		"lint": "prettier --check .",
 		"lint-fix": "prettier --write .",
-		"post-build": "cp -r source/prompts dist/prompts"
+		"post-build": "cp -r source/prompts dist/prompts",
+		"logs": "node tools/log_viewer/src/server.js"
 	},
 	"files": [
 		"dist"

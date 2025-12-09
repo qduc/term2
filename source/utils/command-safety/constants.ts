@@ -70,7 +70,84 @@ export const SYSTEM_PATHS = [
     '/bin',
 ];
 
-export const SENSITIVE_EXTENSIONS = ['.env', '.pem', '.key', '.json'];
+export const SENSITIVE_EXTENSIONS = ['.env', '.pem', '.key'];
+
+// Safe JSON files that are common project configuration files
+export const SAFE_JSON_FILES = new Set([
+	'package.json',
+	'package-lock.json',
+	'tsconfig.json',
+	'jsconfig.json',
+	'eslint.config.json',
+	'.eslintrc.json',
+	'prettier.config.json',
+	'.prettierrc.json',
+	'jest.config.json',
+	'babel.config.json',
+	'.babelrc.json',
+	'ava.config.json',
+	'xo.config.json',
+	'tslint.json',
+	'renovate.json',
+	'nx.json',
+	'project.json',
+	'vercel.json',
+	'now.json',
+	'composer.json',
+]);
+
+// Patterns that indicate potentially sensitive JSON files (credentials, tokens, etc.)
+export const SUSPICIOUS_JSON_PATTERNS = [
+	// Credentials and secrets (exact and with suffixes)
+	/^secrets?\.json$/i,
+	/^secrets?[-_.].*\.json$/i,
+	/^credentials?\.json$/i,
+	/^credentials?[-_.].*\.json$/i,
+	/^tokens?\.json$/i,
+	/^tokens?[-_.].*\.json$/i,
+	/^auth\.json$/i,
+	/^auth[-_.].*\.json$/i,
+	/^api[-_]?keys?\.json$/i,
+	/^api[-_]?keys?[-_.].*\.json$/i,
+	/^service[-_]?accounts?\.json$/i,
+	/^service[-_]?accounts?[-_.].*\.json$/i,
+
+	// Private keys
+	/^private\.json$/i,
+	/^private[-_.].*\.json$/i,
+	/^key\.json$/i,
+	/^key[-_.].*\.json$/i,
+	/^id_rsa.*\.json$/i,
+
+	// Cloud provider credentials
+	/^firebase[-_]?adminsdk.*\.json$/i,
+	/^google[-_]?credentials.*\.json$/i,
+	/^gcloud.*\.json$/i,
+	/^azure.*\.json$/i,
+	/^aws.*\.json$/i,
+	/^service[-_]account\.json$/i,
+	/^client[-_]secret.*\.json$/i,
+	/^oauth.*client.*\.json$/i,
+
+	// SSO and authentication providers
+	/^okta.*\.json$/i,
+	/^sso.*\.json$/i,
+	/^saml.*\.json$/i,
+
+	// Monitoring and logging credentials
+	/^sentry.*\.json$/i,
+	/^newrelic.*\.json$/i,
+	/^datadog.*\.json$/i,
+
+	// Key storage formats
+	/.*\.keystore\.json$/i,
+	/.*\.keypair\.json$/i,
+	/.*\.p8\.json$/i,
+	/.*\.p12\.json$/i,
+
+	// Vault and secret management
+	/^vault.*\.json$/i,
+];
 
 export const HOME_PATTERNS = [
     /^~/, // Tilde

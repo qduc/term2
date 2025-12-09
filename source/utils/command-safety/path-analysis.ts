@@ -6,6 +6,8 @@ import {
     SENSITIVE_EXTENSIONS,
     HOME_PATTERNS,
     SENSITIVE_PATHS,
+    SAFE_JSON_FILES,
+    SUSPICIOUS_JSON_PATTERNS,
 } from './constants.js';
 
 export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
@@ -47,6 +49,28 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
             });
             return SafetyStatus.RED;
         }
+
+        // Check if filename in home directory is suspicious (credentials, secrets, etc.)
+        const filename = path.basename(candidate);
+        if (
+            /\.json$/i.test(filename) &&
+            SUSPICIOUS_JSON_PATTERNS.some(pattern => pattern.test(filename))
+        ) {
+            loggingService.security(
+                'Path risk: suspicious JSON file in home directory',
+                {path: candidate},
+            );
+            return SafetyStatus.RED;
+        }
+
+        // Check for other sensitive extensions in home directory
+        if (SENSITIVE_EXTENSIONS.some(ext => filename.endsWith(ext))) {
+            loggingService.security(
+                'Path risk: sensitive file in home directory',
+                {path: candidate},
+            );
+            return SafetyStatus.RED;
+        }
     }
 
     // RED: Absolute System Paths
@@ -83,8 +107,31 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
         return SafetyStatus.RED;
     }
 
-    // Hidden files -> YELLOW
     const filename = path.basename(candidate);
+
+    // JSON files: check allowlist and suspicious patterns BEFORE hidden file check
+    // This ensures safe JSON files like .eslintrc.json are GREEN
+    // Use case-insensitive check for .json extension
+    if (/\.json$/i.test(filename)) {
+        // Safe project config files are always GREEN
+        // Check case-insensitively by converting to lowercase
+        if (SAFE_JSON_FILES.has(filename.toLowerCase())) {
+            return SafetyStatus.GREEN;
+        }
+
+        // Check for suspicious credential/token patterns
+        if (SUSPICIOUS_JSON_PATTERNS.some(pattern => pattern.test(filename))) {
+            loggingService.security('Path risk: suspicious JSON filename', {
+                path: candidate,
+            });
+            return SafetyStatus.YELLOW;
+        }
+
+        // Other JSON files are GREEN by default (permissive)
+        return SafetyStatus.GREEN;
+    }
+
+    // Hidden files -> YELLOW
     if (filename.startsWith('.')) {
         loggingService.security('Path risk: hidden file', {path: candidate});
         return SafetyStatus.YELLOW;

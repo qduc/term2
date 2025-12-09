@@ -82,16 +82,15 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                         path: filePath,
                     });
                 } catch (diffError: any) {
-                    // Diff validation failed - reject immediately without user approval
-                    loggingService.error('apply_patch validation failed', {
+                    // Diff validation failed - auto-approve (skip user prompt) and fail in execute
+                    // This prevents breaking the stream while still rejecting the invalid patch
+                    loggingService.error('apply_patch validation failed - will fail in execute', {
                         type,
                         path: filePath,
                         error: diffError?.message || String(diffError),
                     });
-                    throw new PatchValidationError(
-                        `Invalid diff: ${diffError?.message || String(diffError)}`,
-                        filePath
-                    );
+                    // Return false to auto-approve - execute will handle the error gracefully
+                    return false;
                 }
             }
 
@@ -148,9 +147,6 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
             });
             return true;
         } catch (error: any) {
-            if (error instanceof PatchValidationError) {
-                throw error;
-            }
             loggingService.error('apply_patch needsApproval error', {
                 error: error?.message || String(error),
             });
@@ -171,6 +167,34 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                     path: filePath,
                     targetPath,
                 });
+            }
+
+            // Re-validate patch before executing
+            if (type === 'create_file' || type === 'update_file') {
+                try {
+                    if (type === 'create_file') {
+                        // Test applying diff to empty content
+                        applyDiff('', diff);
+                    } else {
+                        // Test applying diff to existing file content
+                        const original = await readFile(targetPath, 'utf8');
+                        applyDiff(original, diff);
+                    }
+                } catch (validationError: any) {
+                    loggingService.error('Patch validation failed in execute', {
+                        type,
+                        path: filePath,
+                        error: validationError?.message || String(validationError),
+                    });
+                    return JSON.stringify({
+                        output: [
+                            {
+                                success: false,
+                                error: `Invalid patch: ${validationError?.message || String(validationError)}. Please check the file path and diff format.`,
+                            },
+                        ],
+                    });
+                }
             }
 
             switch (type) {

@@ -2,7 +2,7 @@ import test from 'ava';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import {applyPatchToolDefinition, PatchValidationError} from './apply-patch.js';
+import {applyPatchToolDefinition} from './apply-patch.js';
 import {settingsService} from '../services/settings-service.js';
 import {loggingService} from '../services/logging-service.js';
 
@@ -162,15 +162,27 @@ test.serial('needsApproval: requires approval in default mode', async t => {
 });
 
 
-test.serial('needsApproval: validates diff syntax', async t => {
+test.serial('needsApproval: auto-approves invalid diffs (will fail in execute)', async t => {
     await withTempDir(async () => {
-        const error = await t.throwsAsync(async () => {
-            await applyPatchToolDefinition.needsApproval({
-                type: 'create_file',
-                path: 'test.txt',
-                diff: 'garbage',
-            });
+        // Invalid diffs now return false (auto-approve) to avoid breaking the stream
+        const result = await applyPatchToolDefinition.needsApproval({
+            type: 'create_file',
+            path: 'test.txt',
+            diff: 'garbage',
         });
-        t.true(error instanceof PatchValidationError);
+        t.false(result);
+    });
+});
+
+test.serial('execute: rejects invalid diffs with proper error', async t => {
+    await withTempDir(async () => {
+        const result = await applyPatchToolDefinition.execute({
+            type: 'create_file',
+            path: 'test.txt',
+            diff: 'garbage',
+        });
+        const parsed = JSON.parse(result);
+        t.false(parsed.output[0].success);
+        t.true(parsed.output[0].error.includes('Invalid patch'));
     });
 });

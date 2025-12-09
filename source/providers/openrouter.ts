@@ -607,6 +607,10 @@ class OpenRouterModel implements Model {
                                 ),
                             },
                         } as any;
+						yield {
+							type: 'model',
+							event: data
+						}
                         return;
                     }
                     try {
@@ -640,6 +644,10 @@ class OpenRouterModel implements Model {
                                 delta,
                             } as any;
                         }
+						yield {
+							type: 'model',
+							event: json
+						}
                     } catch {
                         // ignore parse errors for keep-alive lines
                     }

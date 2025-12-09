@@ -83,7 +83,13 @@ export class ConversationService {
     private eventTypeCount = 0;
     private consecutiveToolFailures = 0;
     private logStreamEvent = (eventType: string, eventData: any) => {
-        if (eventData.item) {
+        if (eventType === 'raw_model_stream_event') {
+			loggingService.debug('Stream event', {
+				eventType,
+				...eventData,
+			});
+		}
+		if (eventData.item) {
 			eventType = eventData.item.type;
 			eventData = eventData.item.rawItem;
 			this.logStreamEvent(eventType, eventData);
@@ -380,25 +386,20 @@ export class ConversationService {
             }
 
             // Handle reasoning items - look for reasoning_item_created event
-            if (
-                event?.type === 'run_item_stream_event' &&
-                event?.name === 'reasoning_item_created' &&
-                event.item?.type === 'reasoning_item'
-            ) {
-                const reasoningItem = event.item;
-
-                // Extract and emit reasoning text from content array
-                if (
-                    reasoningItem.rawItem?.content &&
-                    Array.isArray(reasoningItem.rawItem.content)
-                ) {
-                    for (const contentItem of reasoningItem.rawItem.content) {
-                        if (contentItem.text) {
-                            emitReasoning(contentItem.text);
-                        }
-                    }
+            const reasoningDelta = (() => {
+                const choices = event?.data?.event?.choices;
+                if (!choices) return '';
+                if (Array.isArray(choices)) {
+                    return choices[0]?.delta?.reasoning ?? '';
                 }
-            }
+                if (typeof choices === 'object') {
+                    const byZero = (choices as Record<string, any>)['0'];
+                    const first = byZero ?? choices[Object.keys(choices)[0]];
+                    return first?.delta?.reasoning ?? '';
+                }
+                return '';
+            })();
+            emitReasoning(reasoningDelta);
 
             if (event?.type === 'run_item_stream_event') {
                 this.#emitCommandMessages(

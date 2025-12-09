@@ -2,6 +2,7 @@ import {z} from 'zod';
 import {exec} from 'child_process';
 import util from 'util';
 import process from 'process';
+import path from 'path';
 import {randomUUID} from 'node:crypto';
 import {validateCommandSafety} from '../utils/command-safety/index.js';
 import {logValidationError} from '../utils/command-logger.js';
@@ -60,6 +61,27 @@ interface ShellCommandResult {
     outcome: {type: 'exit'; exitCode: number | null} | {type: 'timeout'};
 }
 
+/**
+ * Strip redundant 'cd <path> &&' prefix if it targets the current working directory
+ */
+function stripRedundantCd(command: string, cwd: string): string {
+    const cdPattern = /^cd\s+([^\s&]+)\s+&&\s+(.+)$/;
+    const match = command.match(cdPattern);
+
+    if (match) {
+        const [, targetPath, restOfCommand] = match;
+        // Resolve the target path to absolute
+        const absoluteTargetPath = path.resolve(cwd, targetPath);
+
+        // If target path is same as cwd, strip the cd part
+        if (absoluteTargetPath === cwd) {
+            return restOfCommand;
+        }
+    }
+
+    return command;
+}
+
 export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
     name: 'shell',
     description:
@@ -67,11 +89,14 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
     parameters: shellParametersSchema,
     needsApproval: async params => {
         try {
-            const isDangerous = validateCommandSafety(params.commands);
+            const cwd = process.cwd();
+            const optimizedCommand = stripRedundantCd(params.commands, cwd);
+            const isDangerous = validateCommandSafety(optimizedCommand);
 
             // Log security event for all shell commands with dangerous flag
             loggingService.security('Shell tool needsApproval check', {
                 commands: [params.commands.substring(0, 100)], // Truncate for safety
+                optimizedCommand: optimizedCommand.substring(0, 100),
                 isDangerous,
             });
 
@@ -110,7 +135,15 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
                 maxOutputLength,
             });
 
-            const command = commands;
+            // Strip redundant 'cd <path> &&' if it targets the current directory
+            const command = stripRedundantCd(commands, cwd);
+            if (command !== commands) {
+                loggingService.debug('Stripped redundant cd command', {
+                    original: commands,
+                    optimized: command,
+                    cwd,
+                });
+            }
             let stdout = '';
             let stderr = '';
             let exitCode: number | null = 0;
@@ -182,12 +215,19 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
                 ).length,
             });
 
-            return JSON.stringify({
+            const result: Record<string, any> = {
                 output,
                 providerData: {
                     working_directory: cwd,
                 },
-            });
+            };
+
+            // Add optimization note if we stripped redundant cd
+            if (command !== commands) {
+                result.note = `Optimization: Stripped redundant 'cd ${cwd}' prefix. You're already in this directory - avoid using 'cd <current-dir> && <command>' in future requests.`;
+            }
+
+            return JSON.stringify(result);
         } finally {
             // Always clear correlation ID
             loggingService.clearCorrelationId();

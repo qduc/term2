@@ -206,7 +206,6 @@ const App: FC<AppProps> = ({conversationService}) => {
                 if (command) {
                     // Execute the command
                     const shouldClearInput = command.action(parsed.args || undefined);
-                    addToHistory(value);
 
                     // Clear input unless command returned false
                     if (shouldClearInput !== false) {
@@ -227,7 +226,6 @@ const App: FC<AppProps> = ({conversationService}) => {
         }
 
         // Fallback: unknown slash command, send as message
-        addToHistory(value);
         setInput('');
         await sendUserMessage(value);
     };

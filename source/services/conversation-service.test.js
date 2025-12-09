@@ -107,8 +107,9 @@ test('emits approval interruptions and resumes after approval', async t => {
         async startStream() {
             return initialStream;
         },
-        async continueRunStream(state) {
+        async continueRunStream(state, options) {
             t.is(state, initialStream.state);
+            t.deepEqual(options, {previousResponseId: 'resp_test'});
             return continuationStream;
         },
     };
@@ -129,19 +130,22 @@ test('emits approval interruptions and resumes after approval', async t => {
 
 test('dedupes command messages emitted live from run events', async t => {
     const commandPayload = JSON.stringify({
-        command: 'ls',
-        stdout: 'file.txt',
-        success: true,
+        output: [{
+            command: 'ls',
+            stdout: 'file.txt',
+            stderr: '',
+            outcome: { type: 'exit', exitCode: 0 }
+        }]
     });
     const rawItem = {
         id: 'call-123',
         type: 'function_call_result',
-        name: 'bash',
-        arguments: JSON.stringify({command: 'ls'}),
+        name: 'shell',
+        arguments: JSON.stringify({commands: ['ls']}),
     };
     const commandItem = {
         type: 'tool_call_output_item',
-        name: 'bash',
+        name: 'shell',
         output: commandPayload,
         rawItem,
     };
@@ -157,7 +161,7 @@ test('dedupes command messages emitted live from run events', async t => {
     };
 
     const service = new ConversationService({agentClient: mockClient});
-    const result = await service.sendMessage('run bash', {
+    const result = await service.sendMessage('run shell', {
         onCommandMessage(message) {
             emitted.push(message);
         },
@@ -165,11 +169,12 @@ test('dedupes command messages emitted live from run events', async t => {
 
     t.deepEqual(emitted, [
         {
-            id: 'call-123',
+            id: 'call-123-0',
             sender: 'command',
             command: 'ls',
             output: 'file.txt',
             success: true,
+            failureReason: undefined,
         },
     ]);
     t.deepEqual(result.commandMessages, []);
@@ -183,45 +188,51 @@ test('dedupes commands from initial stream when continuation history contains th
     // The 'ls' command should NOT be duplicated in the final result
 
     const lsCommandPayload = JSON.stringify({
-        command: 'ls',
-        stdout: 'file.txt',
-        success: true,
+        output: [{
+            command: 'ls',
+            stdout: 'file.txt',
+            stderr: '',
+            outcome: { type: 'exit', exitCode: 0 }
+        }]
     });
     const lsRawItem = {
         id: 'call-ls-123',
         type: 'function_call_result',
-        name: 'bash',
-        arguments: JSON.stringify({command: 'ls'}),
+        name: 'shell',
+        arguments: JSON.stringify({commands: ['ls']}),
     };
     const lsCommandItem = {
         type: 'tool_call_output_item',
-        name: 'bash',
+        name: 'shell',
         output: lsCommandPayload,
         rawItem: lsRawItem,
     };
 
     const sedCommandPayload = JSON.stringify({
-        command: 'sed -n "1,10p" file.txt',
-        stdout: 'content',
-        success: true,
+        output: [{
+            command: 'sed -n "1,10p" file.txt',
+            stdout: 'content',
+            stderr: '',
+            outcome: { type: 'exit', exitCode: 0 }
+        }]
     });
     const sedRawItem = {
         id: 'call-sed-456',
         type: 'function_call_result',
-        name: 'bash',
-        arguments: JSON.stringify({command: 'sed -n "1,10p" file.txt'}),
+        name: 'shell',
+        arguments: JSON.stringify({commands: ['sed -n "1,10p" file.txt']}),
     };
     const sedCommandItem = {
         type: 'tool_call_output_item',
-        name: 'bash',
+        name: 'shell',
         output: sedCommandPayload,
         rawItem: sedRawItem,
     };
 
     const interruption = {
-        name: 'bash',
+        name: 'shell',
         agent: {name: 'CLI Agent'},
-        arguments: JSON.stringify({command: 'sed -n "1,10p" file.txt'}),
+        arguments: JSON.stringify({commands: ['sed -n "1,10p" file.txt']}),
     };
 
     // Initial stream: emits 'ls' command, then hits approval for 'sed'
@@ -268,7 +279,7 @@ test('dedupes commands from initial stream when continuation history contains th
 
     t.is(approvalResult.type, 'approval_required');
     t.is(emittedCommands.length, 1);
-    t.is(emittedCommands[0].id, 'call-ls-123');
+    t.is(emittedCommands[0].id, 'call-ls-123-0');
 
     // Handle approval - should emit 'sed' but NOT duplicate 'ls'
     const finalResult = await service.handleApprovalDecision('y', {
@@ -280,7 +291,7 @@ test('dedupes commands from initial stream when continuation history contains th
     t.is(finalResult.type, 'response');
     // Only 'sed' should be emitted during continuation
     t.is(emittedCommands.length, 2);
-    t.is(emittedCommands[1].id, 'call-sed-456');
+    t.is(emittedCommands[1].id, 'call-sed-456-0');
     // Final result should have no additional commands since both were emitted live
     t.deepEqual(finalResult.commandMessages, []);
 });
@@ -400,7 +411,8 @@ test('handleApprovalDecision() rejects interruption when answer is n', async t =
         async startStream() {
             return initialStream;
         },
-        async continueRunStream() {
+        async continueRunStream(state, options) {
+            t.deepEqual(options, {previousResponseId: 'resp_test'});
             return continuationStream;
         },
     };

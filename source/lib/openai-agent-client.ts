@@ -141,21 +141,33 @@ export class OpenAIAgentClient {
         }
     }
 
-    async continueRun(state: any): Promise<any> {
-        this.abort();
-        this.#currentAbortController = new AbortController();
-        const signal = this.#currentAbortController.signal;
-
-        return this.#executeWithRetry(() => run(this.#agent, state, {signal}));
-    }
-
-    async continueRunStream(state: any): Promise<any> {
+    async continueRun(
+        state: any,
+        {previousResponseId}: {previousResponseId?: string | null} = {},
+    ): Promise<any> {
         this.abort();
         this.#currentAbortController = new AbortController();
         const signal = this.#currentAbortController.signal;
 
         return this.#executeWithRetry(() =>
             run(this.#agent, state, {
+                previousResponseId: previousResponseId ?? undefined,
+                signal,
+            }),
+        );
+    }
+
+    async continueRunStream(
+        state: any,
+        {previousResponseId}: {previousResponseId?: string | null} = {},
+    ): Promise<any> {
+        this.abort();
+        this.#currentAbortController = new AbortController();
+        const signal = this.#currentAbortController.signal;
+
+        return this.#executeWithRetry(() =>
+            run(this.#agent, state, {
+                previousResponseId: previousResponseId ?? undefined,
                 stream: true,
                 maxTurns: this.#maxTurns,
                 signal,

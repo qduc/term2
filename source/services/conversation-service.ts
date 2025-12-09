@@ -175,43 +175,14 @@ export class ConversationService {
         } = {},
     ): Promise<ConversationResult> {
         try {
-            // If there's an aborted approval, handle it first by rejecting with the user's message
+            // If there's an aborted approval, clear it and start fresh with the user's new message
+            // The user's message is a new input, not a continuation of the rejected tool call
             if (this.abortedApprovalContext) {
-                loggingService.debug('Handling aborted approval with user message as rejection reason', {
+                loggingService.debug('Clearing aborted approval, treating user message as new input', {
                     message: text,
                 });
-
-                const {state, interruption, emittedCommandIds: previouslyEmittedIds} = this.abortedApprovalContext;
                 this.abortedApprovalContext = null;
-
-                // Reject the interruption with the user's message as the reason
-                state.reject(interruption, `User cancelled with message: ${text}`);
-
-                const stream = await this.agentClient.continueRunStream(state);
-
-                const {finalOutput, reasoningOutput, emittedCommandIds} =
-                    await this.#consumeStream(stream, {
-                        onTextChunk,
-                        onReasoningChunk,
-                        onCommandMessage,
-                    });
-                this.previousResponseId = stream.lastResponseId;
-
-                // Reset failure counter on successful completion
-                this.consecutiveToolFailures = 0;
-
-                // Merge previously emitted command IDs with newly emitted ones
-                const allEmittedIds = new Set([
-                    ...previouslyEmittedIds,
-                    ...emittedCommandIds,
-                ]);
-
-                return this.#buildResult(
-                    stream,
-                    finalOutput || undefined,
-                    reasoningOutput || undefined,
-                    allEmittedIds,
-                );
+                // Fall through to normal message flow below
             }
 
             // Normal message flow
@@ -294,7 +265,9 @@ export class ConversationService {
         }
 
         try {
-            const stream = await this.agentClient.continueRunStream(state);
+            const stream = await this.agentClient.continueRunStream(state, {
+                previousResponseId: this.previousResponseId,
+            });
 
             const {finalOutput, reasoningOutput, emittedCommandIds} =
                 await this.#consumeStream(stream, {

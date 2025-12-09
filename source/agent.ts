@@ -8,10 +8,11 @@ import path from 'path';
 import {settingsService} from './services/settings-service.js';
 
 export const DEFAULT_MODEL = 'gpt-5.1';
+const BASE_INSTRUCTION_PATH = path.join(import.meta.dirname, '../prompts/default.md')
 
 const baseInstructions = fs
     .readFileSync(
-        path.join(import.meta.dirname, '../docs/agent-instructions.md'),
+        BASE_INSTRUCTION_PATH,
         'utf-8',
     )
     .replace(/^# Agent Instructions\n+/, '')

@@ -45,10 +45,18 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
     description:
         'Apply file changes using unified diff format. Supports creating, updating, and deleting files. ' +
         'For create_file and update_file operations, provide a unified diff. ' +
-        'The diff format should use +/- prefixes for added/removed lines. ' +
-        'Example diff:\n' +
+        'For create_file, use @@ headers with only + lines (no - lines since there is no original content). ' +
+        'For update_file, use @@ headers with +/- lines as needed. ' +
+        'Example for create:\n' +
         '```\n' +
-        '-old line\n' +
+        '@@ -0,0 +1,2 @@\n' +
+        '+line 1\n' +
+        '+line 2\n' +
+        '```' +
+        'Example for update:\n' +
+        '```\n' +
+        '@@ -1,1 +1,2 @@\n' +
+        ' existing line\n' +
         '+new line\n' +
         '```',
     parameters: applyPatchParametersSchema,
@@ -62,7 +70,7 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                 try {
                     if (type === 'create_file') {
                         // Dry-run: apply diff to empty content for new file
-                        applyDiff('', diff, 'create');
+                        applyDiff('', diff);
                     } else {
                         // Dry-run: read existing file and test diff application
                         const targetPath = resolveWorkspacePath(filePath);
@@ -168,7 +176,7 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                     await mkdir(path.dirname(targetPath), {recursive: true});
 
                     // Apply diff to empty content for new file
-                    const content = applyDiff('', diff, 'create');
+                    const content = applyDiff('', diff);
                     await writeFile(targetPath, content, 'utf8');
 
                     if (enableFileLogging) {

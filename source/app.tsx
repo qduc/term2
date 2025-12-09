@@ -148,6 +148,14 @@ const App: FC<AppProps> = ({conversationService}) => {
         setInput,
     ]);
 
+    const toggleAppMode = useCallback(() => {
+        const currentMode = settingsService.get<'default' | 'edit'>('app.mode');
+        const nextMode = currentMode === 'default' ? 'edit' : 'default';
+
+        settingsService.set('app.mode', nextMode);
+        addSystemMessage(`Switched app.mode to ${nextMode}`);
+    }, [addSystemMessage]);
+
     // Handle Ctrl+C to exit immediately
     useInput((_input: string, key) => {
         if (key.ctrl && _input === 'c') {
@@ -171,6 +179,14 @@ const App: FC<AppProps> = ({conversationService}) => {
         if (answer === 'y' || answer === 'n') {
             await handleApprovalDecision(answer);
         }
+    });
+
+    // Toggle app.mode with Shift+Tab for quick approval profile switching
+    useInput((input: string, key) => {
+        const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
+        if (!isShiftTab) return;
+
+        toggleAppMode();
     });
 
     const handleSubmit = async (value: string): Promise<void> => {

@@ -49,7 +49,7 @@ function getCurrentSettingValue(key: string): string | number | boolean | undefi
 
 // Pure functions exported for testing
 export function buildSettingsList(
-    settingKeys: typeof SETTING_KEYS,
+    settingKeys: Record<string, string>,
     descriptions: Record<string, string>,
     excludeSensitive: boolean = true,
     getCurrentValue?: (key: string) => string | number | boolean | undefined

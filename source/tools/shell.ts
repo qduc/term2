@@ -44,7 +44,6 @@ const shellParametersSchema = z.object({
         .describe(
             'Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to 10000 characters if not specified.',
         ),
-    needsApproval: z.boolean(),
 });
 
 export type ShellToolParams = z.infer<typeof shellParametersSchema>;
@@ -64,16 +63,6 @@ interface ShellCommandResult {
     outcome: {type: 'exit'; exitCode: number | null} | {type: 'timeout'};
 }
 
-/**
- * Custom shell tool that follows the same approval pattern as the bash tool.
- * This tool accepts an array of commands and executes them sequentially.
- *
- * Unlike the built-in shellTool from @openai/agents, this implementation:
- * 1. Uses the same needsApproval/execute pattern as other custom tools
- * 2. Works correctly with the async UI approval flow (interruption → user decision → continuation)
- * 3. Returns results in a format compatible with the shell tool output format
- * 4. Includes command safety validation like the bash tool
- */
 export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
     name: 'shell',
     description:
@@ -82,14 +71,12 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
     needsApproval: async params => {
         try {
             const isDangerous =
-                params.needsApproval ||
                 params.commands.some(cmd => validateCommandSafety(cmd));
 
             // Log security event for all shell commands with dangerous flag
             loggingService.security('Shell tool needsApproval check', {
                 commands: params.commands.map(cmd => cmd.substring(0, 100)), // Truncate for safety
                 isDangerous,
-                needsApprovalRequested: params.needsApproval,
             });
 
             return isDangerous;

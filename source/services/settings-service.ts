@@ -56,6 +56,10 @@ const EnvironmentSettingsSchema = z.object({
 
 const AppSettingsSchema = z.object({
     shellPath: z.string().optional(),
+    // Global mode controlling behavior across the app
+    // - 'default': operate exactly like now
+    // - 'edit': enable relaxed approvals for apply_patch within cwd
+    mode: z.enum(['default', 'edit']).optional().default('default'),
 });
 
 const ToolsSettingsSchema = z.object({
@@ -134,6 +138,7 @@ export interface SettingsWithSources {
     };
     app: {
         shellPath: SettingWithSource<string | undefined>;
+        mode: SettingWithSource<'default' | 'edit'>;
     };
     tools: {
         logFileOperations: SettingWithSource<boolean>;
@@ -167,6 +172,7 @@ export const SETTING_KEYS = {
     LOGGING_DEBUG: 'logging.debugLogging',
     ENV_NODE_ENV: 'environment.nodeEnv',
     APP_SHELL_PATH: 'app.shellPath', // Sensitive - env only
+    APP_MODE: 'app.mode',
     TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
     DEBUG_BASH_TOOL: 'debug.debugBashTool',
 } as const;
@@ -180,10 +186,17 @@ const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
     SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
     SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
     SETTING_KEYS.LOGGING_LOG_LEVEL,
+    SETTING_KEYS.APP_MODE,
 ]);
 
 // Note: Sensitive settings are NOT in RUNTIME_MODIFIABLE_SETTINGS because they
 // cannot be modified at all - they can only be set via environment variables at startup.
+
+// Some defaulted keys are optional to persist; their absence in config should
+// not trigger auto-rewrite of settings.json.
+const OPTIONAL_DEFAULT_KEYS = new Set<string>([
+    'app.mode',
+]);
 
 // Default settings
 const DEFAULT_SETTINGS: SettingsData = {
@@ -215,6 +228,7 @@ const DEFAULT_SETTINGS: SettingsData = {
     },
     app: {
         shellPath: undefined,
+        mode: 'default',
     },
     tools: {
         logFileOperations: true,
@@ -561,6 +575,10 @@ export class SettingsService {
                     value: this.settings.app.shellPath,
                     source: this.getSource('app.shellPath'),
                 },
+                mode: {
+                    value: this.settings.app.mode,
+                    source: this.getSource('app.mode'),
+                },
             },
             tools: {
                 logFileOperations: {
@@ -705,15 +723,25 @@ export class SettingsService {
     /**
      * Check if target object is missing any keys that exist in source
      */
-    private hasMissingKeys(target: any, source: any): boolean {
+    private hasMissingKeys(target: any, source: any, prefix: string = ''): boolean {
         for (const key in source) {
             if (!source.hasOwnProperty(key)) continue;
 
-            if (!(key in target)) {
-                return true;
-            }
+            const pathKey = prefix ? `${prefix}.${key}` : key;
 
             const sourceValue = source[key];
+
+            if (!(key in target)) {
+                // Skip optional default keys when deciding whether to rewrite file
+                if (OPTIONAL_DEFAULT_KEYS.has(pathKey)) {
+                    continue;
+                }
+                // If the default value is undefined, treat it as optional for persistence
+                if (typeof sourceValue === 'undefined') {
+                    continue;
+                }
+                return true;
+            }
             const targetValue = target[key];
 
             // Recursively check nested objects
@@ -725,7 +753,7 @@ export class SettingsService {
                 typeof targetValue === 'object' &&
                 !Array.isArray(targetValue)
             ) {
-                if (this.hasMissingKeys(targetValue, sourceValue)) {
+                if (this.hasMissingKeys(targetValue, sourceValue, pathKey)) {
                     return true;
                 }
             }

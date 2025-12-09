@@ -42,9 +42,70 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
         '+new line\n' +
         '```',
     parameters: applyPatchParametersSchema,
-    needsApproval: async () => {
-        // File modifications always require approval
-        return true;
+    needsApproval: async params => {
+        try {
+            const mode = settingsService.get<'default' | 'edit'>('app.mode');
+            const {type, path: filePath} = params;
+
+            // Deletions ALWAYS require approval per policy
+            if (type === 'delete_file') {
+                loggingService.security('apply_patch needsApproval: delete requires approval', {
+                    mode,
+                    type,
+                    path: filePath,
+                });
+                return true;
+            }
+
+            // Resolve and ensure target within workspace
+            const workspaceRoot = process.cwd();
+            let targetPath: string;
+            try {
+                targetPath = resolveWorkspacePath(filePath);
+            } catch (e: any) {
+                // Outside workspace => require approval
+                loggingService.security('apply_patch needsApproval: outside workspace', {
+                    mode,
+                    type,
+                    path: filePath,
+                    error: e?.message || String(e),
+                });
+                return true;
+            }
+
+            const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
+
+            // In edit mode, auto-approve create/update within cwd
+            if (
+                mode === 'edit' &&
+                insideCwd &&
+                (type === 'create_file' || type === 'update_file')
+            ) {
+                loggingService.security('apply_patch needsApproval: auto-approved in edit mode', {
+                    mode,
+                    type,
+                    path: filePath,
+                    targetPath,
+                });
+                return false;
+            }
+
+            // Otherwise, require approval (default behavior)
+            loggingService.security('apply_patch needsApproval: approval required', {
+                mode,
+                type,
+                path: filePath,
+                targetPath,
+                insideCwd,
+            });
+            return true;
+        } catch (error: any) {
+            loggingService.error('apply_patch needsApproval error', {
+                error: error?.message || String(error),
+            });
+            // Fail-safe: require approval on any error
+            return true;
+        }
     },
     execute: async params => {
         const enableFileLogging =

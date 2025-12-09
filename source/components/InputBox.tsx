@@ -172,13 +172,13 @@ const InputBox: FC<Props> = ({
         }
 
         if (mode === 'path_completion') {
-            if (key.tab) {
+            if (key.tab && !key.shift) {
                 insertSelectedPath(false);
             }
         }
 
         if (mode === 'settings_completion') {
-            if (key.tab) {
+            if (key.tab && !key.shift) {
                 insertSelectedSetting();
             }
         }

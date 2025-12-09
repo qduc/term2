@@ -128,10 +128,12 @@ export class LoggingService {
                     : [new winston.transports.Console({silent: true})], // Fallback silent console
         });
 
-        // Add custom log levels to logger
-        Object.entries(LOG_LEVELS).forEach(([level]) => {
-            if (!(level in this.logger)) {
-                (this.logger as any).log(level, '', {level});
+        // Add custom log levels to logger if they don't exist
+        Object.keys(LOG_LEVELS).forEach((level) => {
+            if (typeof (this.logger as any)[level] !== 'function') {
+                (this.logger as any)[level] = (message: string, meta?: any) => {
+                    this.logger.log(level, message, meta);
+                };
             }
         });
     }
@@ -241,7 +243,11 @@ export class LoggingService {
                 ...(this.correlationId && {correlationId: this.correlationId}),
             };
 
-            (this.logger as any)[level](message, metadata);
+            if (this.logger && typeof (this.logger as any)[level] === 'function') {
+                (this.logger as any)[level](message, metadata);
+            } else if (this.logger) {
+                this.logger.log(level, message, metadata);
+            }
         } catch (error: any) {
             // Gracefully handle logging errors
             if (this.debugLogging) {

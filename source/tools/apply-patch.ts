@@ -172,10 +172,14 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                     await writeFile(targetPath, content, 'utf8');
 
                     if (enableFileLogging) {
-                        loggingService.info('File created', {
-                            path: filePath,
-                            contentLength: content.length,
-                        });
+                        try {
+                            loggingService.info('File created', {
+                                path: filePath,
+                                contentLength: content.length,
+                            });
+                        } catch (error) {
+                            // Ignore logging errors to prevent operation failure
+                        }
                     }
 
                     return JSON.stringify({
@@ -216,11 +220,15 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                     await writeFile(targetPath, patched, 'utf8');
 
                     if (enableFileLogging) {
-                        loggingService.info('File updated', {
-                            path: filePath,
-                            originalLength: original.length,
-                            patchedLength: patched.length,
-                        });
+                        try {
+                            loggingService.info('File updated', {
+                                path: filePath,
+                                originalLength: original.length,
+                                patchedLength: patched.length,
+                            });
+                        } catch (error) {
+                            // Ignore logging errors to prevent operation failure
+                        }
                     }
 
                     return JSON.stringify({
@@ -235,10 +243,14 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                     await rm(targetPath, {force: true});
 
                     if (enableFileLogging) {
-                        loggingService.info('File deleted', {
-                            path: filePath,
-                            targetPath,
-                        });
+                        try {
+                            loggingService.info('File deleted', {
+                                path: filePath,
+                                targetPath,
+                            });
+                        } catch (error) {
+                            // Ignore logging errors to prevent operation failure
+                        }
                     }
 
                     return JSON.stringify({

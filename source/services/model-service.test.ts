@@ -24,8 +24,9 @@ test('fetchModels uses OpenRouter endpoint and caches results', async t => {
 			ok: true,
 			json: async () => ({
 				data: [
-					{id: 'openrouter/model-a', name: 'Model A'},
-					{id: 'openrouter/model-b', name: 'Model B'},
+					{id: 'openrouter/model-a', name: 'Model A', supported_parameters: ['tools', 'temperature']},
+					{id: 'openrouter/model-b', name: 'Model B', supported_parameters: ['temperature']},
+					{id: 'openrouter/model-c', name: 'Model C', supported_parameters: ['tools', 'max_tokens']},
 				],
 			}),
 		};
@@ -34,7 +35,7 @@ test('fetchModels uses OpenRouter endpoint and caches results', async t => {
 	const first = await fetchModels(undefined, fakeFetch as any);
 	const second = await fetchModels(undefined, fakeFetch as any);
 
-	t.deepEqual(first.map(m => m.id), ['openrouter/model-a', 'openrouter/model-b']);
+	t.deepEqual(first.map(m => m.id), ['openrouter/model-a', 'openrouter/model-c']);
 	t.is(second.length, first.length, 'Cache should be reused');
 	// Only the first call should hit fetch because of caching
 	t.is(calls.length, 1);

@@ -73,7 +73,10 @@ async function fetchOpenRouterModels(fetchImpl: FetchFn): Promise<ModelInfo[]> {
     }
 
     const body = await response.json();
-    return normalizeModelList(body?.data, 'openrouter');
+    const filteredData = (body?.data || []).filter((item: any) =>
+        Array.isArray(item?.supported_parameters) && item.supported_parameters.includes('tools')
+    );
+    return normalizeModelList(filteredData, 'openrouter');
 }
 
 export async function fetchModels(

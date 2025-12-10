@@ -5,6 +5,7 @@ import {
 	run,
 	tool as createTool,
 	webSearchTool,
+	applyPatchTool,
 	type Tool,
     Runner,
 } from '@openai/agents';
@@ -23,6 +24,7 @@ import {randomUUID} from 'node:crypto';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
 import {loggingService} from '../services/logging-service.js';
 import {settingsService} from '../services/settings-service.js';
+import {editorImpl} from './editor-impl.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -272,16 +274,47 @@ export class OpenAIAgentClient {
 			tools: toolDefinitions,
 		} = getAgentDefinition(resolvedModel);
 
-		const tools: Tool[] = toolDefinitions.map(definition =>
-			createTool({
-				name: definition.name,
-				description: definition.description,
-				parameters: definition.parameters,
-				needsApproval: async (context, params) =>
-					definition.needsApproval(params, context),
-				execute: async params => definition.execute(params),
-			}),
-		);
+		// Determine if we should use the native applyPatchTool
+		const shouldUseNativePatchTool =
+			this.#provider === 'openai' && resolvedModel.startsWith('gpt-5.1');
+
+		const tools: Tool[] = toolDefinitions
+			.filter(definition => {
+				// Exclude custom apply_patch if we're using native one
+				if (shouldUseNativePatchTool && definition.name === 'apply_patch') {
+					return false;
+				}
+				return true;
+			})
+			.map(definition =>
+				createTool({
+					name: definition.name,
+					description: definition.description,
+					parameters: definition.parameters,
+					needsApproval: async (context, params) =>
+						definition.needsApproval(params, context),
+					execute: async params => definition.execute(params),
+				}),
+			);
+
+		// Add native applyPatchTool for gpt-5.1 on OpenAI provider
+		if (shouldUseNativePatchTool) {
+			tools.push(
+				applyPatchTool({
+					editor: editorImpl,
+					needsApproval: false, // Default to auto-approve for now
+				}),
+			);
+			loggingService.info('Using native applyPatchTool from SDK', {
+				model: resolvedModel,
+				provider: this.#provider,
+			});
+		} else {
+			loggingService.info('Using custom apply_patch implementation', {
+				model: resolvedModel,
+				provider: this.#provider,
+			});
+		}
 
 		// Add web search tool. If the user explicitly selected 'minimal' we
 		// disable it; if they selected 'default', we don't influence the

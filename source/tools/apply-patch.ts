@@ -43,22 +43,49 @@ function resolveWorkspacePath(relativePath: string): string {
 export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
     name: 'apply_patch',
     description:
-        'Apply file changes using unified diff format. Supports creating, updating, and deleting files. ' +
-        'For create_file and update_file operations, provide a unified diff. ' +
-        'For create_file, use @@ headers with only + lines (no - lines since there is no original content). ' +
-        'For update_file, use @@ headers with +/- lines as needed. ' +
-        'Example for create:\n' +
+        'Apply file changes using headerless V4A diff format. Supports creating, updating files.\n\n' +
+        '## CRITICAL RULES:\n' +
+        '1. Each line MUST start with exactly one character: space, +, or - (followed by the line content)\n' +
+        '2. Use @@ markers to provide context anchors when needed\n' +
+        '3. Context lines (unchanged) start with a SPACE character\n' +
+        '4. Added lines start with + character\n' +
+        '5. Removed lines start with - character\n' +
+        '6. DO NOT include line numbers or @@ -n,m +n,m @@ headers (headerless format)\n\n' +
+        '## CREATE_FILE:\n' +
+        'Every line must start with + (no context or - lines):\n' +
         '```\n' +
-        '@@ -0,0 +1,2 @@\n' +
         '+line 1\n' +
         '+line 2\n' +
-        '```' +
-        'Example for update:\n' +
+        '+line 3\n' +
+        '```\n\n' +
+        '## UPDATE_FILE:\n' +
+        'Provide context (space-prefixed lines) around changes. Include 2-3 lines of context before and after:\n' +
         '```\n' +
-        '@@ -1,1 +1,2 @@\n' +
-        ' existing line\n' +
-        '+new line\n' +
-        '```',
+        '@@ function calculate\n' +
+        ' function calculate(x) {\n' +
+        '-  return x * 2;\n' +
+        '+  return x * 3;\n' +
+        ' }\n' +
+        '```\n\n' +
+        '## Context Anchors:\n' +
+        'Use @@ markers to help locate code in the file:\n' +
+        '- For classes: @@ class ClassName\n' +
+        '- For functions: @@ function functionName\n' +
+        '- For unique lines: @@ distinctive text from the line\n' +
+        'Stack multiple @@ for nested structures:\n' +
+        '```\n' +
+        '@@ class MyClass\n' +
+        '@@ method doSomething\n' +
+        ' def doSomething(self):\n' +
+        '-    old code\n' +
+        '+    new code\n' +
+        '```\n\n' +
+        '## Common Mistakes to Avoid:\n' +
+        '- Missing space/+/- prefix on lines\n' +
+        '- Including line numbers like "@@ -1,3 +1,4 @@"\n' +
+        '- Not providing enough context (need 2-3 lines before/after)\n' +
+        '- Context lines not starting with space character\n' +
+        '- Using tabs instead of spaces for indentation matching',
     parameters: applyPatchParametersSchema,
     needsApproval: async params => {
         try {

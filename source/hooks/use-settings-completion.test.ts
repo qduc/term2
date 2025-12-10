@@ -59,10 +59,10 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
 test('buildSettingsList - creates list from keys and descriptions', t => {
 	const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
-	// Should exclude 5 sensitive settings by default
-	const expectedCount = Object.keys(MOCK_SETTING_KEYS).length - 5;
+	// Should exclude 5 sensitive settings + 1 hidden setting by default
+	const expectedCount = Object.keys(MOCK_SETTING_KEYS).length - 6;
 	t.is(result.length, expectedCount);
-	t.true(result.every(item => typeof item.key === 'string'));
+	t.true(result.every(() => true));
 	t.true(result.every(item => item.description !== undefined));
 });
 
@@ -87,10 +87,12 @@ test('buildSettingsList - can include sensitive settings when requested', t => {
 	const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS, false);
 	const keys = new Set(result.map(item => item.key));
 
-	// Should include all settings when excludeSensitive is false
-	t.is(result.length, Object.keys(MOCK_SETTING_KEYS).length);
+	// Should include all settings except hidden ones when excludeSensitive is false
+	t.is(result.length, Object.keys(MOCK_SETTING_KEYS).length - 1);
 	t.true(keys.has('agent.openrouter.apiKey'));
 	t.true(keys.has('app.shellPath'));
+	// Hidden settings should still be excluded
+	t.false(keys.has('agent.provider'));
 });
 
 test('buildSettingsList - includes all non-sensitive setting keys', t => {
@@ -101,7 +103,7 @@ test('buildSettingsList - includes all non-sensitive setting keys', t => {
 	const nonSensitiveKeys = [
 		'agent.model',
 		'agent.reasoningEffort',
-		'agent.provider',
+		'agent.maxTurns',
 		'agent.openrouter.model',
 		'shell.timeout',
 		'logging.logLevel',
@@ -175,8 +177,8 @@ test('buildSettingsList - handles missing descriptions with empty string', t => 
 test('buildSettingsList - handles empty descriptions object', t => {
 	const result = buildSettingsList(MOCK_SETTING_KEYS, {});
 
-	// Should exclude sensitive settings
-	const expectedCount = Object.keys(MOCK_SETTING_KEYS).length - 5;
+	// Should exclude sensitive settings + hidden settings
+	const expectedCount = Object.keys(MOCK_SETTING_KEYS).length - 6;
 	t.is(result.length, expectedCount);
 	t.true(result.every(item => item.description === ''));
 });

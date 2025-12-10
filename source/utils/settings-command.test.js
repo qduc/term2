@@ -130,9 +130,15 @@ test('setting agent.model strips --provider flag from value', t => {
     const command = createSettingsCommand(deps);
     command.action('agent.model mistralai/devstral-2512:free --provider=openrouter');
 
-    // Should save only the model ID, without the provider flag
-    t.deepEqual(deps.setCalls, [{key: 'agent.model', value: 'mistralai/devstral-2512:free'}]);
-    t.deepEqual(deps.applied, [{key: 'agent.model', value: 'mistralai/devstral-2512:free'}]);
+    // Should save the provider and the model ID
+    t.deepEqual(deps.setCalls, [
+        {key: 'agent.provider', value: 'openrouter'},
+        {key: 'agent.model', value: 'mistralai/devstral-2512:free'}
+    ]);
+    t.deepEqual(deps.applied, [
+        {key: 'agent.provider', value: 'openrouter'},
+        {key: 'agent.model', value: 'mistralai/devstral-2512:free'}
+    ]);
     t.true(deps.messages[0].includes('Set agent.model to mistralai/devstral-2512:free'));
 });
 
@@ -141,9 +147,15 @@ test('setting agent.model strips --provider=openai flag from value', t => {
     const command = createSettingsCommand(deps);
     command.action('agent.model gpt-4o --provider=openai');
 
-    // Should save only the model ID, without the provider flag
-    t.deepEqual(deps.setCalls, [{key: 'agent.model', value: 'gpt-4o'}]);
-    t.deepEqual(deps.applied, [{key: 'agent.model', value: 'gpt-4o'}]);
+    // Should save the provider and the model ID
+    t.deepEqual(deps.setCalls, [
+        {key: 'agent.provider', value: 'openai'},
+        {key: 'agent.model', value: 'gpt-4o'}
+    ]);
+    t.deepEqual(deps.applied, [
+        {key: 'agent.provider', value: 'openai'},
+        {key: 'agent.model', value: 'gpt-4o'}
+    ]);
     t.true(deps.messages[0].includes('Set agent.model to gpt-4o'));
 });
 

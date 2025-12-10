@@ -66,6 +66,12 @@ const App: FC<AppProps> = ({conversationService}) => {
         return () => clearInterval(interval);
     }, [isProcessing]);
 
+    useEffect(() => {
+        conversationService.setRetryCallback(() =>
+            addSystemMessage('Retrying due to upstream error...'),
+        );
+    }, [conversationService, addSystemMessage]);
+
     const applyRuntimeSetting = useCallback(
         (key: string, value: any) => {
             if (key === 'agent.model') {

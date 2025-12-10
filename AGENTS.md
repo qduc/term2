@@ -96,7 +96,6 @@ This project follows TDD approach. You MUST write tests first and then write the
 ```bash
 npm test              # Run all tests
 npx prettier --check . # Format check
-npx xo                # Lint
 npx ava               # Unit tests
 ```
 

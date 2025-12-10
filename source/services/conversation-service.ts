@@ -144,7 +144,11 @@ export class ConversationService {
             (this.agentClient as any).setProvider(provider);
         }
     }
-
+    setRetryCallback(callback: () => void): void {
+        if (typeof this.agentClient.setRetryCallback === 'function') {
+            this.agentClient.setRetryCallback(callback);
+        }
+    }
     /**
      * Abort the current running operation
      */

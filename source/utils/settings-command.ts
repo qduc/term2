@@ -134,7 +134,12 @@ export function createSettingsCommand({
 
             const key = parts[0];
             const rawValue = parts.slice(1).join(' ');
-            const parsedValue = parseSettingValue(rawValue);
+            let parsedValue = parseSettingValue(rawValue);
+
+            // Special handling for agent.model: strip --provider flag if present
+            if (key === SETTING_KEYS.AGENT_MODEL && typeof parsedValue === 'string') {
+                parsedValue = parsedValue.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+            }
 
             if (!settingsService.isRuntimeModifiable(key)) {
                 addSystemMessage(

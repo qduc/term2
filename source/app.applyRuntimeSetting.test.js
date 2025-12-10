@@ -42,28 +42,30 @@ test('applyRuntimeSetting - handles model with provider and extra whitespace', t
     t.is(modelId, 'gpt-4o');
 });
 
-test('insertSelectedModel - formats model ID with provider', t => {
-    // Simulate what insertSelectedModel does
+test('insertSelectedModel - formats model ID with provider from current state', t => {
+    // Simulate what insertSelectedModel does - uses current provider state, not selection.provider
     const selection = {
         id: 'anthropic/claude-3.5-sonnet',
-        provider: 'openrouter'
+        provider: 'openai' // This could be stale
     };
+    const currentProvider = 'openrouter'; // This is the current provider state
 
     const before = '/model ';
-    const nextValue = `${before}${selection.id} --provider=${selection.provider}`;
+    const nextValue = `${before}${selection.id} --provider=${currentProvider}`;
 
     t.is(nextValue, '/model anthropic/claude-3.5-sonnet --provider=openrouter');
 });
 
-test('insertSelectedModel - formats OpenAI model with provider', t => {
+test('insertSelectedModel - formats OpenAI model with provider from current state', t => {
     // Simulate what insertSelectedModel does for OpenAI model
     const selection = {
         id: 'gpt-4o',
-        provider: 'openai'
+        provider: 'openrouter' // This could be stale
     };
+    const currentProvider = 'openai'; // This is the current provider state
 
     const before = '/model ';
-    const nextValue = `${before}${selection.id} --provider=${selection.provider}`;
+    const nextValue = `${before}${selection.id} --provider=${currentProvider}`;
 
     t.is(nextValue, '/model gpt-4o --provider=openai');
 });

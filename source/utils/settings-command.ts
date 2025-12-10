@@ -132,8 +132,18 @@ export function createSettingsCommand({
             const rawValue = parts.slice(1).join(' ');
             let parsedValue = parseSettingValue(rawValue);
 
-            // Special handling for agent.model: strip --provider flag if present
+            // Special handling for agent.model: handle --provider flag
             if (key === SETTING_KEYS.AGENT_MODEL && typeof parsedValue === 'string') {
+                const providerMatch = parsedValue.match(/--provider=(openai|openrouter)/);
+                if (providerMatch) {
+                    const provider = providerMatch[1];
+                    // Update provider setting
+                    settingsService.set(SETTING_KEYS.AGENT_PROVIDER, provider);
+                    // Apply runtime provider change
+                    if (applyRuntimeSetting) {
+                        applyRuntimeSetting(SETTING_KEYS.AGENT_PROVIDER, provider);
+                    }
+                }
                 parsedValue = parsedValue.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
             }
 

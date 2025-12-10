@@ -75,21 +75,7 @@ const App: FC<AppProps> = ({conversationService}) => {
     const applyRuntimeSetting = useCallback(
         (key: string, value: any) => {
             if (key === 'agent.model') {
-                // Parse provider from value if present (format: "model-id --provider=openai")
-                const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
-                const modelId = String(value).replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
-
-                setModel(modelId);
-
-                // If provider is specified in the value, update it
-                if (providerMatch) {
-                    const provider = providerMatch[1] as 'openai' | 'openrouter';
-                    settingsService.set('agent.provider', provider);
-                    const setProviderFn = (conversationService as any).setProvider;
-                    if (typeof setProviderFn === 'function') {
-                        setProviderFn.call(conversationService, provider);
-                    }
-                }
+                setModel(String(value));
                 return;
             }
 
@@ -159,21 +145,19 @@ const App: FC<AppProps> = ({conversationService}) => {
                     const providerMatch = args.match(/--provider=(openai|openrouter)/);
                     const modelId = args.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
 
-                    setModel(modelId);
+                    // Update settings and runtime
+                    settingsService.set('agent.model', modelId);
+                    applyRuntimeSetting('agent.model', modelId);
 
+                    let providerMsg = '';
                     if (providerMatch) {
                         const provider = providerMatch[1] as 'openai' | 'openrouter';
-                        // Update provider setting
                         settingsService.set('agent.provider', provider);
-                        // Apply runtime provider change
-                        const setProvider = (conversationService as any).setProvider;
-                        if (typeof setProvider === 'function') {
-                            setProvider.call(conversationService, provider);
-                        }
-                        addSystemMessage(`Set model to ${modelId} (${provider})`);
-                    } else {
-                        addSystemMessage(`Set model to ${modelId}`);
+                        applyRuntimeSetting('agent.provider', provider);
+                        providerMsg = ` (${provider})`;
                     }
+
+                    addSystemMessage(`Set model to ${modelId}${providerMsg}`);
 
                     return true;
                 },

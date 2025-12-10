@@ -87,12 +87,13 @@ export class OpenAIAgentClient {
 	}
 
 	setProvider(provider: string): void {
-		this.#provider = provider;
-		this.#agent = this.#createAgent({
-			model: this.#model,
-			reasoningEffort: this.#reasoningEffort,
-		});
-		this.#runner = this.#createRunner();
+    this.#provider = provider;
+    settingsService.set('agent.provider', provider);
+    this.#agent = this.#createAgent({
+        model: this.#model,
+        reasoningEffort: this.#reasoningEffort,
+    });
+    this.#runner = this.#createRunner();
 	}
 
 	#createRunner(): Runner | null {

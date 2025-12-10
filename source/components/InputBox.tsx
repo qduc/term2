@@ -287,8 +287,10 @@ const InputBox: FC<Props> = ({
             if (!selection || triggerIdx === null) return false;
 
             const before = value.slice(0, triggerIdx);
-            // Include provider in the command string so it can be extracted later
-            const nextValue = `${before}${selection.id} --provider=${selection.provider}${submitAfterInsert ? '' : ' '}`;
+            // Use the current provider state instead of selection.provider to avoid stale data
+            // when user presses Enter immediately after toggling providers
+            const currentProvider = models.provider || 'openai';
+            const nextValue = `${before}${selection.id} --provider=${currentProvider}${submitAfterInsert ? '' : ' '}`;
             onChange(nextValue);
             setCursorOverride(nextValue.length);
             models.close();

@@ -303,6 +303,7 @@ const App: FC<AppProps> = ({conversationService}) => {
                         slashCommands={slashCommands}
                         onHistoryUp={handleHistoryUp}
                         onHistoryDown={handleHistoryDown}
+                        hasConversationHistory={messages.length > 0}
                     />
                 )}
 

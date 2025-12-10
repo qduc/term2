@@ -19,6 +19,7 @@ type Props = {
     slashCommands: SlashCommand[];
     onHistoryUp: () => void;
     onHistoryDown: () => void;
+    hasConversationHistory?: boolean;
 };
 
 const InputBox: FC<Props> = ({
@@ -26,6 +27,7 @@ const InputBox: FC<Props> = ({
     slashCommands,
     onHistoryUp,
     onHistoryDown,
+    hasConversationHistory = false,
 }) => {
     const {
         input: value,
@@ -52,7 +54,7 @@ const InputBox: FC<Props> = ({
 
     const path = usePathCompletion();
     const settings = useSettingsCompletion();
-    const models = useModelSelection();
+    const models = useModelSelection(hasConversationHistory);
 
     // Set terminal width
     useEffect(() => {
@@ -201,7 +203,7 @@ const InputBox: FC<Props> = ({
         }
 
         if (mode === 'model_selection') {
-            if (key.tab && !key.shift) {
+            if (key.tab && !key.shift && models.canSwitchProvider) {
                 models.toggleProvider();
             }
         }
@@ -351,7 +353,8 @@ const InputBox: FC<Props> = ({
                     loading: models.loading,
                     error: models.error,
                     provider: models.provider,
-                    scrollOffset: models.scrollOffset
+                    scrollOffset: models.scrollOffset,
+                    canSwitchProvider: models.canSwitchProvider
                 }}
                 settings={{
                     isOpen: settings.isOpen,

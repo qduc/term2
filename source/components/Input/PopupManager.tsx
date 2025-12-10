@@ -31,6 +31,7 @@ interface PopupManagerProps {
         error: string | null;
         provider?: 'openai' | 'openrouter' | null;
         scrollOffset?: number;
+        canSwitchProvider?: boolean;
     };
     settings: {
         isOpen: boolean;
@@ -56,6 +57,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
                     error={models.error}
                     provider={models.provider}
                     scrollOffset={models.scrollOffset}
+                    canSwitchProvider={models.canSwitchProvider}
                 />
             )}
             {path.isOpen && (

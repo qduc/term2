@@ -12,7 +12,7 @@ export type SettingCompletionItem = {
 const SETTING_DESCRIPTIONS: Record<string, string> = {
     [SETTING_KEYS.AGENT_MODEL]: 'The AI model to use (e.g. gpt-4, claude-3-opus)',
     [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort level (default, low, medium, high)',
-    [SETTING_KEYS.AGENT_PROVIDER]: 'AI provider (openai, openrouter)',
+    // agent.provider is hidden from UI - it can only be changed via model menu
     [SETTING_KEYS.AGENT_MAX_TURNS]: 'Maximum conversation turns',
     [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Number of retry attempts for failed requests',
     [SETTING_KEYS.SHELL_TIMEOUT]: 'Shell command timeout in milliseconds',
@@ -21,6 +21,14 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
     [SETTING_KEYS.UI_HISTORY_SIZE]: 'Number of history items to keep',
     [SETTING_KEYS.LOGGING_LOG_LEVEL]: 'Logging level (debug, info, warn, error)',
 };
+
+/**
+ * Settings that should be hidden from the UI (not for security, but for UX/workflow)
+ * - agent.provider: Can only be changed at the start of a new conversation via model menu
+ */
+const HIDDEN_SETTINGS = new Set<string>([
+    SETTING_KEYS.AGENT_PROVIDER,
+]);
 
 const MAX_RESULTS = 10;
 
@@ -57,7 +65,7 @@ export function buildSettingsList(
     const sensitiveKeys = excludeSensitive ? getSensitiveSettingKeysSet() : new Set<string>();
 
     return Object.values(settingKeys)
-        .filter(key => !sensitiveKeys.has(key))
+        .filter(key => !sensitiveKeys.has(key) && !HIDDEN_SETTINGS.has(key))
         .map(key => ({
             key,
             description: descriptions[key] || '',

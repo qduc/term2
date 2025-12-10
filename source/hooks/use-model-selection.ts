@@ -11,7 +11,7 @@ import {settingsService} from '../services/settings-service.js';
 export const MODEL_TRIGGER = '/settings agent.model ';
 export const MODEL_CMD_TRIGGER = '/model ';
 
-export const useModelSelection = () => {
+export const useModelSelection = (hasConversationHistory = false) => {
     const {mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex} =
         useInputContext();
 
@@ -23,6 +23,7 @@ export const useModelSelection = () => {
     const [scrollOffset, setScrollOffset] = useState(0);
 
     const isOpen = mode === 'model_selection';
+    const canSwitchProvider = !hasConversationHistory;
 
     const query = useMemo(() => {
         if (!isOpen || triggerIndex === null) return '';
@@ -148,5 +149,6 @@ export const useModelSelection = () => {
         moveDown,
         getSelectedItem,
         toggleProvider,
+        canSwitchProvider,
     };
 };

@@ -32,11 +32,7 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
             value: settings.agent.reasoningEffort.value,
             source: settings.agent.reasoningEffort.source,
         },
-        {
-            key: SETTING_KEYS.AGENT_PROVIDER,
-            value: settings.agent.provider.value,
-            source: settings.agent.provider.source,
-        },
+        // agent.provider is hidden - it can only be changed in a new conversation via model menu
         {
             key: SETTING_KEYS.AGENT_MAX_TURNS,
             value: settings.agent.maxTurns.value,
@@ -139,6 +135,15 @@ export function createSettingsCommand({
             // Special handling for agent.model: strip --provider flag if present
             if (key === SETTING_KEYS.AGENT_MODEL && typeof parsedValue === 'string') {
                 parsedValue = parsedValue.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+            }
+
+            // Prevent changing provider via settings command - it can only be changed
+            // at the start of a new conversation via the model selection menu
+            if (key === 'agent.provider') {
+                addSystemMessage(
+                    `Cannot change provider mid-conversation. Use the model menu (Tab to switch provider) at the start of a new conversation.`,
+                );
+                return true;
             }
 
             if (!settingsService.isRuntimeModifiable(key)) {

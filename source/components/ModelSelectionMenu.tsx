@@ -11,45 +11,59 @@ type Props = {
     error?: string | null;
     scrollOffset?: number;
     maxHeight?: number;
+    canSwitchProvider?: boolean;
 };
 
-const ProviderTabs: FC<{activeProvider?: 'openai' | 'openrouter' | null}> = ({
-    activeProvider,
-}) => {
+const ProviderTabs: FC<{
+    activeProvider?: 'openai' | 'openrouter' | null;
+    canSwitch?: boolean;
+}> = ({activeProvider, canSwitch = true}) => {
     const providers: Array<{id: 'openai' | 'openrouter'; label: string}> = [
         {id: 'openai', label: 'OpenAI'},
         {id: 'openrouter', label: 'OpenRouter'},
     ];
 
     return (
-        <Box justifyContent="space-between">
-            <Box>
-                {providers.map((provider, index) => {
-                    const isActive = provider.id === activeProvider;
-                    return (
-                        <Box key={provider.id}>
-                            <Text
-                                inverse={isActive}
-                                color={isActive ? 'magenta' : 'gray'}
-                                bold={isActive}
-                                dimColor={!isActive}
-                            >
-                                {' '}
-                                {provider.label}
-                                {' '}
-                            </Text>
-                            {index < providers.length - 1 && (
-                                <Text color="gray" dimColor>
-                                    {' │ '}
+        <Box flexDirection="column">
+            <Box justifyContent="space-between">
+                <Box>
+                    {providers.map((provider, index) => {
+                        const isActive = provider.id === activeProvider;
+                        return (
+                            <Box key={provider.id}>
+                                <Text
+                                    inverse={isActive}
+                                    color={isActive ? 'magenta' : 'gray'}
+                                    bold={isActive}
+                                    dimColor={!isActive}
+                                >
+                                    {' '}
+                                    {provider.label}
+                                    {' '}
                                 </Text>
-                            )}
-                        </Box>
-                    );
-                })}
+                                {index < providers.length - 1 && (
+                                    <Text color="gray" dimColor>
+                                        {' │ '}
+                                    </Text>
+                                )}
+                            </Box>
+                        );
+                    })}
+                </Box>
+                {canSwitch && (
+                    <Text color="gray" dimColor>
+                        Tab → switch provider
+                    </Text>
+                )}
             </Box>
-            <Text color="gray" dimColor>
-                Tab → switch provider
-            </Text>
+            {!canSwitch && (
+                <Box marginTop={0}>
+                    <Text color="yellow" dimColor>
+                        ⚠ Provider can only be changed at the start of a new
+                        conversation (/clear to reset)
+                    </Text>
+                </Box>
+            )}
         </Box>
     );
 };
@@ -63,6 +77,7 @@ const ModelSelectionMenu: FC<Props> = ({
     error = null,
     scrollOffset = 0,
     maxHeight = 10,
+    canSwitchProvider = true,
 }) => {
     if (loading) {
         return (
@@ -98,7 +113,10 @@ const ModelSelectionMenu: FC<Props> = ({
 
     return (
         <Box flexDirection="column">
-            <ProviderTabs activeProvider={provider} />
+            <ProviderTabs
+                activeProvider={provider}
+                canSwitch={canSwitchProvider}
+            />
             <Box
                 borderStyle="round"
                 borderColor="magenta"

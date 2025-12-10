@@ -1,64 +1,60 @@
 import React, {FC} from 'react';
 import {Box, Text} from 'ink';
-import {settingsService} from '../services/settings-service.js';
-
-const accent = '#0ed7b5';
-const glow = '#fbbf24';
-const slate = '#94a3b8';
+import { useSetting } from '../hooks/use-setting.js';
 
 const Banner: FC = () => {
-    const mode = settingsService.get<'default' | 'edit'>('app.mode') ?? 'default';
-    const model = settingsService.get<string>('agent.model');
+    const mode = useSetting<'default' | 'edit'>('app.mode') ?? 'default';
+    const model = useSetting<string>('agent.model');
+    const provider = useSetting<string>('agent.provider') ?? 'openai';
+    const reasoningEffort = useSetting<string>('agent.reasoningEffort') ?? 'default';
+
+    const accent = '#0ed7b5';
+    const glow = '#fbbf24';
+    const slate = '#64748b'; // Slate 500 for better visibility than 400
 
     return (
-        <Box
-            flexDirection="column"
-            borderStyle="round"
-            borderColor={accent}
-            paddingX={2}
-            paddingY={1}
-            marginBottom={1}
-        >
-            <Box>
-                <Text color={accent} bold>
-                    term
-                </Text>
-                <Text color={glow} bold>
-                    ²
-                </Text>
-                <Text color={slate}> — terminal-native AI cockpit</Text>
+        <Box marginBottom={1}>
+            <Box marginRight={1}>
+                <Text color={accent} bold>term</Text>
+                <Text color={glow} bold>²</Text>
             </Box>
 
-            <Box marginTop={0}>
-                <Text color={accent}>▚▞ </Text>
-                <Text color={glow}>stream</Text>
-                <Text color="gray"> · </Text>
-                <Text color={glow}>approve</Text>
-                <Text color="gray"> · </Text>
-                <Text color={glow}>edit</Text>
-                <Text color="gray"> · </Text>
-                <Text color={glow}>ship</Text>
-                <Text color="gray"> — stay in flow without leaving the shell</Text>
-            </Box>
+            <Text color={slate}>│</Text>
 
-            <Box marginTop={0}>
-                <Text color="gray" dimColor>
-                    mode
-                </Text>
-                <Text color="gray">: </Text>
-                <Text color={accent} bold>
-                    {mode}
-                </Text>
-                {model && (
-                    <>
-                        <Text color="gray"> · model: </Text>
-                        <Text color={glow}>
-                            {model}
-                        </Text>
-                    </>
+            <Box marginX={1}>
+                {mode === 'edit' ? (
+                    <Text color={glow} bold>Auto Edit</Text>
+                ) : (
+                    <Text color={slate}>Manual Approval</Text>
                 )}
-                <Text color="gray"> · Shift+Tab toggles mode · /help for commands</Text>
             </Box>
+
+            {model && (
+                <>
+                    <Text color={slate}>│</Text>
+                    <Box marginX={1}>
+                        <Text color={accent}>{model}</Text>
+						<Text color={slate}>
+							{' '}({provider === 'openrouter' ? 'OpenRouter' : provider === 'openai' ? 'OpenAI' : provider})
+						</Text>
+                    </Box>
+                </>
+            )}
+
+            {reasoningEffort && reasoningEffort !== 'default' && (
+                <>
+                    <Text color={slate}>│</Text>
+                    <Box marginX={1}>
+                        <Text color={glow}>
+                            {reasoningEffort === 'none' ? 'Reasoning: none' :
+                             reasoningEffort === 'minimal' ? 'Reasoning: minimal' :
+                             reasoningEffort === 'low' ? 'Reasoning: low' :
+                             reasoningEffort === 'medium' ? 'Reasoning: medium' :
+                             reasoningEffort === 'high' ? 'Reasoning: high' : 'Reasoning: default'}
+                        </Text>
+                    </Box>
+                </>
+            )}
         </Box>
     );
 };

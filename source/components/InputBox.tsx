@@ -285,7 +285,8 @@ const InputBox: FC<Props> = ({
             if (!selection || triggerIdx === null) return false;
 
             const before = value.slice(0, triggerIdx);
-            const nextValue = `${before}${selection.id}${submitAfterInsert ? '' : ' '}`;
+            // Include provider in the command string so it can be extracted later
+            const nextValue = `${before}${selection.id} --provider=${selection.provider}${submitAfterInsert ? '' : ' '}`;
             onChange(nextValue);
             setCursorOverride(nextValue.length);
             models.close();

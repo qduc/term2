@@ -75,7 +75,21 @@ const App: FC<AppProps> = ({conversationService}) => {
     const applyRuntimeSetting = useCallback(
         (key: string, value: any) => {
             if (key === 'agent.model') {
-                setModel(String(value));
+                // Parse provider from value if present (format: "model-id --provider=openai")
+                const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
+                const modelId = String(value).replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+
+                setModel(modelId);
+
+                // If provider is specified in the value, update it
+                if (providerMatch) {
+                    const provider = providerMatch[1] as 'openai' | 'openrouter';
+                    settingsService.set('agent.provider', provider);
+                    const setProviderFn = (conversationService as any).setProvider;
+                    if (typeof setProviderFn === 'function') {
+                        setProviderFn.call(conversationService, provider);
+                    }
+                }
                 return;
             }
 
@@ -87,9 +101,9 @@ const App: FC<AppProps> = ({conversationService}) => {
             if (key === 'agent.provider') {
                 // Provider changes require the agent to be recreated, which happens
                 // via the conversation service's setProvider method
-                const setProvider = (conversationService as any).setProvider;
-                if (typeof setProvider === 'function') {
-                    setProvider.call(conversationService, value);
+                const setProviderFn = (conversationService as any).setProvider;
+                if (typeof setProviderFn === 'function') {
+                    setProviderFn.call(conversationService, value);
                 }
                 return;
             }
@@ -139,8 +153,28 @@ const App: FC<AppProps> = ({conversationService}) => {
                         setInput('/model ');
                         return false;
                     }
-                    setModel(args);
-                    addSystemMessage(`Set model to ${args}`);
+
+                    // Parse model and provider from args
+                    // Format: "model-id --provider=openai" or just "model-id"
+                    const providerMatch = args.match(/--provider=(openai|openrouter)/);
+                    const modelId = args.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+
+                    setModel(modelId);
+
+                    if (providerMatch) {
+                        const provider = providerMatch[1] as 'openai' | 'openrouter';
+                        // Update provider setting
+                        settingsService.set('agent.provider', provider);
+                        // Apply runtime provider change
+                        const setProvider = (conversationService as any).setProvider;
+                        if (typeof setProvider === 'function') {
+                            setProvider.call(conversationService, provider);
+                        }
+                        addSystemMessage(`Set model to ${modelId} (${provider})`);
+                    } else {
+                        addSystemMessage(`Set model to ${modelId}`);
+                    }
+
                     return true;
                 },
             },

@@ -1,0 +1,69 @@
+import test from 'ava';
+
+// Test the logic for parsing model selection with provider information
+// This simulates what happens when a user selects a model from the ModelSelectionMenu
+
+test('applyRuntimeSetting - parses model without provider', t => {
+    const value = 'gpt-4o';
+    const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
+    const modelId = String(value).replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+
+    t.is(providerMatch, null);
+    t.is(modelId, 'gpt-4o');
+});
+
+test('applyRuntimeSetting - parses model with openai provider', t => {
+    const value = 'gpt-4o --provider=openai';
+    const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
+    const modelId = String(value).replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+
+    t.truthy(providerMatch);
+    t.is(providerMatch[1], 'openai');
+    t.is(modelId, 'gpt-4o');
+});
+
+test('applyRuntimeSetting - parses model with openrouter provider', t => {
+    const value = 'anthropic/claude-3.5-sonnet --provider=openrouter';
+    const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
+    const modelId = String(value).replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+
+    t.truthy(providerMatch);
+    t.is(providerMatch[1], 'openrouter');
+    t.is(modelId, 'anthropic/claude-3.5-sonnet');
+});
+
+test('applyRuntimeSetting - handles model with provider and extra whitespace', t => {
+    const value = 'gpt-4o    --provider=openai   ';
+    const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
+    const modelId = String(value).replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+
+    t.truthy(providerMatch);
+    t.is(providerMatch[1], 'openai');
+    t.is(modelId, 'gpt-4o');
+});
+
+test('insertSelectedModel - formats model ID with provider', t => {
+    // Simulate what insertSelectedModel does
+    const selection = {
+        id: 'anthropic/claude-3.5-sonnet',
+        provider: 'openrouter'
+    };
+
+    const before = '/model ';
+    const nextValue = `${before}${selection.id} --provider=${selection.provider}`;
+
+    t.is(nextValue, '/model anthropic/claude-3.5-sonnet --provider=openrouter');
+});
+
+test('insertSelectedModel - formats OpenAI model with provider', t => {
+    // Simulate what insertSelectedModel does for OpenAI model
+    const selection = {
+        id: 'gpt-4o',
+        provider: 'openai'
+    };
+
+    const before = '/model ';
+    const nextValue = `${before}${selection.id} --provider=${selection.provider}`;
+
+    t.is(nextValue, '/model gpt-4o --provider=openai');
+});

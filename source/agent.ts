@@ -1,5 +1,5 @@
 import {grepToolDefinition} from './tools/grep.js';
-import {applyPatchToolDefinition} from './tools/apply-patch.js';
+import {searchReplaceToolDefinition} from './tools/search-replace.js';
 import {shellToolDefinition} from './tools/shell.js';
 import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
@@ -89,7 +89,7 @@ export const getAgentDefinition = (model?: string): AgentDefinition => {
         instructions: `${prompt}\n\nEnvironment: ${envInfo}${getAgentsInstructions()}`,
         tools: [
             shellToolDefinition,
-            applyPatchToolDefinition,
+            searchReplaceToolDefinition,
             grepToolDefinition,
         ],
         model: resolvedModel,

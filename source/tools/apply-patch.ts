@@ -4,6 +4,7 @@ import path from 'path';
 import {applyDiff} from '@openai/agents';
 import {loggingService} from '../services/logging-service.js';
 import {settingsService} from '../services/settings-service.js';
+import {resolveWorkspacePath} from './utils.js';
 import type {ToolDefinition} from './types.js';
 
 /**
@@ -26,19 +27,7 @@ const applyPatchParametersSchema = z.object({
 
 export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;
 
-/**
- * Resolves a relative path and ensures it's within the workspace
- */
-function resolveWorkspacePath(relativePath: string): string {
-    const workspaceRoot = process.cwd();
-    const resolved = path.resolve(workspaceRoot, relativePath);
 
-    if (!resolved.startsWith(workspaceRoot)) {
-        throw new Error(`Operation outside workspace: ${relativePath}`);
-    }
-
-    return resolved;
-}
 
 export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
     name: 'apply_patch',

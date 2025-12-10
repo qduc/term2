@@ -72,12 +72,12 @@ test('filterModels matches by id or name and limits results', t => {
 		{id: 'mistral-large', name: 'Mistral Large', provider: 'openrouter' as const},
 	];
 
-	const top = filterModels(models, 'llama', 5);
+	const top = filterModels(models, 'llama');
 	t.deepEqual(top.map(m => m.id), ['meta/llama-3']);
 
-	const fuzzy = filterModels(models, 'gpt', 2);
+	const fuzzy = filterModels(models, 'gpt');
 	t.is(fuzzy.length, 2);
 	// Max results should cap list
-	const limited = filterModels(models, '', 2);
+	const limited = filterModels(models, '');
 	t.is(limited.length, 2);
 });

@@ -1,8 +1,10 @@
 import test from 'ava';
 import {ReadableStream} from 'node:stream/web';
 import {OpenRouterModel, clearOpenRouterConversations} from './openrouter.js';
+import { settingsService } from '../services/settings-service.js';
 
 const originalFetch = globalThis.fetch;
+const originalGet = settingsService.get;
 
 const createJsonResponse = (body: any) =>
     new Response(JSON.stringify(body), {
@@ -12,11 +14,18 @@ const createJsonResponse = (body: any) =>
 
 test.beforeEach(() => {
     clearOpenRouterConversations();
+    settingsService.get = ((key: string) => {
+        if (key === 'agent.openrouter.apiKey') {
+            return 'mock-api-key';
+        }
+        return originalGet.call(settingsService, key);
+    }) as any;
 });
 
 test.afterEach.always(() => {
     clearOpenRouterConversations();
     globalThis.fetch = originalFetch;
+    settingsService.get = originalGet;
 });
 
 test.serial('builds messages with history, tool calls, and reasoning config', async t => {

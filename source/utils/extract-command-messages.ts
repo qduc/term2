@@ -1,6 +1,7 @@
 const SHELL_TOOL_NAME = 'shell';
 const SEARCH_TOOL_NAME = 'search';
 const APPLY_PATCH_TOOL_NAME = 'apply_patch';
+const SEARCH_REPLACE_TOOL_NAME = 'search_replace';
 
 interface CommandMessage {
     id: string;
@@ -241,6 +242,42 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 output,
                 success,
             });
+            continue;
+        }
+
+        // Handle search_replace tool
+        if (normalizedItem.toolName === SEARCH_REPLACE_TOOL_NAME) {
+            const parsedOutput = safeJsonParse(normalizedItem.outputText);
+            const replaceOutputItems = parsedOutput?.output ?? [];
+
+            // Search replace tool can have multiple operation outputs
+            for (const [replaceIndex, replaceResult] of replaceOutputItems.entries()) {
+                const args = normalizedItem.arguments ?? {};
+                const filePath = args?.path ?? replaceResult?.path ?? 'unknown';
+                const searchContent = args?.search_content ?? '';
+                const replaceContent = args?.replace_content ?? '';
+
+                const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
+                const output = replaceResult?.message ?? replaceResult?.error ?? 'No output';
+                const success = replaceResult?.success ?? false;
+
+                const rawItem = item?.rawItem ?? item;
+                const baseId =
+                    rawItem?.id ??
+                    rawItem?.callId ??
+                    item?.id ??
+                    item?.callId ??
+                    `${Date.now()}-${index}`;
+                const stableId = `${baseId}-${replaceIndex}`;
+
+                messages.push({
+                    id: stableId,
+                    sender: 'command',
+                    command,
+                    output,
+                    success,
+                });
+            }
             continue;
         }
     }

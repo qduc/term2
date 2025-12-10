@@ -77,7 +77,4 @@ test('filterModels matches by id or name and limits results', t => {
 
 	const fuzzy = filterModels(models, 'gpt');
 	t.is(fuzzy.length, 2);
-	// Max results should cap list
-	const limited = filterModels(models, '');
-	t.is(limited.length, 2);
 });

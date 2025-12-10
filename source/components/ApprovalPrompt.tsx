@@ -17,6 +17,13 @@ type ShellArgs = {
     max_output_length?: number;
 };
 
+type SearchReplaceArgs = {
+    path: string;
+    search_content: string;
+    replace_content: string;
+    replace_all?: boolean;
+};
+
 const operationLabels: Record<string, {label: string; color: string}> = {
     create_file: {label: 'CREATE', color: 'green'},
     update_file: {label: 'UPDATE', color: 'yellow'},
@@ -101,6 +108,48 @@ const ShellPrompt: FC<{args: ShellArgs}> = ({args}) => {
     );
 };
 
+const SearchReplacePrompt: FC<{args: SearchReplaceArgs}> = ({args}) => {
+    const searchLines = args.search_content.split('\n');
+    const replaceLines = args.replace_content.split('\n');
+    const maxLines = 15;
+
+    return (
+        <Box flexDirection="column">
+            <Box>
+                <Text color="yellow" bold>[SEARCH & REPLACE]</Text>
+                <Text> {args.path}</Text>
+                {args.replace_all && (
+                    <Text color="magenta"> (all occurrences)</Text>
+                )}
+            </Box>
+
+            <Box flexDirection="column" marginLeft={2} marginTop={1}>
+                <Text color="red" bold>- Search:</Text>
+                {searchLines.slice(0, maxLines).map((line, i) => (
+                    <Text key={`search-${i}`} color="red" dimColor={line.trim() === ''}>
+                        {line || '(empty line)'}
+                    </Text>
+                ))}
+                {searchLines.length > maxLines && (
+                    <Text dimColor>... ({searchLines.length - maxLines} more lines)</Text>
+                )}
+            </Box>
+
+            <Box flexDirection="column" marginLeft={2} marginTop={1}>
+                <Text color="green" bold>+ Replace:</Text>
+                {replaceLines.slice(0, maxLines).map((line, i) => (
+                    <Text key={`replace-${i}`} color="green" dimColor={line.trim() === ''}>
+                        {line || '(empty line)'}
+                    </Text>
+                ))}
+                {replaceLines.length > maxLines && (
+                    <Text dimColor>... ({replaceLines.length - maxLines} more lines)</Text>
+                )}
+            </Box>
+        </Box>
+    );
+};
+
 const ApprovalPrompt: FC<Props> = ({approval}) => {
     // Try to parse and render arguments nicely based on tool type
     let content: React.ReactNode = (
@@ -118,6 +167,13 @@ const ApprovalPrompt: FC<Props> = ({approval}) => {
         try {
             const args: ShellArgs = JSON.parse(approval.argumentsText);
             content = <ShellPrompt args={args} />;
+        } catch {
+            // Fall back to raw JSON if parsing fails
+        }
+    } else if (approval.toolName === 'search_replace') {
+        try {
+            const args: SearchReplaceArgs = JSON.parse(approval.argumentsText);
+            content = <SearchReplacePrompt args={args} />;
         } catch {
             // Fall back to raw JSON if parsing fails
         }

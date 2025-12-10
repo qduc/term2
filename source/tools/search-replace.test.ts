@@ -42,6 +42,26 @@ test.afterEach(() => {
     loggingService.error = originalError;
 });
 
+test.serial('needsApproval auto-approves creation when search_content is empty and file is missing in edit mode', async t => {
+    await withTempDir(async () => {
+        const filePath = 'new-file.txt';
+
+        settingsService.get = ((key: string) => {
+            if (key === 'app.mode') return 'edit';
+            return originalGet.call(settingsService, key);
+        }) as any;
+
+        const result = await searchReplaceToolDefinition.needsApproval({
+            path: filePath,
+            search_content: '',
+            replace_content: 'initial content',
+            replace_all: false,
+        });
+
+        t.false(result);
+    });
+});
+
 test.serial('needsApproval auto-approves a unique exact match in edit mode', async t => {
     await withTempDir(async dir => {
         const filePath = 'sample.txt';
@@ -189,6 +209,26 @@ test.serial('execute rejects multiple relaxed matches when replace_all is false'
 
         const unchanged = await fs.readFile(absPath, 'utf8');
         t.is(unchanged, '  foo  \n\tbar\n---\n  foo  \n\tbar\n');
+    });
+});
+
+test.serial('execute creates a new file when search_content is empty and file is missing', async t => {
+    await withTempDir(async dir => {
+        const filePath = 'missing.txt';
+        const absPath = path.join(dir, filePath);
+
+        const result = await searchReplaceToolDefinition.execute({
+            path: filePath,
+            search_content: '',
+            replace_content: 'new content',
+            replace_all: false,
+        });
+
+        const parsed = JSON.parse(result);
+        t.true(parsed.output[0].success);
+
+        const createdContent = await fs.readFile(absPath, 'utf8');
+        t.is(createdContent, 'new content');
     });
 });
 

@@ -35,9 +35,25 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
             try {
                 content = await readFile(targetPath, 'utf8');
             } catch (error: any) {
+                if (search_content === '' && error?.code === 'ENOENT') {
+                    loggingService.info('search_replace validation: creating new file because search_content is empty', {
+                        path: filePath,
+                    });
+                    if (mode === 'edit' && insideCwd) {
+                        return false;
+                    }
+                    return true;
+                }
                 loggingService.error('search_replace needsApproval: file not found', {
                     path: filePath,
                     error: error?.message || String(error),
+                });
+                return true;
+            }
+
+            if (search_content === '') {
+                loggingService.warn('search_replace validation: empty search_content on existing file', {
+                    path: filePath,
                 });
                 return true;
             }
@@ -129,7 +145,37 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
                 });
             }
 
-            const content = await readFile(targetPath, 'utf8');
+            let content: string;
+            try {
+                content = await readFile(targetPath, 'utf8');
+            } catch (error: any) {
+                if (search_content === '' && error?.code === 'ENOENT') {
+                    await writeFile(targetPath, replace_content, 'utf8');
+                    if (enableFileLogging) {
+                        loggingService.info('File created (search_content empty)', {
+                            path: filePath,
+                        });
+                    }
+                    return JSON.stringify({
+                        output: [{
+                            success: true,
+                            operation: 'search_replace',
+                            path: filePath,
+                            message: `Created ${filePath} (new file)`
+                        }]
+                    });
+                }
+                throw error;
+            }
+
+            if (search_content === '') {
+                return JSON.stringify({
+                    output: [{
+                        success: false,
+                        error: 'search_content must not be empty when editing an existing file. Provide search text or create a new file with an empty search.'
+                    }]
+                });
+            }
 
             // 1. Try Exact Match
             let matchCount = 0;

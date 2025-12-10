@@ -9,6 +9,8 @@ type Props = {
     provider?: 'openai' | 'openrouter' | null;
     loading?: boolean;
     error?: string | null;
+    scrollOffset?: number;
+    maxHeight?: number;
 };
 
 const ProviderTabs: FC<{activeProvider?: 'openai' | 'openrouter' | null}> = ({
@@ -59,6 +61,8 @@ const ModelSelectionMenu: FC<Props> = ({
     provider,
     loading = false,
     error = null,
+    scrollOffset = 0,
+    maxHeight = 10,
 }) => {
     if (loading) {
         return (
@@ -88,6 +92,10 @@ const ModelSelectionMenu: FC<Props> = ({
         );
     }
 
+    const visibleItems = items.slice(scrollOffset, scrollOffset + maxHeight);
+    const hasScrollUp = scrollOffset > 0;
+    const hasScrollDown = scrollOffset + maxHeight < items.length;
+
     return (
         <Box flexDirection="column">
             <ProviderTabs activeProvider={provider} />
@@ -97,11 +105,24 @@ const ModelSelectionMenu: FC<Props> = ({
                 paddingX={1}
                 flexDirection="column"
             >
-                <Text color="gray" dimColor>
-                    {items.length} suggestion{items.length === 1 ? '' : 's'}
-                </Text>
-                {items.map((item, index) => {
-                    const isSelected = index === selectedIndex;
+                <Box justifyContent="space-between">
+                    <Text color="gray" dimColor>
+                        {items.length} suggestion{items.length === 1 ? '' : 's'}
+                    </Text>
+                    {items.length > maxHeight && (
+                        <Text color="gray" dimColor>
+                            {scrollOffset + 1}-{Math.min(scrollOffset + maxHeight, items.length)}/{items.length}
+                        </Text>
+                    )}
+                </Box>
+                {hasScrollUp && (
+                    <Text color="gray" dimColor>
+                        ↑ {scrollOffset} more
+                    </Text>
+                )}
+                {visibleItems.map((item, visibleIndex) => {
+                    const actualIndex = scrollOffset + visibleIndex;
+                    const isSelected = actualIndex === selectedIndex;
                     return (
                         <Box key={item.id}>
                             <Text
@@ -120,9 +141,14 @@ const ModelSelectionMenu: FC<Props> = ({
                         </Box>
                     );
                 })}
+                {hasScrollDown && (
+                    <Text color="gray" dimColor>
+                        ↓ {items.length - scrollOffset - maxHeight} more
+                    </Text>
+                )}
             </Box>
             <Text color="gray" dimColor>
-                Enter → set model · Esc → cancel
+                Enter → set model · Esc → cancel · ↑↓ → scroll
             </Text>
         </Box>
     );

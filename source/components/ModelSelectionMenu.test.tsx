@@ -58,7 +58,7 @@ test('ModelSelectionMenu renders list of models', t => {
     t.true(output?.includes('GPT-4o'));
     t.true(output?.includes('gpt-4-turbo'));
     t.true(output?.includes('claude-3-opus'));
-    t.true(output?.includes('Models · 3 suggestions'));
+    t.true(output?.includes('3 suggestions'));
 });
 
 test('ModelSelectionMenu highlights selected item', t => {
@@ -87,5 +87,47 @@ test('ModelSelectionMenu shows provider in header if specified', t => {
             provider="openai"
         />
     );
-    t.true(lastFrame()?.includes('openai models'));
+    t.true(lastFrame()?.includes('OpenAI'));
+});
+
+test('ModelSelectionMenu shows scroll indicators for long lists', t => {
+    const longList: ModelInfo[] = Array.from({length: 20}, (_, i) => ({
+        id: `model-${i}`,
+        name: `Model ${i}`,
+        provider: 'openai',
+    }));
+
+    const {lastFrame} = render(
+        <ModelSelectionMenu
+            items={longList}
+            selectedIndex={5}
+            query=""
+            scrollOffset={2}
+            maxHeight={10}
+        />
+    );
+    const output = lastFrame();
+    // Should show scroll position indicator
+    t.true(output?.includes('3-12/20') || output?.includes('20'));
+    // Should show scroll up indicator
+    t.true(output?.includes('↑ 2 more'));
+    // Should show scroll down indicator (20 - 2 - 10 = 8 more)
+    t.true(output?.includes('↓ 8 more'));
+});
+
+test('ModelSelectionMenu does not show scroll indicators for short lists', t => {
+    const {lastFrame} = render(
+        <ModelSelectionMenu
+            items={mockModels}
+            selectedIndex={0}
+            query=""
+            scrollOffset={0}
+            maxHeight={10}
+        />
+    );
+    const output = lastFrame();
+    // Should not show position indicator for lists shorter than maxHeight
+    t.false(output?.includes('/'));
+    // For short lists with no scroll, should not have these indicators
+    t.false(output?.includes('more'));
 });

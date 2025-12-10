@@ -350,7 +350,8 @@ const InputBox: FC<Props> = ({
                     query: models.query,
                     loading: models.loading,
                     error: models.error,
-                    provider: models.provider
+                    provider: models.provider,
+                    scrollOffset: models.scrollOffset
                 }}
                 settings={{
                     isOpen: settings.isOpen,

@@ -112,10 +112,9 @@ export function clearModelCache(): void {
 export function filterModels(
     models: ModelInfo[],
     query: string,
-    maxResults: number = 12,
 ): ModelInfo[] {
     if (!query.trim()) {
-        return models.slice(0, maxResults);
+        return models;
     }
 
     const fuse = new Fuse(models, {
@@ -126,6 +125,5 @@ export function filterModels(
 
     return fuse
         .search(query.trim())
-        .map(match => match.item)
-        .slice(0, maxResults);
+        .map(match => match.item);
 }

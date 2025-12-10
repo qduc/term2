@@ -10,7 +10,6 @@ import {settingsService} from '../services/settings-service.js';
 
 export const MODEL_TRIGGER = '/settings agent.model ';
 export const MODEL_CMD_TRIGGER = '/model ';
-const MAX_RESULTS = 12;
 
 export const useModelSelection = () => {
     const {mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex} =
@@ -21,6 +20,7 @@ export const useModelSelection = () => {
     const [error, setError] = useState<string | null>(null);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [provider, setProvider] = useState<'openai' | 'openrouter' | null>(null);
+    const [scrollOffset, setScrollOffset] = useState(0);
 
     const isOpen = mode === 'model_selection';
 
@@ -66,7 +66,7 @@ export const useModelSelection = () => {
     }, [isOpen, provider]);
 
     const filteredModels = useMemo(() => {
-        return filterModels(models, query, MAX_RESULTS);
+        return filterModels(models, query);
     }, [models, query]);
 
     useEffect(() => {
@@ -76,11 +76,27 @@ export const useModelSelection = () => {
         });
     }, [filteredModels.length]);
 
+    // Reset scroll to top when query changes (filtering)
+    useEffect(() => {
+        setScrollOffset(0);
+    }, [query]);
+
+    // Auto-scroll to keep selected item visible
+    useEffect(() => {
+        const maxHeight = 10;
+        if (selectedIndex < scrollOffset) {
+            setScrollOffset(selectedIndex);
+        } else if (selectedIndex >= scrollOffset + maxHeight) {
+            setScrollOffset(selectedIndex - maxHeight + 1);
+        }
+    }, [selectedIndex, scrollOffset]);
+
     const open = useCallback((startIndex: number) => {
         if (mode === 'model_selection') return;
         setMode('model_selection');
         setTriggerIndex(startIndex);
         setSelectedIndex(0);
+        setScrollOffset(0);
     }, [mode, setMode, setTriggerIndex]);
 
     const close = useCallback(() => {
@@ -88,6 +104,7 @@ export const useModelSelection = () => {
             setMode('text');
             setTriggerIndex(null);
             setSelectedIndex(0);
+            setScrollOffset(0);
         }
     }, [mode, setMode, setTriggerIndex]);
 
@@ -124,6 +141,7 @@ export const useModelSelection = () => {
         provider,
         filteredModels,
         selectedIndex,
+        scrollOffset,
         open,
         close,
         moveUp,

@@ -149,7 +149,7 @@ test.serial('execute performs relaxed match replacement when exact match is not 
     });
 });
 
-test.serial('execute rejects multiple relaxed matches when replace_all is false', async t => {
+test.serial('execute replaces first of multiple exact matches when replace_all is false', async t => {
     await withTempDir(async dir => {
         const filePath = 'content.txt';
         const absPath = path.join(dir, filePath);
@@ -163,10 +163,163 @@ test.serial('execute rejects multiple relaxed matches when replace_all is false'
         });
 
         const parsed = JSON.parse(result);
+        t.true(parsed.output[0].success);
+
+        const updated = await fs.readFile(absPath, 'utf8');
+        t.is(updated, 'replacement\n---\nfoo\nbar\n');
+    });
+});
+
+test.serial('execute rejects multiple relaxed matches when replace_all is false', async t => {
+    await withTempDir(async dir => {
+        const filePath = 'content.txt';
+        const absPath = path.join(dir, filePath);
+        await fs.writeFile(absPath, '  foo  \n\tbar\n---\n  foo  \n\tbar\n');
+
+        const result = await searchReplaceToolDefinition.execute({
+            path: filePath,
+            search_content: 'foo\nbar',
+            replace_content: 'replacement',
+            replace_all: false,
+        });
+
+        const parsed = JSON.parse(result);
         t.false(parsed.output[0].success);
         t.true(parsed.output[0].error.includes('relaxed matches'));
 
         const unchanged = await fs.readFile(absPath, 'utf8');
-        t.is(unchanged, 'foo\nbar\n---\nfoo\nbar\n');
+        t.is(unchanged, '  foo  \n\tbar\n---\n  foo  \n\tbar\n');
+    });
+});
+
+test.serial('execute reports failure when search string is not found', async t => {
+    await withTempDir(async dir => {
+        const filePath = 'content.txt';
+        const absPath = path.join(dir, filePath);
+        const originalContent = 'hello world';
+        await fs.writeFile(absPath, originalContent);
+
+        const result = await searchReplaceToolDefinition.execute({
+            path: filePath,
+            search_content: 'nonexistent',
+            replace_content: 'replacement',
+            replace_all: false,
+        });
+
+        const parsed = JSON.parse(result);
+        t.false(parsed.output[0].success);
+
+        const unchanged = await fs.readFile(absPath, 'utf8');
+        t.is(unchanged, originalContent);
+    });
+});
+
+test.serial('execute treats special regex characters literally', async t => {
+    await withTempDir(async dir => {
+        const filePath = 'code.js';
+        const absPath = path.join(dir, filePath);
+        const originalContent = 'function test() { return [1, 2, 3]; }';
+        await fs.writeFile(absPath, originalContent);
+
+        const result = await searchReplaceToolDefinition.execute({
+            path: filePath,
+            search_content: '[1, 2, 3]',
+            replace_content: '[4, 5, 6]',
+            replace_all: false,
+        });
+
+        const parsed = JSON.parse(result);
+        t.true(parsed.output[0].success);
+
+        const updated = await fs.readFile(absPath, 'utf8');
+        t.is(updated, 'function test() { return [4, 5, 6]; }');
+    });
+});
+
+test.serial('execute deletes content when replacement is empty string', async t => {
+    await withTempDir(async dir => {
+        const filePath = 'sample.txt';
+        const absPath = path.join(dir, filePath);
+        await fs.writeFile(absPath, 'before DELETE_ME after');
+
+        const result = await searchReplaceToolDefinition.execute({
+            path: filePath,
+            search_content: 'DELETE_ME ',
+            replace_content: '',
+            replace_all: false,
+        });
+
+        const parsed = JSON.parse(result);
+        t.true(parsed.output[0].success);
+
+        const updated = await fs.readFile(absPath, 'utf8');
+        t.is(updated, 'before after');
+    });
+});
+
+test.serial('execute performs exact multi-line match without whitespace normalization', async t => {
+    await withTempDir(async dir => {
+        const filePath = 'exact.txt';
+        const absPath = path.join(dir, filePath);
+        await fs.writeFile(absPath, 'line one\nline two\nline three');
+
+        const result = await searchReplaceToolDefinition.execute({
+            path: filePath,
+            search_content: 'line one\nline two',
+            replace_content: 'new content',
+            replace_all: false,
+        });
+
+        const parsed = JSON.parse(result);
+        t.true(parsed.output[0].success);
+
+        const updated = await fs.readFile(absPath, 'utf8');
+        t.is(updated, 'new content\nline three');
+    });
+});
+
+test.serial('execute handles leading/trailing whitespace differences in relaxed mode', async t => {
+    await withTempDir(async dir => {
+        const filePath = 'whitespace.txt';
+        const absPath = path.join(dir, filePath);
+        await fs.writeFile(absPath, '  foo  \nbar');
+
+        const result = await searchReplaceToolDefinition.execute({
+            path: filePath,
+            search_content: 'foo\nbar',
+            replace_content: 'replaced',
+            replace_all: false,
+        });
+
+        const parsed = JSON.parse(result);
+        t.true(parsed.output[0].success);
+
+        const updated = await fs.readFile(absPath, 'utf8');
+        t.is(updated, 'replaced');
+    });
+});
+
+test.serial('execute does not match substrings in relaxed mode', async t => {
+    await withTempDir(async dir => {
+        const filePath = 'substring.txt';
+        const absPath = path.join(dir, filePath);
+        const originalContent = '  formatted text  ';
+        await fs.writeFile(absPath, originalContent);
+
+        // Search for "format" with different whitespace to trigger relaxed mode
+        // Relaxed mode should NOT match because it compares entire trimmed lines,
+        // and "format" (trimmed) !== "formatted text" (trimmed)
+        const result = await searchReplaceToolDefinition.execute({
+            path: filePath,
+            search_content: '    format    ',
+            replace_content: 'replacement',
+            replace_all: false,
+        });
+
+        const parsed = JSON.parse(result);
+        t.false(parsed.output[0].success);
+
+        const unchanged = await fs.readFile(absPath, 'utf8');
+        t.is(unchanged, originalContent);
     });
 });

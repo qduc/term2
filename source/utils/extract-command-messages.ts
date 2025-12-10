@@ -1,5 +1,5 @@
 const SHELL_TOOL_NAME = 'shell';
-const SEARCH_TOOL_NAME = 'search';
+const GREP_TOOL_NAME = 'grep';
 const APPLY_PATCH_TOOL_NAME = 'apply_patch';
 const SEARCH_REPLACE_TOOL_NAME = 'search_replace';
 
@@ -202,13 +202,13 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
         }
 
         // Handle search tool
-        if (normalizedItem.toolName === SEARCH_TOOL_NAME) {
+        if (normalizedItem.toolName === GREP_TOOL_NAME) {
             const parsedOutput = safeJsonParse(normalizedItem.outputText);
             const args = normalizedItem.arguments ?? parsedOutput?.arguments;
             const pattern = args?.pattern ?? '';
             const searchPath = args?.path ?? '.';
 
-            const parts = [`search "${pattern}"`, `"${searchPath}"`];
+            const parts = [`grep "${pattern}"`, `"${searchPath}"`];
 
             if (args?.case_sensitive) {
                 parts.push('--case-sensitive');

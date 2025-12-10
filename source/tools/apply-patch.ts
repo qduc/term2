@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {readFile, writeFile, mkdir, rm} from 'fs/promises';
+import {readFile, writeFile, mkdir} from 'fs/promises';
 import path from 'path';
 import {applyDiff} from '@openai/agents';
 import {loggingService} from '../services/logging-service.js';
@@ -18,7 +18,7 @@ export class PatchValidationError extends Error {
 }
 
 const applyPatchParametersSchema = z.object({
-    type: z.enum(['create_file', 'update_file', 'delete_file']),
+    type: z.enum(['create_file', 'update_file']),
     path: z.string().min(1, 'File path cannot be empty'),
     diff: z
         .string()
@@ -111,14 +111,14 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
             }
 
             // Deletions ALWAYS require approval per policy
-            if (type === 'delete_file') {
-                loggingService.security('apply_patch needsApproval: delete requires approval', {
-                    mode,
-                    type,
-                    path: filePath,
-                });
-                return true;
-            }
+            // if (type === 'delete_file') {
+            //     loggingService.security('apply_patch needsApproval: delete requires approval', {
+            //         mode,
+            //         type,
+            //         path: filePath,
+            //     });
+            //     return true;
+            // }
 
             // Resolve and ensure target within workspace
             const workspaceRoot = process.cwd();
@@ -302,31 +302,31 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
                     });
                 }
 
-                case 'delete_file': {
-                    await rm(targetPath, {force: true});
+                // case 'delete_file': {
+                //     await rm(targetPath, {force: true});
 
-                    if (enableFileLogging) {
-                        try {
-                            loggingService.info('File deleted', {
-                                path: filePath,
-                                targetPath,
-                            });
-                        } catch (error) {
-                            // Ignore logging errors to prevent operation failure
-                        }
-                    }
+                //     if (enableFileLogging) {
+                //         try {
+                //             loggingService.info('File deleted', {
+                //                 path: filePath,
+                //                 targetPath,
+                //             });
+                //         } catch (error) {
+                //             // Ignore logging errors to prevent operation failure
+                //         }
+                //     }
 
-                    return JSON.stringify({
-                        output: [
-                            {
-                                success: true,
-                                operation: 'delete_file',
-                                path: filePath,
-                                message: `Deleted ${filePath}`,
-                            },
-                        ],
-                    });
-                }
+                //     return JSON.stringify({
+                //         output: [
+                //             {
+                //                 success: true,
+                //                 operation: 'delete_file',
+                //                 path: filePath,
+                //                 message: `Deleted ${filePath}`,
+                //             },
+                //         ],
+                //     });
+                // }
 
                 default: {
                     return JSON.stringify({

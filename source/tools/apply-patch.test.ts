@@ -86,35 +86,35 @@ test.serial('update_file: updates an existing file', async t => {
     });
 });
 
-test.serial('delete_file: deletes a file', async t => {
-    await withTempDir(async (dir) => {
-        const filePath = 'to-delete.txt';
-        const absPath = path.join(dir, filePath);
-        await fs.writeFile(absPath, 'content');
+// test.serial('delete_file: deletes a file', async t => {
+//     await withTempDir(async (dir) => {
+//         const filePath = 'to-delete.txt';
+//         const absPath = path.join(dir, filePath);
+//         await fs.writeFile(absPath, 'content');
 
-        const result = await applyPatchToolDefinition.execute({
-            type: 'delete_file',
-            path: filePath,
-            diff: '', // diff is ignored for delete
-        });
+//         const result = await applyPatchToolDefinition.execute({
+//             type: 'delete_file',
+//             path: filePath,
+//             diff: '', // diff is ignored for delete
+//         });
 
-        const parsed = JSON.parse(result);
-        t.true(parsed.output[0].success);
+//         const parsed = JSON.parse(result);
+//         t.true(parsed.output[0].success);
 
-        await t.throwsAsync(fs.readFile(absPath));
-    });
-});
+//         await t.throwsAsync(fs.readFile(absPath));
+//     });
+// });
 
-test.serial('needsApproval: requires approval for delete_file', async t => {
-    await withTempDir(async () => {
-        const result = await applyPatchToolDefinition.needsApproval({
-            type: 'delete_file',
-            path: 'any.txt',
-            diff: '',
-        });
-        t.true(result);
-    });
-});
+// test.serial('needsApproval: requires approval for delete_file', async t => {
+//     await withTempDir(async () => {
+//         const result = await applyPatchToolDefinition.needsApproval({
+//             type: 'delete_file',
+//             path: 'any.txt',
+//             diff: '',
+//         });
+//         t.true(result);
+//     });
+// });
 
 test.serial('needsApproval: requires approval for outside workspace', async t => {
     await withTempDir(async () => {

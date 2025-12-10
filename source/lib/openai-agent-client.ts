@@ -6,6 +6,7 @@ import {
 	tool as createTool,
 	webSearchTool,
 	type Tool,
+    Runner,
 } from '@openai/agents';
 import {
 	APIConnectionError,
@@ -13,7 +14,6 @@ import {
 	InternalServerError,
 	RateLimitError,
 } from 'openai';
-import {setDefaultModelProvider} from '@openai/agents-core';
 import {
 	clearOpenRouterConversations,
 	OpenRouterProvider,
@@ -38,31 +38,34 @@ export class OpenAIAgentClient {
 	#retryAttempts: number;
 	#currentAbortController: AbortController | null = null;
 	#currentCorrelationId: string | null = null;
-    #retryCallback: (() => void) | null = null;
+	#retryCallback: (() => void) | null = null;
+	#runner: Runner | null = null;
 
-    constructor({
-        model,
-        reasoningEffort,
-        maxTurns,
-        retryAttempts,
-    }: {
-        model?: string;
-        reasoningEffort?: ModelSettingsReasoningEffort | 'default';
-        maxTurns?: number;
-        retryAttempts?: number;
-    } = {}) {
-        this.#reasoningEffort = reasoningEffort;
-        this.#provider = settingsService.get<string>('agent.provider') || 'openai';
-        this.#maxTurns = maxTurns ?? 20;
-        this.#retryAttempts = retryAttempts ?? 2;
-        this.#agent = this.#createAgent({model, reasoningEffort});
-        loggingService.info('OpenAI Agent Client initialized', {
-            model: model || DEFAULT_MODEL,
-            reasoningEffort: reasoningEffort ?? 'default',
-            maxTurns: this.#maxTurns,
-            retryAttempts: this.#retryAttempts,
-        });
-    }
+	constructor({
+		model,
+		reasoningEffort,
+		maxTurns,
+		retryAttempts,
+	}: {
+		model?: string;
+		reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+		maxTurns?: number;
+		retryAttempts?: number;
+	} = {}) {
+		this.#reasoningEffort = reasoningEffort;
+		this.#provider =
+			settingsService.get<string>('agent.provider') || 'openai';
+		this.#maxTurns = maxTurns ?? 20;
+		this.#retryAttempts = retryAttempts ?? 2;
+		this.#agent = this.#createAgent({model, reasoningEffort});
+		this.#runner = this.#createRunner();
+		loggingService.info('OpenAI Agent Client initialized', {
+			model: model || DEFAULT_MODEL,
+			reasoningEffort: reasoningEffort ?? 'default',
+			maxTurns: this.#maxTurns,
+			retryAttempts: this.#retryAttempts,
+		});
+	}
 
 	setModel(model: string): void {
 		this.#agent = this.#createAgent({
@@ -87,26 +90,46 @@ export class OpenAIAgentClient {
 			model: this.#model,
 			reasoningEffort: this.#reasoningEffort,
 		});
+		this.#runner = this.#createRunner();
 	}
 
-    setRetryCallback(callback: () => void): void {
-        this.#retryCallback = callback;
-    }
+	#createRunner(): Runner | null {
+		// Only create a runner if we're using OpenRouter
+		if (this.#provider !== 'openrouter') {
+			return null;
+		}
 
-    /**
-     * Abort the current running stream/operation
-     */
-    abort(): void {
-        if (this.#currentAbortController) {
-            this.#currentAbortController.abort();
-            this.#currentAbortController = null;
-        }
-        if (this.#currentCorrelationId) {
-            loggingService.clearCorrelationId();
-            this.#currentCorrelationId = null;
-        }
-        loggingService.debug('Agent operation aborted');
-    }
+		const apiKey = settingsService.get<string>('agent.openrouter.apiKey');
+		if (!apiKey) {
+			loggingService.warn(
+				'OpenRouter API key not set, falling back to default provider',
+			);
+			return null;
+		}
+
+		return new Runner({
+			modelProvider: new OpenRouterProvider(),
+		});
+	}
+
+	setRetryCallback(callback: () => void): void {
+		this.#retryCallback = callback;
+	}
+
+	/**
+	 * Abort the current running stream/operation
+	 */
+	abort(): void {
+		if (this.#currentAbortController) {
+			this.#currentAbortController.abort();
+			this.#currentAbortController = null;
+		}
+		if (this.#currentCorrelationId) {
+			loggingService.clearCorrelationId();
+			this.#currentCorrelationId = null;
+		}
+		loggingService.debug('Agent operation aborted');
+	}
 
 	clearConversations(): void {
 		if (this.#provider === 'openrouter') {
@@ -135,7 +158,7 @@ export class OpenAIAgentClient {
 
 		try {
 			const result = await this.#executeWithRetry(() =>
-				run(this.#agent, userInput, {
+				this.#runAgent(this.#agent, userInput, {
 					previousResponseId: previousResponseId ?? undefined,
 					stream: true,
 					maxTurns: this.#maxTurns,
@@ -161,7 +184,7 @@ export class OpenAIAgentClient {
 		const signal = this.#currentAbortController.signal;
 
 		return this.#executeWithRetry(() =>
-			run(this.#agent, state, {
+			this.#runAgent(this.#agent, state, {
 				previousResponseId: previousResponseId ?? undefined,
 				signal,
 			}),
@@ -177,13 +200,21 @@ export class OpenAIAgentClient {
 		const signal = this.#currentAbortController.signal;
 
 		return this.#executeWithRetry(() =>
-			run(this.#agent, state, {
+			this.#runAgent(this.#agent, state, {
 				previousResponseId: previousResponseId ?? undefined,
 				stream: true,
 				maxTurns: this.#maxTurns,
 				signal,
 			}),
 		);
+	}
+
+	#runAgent(agent: Agent, input: any, options: any): Promise<any> {
+		// Use runner if available (OpenRouter), otherwise use run() directly
+		if (this.#runner) {
+			return this.#runner.run(agent, input, options);
+		}
+		return run(agent, input, options);
 	}
 
 	async #executeWithRetry<T>(
@@ -268,14 +299,6 @@ export class OpenAIAgentClient {
 				effort: reasoningEffort,
 				summary: 'auto',
 			};
-		}
-
-		// Switch to OpenRouter provider based on config setting
-		if (
-			this.#provider === 'openrouter' &&
-			settingsService.get<string>('agent.openrouter.apiKey')
-		) {
-			setDefaultModelProvider(new OpenRouterProvider());
 		}
 
 		const agent = new Agent({

@@ -148,10 +148,7 @@ function convertAgentItemToOpenRouterMessage(item: any): any | null {
 
     const rawItem = item.rawItem || item;
 
-    if (
-        rawItem?.type === 'function_call' ||
-        rawItem?.type === 'function_call_output'
-    ) {
+    if (rawItem?.type === 'function_call') {
         return {
             role: 'assistant',
             content: null,
@@ -171,6 +168,7 @@ function convertAgentItemToOpenRouterMessage(item: any): any | null {
     }
 
     if (
+        rawItem?.type === 'function_call_output' ||
         rawItem?.type === 'function_call_result' ||
         rawItem?.type === 'function_call_output_result'
     ) {

@@ -318,6 +318,68 @@ test.serial('handles encrypted reasoning details', async t => {
     t.is(response.output[1].content[0].text, 'Response with encrypted reasoning');
 });
 
+test.serial('correctly converts function_call_output to tool message', async t => {
+    const requests: any[] = [];
+
+    globalThis.fetch = async (_url, options: any) => {
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return createJsonResponse({
+            id: 'resp-1',
+            choices: [{message: {content: 'ok'}}],
+            usage: {prompt_tokens: 1, completion_tokens: 1, total_tokens: 2},
+        });
+    };
+
+    const model = new OpenRouterModel('mock-model');
+
+    // Simulate a conversation turn with function_call_output
+    const inputItems = [
+        {type: 'input_text', text: 'User message'},
+        {
+            type: 'function_call',
+            id: 'call-abc',
+            name: 'search_replace',
+            arguments: '{"path":"test.txt","search_content":"old","replace_content":"new"}',
+        },
+        {
+            rawItem: {
+                type: 'function_call_output',
+                callId: 'call-abc',
+                id: 'call-abc',
+                name: 'search_replace',
+                output: '{"output":[{"success":true}]}'
+            }
+        },
+    ];
+
+    await model.getResponse({
+        systemInstructions: 'system message',
+        input: inputItems as any,
+    } as any);
+
+    t.truthy(requests[0]);
+    const messages = requests[0].messages;
+
+    // Should have: system, user, assistant (with tool_calls), tool (with result)
+    t.is(messages.length, 4);
+    t.is(messages[0].role, 'system');
+    t.is(messages[1].role, 'user');
+    t.is(messages[1].content, 'User message');
+
+    // function_call should be converted to assistant message with tool_calls
+    t.is(messages[2].role, 'assistant');
+    t.is(messages[2].content, null);
+    t.truthy(messages[2].tool_calls);
+    t.is(messages[2].tool_calls[0].id, 'call-abc');
+    t.is(messages[2].tool_calls[0].function.name, 'search_replace');
+
+    // function_call_output should be converted to tool message, NOT another assistant message
+    t.is(messages[3].role, 'tool');
+    t.is(messages[3].tool_call_id, 'call-abc');
+    t.truthy(messages[3].content);
+});
+
 test.serial('handles mixed reasoning types (summary + encrypted)', async t => {
     const requests: any[] = [];
 

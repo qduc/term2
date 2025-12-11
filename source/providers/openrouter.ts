@@ -12,6 +12,17 @@ import {
 	loggingService as logger,
 } from '../services/logging-service.js';
 
+// Helper function to decode common HTML entities in tool call arguments
+function decodeHtmlEntities(text: string): string {
+    return text
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&apos;/g, "'");
+}
+
 // Minimal OpenRouter Chat Completions client implementing the Agents Core Model interface.
 //
 // MODELREQUEST TO OPENROUTER MAPPING GUIDE:
@@ -491,7 +502,7 @@ class OpenRouterModel implements Model {
                         type: 'function_call',
                         callId: toolCall.id,
                         name: toolCall.function.name,
-                        arguments: toolCall.function.arguments,
+                        arguments: decodeHtmlEntities(toolCall.function.arguments),
                         status: 'completed',
                     } as any);
                 }
@@ -593,6 +604,12 @@ class OpenRouterModel implements Model {
                             ),
                         });
 
+						loggingService.debug('OpenRouter stream done', {
+							text: accumulated,
+							reasoningDetails,
+							toolCalls: accumulatedToolCalls,
+						});
+
                         yield {
                             type: 'response_done',
                             response: {
@@ -653,6 +670,8 @@ class OpenRouterModel implements Model {
                 }
             }
         }
+
+		// It never runs to here
         const reasoningDetails =
             accumulatedReasoning.length > 0 ? accumulatedReasoning : undefined;
 
@@ -762,7 +781,7 @@ class OpenRouterModel implements Model {
                         type: 'function_call',
                         callId: toolCall.callId,
                         name: toolCall.name,
-                        arguments: toolCall.arguments,
+                        arguments: decodeHtmlEntities(toolCall.arguments),
                         status: 'completed',
                     } as any);
                 }
@@ -836,7 +855,7 @@ class OpenRouterModel implements Model {
                 existing.name += delta.function.name;
             }
             if (delta.function?.arguments) {
-                existing.arguments += delta.function.arguments;
+                existing.arguments += decodeHtmlEntities(delta.function.arguments);
             }
 
             accumulated[index] = existing;

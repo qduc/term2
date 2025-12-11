@@ -178,60 +178,62 @@ export class ConversationService {
             // If there's an aborted approval, we need to resolve it first
             // The user's message is a new input, but the agent is stuck waiting for tool output
             if (this.abortedApprovalContext) {
-                loggingService.debug('Resolving aborted approval before processing new message', {
+                loggingService.debug('Resolving aborted approval with fake execution', {
                     message: text,
                 });
 
-                let currentContext: {
-                    state: any;
-                    interruption: any;
-                    emittedCommandIds: Set<string>;
-                } | null = this.abortedApprovalContext;
+                const {state, interruption, emittedCommandIds} = this.abortedApprovalContext;
                 this.abortedApprovalContext = null;
 
-                let attempts = 0;
-                const maxAttempts = 3;
+				// Add interceptor for this tool execution
+				const toolName = interruption.name ?? 'unknown';
+				// Extract tool call ID from the interruption's rawItem for stricter matching
+				const expectedCallId = (interruption as any).rawItem?.callId ?? (interruption as any).callId;
+				const rejectionMessage = `Tool execution was not approved. User provided new input instead: ${text}`;
 
-                while (currentContext && attempts < maxAttempts) {
-                    const {state, interruption} = currentContext;
-                    state.reject(interruption);
+				const removeInterceptor = this.agentClient.addToolInterceptor(async (name: string, _params: any, toolCallId?: string) => {
+					// Match both tool name and call ID for stricter matching
+					if (name === toolName && (!expectedCallId || toolCallId === expectedCallId)) {
+						return rejectionMessage;
+					}
+					return null;
+				});
 
-                    try {
-                        const stream = await this.agentClient.continueRunStream(state, {
-                            previousResponseId: this.previousResponseId,
-                        });
+				state.approve(interruption);
 
-                        // Consume the stream silently to update state
-                        await this.#consumeStream(stream);
-                        this.previousResponseId = stream.lastResponseId;
+                try {
+                    const stream = await this.agentClient.continueRunStream(state, {
+                        previousResponseId: this.previousResponseId,
+                    });
 
-                        if (stream.interruptions && stream.interruptions.length > 0) {
-                            // Another interruption occurred
-                            const newInterruption = stream.interruptions[0];
-                            currentContext = {
-                                state: stream.state,
-                                interruption: newInterruption,
-                                emittedCommandIds: new Set(),
-                            };
-                            attempts++;
-                            loggingService.debug('Aborted approval resolution resulted in another interruption', {
-                                attempts,
-                                tool: newInterruption.name
-                            });
-                        } else {
-                            currentContext = null; // Resolved!
-                        }
-                    } catch (error) {
-                        loggingService.warn('Error resolving aborted approval', {
-                            error: error instanceof Error ? error.message : String(error)
-                        });
-                        // Break loop on error to avoid infinite loops or further errors
-                        break;
+                    // Consume the stream and emit any text/reasoning
+                    const {finalOutput, reasoningOutput} = await this.#consumeStream(stream, {
+                        onTextChunk,
+                        onReasoningChunk,
+                        onCommandMessage,
+                    });
+                    this.previousResponseId = stream.lastResponseId;
+
+                    // Check if another interruption occurred
+                    if (stream.interruptions && stream.interruptions.length > 0) {
+                        loggingService.warn('Another interruption occurred after fake execution - handling as approval');
+                        // Let the normal flow handle this
+                        return this.#buildResult(stream, finalOutput, reasoningOutput, emittedCommandIds);
                     }
-                }
 
-                if (currentContext) {
-                    loggingService.warn('Could not fully resolve aborted approvals after max attempts. Proceeding anyway.');
+                    // Successfully resolved - agent should now have processed the fake rejection
+                    loggingService.debug('Fake execution completed, agent received rejection message');
+
+                    // Return the response from the agent processing the rejection
+                    return this.#buildResult(stream, finalOutput, reasoningOutput, emittedCommandIds);
+                } catch (error) {
+                    loggingService.warn('Error resolving aborted approval with fake execution', {
+                        error: error instanceof Error ? error.message : String(error)
+                    });
+                    // Fall through to normal message flow
+                } finally {
+                    // Always remove interceptor after use
+                    removeInterceptor();
                 }
             }
 

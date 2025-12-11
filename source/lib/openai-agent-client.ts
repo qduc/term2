@@ -42,6 +42,7 @@ export class OpenAIAgentClient {
 	#currentCorrelationId: string | null = null;
 	#retryCallback: (() => void) | null = null;
 	#runner: Runner | null = null;
+	#toolInterceptors: ((name: string, params: any, toolCallId?: string) => Promise<string | null>)[] = [];
 
 	constructor({
 		model,
@@ -94,6 +95,33 @@ export class OpenAIAgentClient {
         reasoningEffort: this.#reasoningEffort,
     });
     this.#runner = this.#createRunner();
+	}
+
+	addToolInterceptor(interceptor: (name: string, params: any, toolCallId?: string) => Promise<string | null>): () => void {
+		this.#toolInterceptors.push(interceptor);
+		return () => {
+			this.#toolInterceptors = this.#toolInterceptors.filter(i => i !== interceptor);
+		};
+	}
+
+	async #checkToolInterceptors(name: string, params: any, toolCallId?: string): Promise<string | null> {
+		for (const interceptor of this.#toolInterceptors) {
+			try {
+				const result = await interceptor(name, params, toolCallId);
+				if (result !== null) {
+					return result;
+				}
+			} catch (error) {
+				loggingService.error('Tool interceptor threw an error', {
+					name,
+					params,
+					toolCallId,
+					error: error instanceof Error ? error.message : String(error),
+				});
+				return `Tool execution intercepted but failed: ${error instanceof Error ? error.message : String(error)}`;
+			}
+		}
+		return null;
 	}
 
 	#createRunner(): Runner | null {
@@ -294,18 +322,69 @@ export class OpenAIAgentClient {
 					parameters: definition.parameters,
 					needsApproval: async (context, params) =>
 						definition.needsApproval(params, context),
-					execute: async params => definition.execute(params),
+					execute: async (params, _context, details) => {
+							// Extract tool call ID from details if available
+							const toolCallId = details?.toolCall?.callId;
+							// Check if this execution should be intercepted
+							const rejectionMessage = await this.#checkToolInterceptors(definition.name, params, toolCallId);
+							if (rejectionMessage) {
+								loggingService.info('Tool execution intercepted', {
+								tool: definition.name,
+								params: JSON.stringify(params).substring(0, 100),
+							});
+							// Return a failure response that all tools should understand
+							return JSON.stringify({
+								output: [{
+									success: false,
+									error: rejectionMessage,
+								}],
+							});
+						}
+						// Normal execution
+						return definition.execute(params);
+					},
 				}),
 			);
 
 		// Add native applyPatchTool for gpt-5.1 on OpenAI provider
 		if (shouldUseNativePatchTool) {
-			tools.push(
-				applyPatchTool({
-					editor: editorImpl,
-					needsApproval: false, // Default to auto-approve for now
-				}),
-			);
+			const nativePatchTool = applyPatchTool({
+				editor: editorImpl,
+				needsApproval: false, // Default to auto-approve for now
+			}) as any; // Type assertion needed as invoke is not in public API
+
+			// Wrap the native tool's invoke function to apply interceptor check
+			const originalInvoke = nativePatchTool.invoke;
+			if (originalInvoke) {
+				nativePatchTool.invoke = async (runContext: any, input: any, details: any) => {
+					// Extract tool call ID from details if available
+					const toolCallId = details?.toolCall?.callId;
+					// Parse input to get params for logging
+					let params: any;
+					try {
+						params = typeof input === 'string' ? JSON.parse(input) : input;
+					} catch {
+						params = input;
+					}
+					const rejectionMessage = await this.#checkToolInterceptors('apply_patch', params, toolCallId);
+					if (rejectionMessage) {
+						loggingService.info('Native tool execution intercepted', {
+							tool: 'apply_patch',
+							toolCallId,
+							params: JSON.stringify(params).substring(0, 100),
+						});
+						return JSON.stringify({
+							output: [{
+								success: false,
+								error: rejectionMessage,
+							}],
+						});
+					}
+					return originalInvoke.call(nativePatchTool, runContext, input, details);
+				};
+			}
+
+			tools.push(nativePatchTool);
 			loggingService.info('Using native applyPatchTool from SDK', {
 				model: resolvedModel,
 				provider: this.#provider,
@@ -321,7 +400,13 @@ export class OpenAIAgentClient {
 		// disable it; if they selected 'default', we don't influence the
 		// decision and leave the web tool enabled.
 		if (reasoningEffort !== 'minimal') {
-			tools.push(webSearchTool());
+			const webTool = webSearchTool();
+
+			// Note: webSearchTool is a HostedTool that runs server-side and cannot be intercepted
+			// the same way as FunctionTools. Interception for hosted tools would need to be
+			// handled differently, likely through approval mechanisms.
+
+			tools.push(webTool);
 		}
 
 		// Build modelSettings only if an explicit effort value (other than

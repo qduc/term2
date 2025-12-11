@@ -52,9 +52,13 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 ### Agent & Tools
 
 -   **`source/agent.ts`** - Configures the OpenAI agent with available tools
+-   **`source/lib/openai-agent-client.ts`** - Minimal agent client adapter with tool interceptor pattern for enhanced execution control
 -   **`source/tools/`** - Tool implementations
     -   `shell.ts` - Execute commands (with safety validation and approval)
+    -   `search-replace.ts` - Replace text in files with exact or relaxed matching (supports file creation)
+    -   `grep.ts` - Search for patterns in files (renamed from `search` for consistency)
     -   `apply-patch.ts` - Modify files using unified diff format (with pre-approval validation and consecutive failure tracking)
+    -   `tool-execution-context.ts` - Deprecated (replaced with instance-based interceptor pattern)
     -   `types.ts` - Shared tool type definitions
 
 ### UI Components
@@ -81,10 +85,11 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 3. Service calls the OpenAI agent via `openai-agent-client.ts`
 4. Agent response streams back in real-time:
     - Text and reasoning displayed by `LiveResponse.tsx`
-    - Tool requests (shell/apply-patch) are validated before approval
+    - Tool requests (shell/search-replace/grep/apply-patch) are validated before approval
+    - Tool interceptors provide centralized execution control (custom validation, approval flow, error handling)
     - Invalid patches are rejected immediately (dry-run validation)
     - Valid tool requests pause for approval
-5. User approves/rejects via `ApprovalPrompt.tsx`
+5. User approves/rejects via `ApprovalPrompt.tsx` or `SearchReplacePrompt.tsx`
 6. Service executes the tool or continues streaming
 7. Final response appears in `MessageList.tsx`
 8. Consecutive tool failures trigger automatic abort after threshold
@@ -102,7 +107,8 @@ npx ava               # Unit tests
 ## Key Concepts
 
 -   **Message Types**: UserMessage, BotMessage, ReasoningMessage, ApprovalMessage, CommandMessage, SystemMessage
--   **Tool Approval**: Tools like `shell.ts` validate commands and can require user approval before execution
+-   **Tool Interceptors**: Instance-based pattern in `OpenAIAgentClient` for enhanced execution control. Tools register interceptors via `addToolInterceptor()` for custom validation, approval flow, and error handling before/after execution
+-   **Tool Approval**: Tools like `shell.ts` and `search-replace.ts` validate operations and can require user approval before execution
 -   **Patch Validation**: The `apply-patch` tool performs dry-run validation before requesting approval, rejecting malformed diffs immediately
 -   **Failure Tracking**: Consecutive tool failures are tracked; after N failures (configurable, default: 3), the agent automatically aborts to prevent infinite retry loops
 -   **Streaming**: Responses and reasoning stream in real-time for responsive UX
@@ -110,6 +116,7 @@ npx ava               # Unit tests
 -   **Logging**: Winston-based system logs shell commands, API calls, and errors to `~/Library/Logs/term2-nodejs/logs/` (macOS) or `~/.local/state/term2/logs/` (Linux)
 -   **Settings**: Centralized configuration system with hierarchical precedence (CLI > Env > Config > Defaults)
 -   **Pure Functions**: Core logic separated from side effects for testability and maintainability (see Architecture Patterns below)
+-   **Message Type Conversion**: Proper handling of function_call and function_call_output types between OpenRouter and agent SDK message formats
 
 ## Architecture Patterns
 
@@ -279,6 +286,11 @@ Term2 includes a robust logging system for debugging and security auditing:
 npm run logs:view    # Stream logs with jq filtering (cross-platform)
 npm run logs:clean   # Remove all log files (cross-platform)
 ```
+
+The log viewer includes:
+-   **Real-time file monitoring** via Server-Sent Events (SSE) for auto-refresh
+-   **Reverse order display** showing newest log lines first
+-   **Improved scrolling behavior** for better UX when viewing large log files
 
 If you need to inspect the path manually, run a quick Node command to discover the env-paths location:
 

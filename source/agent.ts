@@ -11,7 +11,7 @@ export const DEFAULT_MODEL = settingsService.get<string>('agent.model');
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts')
 
-const DEFAULT_PROMPT = 'default.md';
+const DEFAULT_PROMPT = 'simple.md';
 const ANTHROPIC_PROMPT = 'anthropic.md';
 const GPT_PROMPT = 'gpt-5.md';
 const CODEX_PROMPT = 'codex.md';

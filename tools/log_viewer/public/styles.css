@@ -16,7 +16,7 @@ body{
 header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 header h1{margin:0;font-weight:700;font-size:18px}
 header small{color:var(--muted);font-size:12px}
-.side .panel{background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;min-height:60vh}
+.side .panel{background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;min-height:60vh;overflow:scroll}
 .side ul{list-style:none;padding:0;margin:0}
 .side li{padding:8px;border-radius:6px;margin-bottom:6px;cursor:pointer;color:var(--accent)}
 .side li:hover{background:rgba(255,255,255,0.02)}

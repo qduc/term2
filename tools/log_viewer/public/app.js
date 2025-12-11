@@ -8,6 +8,45 @@ const searchInput = document.getElementById('search');
 const linesInput = document.getElementById('lines');
 
 let selectedFile = null;
+let fileWatcher = null; // SSE watcher
+let refreshTimer = null; // debounce timer for auto-refresh
+
+function stopWatch() {
+  try { fileWatcher?.close(); } catch (_) {}
+  fileWatcher = null;
+}
+
+function debounceRefresh(delay = 300) {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    loadPreview();
+  }, delay);
+}
+
+function startWatch(file) {
+  stopWatch();
+  if (!file) return;
+  try {
+    const es = new EventSource(`/api/watch?file=${encodeURIComponent(file)}`);
+    es.onmessage = (e) => {
+      try {
+        const evt = JSON.parse(e.data);
+        if (evt && evt.type === 'change') {
+          debounceRefresh(250);
+        }
+      } catch (_) {}
+    };
+    es.onerror = () => {
+      // close and retry soon on error
+      stopWatch();
+      setTimeout(() => startWatch(file), 2000);
+    };
+    fileWatcher = es;
+  } catch (_) {
+    // ignore; manual refresh still works
+  }
+}
 
 function renderFiles(files) {
   fileListEl.innerHTML = '';
@@ -135,6 +174,9 @@ async function selectFile(name) {
   selectedFile = name;
   info.textContent = `Loading ${name}...`;
   logsTable.hidden = true;
+  // set up auto-refresh watcher for this file
+  stopWatch();
+  startWatch(name);
   await loadPreview();
 }
 
@@ -178,3 +220,6 @@ searchInput.addEventListener('keyup', () => { loadPreview(); });
 
 // initial
 loadFiles();
+
+// cleanup on unload
+window.addEventListener('beforeunload', () => { stopWatch(); });

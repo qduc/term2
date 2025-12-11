@@ -83,7 +83,8 @@ app.get('/api/preview', async (req, res) => {
     const exists = await fs.promises.stat(filePath);
     if (!exists.isFile()) return res.status(404).json({error: 'not found'});
     const rawLines = await tailFile(filePath, MAX_READ_BYTES, lines);
-    const parsed = rawLines.map(parseLine);
+    // reverse so newest lines appear first in the response
+    const parsed = rawLines.reverse().map(parseLine);
     res.json({file, lines: parsed.length, data: parsed});
   } catch (err) {
     console.error(err);
@@ -101,6 +102,72 @@ app.get('/api/meta', async (req, res) => {
     res.json({size: st.size, mtime: st.mtime});
   } catch (err) {
     res.status(404).json({error: String(err)});
+  }
+});
+
+// Server-Sent Events endpoint to watch a file for changes and notify clients
+app.get('/api/watch', async (req, res) => {
+  const file = safeBasename(req.query.file || '');
+  if (!file) return res.status(400).json({error: 'file query required'});
+  try {
+    const filePath = path.join(LOG_DIR, file);
+    const resolvedLogDir = path.resolve(LOG_DIR);
+    const resolvedFilePath = path.resolve(filePath);
+    if (!resolvedFilePath.startsWith(resolvedLogDir + path.sep)) {
+      return res.status(403).json({error: 'forbidden'});
+    }
+
+    const st = await fs.promises.stat(resolvedFilePath);
+    if (!st.isFile()) return res.status(404).json({error: 'not found'});
+
+    // Setup SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const send = (event) => {
+      try {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch (_) {
+        // ignore write errors; connection might be closed
+      }
+    };
+
+    // Initial meta
+    send({type: 'init', size: st.size, mtime: st.mtime});
+
+    // Keep-alive ping every 20s
+    const ping = setInterval(() => send({type: 'ping', t: Date.now()}), 20000);
+
+    const watcher = fs.watch(resolvedFilePath, {persistent: true}, async (_eventType) => {
+      try {
+        const mst = await fs.promises.stat(resolvedFilePath);
+        send({type: 'change', size: mst.size, mtime: mst.mtime});
+      } catch (e) {
+        // If file is removed or inaccessible
+        send({type: 'error', error: String(e)});
+      }
+    });
+
+    // Cleanup on close
+    const cleanup = () => {
+      clearInterval(ping);
+      try { watcher.close(); } catch (_) {}
+      try { res.end(); } catch (_) {}
+    };
+
+    req.on('close', cleanup);
+  } catch (err) {
+    console.error(err);
+    // If we already started SSE, try to send an error frame; else regular JSON
+    if (!res.headersSent) {
+      return res.status(500).json({error: String(err)});
+    }
+    try {
+      res.write(`data: ${JSON.stringify({type: 'error', error: String(err)})}\n\n`);
+      res.end();
+    } catch (_) {}
   }
 });
 

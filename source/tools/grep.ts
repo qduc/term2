@@ -70,7 +70,7 @@ async function checkRgAvailability(): Promise<boolean> {
 export const grepToolDefinition: ToolDefinition<SearchToolParams> = {
     name: 'grep',
     description:
-        'Search for text in the codebase using ripgrep (rg) if available, falling back to grep. Useful for exploring code, finding usages, etc.',
+        'Search for text in the codebase. Useful for exploring code, finding usages, etc.',
     parameters: searchParametersSchema,
     needsApproval: () => false, // Search is read-only and safe
     execute: async params => {

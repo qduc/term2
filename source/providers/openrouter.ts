@@ -646,8 +646,9 @@ class OpenRouterModel implements Model {
 							type: 'model',
 							event: json
 						}
-                    } catch {
+                    } catch (err) {
                         // ignore parse errors for keep-alive lines
+						loggingService.error('OpenRouter stream parse error', {err})
                     }
                 }
             }
@@ -669,6 +670,12 @@ class OpenRouterModel implements Model {
                 toolCalls: accumulatedToolCalls,
             }),
         });
+
+		loggingService.debug('OpenRouter stream done', {
+			text: accumulated,
+			reasoningDetails,
+			toolCalls: accumulatedToolCalls,
+		})
 
         yield {
             type: 'response_done',

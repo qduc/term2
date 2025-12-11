@@ -3,6 +3,42 @@ const GREP_TOOL_NAME = 'grep';
 const APPLY_PATCH_TOOL_NAME = 'apply_patch';
 const SEARCH_REPLACE_TOOL_NAME = 'search_replace';
 
+const approvalRejectionCallIds = new Set<string>();
+
+const getCallIdFromItem = (item: any): string | null => {
+    const rawItem = item?.rawItem ?? item;
+    if (!rawItem) {
+        return null;
+    }
+
+    return (
+        rawItem.callId ??
+        rawItem.id ??
+        item?.callId ??
+        item?.id ??
+        null
+    );
+};
+
+export const markToolCallAsApprovalRejection = (callId?: string | null): void => {
+    if (!callId) {
+        return;
+    }
+    approvalRejectionCallIds.add(callId);
+};
+
+export const clearApprovalRejectionMarkers = (): void => {
+    approvalRejectionCallIds.clear();
+};
+
+const isApprovalRejectionForItem = (item: any): boolean => {
+    const callId = getCallIdFromItem(item);
+    if (!callId) {
+        return false;
+    }
+    return approvalRejectionCallIds.has(callId);
+};
+
 interface CommandMessage {
     id: string;
     sender: 'command';
@@ -10,6 +46,7 @@ interface CommandMessage {
     output: string;
     success?: boolean;
     failureReason?: string;
+    isApprovalRejection?: boolean;
 }
 
 const coerceToText = (value: unknown): string => {
@@ -171,6 +208,8 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             continue;
         }
 
+        const isApprovalRejection = isApprovalRejectionForItem(item);
+
         // Handle shell tool
         if (normalizedItem.toolName === SHELL_TOOL_NAME) {
             const rawItem = item?.rawItem ?? item;
@@ -222,6 +261,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 output,
                 success,
                 failureReason,
+                isApprovalRejection,
             });
             continue;
         }
@@ -256,6 +296,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                     command,
                     output,
                     success,
+                    isApprovalRejection,
                 });
             }
             continue;
@@ -306,6 +347,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 command,
                 output,
                 success,
+                isApprovalRejection,
             });
             continue;
         }
@@ -341,6 +383,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                     command,
                     output,
                     success,
+                    isApprovalRejection,
                 });
             }
             continue;

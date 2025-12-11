@@ -1,5 +1,9 @@
 import test from 'ava';
 import {ConversationService} from '../../dist/services/conversation-service.js';
+import {
+    clearApprovalRejectionMarkers,
+    markToolCallAsApprovalRejection,
+} from '../../dist/utils/extract-command-messages.js';
 
 class MockStream {
     constructor(events) {
@@ -19,6 +23,10 @@ class MockStream {
         }
     }
 }
+
+test.beforeEach(() => {
+    clearApprovalRejectionMarkers();
+});
 
 test('emits live text chunks for response.output_text.delta events', async t => {
     t.plan(3);
@@ -167,9 +175,57 @@ test('dedupes command messages emitted live from run events', async t => {
             command: 'ls',
             output: 'file.txt',
             success: true,
+            isApprovalRejection: false,
             failureReason: undefined,
         },
     ]);
+    t.deepEqual(result.commandMessages, []);
+});
+
+test('skips approval rejection command messages', async t => {
+    const rejectionPayload = JSON.stringify({
+        output: [
+            {
+                command: 'should-not-show',
+                stdout: 'fake output',
+                stderr: '',
+                outcome: {type: 'exit', exitCode: 1},
+            },
+        ],
+    });
+    const rawItem = {
+        id: 'rejection-call',
+        callId: 'rejection-call',
+        type: 'function_call_result',
+        name: 'shell',
+        arguments: JSON.stringify({commands: ['should-not-show']}),
+    };
+    markToolCallAsApprovalRejection(rawItem.callId);
+    const commandItem = {
+        type: 'tool_call_output_item',
+        name: 'shell',
+        output: rejectionPayload,
+        rawItem,
+    };
+    const events = [{type: 'run_item_stream_event', item: commandItem}];
+    const stream = new MockStream(events);
+    stream.newItems = [commandItem];
+
+    const emitted = [];
+    const mockClient = {
+        async startStream() {
+            return stream;
+        },
+    };
+
+    const service = new ConversationService({agentClient: mockClient});
+    const result = await service.sendMessage('run shell', {
+        onCommandMessage() {
+            emitted.push('called');
+        },
+    });
+
+    t.deepEqual(emitted, []);
     t.deepEqual(result.commandMessages, []);
 });
 

@@ -1,5 +1,8 @@
 import test from 'ava';
-import {extractCommandMessages} from '../../dist/utils/extract-command-messages.js';
+import {
+    clearApprovalRejectionMarkers,
+    extractCommandMessages,
+} from '../../dist/utils/extract-command-messages.js';
 
 const withStubbedNow = value => {
     const realNow = Date.now;
@@ -8,6 +11,10 @@ const withStubbedNow = value => {
         Date.now = realNow;
     };
 };
+
+test.beforeEach(() => {
+    clearApprovalRejectionMarkers();
+});
 
 test('extracts failure reason from shell command outcome', t => {
     const restore = withStubbedNow(1700000000200);
@@ -36,6 +43,7 @@ test('extracts failure reason from shell command outcome', t => {
             output: 'No output',
             success: false,
             failureReason: 'timeout',
+            isApprovalRejection: false,
         });
     } finally {
         restore();
@@ -196,6 +204,7 @@ test('extracts successful apply_patch create_file operation', t => {
             command: 'apply_patch create_file test.txt',
             output: 'Created test.txt',
             success: true,
+            isApprovalRejection: false,
         });
     } finally {
         restore();
@@ -238,6 +247,7 @@ test('extracts successful apply_patch update_file operation', t => {
             command: 'apply_patch update_file existing.txt',
             output: 'Updated existing.txt',
             success: true,
+            isApprovalRejection: false,
         });
     } finally {
         restore();
@@ -320,6 +330,7 @@ test('extracts failed apply_patch operation', t => {
             command: 'apply_patch update_file bad.txt',
             output: 'Invalid diff format',
             success: false,
+            isApprovalRejection: false,
         });
     } finally {
         restore();

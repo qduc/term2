@@ -34,6 +34,7 @@ interface CommandMessage {
     output: string;
     success?: boolean;
     failureReason?: string;
+    isApprovalRejection?: boolean;
 }
 
 interface SystemMessage {

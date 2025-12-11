@@ -1,5 +1,8 @@
 import type {OpenAIAgentClient} from '../lib/openai-agent-client.js';
-import {extractCommandMessages} from '../utils/extract-command-messages.js';
+import {
+    extractCommandMessages,
+    markToolCallAsApprovalRejection,
+} from '../utils/extract-command-messages.js';
 import {loggingService} from './logging-service.js';
 
 interface ApprovalResult {
@@ -18,6 +21,8 @@ export interface CommandMessage {
     command: string;
     output: string;
     success?: boolean;
+    failureReason?: string;
+    isApprovalRejection?: boolean;
 }
 
 interface ResponseResult {
@@ -186,18 +191,18 @@ export class ConversationService {
                 this.abortedApprovalContext = null;
 
 				// Add interceptor for this tool execution
-				const toolName = interruption.name ?? 'unknown';
-				// Extract tool call ID from the interruption's rawItem for stricter matching
-				const expectedCallId = (interruption as any).rawItem?.callId ?? (interruption as any).callId;
-				const rejectionMessage = `Tool execution was not approved. User provided new input instead: ${text}`;
+                const toolName = interruption.name ?? 'unknown';
+                const expectedCallId = (interruption as any).rawItem?.callId ?? (interruption as any).callId;
+                const rejectionMessage = `Tool execution was not approved. User provided new input instead: ${text}`;
 
-				const removeInterceptor = this.agentClient.addToolInterceptor(async (name: string, _params: any, toolCallId?: string) => {
-					// Match both tool name and call ID for stricter matching
-					if (name === toolName && (!expectedCallId || toolCallId === expectedCallId)) {
-						return rejectionMessage;
-					}
-					return null;
-				});
+                const removeInterceptor = this.agentClient.addToolInterceptor(async (name: string, _params: any, toolCallId?: string) => {
+                    // Match both tool name and call ID for stricter matching
+                    if (name === toolName && (!expectedCallId || toolCallId === expectedCallId)) {
+                        markToolCallAsApprovalRejection(toolCallId ?? expectedCallId);
+                        return rejectionMessage;
+                    }
+                    return null;
+                });
 
 				state.approve(interruption);
 
@@ -513,6 +518,11 @@ export class ConversationService {
                 continue;
             }
 
+            if (cmdMsg.isApprovalRejection) {
+                skippedCount++;
+                continue;
+            }
+
             emittedCommandIds.add(cmdMsg.id);
             onCommandMessage(cmdMsg);
             emittedCount++;
@@ -653,9 +663,13 @@ export class ConversationService {
             ? allCommandMessages.filter(msg => !emittedCommandIds.has(msg.id))
             : allCommandMessages;
 
+        const visibleCommandMessages = commandMessages.filter(
+            msg => !msg.isApprovalRejection,
+        );
+
         const response = {
             type: 'response' as const,
-            commandMessages,
+            commandMessages: visibleCommandMessages,
             finalText: finalOutputOverride ?? result.finalOutput ?? 'Done.',
             reasoningText: reasoningOutputOverride,
         };

@@ -49,10 +49,14 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
     -   `history-service.ts` - Persistent input history storage
     -   `logging-service.ts` - Winston-based logging with security audit trails
 
-### Agent & Tools
+### Agent, Providers & Tools
 
--   **`source/agent.ts`** - Configures the OpenAI agent with available tools
+-   **`source/agent.ts`** - Configures the agent with available tools
 -   **`source/lib/openai-agent-client.ts`** - Minimal agent client adapter with tool interceptor pattern for enhanced execution control
+-   **`source/providers/`** - Provider registry and implementations to support multiple backends
+    - `index.ts` / `registry.ts` - Lightweight provider registry (no hard imports in app code)
+    - `openai.provider.ts` - OpenAI provider definition
+    - `openrouter.provider.ts` - OpenRouter provider definition (uses custom runner)
 -   **`source/tools/`** - Tool implementations
     -   `shell.ts` - Execute commands (with safety validation and approval)
     -   `search-replace.ts` - Replace text in files with exact or relaxed matching (supports file creation)
@@ -60,6 +64,10 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
     -   `apply-patch.ts` - Modify files using unified diff format (with pre-approval validation and consecutive failure tracking)
     -   `tool-execution-context.ts` - Deprecated (replaced with instance-based interceptor pattern)
     -   `types.ts` - Shared tool type definitions
+
+### State & Conversation
+
+-   **`source/services/conversation-store.ts`** - Canonical conversation history when a provider does not support server-managed conversations (e.g., OpenRouter)
 
 ### UI Components
 
@@ -82,7 +90,7 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 
 1. User types a message → `app.tsx` captures it
 2. `use-conversation.ts` hook sends it to `conversation-service.ts`
-3. Service calls the OpenAI agent via `openai-agent-client.ts`
+3. Service calls the agent via `openai-agent-client.ts`, which selects a provider through the Provider Registry
 4. Agent response streams back in real-time:
     - Text and reasoning displayed by `LiveResponse.tsx`
     - Tool requests (shell/search-replace/grep/apply-patch) are validated before approval
@@ -93,6 +101,67 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 6. Service executes the tool or continues streaming
 7. Final response appears in `MessageList.tsx`
 8. Consecutive tool failures trigger automatic abort after threshold
+
+### Provider Selection and Runner Creation
+
+The app now supports pluggable providers via a tiny registry layer:
+
+- `source/providers/registry.ts` exposes a `ProviderDefinition` interface and global registry helpers (`registerProvider`, `getProvider`, `getAllProviders`).
+- Each provider registers itself on module load (see `source/providers/index.ts`).
+- A provider can optionally supply a `createRunner(deps)` factory to construct a custom `Runner` from `@openai/agents` with injected dependencies, avoiding circular imports.
+  - OpenAI provider: `createRunner` is `undefined`, using the SDK default runner.
+  - OpenRouter provider: returns a `Runner` with a custom `modelProvider` implementation.
+
+OpenAIAgentClient delegates runner creation to the active provider definition. Dependencies (e.g., `settingsService`, `loggingService`) are passed into `createRunner` rather than imported directly to preserve ESM boundaries.
+
+### Conversation State Strategy
+
+Different providers handle conversation context differently:
+
+- OpenAI (Responses API): supports server-managed conversation chaining. We pass `previousResponseId` when available so the server can derive context without resending full history.
+- OpenRouter: does not support `previousResponseId` or server-side state. The app maintains a local, canonical history via `ConversationStore` and sends the full client-managed transcript each turn.
+
+`ConversationService` integrates `ConversationStore`, updates it from streaming results, and tracks `previousResponseId` when using OpenAI so follow-up turns can chain efficiently.
+
+### Tooling and Output Updates
+
+Recent changes improved consistency and safety across tools:
+
+- Shell tool uses a single `command` string (replacing the older `commands` array) and renders compact, human-readable outputs.
+- Search/Replace tool shows a diff preview and supports approval with clear failure reasons; diff generation is centralized in a `generateDiff` utility.
+- Grep tool returns a plain human-readable string (trimmed) instead of JSON.
+- Tools array sanitization and deep content truncation reduce noisy logs while preserving key context.
+
+### Testing Support
+
+- SettingsService now has a light-weight mock for tests to isolate configuration and simplify overrides. Provider `createRunner` accepts `settingsService` and `loggingService` via DI for easier test scaffolding and to avoid import cycles.
+
+## Recent Architecture Changes (since commit 5e48382)
+
+The following significant architectural changes have been introduced after commit `5e48382`:
+
+1. Provider Registry and DI-based Runner Creation
+   - Introduced `ProviderDefinition` with optional `createRunner(deps)`.
+   - Providers self-register (`source/providers/index.ts`).
+   - `OpenRouter` builds a custom `Runner` with its own `modelProvider`; `OpenAI` uses the default SDK runner.
+
+2. Conversation State Management
+   - Added `ConversationStore` for maintaining canonical client-side history.
+   - OpenAI path supports `previousResponseId` chaining; OpenRouter ignores it and relies on the local history.
+   - Removed OpenRouter-side conversation state management in favor of caller-managed history.
+
+3. Safer, More Consistent Tooling
+   - Shell tool standardized on `command` string; command message rendering improved.
+   - Search/Replace enhanced with diff previews and pre-approval validation.
+   - Utilities added for diff generation and tools array sanitization; grep returns plain text.
+
+4. Dependency Injection for Providers
+   - `createRunner` accepts `{ settingsService, loggingService }` from the caller to avoid ESM circular dependencies and improve testability.
+
+5. Testing Improvements
+   - Introduced a `SettingsService` mock for isolation in unit tests.
+
+These changes make it easier to add new providers, reduce coupling, and clarify how conversation context is managed across backends.
 
 ## Testing & Quality
 

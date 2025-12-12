@@ -61,7 +61,8 @@
 	},
 	"ava": {
 		"environmentVariables": {
-			"NODE_NO_WARNINGS": "1"
+			"NODE_NO_WARNINGS": "1",
+			"DISABLE_LOGGING": "1"
 		},
 		"typescript": {
 			"rewritePaths": {

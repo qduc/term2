@@ -540,6 +540,8 @@ class OpenRouterModel implements Model {
             toolsCount: Array.isArray(tools) ? tools.length : 0,
             tools,
         });
+        loggingService.logToOpenrouter('debug', 'modelRequest', request)
+        loggingService.logToOpenrouter('debug', 'messages', messages)
 
         const res = await callOpenRouter({
             apiKey,

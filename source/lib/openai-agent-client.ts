@@ -177,12 +177,19 @@ export class OpenAIAgentClient {
 		});
 
 		try {
+			const options: any = {
+				stream: true,
+				maxTurns: this.#maxTurns,
+				signal,
+			};
+
+			// Only pass previousResponseId for OpenAI provider (server-managed conversation chaining)
+			if (this.#provider === 'openai' && previousResponseId) {
+				options.previousResponseId = previousResponseId;
+			}
+
 			const result = await this.#executeWithRetry(() =>
-				this.#runAgent(this.#agent, userInput, {
-					stream: true,
-					maxTurns: this.#maxTurns,
-					signal,
-				}),
+				this.#runAgent(this.#agent, userInput, options),
 			);
 			return result;
 		} catch (error: any) {
@@ -196,33 +203,47 @@ export class OpenAIAgentClient {
 
 	async continueRun(
 		state: any,
-		{previousResponseId: _previousResponseId}: {previousResponseId?: string | null} = {},
+		{previousResponseId}: {previousResponseId?: string | null} = {},
 	): Promise<any> {
 		this.abort();
 		this.#currentAbortController = new AbortController();
 		const signal = this.#currentAbortController.signal;
 
+		const options: any = {
+			signal,
+		};
+
+		// Only pass previousResponseId for OpenAI provider (server-managed conversation chaining)
+		if (this.#provider === 'openai' && previousResponseId) {
+			options.previousResponseId = previousResponseId;
+		}
+
 		return this.#executeWithRetry(() =>
-			this.#runAgent(this.#agent, state, {
-				signal,
-			}),
+			this.#runAgent(this.#agent, state, options),
 		);
 	}
 
 	async continueRunStream(
 		state: any,
-		{previousResponseId: _previousResponseId}: {previousResponseId?: string | null} = {},
+		{previousResponseId}: {previousResponseId?: string | null} = {},
 	): Promise<any> {
 		this.abort();
 		this.#currentAbortController = new AbortController();
 		const signal = this.#currentAbortController.signal;
 
+		const options: any = {
+			stream: true,
+			maxTurns: this.#maxTurns,
+			signal,
+		};
+
+		// Only pass previousResponseId for OpenAI provider (server-managed conversation chaining)
+		if (this.#provider === 'openai' && previousResponseId) {
+			options.previousResponseId = previousResponseId;
+		}
+
 		return this.#executeWithRetry(() =>
-			this.#runAgent(this.#agent, state, {
-				stream: true,
-				maxTurns: this.#maxTurns,
-				signal,
-			}),
+			this.#runAgent(this.#agent, state, options),
 		);
 	}
 

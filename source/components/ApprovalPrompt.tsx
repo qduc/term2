@@ -1,5 +1,6 @@
 import React, {FC} from 'react';
 import {Box, Text} from 'ink';
+import {generateDiff} from '../utils/diff.js';
 
 type Props = {
     approval: any;
@@ -109,9 +110,7 @@ const ShellPrompt: FC<{args: ShellArgs}> = ({args}) => {
 };
 
 const SearchReplacePrompt: FC<{args: SearchReplaceArgs}> = ({args}) => {
-    const searchLines = args.search_content.split('\n');
-    const replaceLines = args.replace_content.split('\n');
-    const maxLines = 15;
+    const diff = generateDiff(args.search_content, args.replace_content);
 
     return (
         <Box flexDirection="column">
@@ -122,30 +121,7 @@ const SearchReplacePrompt: FC<{args: SearchReplaceArgs}> = ({args}) => {
                     <Text color="magenta"> (all occurrences)</Text>
                 )}
             </Box>
-
-            <Box flexDirection="column" marginLeft={2} marginTop={1}>
-                <Text color="red" bold>- Search:</Text>
-                {searchLines.slice(0, maxLines).map((line, i) => (
-                    <Text key={`search-${i}`} color="red" dimColor={line.trim() === ''}>
-                        {line || '(empty line)'}
-                    </Text>
-                ))}
-                {searchLines.length > maxLines && (
-                    <Text dimColor>... ({searchLines.length - maxLines} more lines)</Text>
-                )}
-            </Box>
-
-            <Box flexDirection="column" marginLeft={2} marginTop={1}>
-                <Text color="green" bold>+ Replace:</Text>
-                {replaceLines.slice(0, maxLines).map((line, i) => (
-                    <Text key={`replace-${i}`} color="green" dimColor={line.trim() === ''}>
-                        {line || '(empty line)'}
-                    </Text>
-                ))}
-                {replaceLines.length > maxLines && (
-                    <Text dimColor>... ({replaceLines.length - maxLines} more lines)</Text>
-                )}
-            </Box>
+            <DiffView diff={diff} />
         </Box>
     );
 };

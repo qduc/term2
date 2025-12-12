@@ -88,6 +88,45 @@ test('extracts shell command from matching function_call item', t => {
     }
 });
 
+test('extracts shell command from output items using call_id', t => {
+    const restore = withStubbedNow(1700000000261);
+
+    try {
+        const items = [
+            {
+                type: 'function_call',
+                id: 'call-abc',
+                name: 'shell',
+                arguments: JSON.stringify({command: 'npm run lint'}),
+            },
+            {
+                type: 'tool_call_output_item',
+                output: 'exit 0\n> md-preview@0.0.0 lint\n> eslint .',
+                rawItem: {
+                    type: 'function_call_result',
+                    name: 'shell',
+                    id: 'result-1',
+                    call_id: 'call-abc',
+                },
+            },
+        ];
+
+        const messages = extractCommandMessages(items);
+        t.is(messages.length, 1);
+        t.deepEqual(messages[0], {
+            id: 'result-1-0',
+            sender: 'command',
+            command: 'npm run lint',
+            output: '> md-preview@0.0.0 lint\n> eslint .',
+            success: true,
+            failureReason: undefined,
+            isApprovalRejection: false,
+        });
+    } finally {
+        restore();
+    }
+});
+
 test('extracts grep output from plain text tool result', t => {
     const restore = withStubbedNow(1700000000260);
 

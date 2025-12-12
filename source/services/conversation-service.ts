@@ -457,7 +457,12 @@ export class ConversationService {
             return;
         }
 
-        const callId = rawItem.callId ?? rawItem.id;
+        const callId =
+            rawItem.callId ??
+            rawItem.call_id ??
+            rawItem.tool_call_id ??
+            rawItem.toolCallId ??
+            rawItem.id;
         if (!callId) {
             return;
         }
@@ -488,7 +493,17 @@ export class ConversationService {
             }
 
             const rawItem = item?.rawItem ?? item;
-            const callId = rawItem?.callId ?? rawItem?.id ?? item?.callId ?? item?.id;
+            const callId =
+                rawItem?.callId ??
+                rawItem?.call_id ??
+                rawItem?.tool_call_id ??
+                rawItem?.toolCallId ??
+                rawItem?.id ??
+                item?.callId ??
+                item?.call_id ??
+                item?.tool_call_id ??
+                item?.toolCallId ??
+                item?.id;
             if (!callId) {
                 continue;
             }

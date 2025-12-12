@@ -182,6 +182,63 @@ test('dedupes command messages emitted live from run events', async t => {
     t.deepEqual(result.commandMessages, []);
 });
 
+test('attaches cached shell args when output uses call_id', async t => {
+    const functionCallItem = {
+        rawItem: {
+            type: 'function_call',
+            id: 'call-abc',
+            name: 'shell',
+            arguments: JSON.stringify({command: 'npm run lint'}),
+        },
+    };
+
+    const outputItem = {
+        type: 'tool_call_output_item',
+        name: 'shell',
+        output: 'exit 0\n> md-preview@0.0.0 lint\n> eslint .',
+        rawItem: {
+            type: 'function_call_result',
+            name: 'shell',
+            id: 'result-1',
+            call_id: 'call-abc',
+        },
+    };
+
+    const events = [
+        {type: 'run_item_stream_event', item: functionCallItem},
+        {type: 'run_item_stream_event', item: outputItem},
+    ];
+    const stream = new MockStream(events);
+    stream.newItems = [functionCallItem, outputItem];
+
+    const emitted = [];
+    const mockClient = {
+        async startStream() {
+            return stream;
+        },
+    };
+
+    const service = new ConversationService({agentClient: mockClient});
+    const result = await service.sendMessage('run shell', {
+        onCommandMessage(message) {
+            emitted.push(message);
+        },
+    });
+
+    t.deepEqual(emitted, [
+        {
+            id: 'result-1-0',
+            sender: 'command',
+            command: 'npm run lint',
+            output: '> md-preview@0.0.0 lint\n> eslint .',
+            success: true,
+            isApprovalRejection: false,
+            failureReason: undefined,
+        },
+    ]);
+    t.deepEqual(result.commandMessages, []);
+});
+
 test('skips approval rejection command messages', async t => {
     const rejectionPayload = JSON.stringify({
         output: [

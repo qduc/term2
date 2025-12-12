@@ -13,8 +13,14 @@ const getCallIdFromItem = (item: any): string | null => {
 
     return (
         rawItem.callId ??
+        rawItem.call_id ??
+        rawItem.tool_call_id ??
+        rawItem.toolCallId ??
         rawItem.id ??
         item?.callId ??
+        item?.call_id ??
+        item?.tool_call_id ??
+        item?.toolCallId ??
         item?.id ??
         null
     );
@@ -157,7 +163,11 @@ const normalizeToolItem = (
     const type = item.type ?? rawItem?.type;
     const isFunctionResult =
         type === 'function_call_result' ||
-        rawItem?.type === 'function_call_result';
+        rawItem?.type === 'function_call_result' ||
+        type === 'function_call_output' ||
+        rawItem?.type === 'function_call_output' ||
+        type === 'function_call_output_result' ||
+        rawItem?.type === 'function_call_output_result';
     const isToolCallOutput = type === 'tool_call_output_item';
 
     if (!isFunctionResult && !isToolCallOutput) {
@@ -191,7 +201,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             continue;
         }
 
-        const callId = rawItem.callId ?? rawItem.id;
+        const callId = getCallIdFromItem(rawItem) ?? getCallIdFromItem(item);
         if (!callId) {
             continue;
         }
@@ -215,7 +225,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
         // Handle shell tool
         if (normalizedItem.toolName === SHELL_TOOL_NAME) {
             const rawItem = item?.rawItem ?? item;
-            const callId = rawItem?.callId ?? rawItem?.id ?? item?.callId ?? item?.id;
+            const callId = getCallIdFromItem(item);
             const fallbackArgs =
                 callId && toolCallArgumentsById.has(callId)
                     ? toolCallArgumentsById.get(callId)
@@ -224,10 +234,40 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 normalizeToolArguments(normalizedItem.arguments) ??
                 normalizeToolArguments(fallbackArgs) ??
                 {};
-            const command =
-                coerceCommandText((args as any)?.command) ||
-                coerceCommandText((args as any)?.commands) ||
-                'Unknown command';
+            const command = (() => {
+                if (typeof args === 'string') {
+                    return args;
+                }
+
+                const directCommand = coerceCommandText((args as any)?.command);
+                if (directCommand) {
+                    return directCommand;
+                }
+
+                const commandsValue = (args as any)?.commands;
+                if (typeof commandsValue === 'string') {
+                    return commandsValue;
+                }
+
+                if (Array.isArray(commandsValue)) {
+                    const commands = commandsValue
+                        .map(entry =>
+                            typeof entry === 'string'
+                                ? entry
+                                : (entry && typeof entry === 'object' && 'command' in entry)
+                                    ? coerceCommandText((entry as any).command)
+                                    : coerceCommandText(entry),
+                        )
+                        .filter(Boolean)
+                        .join('\n');
+
+                    if (commands) {
+                        return commands;
+                    }
+                }
+
+                return 'Unknown command';
+            })();
 
             const outputText = normalizedItem.outputText ?? '';
             const [statusLineRaw, ...bodyLines] = outputText.split('\n');

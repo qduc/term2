@@ -79,7 +79,7 @@ const CommandMessage: FC<Props> = ({
     // Special handling for search_replace
     if (toolName === 'search_replace' && toolArgs) {
         const diff = generateDiff(toolArgs.search_content, toolArgs.replace_content);
-        
+
         // For search_replace that had an approval prompt (user said 'y'), only show output
         if (hadApproval) {
             return (
@@ -88,7 +88,7 @@ const CommandMessage: FC<Props> = ({
                 </Box>
             );
         }
-        
+
         // For auto-approved search_replace (no approval prompt), show diff + output
         return (
             <Box flexDirection="column">

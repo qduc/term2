@@ -81,14 +81,17 @@ export class ConversationService {
         state: any;
         interruption: any;
         emittedCommandIds: Set<string>;
+        toolCallArgumentsById: Map<string, unknown>;
     } | null = null;
     private abortedApprovalContext: {
         state: any;
         interruption: any;
         emittedCommandIds: Set<string>;
+        toolCallArgumentsById: Map<string, unknown>;
     } | null = null;
     private textDeltaCount = 0;
     private reasoningDeltaCount = 0;
+    private toolCallArgumentsById = new Map<string, unknown>();
     private lastEventType: string | null = null;
     private eventTypeCount = 0;
     private logStreamEvent = (eventType: string, eventData: any) => {
@@ -138,6 +141,7 @@ export class ConversationService {
         this.conversationStore.clear();
         this.pendingApprovalContext = null;
         this.abortedApprovalContext = null;
+        this.toolCallArgumentsById.clear();
         if (typeof (this.agentClient as any).clearConversations === 'function') {
             (this.agentClient as any).clearConversations();
         }
@@ -199,8 +203,21 @@ export class ConversationService {
                     message: text,
                 });
 
-                const {state, interruption, emittedCommandIds} = this.abortedApprovalContext;
+                const {
+                    state,
+                    interruption,
+                    emittedCommandIds,
+                    toolCallArgumentsById,
+                } = this.abortedApprovalContext;
                 this.abortedApprovalContext = null;
+
+                // Restore cached tool-call arguments captured before abort so continuation can attach them
+                this.toolCallArgumentsById.clear();
+                if (toolCallArgumentsById?.size) {
+                    for (const [key, value] of toolCallArgumentsById.entries()) {
+                        this.toolCallArgumentsById.set(key, value);
+                    }
+                }
 
 				// Add interceptor for this tool execution
                 const toolName = interruption.name ?? 'unknown';
@@ -228,6 +245,7 @@ export class ConversationService {
                         onTextChunk,
                         onReasoningChunk,
                         onCommandMessage,
+                        preserveExistingToolArgs: true,
                     });
                     this.previousResponseId = stream.lastResponseId;
 					this.conversationStore.updateFromResult(stream);
@@ -311,11 +329,20 @@ export class ConversationService {
             state,
             interruption,
             emittedCommandIds: previouslyEmittedIds,
+            toolCallArgumentsById,
         } = this.pendingApprovalContext;
         if (answer === 'y') {
             state.approve(interruption);
         } else {
             state.reject(interruption);
+        }
+
+        // Restore cached tool-call arguments so continuation outputs can attach them
+        this.toolCallArgumentsById.clear();
+        if (toolCallArgumentsById?.size) {
+            for (const [key, value] of toolCallArgumentsById.entries()) {
+                this.toolCallArgumentsById.set(key, value);
+            }
         }
 
         try {
@@ -328,6 +355,7 @@ export class ConversationService {
                     onTextChunk,
                     onReasoningChunk,
                     onCommandMessage,
+                    preserveExistingToolArgs: true,
                 });
 
             this.previousResponseId = stream.lastResponseId;
@@ -357,10 +385,12 @@ export class ConversationService {
             onTextChunk,
             onReasoningChunk,
             onCommandMessage,
+            preserveExistingToolArgs = false,
         }: {
             onTextChunk?: (fullText: string, chunk: string) => void;
             onReasoningChunk?: (fullText: string, chunk: string) => void;
             onCommandMessage?: (message: CommandMessage) => void;
+            preserveExistingToolArgs?: boolean;
         } = {},
     ): Promise<{
         finalOutput: string;
@@ -370,7 +400,10 @@ export class ConversationService {
         let finalOutput = '';
         let reasoningOutput = '';
         const emittedCommandIds = new Set<string>();
-        const toolCallArgumentsById = new Map<string, unknown>();
+        const toolCallArgumentsById = this.toolCallArgumentsById;
+        if (!preserveExistingToolArgs) {
+            toolCallArgumentsById.clear();
+        }
         this.textDeltaCount = 0;
         this.reasoningDeltaCount = 0;
 
@@ -664,6 +697,7 @@ export class ConversationService {
                 state: result.state,
                 interruption,
                 emittedCommandIds: emittedCommandIds ?? new Set(),
+                toolCallArgumentsById: new Map(this.toolCallArgumentsById),
             };
 
             let argumentsText = '';

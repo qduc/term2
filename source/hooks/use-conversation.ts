@@ -1,34 +1,7 @@
 import {useCallback, useState} from 'react';
 import type {ConversationService} from '../services/conversation-service.js';
 import {loggingService} from '../services/logging-service.js';
-
-/**
- * Check if an error is abort-related (user-initiated cancellation).
- * These errors should not be displayed to the user as they are intentional.
- */
-const isAbortLikeError = (error: unknown): boolean => {
-	if (!error) return false;
-
-	// Check error.name for AbortError
-	if (typeof error === 'object' && error !== null) {
-		const err = error as any;
-		if (err.name === 'AbortError') return true;
-		if (err.code === 'ABORT_ERR') return true;
-	}
-
-	// Check error message for common abort patterns
-	const errorMessage = error instanceof Error ? error.message : String(error);
-	const abortPatterns = [
-		/abort/i,
-		/cancel/i,
-		/user.?cancelled/i,
-		/user.?aborted/i,
-		/operation.?aborted/i,
-		/operation.?cancelled/i,
-	];
-
-	return abortPatterns.some(pattern => pattern.test(errorMessage));
-};
+import {isAbortLikeError} from '../utils/error-helpers.js';
 
 interface UserMessage {
     id: number;

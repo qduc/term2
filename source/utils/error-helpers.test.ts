@@ -1,33 +1,5 @@
 import test from 'ava';
-
-/**
- * Helper function to access the isAbortLikeError function from use-conversation.ts
- * Since it's not exported, we'll test it through the file's behavior or export it.
- * For now, we'll duplicate the logic here to test the algorithm.
- */
-const isAbortLikeError = (error: unknown): boolean => {
-	if (!error) return false;
-
-	// Check error.name for AbortError
-	if (typeof error === 'object' && error !== null) {
-		const err = error as any;
-		if (err.name === 'AbortError') return true;
-		if (err.code === 'ABORT_ERR') return true;
-	}
-
-	// Check error message for common abort patterns
-	const errorMessage = error instanceof Error ? error.message : String(error);
-	const abortPatterns = [
-		/abort/i,
-		/cancel/i,
-		/user.?cancelled/i,
-		/user.?aborted/i,
-		/operation.?aborted/i,
-		/operation.?cancelled/i,
-	];
-
-	return abortPatterns.some(pattern => pattern.test(errorMessage));
-};
+import {isAbortLikeError} from './error-helpers.js';
 
 // Test isAbortLikeError with AbortError name
 test('isAbortLikeError returns true for error with name AbortError', t => {
@@ -194,4 +166,18 @@ test('isAbortLikeError returns true for string "user cancelled"', t => {
 
 test('isAbortLikeError returns false for string without abort keywords', t => {
 	t.false(isAbortLikeError('some error message'));
+});
+
+test('isAbortLikeError returns true for undici TypeError: terminated with AbortError cause', t => {
+	const error = Object.assign(new TypeError('terminated'), {
+		cause: {name: 'AbortError', message: 'The operation was aborted'},
+	});
+	t.true(isAbortLikeError(error));
+});
+
+test('isAbortLikeError returns false for TypeError: terminated without abort-like cause', t => {
+	const error = Object.assign(new TypeError('terminated'), {
+		cause: {name: 'SocketError', message: 'socket hang up'},
+	});
+	t.false(isAbortLikeError(error));
 });

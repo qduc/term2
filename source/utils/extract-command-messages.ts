@@ -47,6 +47,8 @@ interface CommandMessage {
     success?: boolean;
     failureReason?: string;
     isApprovalRejection?: boolean;
+    toolName?: string;
+    toolArgs?: any;
 }
 
 const coerceToText = (value: unknown): string => {
@@ -384,6 +386,13 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                     output,
                     success,
                     isApprovalRejection,
+                    toolName: SEARCH_REPLACE_TOOL_NAME,
+                    toolArgs: {
+                        path: filePath,
+                        search_content: searchContent,
+                        replace_content: replaceContent,
+                        replace_all: args?.replace_all ?? false,
+                    },
                 });
             }
             continue;

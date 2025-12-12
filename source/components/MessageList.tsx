@@ -23,6 +23,14 @@ const MessageList: FC<Props> = ({messages}) => {
                         ? 0
                         : 1;
 
+                // Check if this command message was preceded by an approval
+                const hadApproval =
+                    msg.sender === 'command' &&
+                    msg.toolName === 'search_replace' &&
+                    prev?.sender === 'approval' &&
+                    prev?.approval?.toolName === 'search_replace' &&
+                    prev?.answer === 'y';
+
                 return (
                     <Box key={msg.id} marginTop={marginTop}>
                         {msg.sender === 'approval' ? (
@@ -49,6 +57,10 @@ const MessageList: FC<Props> = ({messages}) => {
                                 output={msg.output}
                                 success={msg.success}
                                 failureReason={msg.failureReason}
+                                toolName={msg.toolName}
+                                toolArgs={msg.toolArgs}
+                                isApprovalRejection={msg.isApprovalRejection}
+                                hadApproval={hadApproval}
                             />
                         ) : (
                             <ChatMessage msg={msg} />

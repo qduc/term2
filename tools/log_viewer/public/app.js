@@ -14,6 +14,33 @@ let refreshTimer = null; // debounce timer for auto-refresh
 function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
   const seen = new WeakSet();
 
+  const truncateStr = (s, limit = maxLen) =>
+    (typeof s === 'string' && s.length > limit) ? (s.slice(0, limit) + '…') : s;
+
+  const sanitizeToolsArray = (toolsVal) => {
+    if (!Array.isArray(toolsVal)) return toolsVal;
+
+    for (const item of toolsVal) {
+      if (!item || typeof item !== 'object') continue;
+
+      // Find `function` object inside each tools[] item
+      if (item.function && typeof item.function === 'object' && !Array.isArray(item.function)) {
+        const fn = item.function;
+        const name = typeof fn.name === 'string' ? fn.name : undefined;
+        const description = truncateStr(typeof fn.description === 'string' ? fn.description : undefined, maxLen);
+
+        // Remove all fields except name/description
+        item.function = {name, description};
+
+        // Keep output tidy (avoid emitting undefined fields)
+        if (item.function.name === undefined) delete item.function.name;
+        if (item.function.description === undefined) delete item.function.description;
+      }
+    }
+
+    return toolsVal;
+  };
+
   const walk = (node, depth) => {
     if (node === null || node === undefined) return node;
     if (typeof node !== 'object') return node;
@@ -31,11 +58,19 @@ function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
 
     // plain object
     for (const [key, val] of Object.entries(node)) {
-      if (key === 'content' && typeof val === 'string' && val.length > maxLen) {
-        node[key] = val.slice(0, maxLen) + '…';
-      } else {
-        node[key] = walk(val, depth + 1);
+      if (key === 'content' && typeof val === 'string') {
+        node[key] = truncateStr(val, maxLen);
+        continue;
       }
+
+      if (key === 'tools') {
+        node[key] = sanitizeToolsArray(val);
+        // still traverse into it (but depth-limited) in case there are nested content fields, etc.
+        node[key] = walk(node[key], depth + 1);
+        continue;
+      }
+
+      node[key] = walk(val, depth + 1);
     }
     return node;
   };

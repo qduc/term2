@@ -73,11 +73,6 @@ test('openrouter provider has createRunner function', (t) => {
 	t.is(typeof provider?.createRunner, 'function');
 });
 
-test('openrouter provider has clearConversations function', (t) => {
-	const provider = getProvider('openrouter');
-	t.is(typeof provider?.clearConversations, 'function');
-});
-
 test('openai provider has sensitiveSettingKeys defined', (t) => {
 	const provider = getProvider('openai');
 	t.truthy(provider?.sensitiveSettingKeys);

@@ -1,6 +1,6 @@
 import test from 'ava';
 import {ReadableStream} from 'node:stream/web';
-import {OpenRouterModel, clearOpenRouterConversations, OpenRouterError} from './openrouter.js';
+import {OpenRouterModel, OpenRouterError} from './openrouter.js';
 import { settingsService } from '../services/settings-service.js';
 import {loggingService} from '../services/logging-service.js';
 
@@ -15,7 +15,6 @@ const createJsonResponse = (body: any) =>
     });
 
 test.beforeEach(() => {
-    clearOpenRouterConversations();
     settingsService.get = ((key: string) => {
         if (key === 'agent.openrouter.apiKey') {
             return 'mock-api-key';
@@ -25,7 +24,6 @@ test.beforeEach(() => {
 });
 
 test.afterEach.always(() => {
-    clearOpenRouterConversations();
     globalThis.fetch = originalFetch;
     settingsService.get = originalGet;
     loggingService.logToOpenrouter = originalLogToOpenrouter as any;

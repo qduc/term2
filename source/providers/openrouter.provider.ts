@@ -1,6 +1,6 @@
 import {Runner} from '@openai/agents';
 import {registerProvider} from './registry.js';
-import {OpenRouterProvider, clearOpenRouterConversations} from './openrouter.js';
+import {OpenRouterProvider} from './openrouter.js';
 
 async function fetchOpenRouterModels(fetchImpl: (url: string, options?: any) => Promise<any> = fetch as any): Promise<Array<{id: string; name?: string}>> {
     // Get settings service lazily to avoid import cycles
@@ -51,9 +51,6 @@ registerProvider({
         });
     },
     fetchModels: fetchOpenRouterModels,
-    clearConversations: () => {
-        clearOpenRouterConversations();
-    },
     sensitiveSettingKeys: [
         'agent.openrouter.apiKey',
         'agent.openrouter.baseUrl',

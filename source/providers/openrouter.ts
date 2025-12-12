@@ -99,17 +99,6 @@ function getOpenRouterBaseUrl(settingsServiceInstance?: any): string {
     return settingsSvc.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1';
 }
 
-const conversationHistory = new Map<string, any[]>();
-
-function clearOpenRouterConversations(conversationId?: string): void {
-    if (conversationId) {
-        conversationHistory.delete(conversationId);
-        return;
-    }
-
-    conversationHistory.clear();
-}
-
 // Convert OpenRouter usage format to OpenAI Agents SDK format
 function normalizeUsage(openRouterUsage: any): {
     inputTokens: number;
@@ -219,34 +208,29 @@ function convertAgentItemToOpenRouterMessage(item: any): any | null {
 
 function buildMessagesFromRequest(
     req: ModelRequest,
-    conversationId: string | null,
-): {messages: any[]; currentTurnMessages: any[]} {
+): any[] {
     const messages: any[] = [];
-    const currentTurnMessages: any[] = [];
 
     if (req.systemInstructions && req.systemInstructions.trim().length > 0) {
         messages.push({role: 'system', content: req.systemInstructions});
     }
 
-    if (conversationId && conversationHistory.has(conversationId)) {
-        messages.push(...(conversationHistory.get(conversationId) || []));
-    }
+    // Note: History is managed by the SDK
+    // The SDK provides full conversation context in req.input
 
     if (typeof req.input === 'string') {
         const userMessage = {role: 'user', content: req.input};
         messages.push(userMessage);
-        currentTurnMessages.push(userMessage);
     } else if (Array.isArray(req.input)) {
         for (const item of req.input as any[]) {
             const converted = convertAgentItemToOpenRouterMessage(item);
             if (converted) {
                 messages.push(converted);
-                currentTurnMessages.push(converted);
             }
         }
     }
 
-    return {messages, currentTurnMessages};
+    return messages;
 }
 
 // Extract function tools from ModelRequest tools array
@@ -401,7 +385,6 @@ async function callOpenRouter({
 class OpenRouterModel implements Model {
     name: string;
     #modelId: string;
-    #conversationHistory = conversationHistory;
     #settingsService: any;
     #loggingService: any;
 
@@ -423,11 +406,8 @@ class OpenRouterModel implements Model {
         // OpenRouter does not support server-side response chaining the same way
         // as OpenAI Responses. We intentionally ignore previousResponseId and
         // expect the caller to provide full conversation context in `input`.
-        const conversationId: string | null = null;
-        const {messages, currentTurnMessages} = buildMessagesFromRequest(
-            request,
-            conversationId,
-        );
+        // Note: History is managed by the SDK, not by this provider.
+        const messages = buildMessagesFromRequest(request);
 
         this.#loggingService.debug('OpenRouter message', {messages});
 
@@ -454,22 +434,11 @@ class OpenRouterModel implements Model {
                 ? contentFromChoice
                 : JSON.stringify(contentFromChoice);
 
-        const responseId = json?.id ?? conversationId ?? randomUUID();
+        const responseId = json?.id ?? randomUUID();
 
         const usage = normalizeUsage(json?.usage || {}) as any;
         const reasoningDetails = choice?.message?.reasoning_details;
         const toolCalls = choice?.message?.tool_calls;
-
-        this.#storeConversationTurn({
-            conversationId,
-            responseId,
-            currentTurnMessages,
-            assistantMessage: this.#buildAssistantHistoryMessage({
-                content: textContent,
-                reasoningDetails,
-                toolCalls,
-            }),
-        });
 
         // Build output array with message, reasoning, and tool calls
         const output: any[] = [];
@@ -562,16 +531,12 @@ class OpenRouterModel implements Model {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
         // See getResponse(): caller-managed history; do not chain via previousResponseId.
-        const conversationId: string | null = null;
-        const {messages, currentTurnMessages} = buildMessagesFromRequest(
-            request,
-            conversationId,
-        );
+        // Note: History is managed by the SDK, not by this provider.
+        const messages = buildMessagesFromRequest(request);
 
         const tools = extractFunctionToolsFromRequest(request);
 
         this.#loggingService.debug('OpenRouter stream start', {
-            conversationId,
             messageCount: Array.isArray(messages) ? messages.length : 0,
             messages,
             toolsCount: Array.isArray(tools) ? tools.length : 0,
@@ -595,7 +560,7 @@ class OpenRouterModel implements Model {
         const decoder = new TextDecoder();
         let buffer = '';
         let accumulated = '';
-        let responseId = conversationId ?? 'unknown';
+        let responseId = 'unknown';
         let usageData: any = null;
         const accumulatedReasoning: any[] = [];
         const accumulatedToolCalls: any[] = [];
@@ -624,25 +589,12 @@ class OpenRouterModel implements Model {
                     const data = line.slice(5).trim();
                     if (data === '[DONE]') {
                         if (!responseId || responseId === 'unknown') {
-                            responseId = conversationId ?? randomUUID();
+                            responseId = randomUUID();
                         }
                         const reasoningDetails =
                             accumulatedReasoning.length > 0
                                 ? accumulatedReasoning
                                 : undefined;
-
-                        this.#storeConversationTurn({
-                            conversationId,
-                            responseId,
-                            currentTurnMessages,
-                            assistantMessage: this.#buildAssistantHistoryMessage(
-                                {
-                                    content: accumulated,
-                                    reasoningDetails,
-                                    toolCalls: accumulatedToolCalls,
-                                },
-                            ),
-                        });
 
 						this.#loggingService.debug('OpenRouter stream done', {
 							text: accumulated,
@@ -716,19 +668,8 @@ class OpenRouterModel implements Model {
             accumulatedReasoning.length > 0 ? accumulatedReasoning : undefined;
 
         if (!responseId || responseId === 'unknown') {
-            responseId = conversationId ?? randomUUID();
+            responseId = randomUUID();
         }
-
-        this.#storeConversationTurn({
-            conversationId,
-            responseId,
-            currentTurnMessages,
-            assistantMessage: this.#buildAssistantHistoryMessage({
-                content: accumulated,
-                reasoningDetails,
-                toolCalls: accumulatedToolCalls,
-            }),
-        });
 
 		this.#loggingService.debug('OpenRouter stream done', {
 			text: accumulated,
@@ -831,47 +772,6 @@ class OpenRouterModel implements Model {
         return output;
     }
 
-    #buildAssistantHistoryMessage({
-        content,
-        reasoningDetails,
-        toolCalls,
-    }: {
-        content: string;
-        reasoningDetails?: any;
-        toolCalls?: any[];
-    }): any {
-        const assistantMessage: any = {
-            role: 'assistant',
-        };
-
-        if (toolCalls && toolCalls.length > 0) {
-            // Convert SDK format (type: 'function_call') to OpenRouter format (type: 'function')
-            assistantMessage.tool_calls = toolCalls.map((tc) => {
-                if (tc.type === 'function_call') {
-                    // SDK format -> OpenRouter format
-                    return {
-                        id: tc.callId,
-                        type: 'function',
-                        function: {
-                            name: tc.name,
-                            arguments: tc.arguments,
-                        },
-                    };
-                }
-                // Already in OpenRouter format
-                return tc;
-            });
-        }
-
-        assistantMessage.content = content || null;
-
-        if (reasoningDetails) {
-            assistantMessage.reasoning_details = reasoningDetails;
-        }
-
-        return assistantMessage;
-    }
-
     #mergeToolCalls(accumulated: any[], deltas: any[]): void {
         for (const delta of deltas) {
             const index = delta.index ?? accumulated.length;
@@ -901,57 +801,6 @@ class OpenRouterModel implements Model {
         }
     }
 
-    #storeConversationTurn({
-        conversationId,
-        responseId,
-        currentTurnMessages,
-        assistantMessage,
-    }: {
-        conversationId: string | null;
-        responseId?: string | null;
-        currentTurnMessages: any[];
-        assistantMessage: any;
-    }): void {
-        // If there is no conversation id, we do not persist anything.
-        // The caller is responsible for maintaining and supplying history.
-        if (!conversationId) {
-            return;
-        }
-        const baseHistory =
-            (conversationId ? this.#conversationHistory.get(conversationId) : []) ||
-            [];
-        const mergedHistory = [
-            ...baseHistory,
-            ...currentTurnMessages.filter(Boolean),
-        ];
-
-        if (assistantMessage) {
-            mergedHistory.push(assistantMessage);
-        }
-
-        const targetId =
-            (responseId && responseId !== 'unknown' ? responseId : null) ||
-            conversationId ||
-            randomUUID();
-        if (!targetId) {
-            return;
-        }
-
-        this.#conversationHistory.set(targetId, mergedHistory);
-        if (conversationId && conversationId !== targetId) {
-            this.#conversationHistory.set(conversationId, mergedHistory);
-        }
-    }
-
-    clearConversation(conversationId: string | null): void {
-        if (!conversationId) return;
-        this.#conversationHistory.delete(conversationId);
-    }
-
-    clearAllConversations(): void {
-        this.#conversationHistory.clear();
-    }
-
     #resolveModelFromRequest(req: ModelRequest): string | undefined {
         // If the agent explicitly set a model override in the prompt, prefer the runtime model.
         // For now, just return undefined to use constructor/default.
@@ -977,5 +826,4 @@ class OpenRouterProvider implements ModelProvider {
 export {
     OpenRouterModel,
     OpenRouterProvider,
-    clearOpenRouterConversations,
 };

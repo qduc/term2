@@ -40,3 +40,12 @@ details pre{white-space:pre-wrap;color:#cfeff8;background:rgba(255,255,255,0.02)
 .clickable-row:focus{outline:2px solid rgba(125,211,252,0.18)}
 input,select,button{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.03);color:inherit;padding:6px;border-radius:6px}
 button{cursor:pointer}
+
+/* JSON syntax highlighting (only applied when content is valid JSON) */
+pre.code-json{white-space:pre; overflow:auto}
+pre.code-json .json-key{color:#7dd3fc}
+pre.code-json .json-string{color:#c3e88d}
+pre.code-json .json-number{color:#f78c6c}
+pre.code-json .json-boolean{color:#82aaff}
+pre.code-json .json-null{color:#ffcb6b}
+pre.code-json .json-punctuation{color:#cfd8e3}

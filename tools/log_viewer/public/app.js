@@ -58,7 +58,7 @@ function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
 
     // plain object
     for (const [key, val] of Object.entries(node)) {
-      if (key === 'content' && typeof val === 'string') {
+      if ((key === 'content' || key === 'text') && typeof val === 'string') {
         node[key] = truncateStr(val, maxLen);
         continue;
       }
@@ -78,6 +78,89 @@ function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
   return walk(value, 0);
 }
 
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function highlightJson(jsonText) {
+  if (!jsonText) return '';
+  if (typeof jsonLexer !== 'function') return escapeHtml(jsonText);
+  let tokens;
+  try {
+    tokens = jsonLexer(jsonText);
+  } catch (_) {
+    return escapeHtml(jsonText);
+  }
+  return tokens.map((token, idx) => highlightToken(token, idx, tokens)).join('');
+}
+
+function highlightToken(token, index, tokens) {
+  const raw = escapeHtml(token.raw);
+  switch (token.type) {
+    case 'whitespace':
+      return raw;
+    case 'punctuator':
+      return `<span class="json-punctuation">${raw}</span>`;
+    case 'string': {
+      const cls = isKeyToken(index, tokens) ? 'json-key' : 'json-string';
+      return `<span class="${cls}">${raw}</span>`;
+    }
+    case 'number':
+      return `<span class="json-number">${raw}</span>`;
+    case 'literal': {
+      const cls = token.value === null ? 'json-null' : 'json-boolean';
+      return `<span class="${cls}">${raw}</span>`;
+    }
+    default:
+      return raw;
+  }
+}
+
+function isKeyToken(index, tokens) {
+  for (let cursor = index + 1; cursor < tokens.length; cursor++) {
+    const candidate = tokens[cursor];
+    if (candidate.type === 'whitespace') continue;
+    return candidate.type === 'punctuator' && candidate.value === ':';
+  }
+  return false;
+}
+
+function formatCellWithMeta(v) {
+  if (v === null || v === undefined) return {text: '', isJson: false};
+
+  // If it's already an object/array, truncate content fields in-place and pretty-print as JSON
+  if (typeof v === 'object') {
+    const sanitized = truncateContentDeep(v, 3, 200);
+    return {text: JSON.stringify(sanitized, null, 2), isJson: true};
+  }
+
+  // If it's a string, try to parse JSON; if JSON, truncate then pretty-print
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return {text: '', isJson: false};
+
+    // keep your heuristic (fast) or parse-always; this keeps the heuristic:
+    if (s[0] === '{' || s[0] === '[') {
+      try {
+        const parsed = JSON.parse(s);
+        const sanitized = truncateContentDeep(parsed, 3, 200);
+        return {text: JSON.stringify(sanitized, null, 2), isJson: true};
+      } catch (_) {
+        // not JSON
+      }
+    }
+
+    return {text: s, isJson: false};
+  }
+
+  return {text: String(v), isJson: false};
+}
+
 function stopWatch() {
   try { fileWatcher?.close(); } catch (_) {}
   fileWatcher = null;
@@ -91,78 +174,7 @@ function debounceRefresh(delay = 300) {
   }, delay);
 }
 
-function startWatch(file) {
-  stopWatch();
-  if (!file) return;
-  try {
-    const es = new EventSource(`/api/watch?file=${encodeURIComponent(file)}`);
-    es.onmessage = (e) => {
-      try {
-        const evt = JSON.parse(e.data);
-        if (evt && evt.type === 'change') {
-          debounceRefresh(250);
-        }
-      } catch (_) {}
-    };
-    es.onerror = () => {
-      // close and retry soon on error
-      stopWatch();
-      setTimeout(() => startWatch(file), 2000);
-    };
-    fileWatcher = es;
-  } catch (_) {
-    // ignore; manual refresh still works
-  }
-}
-
-function renderFiles(files) {
-  fileListEl.innerHTML = '';
-  files.forEach(f => {
-    const li = document.createElement('li');
-    li.textContent = `${f.name} — ${f.size} bytes`;
-    li.title = `mtime: ${new Date(f.mtime).toLocaleString()}`;
-    li.addEventListener('click', () => {
-      selectFile(f.name);
-    });
-    fileListEl.appendChild(li);
-  });
-}
-
-async function loadFiles() {
-  const res = await fetch('/api/files');
-  const list = await res.json();
-  renderFiles(list.filter(f => f.isFile));
-}
-
-function formatCell(v) {
-  if (!v) return '';
-
-  // If it's already an object/array, truncate content fields in-place and pretty-print
-  if (typeof v === 'object') {
-    const sanitized = truncateContentDeep(v, 3, 200);
-    return JSON.stringify(sanitized, null, 2);
-  }
-
-  // If it's a string, try to parse JSON; if JSON, truncate then pretty-print
-  if (typeof v === 'string') {
-    const s = v.trim();
-    if (!s) return '';
-
-    // keep your heuristic (fast) or parse-always; this keeps the heuristic:
-    if (s[0] === '{' || s[0] === '[') {
-      try {
-        const parsed = JSON.parse(s);
-        const sanitized = truncateContentDeep(parsed, 3, 200);
-        return JSON.stringify(sanitized, null, 2);
-      } catch (_) {
-        // not JSON
-      }
-    }
-    return s;
-  }
-
-  return String(v);
-}
+// ... existing code ...
 
 function renderRows(data) {
   logsBody.innerHTML = '';
@@ -190,13 +202,38 @@ function renderRows(data) {
     summary.textContent = 'fields';
     details.appendChild(summary);
 
-    // Formatted content for the expanded row
+    // Source value for the expanded row:
     // Prefer showing parsed.fields (this is the "fields" column), then fall back.
-    const formatted = formatCell(
+    const expandValue =
       (parsed && Object.prototype.hasOwnProperty.call(parsed, 'fields'))
         ? parsed.fields
-        : (parsed || item.raw)
-    );
+        : (parsed || item.raw);
+
+    const copyToClipboard = async (text) => {
+      // Best effort: Clipboard API, with execCommand fallback.
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (_) {}
+
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.left = '-1000px';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch (_) {
+        return false;
+      }
+    };
 
     details.addEventListener('toggle', () => {
       // When opened, insert a new <tr> with a single <td colspan=5>
@@ -206,11 +243,48 @@ function renderRows(data) {
         const td = document.createElement('td');
         // set colspan dynamically to match current number of columns
         td.colSpan = tr.children.length || 1;
+
+        // Add a copy button above the formatted <pre>
+        const toolbar = document.createElement('div');
+        toolbar.style.display = 'flex';
+        toolbar.style.justifyContent = 'flex-end';
+        toolbar.style.gap = '8px';
+        toolbar.style.margin = '6px 0';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.textContent = 'Copy';
+        copyBtn.title = 'Copy formatted content';
+        copyBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation(); // avoid toggling details/row
+          const ok = await copyToClipboard(formatted);
+          const prev = copyBtn.textContent;
+          copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
+          copyBtn.disabled = true;
+          setTimeout(() => {
+            copyBtn.textContent = prev;
+            copyBtn.disabled = false;
+          }, 900);
+        });
+
+        toolbar.appendChild(copyBtn);
+
         const pre = document.createElement('pre');
         pre.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
-        pre.textContent = formatted;
+
+        const {text, isJson} = formatCellWithMeta(expandValue);
+        if (isJson) {
+          pre.classList.add('code-json');
+          pre.innerHTML = highlightJson(text);
+        } else {
+          pre.classList.remove('code-json');
+          pre.textContent = text;
+        }
+
         td.appendChild(pre);
         expandTr.appendChild(td);
+
         // store a reference so we can remove it when closed
         details._expandRow = expandTr;
         // insert after the current row
@@ -251,6 +325,51 @@ function renderRows(data) {
     tr.appendChild(moreCell);
     logsBody.appendChild(tr);
   });
+}
+
+function startWatch(file) {
+	stopWatch();
+	if (!file) return;
+	try {
+		const es = new EventSource(
+			`/api/watch?file=${encodeURIComponent(file)}`,
+		);
+		es.onmessage = e => {
+			try {
+				const evt = JSON.parse(e.data);
+				if (evt && evt.type === 'change') {
+					debounceRefresh(250);
+				}
+			} catch (_) {}
+		};
+		es.onerror = () => {
+			// close and retry soon on error
+			stopWatch();
+			setTimeout(() => startWatch(file), 2000);
+		};
+		fileWatcher = es;
+	} catch (_) {
+		// ignore; manual refresh still works
+	}
+}
+
+function renderFiles(files) {
+	fileListEl.innerHTML = '';
+	files.forEach(f => {
+		const li = document.createElement('li');
+		li.textContent = `${f.name} — ${f.size} bytes`;
+		li.title = `mtime: ${new Date(f.mtime).toLocaleString()}`;
+		li.addEventListener('click', () => {
+			selectFile(f.name);
+		});
+		fileListEl.appendChild(li);
+	});
+}
+
+async function loadFiles() {
+	const res = await fetch('/api/files');
+	const list = await res.json();
+	renderFiles(list.filter(f => f.isFile));
 }
 
 async function selectFile(name) {

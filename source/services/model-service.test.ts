@@ -4,9 +4,7 @@ import {
 	clearModelCache,
 	filterModels,
 } from './model-service.js';
-import {settingsService} from './settings-service.js';
 
-const originalProvider = settingsService.get('agent.provider');
 const originalApiKey = process.env.OPENAI_API_KEY;
 
 test.beforeEach(() => {
@@ -15,12 +13,10 @@ test.beforeEach(() => {
 
 test.afterEach(() => {
 	clearModelCache();
-	settingsService.set('agent.provider', originalProvider);
 	process.env.OPENAI_API_KEY = originalApiKey;
 });
 
 test.serial('fetchModels uses OpenRouter endpoint and caches results', async t => {
-	settingsService.set('agent.provider', 'openrouter');
 	const calls: Array<{url: string; options: any; callNumber: number}> = [];
 	let callCount = 0;
 	const fakeFetch = async (url: string, options: any) => {
@@ -39,11 +35,11 @@ test.serial('fetchModels uses OpenRouter endpoint and caches results', async t =
 	};
 
 	console.log('About to call fetchModels first time');
-	const first = await fetchModels(undefined, fakeFetch as any);
+	const first = await fetchModels('openrouter', fakeFetch as any);
 	console.log(`After first fetchModels, calls.length = ${calls.length}`);
 
 	console.log('About to call fetchModels second time');
-	const second = await fetchModels(undefined, fakeFetch as any);
+	const second = await fetchModels('openrouter', fakeFetch as any);
 	console.log(`After second fetchModels, calls.length = ${calls.length}`);
 
 	t.deepEqual(first.map(m => m.id), ['openrouter/model-a', 'openrouter/model-c']);
@@ -57,7 +53,6 @@ test.serial('fetchModels uses OpenRouter endpoint and caches results', async t =
 });
 
 test.serial('fetchModels uses OpenAI models endpoint when provider is openai', async t => {
-	settingsService.set('agent.provider', 'openai');
 	process.env.OPENAI_API_KEY = 'key-openai-test';
 	const calls: Array<{url: string; options: any}> = [];
 
@@ -69,7 +64,7 @@ test.serial('fetchModels uses OpenAI models endpoint when provider is openai', a
 		};
 	};
 
-	const models = await fetchModels(undefined, fakeFetch as any);
+	const models = await fetchModels('openai', fakeFetch as any);
 
 	t.deepEqual(models.map(m => m.id), ['gpt-4o', 'gpt-4.1']);
 	t.is(calls.length, 1);

@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import {applyPatchToolDefinition} from './apply-patch.js';
 import {settingsService} from '../services/settings-service.js';
+import {createMockSettingsService} from '../services/settings-service.mock.js';
 import {loggingService} from '../services/logging-service.js';
 
 // Helper to create a temp dir and change cwd to it
@@ -22,22 +23,27 @@ async function withTempDir(run: (dir: string) => Promise<void>) {
     }
 }
 
-// Mock settings
-const originalGet = settingsService.get;
+// Create a mock settings service instance for tests
+const mockSettingsService = createMockSettingsService();
+
+// Mock settings and logging
+const originalGet = settingsService.get.bind(settingsService);
 const originalInfo = loggingService.info;
 const originalError = loggingService.error;
 const originalSecurity = loggingService.security;
 
 test.beforeEach(() => {
-    // Reset mocks
-    settingsService.get = originalGet;
-    loggingService.info = originalInfo;
-    loggingService.error = originalError;
-    loggingService.security = originalSecurity;
+    // Mock settingsService.get to use the mock instance
+    settingsService.get = mockSettingsService.get.bind(mockSettingsService);
+
+    // Disable logging for tests
+    loggingService.info = () => {};
+    loggingService.error = () => {};
+    loggingService.security = () => {};
 });
 
 test.afterEach(() => {
-    // Restore mocks
+    // Restore original settings service and logging
     settingsService.get = originalGet;
     loggingService.info = originalInfo;
     loggingService.error = originalError;
@@ -129,11 +135,9 @@ test.serial('needsApproval: requires approval for outside workspace', async t =>
 
 test.serial('needsApproval: auto-approves in edit mode for create/update inside cwd', async t => {
     await withTempDir(async () => {
-        // Mock settings to return 'edit' mode
-        settingsService.get = ((key: string) => {
-            if (key === 'app.mode') return 'edit';
-            return originalGet.call(settingsService, key);
-        }) as any;
+        // Create a custom mock that returns 'edit' mode
+        const editModeMock = createMockSettingsService({app: {mode: 'edit'}});
+        settingsService.get = editModeMock.get.bind(editModeMock);
 
         const result = await applyPatchToolDefinition.needsApproval({
             type: 'create_file',
@@ -146,11 +150,9 @@ test.serial('needsApproval: auto-approves in edit mode for create/update inside 
 
 test.serial('needsApproval: requires approval in default mode', async t => {
     await withTempDir(async () => {
-        // Mock settings to return 'default' mode
-        settingsService.get = ((key: string) => {
-            if (key === 'app.mode') return 'default';
-            return originalGet.call(settingsService, key);
-        }) as any;
+        // Create a custom mock that returns 'default' mode
+        const defaultModeMock = createMockSettingsService({app: {mode: 'default'}});
+        settingsService.get = defaultModeMock.get.bind(defaultModeMock);
 
         const result = await applyPatchToolDefinition.needsApproval({
             type: 'create_file',

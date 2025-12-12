@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import {searchReplaceToolDefinition} from './search-replace.js';
 import {settingsService} from '../services/settings-service.js';
+import {createMockSettingsService} from '../services/settings-service.mock.js';
 import {loggingService} from '../services/logging-service.js';
 
 // Helper to create a temp dir and change cwd to it
@@ -22,20 +23,27 @@ async function withTempDir(run: (dir: string) => Promise<void>) {
     }
 }
 
+// Create a mock settings service instance for tests
+const mockSettingsService = createMockSettingsService();
+
 // Mock settings and logging
-const originalGet = settingsService.get;
+const originalGet = settingsService.get.bind(settingsService);
 const originalInfo = loggingService.info;
 const originalWarn = loggingService.warn;
 const originalError = loggingService.error;
 
 test.beforeEach(() => {
-    settingsService.get = originalGet;
+    // Mock settingsService.get to use the mock instance
+    settingsService.get = mockSettingsService.get.bind(mockSettingsService);
+
+    // Disable logging for tests
     loggingService.info = () => {};
     loggingService.warn = () => {};
     loggingService.error = () => {};
 });
 
 test.afterEach(() => {
+    // Restore original settings service and logging
     settingsService.get = originalGet;
     loggingService.info = originalInfo;
     loggingService.warn = originalWarn;
@@ -46,10 +54,9 @@ test.serial('needsApproval auto-approves creation when search_content is empty a
     await withTempDir(async () => {
         const filePath = 'new-file.txt';
 
-        settingsService.get = ((key: string) => {
-            if (key === 'app.mode') return 'edit';
-            return originalGet.call(settingsService, key);
-        }) as any;
+        // Create a custom mock that returns 'edit' mode
+        const editModeMock = createMockSettingsService({app: {mode: 'edit'}});
+        settingsService.get = editModeMock.get.bind(editModeMock);
 
         const result = await searchReplaceToolDefinition.needsApproval({
             path: filePath,
@@ -68,10 +75,9 @@ test.serial('needsApproval auto-approves a unique exact match in edit mode', asy
         const absPath = path.join(dir, filePath);
         await fs.writeFile(absPath, 'hello world');
 
-        settingsService.get = ((key: string) => {
-            if (key === 'app.mode') return 'edit';
-            return originalGet.call(settingsService, key);
-        }) as any;
+        // Create a custom mock that returns 'edit' mode
+        const editModeMock = createMockSettingsService({app: {mode: 'edit'}});
+        settingsService.get = editModeMock.get.bind(editModeMock);
 
         const result = await searchReplaceToolDefinition.needsApproval({
             path: filePath,
@@ -90,10 +96,9 @@ test.serial('needsApproval requires approval when multiple exact matches and rep
         const absPath = path.join(dir, filePath);
         await fs.writeFile(absPath, 'hello world hello');
 
-        settingsService.get = ((key: string) => {
-            if (key === 'app.mode') return 'edit';
-            return originalGet.call(settingsService, key);
-        }) as any;
+        // Create a custom mock that returns 'edit' mode
+        const editModeMock = createMockSettingsService({app: {mode: 'edit'}});
+        settingsService.get = editModeMock.get.bind(editModeMock);
 
         const result = await searchReplaceToolDefinition.needsApproval({
             path: filePath,

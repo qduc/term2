@@ -1,12 +1,20 @@
 import test from 'ava';
 import {ReadableStream} from 'node:stream/web';
 import {OpenRouterModel, OpenRouterError} from './openrouter.js';
-import { settingsService } from '../services/settings-service.js';
+import {createMockSettingsService} from '../services/settings-service.mock.js';
 import {loggingService} from '../services/logging-service.js';
 
 const originalFetch = globalThis.fetch;
-const originalGet = settingsService.get;
 const originalLogToOpenrouter = loggingService.logToOpenrouter.bind(loggingService);
+
+// Create a mock settings service with OpenRouter API key for tests
+const mockSettingsService = createMockSettingsService({
+    agent: {
+        openrouter: {
+            apiKey: 'mock-api-key',
+        },
+    },
+});
 
 const createJsonResponse = (body: any) =>
     new Response(JSON.stringify(body), {
@@ -15,17 +23,11 @@ const createJsonResponse = (body: any) =>
     });
 
 test.beforeEach(() => {
-    settingsService.get = ((key: string) => {
-        if (key === 'agent.openrouter.apiKey') {
-            return 'mock-api-key';
-        }
-        return originalGet.call(settingsService, key);
-    }) as any;
+    // Nothing to do - mock is already configured
 });
 
 test.afterEach.always(() => {
     globalThis.fetch = originalFetch;
-    settingsService.get = originalGet;
     loggingService.logToOpenrouter = originalLogToOpenrouter as any;
 });
 
@@ -57,7 +59,7 @@ test.serial('builds messages from explicit history, tool calls, and reasoning co
         return responses[requests.length - 1];
     };
 
-    const model = new OpenRouterModel('mock-model');
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
 
     await model.getResponse({
         systemInstructions: 'system message',
@@ -147,7 +149,7 @@ test.serial('logs modelRequest input without implicit expansion', async t => {
         });
     };
 
-    const model = new OpenRouterModel('mock-model');
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
 
     for await (const _event of model.getStreamedResponse({
         systemInstructions: 'system message',
@@ -242,7 +244,7 @@ test.serial('streams reasoning details and stores assistant history', async t =>
         return responses[call++];
     };
 
-    const model = new OpenRouterModel('mock-model');
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
     const streamedEvents: any[] = [];
 
     for await (const event of model.getStreamedResponse({
@@ -277,7 +279,7 @@ test.serial('converts user message items in array inputs', async t => {
         });
     };
 
-    const model = new OpenRouterModel('mock-model');
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
 
     await model.getResponse({
         systemInstructions: 'system message',
@@ -319,7 +321,7 @@ test.serial('handles summary reasoning details', async t => {
         });
     };
 
-    const model = new OpenRouterModel('mock-model');
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
     const response = await model.getResponse({
         systemInstructions: 'system message',
         input: 'What is 1 + 1',
@@ -371,7 +373,7 @@ test.serial('handles encrypted reasoning details', async t => {
         });
     };
 
-    const model = new OpenRouterModel('mock-model');
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
     const response = await model.getResponse({
         systemInstructions: 'system message',
         input: 'Test encrypted reasoning',
@@ -407,7 +409,7 @@ test.serial('correctly converts function_call_output to tool message', async t =
         });
     };
 
-    const model = new OpenRouterModel('mock-model');
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
 
     // Simulate a conversation turn with function_call_output
     const inputItems = [
@@ -491,7 +493,7 @@ test.serial('handles mixed reasoning types (summary + encrypted)', async t => {
         });
     };
 
-    const model = new OpenRouterModel('mock-model');
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
     const response = await model.getResponse({
         systemInstructions: 'system message',
         input: 'What is 1 + 1',
@@ -531,7 +533,7 @@ test.serial('preserves assistant message content when tool calls are present', a
         });
     };
 
-    const model = new OpenRouterModel('mock-model');
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
 
     // First turn - get initial response
     await model.getResponse({

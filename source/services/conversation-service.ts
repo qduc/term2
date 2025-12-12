@@ -4,6 +4,7 @@ import {
     markToolCallAsApprovalRejection,
 } from '../utils/extract-command-messages.js';
 import {loggingService} from './logging-service.js';
+import {ConversationStore} from './conversation-store.js';
 
 interface ApprovalResult {
     type: 'approval_required';
@@ -74,6 +75,7 @@ const getCommandFromArgs = (args: unknown): string => {
 
 export class ConversationService {
     private agentClient: OpenAIAgentClient;
+    private conversationStore: ConversationStore;
     private previousResponseId: string | null = null;
     private pendingApprovalContext: {
         state: any;
@@ -128,10 +130,12 @@ export class ConversationService {
 
     constructor({agentClient}: {agentClient: OpenAIAgentClient}) {
         this.agentClient = agentClient;
+        this.conversationStore = new ConversationStore();
     }
 
     reset(): void {
         this.previousResponseId = null;
+        this.conversationStore.clear();
         this.pendingApprovalContext = null;
         this.abortedApprovalContext = null;
         if (typeof (this.agentClient as any).clearConversations === 'function') {
@@ -185,6 +189,9 @@ export class ConversationService {
         } = {},
     ): Promise<ConversationResult> {
         try {
+			// Maintain canonical local history regardless of provider.
+			this.conversationStore.addUserMessage(text);
+
             // If there's an aborted approval, we need to resolve it first
             // The user's message is a new input, but the agent is stuck waiting for tool output
             if (this.abortedApprovalContext) {
@@ -223,6 +230,7 @@ export class ConversationService {
                         onCommandMessage,
                     });
                     this.previousResponseId = stream.lastResponseId;
+					this.conversationStore.updateFromResult(stream);
 
                     // Check if another interruption occurred
                     if (stream.interruptions && stream.interruptions.length > 0) {
@@ -248,9 +256,19 @@ export class ConversationService {
             }
 
             // Normal message flow
-            const stream = await this.agentClient.startStream(text, {
-                previousResponseId: this.previousResponseId,
-            });
+            const provider =
+                typeof (this.agentClient as any).getProvider === 'function'
+                    ? (this.agentClient as any).getProvider()
+                    : 'openai';
+
+            const stream = await this.agentClient.startStream(
+                provider === 'openrouter'
+                    ? (this.conversationStore.getHistory() as any)
+                    : text,
+                {
+                    previousResponseId: this.previousResponseId,
+                },
+            );
 
             const {finalOutput, reasoningOutput, emittedCommandIds} =
                 await this.#consumeStream(stream, {
@@ -259,6 +277,7 @@ export class ConversationService {
                     onCommandMessage,
                 });
             this.previousResponseId = stream.lastResponseId;
+			this.conversationStore.updateFromResult(stream);
 
             // Pass emittedCommandIds so we don't duplicate commands in the final result
             return this.#buildResult(
@@ -312,6 +331,7 @@ export class ConversationService {
                 });
 
             this.previousResponseId = stream.lastResponseId;
+			this.conversationStore.updateFromResult(stream);
 
             // Merge previously emitted command IDs with newly emitted ones
             // This prevents duplicates when result.history contains commands from the initial stream

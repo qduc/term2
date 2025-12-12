@@ -95,6 +95,10 @@ export class OpenAIAgentClient {
     this.#runner = this.#createRunner();
 	}
 
+	getProvider(): string {
+		return this.#provider;
+	}
+
 	addToolInterceptor(interceptor: (name: string, params: any, toolCallId?: string) => Promise<string | null>): () => void {
 		this.#toolInterceptors.push(interceptor);
 		return () => {
@@ -158,7 +162,7 @@ export class OpenAIAgentClient {
 	}
 
 	async startStream(
-		userInput: string,
+		userInput: string | any[],
 		{previousResponseId}: {previousResponseId?: string | null} = {},
 	): Promise<any> {
 		// Abort any previous operation
@@ -172,7 +176,9 @@ export class OpenAIAgentClient {
 		const signal = this.#currentAbortController.signal;
 
 		loggingService.info('Agent stream started', {
-			inputLength: userInput.length,
+			inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
+			inputLength: typeof userInput === 'string' ? userInput.length : undefined,
+			inputItems: Array.isArray(userInput) ? userInput.length : undefined,
 			hasPreviousResponseId: !!previousResponseId,
 		});
 
@@ -195,7 +201,9 @@ export class OpenAIAgentClient {
 		} catch (error: any) {
 			loggingService.error('Agent stream failed', {
 				error: error instanceof Error ? error.message : String(error),
-				inputLength: userInput.length,
+				inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
+				inputLength: typeof userInput === 'string' ? userInput.length : undefined,
+				inputItems: Array.isArray(userInput) ? userInput.length : undefined,
 			});
 			throw error;
 		}

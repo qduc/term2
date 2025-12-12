@@ -129,19 +129,12 @@ test('emits approval interruptions and resumes after approval', async t => {
 });
 
 test('dedupes command messages emitted live from run events', async t => {
-    const commandPayload = JSON.stringify({
-        output: [{
-            command: 'ls',
-            stdout: 'file.txt',
-            stderr: '',
-            outcome: { type: 'exit', exitCode: 0 }
-        }]
-    });
+    const commandPayload = 'exit 0\nfile.txt';
     const rawItem = {
         id: 'call-123',
         type: 'function_call_result',
         name: 'shell',
-        arguments: JSON.stringify({commands: ['ls']}),
+        arguments: JSON.stringify({commands: 'ls'}),
     };
     const commandItem = {
         type: 'tool_call_output_item',
@@ -187,19 +180,12 @@ test('dedupes commands from initial stream when continuation history contains th
     // 3. Continuation stream's history/newItems contains the 'ls' command again
     // The 'ls' command should NOT be duplicated in the final result
 
-    const lsCommandPayload = JSON.stringify({
-        output: [{
-            command: 'ls',
-            stdout: 'file.txt',
-            stderr: '',
-            outcome: { type: 'exit', exitCode: 0 }
-        }]
-    });
+    const lsCommandPayload = 'exit 0\nfile.txt';
     const lsRawItem = {
         id: 'call-ls-123',
         type: 'function_call_result',
         name: 'shell',
-        arguments: JSON.stringify({commands: ['ls']}),
+        arguments: JSON.stringify({commands: 'ls'}),
     };
     const lsCommandItem = {
         type: 'tool_call_output_item',
@@ -208,19 +194,12 @@ test('dedupes commands from initial stream when continuation history contains th
         rawItem: lsRawItem,
     };
 
-    const sedCommandPayload = JSON.stringify({
-        output: [{
-            command: 'sed -n "1,10p" file.txt',
-            stdout: 'content',
-            stderr: '',
-            outcome: { type: 'exit', exitCode: 0 }
-        }]
-    });
+    const sedCommandPayload = 'exit 0\ncontent';
     const sedRawItem = {
         id: 'call-sed-456',
         type: 'function_call_result',
         name: 'shell',
-        arguments: JSON.stringify({commands: ['sed -n "1,10p" file.txt']}),
+        arguments: JSON.stringify({commands: 'sed -n "1,10p" file.txt'}),
     };
     const sedCommandItem = {
         type: 'tool_call_output_item',
@@ -232,7 +211,7 @@ test('dedupes commands from initial stream when continuation history contains th
     const interruption = {
         name: 'shell',
         agent: {name: 'CLI Agent'},
-        arguments: JSON.stringify({commands: ['sed -n "1,10p" file.txt']}),
+        arguments: JSON.stringify({commands: 'sed -n "1,10p" file.txt'}),
     };
 
     // Initial stream: emits 'ls' command, then hits approval for 'sed'

@@ -114,7 +114,6 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
     },
     execute: async ({commands, timeout_ms, max_output_length}) => {
         const cwd = process.cwd();
-        const output: ShellCommandResult[] = [];
         const correlationId = randomUUID();
 
         // Set correlation ID for tracking related operations
@@ -191,43 +190,41 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
                 }
             }
 
-            output.push({
-                command,
-                stdout: trimOutput(stdout, undefined, maxOutputLength),
-                stderr: trimOutput(stderr, undefined, maxOutputLength),
-                outcome,
-            });
-
             loggingService.info('Shell command execution completed', {
                 commandCount: 1,
-                successCount: output.filter(
-                    cmd =>
-                        cmd.outcome.type === 'exit' &&
-                        cmd.outcome.exitCode === 0,
-                ).length,
-                failureCount: output.filter(
-                    cmd =>
-                        cmd.outcome.type === 'exit' &&
-                        cmd.outcome.exitCode !== 0,
-                ).length,
-                timeoutCount: output.filter(
-                    cmd => cmd.outcome.type === 'timeout',
-                ).length,
+                successCount:
+                    outcome.type === 'exit' && outcome.exitCode === 0 ? 1 : 0,
+                failureCount:
+                    outcome.type === 'exit' && outcome.exitCode !== 0 ? 1 : 0,
+                timeoutCount: outcome.type === 'timeout' ? 1 : 0,
             });
 
-            const result: Record<string, any> = {
-                output,
-                providerData: {
-                    working_directory: cwd,
-                },
-            };
+            const stdoutTrimmed = trimOutput(
+                stdout,
+                undefined,
+                maxOutputLength,
+            ).trimEnd();
+            const stderrTrimmed = trimOutput(
+                stderr,
+                undefined,
+                maxOutputLength,
+            ).trimEnd();
+            const combinedOutput = [stdoutTrimmed, stderrTrimmed]
+                .filter(Boolean)
+                .join('\n')
+                .trimEnd();
 
-            // Add optimization note if we stripped redundant cd
-            if (command !== commands) {
-                result.note = `Optimization: Stripped redundant 'cd ${cwd}' prefix. You're already in this directory - avoid using 'cd <current-dir> && <command>' in future requests.`;
-            }
+            const statusLine =
+                outcome.type === 'timeout'
+                    ? 'timeout'
+                    : `exit ${outcome.exitCode ?? 'null'}`;
 
-            return JSON.stringify(result);
+            const noteLine =
+                command !== commands ? 'note: stripped redundant cd prefix' : '';
+
+            return [statusLine, combinedOutput, noteLine]
+                .filter(Boolean)
+                .join('\n');
         } finally {
             // Always clear correlation ID
             loggingService.clearCorrelationId();

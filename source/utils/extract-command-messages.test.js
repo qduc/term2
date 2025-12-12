@@ -16,21 +16,13 @@ test('extracts failure reason from shell command outcome', t => {
         const items = [
             {
                 type: 'tool_call_output_item',
-                output: JSON.stringify({
-                    output: [
-                        {
-                            command: 'rg -n "DEFAULT_TRIM_CONFIG"',
-                            stdout: '',
-                            stderr: '',
-                            outcome: {
-                                type: 'timeout',
-                            },
-                        },
-                    ],
-                }),
+                output: 'timeout\n',
                 rawItem: {
                     type: 'function_call_result',
                     name: 'shell',
+                    arguments: JSON.stringify({
+                        commands: 'rg -n "DEFAULT_TRIM_CONFIG"',
+                    }),
                 },
             },
         ];

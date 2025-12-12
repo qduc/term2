@@ -83,6 +83,30 @@ const safeJsonParse = (payload: unknown): any => {
     }
 };
 
+const normalizeToolArguments = (value: unknown): any => {
+    if (!value) {
+        return null;
+    }
+
+    if (typeof value === 'string') {
+        return safeJsonParse(value) ?? value;
+    }
+
+    return value;
+};
+
+const coerceCommandText = (value: unknown): string => {
+    if (typeof value === 'string') {
+        return value;
+    }
+
+    if (Array.isArray(value)) {
+        return value.map(part => coerceToText(part)).filter(Boolean).join('\n');
+    }
+
+    return coerceToText(value);
+};
+
 const normalizeToolItem = (
     item: any,
 ): {toolName: string; arguments: any; outputText: string} | null => {
@@ -124,45 +148,45 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 
         // Handle shell tool
         if (normalizedItem.toolName === SHELL_TOOL_NAME) {
-            const parsedOutput = safeJsonParse(normalizedItem.outputText);
-            const shellOutputItems = parsedOutput?.output ?? [];
+            const args = normalizeToolArguments(normalizedItem.arguments) ?? {};
+            const command = coerceCommandText(args?.commands) || 'Unknown command';
 
-            // Shell tool can have multiple command outputs
-            for (const [cmdIndex, cmdResult] of shellOutputItems.entries()) {
-                const command = cmdResult?.command ?? 'Unknown command';
-                const stdoutText = coerceToText(cmdResult?.stdout);
-                const stderrText = coerceToText(cmdResult?.stderr);
-                const combinedOutput = [stdoutText, stderrText]
-                    .filter(Boolean)
-                    .join('\n');
-                const output = combinedOutput || 'No output';
-                const outcome = cmdResult?.outcome;
-                const success =
-                    outcome?.type === 'exit' && outcome?.exitCode === 0;
+            const outputText = normalizedItem.outputText ?? '';
+            const [statusLineRaw, ...bodyLines] = outputText.split('\n');
+            const statusLine = (statusLineRaw ?? '').trim();
+            const bodyText = bodyLines.join('\n').trim();
+            const output = bodyText || 'No output';
 
-                let failureReason: string | undefined;
-                if (outcome && outcome.type !== 'exit') {
-                    failureReason = outcome.type;
-                }
+            let success: boolean | undefined;
+            let failureReason: string | undefined;
 
-                const rawItem = item?.rawItem ?? item;
-                const baseId =
-                    rawItem?.id ??
-                    rawItem?.callId ??
-                    item?.id ??
-                    item?.callId ??
-                    `${Date.now()}-${index}`;
-                const stableId = `${baseId}-${cmdIndex}`;
-
-                messages.push({
-                    id: stableId,
-                    sender: 'command',
-                    command,
-                    output,
-                    success,
-                    failureReason,
-                });
+            if (statusLine === 'timeout') {
+                success = false;
+                failureReason = 'timeout';
+            } else if (statusLine.startsWith('exit ')) {
+                const parsedExitCode = Number(statusLine.slice(5).trim());
+                success = Number.isFinite(parsedExitCode)
+                    ? parsedExitCode === 0
+                    : undefined;
             }
+
+            const rawItem = item?.rawItem ?? item;
+            const baseId =
+                rawItem?.id ??
+                rawItem?.callId ??
+                item?.id ??
+                item?.callId ??
+                `${Date.now()}-${index}`;
+            const stableId = `${baseId}-0`;
+
+            messages.push({
+                id: stableId,
+                sender: 'command',
+                command,
+                output,
+                success,
+                failureReason,
+            });
             continue;
         }
 
@@ -173,7 +197,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 
             // Apply patch tool can have multiple operation outputs
             for (const [patchIndex, patchResult] of patchOutputItems.entries()) {
-                const args = normalizedItem.arguments ?? {};
+                const args = normalizeToolArguments(normalizedItem.arguments) ?? {};
                 const operationType = args?.type ?? patchResult?.operation ?? 'unknown';
                 const filePath = args?.path ?? patchResult?.path ?? 'unknown';
 
@@ -204,7 +228,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
         // Handle search tool
         if (normalizedItem.toolName === GREP_TOOL_NAME) {
             const parsedOutput = safeJsonParse(normalizedItem.outputText);
-            const args = normalizedItem.arguments ?? parsedOutput?.arguments;
+            const args = normalizeToolArguments(normalizedItem.arguments) ?? parsedOutput?.arguments;
             const pattern = args?.pattern ?? '';
             const searchPath = args?.path ?? '.';
 
@@ -252,7 +276,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 
             // Search replace tool can have multiple operation outputs
             for (const [replaceIndex, replaceResult] of replaceOutputItems.entries()) {
-                const args = normalizedItem.arguments ?? {};
+                const args = normalizeToolArguments(normalizedItem.arguments) ?? {};
                 const filePath = args?.path ?? replaceResult?.path ?? 'unknown';
                 const searchContent = args?.search_content ?? '';
                 const replaceContent = args?.replace_content ?? '';

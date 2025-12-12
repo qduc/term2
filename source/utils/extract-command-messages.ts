@@ -139,6 +139,31 @@ const normalizeToolItem = (
 
 export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
     const messages: CommandMessage[] = [];
+    const toolCallArgumentsById = new Map<string, unknown>();
+
+    for (const item of items ?? []) {
+        const rawItem = item?.rawItem ?? item;
+        if (!rawItem) {
+            continue;
+        }
+
+        const type = rawItem?.type ?? item?.type;
+        if (type !== 'function_call') {
+            continue;
+        }
+
+        const callId = rawItem.callId ?? rawItem.id;
+        if (!callId) {
+            continue;
+        }
+
+        const args = rawItem.arguments ?? rawItem.args ?? item?.arguments ?? item?.args;
+        if (!args) {
+            continue;
+        }
+
+        toolCallArgumentsById.set(callId, args);
+    }
 
     for (const [index, item] of (items ?? []).entries()) {
         const normalizedItem = normalizeToolItem(item);
@@ -148,8 +173,20 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 
         // Handle shell tool
         if (normalizedItem.toolName === SHELL_TOOL_NAME) {
-            const args = normalizeToolArguments(normalizedItem.arguments) ?? {};
-            const command = coerceCommandText(args?.commands) || 'Unknown command';
+            const rawItem = item?.rawItem ?? item;
+            const callId = rawItem?.callId ?? rawItem?.id ?? item?.callId ?? item?.id;
+            const fallbackArgs =
+                callId && toolCallArgumentsById.has(callId)
+                    ? toolCallArgumentsById.get(callId)
+                    : null;
+            const args =
+                normalizeToolArguments(normalizedItem.arguments) ??
+                normalizeToolArguments(fallbackArgs) ??
+                {};
+            const command =
+                coerceCommandText((args as any)?.commands) ||
+                coerceCommandText((args as any)?.command) ||
+                'Unknown command';
 
             const outputText = normalizedItem.outputText ?? '';
             const [statusLineRaw, ...bodyLines] = outputText.split('\n');
@@ -170,7 +207,6 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                     : undefined;
             }
 
-            const rawItem = item?.rawItem ?? item;
             const baseId =
                 rawItem?.id ??
                 rawItem?.callId ??

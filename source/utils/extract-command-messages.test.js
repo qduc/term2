@@ -42,6 +42,43 @@ test('extracts failure reason from shell command outcome', t => {
     }
 });
 
+test('extracts shell command from matching function_call item', t => {
+    const restore = withStubbedNow(1700000000250);
+
+    try {
+        const items = [
+            {
+                type: 'function_call',
+                id: 'call-abc',
+                name: 'shell',
+                arguments: JSON.stringify({commands: 'echo hi'}),
+            },
+            {
+                type: 'tool_call_output_item',
+                output: 'exit 0\nhi',
+                rawItem: {
+                    type: 'function_call_result',
+                    name: 'shell',
+                    callId: 'call-abc',
+                },
+            },
+        ];
+
+        const messages = extractCommandMessages(items);
+        t.is(messages.length, 1);
+        t.deepEqual(messages[0], {
+            id: 'call-abc-0',
+            sender: 'command',
+            command: 'echo hi',
+            output: 'hi',
+            success: true,
+            failureReason: undefined,
+        });
+    } finally {
+        restore();
+    }
+});
+
 test('extracts successful apply_patch create_file operation', t => {
     const restore = withStubbedNow(1700000000300);
 

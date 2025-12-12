@@ -340,6 +340,7 @@ export class ConversationService {
         let finalOutput = '';
         let reasoningOutput = '';
         const emittedCommandIds = new Set<string>();
+        const toolCallArgumentsById = new Map<string, unknown>();
         this.textDeltaCount = 0;
         this.reasoningDeltaCount = 0;
 
@@ -407,19 +408,23 @@ export class ConversationService {
             emitReasoning(reasoningDelta);
 
             if (event?.type === 'run_item_stream_event') {
+                this.#captureToolCallArguments(event.item, toolCallArgumentsById);
                 this.#emitCommandMessages(
                     [event.item],
                     emittedCommandIds,
                     onCommandMessage,
+                    toolCallArgumentsById,
                 );
             } else if (
                 event?.type === 'tool_call_output_item' ||
                 event?.rawItem?.type === 'function_call_output'
             ) {
+                this.#captureToolCallArguments(event, toolCallArgumentsById);
                 this.#emitCommandMessages(
                     [event],
                     emittedCommandIds,
                     onCommandMessage,
+                    toolCallArgumentsById,
                 );
             }
         }
@@ -429,15 +434,75 @@ export class ConversationService {
         return {finalOutput, reasoningOutput, emittedCommandIds};
     }
 
+    #captureToolCallArguments(
+        item: any,
+        toolCallArgumentsById: Map<string, unknown>,
+    ): void {
+        const rawItem = item?.rawItem ?? item;
+        if (!rawItem) {
+            return;
+        }
+
+        if (rawItem?.type !== 'function_call') {
+            return;
+        }
+
+        const callId = rawItem.callId ?? rawItem.id;
+        if (!callId) {
+            return;
+        }
+
+        const args = rawItem.arguments ?? rawItem.args ?? item?.arguments ?? item?.args;
+        if (!args) {
+            return;
+        }
+
+        toolCallArgumentsById.set(callId, args);
+    }
+
+    #attachCachedArguments(
+        items: any[] = [],
+        toolCallArgumentsById: Map<string, unknown>,
+    ): void {
+        if (!items?.length) {
+            return;
+        }
+
+        for (const item of items) {
+            if (!item) {
+                continue;
+            }
+
+            if (item.arguments || item.args || item?.rawItem?.arguments || item?.rawItem?.args) {
+                continue;
+            }
+
+            const rawItem = item?.rawItem ?? item;
+            const callId = rawItem?.callId ?? rawItem?.id ?? item?.callId ?? item?.id;
+            if (!callId) {
+                continue;
+            }
+
+            const args = toolCallArgumentsById.get(callId);
+            if (!args) {
+                continue;
+            }
+
+            item.arguments = args;
+        }
+    }
+
     #emitCommandMessages(
         items: any[] = [],
         emittedCommandIds: Set<string>,
         onCommandMessage?: (message: CommandMessage) => void,
+        toolCallArgumentsById: Map<string, unknown> = new Map(),
     ): void {
         if (!items?.length || !onCommandMessage) {
             return;
         }
 
+        this.#attachCachedArguments(items, toolCallArgumentsById);
         const commandMessages = extractCommandMessages(items);
         let emittedCount = 0;
         let skippedCount = 0;

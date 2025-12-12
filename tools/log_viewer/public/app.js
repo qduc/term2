@@ -257,45 +257,48 @@ function renderRows(data) {
         // set colspan dynamically to match current number of columns
         td.colSpan = tr.children.length || 1;
 
-        // Add a copy button above the formatted <pre>
-        const toolbar = document.createElement('div');
-        toolbar.style.display = 'flex';
-        toolbar.style.justifyContent = 'flex-end';
-        toolbar.style.gap = '8px';
-        toolbar.style.margin = '6px 0';
+            // Add a copy button above the formatted <pre>
+            const toolbar = document.createElement('div');
+            toolbar.style.display = 'flex';
+            toolbar.style.justifyContent = 'flex-end';
+            toolbar.style.gap = '8px';
+            toolbar.style.margin = '6px 0';
 
-        const copyBtn = document.createElement('button');
-        copyBtn.type = 'button';
-        copyBtn.textContent = 'Copy';
-        copyBtn.title = 'Copy formatted content';
-        copyBtn.addEventListener('click', async (e) => {
-          e.preventDefault();
-          e.stopPropagation(); // avoid toggling details/row
-          const ok = await copyToClipboard(formatted);
-          const prev = copyBtn.textContent;
-          copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
-          copyBtn.disabled = true;
-          setTimeout(() => {
-            copyBtn.textContent = prev;
-            copyBtn.disabled = false;
-          }, 900);
-        });
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.textContent = 'Copy';
+            copyBtn.title = 'Copy formatted content';
 
-        toolbar.appendChild(copyBtn);
+            const pre = document.createElement('pre');
+            pre.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 
-        const pre = document.createElement('pre');
-        pre.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+            const {text, isJson} = formatCellWithMeta(expandValue);
+            if (isJson) {
+              pre.classList.add('code-json');
+              pre.innerHTML = highlightJson(text);
+            } else {
+              pre.classList.remove('code-json');
+              pre.textContent = text;
+            }
 
-        const {text, isJson} = formatCellWithMeta(expandValue);
-        if (isJson) {
-          pre.classList.add('code-json');
-          pre.innerHTML = highlightJson(text);
-        } else {
-          pre.classList.remove('code-json');
-          pre.textContent = text;
-        }
+            copyBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              e.stopPropagation(); // avoid toggling details/row
+              const ok = await copyToClipboard(text);
+              const prev = copyBtn.textContent;
+              copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
+              copyBtn.disabled = true;
+              setTimeout(() => {
+                copyBtn.textContent = prev;
+                copyBtn.disabled = false;
+              }, 900);
+            });
 
-        td.appendChild(pre);
+            toolbar.appendChild(copyBtn);
+
+            td.appendChild(toolbar);
+            td.appendChild(pre);
+
         expandTr.appendChild(td);
 
         // store a reference so we can remove it when closed

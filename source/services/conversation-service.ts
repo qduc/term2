@@ -42,23 +42,28 @@ const getCommandFromArgs = (args: unknown): string => {
     if (typeof args === 'string') {
         try {
             const parsed = JSON.parse(args);
-            // Handle shell tool's commands array
+            // Handle shell tool's command parameter
+            if (parsed?.command) {
+                return parsed.command;
+            }
+            // Fallback for old 'commands' array format
             if (Array.isArray(parsed?.commands)) {
                 return parsed.commands.join('\n');
             }
-            return parsed?.command ?? args;
+            return args;
         } catch {
             return args;
         }
     }
 
     if (typeof args === 'object') {
-        // Handle shell tool's commands array
+        // Handle shell tool's command parameter
+        const cmdFromObject =
+            'command' in args ? String(args.command) : undefined;
+        // Fallback for old 'commands' array format
         if ('commands' in args && Array.isArray(args.commands)) {
             return (args.commands as string[]).join('\n');
         }
-        const cmdFromObject =
-            'command' in args ? String(args.command) : undefined;
         const argsFromObject =
             'arguments' in args ? String(args.arguments) : undefined;
         return cmdFromObject ?? argsFromObject ?? JSON.stringify(args);

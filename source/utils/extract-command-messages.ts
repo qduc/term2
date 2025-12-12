@@ -223,8 +223,8 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 normalizeToolArguments(fallbackArgs) ??
                 {};
             const command =
-                coerceCommandText((args as any)?.commands) ||
                 coerceCommandText((args as any)?.command) ||
+                coerceCommandText((args as any)?.commands) ||
                 'Unknown command';
 
             const outputText = normalizedItem.outputText ?? '';

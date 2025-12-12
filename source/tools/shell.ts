@@ -20,7 +20,7 @@ import type {ToolDefinition} from './types.js';
 const execPromise = util.promisify(exec);
 
 const shellParametersSchema = z.object({
-    commands: z
+    command: z
         .string()
         .min(1)
         .describe('Single shell command to execute.'),
@@ -90,12 +90,12 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
     needsApproval: async params => {
         try {
             const cwd = process.cwd();
-            const optimizedCommand = stripRedundantCd(params.commands, cwd);
+            const optimizedCommand = stripRedundantCd(params.command, cwd);
             const isDangerous = validateCommandSafety(optimizedCommand);
 
             // Log security event for all shell commands with dangerous flag
             loggingService.security('Shell tool needsApproval check', {
-                commands: [params.commands.substring(0, 100)], // Truncate for safety
+                commands: [params.command.substring(0, 100)], // Truncate for safety
                 optimizedCommand: optimizedCommand.substring(0, 100),
                 isDangerous,
             });
@@ -107,12 +107,12 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
             logValidationError(`Validation failed: ${errorMessage}`);
             loggingService.error('Shell tool validation error', {
                 error: errorMessage,
-                commands: [params.commands.substring(0, 100)],
+                commands: [params.command.substring(0, 100)],
             });
             return true; // fail-safe: require approval on validation errors
         }
     },
-    execute: async ({commands, timeout_ms, max_output_length}) => {
+    execute: async ({command, timeout_ms, max_output_length}) => {
         const cwd = process.cwd();
         const correlationId = randomUUID();
 
@@ -128,18 +128,18 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 
             loggingService.info('Shell command execution started', {
                 commandCount: 1,
-                commands: [commands],
+                commands: [command],
                 timeout,
                 workingDirectory: cwd,
                 maxOutputLength,
             });
 
             // Strip redundant 'cd <path> &&' if it targets the current directory
-            const command = stripRedundantCd(commands, cwd);
-            if (command !== commands) {
+            const optimizedCommand = stripRedundantCd(command, cwd);
+            if (optimizedCommand !== command) {
                 loggingService.debug('Stripped redundant cd command', {
-                    original: commands,
-                    optimized: command,
+                    original: command,
+                    optimized: optimizedCommand,
                     cwd,
                 });
             }
@@ -152,7 +152,7 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
             };
 
             try {
-                const result = await execPromise(command, {
+                const result = await execPromise(optimizedCommand, {
                     cwd,
                     timeout,
                     maxBuffer: 1024 * 1024, // 1MB max buffer
@@ -161,7 +161,7 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
                 stderr = result.stderr;
 
                 loggingService.debug('Shell command executed successfully', {
-                    command: command.substring(0, 100),
+                    command: optimizedCommand.substring(0, 100),
                     exitCode: 0,
                     stdoutLength: stdout.length,
                     stderrLength: stderr.length,
@@ -177,12 +177,12 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
 
                 if (outcome.type === 'timeout') {
                     loggingService.warn('Shell command timeout', {
-                        command: command.substring(0, 100),
+                        command: optimizedCommand.substring(0, 100),
                         timeout,
                     });
                 } else {
                     loggingService.debug('Shell command execution failed', {
-                        command: command.substring(0, 100),
+                        command: optimizedCommand.substring(0, 100),
                         exitCode,
                         errorMessage: error?.message ?? String(error),
                         stderrLength: stderr.length,
@@ -220,7 +220,7 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
                     : `exit ${outcome.exitCode ?? 'null'}`;
 
             const noteLine =
-                command !== commands ? 'note: stripped redundant cd prefix' : '';
+                optimizedCommand !== command ? 'note: stripped redundant cd prefix' : '';
 
             return [statusLine, combinedOutput, noteLine]
                 .filter(Boolean)

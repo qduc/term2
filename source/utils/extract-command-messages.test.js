@@ -28,7 +28,7 @@ test('extracts failure reason from shell command outcome', t => {
                     type: 'function_call_result',
                     name: 'shell',
                     arguments: JSON.stringify({
-                        commands: 'rg -n "DEFAULT_TRIM_CONFIG"',
+                        command: 'rg -n "DEFAULT_TRIM_CONFIG"',
                     }),
                 },
             },
@@ -59,7 +59,7 @@ test('extracts shell command from matching function_call item', t => {
                 type: 'function_call',
                 id: 'call-abc',
                 name: 'shell',
-                arguments: JSON.stringify({commands: 'echo hi'}),
+                arguments: JSON.stringify({command: 'echo hi'}),
             },
             {
                 type: 'tool_call_output_item',

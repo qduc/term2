@@ -81,6 +81,7 @@ test('extracts shell command from matching function_call item', t => {
             output: 'hi',
             success: true,
             failureReason: undefined,
+            isApprovalRejection: false,
         });
     } finally {
         restore();
@@ -119,6 +120,7 @@ test('extracts grep output from plain text tool result', t => {
             command: 'grep "hello" "source"',
             output: 'source/app.tsx:1:hello',
             success: true,
+            isApprovalRejection: false,
         });
     } finally {
         restore();
@@ -162,6 +164,7 @@ test('extracts grep command from matching function_call item', t => {
             command: 'grep "DEFAULT_TRIM_CONFIG" "source" --case-sensitive --include "*.ts"',
             output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',
             success: true,
+            isApprovalRejection: false,
         });
     } finally {
         restore();

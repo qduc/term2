@@ -134,7 +134,6 @@ function convertAgentItemToOpenRouterMessage(item: any): any | null {
 
         if (item.tool_calls) {
             message.tool_calls = item.tool_calls;
-            message.content = null;
         }
 
         return message;
@@ -823,10 +822,9 @@ class OpenRouterModel implements Model {
                 // Already in OpenRouter format
                 return tc;
             });
-            assistantMessage.content = null;
-        } else {
-            assistantMessage.content = content;
         }
+
+        assistantMessage.content = content || null;
 
         if (reasoningDetails) {
             assistantMessage.reasoning_details = reasoningDetails;

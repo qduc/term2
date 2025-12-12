@@ -190,7 +190,6 @@ export class OpenAIAgentClient {
 		try {
 			const result = await this.#executeWithRetry(() =>
 				this.#runAgent(this.#agent, userInput, {
-					previousResponseId: previousResponseId ?? undefined,
 					stream: true,
 					maxTurns: this.#maxTurns,
 					signal,
@@ -208,7 +207,7 @@ export class OpenAIAgentClient {
 
 	async continueRun(
 		state: any,
-		{previousResponseId}: {previousResponseId?: string | null} = {},
+		{previousResponseId: _previousResponseId}: {previousResponseId?: string | null} = {},
 	): Promise<any> {
 		this.abort();
 		this.#currentAbortController = new AbortController();
@@ -216,7 +215,6 @@ export class OpenAIAgentClient {
 
 		return this.#executeWithRetry(() =>
 			this.#runAgent(this.#agent, state, {
-				previousResponseId: previousResponseId ?? undefined,
 				signal,
 			}),
 		);
@@ -224,7 +222,7 @@ export class OpenAIAgentClient {
 
 	async continueRunStream(
 		state: any,
-		{previousResponseId}: {previousResponseId?: string | null} = {},
+		{previousResponseId: _previousResponseId}: {previousResponseId?: string | null} = {},
 	): Promise<any> {
 		this.abort();
 		this.#currentAbortController = new AbortController();
@@ -232,7 +230,6 @@ export class OpenAIAgentClient {
 
 		return this.#executeWithRetry(() =>
 			this.#runAgent(this.#agent, state, {
-				previousResponseId: previousResponseId ?? undefined,
 				stream: true,
 				maxTurns: this.#maxTurns,
 				signal,

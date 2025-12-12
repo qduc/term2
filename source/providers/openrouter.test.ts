@@ -31,7 +31,7 @@ test.afterEach.always(() => {
     loggingService.logToOpenrouter = originalLogToOpenrouter as any;
 });
 
-test.serial('builds messages with history, tool calls, and reasoning config', async t => {
+test.serial('builds messages from explicit history, tool calls, and reasoning config', async t => {
     const requests: any[] = [];
     const responses = [
         createJsonResponse({
@@ -67,7 +67,16 @@ test.serial('builds messages with history, tool calls, and reasoning config', as
         modelSettings: {reasoningEffort: 'high'},
     } as any);
 
+    // Caller-managed history: include the prior user + assistant messages explicitly.
     const secondTurnItems = [
+        {type: 'message', role: 'user', content: 'First user turn'},
+        {
+            type: 'message',
+            role: 'assistant',
+            content: [{type: 'output_text', text: 'Hello back'}],
+            status: 'completed',
+            reasoning_details: [{type: 'text', text: 'thinking'}],
+        },
         {type: 'input_text', text: 'Second user turn'},
         {
             type: 'function_call',
@@ -81,7 +90,6 @@ test.serial('builds messages with history, tool calls, and reasoning config', as
     await model.getResponse({
         systemInstructions: 'system message',
         input: secondTurnItems as any,
-        previousResponseId: 'resp-1',
     } as any);
 
     t.truthy(requests[0]);
@@ -114,7 +122,7 @@ test.serial('builds messages with history, tool calls, and reasoning config', as
     ]);
 });
 
-test.serial('logs expanded modelRequest input when using previousResponseId', async t => {
+test.serial('logs modelRequest input without implicit expansion', async t => {
     const logged: any[] = [];
     loggingService.logToOpenrouter = ((level: string, message: string, meta?: any) => {
         logged.push({level, message, meta});
@@ -133,29 +141,20 @@ test.serial('logs expanded modelRequest input when using previousResponseId', as
         },
     });
 
-    const responses = [
-        createJsonResponse({
-            id: 'resp-1',
-            choices: [{message: {content: 'first response'}}],
-            usage: {prompt_tokens: 1, completion_tokens: 1, total_tokens: 2},
-        }),
-        new Response(stream, {
-            status: 200,
-            headers: {'Content-Type': 'text/event-stream'},
-        }),
-    ];
-
-    let call = 0;
     globalThis.fetch = async (_url, options: any) => {
         JSON.parse(options.body);
-        return responses[call++];
+        return new Response(stream, {
+            status: 200,
+            headers: {'Content-Type': 'text/event-stream'},
+        });
     };
 
     const model = new OpenRouterModel('mock-model');
 
-    await model.getResponse({
+    for await (const _event of model.getStreamedResponse({
         systemInstructions: 'system message',
         input: [
+            // Full context supplied by caller.
             {type: 'message', role: 'user', content: 'First user turn'},
             {
                 type: 'message',
@@ -177,13 +176,6 @@ test.serial('logs expanded modelRequest input when using previousResponseId', as
                 output: {type: 'text', text: 'match'},
                 status: 'completed',
             },
-        ] as any,
-    } as any);
-
-    for await (const _event of model.getStreamedResponse({
-        systemInstructions: 'system message',
-        previousResponseId: 'resp-1',
-        input: [
             {
                 type: 'function_call_result',
                 callId: 'call-999',
@@ -273,21 +265,6 @@ test.serial('streams reasoning details and stores assistant history', async t =>
 
     // Second output item should be the message
     t.is(doneEvent.response.output[1].content[0].text, 'Hello!');
-
-    await model.getResponse({
-        systemInstructions: 'system message',
-        input: 'Next input',
-        previousResponseId: 'resp-stream',
-    } as any);
-
-    const followUpRequest = requests[1];
-    const assistantHistory = followUpRequest.messages.find(
-        (msg: any) => msg.role === 'assistant' && msg.reasoning_details,
-    );
-
-    t.truthy(assistantHistory);
-    t.is(assistantHistory.reasoning_details[0].type, 'reasoning.text');
-    t.is(assistantHistory.reasoning_details[0].text, 'step1');
 });
 
 test.serial('converts user message items in array inputs', async t => {
@@ -583,7 +560,6 @@ test.serial('preserves assistant message content when tool calls are present', a
             },
             {type: 'function_call_result', callId: 'call-456', output: 'search results'},
         ] as any,
-        previousResponseId: 'resp-with-tools',
     } as any);
 
     const secondRequest = requests[1];

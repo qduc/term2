@@ -387,7 +387,10 @@ class OpenRouterModel implements Model {
         if (!apiKey) {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
-        const conversationId = request.previousResponseId ?? null;
+        // OpenRouter does not support server-side response chaining the same way
+        // as OpenAI Responses. We intentionally ignore previousResponseId and
+        // expect the caller to provide full conversation context in `input`.
+        const conversationId: string | null = null;
         const {messages, currentTurnMessages} = buildMessagesFromRequest(
             request,
             conversationId,
@@ -524,7 +527,8 @@ class OpenRouterModel implements Model {
         if (!apiKey) {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
-        const conversationId = request.previousResponseId ?? null;
+        // See getResponse(): caller-managed history; do not chain via previousResponseId.
+        const conversationId: string | null = null;
         const {messages, currentTurnMessages} = buildMessagesFromRequest(
             request,
             conversationId,
@@ -873,6 +877,11 @@ class OpenRouterModel implements Model {
         currentTurnMessages: any[];
         assistantMessage: any;
     }): void {
+        // If there is no conversation id, we do not persist anything.
+        // The caller is responsible for maintaining and supplying history.
+        if (!conversationId) {
+            return;
+        }
         const baseHistory =
             (conversationId ? this.#conversationHistory.get(conversationId) : []) ||
             [];

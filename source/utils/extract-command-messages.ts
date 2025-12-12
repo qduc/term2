@@ -264,7 +264,16 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
         // Handle search tool
         if (normalizedItem.toolName === GREP_TOOL_NAME) {
             const parsedOutput = safeJsonParse(normalizedItem.outputText);
-            const args = normalizeToolArguments(normalizedItem.arguments) ?? parsedOutput?.arguments;
+            const rawItem = item?.rawItem ?? item;
+            const callId = rawItem?.callId ?? rawItem?.id ?? item?.callId ?? item?.id;
+            const fallbackArgs =
+                callId && toolCallArgumentsById.has(callId)
+                    ? toolCallArgumentsById.get(callId)
+                    : null;
+            const args =
+                normalizeToolArguments(normalizedItem.arguments) ??
+                normalizeToolArguments(fallbackArgs) ??
+                parsedOutput?.arguments;
             const pattern = args?.pattern ?? '';
             const searchPath = args?.path ?? '.';
 
@@ -281,13 +290,9 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             }
 
             const command = parts.join(' ');
-            const output =
-                parsedOutput?.output ??
-                normalizedItem.outputText ??
-                'No output';
+            const output = parsedOutput?.output ?? normalizedItem.outputText ?? 'No output';
             const success = true;
 
-            const rawItem = item?.rawItem ?? item;
             const stableId =
                 rawItem?.id ??
                 rawItem?.callId ??

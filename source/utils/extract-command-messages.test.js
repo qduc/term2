@@ -79,6 +79,87 @@ test('extracts shell command from matching function_call item', t => {
     }
 });
 
+test('extracts grep output from plain text tool result', t => {
+    const restore = withStubbedNow(1700000000260);
+
+    try {
+        const items = [
+            {
+                type: 'tool_call_output_item',
+                output: 'source/app.tsx:1:hello',
+                rawItem: {
+                    type: 'function_call_result',
+                    name: 'grep',
+                    id: 'call-grep-1',
+                    arguments: JSON.stringify({
+                        pattern: 'hello',
+                        path: 'source',
+                        case_sensitive: false,
+                        file_pattern: null,
+                        exclude_pattern: null,
+                        max_results: 100,
+                    }),
+                },
+            },
+        ];
+
+        const messages = extractCommandMessages(items);
+        t.is(messages.length, 1);
+        t.deepEqual(messages[0], {
+            id: 'call-grep-1',
+            sender: 'command',
+            command: 'grep "hello" "source"',
+            output: 'source/app.tsx:1:hello',
+            success: true,
+        });
+    } finally {
+        restore();
+    }
+});
+
+test('extracts grep command from matching function_call item', t => {
+    const restore = withStubbedNow(1700000000265);
+
+    try {
+        const items = [
+            {
+                type: 'function_call',
+                id: 'call-grep-abc',
+                name: 'grep',
+                arguments: JSON.stringify({
+                    pattern: 'DEFAULT_TRIM_CONFIG',
+                    path: 'source',
+                    case_sensitive: true,
+                    file_pattern: '*.ts',
+                    exclude_pattern: null,
+                    max_results: 100,
+                }),
+            },
+            {
+                type: 'tool_call_output_item',
+                output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',
+                rawItem: {
+                    type: 'function_call_result',
+                    name: 'grep',
+                    callId: 'call-grep-abc',
+                },
+            },
+        ];
+
+        const messages = extractCommandMessages(items);
+        t.is(messages.length, 1);
+        t.deepEqual(messages[0], {
+            id: 'call-grep-abc',
+            sender: 'command',
+            command: 'grep "DEFAULT_TRIM_CONFIG" "source" --case-sensitive --include "*.ts"',
+            output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',
+            success: true,
+        });
+    } finally {
+        restore();
+    }
+});
+
 test('extracts successful apply_patch create_file operation', t => {
     const restore = withStubbedNow(1700000000300);
 

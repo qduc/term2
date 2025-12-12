@@ -128,17 +128,11 @@ export const grepToolDefinition: ToolDefinition<SearchToolParams> = {
 
             const result = trimOutput(stdout.trim(), limit);
 
-            return JSON.stringify({
-                arguments: params,
-                output: result,
-            });
+            return result || 'No matches found.';
         } catch (error: any) {
             // grep/rg returns exit code 1 if no matches found, which execPromise treats as error
             if (error.code === 1) {
-                return JSON.stringify({
-                    arguments: params,
-                    output: 'No matches found.',
-                });
+                return 'No matches found.';
             }
             throw new Error(`Search failed: ${error.message}`);
         }

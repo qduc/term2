@@ -154,9 +154,11 @@ const InputBox: FC<Props> = ({
     // ESC handling
     useInput((_input, key) => {
         if (key.escape) {
+            // Prevent trigger detection right after ESC
+            escPressedRef.current = true;
+
             if (mode !== 'text') {
                 // Close menu
-                escPressedRef.current = true;
                 setMode('text');
                 return;
             }

@@ -11,6 +11,38 @@ let selectedFile = null;
 let fileWatcher = null; // SSE watcher
 let refreshTimer = null; // debounce timer for auto-refresh
 
+function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
+  const seen = new WeakSet();
+
+  const walk = (node, depth) => {
+    if (node === null || node === undefined) return node;
+    if (typeof node !== 'object') return node;
+    if (depth > maxDepth) return node;
+
+    if (seen.has(node)) return node;
+    seen.add(node);
+
+    if (Array.isArray(node)) {
+      for (let i = 0; i < node.length; i++) {
+        node[i] = walk(node[i], depth + 1);
+      }
+      return node;
+    }
+
+    // plain object
+    for (const [key, val] of Object.entries(node)) {
+      if (key === 'content' && typeof val === 'string' && val.length > maxLen) {
+        node[key] = val.slice(0, maxLen) + '…';
+      } else {
+        node[key] = walk(val, depth + 1);
+      }
+    }
+    return node;
+  };
+
+  return walk(value, 0);
+}
+
 function stopWatch() {
   try { fileWatcher?.close(); } catch (_) {}
   fileWatcher = null;
@@ -69,21 +101,31 @@ async function loadFiles() {
 
 function formatCell(v) {
   if (!v) return '';
-  // If it's an object, pretty-print it with indentation for readability
-  if (typeof v === 'object') return JSON.stringify(v, null, 2);
-  // If it's a string, try to detect and parse JSON to pretty-print it
+
+  // If it's already an object/array, truncate content fields in-place and pretty-print
+  if (typeof v === 'object') {
+    const sanitized = truncateContentDeep(v, 3, 200);
+    return JSON.stringify(sanitized, null, 2);
+  }
+
+  // If it's a string, try to parse JSON; if JSON, truncate then pretty-print
   if (typeof v === 'string') {
     const s = v.trim();
-    // quick heuristic: valid JSON often starts with { or [
-    if (s && (s[0] === '{' || s[0] === '[')) {
+    if (!s) return '';
+
+    // keep your heuristic (fast) or parse-always; this keeps the heuristic:
+    if (s[0] === '{' || s[0] === '[') {
       try {
         const parsed = JSON.parse(s);
-        return JSON.stringify(parsed, null, 2);
-      } catch (err) {
-        // not JSON — fall through and return raw string
+        const sanitized = truncateContentDeep(parsed, 3, 200);
+        return JSON.stringify(sanitized, null, 2);
+      } catch (_) {
+        // not JSON
       }
     }
+    return s;
   }
+
   return String(v);
 }
 
@@ -114,7 +156,12 @@ function renderRows(data) {
     details.appendChild(summary);
 
     // Formatted content for the expanded row
-    const formatted = formatCell(parsed || item.raw);
+    // Prefer showing parsed.fields (this is the "fields" column), then fall back.
+    const formatted = formatCell(
+      (parsed && Object.prototype.hasOwnProperty.call(parsed, 'fields'))
+        ? parsed.fields
+        : (parsed || item.raw)
+    );
 
     details.addEventListener('toggle', () => {
       // When opened, insert a new <tr> with a single <td colspan=5>
@@ -125,6 +172,7 @@ function renderRows(data) {
         // set colspan dynamically to match current number of columns
         td.colSpan = tr.children.length || 1;
         const pre = document.createElement('pre');
+        pre.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
         pre.textContent = formatted;
         td.appendChild(pre);
         expandTr.appendChild(td);

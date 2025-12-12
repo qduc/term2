@@ -51,3 +51,47 @@ test('generateDiff should handle multiline changes', t => {
     const result = generateDiff(oldText, newText);
     t.is(result, expected);
 });
+
+test('generateDiff should handle null inputs', t => {
+    // @ts-expect-error Testing runtime safety with null
+    const result = generateDiff(null, null);
+    t.is(result, ' '); // Two empty strings produce one matching empty line
+});
+
+test('generateDiff should handle undefined inputs', t => {
+    // @ts-expect-error Testing runtime safety with undefined
+    const result = generateDiff(undefined, 'hello');
+    // undefined becomes '' (one empty line), newText is 'hello' (one line)
+    // So we're comparing [''] vs ['hello'] - they don't match
+    t.is(result, '-\n+hello');
+});
+
+test('generateDiff should handle undefined oldText', t => {
+    // @ts-expect-error Testing runtime safety with undefined
+    const result = generateDiff(undefined, undefined);
+    t.is(result, ' '); // Both undefined become '', matching empty lines
+});
+
+test('generateDiff should handle number inputs', t => {
+    // @ts-expect-error Testing runtime safety with numbers
+    const result = generateDiff(123, 456);
+    t.is(result, '-123\n+456'); // Numbers get stringified
+});
+
+test('generateDiff should handle object inputs', t => {
+    // @ts-expect-error Testing runtime safety with objects
+    const result = generateDiff({}, {foo: 'bar'});
+    // Objects get stringified to '[object Object]' which matches
+    t.is(result, ' [object Object]');
+});
+
+test('generateDiff should handle mixed null and string', t => {
+    // @ts-expect-error Testing runtime safety with null
+    const result1 = generateDiff(null, 'text');
+    t.is(result1, '-\n+text');
+
+    // @ts-expect-error Testing runtime safety with null
+    const result2 = generateDiff('text', null);
+    // 'text' becomes one line, null becomes '' which is one empty line
+    t.is(result2, '-text\n+');
+});

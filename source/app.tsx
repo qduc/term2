@@ -8,6 +8,7 @@ import Banner from './components/Banner.js';
 import MessageList from './components/MessageList.js';
 import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
+import {ErrorBoundary} from './components/ErrorBoundary.js';
 import type {SlashCommand} from './components/SlashCommandMenu.js';
 import type {ConversationService} from './services/conversation-service.js';
 import {settingsService} from './services/settings-service.js';
@@ -270,34 +271,36 @@ const App: FC<AppProps> = ({conversationService}) => {
     }, [navigateDown, setInput]);
 
     return (
-        <Box flexDirection="column" flexGrow={1}>
-            <Banner />
-            {/* Main content area grows to fill available vertical space */}
+        <ErrorBoundary>
             <Box flexDirection="column" flexGrow={1}>
-                <MessageList messages={messages} />
+                <Banner />
+                {/* Main content area grows to fill available vertical space */}
+                <Box flexDirection="column" flexGrow={1}>
+                    <MessageList messages={messages} />
 
-                {liveResponse && <LiveResponse text={liveResponse.text} />}
+                    {liveResponse && <LiveResponse text={liveResponse.text} />}
+                </Box>
+
+                {/* Fixed bottom area for input / status */}
+                <Box flexDirection="column">
+                    {!isProcessing && !waitingForApproval && (
+                        <InputBox
+                            onSubmit={handleSubmit}
+                            slashCommands={slashCommands}
+                            onHistoryUp={handleHistoryUp}
+                            onHistoryDown={handleHistoryDown}
+                            hasConversationHistory={messages.filter(msg => msg.sender !== 'system').length > 0}
+                        />
+                    )}
+
+                    {isProcessing && (
+                        <Text color="gray" dimColor>
+                            processing{'.'.repeat(dotCount)}
+                        </Text>
+                    )}
+                </Box>
             </Box>
-
-            {/* Fixed bottom area for input / status */}
-            <Box flexDirection="column">
-                {!isProcessing && !waitingForApproval && (
-                    <InputBox
-                        onSubmit={handleSubmit}
-                        slashCommands={slashCommands}
-                        onHistoryUp={handleHistoryUp}
-                        onHistoryDown={handleHistoryDown}
-                        hasConversationHistory={messages.filter(msg => msg.sender !== 'system').length > 0}
-                    />
-                )}
-
-                {isProcessing && (
-                    <Text color="gray" dimColor>
-                        processing{'.'.repeat(dotCount)}
-                    </Text>
-                )}
-            </Box>
-        </Box>
+        </ErrorBoundary>
     );
 };
 

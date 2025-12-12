@@ -1,6 +1,10 @@
 export function generateDiff(oldText: string, newText: string): string {
-    const oldLines = oldText.split('\n');
-    const newLines = newText.split('\n');
+    // Safely coerce inputs to strings, treating null/undefined as empty strings
+    const safeOldText = oldText == null ? '' : String(oldText);
+    const safeNewText = newText == null ? '' : String(newText);
+
+    const oldLines = safeOldText.split('\n');
+    const newLines = safeNewText.split('\n');
     const N = oldLines.length;
     const M = newLines.length;
 

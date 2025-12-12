@@ -12,6 +12,24 @@ import {
 	loggingService as logger,
 } from '../services/logging-service.js';
 
+/**
+ * Custom error class for OpenRouter API errors
+ * Includes status code and headers for proper retry logic
+ */
+export class OpenRouterError extends Error {
+	status: number;
+	headers: Record<string, string>;
+	responseBody?: string;
+
+	constructor(message: string, status: number, headers: Record<string, string>, responseBody?: string) {
+		super(message);
+		this.name = 'OpenRouterError';
+		this.status = status;
+		this.headers = headers;
+		this.responseBody = responseBody;
+	}
+}
+
 // Helper function to decode common HTML entities in tool call arguments
 function decodeHtmlEntities(text: string): string {
     return text
@@ -361,11 +379,18 @@ async function callOpenRouter({
         try {
             errText = await res.text();
         } catch {}
-        throw new Error(
-            `OpenRouter request failed: ${res.status} ${res.statusText}${
-                errText ? ` - ${errText}` : ''
-            }`,
-        );
+
+        // Extract headers for retry logic (especially Retry-After)
+        const headers: Record<string, string> = {};
+        res.headers.forEach((value, key) => {
+            headers[key.toLowerCase()] = value;
+        });
+
+        const message = `OpenRouter request failed: ${res.status} ${res.statusText}${
+            errText ? ` - ${errText}` : ''
+        }`;
+
+        throw new OpenRouterError(message, res.status, headers, errText);
     }
     return res;
 }

@@ -2,6 +2,34 @@ import {useCallback, useState} from 'react';
 import type {ConversationService} from '../services/conversation-service.js';
 import {loggingService} from '../services/logging-service.js';
 
+/**
+ * Check if an error is abort-related (user-initiated cancellation).
+ * These errors should not be displayed to the user as they are intentional.
+ */
+const isAbortLikeError = (error: unknown): boolean => {
+	if (!error) return false;
+
+	// Check error.name for AbortError
+	if (typeof error === 'object' && error !== null) {
+		const err = error as any;
+		if (err.name === 'AbortError') return true;
+		if (err.code === 'ABORT_ERR') return true;
+	}
+
+	// Check error message for common abort patterns
+	const errorMessage = error instanceof Error ? error.message : String(error);
+	const abortPatterns = [
+		/abort/i,
+		/cancel/i,
+		/user.?cancelled/i,
+		/user.?aborted/i,
+		/operation.?aborted/i,
+		/operation.?cancelled/i,
+	];
+
+	return abortPatterns.some(pattern => pattern.test(errorMessage));
+};
+
 interface UserMessage {
     id: number;
     sender: 'user';
@@ -330,6 +358,14 @@ export const useConversation = ({
                     error: error instanceof Error ? error.message : String(error),
                     stack: error instanceof Error ? error.stack : undefined,
                 });
+
+                // Don't show error messages for user-initiated aborts
+                if (isAbortLikeError(error)) {
+                    loggingService.debug('Suppressing abort error in sendUserMessage');
+                    // The finally block will handle cleanup
+                    return;
+                }
+
                 const errorMessage =
                     error instanceof Error ? error.message : String(error);
 
@@ -520,6 +556,14 @@ export const useConversation = ({
                         error: error instanceof Error ? error.message : String(error),
                         stack: error instanceof Error ? error.stack : undefined,
                     });
+
+                    // Don't show error messages for user-initiated aborts
+                    if (isAbortLikeError(error)) {
+                        loggingService.debug('Suppressing abort error in max turns continuation');
+                        // The finally block will handle cleanup
+                        return;
+                    }
+
                     const errorMessage =
                         error instanceof Error ? error.message : String(error);
                     const botErrorMessage: BotMessage = {
@@ -656,6 +700,14 @@ export const useConversation = ({
                     error: error instanceof Error ? error.message : String(error),
                     stack: error instanceof Error ? error.stack : undefined,
                 });
+
+                // Don't show error messages for user-initiated aborts
+                if (isAbortLikeError(error)) {
+                    loggingService.debug('Suppressing abort error in handleApprovalDecision');
+                    // The finally block will handle cleanup
+                    return;
+                }
+
                 const errorMessage =
                     error instanceof Error ? error.message : String(error);
                 const botErrorMessage: BotMessage = {

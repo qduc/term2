@@ -1,7 +1,5 @@
 import {
 	Agent,
-	ModelBehaviorError,
-	UserError,
 	run,
 	tool as createTool,
 	webSearchTool,
@@ -18,6 +16,7 @@ import {
 import {
 	clearOpenRouterConversations,
 	OpenRouterProvider,
+	OpenRouterError,
 } from '../providers/openrouter.js';
 import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
 import {randomUUID} from 'node:crypto';
@@ -252,31 +251,56 @@ export class OpenAIAgentClient {
 		try {
 			return await operation();
 		} catch (error) {
-			const isRetryable =
-				retries > 0 &&
-				(error instanceof UserError ||
-					error instanceof ModelBehaviorError ||
-					error instanceof APIConnectionError ||
-					error instanceof APIConnectionTimeoutError ||
-					error instanceof InternalServerError ||
-					error instanceof RateLimitError);
+			// Determine if the error is retryable
+			// UserError and ModelBehaviorError are NOT retried (logic errors, not transient)
+			const isTransientError =
+				error instanceof APIConnectionError ||
+				error instanceof APIConnectionTimeoutError ||
+				error instanceof InternalServerError ||
+				error instanceof RateLimitError;
+
+			// Check if it's an OpenRouter error with retryable status
+			const isOpenRouterRetryable =
+				error instanceof OpenRouterError &&
+				(error.status === 429 || error.status >= 500);
+
+			const isRetryable = retries > 0 && (isTransientError || isOpenRouterRetryable);
 
 			if (isRetryable) {
-				let delay = 1000 * (this.#retryAttempts - retries + 1); // Exponential backoff
-				if (
-					error instanceof RateLimitError &&
-					error.headers?.['retry-after']
-				) {
-					delay = parseInt(error.headers['retry-after'], 10) * 1000;
+				const attemptIndex = this.#retryAttempts - retries;
+				let delay: number;
+
+				// Check for Retry-After header (both OpenAI and OpenRouter)
+				const retryAfterHeader =
+					(error instanceof RateLimitError && error.headers?.['retry-after']) ||
+					(error instanceof OpenRouterError && error.headers['retry-after']);
+
+				if (retryAfterHeader) {
+					// Respect the Retry-After header
+					delay = parseInt(retryAfterHeader, 10) * 1000;
+				} else {
+					// Exponential backoff with full jitter
+					// Base delay: 500-1000ms
+					// Multiplier: 2^attemptIndex
+					// Max cap: 30 seconds
+					const baseDelay = 500 + Math.random() * 500; // 500-1000ms
+					const exponentialDelay = baseDelay * Math.pow(2, attemptIndex);
+					const maxDelay = 30000; // 30 seconds
+					const cappedDelay = Math.min(exponentialDelay, maxDelay);
+					// Apply full jitter: random value between 0 and cappedDelay
+					delay = Math.random() * cappedDelay;
 				}
+
 				await new Promise(resolve => setTimeout(resolve, delay));
 
 				loggingService.warn('Agent operation retry', {
 					errorType: error.constructor.name,
 					retriesRemaining: retries - 1,
-					delayMs: delay,
+					delayMs: Math.round(delay),
+					attemptIndex,
 					errorMessage:
 						error instanceof Error ? error.message : String(error),
+					...(error instanceof OpenRouterError && {status: error.status}),
 				});
 				this.#retryCallback?.();
 				return this.#executeWithRetry(operation, retries - 1);

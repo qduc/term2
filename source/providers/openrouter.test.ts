@@ -1,6 +1,6 @@
 import test from 'ava';
 import {ReadableStream} from 'node:stream/web';
-import {OpenRouterModel, clearOpenRouterConversations} from './openrouter.js';
+import {OpenRouterModel, clearOpenRouterConversations, OpenRouterError} from './openrouter.js';
 import { settingsService } from '../services/settings-service.js';
 import {loggingService} from '../services/logging-service.js';
 
@@ -577,4 +577,104 @@ test.serial('preserves assistant message content when tool calls are present', a
     t.is(assistantMsg.tool_calls.length, 1);
     t.is(assistantMsg.tool_calls[0].id, 'call-456');
     t.is(assistantMsg.tool_calls[0].function.name, 'search');
+});
+
+// ========== Error Recovery Tests: OpenRouterError and Retry Classification ==========
+
+test('OpenRouterError includes status and headers', t => {
+	const error = new OpenRouterError(
+		'Test error',
+		429,
+		{'retry-after': '5', 'x-custom': 'value'},
+		'response body'
+	);
+
+	t.is(error.message, 'Test error');
+	t.is(error.status, 429);
+	t.deepEqual(error.headers, {'retry-after': '5', 'x-custom': 'value'});
+	t.is(error.responseBody, 'response body');
+	t.is(error.name, 'OpenRouterError');
+});
+
+test('OpenRouterError is throwable', t => {
+	const fn = () => {
+		throw new OpenRouterError('Error message', 500, {});
+	};
+
+	const error = t.throws(fn);
+	t.true(error instanceof OpenRouterError);
+	if (error instanceof OpenRouterError) {
+		t.is(error.status, 500);
+	}
+});
+
+test('OpenRouterError can be created with minimal arguments', t => {
+	const error = new OpenRouterError('Minimal error', 400, {});
+
+	t.is(error.message, 'Minimal error');
+	t.is(error.status, 400);
+	t.deepEqual(error.headers, {});
+	t.is(error.responseBody, undefined);
+});
+
+test('OpenRouterError preserves response body', t => {
+	const responseBody = '{"error": "Rate limit exceeded"}';
+	const error = new OpenRouterError('Rate limited', 429, {}, responseBody);
+
+	t.is(error.responseBody, responseBody);
+});
+
+test('OpenRouterError with 429 status for retry logic', t => {
+	const error = new OpenRouterError('Too many requests', 429, {'retry-after': '60'});
+
+	t.is(error.status, 429);
+	t.is(error.headers['retry-after'], '60');
+});
+
+test('OpenRouterError with 5xx status codes for retry logic', t => {
+	const statuses = [500, 502, 503, 504];
+
+	for (const status of statuses) {
+		const error = new OpenRouterError(`Server error ${status}`, status, {});
+		t.is(error.status, status);
+		t.true(error.status >= 500);
+	}
+});
+
+test('OpenRouterError with 4xx status codes (non-retryable)', t => {
+	const statuses = [400, 401, 403, 404, 422];
+
+	for (const status of statuses) {
+		const error = new OpenRouterError(`Client error ${status}`, status, {});
+		t.is(error.status, status);
+		t.true(error.status >= 400 && error.status < 500);
+		t.not(error.status, 429); // 429 is retryable
+	}
+});
+
+test('OpenRouterError with headers for Retry-After extraction', t => {
+	const headers = {
+		'retry-after': '120',
+		'x-ratelimit-reset': '1234567890',
+		'content-type': 'application/json',
+	};
+	const error = new OpenRouterError('Rate limit', 429, headers);
+
+	t.is(error.headers['retry-after'], '120');
+	t.is(error.headers['x-ratelimit-reset'], '1234567890');
+	t.is(error.headers['content-type'], 'application/json');
+});
+
+test('OpenRouterError error instanceof checks', t => {
+	const error = new OpenRouterError('Test', 500, {});
+
+	t.true(error instanceof Error);
+	t.true(error instanceof OpenRouterError);
+});
+
+test('OpenRouterError with empty headers', t => {
+	const error = new OpenRouterError('No headers', 503, {});
+
+	t.deepEqual(error.headers, {});
+	t.is(Object.keys(error.headers).length, 0);
 });

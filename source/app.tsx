@@ -14,6 +14,7 @@ import type {ConversationService} from './services/conversation-service.js';
 import {settingsService} from './services/settings-service.js';
 import {createSettingsCommand} from './utils/settings-command.js';
 import {setTrimConfig} from './utils/output-trim.js';
+import {getProvider} from './providers/index.js';
 
 // Pure function to parse slash commands
 type ParsedInput =
@@ -142,9 +143,18 @@ const App: FC<AppProps> = ({conversationService}) => {
                     }
 
                     // Parse model and provider from args
-                    // Format: "model-id --provider=openai" or just "model-id"
-                    const providerMatch = args.match(/--provider=(openai|openrouter)/);
-                    const modelId = args.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+                    // Format: "model-id --provider=providerid" or just "model-id"
+                    const providerMatch = args.match(/--provider=(\w+)/);
+                    const modelId = args.replace(/\s*--provider=\w+\s*/, '').trim();
+
+                    // Validate provider if specified
+                    if (providerMatch) {
+                        const provider = providerMatch[1];
+                        if (!getProvider(provider)) {
+                            addSystemMessage(`Error: Unknown provider '${provider}'`);
+                            return false;
+                        }
+                    }
 
                     // Update settings and runtime
                     settingsService.set('agent.model', modelId);
@@ -152,7 +162,7 @@ const App: FC<AppProps> = ({conversationService}) => {
 
                     let providerMsg = '';
                     if (providerMatch) {
-                        const provider = providerMatch[1] as 'openai' | 'openrouter';
+                        const provider = providerMatch[1];
                         settingsService.set('agent.provider', provider);
                         applyRuntimeSetting('agent.provider', provider);
                         providerMsg = ` (${provider})`;

@@ -4,6 +4,9 @@ import envPaths from 'env-paths';
 import {z} from 'zod';
 import deepEqual from 'fast-deep-equal';
 import {loggingService} from './logging-service.js';
+// Import providers to ensure they're registered before schema construction
+import '../providers/index.js';
+import {getAllProviders, getProvider} from '../providers/index.js';
 
 const paths = envPaths('term2');
 
@@ -19,7 +22,10 @@ const AgentSettingsSchema = z.object({
     retryAttempts: z.number().int().nonnegative().default(2),
     maxConsecutiveToolFailures: z.number().int().positive().default(3),
     provider: z
-        .enum(['openai', 'openrouter'])
+        .string()
+        .refine((val) => getProvider(val) !== undefined, {
+            message: 'Provider must be registered in the provider registry',
+        })
         .default('openai')
         .describe('Provider to use for the agent'),
     openrouter: z
@@ -75,13 +81,24 @@ const DebugSettingsSchema = z.object({
  * Settings that are sensitive and should NEVER be saved to disk.
  * These are only loaded from environment variables.
  */
-const SENSITIVE_SETTING_KEYS = new Set<string>([
-    'agent.openrouter.apiKey',
-    'agent.openrouter.baseUrl',
-    'agent.openrouter.referrer',
-    'agent.openrouter.title',
-    'app.shellPath',
-]);
+function getSensitiveSettingKeys(): Set<string> {
+    const keys = new Set<string>([
+        'app.shellPath',
+    ]);
+
+    // Add provider-specific sensitive keys
+    for (const provider of getAllProviders()) {
+        if (provider.sensitiveSettingKeys) {
+            for (const key of provider.sensitiveSettingKeys) {
+                keys.add(key);
+            }
+        }
+    }
+
+    return keys;
+}
+
+const SENSITIVE_SETTING_KEYS = getSensitiveSettingKeys();
 
 const SettingsSchema = z.object({
     agent: AgentSettingsSchema.optional(),

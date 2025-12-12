@@ -1,12 +1,13 @@
 import React, {FC} from 'react';
 import {Box, Text} from 'ink';
 import type {ModelInfo} from '../services/model-service.js';
+import {getAllProviders} from '../providers/index.js';
 
 type Props = {
     items: ModelInfo[];
     selectedIndex: number;
     query: string;
-    provider?: 'openai' | 'openrouter' | null;
+    provider?: string | null;
     loading?: boolean;
     error?: string | null;
     scrollOffset?: number;
@@ -15,13 +16,10 @@ type Props = {
 };
 
 const ProviderTabs: FC<{
-    activeProvider?: 'openai' | 'openrouter' | null;
+    activeProvider?: string | null;
     canSwitch?: boolean;
 }> = ({activeProvider, canSwitch = true}) => {
-    const providers: Array<{id: 'openai' | 'openrouter'; label: string}> = [
-        {id: 'openai', label: 'OpenAI'},
-        {id: 'openrouter', label: 'OpenRouter'},
-    ];
+    const providers = getAllProviders().map(p => ({id: p.id, label: p.label}));
 
     return (
         <Box flexDirection="column">

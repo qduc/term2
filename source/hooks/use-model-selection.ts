@@ -7,6 +7,7 @@ import {
 } from '../services/model-service.js';
 import {loggingService} from '../services/logging-service.js';
 import {settingsService} from '../services/settings-service.js';
+import {getProviderIds} from '../providers/index.js';
 
 export const MODEL_TRIGGER = '/settings agent.model ';
 export const MODEL_CMD_TRIGGER = '/model ';
@@ -19,7 +20,7 @@ export const useModelSelection = (hasConversationHistory = false) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedIndex, setSelectedIndex] = useState(0);
-    const [provider, setProvider] = useState<'openai' | 'openrouter' | null>(null);
+    const [provider, setProvider] = useState<string | null>(null);
     const [scrollOffset, setScrollOffset] = useState(0);
 
     const isOpen = mode === 'model_selection';
@@ -33,7 +34,7 @@ export const useModelSelection = (hasConversationHistory = false) => {
 
     useEffect(() => {
         if (isOpen) {
-            const providerSetting = settingsService.get<'openai' | 'openrouter'>(
+            const providerSetting = settingsService.get<string>(
                 'agent.provider',
             );
             setProvider(providerSetting);
@@ -130,7 +131,12 @@ export const useModelSelection = (hasConversationHistory = false) => {
     }, [filteredModels, selectedIndex]);
 
     const toggleProvider = useCallback(() => {
-        setProvider(prev => (prev === 'openai' ? 'openrouter' : 'openai'));
+        const providerIds = getProviderIds();
+        setProvider(prev => {
+            const currentIndex = providerIds.indexOf(prev || providerIds[0]);
+            const nextIndex = (currentIndex + 1) % providerIds.length;
+            return providerIds[nextIndex];
+        });
     }, []);
 
     return {

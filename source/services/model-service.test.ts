@@ -9,17 +9,23 @@ import {settingsService} from './settings-service.js';
 const originalProvider = settingsService.get('agent.provider');
 const originalApiKey = process.env.OPENAI_API_KEY;
 
+test.beforeEach(() => {
+	clearModelCache();
+});
+
 test.afterEach(() => {
 	clearModelCache();
 	settingsService.set('agent.provider', originalProvider);
 	process.env.OPENAI_API_KEY = originalApiKey;
 });
 
-test('fetchModels uses OpenRouter endpoint and caches results', async t => {
+test.serial('fetchModels uses OpenRouter endpoint and caches results', async t => {
 	settingsService.set('agent.provider', 'openrouter');
-	const calls: Array<{url: string; options: any}> = [];
+	const calls: Array<{url: string; options: any; callNumber: number}> = [];
+	let callCount = 0;
 	const fakeFetch = async (url: string, options: any) => {
-		calls.push({url, options});
+		callCount++;
+		calls.push({url, options, callNumber: callCount});
 		return {
 			ok: true,
 			json: async () => ({
@@ -32,17 +38,25 @@ test('fetchModels uses OpenRouter endpoint and caches results', async t => {
 		};
 	};
 
+	console.log('About to call fetchModels first time');
 	const first = await fetchModels(undefined, fakeFetch as any);
+	console.log(`After first fetchModels, calls.length = ${calls.length}`);
+
+	console.log('About to call fetchModels second time');
 	const second = await fetchModels(undefined, fakeFetch as any);
+	console.log(`After second fetchModels, calls.length = ${calls.length}`);
 
 	t.deepEqual(first.map(m => m.id), ['openrouter/model-a', 'openrouter/model-c']);
 	t.is(second.length, first.length, 'Cache should be reused');
 	// Only the first call should hit fetch because of caching
+	if (calls.length !== 1) {
+		console.log('Calls:', calls.map(c => ({url: c.url, callNumber: c.callNumber})));
+	}
 	t.is(calls.length, 1);
 	t.true(calls[0].url.includes('/models'));
 });
 
-test('fetchModels uses OpenAI models endpoint when provider is openai', async t => {
+test.serial('fetchModels uses OpenAI models endpoint when provider is openai', async t => {
 	settingsService.set('agent.provider', 'openai');
 	process.env.OPENAI_API_KEY = 'key-openai-test';
 	const calls: Array<{url: string; options: any}> = [];

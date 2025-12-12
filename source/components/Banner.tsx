@@ -1,12 +1,16 @@
 import React, {FC} from 'react';
 import {Box, Text} from 'ink';
 import { useSetting } from '../hooks/use-setting.js';
+import {getProvider} from '../providers/index.js';
 
 const Banner: FC = () => {
     const mode = useSetting<'default' | 'edit'>('app.mode') ?? 'default';
     const model = useSetting<string>('agent.model');
-    const provider = useSetting<string>('agent.provider') ?? 'openai';
+    const providerKey = useSetting<string>('agent.provider') ?? 'openai';
     const reasoningEffort = useSetting<string>('agent.reasoningEffort') ?? 'default';
+
+    const providerDef = getProvider(providerKey);
+    const providerLabel = providerDef?.label || providerKey;
 
     const accent = '#0ed7b5';
     const glow = '#fbbf24';
@@ -35,7 +39,7 @@ const Banner: FC = () => {
                     <Box marginX={1}>
                         <Text color={accent}>{model}</Text>
 						<Text color={slate}>
-							{' '}({provider === 'openrouter' ? 'OpenRouter' : provider === 'openai' ? 'OpenAI' : provider})
+							{' '}({providerLabel})
 						</Text>
                     </Box>
                 </>

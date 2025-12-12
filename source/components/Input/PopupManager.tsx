@@ -29,7 +29,7 @@ interface PopupManagerProps {
         query: string;
         loading: boolean;
         error: string | null;
-        provider?: 'openai' | 'openrouter' | null;
+        provider?: string | null;
         scrollOffset?: number;
         canSwitchProvider?: boolean;
     };

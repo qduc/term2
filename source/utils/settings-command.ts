@@ -4,6 +4,7 @@ import type {
     SettingsWithSources,
 } from '../services/settings-service.js';
 import {SETTING_KEYS} from '../services/settings-service.js';
+import {getProvider} from '../providers/index.js';
 
 export function parseSettingValue(raw: string): any {
     const value = raw.trim();
@@ -134,9 +135,14 @@ export function createSettingsCommand({
 
             // Special handling for agent.model: handle --provider flag
             if (key === SETTING_KEYS.AGENT_MODEL && typeof parsedValue === 'string') {
-                const providerMatch = parsedValue.match(/--provider=(openai|openrouter)/);
+                const providerMatch = parsedValue.match(/--provider=(\w+)/);
                 if (providerMatch) {
                     const provider = providerMatch[1];
+                    // Validate provider
+                    if (!getProvider(provider)) {
+                        addSystemMessage(`Error: Unknown provider '${provider}'`);
+                        return false;
+                    }
                     // Update provider setting
                     settingsService.set(SETTING_KEYS.AGENT_PROVIDER, provider);
                     // Apply runtime provider change
@@ -144,7 +150,7 @@ export function createSettingsCommand({
                         applyRuntimeSetting(SETTING_KEYS.AGENT_PROVIDER, provider);
                     }
                 }
-                parsedValue = parsedValue.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+                parsedValue = parsedValue.replace(/\s*--provider=\w+\s*/, '').trim();
             }
 
             // Prevent changing provider via settings command - it can only be changed

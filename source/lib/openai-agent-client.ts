@@ -14,10 +14,9 @@ import {
 	RateLimitError,
 } from 'openai';
 import {
-	clearOpenRouterConversations,
-	OpenRouterProvider,
 	OpenRouterError,
 } from '../providers/openrouter.js';
+import {getProvider} from '../providers/index.js';
 import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
 import {randomUUID} from 'node:crypto';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
@@ -124,22 +123,12 @@ export class OpenAIAgentClient {
 	}
 
 	#createRunner(): Runner | null {
-		// Only create a runner if we're using OpenRouter
-		if (this.#provider !== 'openrouter') {
+		const providerDef = getProvider(this.#provider);
+		if (!providerDef?.createRunner) {
 			return null;
 		}
 
-		const apiKey = settingsService.get<string>('agent.openrouter.apiKey');
-		if (!apiKey) {
-			loggingService.warn(
-				'OpenRouter API key not set, falling back to default provider',
-			);
-			return null;
-		}
-
-		return new Runner({
-			modelProvider: new OpenRouterProvider(),
-		});
+		return providerDef.createRunner();
 	}
 
 	setRetryCallback(callback: () => void): void {
@@ -162,8 +151,9 @@ export class OpenAIAgentClient {
 	}
 
 	clearConversations(): void {
-		if (this.#provider === 'openrouter') {
-			clearOpenRouterConversations();
+		const providerDef = getProvider(this.#provider);
+		if (providerDef?.clearConversations) {
+			providerDef.clearConversations();
 		}
 	}
 

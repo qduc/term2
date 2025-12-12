@@ -128,7 +128,7 @@ export class OpenAIAgentClient {
 			return null;
 		}
 
-		return providerDef.createRunner();
+		return providerDef.createRunner({settingsService, loggingService});
 	}
 
 	setRetryCallback(callback: () => void): void {

@@ -11,8 +11,13 @@ export interface ProviderDefinition {
     /** Human-readable label for display (e.g., 'OpenAI', 'OpenRouter') */
     label: string;
 
-    /** Factory function to create a Runner instance, or undefined to use SDK default */
-    createRunner?: () => Runner | null;
+    /**
+     * Factory function to create a Runner instance, or undefined to use SDK default.
+     *
+     * NOTE: This accepts dependencies from the caller to avoid providers importing
+     * services directly (which can create ESM circular dependency issues).
+     */
+    createRunner?: (deps: {settingsService: any; loggingService: any}) => Runner | null;
 
     /** Function to fetch available models for this provider */
     fetchModels: (fetchImpl?: (url: string, options?: any) => Promise<any>) => Promise<Array<{id: string; name?: string}>>;

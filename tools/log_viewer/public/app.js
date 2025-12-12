@@ -20,21 +20,33 @@ function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
   const sanitizeToolsArray = (toolsVal) => {
     if (!Array.isArray(toolsVal)) return toolsVal;
 
+    const sanitizeNameDesc = (obj) => {
+      const name = typeof obj.name === 'string' ? obj.name : undefined;
+      const description = truncateStr(typeof obj.description === 'string' ? obj.description : undefined, maxLen);
+
+      // Remove all fields except name/description
+      for (const key in obj) {
+        if (key !== 'name' && key !== 'description') {
+          delete obj[key];
+        }
+      }
+      obj.name = name;
+      obj.description = description;
+
+      // Keep output tidy (avoid emitting undefined fields)
+      if (obj.name === undefined) delete obj.name;
+      if (obj.description === undefined) delete obj.description;
+    };
+
     for (const item of toolsVal) {
       if (!item || typeof item !== 'object') continue;
 
       // Find `function` object inside each tools[] item
       if (item.function && typeof item.function === 'object' && !Array.isArray(item.function)) {
-        const fn = item.function;
-        const name = typeof fn.name === 'string' ? fn.name : undefined;
-        const description = truncateStr(typeof fn.description === 'string' ? fn.description : undefined, maxLen);
-
-        // Remove all fields except name/description
-        item.function = {name, description};
-
-        // Keep output tidy (avoid emitting undefined fields)
-        if (item.function.name === undefined) delete item.function.name;
-        if (item.function.description === undefined) delete item.function.description;
+        sanitizeNameDesc(item.function);
+      } else if (typeof item.name === 'string' || typeof item.description === 'string') {
+        // Handle cases where fields are at the root level
+        sanitizeNameDesc(item);
       }
     }
 
@@ -57,8 +69,9 @@ function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
     }
 
     // plain object
+    const keysToTruncate = ['content', 'text', 'systemInstructions'];
     for (const [key, val] of Object.entries(node)) {
-      if ((key === 'content' || key === 'text') && typeof val === 'string') {
+      if (keysToTruncate.includes(key) && typeof val === 'string') {
         node[key] = truncateStr(val, maxLen);
         continue;
       }

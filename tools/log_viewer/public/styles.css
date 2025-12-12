@@ -42,7 +42,7 @@ input,select,button{background:rgba(255,255,255,0.03);border:1px solid rgba(255,
 button{cursor:pointer}
 
 /* JSON syntax highlighting (only applied when content is valid JSON) */
-pre.code-json{white-space:pre; overflow:auto}
+pre.code-json{white-space:pre-wrap; overflow:auto}
 pre.code-json .json-key{color:#7dd3fc}
 pre.code-json .json-string{color:#c3e88d}
 pre.code-json .json-number{color:#f78c6c}

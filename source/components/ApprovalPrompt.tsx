@@ -127,6 +127,20 @@ const SearchReplacePrompt: FC<{args: SearchReplaceArgs}> = ({args}) => {
 };
 
 const ApprovalPrompt: FC<Props> = ({approval}) => {
+    // Special handling for max turns exceeded prompt
+    if (approval.toolName === 'max_turns_exceeded') {
+        return (
+            <Box flexDirection="column">
+                <Text color="yellow" bold>
+                    {approval.argumentsText}
+                </Text>
+                <Text color="yellow">
+                    Do you want to continue? (y/n)
+                </Text>
+            </Box>
+        );
+    }
+
     // Try to parse and render arguments nicely based on tool type
     let content: React.ReactNode = (
         <Text dimColor>{approval.argumentsText}</Text>

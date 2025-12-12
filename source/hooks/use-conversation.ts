@@ -23,6 +23,7 @@ interface ApprovalMessage {
         toolName: string;
         argumentsText: string;
         rawInterruption: any;
+        isMaxTurnsPrompt?: boolean; // Special flag for max turns continuation
     };
     answer: string | null;
 }
@@ -331,12 +332,39 @@ export const useConversation = ({
                 });
                 const errorMessage =
                     error instanceof Error ? error.message : String(error);
-                const botErrorMessage: BotMessage = {
-                    id: Date.now(),
-                    sender: 'bot',
-                    text: `Error: ${errorMessage}`,
-                };
-                setMessages(prev => [...prev, botErrorMessage]);
+
+                // Check if this is a max turns exceeded error
+                const isMaxTurnsError = errorMessage.includes('Max turns') && errorMessage.includes('exceeded');
+
+                if (isMaxTurnsError) {
+                    // Create an approval prompt for max turns continuation
+                    const approvalMessage: ApprovalMessage = {
+                        id: Date.now(),
+                        sender: 'approval',
+                        approval: {
+                            agentName: 'System',
+                            toolName: 'max_turns_exceeded',
+                            argumentsText: errorMessage,
+                            rawInterruption: null,
+                            isMaxTurnsPrompt: true,
+                        },
+                        answer: null,
+                    };
+                    setPendingApprovalMessageId(approvalMessage.id);
+                    setMessages(prev => [...prev, approvalMessage]);
+                    setWaitingForApproval(true);
+                } else {
+                    // For other errors, just show the error message
+                    const botErrorMessage: BotMessage = {
+                        id: Date.now(),
+                        sender: 'bot',
+                        text: `Error: ${errorMessage}`,
+                    };
+                    setMessages(prev => [...prev, botErrorMessage]);
+                    // Reset approval state on error to allow user to continue
+                    setWaitingForApproval(false);
+                    setPendingApprovalMessageId(null);
+                }
             } finally {
                 loggingService.debug('sendUserMessage finally block - resetting state');
                 flushLog();
@@ -355,6 +383,12 @@ export const useConversation = ({
                 return;
             }
 
+            // Check if this is a max turns exceeded prompt
+            const approvalMessage = messages.find(
+                msg => msg.sender === 'approval' && msg.id === pendingApprovalMessageId
+            ) as ApprovalMessage | undefined;
+            const isMaxTurnsPrompt = approvalMessage?.approval?.isMaxTurnsPrompt;
+
             setMessages(prev =>
                 prev.map(msg =>
                     msg.sender === 'approval' &&
@@ -363,6 +397,146 @@ export const useConversation = ({
                         : msg,
                 ),
             );
+
+            // Handle "n" answer for max turns - return to input
+            if (isMaxTurnsPrompt && answer === 'n') {
+                setWaitingForApproval(false);
+                setPendingApprovalMessageId(null);
+                setIsProcessing(false);
+                return;
+            }
+
+            // Handle "y" answer for max turns - continue execution automatically
+            if (isMaxTurnsPrompt && answer === 'y') {
+                setWaitingForApproval(false);
+                setPendingApprovalMessageId(null);
+                setIsProcessing(true);
+
+                const liveMessageId = Date.now();
+                setLiveResponse({
+                    id: liveMessageId,
+                    sender: 'bot',
+                    text: '',
+                });
+
+                // Track accumulated text so we can flush it before command messages
+                let accumulatedText = '';
+                let accumulatedReasoningText = '';
+                let flushedReasoningLength = 0;
+                let textWasFlushed = false;
+                let currentReasoningMessageId: number | null = null;
+
+                const {logDeduplicated, flush: flushLog} = createEventLogger();
+
+                try {
+                    // Send a continuation message to resume work
+                    const continuationMessage = 'Please continue with your previous task.';
+                    const result = await conversationService.sendMessage(continuationMessage, {
+                        onTextChunk: (_fullText, chunk = '') => {
+                            logDeduplicated('onTextChunk');
+                            accumulatedText += chunk;
+                            setLiveResponse(prev =>
+                                prev && prev.id === liveMessageId
+                                    ? {...prev, text: accumulatedText}
+                                    : {
+                                            id: liveMessageId,
+                                            sender: 'bot',
+                                            text: accumulatedText,
+                                      },
+                            );
+                        },
+                        onReasoningChunk: fullReasoningText => {
+                            logDeduplicated('onReasoningChunk');
+                            const newReasoningText = fullReasoningText.slice(
+                                flushedReasoningLength,
+                            );
+                            accumulatedReasoningText = newReasoningText;
+
+                            if (!newReasoningText.trim()) return;
+
+                            setMessages(prev => {
+                                if (currentReasoningMessageId !== null) {
+                                    return prev.map(msg =>
+                                        msg.id === currentReasoningMessageId
+                                            ? {...msg, text: newReasoningText}
+                                            : msg,
+                                    );
+                                }
+
+                                const newId = Date.now();
+                                currentReasoningMessageId = newId;
+                                return [
+                                    ...prev,
+                                    {
+                                        id: newId,
+                                        sender: 'reasoning',
+                                        text: newReasoningText,
+                                    },
+                                ];
+                            });
+                        },
+                        onCommandMessage: cmdMsg => {
+                            logDeduplicated('onCommandMessage');
+                            const messagesToAdd: Message[] = [];
+
+                            if (accumulatedReasoningText.trim()) {
+                                flushedReasoningLength +=
+                                    accumulatedReasoningText.length;
+                                accumulatedReasoningText = '';
+                                currentReasoningMessageId = null;
+                            }
+
+                            if (accumulatedText.trim()) {
+                                const textMessage: BotMessage = {
+                                    id: Date.now() + 1,
+                                    sender: 'bot',
+                                    text: accumulatedText,
+                                };
+                                messagesToAdd.push(textMessage);
+                                accumulatedText = '';
+                                textWasFlushed = true;
+                            }
+
+                            if (messagesToAdd.length > 0) {
+                                setMessages(prev => [
+                                    ...prev,
+                                    ...messagesToAdd,
+                                ]);
+                                setLiveResponse(null);
+                            }
+
+                            setMessages(prev => [...prev, cmdMsg]);
+                        },
+                    });
+
+                    applyServiceResult(
+                        result,
+                        accumulatedText,
+                        accumulatedReasoningText,
+                        textWasFlushed,
+                    );
+                } catch (error) {
+                    loggingService.error('Error in continuation after max turns', {
+                        error: error instanceof Error ? error.message : String(error),
+                        stack: error instanceof Error ? error.stack : undefined,
+                    });
+                    const errorMessage =
+                        error instanceof Error ? error.message : String(error);
+                    const botErrorMessage: BotMessage = {
+                        id: Date.now(),
+                        sender: 'bot',
+                        text: `Error: ${errorMessage}`,
+                    };
+                    setMessages(prev => [...prev, botErrorMessage]);
+                    setWaitingForApproval(false);
+                    setPendingApprovalMessageId(null);
+                } finally {
+                    flushLog();
+                    setLiveResponse(null);
+                    setIsProcessing(false);
+                }
+                return;
+            }
 
             setIsProcessing(true);
             const liveMessageId = Date.now();
@@ -490,6 +664,9 @@ export const useConversation = ({
                     text: `Error: ${errorMessage}`,
                 };
                 setMessages(prev => [...prev, botErrorMessage]);
+                // Reset approval state on error to allow user to continue
+                setWaitingForApproval(false);
+                setPendingApprovalMessageId(null);
             } finally {
                 loggingService.debug('handleApprovalDecision finally block - resetting state');
                 flushLog();
@@ -505,6 +682,7 @@ export const useConversation = ({
             conversationService,
             pendingApprovalMessageId,
             waitingForApproval,
+            messages,
         ],
     );
 

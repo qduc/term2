@@ -306,6 +306,7 @@ function buildMessagesFromRequest(
     // See: https://openrouter.ai/docs/guides/best-practices/prompt-caching#anthropic-claude
     if (modelId && isAnthropicModel(modelId)) {
         addCacheControlToLastUserMessage(messages);
+        addCacheControlToLastToolMessage(messages);
     }
 
     return messages;
@@ -341,6 +342,39 @@ function addCacheControlToLastUserMessage(messages: any[]): void {
                 }
             }
             break; // Only process the last user message
+        }
+    }
+}
+
+/**
+ * Add cache_control to the last tool message in the messages array.
+ */
+function addCacheControlToLastToolMessage(messages: any[]): void {
+    // Find the last tool message by iterating from the end
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg.role === 'tool') {
+            // Transform the message content to include cache_control
+            if (typeof msg.content === 'string') {
+                // Convert string content to array format with cache_control
+                msg.content = [
+                    {
+                        type: 'text',
+                        text: msg.content,
+                        cache_control: { type: 'ephemeral' },
+                    },
+                ];
+            } else if (Array.isArray(msg.content) && msg.content.length > 0) {
+                // Add cache_control to the last text item in the array
+                for (let j = msg.content.length - 1; j >= 0; j--) {
+                    const item = msg.content[j];
+                    if (item.type === 'text') {
+                        item.cache_control = { type: 'ephemeral' };
+                        break;
+                    }
+                }
+            }
+            break; // Only process the last tool message
         }
     }
 }
@@ -518,7 +552,7 @@ class OpenRouterModel implements Model {
         this.#loggingService = deps.loggingService;
         this.#modelId =
             deps.modelId ||
-            this.#settingsService.get('agent.openrouter.model') ||
+            this.#settingsService.get('agent.model') ||
             'openrouter/auto';
     }
 

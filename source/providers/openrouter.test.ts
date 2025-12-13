@@ -808,6 +808,73 @@ test.serial('handles mixed reasoning types (summary + encrypted)', async t => {
     t.truthy(response.output[2].content[0].text.includes('1 + 1 equals 2'));
 });
 
+test.serial('applies cache_control to last tool message for Anthropic models', async t => {
+    const requests: any[] = [];
+    globalThis.fetch = async (_url, options: any) => {
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return createJsonResponse({
+            id: 'resp-1',
+            choices: [{ message: { content: 'ok' } }],
+            usage: {},
+        });
+    };
+
+    const model = new OpenRouterModel({
+        settingsService: mockSettingsService,
+        loggingService: logger,
+        modelId: 'anthropic/claude-3.5-sonnet'
+    });
+
+    const inputItems = [
+        { type: 'input_text', text: 'User message' },
+        {
+            type: 'function_call',
+            id: 'call-1',
+            name: 'tool1',
+            arguments: '{}',
+        },
+        {
+            type: 'function_call_result',
+            callId: 'call-1',
+            output: 'result1',
+        },
+        {
+            type: 'function_call',
+            id: 'call-2',
+            name: 'tool2',
+            arguments: '{}',
+        },
+        {
+            type: 'function_call_result',
+            callId: 'call-2',
+            output: 'result2',
+        },
+    ];
+
+    await model.getResponse({
+        systemInstructions: 'system',
+        input: inputItems as any,
+    } as any);
+
+    t.truthy(requests[0]);
+    const messages = requests[0].messages;
+
+    // Verify last tool message has cache_control
+    const lastToolMsg = messages[messages.length - 1];
+    t.is(lastToolMsg.role, 'tool');
+    t.is(lastToolMsg.tool_call_id, 'call-2');
+    t.true(Array.isArray(lastToolMsg.content));
+    t.is(lastToolMsg.content[0].text, 'result2');
+    t.deepEqual(lastToolMsg.content[0].cache_control, { type: 'ephemeral' });
+
+    // Verify previous tool message does NOT have cache_control
+    const firstToolMsg = messages.find((m: any) => m.tool_call_id === 'call-1');
+    t.truthy(firstToolMsg);
+    t.is(typeof firstToolMsg.content, 'string');
+    t.is(firstToolMsg.content, 'result1');
+});
+
 test.serial('preserves assistant message content when tool calls are present', async t => {
     const requests: any[] = [];
 

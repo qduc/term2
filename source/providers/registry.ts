@@ -20,7 +20,7 @@ export interface ProviderDefinition {
     createRunner?: (deps: {settingsService: any; loggingService: any}) => Runner | null;
 
     /** Function to fetch available models for this provider */
-    fetchModels: (fetchImpl?: (url: string, options?: any) => Promise<any>) => Promise<Array<{id: string; name?: string}>>;
+    fetchModels: (deps: {settingsService: any; loggingService: any}, fetchImpl?: (url: string, options?: any) => Promise<any>) => Promise<Array<{id: string; name?: string}>>;
 
     /** Optional function to clear conversation state for this provider */
     clearConversations?: () => void;

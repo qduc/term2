@@ -6,6 +6,7 @@ import ModelSelectionMenu from '../ModelSelectionMenu.js';
 import type {PathCompletionItem} from '../../hooks/use-path-completion.js';
 import type {SettingCompletionItem} from '../../hooks/use-settings-completion.js';
 import type {ModelInfo} from '../../services/model-service.js';
+import type {SettingsService} from '../../services/settings-service.js';
 
 interface PopupManagerProps {
     slash: {
@@ -38,6 +39,7 @@ interface PopupManagerProps {
         items: SettingCompletionItem[];
         selectedIndex: number;
     };
+    settingsService: SettingsService;
 }
 
 export const PopupManager: FC<PopupManagerProps> = ({
@@ -45,6 +47,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
     path,
     models,
     settings,
+    settingsService,
 }) => {
     return (
         <>
@@ -58,6 +61,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
                     provider={models.provider}
                     scrollOffset={models.scrollOffset}
                     canSwitchProvider={models.canSwitchProvider}
+                    settingsService={settingsService}
                 />
             )}
             {path.isOpen && (

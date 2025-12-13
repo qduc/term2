@@ -3,6 +3,7 @@ import {Box, Text} from 'ink';
 import type {ModelInfo} from '../services/model-service.js';
 import {getAllProviders} from '../providers/index.js';
 import {hasProviderCredentials} from '../utils/provider-credentials.js';
+import type {SettingsService} from '../services/settings-service.js';
 
 type Props = {
     items: ModelInfo[];
@@ -14,16 +15,18 @@ type Props = {
     scrollOffset?: number;
     maxHeight?: number;
     canSwitchProvider?: boolean;
+    settingsService: SettingsService;
 };
 
 const ProviderTabs: FC<{
     activeProvider?: string | null;
     canSwitch?: boolean;
-}> = ({activeProvider, canSwitch = true}) => {
+    settingsService: SettingsService;
+}> = ({activeProvider, canSwitch = true, settingsService}) => {
     const providers = getAllProviders().map(p => ({
         id: p.id,
         label: p.label,
-        hasCredentials: hasProviderCredentials(p.id),
+        hasCredentials: hasProviderCredentials(settingsService, p.id),
     }));
 
     return (
@@ -84,6 +87,7 @@ const ModelSelectionMenu: FC<Props> = ({
     scrollOffset = 0,
     maxHeight = 10,
     canSwitchProvider = true,
+    settingsService,
 }) => {
     if (loading) {
         return (
@@ -122,6 +126,7 @@ const ModelSelectionMenu: FC<Props> = ({
             <ProviderTabs
                 activeProvider={provider}
                 canSwitch={canSwitchProvider}
+                settingsService={settingsService}
             />
             <Box
                 borderStyle="round"

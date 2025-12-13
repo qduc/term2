@@ -377,10 +377,57 @@ const parseBooleanEnv = (value: unknown): boolean => {
     return normalized === '1' || normalized === 'true' || normalized === 'yes';
 };
 
+const isTestEnvironment = () => {
+    return (
+        process.env.NODE_ENV === 'test' ||
+        process.env.VITEST !== undefined ||
+        process.env.AVA_PATH !== undefined ||
+        process.env.JEST_WORKER_ID !== undefined ||
+        process.env.TERM2_TEST_MODE === 'true' ||
+        Boolean(process.env.AVA)
+    );
+};
+
 /**
- * Singleton export for convenience
+ * @deprecated DO NOT USE - Singleton pattern is deprecated
+ *
+ * This singleton is deprecated and should not be used in application code.
+ * Instead, pass the LoggingService instance via dependency injection:
+ *
+ * - In services/tools: Accept via constructor deps parameter
+ * - In components: Accept as prop or use a context provider
+ *
+ * This export now throws an error when accessed to catch deprecated usage.
+ * It's only allowed in test files for backwards compatibility.
  */
-export const loggingService = new LoggingService({
+const _loggingServiceInstance = new LoggingService({
     disableLogging: parseBooleanEnv(process.env.DISABLE_LOGGING) || Boolean(process.env.AVA),
     debugLogging: parseBooleanEnv(process.env.DEBUG_LOGGING),
+});
+
+export const loggingService = new Proxy(_loggingServiceInstance, {
+    get(target, prop) {
+        // Allow access in test environment for backwards compatibility
+        if (isTestEnvironment()) {
+            const value = target[prop as keyof typeof target];
+            // Bind methods to the original target to preserve 'this' context
+            if (typeof value === 'function') {
+                return value.bind(target);
+            }
+            return value;
+        }
+
+        // Get the caller's stack trace to show where the deprecated usage is
+        const stack = new Error().stack || '';
+        const callerLine = stack.split('\n')[2] || 'unknown location';
+
+        throw new Error(
+            `DEPRECATED: Direct use of loggingService singleton is not allowed.\n` +
+            `Called from: ${callerLine.trim()}\n\n` +
+            `Instead, pass LoggingService via dependency injection:\n` +
+            `  - In services/tools: Accept via 'deps' constructor parameter\n` +
+            `  - In components: Accept as prop or use a context provider\n\n` +
+            `The singleton pattern prevents proper testing and makes dependencies unclear.`
+        );
+    }
 });

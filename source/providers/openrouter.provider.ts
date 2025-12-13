@@ -2,9 +2,8 @@ import {Runner} from '@openai/agents';
 import {registerProvider} from './registry.js';
 import {OpenRouterProvider} from './openrouter.js';
 
-async function fetchOpenRouterModels(fetchImpl: (url: string, options?: any) => Promise<any> = fetch as any): Promise<Array<{id: string; name?: string}>> {
-    // Get settings service lazily to avoid import cycles
-    const {settingsService} = await import('../services/settings-service.js');
+async function fetchOpenRouterModels(deps: {settingsService: any; loggingService: any}, fetchImpl: (url: string, options?: any) => Promise<any> = fetch as any): Promise<Array<{id: string; name?: string}>> {
+    const {settingsService} = deps;
 
     const baseUrl = settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1';
     const apiKey = settingsService.get('agent.openrouter.apiKey');
@@ -47,7 +46,7 @@ registerProvider({
         }
 
         return new Runner({
-            modelProvider: new OpenRouterProvider(settingsService, loggingService),
+            modelProvider: new OpenRouterProvider({settingsService, loggingService}),
         });
     },
     fetchModels: fetchOpenRouterModels,

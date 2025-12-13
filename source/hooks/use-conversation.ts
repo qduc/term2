@@ -1,8 +1,8 @@
 import {useCallback, useState} from 'react';
 import type {ConversationService} from '../services/conversation-service.js';
-import {loggingService} from '../services/logging-service.js';
 import {isAbortLikeError} from '../utils/error-helpers.js';
 import type {ConversationEvent} from '../services/conversation-events.js';
+import type {ILoggingService} from '../services/service-interfaces.js';
 
 interface UserMessage {
     id: number;
@@ -69,8 +69,10 @@ interface LiveResponse {
 
 export const useConversation = ({
     conversationService,
+    loggingService,
 }: {
     conversationService: ConversationService;
+    loggingService: ILoggingService;
 }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [waitingForApproval, setWaitingForApproval] =

@@ -1,9 +1,11 @@
-import {settingsService} from '../services/settings-service.js';
+import type {ISettingsService} from '../services/service-interfaces.js';
+
 /**
  * Log command execution for security forensics
  * Only writes to stderr if DEBUG_BASH_TOOL is enabled to avoid polluting Ink UI
  */
 export function logCommandExecution(
+    settingsService: ISettingsService,
     command: string,
     isDangerous: boolean,
     approved: boolean,
@@ -26,7 +28,7 @@ export function logCommandExecution(
 /**
  * Log validation errors for debugging
  */
-export function logValidationError(message: string): void {
+export function logValidationError(settingsService: ISettingsService, message: string): void {
     if (!settingsService.get<boolean>('debug.debugBashTool')) {
         return;
     }

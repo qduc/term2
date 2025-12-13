@@ -4,6 +4,7 @@ import {render} from 'ink-testing-library';
 import InputBox from './InputBox.js';
 import {InputProvider} from '../context/InputContext.js';
 import type {SlashCommand} from './SlashCommandMenu.js';
+import {createMockSettingsService} from '../services/settings-service.mock.js';
 
 // Mock slash commands
 const mockSlashCommands: SlashCommand[] = [
@@ -17,6 +18,16 @@ const defaultProps = {
 	slashCommands: mockSlashCommands,
 	onHistoryUp: () => {},
 	onHistoryDown: () => {},
+	settingsService: createMockSettingsService(),
+	loggingService: {
+		info: () => {},
+		warn: () => {},
+		error: () => {},
+		debug: () => {},
+		security: () => {},
+		setCorrelationId: () => {},
+		clearCorrelationId: () => {},
+	} as any,
 };
 
 // Helper to wrap InputBox with InputProvider

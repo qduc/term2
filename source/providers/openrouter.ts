@@ -6,10 +6,7 @@ import {
     type ResponseStreamEvent,
 } from '@openai/agents-core';
 import {randomUUID} from 'node:crypto';
-import {settingsService} from '../services/settings-service.js';
-import {
-	loggingService,
-} from '../services/logging-service.js';
+import type {ILoggingService, ISettingsService} from '../services/service-interfaces.js';
 
 /**
  * Custom error class for OpenRouter API errors
@@ -94,9 +91,8 @@ function decodeHtmlEntities(text: string): string {
 //
 // See detailed comments below for ModelResponse.output structure requirements.
 
-function getOpenRouterBaseUrl(settingsServiceInstance?: any): string {
-    const settingsSvc = settingsServiceInstance || settingsService;
-    return settingsSvc.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1';
+function getOpenRouterBaseUrl(settingsService: ISettingsService): string {
+    return settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1';
 }
 
 // Convert OpenRouter usage format to OpenAI Agents SDK format
@@ -372,7 +368,7 @@ async function callOpenRouter({
     signal,
     settings,
     tools,
-    settingsServiceInstance,
+    settingsService,
 }: {
     apiKey: string;
     model: string;
@@ -381,10 +377,9 @@ async function callOpenRouter({
     signal?: AbortSignal;
     settings?: any;
     tools?: any[];
-    settingsServiceInstance?: any;
+    settingsService: ISettingsService;
 }): Promise<Response> {
-    const settingsSvc = settingsServiceInstance || settingsService;
-    const url = `${getOpenRouterBaseUrl(settingsSvc)}/chat/completions`;
+    const url = `${getOpenRouterBaseUrl(settingsService)}/chat/completions`;
     const body: any = {
         model,
         messages,
@@ -408,10 +403,10 @@ async function callOpenRouter({
             'Content-Type': 'application/json',
             Authorization: `Bearer ${apiKey}`,
             'HTTP-Referer':
-                settingsSvc.get('agent.openrouter.referrer') ||
+                settingsService.get('agent.openrouter.referrer') ||
                 'http://localhost',
             'X-Title':
-                settingsSvc.get('agent.openrouter.title') || 'term2',
+                settingsService.get('agent.openrouter.title') || 'term2',
         },
         body: JSON.stringify(body),
         signal,
@@ -440,15 +435,19 @@ async function callOpenRouter({
 class OpenRouterModel implements Model {
     name: string;
     #modelId: string;
-    #settingsService: any;
-    #loggingService: any;
+    #settingsService: ISettingsService;
+    #loggingService: ILoggingService;
 
-    constructor(modelId?: string, settingsServiceInstance?: any, loggingServiceInstance?: any) {
+    constructor(deps: {
+        settingsService: ISettingsService;
+        loggingService: ILoggingService;
+        modelId?: string;
+    }) {
         this.name = 'OpenRouter';
-        this.#settingsService = settingsServiceInstance || settingsService;
-        this.#loggingService = loggingServiceInstance || loggingService;
+        this.#settingsService = deps.settingsService;
+        this.#loggingService = deps.loggingService;
         this.#modelId =
-            modelId ||
+            deps.modelId ||
             this.#settingsService.get('agent.openrouter.model') ||
             'openrouter/auto';
     }
@@ -482,7 +481,7 @@ class OpenRouterModel implements Model {
             signal: request.signal,
             settings: request.modelSettings,
             tools,
-            settingsServiceInstance: this.#settingsService,
+            settingsService: this.#settingsService,
         });
         const json: any = await res.json();
         const choice = json?.choices?.[0];
@@ -615,8 +614,8 @@ class OpenRouterModel implements Model {
             toolsCount: Array.isArray(tools) ? tools.length : 0,
             tools,
         });
-        this.#loggingService.logToOpenrouter('debug', 'modelRequest', request)
-        this.#loggingService.logToOpenrouter('debug', 'messages', messages)
+        this.#loggingService.debug('modelRequest', request)
+        this.#loggingService.debug('OpenRouter messages', {messages})
 
         const res = await callOpenRouter({
             apiKey,
@@ -626,7 +625,7 @@ class OpenRouterModel implements Model {
             signal: request.signal,
             settings: request.modelSettings,
             tools,
-            settingsServiceInstance: this.#settingsService,
+            settingsService: this.#settingsService,
         });
 
         const reader = res.body?.getReader();
@@ -904,17 +903,32 @@ class OpenRouterModel implements Model {
 }
 
 class OpenRouterProvider implements ModelProvider {
-    #settingsService: any;
-    #loggingService: any;
+    #settingsService: ISettingsService;
+    #loggingService: ILoggingService;
 
-    constructor(settingsServiceInstance?: any, loggingServiceInstance?: any) {
-        this.#settingsService = settingsServiceInstance || settingsService;
-        this.#loggingService = loggingServiceInstance || loggingService;
+    constructor(deps: {
+        settingsService: ISettingsService;
+        loggingService: ILoggingService;
+    }) {
+        this.#settingsService = deps.settingsService;
+        this.#loggingService = deps.loggingService;
     }
 
     getModel(modelName?: string): Promise<Model> | Model {
-        return new OpenRouterModel(modelName, this.#settingsService, this.#loggingService);
+        return new OpenRouterModel({
+            settingsService: this.#settingsService,
+            loggingService: this.#loggingService,
+            modelId: modelName,
+        });
     }
+}
+
+// Export factory function for dependency injection
+export function createOpenRouterProvider(deps: {
+    settingsService: ISettingsService;
+    loggingService: ILoggingService;
+}): OpenRouterProvider {
+    return new OpenRouterProvider(deps);
 }
 
 export {

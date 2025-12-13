@@ -1,5 +1,4 @@
 import parse from 'bash-parser';
-import {loggingService} from '../../services/logging-service.js';
 import {
     SafetyStatus,
     ALLOWED_COMMANDS,
@@ -10,19 +9,43 @@ import {hasFindDangerousExecution, hasFindSuspiciousFlags} from './find-helpers.
 import {analyzePathRisk} from './path-analysis.js';
 import {getCommandHandler} from './handlers/index.js';
 import type {CommandHandlerHelpers} from './handlers/index.js';
+import type {ILoggingService} from '../../services/service-interfaces.js';
+
+const nullLoggingService: ILoggingService = {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+    security: () => {},
+    setCorrelationId: () => {},
+    getCorrelationId: () => undefined,
+    clearCorrelationId: () => {},
+};
+
+function getLogger(loggingService?: ILoggingService): ILoggingService {
+    return loggingService ?? nullLoggingService;
+}
 
 /**
  * Classify command into a SafetyStatus (GREEN/YELLOW/RED)
  */
-export function classifyCommand(commandString: string): SafetyStatus {
+export function classifyCommand(
+    commandString: string,
+    loggingService?: ILoggingService,
+): SafetyStatus {
     try {
         const reasons: string[] = [];
         const truncatedCommand = commandString.substring(0, 200);
-        loggingService.security('Classifying command safety', {
+        const logger = getLogger(loggingService);
+
+        logger.security('Classifying command safety', {
             command: truncatedCommand,
         });
         const ast = parse(commandString, {mode: 'bash'});
         let worstStatus: SafetyStatus = SafetyStatus.GREEN;
+
+        const analyzePathRiskWithLogger = (p: string | undefined) =>
+            analyzePathRisk(p, logger);
 
         function upgradeStatus(s: SafetyStatus, reason?: string) {
             if (worstStatus === SafetyStatus.RED) return;
@@ -70,7 +93,7 @@ export function classifyCommand(commandString: string): SafetyStatus {
                     if (handler) {
                         const helpers: CommandHandlerHelpers = {
                             extractWordText,
-                            analyzePathRisk,
+                            analyzePathRisk: analyzePathRiskWithLogger,
                             hasFindDangerousExecution,
                             hasFindSuspiciousFlags,
                         };
@@ -86,7 +109,7 @@ export function classifyCommand(commandString: string): SafetyStatus {
                         // Handle redirects
                         if (arg?.type === 'Redirect') {
                             const fileText = extractWordText(arg.file ?? arg);
-                            const pathStatus = analyzePathRisk(fileText);
+                            const pathStatus = analyzePathRiskWithLogger(fileText);
                             upgradeStatus(
                                 pathStatus,
                                 `redirect to ${fileText ?? '<unknown>'}`,
@@ -101,7 +124,7 @@ export function classifyCommand(commandString: string): SafetyStatus {
                         }
 
                         // Analyze path arguments
-                        const pathStatus = analyzePathRisk(argText);
+                        const pathStatus = analyzePathRiskWithLogger(argText);
                         // Unknown/opaque args fall back to YELLOW
                         if (!argText)
                             upgradeStatus(
@@ -146,7 +169,7 @@ export function classifyCommand(commandString: string): SafetyStatus {
             (ast.commands as any[]).forEach(traverse);
         }
 
-        loggingService.security('Command classification result', {
+        logger.security('Command classification result', {
             command: truncatedCommand,
             status: worstStatus,
             reasons,
@@ -155,7 +178,8 @@ export function classifyCommand(commandString: string): SafetyStatus {
         return worstStatus;
     } catch (e) {
         // Fail-safe: unparsable -> audit
-        loggingService.warn('Failed to parse command, classifying as YELLOW', {
+        const logger = getLogger(loggingService);
+        logger.warn('Failed to parse command, classifying as YELLOW', {
             command: commandString.substring(0, 200),
             error: e instanceof Error ? e.message : String(e),
         });
@@ -168,7 +192,10 @@ export function classifyCommand(commandString: string): SafetyStatus {
  * Returns true when a command requires user approval.
  * Throws for invalid/empty inputs OR hard-blocked RED classifications.
  */
-export function validateCommandSafety(command: string): boolean {
+export function validateCommandSafety(
+    command: string,
+    loggingService?: ILoggingService,
+): boolean {
     if (
         !command ||
         typeof command !== 'string' ||
@@ -176,19 +203,20 @@ export function validateCommandSafety(command: string): boolean {
     ) {
         throw new Error('Command cannot be empty');
     }
-    loggingService.security('Validating command safety', {
+    const logger = getLogger(loggingService);
+    logger.security('Validating command safety', {
         command: command.substring(0, 200),
     });
-    const status = classifyCommand(command);
+    const status = classifyCommand(command, logger);
 
     if (status === SafetyStatus.RED) {
-        loggingService.security('Command validation failed: RED (forbidden)', {
+        logger.security('Command validation failed: RED (forbidden)', {
             command: command.substring(0, 200),
         });
         throw new Error('Command classified as RED (forbidden)');
     }
 
-    loggingService.security('Validation result', {
+    logger.security('Validation result', {
         command: command.substring(0, 200),
         status,
     });

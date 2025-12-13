@@ -1,5 +1,5 @@
 import path from 'path';
-import {loggingService} from '../../services/logging-service.js';
+import type {ILoggingService} from '../../services/service-interfaces.js';
 import {
     SafetyStatus,
     SYSTEM_PATHS,
@@ -10,7 +10,26 @@ import {
     SUSPICIOUS_JSON_PATTERNS,
 } from './constants.js';
 
-export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
+const nullLoggingService: ILoggingService = {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+    security: () => {},
+    setCorrelationId: () => {},
+    getCorrelationId: () => undefined,
+    clearCorrelationId: () => {},
+};
+
+function getLogger(loggingService?: ILoggingService): ILoggingService {
+    return loggingService ?? nullLoggingService;
+}
+
+export function analyzePathRisk(
+    inputPath: string | undefined,
+    loggingService?: ILoggingService,
+): SafetyStatus {
+    const logger = getLogger(loggingService);
     const candidate = inputPath?.trim();
     if (!candidate) return SafetyStatus.GREEN;
 
@@ -33,7 +52,7 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
 
         // Plain home directory access without any suffix is RED
         if (sliced === '' || sliced === '/') {
-            loggingService.security('Path risk: home directory access', {
+            logger.security('Path risk: home directory access', {
                 path: candidate,
             });
             return SafetyStatus.RED;
@@ -44,7 +63,7 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
             /^\/\.\w+/.test(sliced) ||
             SENSITIVE_PATHS.some(sensitive => sliced.includes(sensitive))
         ) {
-            loggingService.security('Path risk: home dotfile or config', {
+            logger.security('Path risk: home dotfile or config', {
                 path: candidate,
             });
             return SafetyStatus.RED;
@@ -56,7 +75,7 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
             /\.json$/i.test(filename) &&
             SUSPICIOUS_JSON_PATTERNS.some(pattern => pattern.test(filename))
         ) {
-            loggingService.security(
+            logger.security(
                 'Path risk: suspicious JSON file in home directory',
                 {path: candidate},
             );
@@ -65,7 +84,7 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
 
         // Check for other sensitive extensions in home directory
         if (SENSITIVE_EXTENSIONS.some(ext => filename.endsWith(ext))) {
-            loggingService.security(
+            logger.security(
                 'Path risk: sensitive file in home directory',
                 {path: candidate},
             );
@@ -76,7 +95,7 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
     // RED: Absolute System Paths
     if (path.isAbsolute(candidate)) {
         if (SYSTEM_PATHS.some(sys => candidate.startsWith(sys))) {
-            loggingService.security('Path risk: absolute system path', {
+            logger.security('Path risk: absolute system path', {
                 path: candidate,
             });
             return SafetyStatus.RED;
@@ -87,13 +106,13 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
             candidate.includes('/.ssh') ||
             candidate.includes('/.gitconfig')
         ) {
-            loggingService.security('Path risk: absolute home dotfile', {
+            logger.security('Path risk: absolute home dotfile', {
                 path: candidate,
             });
             return SafetyStatus.RED;
         }
         // Other absolute paths are suspicious -> audit
-        loggingService.security('Path risk: absolute non-system path', {
+        logger.security('Path risk: absolute non-system path', {
             path: candidate,
         });
         return SafetyStatus.YELLOW;
@@ -101,7 +120,7 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
 
     // RED: Directory Traversal
     if (candidate.includes('..')) {
-        loggingService.security('Path risk: directory traversal detected', {
+        logger.security('Path risk: directory traversal detected', {
             path: candidate,
         });
         return SafetyStatus.RED;
@@ -121,7 +140,7 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
 
         // Check for suspicious credential/token patterns
         if (SUSPICIOUS_JSON_PATTERNS.some(pattern => pattern.test(filename))) {
-            loggingService.security('Path risk: suspicious JSON filename', {
+            logger.security('Path risk: suspicious JSON filename', {
                 path: candidate,
             });
             return SafetyStatus.YELLOW;
@@ -133,13 +152,13 @@ export function analyzePathRisk(inputPath: string | undefined): SafetyStatus {
 
     // Hidden files -> YELLOW
     if (filename.startsWith('.')) {
-        loggingService.security('Path risk: hidden file', {path: candidate});
+        logger.security('Path risk: hidden file', {path: candidate});
         return SafetyStatus.YELLOW;
     }
 
     // Sensitive extensions
     if (SENSITIVE_EXTENSIONS.some(ext => filename.endsWith(ext))) {
-        loggingService.security('Path risk: sensitive extension', {
+        logger.security('Path risk: sensitive extension', {
             path: candidate,
         });
         return SafetyStatus.YELLOW;

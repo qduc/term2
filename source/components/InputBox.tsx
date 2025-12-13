@@ -8,6 +8,8 @@ import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { useModelSelection, MODEL_TRIGGER, MODEL_CMD_TRIGGER } from '../hooks/use-model-selection.js';
 import { PopupManager } from './Input/PopupManager.js';
 import type { SlashCommand } from './SlashCommandMenu.js';
+import type { SettingsService } from '../services/settings-service.js';
+import type { LoggingService } from '../services/logging-service.js';
 
 // Constants
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
@@ -21,6 +23,8 @@ type Props = {
     onHistoryDown: () => void;
     hasConversationHistory?: boolean;
     waitingForRejectionReason?: boolean;
+    settingsService: SettingsService;
+    loggingService: LoggingService;
 };
 
 const InputBox: FC<Props> = ({
@@ -28,6 +32,8 @@ const InputBox: FC<Props> = ({
     slashCommands,
     onHistoryUp,
     onHistoryDown,
+    settingsService,
+    loggingService,
     hasConversationHistory = false,
     waitingForRejectionReason = false,
 }) => {
@@ -54,9 +60,12 @@ const InputBox: FC<Props> = ({
         },
     });
 
-    const path = usePathCompletion();
-    const settings = useSettingsCompletion();
-    const models = useModelSelection(hasConversationHistory);
+    const path = usePathCompletion({loggingService});
+    const settings = useSettingsCompletion(settingsService);
+    const models = useModelSelection({
+        loggingService,
+        settingsService,
+    }, hasConversationHistory);
 
     // Set terminal width
     useEffect(() => {
@@ -367,6 +376,7 @@ const InputBox: FC<Props> = ({
                     items: settings.filteredEntries,
                     selectedIndex: settings.selectedIndex
                 }}
+                settingsService={settingsService}
             />
             <Box>
                 {waitingForRejectionReason ? (

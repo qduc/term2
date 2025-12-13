@@ -5,9 +5,7 @@ import process from 'process';
 import path from 'path';
 import {randomUUID} from 'node:crypto';
 import {validateCommandSafety} from '../utils/command-safety/index.js';
-import {logValidationError} from '../utils/command-logger.js';
-import {loggingService} from '../services/logging-service.js';
-import {settingsService} from '../services/settings-service.js';
+import {logValidationError as logValidationErrorUtil} from '../utils/command-logger.js';
 import {
     trimOutput,
     setTrimConfig,
@@ -16,6 +14,7 @@ import {
     type OutputTrimConfig,
 } from '../utils/output-trim.js';
 import type {ToolDefinition} from './types.js';
+import type {ILoggingService, ISettingsService} from '../services/service-interfaces.js';
 
 const execPromise = util.promisify(exec);
 
@@ -82,7 +81,16 @@ function stripRedundantCd(command: string, cwd: string): string {
     return command;
 }
 
-export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
+export function createShellToolDefinition(deps: {
+    loggingService: ILoggingService;
+    settingsService: ISettingsService;
+}): ToolDefinition<ShellToolParams> {
+    const {loggingService, settingsService} = deps;
+
+    // Create command logger function with dependencies
+    const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
+
+    return {
     name: 'shell',
     description:
         'Execute a single shell command. Use this to run a terminal command. Assert the safety of the command; if it does not change system state or read sensitive data, set needsApproval to false. Otherwise set needsApproval to true and wait for user approval before executing.',
@@ -91,7 +99,10 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
         try {
             const cwd = process.cwd();
             const optimizedCommand = stripRedundantCd(params.command, cwd);
-            const isDangerous = validateCommandSafety(optimizedCommand);
+            const isDangerous = validateCommandSafety(
+                optimizedCommand,
+                loggingService,
+            );
 
             // Log security event for all shell commands with dangerous flag
             loggingService.security('Shell tool needsApproval check', {
@@ -237,3 +248,4 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
         }
     },
 };
+}

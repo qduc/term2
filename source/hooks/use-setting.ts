@@ -1,11 +1,11 @@
 import {useState, useEffect} from 'react';
-import {settingsService} from '../services/settings-service.js';
+import type {SettingsService} from '../services/settings-service.js';
 
 /**
  * Hook to subscribe to a specific setting value.
  * Updates the component whenever the setting changes.
  */
-export function useSetting<T>(key: string): T {
+export function useSetting<T>(settingsService: SettingsService, key: string): T {
     const [value, setValue] = useState<T>(() => settingsService.get<T>(key));
 
     useEffect(() => {

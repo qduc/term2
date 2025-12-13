@@ -2,12 +2,17 @@ import React, {FC} from 'react';
 import {Box, Text} from 'ink';
 import { useSetting } from '../hooks/use-setting.js';
 import {getProvider} from '../providers/index.js';
+import type {SettingsService} from '../services/settings-service.js';
 
-const Banner: FC = () => {
-    const mode = useSetting<'default' | 'edit'>('app.mode') ?? 'default';
-    const model = useSetting<string>('agent.model');
-    const providerKey = useSetting<string>('agent.provider') ?? 'openai';
-    const reasoningEffort = useSetting<string>('agent.reasoningEffort') ?? 'default';
+interface BannerProps {
+    settingsService: SettingsService;
+}
+
+const Banner: FC<BannerProps> = ({settingsService}) => {
+    const mode = useSetting<'default' | 'edit'>(settingsService, 'app.mode') ?? 'default';
+    const model = useSetting<string>(settingsService, 'agent.model');
+    const providerKey = useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
+    const reasoningEffort = useSetting<string>(settingsService, 'agent.reasoningEffort') ?? 'default';
 
     const providerDef = getProvider(providerKey);
     const providerLabel = providerDef?.label || providerKey;

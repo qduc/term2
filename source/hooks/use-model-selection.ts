@@ -5,15 +5,21 @@ import {
     filterModels,
     type ModelInfo,
 } from '../services/model-service.js';
-import {loggingService} from '../services/logging-service.js';
-import {settingsService} from '../services/settings-service.js';
 import {getProviderIds} from '../providers/index.js';
 import {getAvailableProviderIds} from '../utils/provider-credentials.js';
+import type {ILoggingService, ISettingsService} from '../services/service-interfaces.js';
 
 export const MODEL_TRIGGER = '/settings agent.model ';
 export const MODEL_CMD_TRIGGER = '/model ';
 
-export const useModelSelection = (hasConversationHistory = false) => {
+export const useModelSelection = (
+    deps: {
+        loggingService: ILoggingService;
+        settingsService: ISettingsService;
+    },
+    hasConversationHistory = false
+) => {
+    const {loggingService, settingsService} = deps;
     const {mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex} =
         useInputContext();
 
@@ -50,7 +56,7 @@ export const useModelSelection = (hasConversationHistory = false) => {
             setError(null);
 
             try {
-                const fetched = await fetchModels(provider);
+                const fetched = await fetchModels({settingsService, loggingService}, provider);
                 setModels(fetched);
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
@@ -133,7 +139,7 @@ export const useModelSelection = (hasConversationHistory = false) => {
 
     const toggleProvider = useCallback(() => {
         const providerIds = getProviderIds();
-        const availableProviders = getAvailableProviderIds(providerIds);
+        const availableProviders = getAvailableProviderIds(settingsService, providerIds);
 
         // If no providers available, stay on current
         if (availableProviders.length === 0) return;

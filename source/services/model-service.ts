@@ -1,7 +1,6 @@
 import Fuse from 'fuse.js';
-import {settingsService} from './settings-service.js';
-import {loggingService} from './logging-service.js';
 import {getProvider} from '../providers/index.js';
+import type {ILoggingService, ISettingsService} from './service-interfaces.js';
 
 export type ModelInfo = {
     id: string;
@@ -14,9 +13,14 @@ type FetchFn = (url: string, options?: any) => Promise<any>;
 const cache = new Map<string, ModelInfo[]>();
 
 export async function fetchModels(
+    deps: {
+        settingsService: ISettingsService;
+        loggingService: ILoggingService;
+    },
     providerOverride?: string,
     fetchImpl: FetchFn = fetch as any,
 ): Promise<ModelInfo[]> {
+    const {settingsService, loggingService} = deps;
     const provider = providerOverride || settingsService.get<string>('agent.provider');
     const cacheKey = provider;
 
@@ -30,7 +34,7 @@ export async function fetchModels(
             throw new Error(`Provider '${provider}' is not registered`);
         }
 
-        const rawModels = await providerDef.fetchModels(fetchImpl);
+        const rawModels = await providerDef.fetchModels({settingsService, loggingService}, fetchImpl);
         const models: ModelInfo[] = rawModels.map(m => ({
             ...m,
             provider,

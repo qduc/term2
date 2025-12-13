@@ -5,14 +5,15 @@ import {
     refreshWorkspaceEntries,
     type PathEntry,
 } from '../services/file-service.js';
-import {loggingService} from '../services/logging-service.js';
 import { useInputContext } from '../context/InputContext.js';
+import type {ILoggingService} from '../services/service-interfaces.js';
 
 export type PathCompletionItem = PathEntry;
 
 const MAX_RESULTS = 12;
 
-export const usePathCompletion = () => {
+export const usePathCompletion = (deps?: {loggingService?: ILoggingService}) => {
+    const logger = deps?.loggingService;
     const {
         mode,
         setMode,
@@ -58,11 +59,14 @@ export const usePathCompletion = () => {
 
     useEffect(() => {
         loadEntries().catch(error => {
-            loggingService.error('Failed to load workspace entries', {
-                error: error instanceof Error ? error.message : String(error),
-            });
+            const message = error instanceof Error ? error.message : String(error);
+            if (logger) {
+                logger.error('Failed to load workspace entries', {error: message});
+            } else {
+                console.error('[use-path-completion] Failed to load workspace entries', message);
+            }
         });
-    }, [loadEntries]);
+    }, [loadEntries, logger]);
 
     const fuse = useMemo(() => {
         return new Fuse(entries, {

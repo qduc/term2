@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import Fuse from 'fuse.js';
-import {SETTING_KEYS, SENSITIVE_SETTINGS, settingsService} from '../services/settings-service.js';
+import {SETTING_KEYS, SENSITIVE_SETTINGS, type SettingsService} from '../services/settings-service.js';
 import { useInputContext } from '../context/InputContext.js';
 
 export type SettingCompletionItem = {
@@ -42,7 +42,7 @@ function getSensitiveSettingKeysSet(): Set<string> {
 /**
  * Get the current value of a setting for display in the menu
  */
-function getCurrentSettingValue(key: string): string | number | boolean | undefined {
+function getCurrentSettingValue(settingsService: SettingsService, key: string): string | number | boolean | undefined {
     try {
         const value = settingsService.get(key);
         // Format the value for display
@@ -96,7 +96,7 @@ export function clampIndex(currentIndex: number, arrayLength: number): number {
     return Math.min(currentIndex, arrayLength - 1);
 }
 
-export const useSettingsCompletion = () => {
+export const useSettingsCompletion = (settingsService: SettingsService) => {
     const { mode, setMode, input, triggerIndex, setTriggerIndex } = useInputContext();
 
     const isOpen = mode === 'settings_completion';
@@ -118,16 +118,16 @@ export const useSettingsCompletion = () => {
             setSettingsVersion(prev => prev + 1);
         });
         return unsubscribe;
-    }, []);
+    }, [settingsService]);
 
     const allSettings = useMemo(() => {
         return buildSettingsList(
             SETTING_KEYS,
             SETTING_DESCRIPTIONS,
             true,
-            getCurrentSettingValue
+            (key: string) => getCurrentSettingValue(settingsService, key)
         );
-    }, [settingsVersion]);
+    }, [settingsVersion, settingsService]);
 
     const fuse = useMemo(() => {
         return new Fuse(allSettings, {

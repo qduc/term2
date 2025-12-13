@@ -1,13 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
-import {loggingService} from './logging-service.js';
-import {settingsService} from './settings-service.js';
+import {LoggingService} from './logging-service.js';
+import {SettingsService} from './settings-service.js';
 
 const paths = envPaths('term2');
-// Use log directory for state/history files (on Linux: ~/.local/state/term2-nodejs)
-const HISTORY_FILE = path.join(paths.log, 'history.json');
-const MAX_HISTORY_SIZE = settingsService.get('ui.historySize');
 
 interface HistoryData {
     messages: string[];
@@ -17,10 +14,20 @@ interface HistoryData {
  * Service for managing user input history.
  * Saves messages to XDG state directory (~/.local/state/term2/history.json on Linux).
  */
-class HistoryService {
+export class HistoryService {
     private messages: string[] = [];
+    private historyFile: string;
+    private maxHistorySize: number;
+    private loggingService: LoggingService;
 
-    constructor() {
+    constructor(deps: {
+        loggingService: LoggingService;
+        settingsService: SettingsService;
+        historyFile?: string;
+    }) {
+        this.loggingService = deps.loggingService;
+        this.historyFile = deps.historyFile || path.join(paths.log, 'history.json');
+        this.maxHistorySize = deps.settingsService.get('ui.historySize');
         this.load();
     }
 
@@ -29,8 +36,8 @@ class HistoryService {
      */
     private load(): void {
         try {
-            if (fs.existsSync(HISTORY_FILE)) {
-                const data = fs.readFileSync(HISTORY_FILE, 'utf-8');
+            if (fs.existsSync(this.historyFile)) {
+                const data = fs.readFileSync(this.historyFile, 'utf-8');
                 const parsed = JSON.parse(data) as HistoryData;
                 this.messages = Array.isArray(parsed.messages)
                     ? parsed.messages
@@ -38,9 +45,9 @@ class HistoryService {
             }
         } catch (error) {
             // If we can't load history, start with empty array
-            loggingService.error('Failed to load history', {
+            this.loggingService.error('Failed to load history', {
                 error: error instanceof Error ? error.message : String(error),
-                filePath: HISTORY_FILE,
+                filePath: this.historyFile,
             });
             this.messages = [];
         }
@@ -52,7 +59,7 @@ class HistoryService {
     private save(): void {
         try {
             // Ensure directory exists
-            const dir = path.dirname(HISTORY_FILE);
+            const dir = path.dirname(this.historyFile);
             if (!fs.existsSync(dir)) {
                 fs.mkdirSync(dir, {recursive: true});
             }
@@ -62,14 +69,14 @@ class HistoryService {
             };
 
             fs.writeFileSync(
-                HISTORY_FILE,
+                this.historyFile,
                 JSON.stringify(data, null, 2),
                 'utf-8',
             );
         } catch (error) {
-            loggingService.error('Failed to save history', {
+            this.loggingService.error('Failed to save history', {
                 error: error instanceof Error ? error.message : String(error),
-                filePath: HISTORY_FILE,
+                filePath: this.historyFile,
                 messageCount: this.messages.length,
             });
         }
@@ -95,8 +102,8 @@ class HistoryService {
         this.messages.push(message);
 
         // Trim history if it exceeds max size
-        if (this.messages.length > MAX_HISTORY_SIZE) {
-            this.messages = this.messages.slice(-MAX_HISTORY_SIZE);
+        if (this.messages.length > this.maxHistorySize) {
+            this.messages = this.messages.slice(-this.maxHistorySize);
         }
 
         this.save();
@@ -118,4 +125,60 @@ class HistoryService {
     }
 }
 
-export const historyService = new HistoryService();
+/**
+ * @deprecated DO NOT USE - Singleton pattern is deprecated
+ *
+ * This singleton is deprecated and should not be used in application code.
+ * Instead, pass the HistoryService instance via dependency injection:
+ *
+ * - In App component: Accept as prop from cli.tsx
+ * - In services/tools: Accept via constructor deps parameter
+ * - In hooks: Accept as parameter or use a context provider
+ *
+ * This export now throws an error when accessed to catch deprecated usage.
+ * It's only allowed in test files for backwards compatibility.
+ */
+const _historyServiceInstance = new HistoryService({
+    loggingService: new LoggingService({ disableLogging: false }),
+    settingsService: new (class MockSettingsService {
+        get() { return 1000; } // Default history size
+    })() as any,
+});
+
+const isTestEnvironment = () => {
+    return (
+        process.env.NODE_ENV === 'test' ||
+        process.env.VITEST !== undefined ||
+        process.env.AVA_PATH !== undefined ||
+        process.env.JEST_WORKER_ID !== undefined ||
+        process.env.TERM2_TEST_MODE === 'true'
+    );
+};
+
+export const historyService = new Proxy(_historyServiceInstance, {
+    get(target, prop) {
+        // Allow access in test environment for backwards compatibility
+        if (isTestEnvironment()) {
+            const value = target[prop as keyof typeof target];
+            // Bind methods to the original target to preserve 'this' context
+            if (typeof value === 'function') {
+                return value.bind(target);
+            }
+            return value;
+        }
+
+        // Get the caller's stack trace to show where the deprecated usage is
+        const stack = new Error().stack || '';
+        const callerLine = stack.split('\n')[2] || 'unknown location';
+
+        throw new Error(
+            `DEPRECATED: Direct use of historyService singleton is not allowed.\n` +
+            `Called from: ${callerLine.trim()}\n\n` +
+            `Instead, pass HistoryService via dependency injection:\n` +
+            `  - In App component: Accept as prop from cli.tsx\n` +
+            `  - In services/tools: Accept via 'deps' constructor parameter\n` +
+            `  - In hooks: Accept as parameter or use a context provider\n\n` +
+            `The singleton pattern prevents proper testing and makes dependencies unclear.`
+        );
+    }
+});

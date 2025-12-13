@@ -2,10 +2,9 @@ import test from 'ava';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import {applyPatchToolDefinition} from './apply-patch.js';
-import {settingsService} from '../services/settings-service.js';
+import {createApplyPatchToolDefinition} from './apply-patch.js';
 import {createMockSettingsService} from '../services/settings-service.mock.js';
-import {loggingService} from '../services/logging-service.js';
+import type {ILoggingService} from '../services/service-interfaces.js';
 
 // Helper to create a temp dir and change cwd to it
 async function withTempDir(run: (dir: string) => Promise<void>) {
@@ -23,39 +22,31 @@ async function withTempDir(run: (dir: string) => Promise<void>) {
     }
 }
 
-// Create a mock settings service instance for tests
-const mockSettingsService = createMockSettingsService();
+const mockLoggingService: ILoggingService = {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+    security: () => {},
+    setCorrelationId: () => {},
+    getCorrelationId: () => undefined,
+    clearCorrelationId: () => {},
+};
 
-// Mock settings and logging
-const originalGet = settingsService.get.bind(settingsService);
-const originalInfo = loggingService.info;
-const originalError = loggingService.error;
-const originalSecurity = loggingService.security;
-
-test.beforeEach(() => {
-    // Mock settingsService.get to use the mock instance
-    settingsService.get = mockSettingsService.get.bind(mockSettingsService);
-
-    // Disable logging for tests
-    loggingService.info = () => {};
-    loggingService.error = () => {};
-    loggingService.security = () => {};
-});
-
-test.afterEach(() => {
-    // Restore original settings service and logging
-    settingsService.get = originalGet;
-    loggingService.info = originalInfo;
-    loggingService.error = originalError;
-    loggingService.security = originalSecurity;
-});
+function createTool(settingsService = createMockSettingsService()) {
+    return createApplyPatchToolDefinition({
+        loggingService: mockLoggingService,
+        settingsService,
+    });
+}
 
 test.serial('create_file: creates a new file with content', async t => {
     await withTempDir(async (dir) => {
+        const tool = createTool();
         const filePath = 'new-file.txt';
         const diff = '@@ -0,0 +1 @@\n+Hello World';
 
-        const result = await applyPatchToolDefinition.execute({
+        const result = await tool.execute({
             type: 'create_file',
             path: filePath,
             diff,
@@ -72,13 +63,14 @@ test.serial('create_file: creates a new file with content', async t => {
 
 test.serial('update_file: updates an existing file', async t => {
     await withTempDir(async (dir) => {
+        const tool = createTool();
         const filePath = 'existing.txt';
         const absPath = path.join(dir, filePath);
         await fs.writeFile(absPath, 'Hello\nWorld');
 
         const diff = '@@ -1,2 +1,2 @@\n Hello\n-World\n+Universe';
 
-        const result = await applyPatchToolDefinition.execute({
+        const result = await tool.execute({
             type: 'update_file',
             path: filePath,
             diff,
@@ -124,7 +116,8 @@ test.serial('update_file: updates an existing file', async t => {
 
 test.serial('needsApproval: requires approval for outside workspace', async t => {
     await withTempDir(async () => {
-        const result = await applyPatchToolDefinition.needsApproval({
+        const tool = createTool();
+        const result = await tool.needsApproval({
             type: 'create_file',
             path: '../outside.txt',
             diff: '@@ -0,0 +1 @@\n+content',
@@ -135,11 +128,9 @@ test.serial('needsApproval: requires approval for outside workspace', async t =>
 
 test.serial('needsApproval: auto-approves in edit mode for create/update inside cwd', async t => {
     await withTempDir(async () => {
-        // Create a custom mock that returns 'edit' mode
-        const editModeMock = createMockSettingsService({app: {mode: 'edit'}});
-        settingsService.get = editModeMock.get.bind(editModeMock);
+        const tool = createTool(createMockSettingsService({app: {mode: 'edit'}}));
 
-        const result = await applyPatchToolDefinition.needsApproval({
+        const result = await tool.needsApproval({
             type: 'create_file',
             path: 'inside.txt',
             diff: '@@ -0,0 +1 @@\n+content',
@@ -150,11 +141,9 @@ test.serial('needsApproval: auto-approves in edit mode for create/update inside 
 
 test.serial('needsApproval: requires approval in default mode', async t => {
     await withTempDir(async () => {
-        // Create a custom mock that returns 'default' mode
-        const defaultModeMock = createMockSettingsService({app: {mode: 'default'}});
-        settingsService.get = defaultModeMock.get.bind(defaultModeMock);
+        const tool = createTool(createMockSettingsService({app: {mode: 'default'}}));
 
-        const result = await applyPatchToolDefinition.needsApproval({
+        const result = await tool.needsApproval({
             type: 'create_file',
             path: 'inside.txt',
             diff: '@@ -0,0 +1 @@\n+content',
@@ -166,8 +155,9 @@ test.serial('needsApproval: requires approval in default mode', async t => {
 
 test.serial('needsApproval: auto-approves invalid diffs (will fail in execute)', async t => {
     await withTempDir(async () => {
+        const tool = createTool();
         // Invalid diffs now return false (auto-approve) to avoid breaking the stream
-        const result = await applyPatchToolDefinition.needsApproval({
+        const result = await tool.needsApproval({
             type: 'create_file',
             path: 'test.txt',
             diff: 'garbage',
@@ -178,7 +168,8 @@ test.serial('needsApproval: auto-approves invalid diffs (will fail in execute)',
 
 test.serial('execute: rejects invalid diffs with proper error', async t => {
     await withTempDir(async () => {
-        const result = await applyPatchToolDefinition.execute({
+        const tool = createTool();
+        const result = await tool.execute({
             type: 'create_file',
             path: 'test.txt',
             diff: 'garbage',

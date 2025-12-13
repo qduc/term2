@@ -3,6 +3,7 @@ import React from 'react';
 import {render} from 'ink-testing-library';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
 import type {ModelInfo} from '../services/model-service.js';
+import {createMockSettingsService} from '../services/settings-service.mock.js';
 
 const mockModels: ModelInfo[] = [
     {id: 'gpt-4o', name: 'GPT-4o', provider: 'openai'},
@@ -12,7 +13,7 @@ const mockModels: ModelInfo[] = [
 
 test('ModelSelectionMenu renders loading state', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu
+        <ModelSelectionMenu settingsService={createMockSettingsService()}
             items={[]}
             selectedIndex={0}
             query=""
@@ -24,7 +25,7 @@ test('ModelSelectionMenu renders loading state', t => {
 
 test('ModelSelectionMenu renders error state', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu
+        <ModelSelectionMenu settingsService={createMockSettingsService()}
             items={[]}
             selectedIndex={0}
             query=""
@@ -36,7 +37,7 @@ test('ModelSelectionMenu renders error state', t => {
 
 test('ModelSelectionMenu renders empty state', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu
+        <ModelSelectionMenu settingsService={createMockSettingsService()}
             items={[]}
             selectedIndex={0}
             query="xyz"
@@ -47,7 +48,7 @@ test('ModelSelectionMenu renders empty state', t => {
 
 test('ModelSelectionMenu renders list of models', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu
+        <ModelSelectionMenu settingsService={createMockSettingsService()}
             items={mockModels}
             selectedIndex={0}
             query=""
@@ -68,7 +69,7 @@ test('ModelSelectionMenu highlights selected item', t => {
     // To be more specific, we could check for ANSI codes if we really wanted to,
     // but checking content is usually enough for unit tests here.
     const {lastFrame} = render(
-        <ModelSelectionMenu
+        <ModelSelectionMenu settingsService={createMockSettingsService()}
             items={mockModels}
             selectedIndex={1}
             query=""
@@ -80,7 +81,7 @@ test('ModelSelectionMenu highlights selected item', t => {
 
 test('ModelSelectionMenu shows provider in header if specified', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu
+        <ModelSelectionMenu settingsService={createMockSettingsService()}
             items={mockModels}
             selectedIndex={0}
             query=""
@@ -98,7 +99,7 @@ test('ModelSelectionMenu shows scroll indicators for long lists', t => {
     }));
 
     const {lastFrame} = render(
-        <ModelSelectionMenu
+        <ModelSelectionMenu settingsService={createMockSettingsService()}
             items={longList}
             selectedIndex={5}
             query=""
@@ -117,7 +118,7 @@ test('ModelSelectionMenu shows scroll indicators for long lists', t => {
 
 test('ModelSelectionMenu does not show scroll indicators for short lists', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu
+        <ModelSelectionMenu settingsService={createMockSettingsService()}
             items={mockModels}
             selectedIndex={0}
             query=""

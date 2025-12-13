@@ -1,9 +1,8 @@
 import {readFile, writeFile, mkdir, rm} from 'fs/promises';
 import path from 'path';
 import {applyDiff} from '@openai/agents';
-import {loggingService} from '../services/logging-service.js';
-import {settingsService} from '../services/settings-service.js';
 import type {ApplyPatchOperation, ApplyPatchResult} from '@openai/agents';
+import type {ILoggingService, ISettingsService} from '../services/service-interfaces.js';
 
 /**
  * Resolves a relative path and ensures it's within the workspace
@@ -20,10 +19,16 @@ function resolveWorkspacePath(relativePath: string): string {
 }
 
 /**
- * Editor implementation that performs actual file operations.
+ * Create editor implementation that performs actual file operations.
  * Used by the native applyPatchTool from the SDK.
  */
-export const editorImpl = {
+export function createEditorImpl(deps: {
+	loggingService: ILoggingService;
+	settingsService: ISettingsService;
+}) {
+	const {loggingService, settingsService} = deps;
+
+	return {
 	async createFile(
 		operation: Extract<ApplyPatchOperation, {type: 'create_file'}>,
 	): Promise<ApplyPatchResult> {
@@ -215,3 +220,4 @@ export const editorImpl = {
 		}
 	},
 };
+}

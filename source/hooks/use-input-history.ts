@@ -1,5 +1,5 @@
 import {useState, useCallback} from 'react';
-import {historyService} from '../services/history-service.js';
+import {HistoryService} from '../services/history-service.js';
 
 /**
  * Hook for managing input history navigation with up/down arrows.
@@ -9,7 +9,7 @@ import {historyService} from '../services/history-service.js';
  * - Press down arrow to navigate to next messages
  * - At the end (down from most recent), returns to current input
  */
-export const useInputHistory = () => {
+export const useInputHistory = (historyService: HistoryService) => {
     const [historyIndex, setHistoryIndex] = useState<number>(-1);
     const [currentInput, setCurrentInput] = useState<string>('');
 

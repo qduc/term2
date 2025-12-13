@@ -3,7 +3,7 @@ import path from 'node:path';
 import envPaths from 'env-paths';
 import {z} from 'zod';
 import deepEqual from 'fast-deep-equal';
-import {loggingService} from './logging-service.js';
+import {LoggingService} from './logging-service.js';
 // Import providers to ensure they're registered before schema construction
 import '../providers/index.js';
 import {getAllProviders, getProvider} from '../providers/index.js';
@@ -273,6 +273,7 @@ export class SettingsService {
     private disableLogging: boolean;
     private disableFilePersistence: boolean;
     private listeners: Set<(key?: string) => void> = new Set();
+    private loggingService: LoggingService;
 
     // Detect if running in test environment
     //
@@ -296,6 +297,7 @@ export class SettingsService {
         disableFilePersistence?: boolean;
         cli?: Partial<SettingsData>;
         env?: Partial<SettingsData>;
+        loggingService?: LoggingService;
     }) {
         const {
             settingsDir = path.join(paths.log),
@@ -303,11 +305,17 @@ export class SettingsService {
             disableFilePersistence,
             cli = {},
             env = {},
+            loggingService,
         } = options ?? {};
 
         this.settingsDir = settingsDir;
         this.disableLogging = disableLogging;
         this.sources = new Map();
+        
+        // Use injected LoggingService or create a new one if not provided
+        this.loggingService = loggingService || new LoggingService({
+            disableLogging: this.disableLogging,
+        });
 
         // Disk persistence can be explicitly disabled (e.g., for tests), and is
         // also automatically disabled when running under a known test runner.
@@ -320,7 +328,7 @@ export class SettingsService {
                 fs.mkdirSync(this.settingsDir, {recursive: true});
             } catch (error: any) {
                 if (!this.disableLogging) {
-                    loggingService.error(
+                    this.loggingService.error(
                         'Failed to create settings directory',
                         {
                             error:
@@ -343,10 +351,10 @@ export class SettingsService {
 
         // Apply logging level from settings to the logging service so it respects settings
         try {
-            loggingService.setLogLevel(this.settings.logging.logLevel);
+            this.loggingService.setLogLevel(this.settings.logging.logLevel);
         } catch (error: any) {
             if (!this.disableLogging) {
-                loggingService.warn(
+                this.loggingService.warn(
                     'Failed to apply logging level from settings',
                     {
                         error:
@@ -360,7 +368,7 @@ export class SettingsService {
         }
 
         if (!this.disableLogging) {
-            loggingService.info('SettingsService initialized', {
+            this.loggingService.info('SettingsService initialized', {
                 cliOverrides: Object.keys(this.flattenSettings(cli)).length > 0,
                 envOverrides: Object.keys(this.flattenSettings(env)).length > 0,
                 configOverrides:
@@ -382,7 +390,7 @@ export class SettingsService {
             if (!this.disableFilePersistence) {
                 this.saveToFile();
                 if (!this.disableLogging) {
-                    loggingService.info('Created settings file at startup', {
+                    this.loggingService.info('Created settings file at startup', {
                         settingsFile: settingsFilePath,
                     });
                 }
@@ -391,7 +399,7 @@ export class SettingsService {
             if (!this.disableFilePersistence) {
                 this.saveToFile();
                 if (!this.disableLogging) {
-                    loggingService.info(
+                    this.loggingService.info(
                         'Updated settings file with new default values',
                         {
                             settingsFile: settingsFilePath,
@@ -481,10 +489,10 @@ export class SettingsService {
         // If we're changing the logging level, update the logging service runtime
         if (key === 'logging.logLevel') {
             try {
-                loggingService.setLogLevel(value);
+                this.loggingService.setLogLevel(value);
             } catch (err: any) {
                 if (!this.disableLogging) {
-                    loggingService.warn(
+                    this.loggingService.warn(
                         'Failed to update logging level at runtime',
                         {
                             error:
@@ -571,7 +579,7 @@ export class SettingsService {
                 listener(changedKey);
             } catch (error: any) {
                 if (!this.disableLogging) {
-                    loggingService.warn('Settings change listener threw', {
+                    this.loggingService.warn('Settings change listener threw', {
                         error: error instanceof Error ? error.message : String(error),
                         changedKey,
                     });
@@ -703,7 +711,7 @@ export class SettingsService {
 
             if (!validated.success) {
                 if (!this.disableLogging) {
-                    loggingService.warn(
+                    this.loggingService.warn(
                         'Settings file contains invalid values',
                         {
                             errors: validated.error.issues.map(issue => ({
@@ -721,7 +729,7 @@ export class SettingsService {
             return {validated: validated.data, raw: parsed};
         } catch (error: any) {
             if (!this.disableLogging) {
-                loggingService.error('Failed to load settings file', {
+                this.loggingService.error('Failed to load settings file', {
                     error:
                         error instanceof Error ? error.message : String(error),
                     settingsFile: path.join(this.settingsDir, 'settings.json'),
@@ -774,7 +782,7 @@ export class SettingsService {
             fs.writeFileSync(settingsFile, newContent, 'utf-8');
         } catch (error: any) {
             if (!this.disableLogging) {
-                loggingService.error('Failed to save settings file', {
+                this.loggingService.error('Failed to save settings file', {
                     error:
                         error instanceof Error ? error.message : String(error),
                     settingsFile: path.join(this.settingsDir, 'settings.json'),
@@ -929,7 +937,7 @@ export class SettingsService {
 
         // If validation fails, return defaults
         if (!this.disableLogging) {
-            loggingService.warn(
+            this.loggingService.warn(
                 'Final merged settings failed validation, using defaults',
                 {
                     errors: validated.error.issues.map(issue => ({
@@ -1043,8 +1051,62 @@ export function buildEnvOverrides(): Partial<SettingsData> {
     } as Partial<SettingsData>;
 }
 
-export const settingsService = new SettingsService({
+/**
+ * @deprecated DO NOT USE - Singleton pattern is deprecated
+ *
+ * This singleton is deprecated and should not be used in application code.
+ * Instead, pass the SettingsService instance via dependency injection:
+ *
+ * - In App component: Accept as a prop from cli.tsx
+ * - In services/tools: Accept via constructor deps parameter
+ * - In hooks: Use a context provider or accept as parameter
+ *
+ * This export now throws an error when accessed to catch deprecated usage.
+ * It's only allowed in test files for backwards compatibility.
+ */
+const _settingsServiceInstance = new SettingsService({
     env: buildEnvOverrides(),
+    loggingService: new LoggingService({
+        disableLogging: false,
+    }),
+});
+
+const isTestEnvironment = () => {
+    return (
+        process.env.NODE_ENV === 'test' ||
+        process.env.VITEST !== undefined ||
+        process.env.AVA_PATH !== undefined ||
+        process.env.JEST_WORKER_ID !== undefined ||
+        process.env.TERM2_TEST_MODE === 'true'
+    );
+};
+
+export const settingsService = new Proxy(_settingsServiceInstance, {
+    get(target, prop) {
+        // Allow access in test environment for backwards compatibility
+        if (isTestEnvironment()) {
+            const value = target[prop as keyof typeof target];
+            // Bind methods to the original target to preserve 'this' context
+            if (typeof value === 'function') {
+                return value.bind(target);
+            }
+            return value;
+        }
+
+        // Get the caller's stack trace to show where the deprecated usage is
+        const stack = new Error().stack || '';
+        const callerLine = stack.split('\n')[2] || 'unknown location';
+
+        throw new Error(
+            `DEPRECATED: Direct use of settingsService singleton is not allowed.\n` +
+            `Called from: ${callerLine.trim()}\n\n` +
+            `Instead, pass SettingsService via dependency injection:\n` +
+            `  - In App component: Accept as prop from cli.tsx\n` +
+            `  - In services/tools: Accept via 'deps' constructor parameter\n` +
+            `  - In hooks: Accept as parameter or use a context provider\n\n` +
+            `See source/app.tsx for an example of proper dependency injection.`
+        );
+    }
 });
 
 /**

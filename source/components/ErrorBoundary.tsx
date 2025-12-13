@@ -1,9 +1,10 @@
 import React, {Component, ReactNode} from 'react';
 import {Box, Text} from 'ink';
-import {loggingService} from '../services/logging-service.js';
+import type {LoggingService} from '../services/logging-service.js';
 
 interface ErrorBoundaryProps {
 	children: ReactNode;
+	loggingService?: LoggingService;
 }
 
 interface ErrorBoundaryState {
@@ -42,13 +43,15 @@ export class ErrorBoundary extends Component<
 	}
 
 	componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-		// Log the error with full context
-		loggingService.error('React component error caught by ErrorBoundary', {
-			error: error.message,
-			stack: error.stack,
-			componentStack: errorInfo.componentStack,
-			name: error.name,
-		});
+		// Log the error with full context if logging service is available
+		if (this.props.loggingService) {
+			this.props.loggingService.error('React component error caught by ErrorBoundary', {
+				error: error.message,
+				stack: error.stack,
+				componentStack: errorInfo.componentStack,
+				name: error.name,
+			});
+		}
 
 		// Store error info in state for display
 		this.setState({

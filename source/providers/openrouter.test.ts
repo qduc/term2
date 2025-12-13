@@ -2,10 +2,13 @@ import test from 'ava';
 import {ReadableStream} from 'node:stream/web';
 import {OpenRouterModel, OpenRouterError} from './openrouter.js';
 import {createMockSettingsService} from '../services/settings-service.mock.js';
-import {loggingService} from '../services/logging-service.js';
+import {LoggingService} from '../services/logging-service.js';
 
 const originalFetch = globalThis.fetch;
-const originalLogToOpenrouter = loggingService.logToOpenrouter.bind(loggingService);
+
+// Use a dedicated logger instance for this test suite (avoid deprecated singleton)
+const logger = new LoggingService({disableLogging: true});
+const originalLogToOpenrouter = logger.logToOpenrouter.bind(logger);
 
 // Create a mock settings service with OpenRouter API key for tests
 const mockSettingsService = createMockSettingsService({
@@ -28,7 +31,7 @@ test.beforeEach(() => {
 
 test.afterEach.always(() => {
     globalThis.fetch = originalFetch;
-    loggingService.logToOpenrouter = originalLogToOpenrouter as any;
+    logger.logToOpenrouter = originalLogToOpenrouter as any;
 });
 
 test.serial('builds messages from explicit history, tool calls, and reasoning config', async t => {
@@ -59,7 +62,7 @@ test.serial('builds messages from explicit history, tool calls, and reasoning co
         return responses[requests.length - 1];
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
 
     await model.getResponse({
         systemInstructions: 'system message',
@@ -134,7 +137,7 @@ test.serial('preserves assistant reasoning_details when nested under rawItem in 
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
 
     await model.getResponse({
         systemInstructions: 'system message',
@@ -177,7 +180,7 @@ test.serial('preserves assistant reasoning (reasoning tokens) in history message
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
 
     await model.getResponse({
         systemInstructions: 'system message',
@@ -222,7 +225,7 @@ test.serial('replays reasoning_details alongside tool_calls when stored on funct
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
 
     await model.getResponse({
         systemInstructions: 'system message',
@@ -266,7 +269,7 @@ test.serial('reconstructs reasoning_details from standalone reasoning items befo
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
 
     const input = [
         {role: 'user', type: 'message', content: 'do I have uncommitted change'},
@@ -359,7 +362,7 @@ test.serial('stores reasoning_details/reasoning on message output items for futu
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
     const resp = await model.getResponse({
         systemInstructions: 'system message',
         input: 'hi',
@@ -387,7 +390,7 @@ test.serial('passes through full reasoning request object (max_tokens/exclude) e
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
     await model.getResponse({
         systemInstructions: 'system message',
         input: 'hi',
@@ -405,9 +408,13 @@ test.serial('passes through full reasoning request object (max_tokens/exclude) e
 
 test.serial('logs modelRequest input without implicit expansion', async t => {
     const logged: any[] = [];
-    loggingService.logToOpenrouter = ((level: string, message: string, meta?: any) => {
-        logged.push({level, message, meta});
+    const originalDebug = logger.debug.bind(logger);
+    logger.debug = ((message: string, meta?: any) => {
+        logged.push({message, meta});
     }) as any;
+    t.teardown(() => {
+        logger.debug = originalDebug as any;
+    });
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -430,7 +437,7 @@ test.serial('logs modelRequest input without implicit expansion', async t => {
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
 
     for await (const _event of model.getStreamedResponse({
         systemInstructions: 'system message',
@@ -525,7 +532,7 @@ test.serial('streams reasoning details and stores assistant history', async t =>
         return responses[call++];
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
     const streamedEvents: any[] = [];
 
     for await (const event of model.getStreamedResponse({
@@ -560,7 +567,7 @@ test.serial('converts user message items in array inputs', async t => {
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
 
     await model.getResponse({
         systemInstructions: 'system message',
@@ -602,7 +609,7 @@ test.serial('handles summary reasoning details', async t => {
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
     const response = await model.getResponse({
         systemInstructions: 'system message',
         input: 'What is 1 + 1',
@@ -654,7 +661,7 @@ test.serial('handles encrypted reasoning details', async t => {
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
     const response = await model.getResponse({
         systemInstructions: 'system message',
         input: 'Test encrypted reasoning',
@@ -690,7 +697,7 @@ test.serial('correctly converts function_call_output to tool message', async t =
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
 
     // Simulate a conversation turn with function_call_output
     const inputItems = [
@@ -774,7 +781,7 @@ test.serial('handles mixed reasoning types (summary + encrypted)', async t => {
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
     const response = await model.getResponse({
         systemInstructions: 'system message',
         input: 'What is 1 + 1',
@@ -814,7 +821,7 @@ test.serial('preserves assistant message content when tool calls are present', a
         });
     };
 
-    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const model = new OpenRouterModel({settingsService: mockSettingsService, loggingService: logger, modelId: 'mock-model'});
 
     // First turn - get initial response
     await model.getResponse({

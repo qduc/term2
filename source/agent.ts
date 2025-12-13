@@ -1,13 +1,11 @@
 import {grepToolDefinition} from './tools/grep.js';
-import {searchReplaceToolDefinition} from './tools/search-replace.js';
-import {shellToolDefinition} from './tools/shell.js';
+import {createSearchReplaceToolDefinition} from './tools/search-replace.js';
+import {createShellToolDefinition} from './tools/shell.js';
 import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import {settingsService} from './services/settings-service.js';
-
-export const DEFAULT_MODEL = settingsService.get<string>('agent.model');
+import type {ISettingsService, ILoggingService} from './services/service-interfaces.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts')
 
@@ -28,9 +26,11 @@ function getTopLevelEntries(cwd: string, limit = 50): string {
     }
 }
 
-const envInfo = `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
-    settingsService.get<string>('app.shellPath') || 'unknown'
-}; cwd: ${process.cwd()}; top-level: ${getTopLevelEntries(process.cwd())}`;
+function getEnvInfo(settingsService: ISettingsService): string {
+    return `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
+        settingsService.get<string>('app.shellPath') || 'unknown'
+    }; cwd: ${process.cwd()}; top-level: ${getTopLevelEntries(process.cwd())}`;
+}
 
 function getAgentsInstructions(): string {
     const agentsPath = path.join(process.cwd(), 'AGENTS.md');
@@ -75,8 +75,13 @@ function resolvePrompt(promptPath: string): string {
 /**
  * Returns the agent definition with appropriate tools based on the model.
  */
-export const getAgentDefinition = (model?: string): AgentDefinition => {
-    const resolvedModel = model?.trim() || DEFAULT_MODEL;
+export const getAgentDefinition = (deps: {
+    settingsService: ISettingsService;
+    loggingService: ILoggingService;
+}, model?: string): AgentDefinition => {
+    const {settingsService, loggingService} = deps;
+    const defaultModel = settingsService.get<string>('agent.model');
+    const resolvedModel = model?.trim() || defaultModel;
 
 	if (!resolvedModel)
 		throw new Error('Model cannot be undefined or empty');
@@ -84,12 +89,14 @@ export const getAgentDefinition = (model?: string): AgentDefinition => {
 	const promptPath = getPromptPath(resolvedModel);
 	const prompt = resolvePrompt(promptPath);
 
+    const envInfo = getEnvInfo(settingsService);
+    
     return {
         name: 'Terminal Assistant',
         instructions: `${prompt}\n\nEnvironment: ${envInfo}${getAgentsInstructions()}`,
         tools: [
-            shellToolDefinition,
-            searchReplaceToolDefinition,
+            createShellToolDefinition({settingsService, loggingService}),
+            createSearchReplaceToolDefinition({settingsService, loggingService}),
             grepToolDefinition,
         ],
         model: resolvedModel,

@@ -19,9 +19,9 @@ import {
 import {getProvider} from '../providers/index.js';
 import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
 import {randomUUID} from 'node:crypto';
-import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
+import {getAgentDefinition} from '../agent.js';
 import type {ILoggingService, ISettingsService} from '../services/service-interfaces.js';
-import {editorImpl} from './editor-impl.js';
+import {createEditorImpl} from './editor-impl.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -42,6 +42,7 @@ export class OpenAIAgentClient {
 	#toolInterceptors: ((name: string, params: any, toolCallId?: string) => Promise<string | null>)[] = [];
     #logger: ILoggingService;
     #settings: ISettingsService;
+	#editor: ReturnType<typeof createEditorImpl>;
 
 	constructor({
 		model,
@@ -61,6 +62,10 @@ export class OpenAIAgentClient {
 	}) {
         this.#logger = deps.logger;
         this.#settings = deps.settings;
+		this.#editor = createEditorImpl({
+			loggingService: this.#logger,
+			settingsService: this.#settings,
+		});
 		this.#reasoningEffort = reasoningEffort;
 		this.#provider =
 			this.#settings.get<string>('agent.provider') || 'openai';
@@ -69,7 +74,7 @@ export class OpenAIAgentClient {
 		this.#agent = this.#createAgent({model, reasoningEffort});
 		this.#runner = this.#createRunner();
 		this.#logger.info('OpenAI Agent Client initialized', {
-			model: model || DEFAULT_MODEL,
+			model: model || this.#settings.get<string>('agent.model'),
 			reasoningEffort: reasoningEffort ?? 'default',
 			maxTurns: this.#maxTurns,
 			retryAttempts: this.#retryAttempts,
@@ -355,13 +360,16 @@ export class OpenAIAgentClient {
 		model?: string;
 		reasoningEffort?: ModelSettingsReasoningEffort | 'default';
 	} = {}): Agent {
-		const resolvedModel = model?.trim() || DEFAULT_MODEL;
+		const resolvedModel = model?.trim() || this.#settings.get<string>('agent.model');
 		this.#model = resolvedModel;
 		const {
 			name,
 			instructions,
 			tools: toolDefinitions,
-		} = getAgentDefinition(resolvedModel);
+		} = getAgentDefinition({
+			settingsService: this.#settings,
+			loggingService: this.#logger,
+		}, resolvedModel);
 
 		// Determine if we should use the native applyPatchTool
 		const shouldUseNativePatchTool =
@@ -409,7 +417,7 @@ export class OpenAIAgentClient {
 		// Add native applyPatchTool for gpt-5.1 on OpenAI provider
 		if (shouldUseNativePatchTool) {
 			const nativePatchTool = applyPatchTool({
-				editor: editorImpl,
+				editor: this.#editor,
 				needsApproval: false, // Default to auto-approve for now
 			}) as any; // Type assertion needed as invoke is not in public API
 

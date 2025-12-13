@@ -367,23 +367,37 @@ test('getAll() returns all settings with sources', async t => {
 
 test('SettingsService initialization applies logging.logLevel to loggingService', async t => {
     const settingsDir = getTestSettingsDir();
+    const mockLoggingService = {
+        setLogLevel: (level) => { mockLoggingService._level = level; },
+        getLogLevel: () => mockLoggingService._level || 'info',
+        _level: 'info'
+    };
+    
     const service = new SettingsService({
         settingsDir,
         disableLogging: true,
+        loggingService: mockLoggingService,
         cli: {
             logging: {logLevel: 'debug'},
         },
     });
 
     t.is(service.get('logging.logLevel'), 'debug');
-    t.is(loggingService.getLogLevel(), 'debug');
+    t.is(mockLoggingService.getLogLevel(), 'debug');
 });
 
 test('SettingsService runtime set updates loggingService', async t => {
     const settingsDir = getTestSettingsDir();
+    const mockLoggingService = {
+        setLogLevel: (level) => { mockLoggingService._level = level; },
+        getLogLevel: () => mockLoggingService._level || 'info',
+        _level: 'info'
+    };
+    
     const service = new SettingsService({
         settingsDir,
         disableLogging: true,
+        loggingService: mockLoggingService,
     });
 
     // Initially default
@@ -392,7 +406,7 @@ test('SettingsService runtime set updates loggingService', async t => {
     service.set('logging.logLevel', 'debug');
 
     t.is(service.get('logging.logLevel'), 'debug');
-    t.is(loggingService.getLogLevel(), 'debug');
+    t.is(mockLoggingService.getLogLevel(), 'debug');
 });
 
 test('gracefully degrades on invalid config file', async t => {

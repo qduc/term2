@@ -11,7 +11,9 @@ import LiveResponse from './components/LiveResponse.js';
 import {ErrorBoundary} from './components/ErrorBoundary.js';
 import type {SlashCommand} from './components/SlashCommandMenu.js';
 import type {ConversationService} from './services/conversation-service.js';
-import {settingsService} from './services/settings-service.js';
+import type {SettingsService} from './services/settings-service.js';
+import type {HistoryService} from './services/history-service.js';
+import type {LoggingService} from './services/logging-service.js';
 import {createSettingsCommand} from './utils/settings-command.js';
 import {setTrimConfig} from './utils/output-trim.js';
 import {getProvider} from './providers/index.js';
@@ -35,9 +37,12 @@ function parseInput(value: string): ParsedInput {
 
 interface AppProps {
     conversationService: ConversationService;
+    settingsService: SettingsService;
+    historyService: HistoryService;
+    loggingService: LoggingService;
 }
 
-const App: FC<AppProps> = ({conversationService}) => {
+const App: FC<AppProps> = ({conversationService, settingsService, historyService, loggingService}) => {
     const {exit} = useApp();
     const { input, setInput } = useInputContext();
     const {
@@ -54,9 +59,10 @@ const App: FC<AppProps> = ({conversationService}) => {
         setModel,
         setReasoningEffort,
         addSystemMessage,
-    } = useConversation({conversationService});
+    } = useConversation({conversationService, loggingService});
 
-    const {navigateUp, navigateDown, addToHistory} = useInputHistory();
+
+    const {navigateUp, navigateDown, addToHistory} = useInputHistory(historyService);
 
     const [dotCount, setDotCount] = useState(1);
 
@@ -303,9 +309,9 @@ const App: FC<AppProps> = ({conversationService}) => {
     }, [navigateDown, setInput]);
 
     return (
-        <ErrorBoundary>
+        <ErrorBoundary loggingService={loggingService}>
             <Box flexDirection="column" flexGrow={1}>
-                <Banner />
+                <Banner settingsService={settingsService} />
                 {/* Main content area grows to fill available vertical space */}
                 <Box flexDirection="column" flexGrow={1}>
                     <MessageList messages={messages} />
@@ -323,6 +329,8 @@ const App: FC<AppProps> = ({conversationService}) => {
                             onHistoryDown={handleHistoryDown}
                             hasConversationHistory={messages.filter(msg => msg.sender !== 'system').length > 0}
                             waitingForRejectionReason={waitingForRejectionReason}
+                            settingsService={settingsService}
+                            loggingService={loggingService}
                         />
                     ) : null}
 

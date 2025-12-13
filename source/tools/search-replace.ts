@@ -1,10 +1,9 @@
 import {z} from 'zod';
 import {readFile, writeFile} from 'fs/promises';
 import path from 'path';
-import {loggingService} from '../services/logging-service.js';
-import {settingsService} from '../services/settings-service.js';
 import {resolveWorkspacePath} from './utils.js';
 import type {ToolDefinition} from './types.js';
+import type {ILoggingService, ISettingsService} from '../services/service-interfaces.js';
 
 const searchReplaceParametersSchema = z.object({
     path: z.string().describe('The absolute or relative path to the file'),
@@ -113,7 +112,13 @@ function findMatchesInContent(content: string, searchContent: string): MatchInfo
     return { type: 'none' };
 }
 
-export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams> = {
+export function createSearchReplaceToolDefinition(deps: {
+    loggingService: ILoggingService;
+    settingsService: ISettingsService;
+}): ToolDefinition<SearchReplaceToolParams> {
+    const {loggingService, settingsService} = deps;
+
+    return {
     name: 'search_replace',
     description:
         'Replace text in a file using exact or relaxed matching.\n' +
@@ -354,3 +359,4 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
         }
     }
 };
+}

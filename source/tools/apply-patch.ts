@@ -2,10 +2,9 @@ import {z} from 'zod';
 import {readFile, writeFile, mkdir} from 'fs/promises';
 import path from 'path';
 import {applyDiff} from '@openai/agents';
-import {loggingService} from '../services/logging-service.js';
-import {settingsService} from '../services/settings-service.js';
 import {resolveWorkspacePath} from './utils.js';
 import type {ToolDefinition} from './types.js';
+import type {ILoggingService, ISettingsService} from '../services/service-interfaces.js';
 
 /**
  * Error thrown when patch validation fails (malformed diff)
@@ -29,7 +28,13 @@ export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;
 
 
 
-export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
+export function createApplyPatchToolDefinition(deps: {
+    loggingService: ILoggingService;
+    settingsService: ISettingsService;
+}): ToolDefinition<ApplyPatchToolParams> {
+    const {loggingService, settingsService} = deps;
+
+    return {
     name: 'apply_patch',
     description:
         'Apply file changes using headerless V4A diff format. Supports creating, updating files.\n\n' +
@@ -359,3 +364,4 @@ export const applyPatchToolDefinition: ToolDefinition<ApplyPatchToolParams> = {
         }
     },
 };
+}

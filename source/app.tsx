@@ -5,6 +5,7 @@ import {Box, Text, useApp, useInput} from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
 import { useInputHistory } from './hooks/use-input-history.js';
 import Banner from './components/Banner.js';
+import StatusBar from './components/StatusBar.js';
 import MessageList from './components/MessageList.js';
 import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
@@ -351,6 +352,8 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                             processing{'.'.repeat(dotCount)}
                         </Text>
                     )}
+
+                    <StatusBar settingsService={settingsService} />
                 </Box>
             </Box>
         </ErrorBoundary>

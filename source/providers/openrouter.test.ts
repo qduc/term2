@@ -122,6 +122,287 @@ test.serial('builds messages from explicit history, tool calls, and reasoning co
     ]);
 });
 
+test.serial('preserves assistant reasoning_details when nested under rawItem in history', async t => {
+    const requests: any[] = [];
+
+    globalThis.fetch = async (_url, options: any) => {
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return new Response(JSON.stringify({choices: [{message: {content: 'ok'}}], usage: {}}), {
+            status: 200,
+            headers: {'Content-Type': 'application/json'},
+        });
+    };
+
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
+
+    await model.getResponse({
+        systemInstructions: 'system message',
+        input: [
+            {type: 'message', role: 'user', content: 'hi'},
+            {
+                rawItem: {
+                    type: 'message',
+                    role: 'assistant',
+                    status: 'completed',
+                    content: [{type: 'output_text', text: 'Hello back'}],
+                    reasoning_details: [{type: 'text', text: 'thinking'}],
+                },
+            },
+        ] as any,
+    } as any);
+
+    t.truthy(requests[0]);
+    t.deepEqual(requests[0].messages, [
+        {role: 'system', content: 'system message'},
+        {role: 'user', content: 'hi'},
+        {
+            role: 'assistant',
+            content: 'Hello back',
+            reasoning_details: [{type: 'text', text: 'thinking'}],
+        },
+    ]);
+});
+
+test.serial('preserves assistant reasoning (reasoning tokens) in history messages', async t => {
+    const requests: any[] = [];
+
+    globalThis.fetch = async (_url, options: any) => {
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return createJsonResponse({
+            id: 'resp-ok',
+            choices: [{message: {content: 'ok'}}],
+            usage: {},
+        });
+    };
+
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
+
+    await model.getResponse({
+        systemInstructions: 'system message',
+        input: [
+            {type: 'message', role: 'user', content: 'hi'},
+            {
+                type: 'message',
+                role: 'assistant',
+                status: 'completed',
+                content: [{type: 'output_text', text: 'Hello back'}],
+                reasoning: 'Thinking privately...',
+                reasoning_details: [{type: 'reasoning.text', text: 'step1', format: null, index: 0}],
+            },
+        ] as any,
+    } as any);
+
+    t.truthy(requests[0]);
+    t.deepEqual(requests[0].messages, [
+        {role: 'system', content: 'system message'},
+        {role: 'user', content: 'hi'},
+        {
+            role: 'assistant',
+            content: 'Hello back',
+            reasoning: 'Thinking privately...',
+            reasoning_details: [
+                {type: 'reasoning.text', text: 'step1', format: null, index: 0},
+            ],
+        },
+    ]);
+});
+
+test.serial('replays reasoning_details alongside tool_calls when stored on function_call items', async t => {
+    const requests: any[] = [];
+
+    globalThis.fetch = async (_url, options: any) => {
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return createJsonResponse({
+            id: 'resp-ok',
+            choices: [{message: {content: 'ok'}}],
+            usage: {},
+        });
+    };
+
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
+
+    await model.getResponse({
+        systemInstructions: 'system message',
+        input: [
+            {type: 'message', role: 'user', content: 'hi'},
+            {
+                type: 'function_call',
+                id: 'call-123',
+                name: 'bash',
+                arguments: '{"cmd":"ls"}',
+                reasoning_details: [
+                    {type: 'reasoning.text', text: 'tool planning', format: 'anthropic-claude-v1', index: 0},
+                ],
+                reasoning: 'I should run ls',
+            },
+            {type: 'function_call_result', callId: 'call-123', output: 'files\n'},
+        ] as any,
+    } as any);
+
+    const messages = requests[0].messages;
+    const assistantWithToolCalls = messages.find(
+        (m: any) => m.role === 'assistant' && Array.isArray(m.tool_calls),
+    );
+    t.truthy(assistantWithToolCalls);
+    t.deepEqual(assistantWithToolCalls.reasoning_details, [
+        {type: 'reasoning.text', text: 'tool planning', format: 'anthropic-claude-v1', index: 0},
+    ]);
+    t.is(assistantWithToolCalls.reasoning, 'I should run ls');
+});
+
+test.serial('reconstructs reasoning_details from standalone reasoning items before tool calls (Gemini requirement)', async t => {
+    const requests: any[] = [];
+
+    globalThis.fetch = async (_url, options: any) => {
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return createJsonResponse({
+            id: 'resp-ok',
+            choices: [{message: {content: 'ok'}}],
+            usage: {},
+        });
+    };
+
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
+
+    const input = [
+        {role: 'user', type: 'message', content: 'do I have uncommitted change'},
+        {
+            id: 'reasoning-1',
+            type: 'reasoning',
+            providerData: {
+                type: 'reasoning.text',
+                text: 'step1',
+                format: 'google-gemini-v1',
+                index: 0,
+            },
+            content: [{type: 'input_text', text: 'step1'}],
+        },
+        {
+            id: 'tool_shell_1',
+            type: 'reasoning',
+            providerData: {
+                id: 'tool_shell_1',
+                type: 'reasoning.encrypted',
+                data: 'ENC',
+                format: 'google-gemini-v1',
+                index: 1,
+            },
+            content: [],
+        },
+        {
+            type: 'function_call',
+            callId: 'tool_shell_1',
+            name: 'shell',
+            status: 'completed',
+            arguments: '{"command":"git status"}',
+        },
+        {
+            type: 'function_call_result',
+            callId: 'tool_shell_1',
+            name: 'shell',
+            status: 'completed',
+            output: {type: 'text', text: 'ok'},
+        },
+    ] as any;
+
+    await model.getResponse({
+        systemInstructions: 'system message',
+        input,
+    } as any);
+
+    const body = requests[0];
+    t.truthy(body);
+
+    // Expect the reasoning blocks to be replayed as reasoning_details on the assistant tool_calls message.
+    const assistantToolCall = body.messages.find(
+        (m: any) => m.role === 'assistant' && Array.isArray(m.tool_calls),
+    );
+    t.truthy(assistantToolCall);
+    t.deepEqual(assistantToolCall.reasoning_details, [
+        {
+            type: 'reasoning.text',
+            text: 'step1',
+            format: 'google-gemini-v1',
+            index: 0,
+        },
+        {
+            id: 'tool_shell_1',
+            type: 'reasoning.encrypted',
+            data: 'ENC',
+            format: 'google-gemini-v1',
+            index: 1,
+        },
+    ]);
+});
+
+test.serial('stores reasoning_details/reasoning on message output items for future turns', async t => {
+    globalThis.fetch = async (_url, options: any) => {
+        JSON.parse(options.body);
+        return createJsonResponse({
+            id: 'resp-1',
+            choices: [
+                {
+                    message: {
+                        content: 'Hello back',
+                        reasoning: 'Some thinking',
+                        reasoning_details: [
+                            {type: 'reasoning.text', text: 'step1', format: null, index: 0},
+                        ],
+                    },
+                },
+            ],
+            usage: {prompt_tokens: 1, completion_tokens: 2, total_tokens: 3},
+        });
+    };
+
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    const resp = await model.getResponse({
+        systemInstructions: 'system message',
+        input: 'hi',
+    } as any);
+
+    const msg = resp.output.find((o: any) => o.type === 'message');
+    t.truthy(msg);
+    t.is(msg.content?.[0]?.text, 'Hello back');
+    t.is(msg.reasoning, 'Some thinking');
+    t.deepEqual(msg.reasoning_details, [
+        {type: 'reasoning.text', text: 'step1', format: null, index: 0},
+    ]);
+});
+
+test.serial('passes through full reasoning request object (max_tokens/exclude) even without reasoningEffort', async t => {
+    const requests: any[] = [];
+
+    globalThis.fetch = async (_url, options: any) => {
+        const body = JSON.parse(options.body);
+        requests.push(body);
+        return createJsonResponse({
+            id: 'resp-reasoning-obj',
+            choices: [{message: {content: 'ok'}}],
+            usage: {},
+        });
+    };
+
+    const model = new OpenRouterModel('mock-model', mockSettingsService);
+    await model.getResponse({
+        systemInstructions: 'system message',
+        input: 'hi',
+        modelSettings: {
+            reasoning: {
+                max_tokens: 2000,
+                exclude: false,
+            },
+        },
+    } as any);
+
+    t.truthy(requests[0]);
+    t.deepEqual(requests[0].reasoning, {max_tokens: 2000, exclude: false});
+});
+
 test.serial('logs modelRequest input without implicit expansion', async t => {
     const logged: any[] = [];
     loggingService.logToOpenrouter = ((level: string, message: string, meta?: any) => {

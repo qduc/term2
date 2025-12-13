@@ -119,14 +119,16 @@ function convertAgentItemToOpenRouterMessage(item: any): any | null {
         return null;
     }
 
-    if (item.type === 'input_text' && typeof item.text === 'string') {
-        return {role: 'user', content: item.text};
+	const rawItem = item.rawItem || item;
+
+    if (rawItem.type === 'input_text' && typeof rawItem.text === 'string') {
+        return {role: 'user', content: rawItem.text};
     }
 
-    if (item.role === 'assistant' && item.type === 'message') {
+    if (rawItem.role === 'assistant' && rawItem.type === 'message') {
         const message: any = {role: 'assistant'};
-        if (Array.isArray(item.content)) {
-            const textContent = item.content
+        if (Array.isArray(rawItem.content)) {
+            const textContent = rawItem.content
                 .filter((c: any) => c?.type === 'output_text' && c?.text)
                 .map((c: any) => c.text)
                 .join('');
@@ -135,25 +137,37 @@ function convertAgentItemToOpenRouterMessage(item: any): any | null {
             }
         }
 
-        if (item.reasoning_details) {
-            message.reasoning_details = item.reasoning_details;
+		// Preserve OpenRouter "reasoning" field (aka reasoning tokens) when present.
+		// This is distinct from reasoning_details blocks.
+		const reasoning = rawItem.reasoning ?? item.reasoning;
+		if (typeof reasoning === 'string') {
+			message.reasoning = reasoning;
+		}
+
+        // Preserve reasoning_details EXACTLY as received (required by OpenRouter).
+        // Some SDK history items may carry these fields under `rawItem`.
+        const reasoningDetails =
+			rawItem.reasoning_details ?? item.reasoning_details;
+        if (reasoningDetails != null) {
+            message.reasoning_details = reasoningDetails;
         }
 
-        if (item.tool_calls) {
-            message.tool_calls = item.tool_calls;
+        const toolCalls = rawItem.tool_calls ?? item.tool_calls;
+        if (toolCalls != null) {
+            message.tool_calls = toolCalls;
         }
 
         return message;
     }
 
     // Handle explicit user messages included in array-form inputs
-    if (item.role === 'user' && item.type === 'message') {
-        if (typeof item.content === 'string') {
-            return {role: 'user', content: item.content};
+    if (rawItem.role === 'user' && rawItem.type === 'message') {
+        if (typeof rawItem.content === 'string') {
+            return {role: 'user', content: rawItem.content};
         }
 
-        if (Array.isArray(item.content)) {
-            const textContent = item.content
+        if (Array.isArray(rawItem.content)) {
+            const textContent = rawItem.content
                 .filter((c: any) => (c?.type === 'input_text' || c?.type === 'output_text') && c?.text)
                 .map((c: any) => c.text)
                 .join('');
@@ -163,9 +177,13 @@ function convertAgentItemToOpenRouterMessage(item: any): any | null {
         }
     }
 
-    const rawItem = item.rawItem || item;
-
     if (rawItem?.type === 'function_call') {
+		// Tool-call continuation: to preserve reasoning blocks across tool flows,
+		// we may need to replay reasoning_details/reasoning alongside tool_calls.
+		const reasoning = rawItem.reasoning ?? item.reasoning;
+		const reasoningDetails =
+			rawItem.reasoning_details ?? item.reasoning_details;
+
         return {
             role: 'assistant',
             content: null,
@@ -181,6 +199,10 @@ function convertAgentItemToOpenRouterMessage(item: any): any | null {
                     },
                 },
             ],
+			...(typeof reasoning === 'string' ? {reasoning} : {}),
+			...(reasoningDetails != null
+				? {reasoning_details: reasoningDetails}
+				: {}),
         };
     }
 
@@ -210,6 +232,7 @@ function buildMessagesFromRequest(
     req: ModelRequest,
 ): any[] {
     const messages: any[] = [];
+	let pendingReasoningDetails: any[] = [];
 
     if (req.systemInstructions && req.systemInstructions.trim().length > 0) {
         messages.push({role: 'system', content: req.systemInstructions});
@@ -223,8 +246,31 @@ function buildMessagesFromRequest(
         messages.push(userMessage);
     } else if (Array.isArray(req.input)) {
         for (const item of req.input as any[]) {
+            // The Agents SDK may represent preserved reasoning blocks as standalone
+            // output items of type "reasoning" (with providerData containing the
+            // original reasoning detail object). Gemini models require these blocks
+            // to be replayed as reasoning_details in subsequent requests.
+            const raw = (item as any)?.rawItem ?? item;
+            if (raw?.type === 'reasoning') {
+                const detail = raw?.providerData ?? (item as any)?.providerData;
+                if (detail && typeof detail === 'object') {
+                    pendingReasoningDetails.push(detail);
+                }
+                continue;
+            }
+
             const converted = convertAgentItemToOpenRouterMessage(item);
             if (converted) {
+                // Attach any pending reasoning blocks to the next assistant message we
+                // emit (including assistant tool_calls messages), unless already present.
+                if (
+                    pendingReasoningDetails.length > 0 &&
+                    converted.role === 'assistant' &&
+                    converted.reasoning_details == null
+                ) {
+                    converted.reasoning_details = pendingReasoningDetails;
+                    pendingReasoningDetails = [];
+                }
                 messages.push(converted);
             }
         }
@@ -285,14 +331,23 @@ function extractModelSettingsForRequest(settings: any): any {
         // Presence Penalty: OpenAI standard parameter
         if (settings.presencePenalty != null) body.presence_penalty = settings.presencePenalty;
 
+        const hasReasoningObj =
+            settings.reasoning && typeof settings.reasoning === 'object';
+        if (hasReasoningObj) {
+            // Pass through the full reasoning object unmodified. (OpenRouter supports
+            // additional fields like max_tokens and exclude.)
+            body.reasoning = {...settings.reasoning};
+        }
+
         const reasoningEffort =
             settings.reasoningEffort ?? settings.reasoning?.effort;
         const normalizedEffort =
             reasoningEffort === 'default' ? 'medium' : reasoningEffort;
 
+        // If an effort is provided (and isn't explicitly disabled), ensure it's set.
         if (normalizedEffort && normalizedEffort !== 'none') {
             body.reasoning = {
-                ...(settings.reasoning ?? {}),
+                ...(body.reasoning ?? {}),
                 effort: normalizedEffort,
             };
         }
@@ -437,6 +492,7 @@ class OpenRouterModel implements Model {
         const responseId = json?.id ?? randomUUID();
 
         const usage = normalizeUsage(json?.usage || {}) as any;
+		const reasoning = choice?.message?.reasoning;
         const reasoningDetails = choice?.message?.reasoning_details;
         const toolCalls = choice?.message?.tool_calls;
 
@@ -495,6 +551,10 @@ class OpenRouterModel implements Model {
                         text: textContent,
                     },
                 ],
+				...(typeof reasoning === 'string' ? {reasoning} : {}),
+				...(reasoningDetails != null
+					? {reasoning_details: reasoningDetails}
+					: {}),
             } as any);
         }
 
@@ -509,6 +569,13 @@ class OpenRouterModel implements Model {
                         name: toolCall.function.name,
                         arguments: decodeHtmlEntities(toolCall.function.arguments),
                         status: 'completed',
+						// Preserve reasoning blocks/tokens on tool calls so that when the
+						// caller replays history, we can attach them back onto the assistant
+						// tool_calls message (OpenRouter best practice).
+						...(typeof reasoning === 'string' ? {reasoning} : {}),
+						...(reasoningDetails != null
+							? {reasoning_details: reasoningDetails}
+							: {}),
                     } as any);
                 }
             }
@@ -562,6 +629,7 @@ class OpenRouterModel implements Model {
         let accumulated = '';
         let responseId = 'unknown';
         let usageData: any = null;
+		let accumulatedReasoningText = '';
         const accumulatedReasoning: any[] = [];
         const accumulatedToolCalls: any[] = [];
         if (!reader) {
@@ -611,6 +679,7 @@ class OpenRouterModel implements Model {
                                     accumulated,
                                     reasoningDetails,
                                     accumulatedToolCalls,
+							accumulatedReasoningText,
                                 ),
                             },
                         } as any;
@@ -637,6 +706,11 @@ class OpenRouterModel implements Model {
                                 accumulatedReasoning.push(reasoningDetails);
                             }
                         }
+						const reasoningDelta =
+							json?.choices?.[0]?.delta?.reasoning;
+						if (typeof reasoningDelta === 'string' && reasoningDelta.length > 0) {
+							accumulatedReasoningText += reasoningDelta;
+						}
                         const deltaToolCalls =
                             json?.choices?.[0]?.delta?.tool_calls;
                         if (deltaToolCalls) {
@@ -686,6 +760,7 @@ class OpenRouterModel implements Model {
                     accumulated,
                     reasoningDetails,
                     accumulatedToolCalls,
+					accumulatedReasoningText,
                 ),
             },
         } as any;
@@ -695,6 +770,7 @@ class OpenRouterModel implements Model {
         accumulated: string,
         reasoningDetails?: any,
         toolCalls?: any[],
+		reasoningText?: string,
     ): any[] {
         const output: any[] = [];
 
@@ -750,6 +826,12 @@ class OpenRouterModel implements Model {
                         text: accumulated,
                     },
                 ],
+				...(typeof reasoningText === 'string' && reasoningText.length > 0
+					? {reasoning: reasoningText}
+					: {}),
+				...(reasoningDetails != null
+					? {reasoning_details: reasoningDetails}
+					: {}),
             } as any);
         }
 
@@ -764,6 +846,12 @@ class OpenRouterModel implements Model {
                         name: toolCall.name,
                         arguments: decodeHtmlEntities(toolCall.arguments),
                         status: 'completed',
+						...(typeof reasoningText === 'string' && reasoningText.length > 0
+							? {reasoning: reasoningText}
+							: {}),
+						...(reasoningDetails != null
+							? {reasoning_details: reasoningDetails}
+							: {}),
                     } as any);
                 }
             }

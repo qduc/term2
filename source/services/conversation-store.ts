@@ -46,7 +46,23 @@ export class ConversationStore {
 		// Otherwise, merge by detecting any overlap between the end of the existing
 		// history and the beginning of the incoming history.
 		const overlap = this.#findSuffixPrefixOverlap(this.#history, next);
-		this.#history = [...this.#history, ...next.slice(overlap)];
+		if (overlap > 0) {
+			// Preserve richer incoming items (e.g. assistant reasoning_details) for the
+			// overlapped region. This is important because overlap detection uses a
+			// signature that intentionally ignores many fields.
+			const mergedExisting = this.#cloneHistory(this.#history);
+			for (let i = 0; i < overlap; i++) {
+				const existingIndex = mergedExisting.length - overlap + i;
+				mergedExisting[existingIndex] = this.#preferIncomingItem(
+					mergedExisting[existingIndex],
+					next[i],
+				);
+			}
+			this.#history = [...mergedExisting, ...next.slice(overlap)];
+			return;
+		}
+
+		this.#history = [...this.#history, ...next];
 	}
 
 	getHistory(): AgentInputItem[] {
@@ -93,6 +109,49 @@ export class ConversationStore {
 		} catch {
 			return items.slice();
 		}
+	}
+
+	#preferIncomingItem(
+		existing: AgentInputItem,
+		incoming: AgentInputItem,
+	): AgentInputItem {
+		const eAny: any = existing as any;
+		const iAny: any = incoming as any;
+		const eRaw: any = eAny?.rawItem ?? eAny;
+		const iRaw: any = iAny?.rawItem ?? iAny;
+
+		// Prefer the incoming item if it provides reasoning_details/tool_calls that
+		// the existing overlapped item doesn't have.
+		const isAssistantMessage =
+			iRaw?.role === 'assistant' &&
+			iRaw?.type === 'message' &&
+			eRaw?.role === 'assistant' &&
+			eRaw?.type === 'message';
+
+		if (isAssistantMessage) {
+			const incomingReasoning =
+				iAny?.reasoning_details ?? iRaw?.reasoning_details;
+			const existingReasoning =
+				eAny?.reasoning_details ?? eRaw?.reasoning_details;
+			if (existingReasoning == null && incomingReasoning != null) {
+				return incoming;
+			}
+
+			// Preserve OpenRouter "reasoning" (reasoning tokens) field as well.
+			const incomingReasoningText = iAny?.reasoning ?? iRaw?.reasoning;
+			const existingReasoningText = eAny?.reasoning ?? eRaw?.reasoning;
+			if (existingReasoningText == null && incomingReasoningText != null) {
+				return incoming;
+			}
+
+			const incomingToolCalls = iAny?.tool_calls ?? iRaw?.tool_calls;
+			const existingToolCalls = eAny?.tool_calls ?? eRaw?.tool_calls;
+			if (existingToolCalls == null && incomingToolCalls != null) {
+				return incoming;
+			}
+		}
+
+		return existing;
 	}
 
 	#signature(item: AgentInputItem): string {

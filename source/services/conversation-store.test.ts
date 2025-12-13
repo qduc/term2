@@ -94,6 +94,66 @@ test('updateFromResult() replaces history when incoming history is a superset', 
 	t.is(last.content, 'Ack2');
 });
 
+test('updateFromResult() preserves reasoning_details across overlap merges', t => {
+	const store = new ConversationStore();
+
+	// Initial transcript where the assistant message has no reasoning_details.
+	store.updateFromResult({
+		history: [
+			{role: 'user', type: 'message', content: 'First'},
+			{role: 'assistant', type: 'message', content: 'Hello'},
+		] satisfies AgentInputItem[],
+	});
+
+	// Later, the SDK returns incremental history starting with the last assistant
+	// message, now enriched with reasoning_details (common in tool flows).
+	const reasoning_details = [{type: 'text', text: 'thinking'}];
+	store.updateFromResult({
+		history: [
+			{role: 'assistant', type: 'message', content: 'Hello', reasoning_details},
+			{type: 'function_call', id: 'call-1', name: 'bash', arguments: '{"cmd":"ls"}'},
+			{type: 'function_call_result', callId: 'call-1', output: 'files\n'},
+		] as any,
+	});
+
+	const history: any[] = store.getHistory() as any;
+	const assistantHello = history.find(
+		item => (item?.rawItem ?? item)?.role === 'assistant' && (item?.rawItem ?? item)?.content === 'Hello',
+	);
+	t.truthy(assistantHello);
+	t.deepEqual((assistantHello?.rawItem ?? assistantHello)?.reasoning_details, reasoning_details);
+});
+
+test('updateFromResult() preserves reasoning (reasoning tokens) across overlap merges', t => {
+	const store = new ConversationStore();
+
+	// Initial transcript where the assistant message has no reasoning field.
+	store.updateFromResult({
+		history: [
+			{role: 'user', type: 'message', content: 'First'},
+			{role: 'assistant', type: 'message', content: 'Hello'},
+		] satisfies AgentInputItem[],
+	});
+
+	// Later, the SDK returns incremental history starting with the last assistant
+	// message, now enriched with OpenRouter-style reasoning.
+	store.updateFromResult({
+		history: [
+			{role: 'assistant', type: 'message', content: 'Hello', reasoning: 'Some hidden thinking'},
+			{role: 'user', type: 'message', content: 'Next'},
+		] as any,
+	});
+
+	const history: any[] = store.getHistory() as any;
+	const assistantHello = history.find(
+		item =>
+			(item?.rawItem ?? item)?.role === 'assistant' &&
+			(item?.rawItem ?? item)?.content === 'Hello',
+	);
+	t.truthy(assistantHello);
+	t.is((assistantHello?.rawItem ?? assistantHello)?.reasoning, 'Some hidden thinking');
+});
+
 test('clear() resets history', t => {
 	const store = new ConversationStore();
 	store.addUserMessage('Hello');

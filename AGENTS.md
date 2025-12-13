@@ -136,32 +136,17 @@ Recent changes improved consistency and safety across tools:
 
 - SettingsService now has a light-weight mock for tests to isolate configuration and simplify overrides. Provider `createRunner` accepts `settingsService` and `loggingService` via DI for easier test scaffolding and to avoid import cycles.
 
-## Recent Architecture Changes (since commit 5e48382)
+## Architecture highlights
 
-The following significant architectural changes have been introduced after commit `5e48382`:
+High-level architecture and design decisions (concise):
 
-1. Provider Registry and DI-based Runner Creation
-   - Introduced `ProviderDefinition` with optional `createRunner(deps)`.
-   - Providers self-register (`source/providers/index.ts`).
-   - `OpenRouter` builds a custom `Runner` with its own `modelProvider`; `OpenAI` uses the default SDK runner.
+- Pluggable provider registry with dependency-injected runner creation. Providers (e.g. OpenAI, OpenRouter) register via `source/providers` and may expose a `createRunner(deps)` factory so runners can be constructed without circular imports.
+- Provider-neutral conversation strategy: a client-side `ConversationStore` is used where providers don't manage server-side state; when supported we pass `previousResponseId` to OpenAI to enable server-side chaining.
+- Tool interceptor and approval model: tools (shell, apply-patch, search-replace, grep) run through centralized validation and an approval flow; utilities provide safe diff generation and output sanitization.
+- Dependency injection and testability: services accept interfaces (logging, settings) and a `SettingsService` mock exists to simplify unit tests and avoid I/O in tests.
+- Session & streaming model: conversation sessions stream deltas, capture reasoning, and surface tool calls for explicit approval; retry and failure-tracking behavior is configurable.
 
-2. Conversation State Management
-   - Added `ConversationStore` for maintaining canonical client-side history.
-   - OpenAI path supports `previousResponseId` chaining; OpenRouter ignores it and relies on the local history.
-   - Removed OpenRouter-side conversation state management in favor of caller-managed history.
-
-3. Safer, More Consistent Tooling
-   - Shell tool standardized on `command` string; command message rendering improved.
-   - Search/Replace enhanced with diff previews and pre-approval validation.
-   - Utilities added for diff generation and tools array sanitization; grep returns plain text.
-
-4. Dependency Injection for Providers
-   - `createRunner` accepts `{ settingsService, loggingService }` from the caller to avoid ESM circular dependencies and improve testability.
-
-5. Testing Improvements
-   - Introduced a `SettingsService` mock for isolation in unit tests.
-
-These changes make it easier to add new providers, reduce coupling, and clarify how conversation context is managed across backends.
+For implementation details, chronological change logs, and rationale, consult the source files under `source/` and the Git history — this document intentionally stays at a high level.
 
 ## Testing & Quality
 

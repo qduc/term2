@@ -4,12 +4,12 @@ import {
     SafetyStatus,
     ALLOWED_COMMANDS,
     BLOCKED_COMMANDS,
-    SAFE_GIT_COMMANDS,
-    DANGEROUS_GIT_COMMANDS,
 } from './constants.js';
 import {extractWordText} from './utils.js';
 import {hasFindDangerousExecution, hasFindSuspiciousFlags} from './find-helpers.js';
 import {analyzePathRisk} from './path-analysis.js';
+import {getCommandHandler} from './handlers/index.js';
+import type {CommandHandlerHelpers} from './handlers/index.js';
 
 /**
  * Classify command into a SafetyStatus (GREEN/YELLOW/RED)
@@ -64,246 +64,28 @@ export function classifyCommand(commandString: string): SafetyStatus {
 
                 const cmdName = typeof name === 'string' ? name : undefined;
 
-                // Special handling for git command
-                if (cmdName === 'git') {
-                    // Extract the git subcommand (first non-flag argument)
-                    let gitSubcommand: string | undefined;
-                    if (node.suffix) {
-                        for (const arg of node.suffix) {
-                            const argText = extractWordText(arg);
-                            if (argText && !argText.startsWith('-')) {
-                                gitSubcommand = argText;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!gitSubcommand) {
-                        // No subcommand found (e.g., just "git" or "git --version")
-                        upgradeStatus(
-                            SafetyStatus.YELLOW,
-                            'git without subcommand',
-                        );
+                // Check if there's a specialized handler for this command
+                if (cmdName) {
+                    const handler = getCommandHandler(cmdName);
+                    if (handler) {
+                        const helpers: CommandHandlerHelpers = {
+                            extractWordText,
+                            analyzePathRisk,
+                            hasFindDangerousExecution,
+                            hasFindSuspiciousFlags,
+                        };
+                        const result = handler.handle(node, helpers);
+                        upgradeStatus(result.status, result.reasons.join('; '));
                         return;
                     }
-
-                    // Check if it's a known dangerous command
-                    if (DANGEROUS_GIT_COMMANDS.has(gitSubcommand)) {
-                        upgradeStatus(
-                            SafetyStatus.YELLOW,
-                            `git ${gitSubcommand} (write operation)`,
-                        );
-                        return;
-                    }
-
-                    // Check if it's a known safe command
-                    if (SAFE_GIT_COMMANDS.has(gitSubcommand)) {
-                        // Check for dangerous flags that might make it unsafe
-                        const hasDangerousFlags = node.suffix.some((arg: any) => {
-                            const argText = extractWordText(arg);
-                            if (!argText) return false;
-
-                            // Flags that might modify repository state
-                            return (
-                                argText.startsWith('--force') ||
-                                argText.startsWith('-f') ||
-                                argText.startsWith('--hard') ||
-                                argText.startsWith('--delete') ||
-                                argText.startsWith('-d') ||
-                                argText.startsWith('-D')
-                            );
-                        });
-
-                        if (hasDangerousFlags) {
-                            upgradeStatus(
-                                SafetyStatus.YELLOW,
-                                `git ${gitSubcommand} with potentially dangerous flags`,
-                            );
-                        }
-                        // Otherwise stays GREEN - safe read-only git command
-                        return;
-                    }
-
-                    // Unknown git subcommand
-                    upgradeStatus(
-                        SafetyStatus.YELLOW,
-                        `git ${gitSubcommand} (unknown subcommand)`,
-                    );
-                    return;
                 }
 
-                // Special handling for find command
-                if (cmdName === 'find' && node.suffix) {
-                    // Check for dangerous find operations first (RED)
-                    const dangerResult = hasFindDangerousExecution(node.suffix);
-                    if (dangerResult.dangerous) {
-                        upgradeStatus(
-                            SafetyStatus.RED,
-                            dangerResult.reason || 'find with dangerous flags',
-                        );
-                    }
-
-                    // Check for suspicious find flags (YELLOW)
-                    if (!dangerResult.dangerous) {
-                        const suspiciousResult =
-                            hasFindSuspiciousFlags(node.suffix);
-                        if (suspiciousResult.suspicious) {
-                            upgradeStatus(
-                                SafetyStatus.YELLOW,
-                                suspiciousResult.reason ||
-                                    'find with suspicious flags',
-                            );
-                        }
-                    }
-
-                    // Check path arguments for find
-                    if (!dangerResult.dangerous) {
-                        // Track if previous arg was a pattern flag like -name, -regex
-                        let previousArgWasPatternFlag = false;
-
-                        for (const arg of node.suffix) {
-                            if (arg?.type === 'Redirect') continue;
-                            const argText = extractWordText(arg);
-                            if (!argText) continue;
-
-                            // Track pattern flags
-                            if (
-                                [
-                                    '-name',
-                                    '-iname',
-                                    '-path',
-                                    '-ipath',
-                                    '-regex',
-                                    '-iregex',
-                                ].includes(argText)
-                            ) {
-                                previousArgWasPatternFlag = true;
-                                continue;
-                            }
-
-                            // Skip flags
-                            if (argText.startsWith('-')) {
-                                previousArgWasPatternFlag = false;
-                                continue;
-                            }
-
-                            // Skip pattern arguments (the values after -name, -regex, etc.)
-                            if (previousArgWasPatternFlag) {
-                                previousArgWasPatternFlag = false;
-                                continue;
-                            }
-
-                            // Skip glob patterns (contain wildcards)
-                            if (/[*?[\]]/.test(argText)) continue;
-
-                            // Skip safe relative paths (. and ./)
-                            if (argText === '.' || argText === './') continue;
-
-                            // Skip patterns with backslashes (regex patterns)
-                            if (argText.includes('\\')) continue;
-
-                            // Root traversal detection (DoS + information disclosure)
-                            if (argText === '/' || argText === '//') {
-                                upgradeStatus(
-                                    SafetyStatus.YELLOW,
-                                    'find / (root traversal - resource intensive)',
-                                );
-                                continue;
-                            }
-
-                            // For find, analyzing paths is more lenient:
-                            // - System paths like /etc are YELLOW (not RED)
-                            // - Home directories and dotfiles are still RED
-                            const pathStatus = analyzePathRisk(argText);
-                            if (pathStatus === SafetyStatus.RED) {
-                                // Keep RED for home directories, dotfiles, and traversal
-                                // Downgrade system paths to YELLOW
-                                const homeRelatedPatterns = [
-                                    /^~/, // Tilde
-                                    /^\$/, // Variables like $HOME, $USER
-                                    /^\/home\//, // Linux home
-                                    /^\/Users\//, // macOS home
-                                    /^\/root/, // Root's home
-                                    /\/\.ssh/, // SSH keys
-                                    /\/\.env/, // Environment files
-                                    /\/\.git/, // Git config
-                                    /\/\.aws/, // AWS credentials
-                                    /\/\.kube/, // Kubernetes config
-                                    /\/\.gnupg/, // GPG keys
-                                    /\.\./, // Directory traversal
-                                ];
-
-                                const isHomeRelated = homeRelatedPatterns.some(
-                                    pattern => pattern.test(argText),
-                                );
-
-                                if (isHomeRelated) {
-                                    upgradeStatus(
-                                        SafetyStatus.RED,
-                                        `find dangerous path: ${argText}`,
-                                    );
-                                } else {
-                                    // System paths like /etc get downgraded to YELLOW
-                                    upgradeStatus(
-                                        SafetyStatus.YELLOW,
-                                        `find system path: ${argText}`,
-                                    );
-                                }
-                            } else if (pathStatus === SafetyStatus.YELLOW) {
-                                upgradeStatus(
-                                    pathStatus,
-                                    `find path argument ${argText}`,
-                                );
-                            }
-                        }
-                    }
-
-                    // Done with find-specific handling
-                    // Don't process suffix generically
-                    return;
-                }
-
+                // Generic argument processing for commands without specialized handlers
                 if (node.suffix) {
-                    let hasOutputRedirect = false;
-                    let hasInPlaceEdit = false;
-
-                    // First pass: detect dangerous sed patterns
                     for (const arg of node.suffix) {
-                        if (arg?.type === 'Redirect') {
-                            // Check if it's an output redirect (>, >>)
-                            const op = arg.op?.text || arg.op;
-                            if (op === '>' || op === '>>') {
-                                hasOutputRedirect = true;
-                            }
-                        }
-
-                        const argText = extractWordText(arg);
-                        if (argText && argText.startsWith('-')) {
-                            if (cmdName === 'sed' && argText.startsWith('-i')) {
-                                hasInPlaceEdit = true;
-                            }
-                        }
-                    }
-
-                    // Second pass: classify arguments
-                    for (const arg of node.suffix) {
-                        // Redirects: analyze path risk. For `sed`, only mark output redirects as YELLOW
+                        // Handle redirects
                         if (arg?.type === 'Redirect') {
                             const fileText = extractWordText(arg.file ?? arg);
-                            const op = arg.op?.text || arg.op;
-
-                            if (
-                                cmdName === 'sed' &&
-                                (op === '>' || op === '>>')
-                            ) {
-                                upgradeStatus(
-                                    SafetyStatus.YELLOW,
-                                    `sed with output redirection to ${
-                                        fileText ?? '<unknown>'
-                                    }`,
-                                );
-                            }
-
                             const pathStatus = analyzePathRisk(fileText);
                             upgradeStatus(
                                 pathStatus,
@@ -313,48 +95,13 @@ export function classifyCommand(commandString: string): SafetyStatus {
                         }
 
                         const argText = extractWordText(arg);
-                        // Flags are normally ignored, but for `sed` the -i flag is dangerous
-                        // because it performs in-place edits. Detect -i and variants (e.g. -i, -i.bak, -i'')
+                        // Skip flags (generic commands don't have special flag handling)
                         if (argText && argText.startsWith('-')) {
-                            if (cmdName === 'sed' && argText.startsWith('-i')) {
-                                upgradeStatus(
-                                    SafetyStatus.RED,
-                                    `sed in-place edit detected: ${argText}`,
-                                );
-                                continue;
-                            }
-                            continue; // other flags ignored
-                        }
-
-                        const pathStatus = analyzePathRisk(argText);
-                        // For `sed`, file arguments are only risky if combined with dangerous operations
-                        if (cmdName === 'sed' && argText) {
-                            // If there's an in-place edit or output redirect, path risk matters
-                            // Otherwise, reading files with sed is safe (GREEN)
-                            if (hasInPlaceEdit || hasOutputRedirect) {
-                                if (pathStatus === SafetyStatus.RED)
-                                    upgradeStatus(
-                                        pathStatus,
-                                        `sed file argument ${argText}`,
-                                    );
-                                else
-                                    upgradeStatus(
-                                        SafetyStatus.YELLOW,
-                                        `sed file argument ${argText}`,
-                                    );
-                            } else {
-                                // Read-only sed: only escalate if path itself is risky
-                                if (pathStatus !== SafetyStatus.GREEN) {
-                                    upgradeStatus(
-                                        pathStatus,
-                                        `sed file argument ${argText}`,
-                                    );
-                                }
-                                // Otherwise GREEN - read-only sed is safe
-                            }
                             continue;
                         }
 
+                        // Analyze path arguments
+                        const pathStatus = analyzePathRisk(argText);
                         // Unknown/opaque args fall back to YELLOW
                         if (!argText)
                             upgradeStatus(

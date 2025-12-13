@@ -1,5 +1,6 @@
 import {grepToolDefinition} from './tools/grep.js';
 import {createSearchReplaceToolDefinition} from './tools/search-replace.js';
+import { createApplyPatchToolDefinition } from './tools/apply-patch.js';
 import {createShellToolDefinition} from './tools/shell.js';
 import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
@@ -90,15 +91,22 @@ export const getAgentDefinition = (deps: {
 	const prompt = resolvePrompt(promptPath);
 
     const envInfo = getEnvInfo(settingsService);
-    
+
+    const tools: ToolDefinition[] = [
+        createShellToolDefinition({settingsService, loggingService}),
+        grepToolDefinition,
+    ];
+
+    if (resolvedModel.includes('gpt-5.1') || resolvedModel.includes('gpt-5.2')) {
+        tools.push(createApplyPatchToolDefinition({settingsService, loggingService}));
+    } else {
+        tools.push(createSearchReplaceToolDefinition({settingsService, loggingService}));
+    }
+
     return {
         name: 'Terminal Assistant',
         instructions: `${prompt}\n\nEnvironment: ${envInfo}${getAgentsInstructions()}`,
-        tools: [
-            createShellToolDefinition({settingsService, loggingService}),
-            createSearchReplaceToolDefinition({settingsService, loggingService}),
-            grepToolDefinition,
-        ],
+        tools,
         model: resolvedModel,
     };
 };

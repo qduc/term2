@@ -802,6 +802,7 @@ class OpenRouterModel implements Model {
                     }
                     try {
                         const json = JSON.parse(data);
+						this.#loggingService.debug('OpenRouter SSE chunk', json);
                         if (json?.id && responseId === 'unknown') {
                             responseId = json.id;
                         }

@@ -86,47 +86,47 @@ export const useConversation = ({
     const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
 
     // Helper to log events with deduplication
-    const createEventLogger = () => {
-        let lastEventType: string | null = null;
-        let eventCount = 0;
-        let eventSequence: string[] = [];
-
-        const logDeduplicated = (eventType: string) => {
-            if (eventType !== lastEventType) {
-                if (lastEventType !== null) {
-                    loggingService.debug('Conversation event sequence', {
-                        event: lastEventType,
-                        count: eventCount,
-                        sequenceLength: eventSequence.length,
-                        sequence: eventSequence,
-                    });
-                }
-                lastEventType = eventType;
-                eventCount = 1;
-                if (!eventSequence.includes(eventType)) {
-                    eventSequence.push(eventType);
-                }
-            } else {
-                eventCount++;
-            }
-        };
-
-        const flush = () => {
-            if (lastEventType !== null) {
-                loggingService.debug('Conversation event sequence final', {
-                    event: lastEventType,
-                    count: eventCount,
-                    sequenceLength: eventSequence.length,
-                    sequence: eventSequence,
-                });
-                lastEventType = null;
-                eventCount = 0;
-                eventSequence = [];
-            }
-        };
-
-        return {logDeduplicated, flush};
-    };
+    // const createEventLogger = () => {
+    //     let lastEventType: string | null = null;
+    //     let eventCount = 0;
+    //     let eventSequence: string[] = [];
+	//
+    //     const logDeduplicated = (eventType: string) => {
+    //         if (eventType !== lastEventType) {
+    //             if (lastEventType !== null) {
+    //                 loggingService.debug('Conversation event sequence', {
+    //                     event: lastEventType,
+    //                     count: eventCount,
+    //                     sequenceLength: eventSequence.length,
+    //                     sequence: eventSequence,
+    //                 });
+    //             }
+    //             lastEventType = eventType;
+    //             eventCount = 1;
+    //             if (!eventSequence.includes(eventType)) {
+    //                 eventSequence.push(eventType);
+    //             }
+    //         } else {
+    //             eventCount++;
+    //         }
+    //     };
+	//
+    //     const flush = () => {
+    //         if (lastEventType !== null) {
+    //             loggingService.debug('Conversation event sequence final', {
+    //                 event: lastEventType,
+    //                 count: eventCount,
+    //                 sequenceLength: eventSequence.length,
+    //                 sequence: eventSequence,
+    //             });
+    //             lastEventType = null;
+    //             eventCount = 0;
+    //             eventSequence = [];
+    //         }
+    //     };
+	//
+    //     return {logDeduplicated, flush};
+    // };
 
     const applyServiceResult = useCallback(
         (
@@ -239,12 +239,12 @@ export const useConversation = ({
             let currentReasoningMessageId: number | null = null; // Track current reasoning message ID
 
             // Create event logger with deduplication for this message send
-            const {logDeduplicated, flush: flushLog} = createEventLogger();
+            // const {logDeduplicated, flush: flushLog} = createEventLogger();
 
             const applyConversationEvent = (event: ConversationEvent) => {
                 switch (event.type) {
                     case 'text_delta': {
-                        logDeduplicated('text_delta');
+                        // logDeduplicated('text_delta');
                         accumulatedText += event.delta;
                         setLiveResponse(prev =>
                             prev && prev.id === liveMessageId
@@ -258,7 +258,7 @@ export const useConversation = ({
                         return;
                     }
                     case 'reasoning_delta': {
-                        logDeduplicated('reasoning_delta');
+                        // logDeduplicated('reasoning_delta');
                         const fullReasoningText = event.fullText ?? '';
                         // Only show reasoning text after what was already flushed
                         const newReasoningText = fullReasoningText.slice(
@@ -293,7 +293,7 @@ export const useConversation = ({
                         return;
                     }
                     case 'command_message': {
-                        logDeduplicated('command_message');
+                        // logDeduplicated('command_message');
                         const cmdMsg = event.message as any;
 
                         // Before adding command message, flush reasoning and text separately
@@ -423,7 +423,7 @@ export const useConversation = ({
                 }
             } finally {
                 loggingService.debug('sendUserMessage finally block - resetting state');
-                flushLog();
+                // flushLog();
                 setLiveResponse(null);
                 setIsProcessing(false);
                 // Don't reset waitingForApproval here - it's set by applyServiceResult
@@ -482,12 +482,12 @@ export const useConversation = ({
                 let textWasFlushed = false;
                 let currentReasoningMessageId: number | null = null;
 
-                const {logDeduplicated, flush: flushLog} = createEventLogger();
+                // const {logDeduplicated, flush: flushLog} = createEventLogger();
 
                 const applyConversationEvent = (event: ConversationEvent) => {
                     switch (event.type) {
                         case 'text_delta': {
-                            logDeduplicated('text_delta');
+                            // logDeduplicated('text_delta');
                             accumulatedText += event.delta;
                             setLiveResponse(prev =>
                                 prev && prev.id === liveMessageId
@@ -501,7 +501,7 @@ export const useConversation = ({
                             return;
                         }
                         case 'reasoning_delta': {
-                            logDeduplicated('reasoning_delta');
+                            // logDeduplicated('reasoning_delta');
                             const fullReasoningText = event.fullText ?? '';
                             const newReasoningText = fullReasoningText.slice(
                                 flushedReasoningLength,
@@ -533,7 +533,7 @@ export const useConversation = ({
                             return;
                         }
                         case 'command_message': {
-                            logDeduplicated('command_message');
+                            // logDeduplicated('command_message');
                             const cmdMsg = event.message as any;
 
                             const messagesToAdd: Message[] = [];
@@ -625,7 +625,7 @@ export const useConversation = ({
                     setWaitingForApproval(false);
                     setPendingApprovalMessageId(null);
                 } finally {
-                    flushLog();
+                    // flushLog();
                     setLiveResponse(null);
                     setIsProcessing(false);
                 }
@@ -648,12 +648,12 @@ export const useConversation = ({
             let currentReasoningMessageId: number | null = null; // Track current reasoning message ID
 
             // Create event logger with deduplication for this approval decision
-            const {logDeduplicated, flush: flushLog} = createEventLogger();
+            // const {logDeduplicated, flush: flushLog} = createEventLogger();
 
             const applyConversationEvent = (event: ConversationEvent) => {
                 switch (event.type) {
                     case 'text_delta': {
-                        logDeduplicated('text_delta');
+                        // logDeduplicated('text_delta');
                         accumulatedText += event.delta;
                         setLiveResponse(prev =>
                             prev && prev.id === liveMessageId
@@ -667,7 +667,7 @@ export const useConversation = ({
                         return;
                     }
                     case 'reasoning_delta': {
-                        logDeduplicated('reasoning_delta');
+                        // logDeduplicated('reasoning_delta');
                         const fullReasoningText = event.fullText ?? '';
                         const newReasoningText = fullReasoningText.slice(
                             flushedReasoningLength,
@@ -699,7 +699,7 @@ export const useConversation = ({
                         return;
                     }
                     case 'command_message': {
-                        logDeduplicated('command_message');
+                        // logDeduplicated('command_message');
                         const cmdMsg = event.message as any;
 
                         const messagesToAdd: Message[] = [];
@@ -794,7 +794,7 @@ export const useConversation = ({
                 setPendingApprovalMessageId(null);
             } finally {
                 loggingService.debug('handleApprovalDecision finally block - resetting state');
-                flushLog();
+                // flushLog();
                 setLiveResponse(null);
                 setIsProcessing(false);
                 // Don't reset approval state here - if the result is another approval_required,

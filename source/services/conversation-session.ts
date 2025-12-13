@@ -116,32 +116,32 @@ export class ConversationSession {
     private toolCallArgumentsById = new Map<string, unknown>();
     private lastEventType: string | null = null;
     private eventTypeCount = 0;
-    private logStreamEvent = (eventType: string, eventData: any) => {
-		if (eventData.item) {
-			eventType = eventData.item.type;
-			eventData = eventData.item.rawItem;
-			this.logStreamEvent(eventType, eventData);
-		}
-
-		// Deduplicate consecutive identical event types
-        if (eventType !== this.lastEventType) {
-            if (this.lastEventType !== null && this.eventTypeCount > 0) {
-                this.logger.debug('Stream event summary', {
-                    eventType: this.lastEventType,
-                    count: this.eventTypeCount,
-                });
-            }
-            this.lastEventType = eventType;
-            this.eventTypeCount = 1;
-            // Log the first occurrence with details
-            this.logger.debug('Stream event', {
-                eventType,
-                ...eventData,
-            });
-        } else {
-            this.eventTypeCount++;
-        }
-    };
+    // private logStreamEvent = (eventType: string, eventData: any) => {
+	// 	if (eventData.item) {
+	// 		eventType = eventData.item.type;
+	// 		eventData = eventData.item.rawItem;
+	// 		// this.logStreamEvent(eventType, eventData);
+	// 	}
+	//
+	// 	// Deduplicate consecutive identical event types
+    //     if (eventType !== this.lastEventType) {
+    //         if (this.lastEventType !== null && this.eventTypeCount > 0) {
+    //             this.logger.debug('Stream event summary', {
+    //                 eventType: this.lastEventType,
+    //                 count: this.eventTypeCount,
+    //             });
+    //         }
+    //         this.lastEventType = eventType;
+    //         this.eventTypeCount = 1;
+    //         // Log the first occurrence with details
+    //         this.logger.debug('Stream event', {
+    //             eventType,
+    //             ...eventData,
+    //         });
+    //     } else {
+    //         this.eventTypeCount++;
+    //     }
+    // };
     private flushStreamEventLog = () => {
         if (this.lastEventType !== null && this.eventTypeCount > 1) {
             this.logger.debug('Stream event summary', {
@@ -852,9 +852,9 @@ export class ConversationSession {
         };
 
         const emitReasoning = (delta: string) => {
-            if (!delta) {
-                return null;
-            }
+			if (!delta || delta.replaceAll('\n', '') === '') {
+				return null;
+			}
             acc.reasoningOutput += delta;
             this.reasoningDeltaCount++;
             return {
@@ -866,12 +866,12 @@ export class ConversationSession {
 
         for await (const event of stream) {
             // Log event type with deduplication for ordering understanding
-            const eventType = event?.type || 'unknown';
-            this.logStreamEvent(eventType, {
-                eventName: event?.name,
-                hasData: !!event?.data,
-                item: event?.item,
-            });
+            // const eventType = event?.type || 'unknown';
+            // this.logStreamEvent(eventType, {
+            //     eventName: event?.name,
+            //     hasData: !!event?.data,
+            //     item: event?.item,
+            // });
 
             const delta1 = this.#extractTextDelta(event);
             if (delta1) {

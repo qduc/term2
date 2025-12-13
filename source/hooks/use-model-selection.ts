@@ -8,6 +8,7 @@ import {
 import {loggingService} from '../services/logging-service.js';
 import {settingsService} from '../services/settings-service.js';
 import {getProviderIds} from '../providers/index.js';
+import {getAvailableProviderIds} from '../utils/provider-credentials.js';
 
 export const MODEL_TRIGGER = '/settings agent.model ';
 export const MODEL_CMD_TRIGGER = '/model ';
@@ -132,10 +133,15 @@ export const useModelSelection = (hasConversationHistory = false) => {
 
     const toggleProvider = useCallback(() => {
         const providerIds = getProviderIds();
+        const availableProviders = getAvailableProviderIds(providerIds);
+
+        // If no providers available, stay on current
+        if (availableProviders.length === 0) return;
+
         setProvider(prev => {
-            const currentIndex = providerIds.indexOf(prev || providerIds[0]);
-            const nextIndex = (currentIndex + 1) % providerIds.length;
-            return providerIds[nextIndex];
+            const currentIndex = availableProviders.indexOf(prev || availableProviders[0]);
+            const nextIndex = (currentIndex + 1) % availableProviders.length;
+            return availableProviders[nextIndex];
         });
     }, []);
 

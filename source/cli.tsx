@@ -6,7 +6,7 @@ import meow from 'meow';
 import App from './app.js';
 import {OpenAIAgentClient} from './lib/openai-agent-client.js';
 import {ConversationService} from './services/conversation-service.js';
-import {SettingsService} from './services/settings-service.js';
+import {SettingsService, buildEnvOverrides} from './services/settings-service.js';
 import {loggingService} from './services/logging-service.js';
 
 // Global Ctrl+C handler for immediate exit
@@ -82,6 +82,7 @@ if (validatedReasoningEffort) {
 }
 
 const settings = new SettingsService({
+    env: buildEnvOverrides(),
     cli: Object.keys(cliOverrides).length > 0 ? cliOverrides : undefined,
 });
 const usedModel = settings.get('agent.model');

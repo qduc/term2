@@ -998,10 +998,10 @@ export class SettingsService {
 }
 
 /**
- * Singleton instance for convenience
+ * Build environment-derived overrides from process.env
+ * Exported for use in CLI initialization
  */
-// Build environment-derived overrides once at startup to preserve legacy env behavior
-function buildEnvOverrides(): Partial<SettingsData> {
+export function buildEnvOverrides(): Partial<SettingsData> {
     const env = (typeof process !== 'undefined' ? process.env : {}) as any;
     const openrouter: any = {};
     if (env.OPENROUTER_API_KEY) openrouter.apiKey = env.OPENROUTER_API_KEY;

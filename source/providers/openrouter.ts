@@ -456,7 +456,10 @@ class OpenRouterModel implements Model {
     async getResponse(request: ModelRequest): Promise<ModelResponse> {
         const apiKey = this.#settingsService.get('agent.openrouter.apiKey');
         if (!apiKey) {
-            throw new Error('OPENROUTER_API_KEY is not set');
+            throw new Error(
+                'OpenRouter API key is not configured. Please set the OPENROUTER_API_KEY environment variable. ' +
+                'Get your API key from: https://openrouter.ai/keys'
+            );
         }
         // OpenRouter does not support server-side response chaining the same way
         // as OpenAI Responses. We intentionally ignore previousResponseId and
@@ -595,7 +598,10 @@ class OpenRouterModel implements Model {
     ): AsyncIterable<ResponseStreamEvent> {
         const apiKey = this.#settingsService.get('agent.openrouter.apiKey');
         if (!apiKey) {
-            throw new Error('OPENROUTER_API_KEY is not set');
+            throw new Error(
+                'OpenRouter API key is not configured. Please set the OPENROUTER_API_KEY environment variable. ' +
+                'Get your API key from: https://openrouter.ai/keys'
+            );
         }
         // See getResponse(): caller-managed history; do not chain via previousResponseId.
         // Note: History is managed by the SDK, not by this provider.

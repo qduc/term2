@@ -376,8 +376,16 @@ export const useConversation = ({
                     return;
                 }
 
-                const errorMessage =
+                let errorMessage =
                     error instanceof Error ? error.message : String(error);
+
+                // Enhance error messages for common issues
+                if (errorMessage.includes('OPENAI_API_KEY') ||
+                    errorMessage.includes('401') && errorMessage.toLowerCase().includes('unauthorized')) {
+                    errorMessage =
+                        'OpenAI API key is not configured or invalid. Please set the OPENAI_API_KEY environment variable. ' +
+                        'Get your API key from: https://platform.openai.com/api-keys';
+                }
 
                 // Check if this is a max turns exceeded error
                 const isMaxTurnsError = errorMessage.includes('Max turns') && errorMessage.includes('exceeded');

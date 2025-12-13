@@ -264,7 +264,19 @@ export class OpenAIAgentClient {
 	}
 
 	#runAgent(agent: Agent, input: any, options: any): Promise<any> {
-		// Use runner if available (OpenRouter), otherwise use run() directly
+		// Check if provider is configured but runner failed to initialize
+		if (!this.#runner && this.#provider !== 'openai') {
+			const providerDef = getProvider(this.#provider);
+			const providerLabel = providerDef?.label || this.#provider;
+			throw new Error(
+				`${providerLabel} is configured but could not be initialized. ` +
+				`Please check that all required credentials are set. ` +
+				`For OpenRouter, set OPENROUTER_API_KEY environment variable. ` +
+				`Get your API key from: https://openrouter.ai/keys`
+			);
+		}
+
+		// Use runner if available (custom provider), otherwise use run() directly (OpenAI)
 		if (this.#runner) {
 			return this.#runner.run(agent, input, options);
 		}

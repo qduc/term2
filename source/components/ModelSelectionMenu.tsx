@@ -2,6 +2,7 @@ import React, {FC} from 'react';
 import {Box, Text} from 'ink';
 import type {ModelInfo} from '../services/model-service.js';
 import {getAllProviders} from '../providers/index.js';
+import {hasProviderCredentials} from '../utils/provider-credentials.js';
 
 type Props = {
     items: ModelInfo[];
@@ -19,7 +20,11 @@ const ProviderTabs: FC<{
     activeProvider?: string | null;
     canSwitch?: boolean;
 }> = ({activeProvider, canSwitch = true}) => {
-    const providers = getAllProviders().map(p => ({id: p.id, label: p.label}));
+    const providers = getAllProviders().map(p => ({
+        id: p.id,
+        label: p.label,
+        hasCredentials: hasProviderCredentials(p.id),
+    }));
 
     return (
         <Box flexDirection="column">
@@ -27,16 +32,19 @@ const ProviderTabs: FC<{
                 <Box>
                     {providers.map((provider, index) => {
                         const isActive = provider.id === activeProvider;
+                        const isDisabled = !provider.hasCredentials;
                         return (
                             <Box key={provider.id}>
                                 <Text
                                     inverse={isActive}
-                                    color={isActive ? 'magenta' : 'gray'}
+                                    color={isActive ? 'magenta' : isDisabled ? 'red' : 'gray'}
                                     bold={isActive}
-                                    dimColor={!isActive}
+                                    dimColor={!isActive || isDisabled}
+                                    strikethrough={isDisabled}
                                 >
                                     {' '}
                                     {provider.label}
+                                    {isDisabled ? ' (no key)' : ''}
                                     {' '}
                                 </Text>
                                 {index < providers.length - 1 && (

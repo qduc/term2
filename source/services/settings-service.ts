@@ -271,17 +271,36 @@ export class SettingsService {
     private sources: Map<string, SettingSource>;
     private settingsDir: string;
     private disableLogging: boolean;
+    private disableFilePersistence: boolean;
     private listeners: Set<(key?: string) => void> = new Set();
+
+    // Detect if running in test environment
+    //
+    // We intentionally use a broad set of signals because different test runners
+    // set different environment variables. This prevents unit/integration tests
+    // from writing to disk by default (which can cause flaky tests and polluted
+    // developer machines/CI workspaces).
+    private isTestEnvironment(): boolean {
+        return (
+            process.env.NODE_ENV === 'test' ||
+            process.env.VITEST !== undefined ||
+            process.env.AVA_PATH !== undefined ||
+            process.env.JEST_WORKER_ID !== undefined ||
+            process.env.TERM2_TEST_MODE === 'true'
+        );
+    }
 
     constructor(options?: {
         settingsDir?: string;
         disableLogging?: boolean;
+        disableFilePersistence?: boolean;
         cli?: Partial<SettingsData>;
         env?: Partial<SettingsData>;
     }) {
         const {
             settingsDir = path.join(paths.log),
             disableLogging = false,
+            disableFilePersistence,
             cli = {},
             env = {},
         } = options ?? {};
@@ -289,6 +308,11 @@ export class SettingsService {
         this.settingsDir = settingsDir;
         this.disableLogging = disableLogging;
         this.sources = new Map();
+
+        // Disk persistence can be explicitly disabled (e.g., for tests), and is
+        // also automatically disabled when running under a known test runner.
+        this.disableFilePersistence =
+            disableFilePersistence ?? this.isTestEnvironment();
 
         // Ensure settings directory exists
         if (!fs.existsSync(this.settingsDir)) {
@@ -355,21 +379,25 @@ export class SettingsService {
         // manual change). saveToFile is safe and handles errors/logging internally.
         // Also update the file if new settings have been added since the file was created.
         if (!configFileExisted) {
-            this.saveToFile();
-            if (!this.disableLogging) {
-                loggingService.info('Created settings file at startup', {
-                    settingsFile: settingsFilePath,
-                });
+            if (!this.disableFilePersistence) {
+                this.saveToFile();
+                if (!this.disableLogging) {
+                    loggingService.info('Created settings file at startup', {
+                        settingsFile: settingsFilePath,
+                    });
+                }
             }
         } else if (shouldUpdateFile) {
-            this.saveToFile();
-            if (!this.disableLogging) {
-                loggingService.info(
-                    'Updated settings file with new default values',
-                    {
-                        settingsFile: settingsFilePath,
-                    },
-                );
+            if (!this.disableFilePersistence) {
+                this.saveToFile();
+                if (!this.disableLogging) {
+                    loggingService.info(
+                        'Updated settings file with new default values',
+                        {
+                            settingsFile: settingsFilePath,
+                        },
+                    );
+                }
             }
         }
     }
@@ -471,7 +499,9 @@ export class SettingsService {
         }
 
         // Persist to file
-        this.saveToFile();
+        if (!this.disableFilePersistence) {
+            this.saveToFile();
+        }
 
         this.notifyChange(key);
     }
@@ -518,7 +548,9 @@ export class SettingsService {
             this.sources.clear();
         }
 
-        this.saveToFile();
+        if (!this.disableFilePersistence) {
+            this.saveToFile();
+        }
 
         this.notifyChange(key);
     }
@@ -704,6 +736,10 @@ export class SettingsService {
      * Save settings to file, excluding sensitive values
      */
     private saveToFile(): void {
+        if (this.disableFilePersistence) {
+            return;
+        }
+
         try {
             const settingsFile = path.join(this.settingsDir, 'settings.json');
 
@@ -726,7 +762,7 @@ export class SettingsService {
 
                     // Deep equality check that ignores formatting and key order
                     // Uses fast-deep-equal library for robust comparison
-                    if (deepEqual(existingParsed, this.settings)) {
+                    if (deepEqual(existingParsed, settingsToSave)) {
                         return; // No changes, don't write
                     }
                 } catch (parseError) {

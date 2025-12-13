@@ -47,6 +47,7 @@ export function createMockSettingsService(overrides: Partial<{
     return new SettingsService({
         settingsDir: tempDir,
         disableLogging: true, // Disable logging for tests
+        disableFilePersistence: true, // Never write settings.json during tests
         cli: nestedOverrides, // Apply any overrides
     });
 }

@@ -118,7 +118,7 @@ This repo is already close: `ConversationService` and `OpenAIAgentClient` are th
 
 ---
 
-## Phase 3 — Session-scoped runtime wrapper (introduce “ConversationSession”)
+## Phase 3 — Session-scoped runtime wrapper (introduce “ConversationSession”) ✅ DONE
 
 **Intent**: prepare for a server where multiple users have parallel conversations.
 
@@ -136,6 +136,11 @@ This repo is already close: `ConversationService` and `OpenAIAgentClient` are th
   - history
   - previousResponseId
   - pending approval
+
+### Implementation notes (what landed)
+- Introduced `ConversationSession` (`source/services/conversation-session.ts`) which owns per-session state.
+- Refactored `ConversationService` into a backward-compatible facade that delegates to a single default session (CLI remains unchanged).
+- Added isolation tests to ensure two sessions do not share `previousResponseId` or pending approval state.
 
 ---
 

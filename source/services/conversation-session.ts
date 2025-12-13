@@ -6,11 +6,7 @@ import {
 import type {ILoggingService} from './service-interfaces.js';
 import {ConversationStore} from './conversation-store.js';
 import {ModelBehaviorError} from '@openai/agents';
-import type {
-    ConversationEvent,
-    ApprovalRequiredEvent,
-    FinalResponseEvent,
-} from './conversation-events.js';
+import type {ConversationEvent} from './conversation-events.js';
 
 interface ApprovalResult {
     type: 'approval_required';
@@ -208,28 +204,25 @@ export class ConversationSession {
         }
     }
 
-    async sendMessage(
+    /**
+     * Phase 4: stream conversation events as an async iterator.
+     *
+     * This is the transport-friendly primitive that can later be bridged to SSE/WebSockets.
+     */
+    async *run(
         text: string,
         {
-            onTextChunk,
-            onReasoningChunk,
-            onCommandMessage,
-            onEvent,
             hallucinationRetryCount = 0,
         }: {
-            onTextChunk?: (fullText: string, chunk: string) => void;
-            onReasoningChunk?: (fullText: string, chunk: string) => void;
-            onCommandMessage?: (message: CommandMessage) => void;
-            onEvent?: (event: ConversationEvent) => void;
             hallucinationRetryCount?: number;
         } = {},
-    ): Promise<ConversationResult> {
+    ): AsyncIterable<ConversationEvent> {
         try {
-			// Maintain canonical local history regardless of provider.
-			this.conversationStore.addUserMessage(text);
+            // Maintain canonical local history regardless of provider.
+            this.conversationStore.addUserMessage(text);
 
-            // If there's an aborted approval, we need to resolve it first
-            // The user's message is a new input, but the agent is stuck waiting for tool output
+            // If there's an aborted approval, we need to resolve it first.
+            // The user's message is a new input, but the agent is stuck waiting for tool output.
             if (this.abortedApprovalContext) {
                 this.logger.debug('Resolving aborted approval with fake execution', {
                     message: text,
@@ -251,68 +244,146 @@ export class ConversationSession {
                     }
                 }
 
-				// Add interceptor for this tool execution
+                // Add interceptor for this tool execution
                 const toolName = interruption.name ?? 'unknown';
-                const expectedCallId = (interruption as any).rawItem?.callId ?? (interruption as any).callId;
+                const expectedCallId =
+                    (interruption as any).rawItem?.callId ??
+                    (interruption as any).callId;
                 const rejectionMessage = `Tool execution was not approved. User provided new input instead: ${text}`;
 
-                const removeInterceptor = this.agentClient.addToolInterceptor(async (name: string, _params: any, toolCallId?: string) => {
-                    // Match both tool name and call ID for stricter matching
-                    if (name === toolName && (!expectedCallId || toolCallId === expectedCallId)) {
-                        markToolCallAsApprovalRejection(toolCallId ?? expectedCallId);
-                        return rejectionMessage;
-                    }
-                    return null;
-                });
+                const removeInterceptor = this.agentClient.addToolInterceptor(
+                    async (name: string, _params: any, toolCallId?: string) => {
+                        // Match both tool name and call ID for stricter matching
+                        if (
+                            name === toolName &&
+                            (!expectedCallId || toolCallId === expectedCallId)
+                        ) {
+                            markToolCallAsApprovalRejection(
+                                toolCallId ?? expectedCallId,
+                            );
+                            return rejectionMessage;
+                        }
+                        return null;
+                    },
+                );
 
-				state.approve(interruption);
+                state.approve(interruption);
 
                 try {
                     const stream = await this.agentClient.continueRunStream(state, {
                         previousResponseId: this.previousResponseId,
                     });
 
-                    // Consume the stream and emit any text/reasoning
-                    const {finalOutput, reasoningOutput} = await this.#consumeStream(stream, {
-                        onTextChunk,
-                        onReasoningChunk,
-                        onCommandMessage,
-                        onEvent,
+                    const acc = {
+                        finalOutput: '',
+                        reasoningOutput: '',
+                        emittedCommandIds: new Set<string>(emittedCommandIds),
+                    };
+                    yield* this.#streamEvents(stream, acc, {
                         preserveExistingToolArgs: true,
                     });
+
                     this.previousResponseId = stream.lastResponseId;
-					this.conversationStore.updateFromResult(stream);
+                    this.conversationStore.updateFromResult(stream);
 
                     // Check if another interruption occurred
                     if (stream.interruptions && stream.interruptions.length > 0) {
-                        this.logger.warn('Another interruption occurred after fake execution - handling as approval');
+                        this.logger.warn(
+                            'Another interruption occurred after fake execution - handling as approval',
+                        );
                         // Let the normal flow handle this
                         const result = this.#buildResult(
                             stream,
-                            finalOutput,
-                            reasoningOutput,
-                            emittedCommandIds,
+                            acc.finalOutput,
+                            acc.reasoningOutput,
+                            acc.emittedCommandIds,
                         );
-                        this.#emitTerminalEvent(result, onEvent);
-                        return result;
+                        // Re-emit the terminal event explicitly.
+                        if (result.type === 'approval_required') {
+                            const interruption = result.approval.rawInterruption;
+                            const callId =
+                                interruption?.rawItem?.callId ??
+                                interruption?.callId ??
+                                interruption?.call_id ??
+                                interruption?.tool_call_id ??
+                                interruption?.toolCallId ??
+                                interruption?.id;
+                            yield {
+                                type: 'approval_required',
+                                approval: {
+                                    agentName: result.approval.agentName,
+                                    toolName: result.approval.toolName,
+                                    argumentsText: result.approval.argumentsText,
+                                    ...(callId ? {callId: String(callId)} : {}),
+                                },
+                            };
+                        } else {
+                            yield {
+                                type: 'final',
+                                finalText: result.finalText,
+                                ...(result.reasoningText
+                                    ? {reasoningText: result.reasoningText}
+                                    : {}),
+                                ...(result.commandMessages?.length
+                                    ? {commandMessages: result.commandMessages}
+                                    : {}),
+                            };
+                        }
+                        return;
                     }
 
                     // Successfully resolved - agent should now have processed the fake rejection
-                    this.logger.debug('Fake execution completed, agent received rejection message');
+                    this.logger.debug(
+                        'Fake execution completed, agent received rejection message',
+                    );
 
-                    // Return the response from the agent processing the rejection
                     const result = this.#buildResult(
                         stream,
-                        finalOutput,
-                        reasoningOutput,
-                        emittedCommandIds,
+                        acc.finalOutput,
+                        acc.reasoningOutput,
+                        acc.emittedCommandIds,
                     );
-                    this.#emitTerminalEvent(result, onEvent);
-                    return result;
+                    if (result.type === 'approval_required') {
+                        const interruption = result.approval.rawInterruption;
+                        const callId =
+                            interruption?.rawItem?.callId ??
+                            interruption?.callId ??
+                            interruption?.call_id ??
+                            interruption?.tool_call_id ??
+                            interruption?.toolCallId ??
+                            interruption?.id;
+                        yield {
+                            type: 'approval_required',
+                            approval: {
+                                agentName: result.approval.agentName,
+                                toolName: result.approval.toolName,
+                                argumentsText: result.approval.argumentsText,
+                                ...(callId ? {callId: String(callId)} : {}),
+                            },
+                        };
+                    } else {
+                        yield {
+                            type: 'final',
+                            finalText: result.finalText,
+                            ...(result.reasoningText
+                                ? {reasoningText: result.reasoningText}
+                                : {}),
+                            ...(result.commandMessages?.length
+                                ? {commandMessages: result.commandMessages}
+                                : {}),
+                        };
+                    }
+                    return;
                 } catch (error) {
-                    this.logger.warn('Error resolving aborted approval with fake execution', {
-                        error: error instanceof Error ? error.message : String(error)
-                    });
+                    this.logger.warn(
+                        'Error resolving aborted approval with fake execution',
+                        {
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        },
+                    );
                     // Fall through to normal message flow
                 } finally {
                     // Always remove interceptor after use
@@ -335,73 +406,108 @@ export class ConversationSession {
                 },
             );
 
-            const {finalOutput, reasoningOutput, emittedCommandIds} =
-                await this.#consumeStream(stream, {
-                    onTextChunk,
-                    onReasoningChunk,
-                    onCommandMessage,
-                    onEvent,
-                });
-            this.previousResponseId = stream.lastResponseId;
-			this.conversationStore.updateFromResult(stream);
+            const acc = {
+                finalOutput: '',
+                reasoningOutput: '',
+                emittedCommandIds: new Set<string>(),
+            };
+            yield* this.#streamEvents(stream, acc, {
+                preserveExistingToolArgs: false,
+            });
 
-            // Pass emittedCommandIds so we don't duplicate commands in the final result
+            this.previousResponseId = stream.lastResponseId;
+            this.conversationStore.updateFromResult(stream);
+
+            // Build terminal event (approval_required or final)
             const result = this.#buildResult(
                 stream,
-                finalOutput || undefined,
-                reasoningOutput || undefined,
-                emittedCommandIds,
+                acc.finalOutput || undefined,
+                acc.reasoningOutput || undefined,
+                acc.emittedCommandIds,
             );
-            this.#emitTerminalEvent(result, onEvent);
-            return result;
+
+            if (result.type === 'approval_required') {
+                const interruption = result.approval.rawInterruption;
+                const callId =
+                    interruption?.rawItem?.callId ??
+                    interruption?.callId ??
+                    interruption?.call_id ??
+                    interruption?.tool_call_id ??
+                    interruption?.toolCallId ??
+                    interruption?.id;
+                yield {
+                    type: 'approval_required',
+                    approval: {
+                        agentName: result.approval.agentName,
+                        toolName: result.approval.toolName,
+                        argumentsText: result.approval.argumentsText,
+                        ...(callId ? {callId: String(callId)} : {}),
+                    },
+                };
+                return;
+            }
+
+            yield {
+                type: 'final',
+                finalText: result.finalText,
+                ...(result.reasoningText ? {reasoningText: result.reasoningText} : {}),
+                ...(result.commandMessages?.length
+                    ? {commandMessages: result.commandMessages}
+                    : {}),
+            };
         } catch (error) {
             // Handle tool hallucination: model called a non-existent tool
-            if (isToolHallucinationError(error) && hallucinationRetryCount < MAX_HALLUCINATION_RETRIES) {
-                const toolName = error instanceof Error
-                    ? error.message.match(/Tool (\S+) not found/)?.[1] || 'unknown'
-                    : 'unknown';
+            if (
+                isToolHallucinationError(error) &&
+                hallucinationRetryCount < MAX_HALLUCINATION_RETRIES
+            ) {
+                const toolName =
+                    error instanceof Error
+                        ? error.message.match(/Tool (\S+) not found/)?.[1] ||
+                          'unknown'
+                        : 'unknown';
 
                 this.logger.warn('Tool hallucination detected, retrying', {
                     toolName,
                     attempt: hallucinationRetryCount + 1,
                     maxRetries: MAX_HALLUCINATION_RETRIES,
-                    errorMessage: error instanceof Error ? error.message : String(error),
+                    errorMessage:
+                        error instanceof Error ? error.message : String(error),
                 });
 
-                // Remove the user message from conversation store before retry
-                // so we don't duplicate it
+                // Remove the user message from conversation store before retry so we don't duplicate it
                 this.conversationStore.removeLastUserMessage();
 
-                // Retry with the same message
-                return this.sendMessage(text, {
-                    onTextChunk,
-                    onReasoningChunk,
-                    onCommandMessage,
+                yield* this.run(text, {
                     hallucinationRetryCount: hallucinationRetryCount + 1,
                 });
+                return;
             }
 
+            yield {
+                type: 'error',
+                message: error instanceof Error ? error.message : String(error),
+            };
             throw error;
         }
     }
 
-    async handleApprovalDecision(
-        answer: string,
-        rejectionReason?: string,
+    /**
+     * Phase 4: continue a session after an approval decision.
+     *
+     * Named as a string-literal because `continue` is a keyword.
+     */
+    async *['continue'](
         {
-            onTextChunk,
-            onReasoningChunk,
-            onCommandMessage,
-            onEvent,
+            answer,
+            rejectionReason,
         }: {
-            onTextChunk?: (fullText: string, chunk: string) => void;
-            onReasoningChunk?: (fullText: string, chunk: string) => void;
-            onCommandMessage?: (message: CommandMessage) => void;
-            onEvent?: (event: ConversationEvent) => void;
-        } = {},
-    ): Promise<ConversationResult | null> {
+            answer: string;
+            rejectionReason?: string;
+        },
+    ): AsyncIterable<ConversationEvent> {
         if (!this.pendingApprovalContext) {
-            return null;
+            return;
         }
 
         const {
@@ -410,22 +516,32 @@ export class ConversationSession {
             emittedCommandIds: previouslyEmittedIds,
             toolCallArgumentsById,
         } = this.pendingApprovalContext;
+
         if (answer === 'y') {
             state.approve(interruption);
         } else {
             // If rejection reason provided, inject it as a tool interceptor result
             if (rejectionReason) {
                 const toolName = interruption.name ?? 'unknown';
-                const expectedCallId = (interruption as any).rawItem?.callId ?? (interruption as any).callId;
+                const expectedCallId =
+                    (interruption as any).rawItem?.callId ??
+                    (interruption as any).callId;
                 const rejectionMessage = `Tool execution was not approved. User's reason: ${rejectionReason}`;
 
-                const removeInterceptor = this.agentClient.addToolInterceptor(async (name: string, _params: any, toolCallId?: string) => {
-                    if (name === toolName && (!expectedCallId || toolCallId === expectedCallId)) {
-                        markToolCallAsApprovalRejection(toolCallId ?? expectedCallId);
-                        return rejectionMessage;
-                    }
-                    return null;
-                });
+                const removeInterceptor = this.agentClient.addToolInterceptor(
+                    async (name: string, _params: any, toolCallId?: string) => {
+                        if (
+                            name === toolName &&
+                            (!expectedCallId || toolCallId === expectedCallId)
+                        ) {
+                            markToolCallAsApprovalRejection(
+                                toolCallId ?? expectedCallId,
+                            );
+                            return rejectionMessage;
+                        }
+                        return null;
+                    },
+                );
 
                 // Approve to continue but interceptor will return rejection message
                 state.approve(interruption);
@@ -453,34 +569,66 @@ export class ConversationSession {
                 previousResponseId: this.previousResponseId,
             });
 
-            const {finalOutput, reasoningOutput, emittedCommandIds} =
-                await this.#consumeStream(stream, {
-                    onTextChunk,
-                    onReasoningChunk,
-                    onCommandMessage,
-                    onEvent,
-                    preserveExistingToolArgs: true,
-                });
+            const acc = {
+                finalOutput: '',
+                reasoningOutput: '',
+                emittedCommandIds: new Set<string>(),
+            };
+            yield* this.#streamEvents(stream, acc, {
+                preserveExistingToolArgs: true,
+            });
 
             this.previousResponseId = stream.lastResponseId;
-			this.conversationStore.updateFromResult(stream);
+            this.conversationStore.updateFromResult(stream);
 
             // Merge previously emitted command IDs with newly emitted ones
             // This prevents duplicates when result.history contains commands from the initial stream
             const allEmittedIds = new Set([
                 ...previouslyEmittedIds,
-                ...emittedCommandIds,
+                ...acc.emittedCommandIds,
             ]);
 
             const result = this.#buildResult(
                 stream,
-                finalOutput || undefined,
-                reasoningOutput || undefined,
+                acc.finalOutput || undefined,
+                acc.reasoningOutput || undefined,
                 allEmittedIds,
             );
-            this.#emitTerminalEvent(result, onEvent);
-            return result;
+
+            if (result.type === 'approval_required') {
+                const interruption = result.approval.rawInterruption;
+                const callId =
+                    interruption?.rawItem?.callId ??
+                    interruption?.callId ??
+                    interruption?.call_id ??
+                    interruption?.tool_call_id ??
+                    interruption?.toolCallId ??
+                    interruption?.id;
+                yield {
+                    type: 'approval_required',
+                    approval: {
+                        agentName: result.approval.agentName,
+                        toolName: result.approval.toolName,
+                        argumentsText: result.approval.argumentsText,
+                        ...(callId ? {callId: String(callId)} : {}),
+                    },
+                };
+                return;
+            }
+
+            yield {
+                type: 'final',
+                finalText: result.finalText,
+                ...(result.reasoningText ? {reasoningText: result.reasoningText} : {}),
+                ...(result.commandMessages?.length
+                    ? {commandMessages: result.commandMessages}
+                    : {}),
+            };
         } catch (error) {
+            yield {
+                type: 'error',
+                message: error instanceof Error ? error.message : String(error),
+            };
             throw error;
         } finally {
             // Clean up interceptor if one was added for rejection reason
@@ -490,56 +638,224 @@ export class ConversationSession {
         }
     }
 
-    async #consumeStream(
-        stream: any,
+    async sendMessage(
+        text: string,
         {
             onTextChunk,
             onReasoningChunk,
             onCommandMessage,
             onEvent,
-            preserveExistingToolArgs = false,
+            hallucinationRetryCount = 0,
         }: {
             onTextChunk?: (fullText: string, chunk: string) => void;
             onReasoningChunk?: (fullText: string, chunk: string) => void;
             onCommandMessage?: (message: CommandMessage) => void;
             onEvent?: (event: ConversationEvent) => void;
-            preserveExistingToolArgs?: boolean;
+            hallucinationRetryCount?: number;
         } = {},
-    ): Promise<{
-        finalOutput: string;
-        reasoningOutput: string;
-        emittedCommandIds: Set<string>;
-    }> {
-        let finalOutput = '';
-        let reasoningOutput = '';
-        const emittedCommandIds = new Set<string>();
+    ): Promise<ConversationResult> {
+        let finalText = '';
+        let reasoningText = '';
+        const commandMessages: CommandMessage[] = [];
+        let sawTerminalEvent: ConversationEvent | null = null;
+
+        for await (const event of this.run(text, {hallucinationRetryCount})) {
+            onEvent?.(event);
+
+            switch (event.type) {
+                case 'text_delta': {
+                    const full = event.fullText ?? '';
+                    onTextChunk?.(full, event.delta);
+                    break;
+                }
+                case 'reasoning_delta': {
+                    const full = event.fullText ?? '';
+                    onReasoningChunk?.(full, event.delta);
+                    break;
+                }
+                case 'command_message': {
+                    onCommandMessage?.(event.message as any);
+                    break;
+                }
+                case 'approval_required': {
+                    sawTerminalEvent = event;
+                    // pendingApprovalContext is set inside #buildResult during run()
+                    const rawInterruption = this.pendingApprovalContext?.interruption;
+                    return {
+                        type: 'approval_required',
+                        approval: {
+                            agentName: event.approval.agentName,
+                            toolName: event.approval.toolName,
+                            argumentsText: event.approval.argumentsText,
+                            rawInterruption,
+                        },
+                    };
+                }
+                case 'final': {
+                    sawTerminalEvent = event;
+                    finalText = event.finalText;
+                    reasoningText = event.reasoningText ?? '';
+                    if (event.commandMessages?.length) {
+                        for (const msg of event.commandMessages) {
+                            commandMessages.push(msg as any);
+                        }
+                    }
+                    break;
+                }
+                case 'error': {
+                    // Preserve legacy behavior (throwing) by throwing after the stream ends.
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        // If we didn't see a terminal event, fall back to the legacy default.
+        if (!sawTerminalEvent) {
+            finalText = finalText || 'Done.';
+        }
+
+        return {
+            type: 'response',
+            commandMessages,
+            finalText: finalText || 'Done.',
+            ...(reasoningText ? {reasoningText} : {}),
+        };
+    }
+
+    async handleApprovalDecision(
+        answer: string,
+        rejectionReason?: string,
+        {
+            onTextChunk,
+            onReasoningChunk,
+            onCommandMessage,
+            onEvent,
+        }: {
+            onTextChunk?: (fullText: string, chunk: string) => void;
+            onReasoningChunk?: (fullText: string, chunk: string) => void;
+            onCommandMessage?: (message: CommandMessage) => void;
+            onEvent?: (event: ConversationEvent) => void;
+        } = {},
+    ): Promise<ConversationResult | null> {
+        if (!this.pendingApprovalContext) {
+            return null;
+        }
+
+        let finalText = '';
+        let reasoningText = '';
+        const commandMessages: CommandMessage[] = [];
+        let sawTerminalEvent: ConversationEvent | null = null;
+
+        for await (const event of this['continue']({answer, rejectionReason})) {
+            onEvent?.(event);
+
+            switch (event.type) {
+                case 'text_delta': {
+                    const full = event.fullText ?? '';
+                    onTextChunk?.(full, event.delta);
+                    break;
+                }
+                case 'reasoning_delta': {
+                    const full = event.fullText ?? '';
+                    onReasoningChunk?.(full, event.delta);
+                    break;
+                }
+                case 'command_message': {
+                    onCommandMessage?.(event.message as any);
+                    break;
+                }
+                case 'approval_required': {
+                    sawTerminalEvent = event;
+                    const rawInterruption = this.pendingApprovalContext?.interruption;
+                    return {
+                        type: 'approval_required',
+                        approval: {
+                            agentName: event.approval.agentName,
+                            toolName: event.approval.toolName,
+                            argumentsText: event.approval.argumentsText,
+                            rawInterruption,
+                        },
+                    };
+                }
+                case 'final': {
+                    sawTerminalEvent = event;
+                    finalText = event.finalText;
+                    reasoningText = event.reasoningText ?? '';
+                    if (event.commandMessages?.length) {
+                        for (const msg of event.commandMessages) {
+                            commandMessages.push(msg as any);
+                        }
+                    }
+                    break;
+                }
+                case 'error': {
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        if (!sawTerminalEvent) {
+            return {
+                type: 'response',
+                commandMessages,
+                finalText: finalText || 'Done.',
+                ...(reasoningText ? {reasoningText} : {}),
+            };
+        }
+
+        return {
+            type: 'response',
+            commandMessages,
+            finalText: finalText || 'Done.',
+            ...(reasoningText ? {reasoningText} : {}),
+        };
+    }
+
+    async *#streamEvents(
+        stream: any,
+        acc: {
+            finalOutput: string;
+            reasoningOutput: string;
+            emittedCommandIds: Set<string>;
+        },
+        {preserveExistingToolArgs}: {preserveExistingToolArgs: boolean},
+    ): AsyncIterable<ConversationEvent> {
         const toolCallArgumentsById = this.toolCallArgumentsById;
         if (!preserveExistingToolArgs) {
             toolCallArgumentsById.clear();
         }
+
         this.textDeltaCount = 0;
         this.reasoningDeltaCount = 0;
 
         const emitText = (delta: string) => {
             if (!delta) {
-                return;
+                return null;
             }
-
-            finalOutput += delta;
+            acc.finalOutput += delta;
             this.textDeltaCount++;
-            onTextChunk?.(finalOutput, delta);
-            onEvent?.({type: 'text_delta', delta, fullText: finalOutput});
+            return {
+                type: 'text_delta' as const,
+                delta,
+                fullText: acc.finalOutput,
+            };
         };
 
         const emitReasoning = (delta: string) => {
             if (!delta) {
-                return;
+                return null;
             }
-
-            reasoningOutput += delta;
+            acc.reasoningOutput += delta;
             this.reasoningDeltaCount++;
-            onReasoningChunk?.(reasoningOutput, delta);
-            onEvent?.({type: 'reasoning_delta', delta, fullText: reasoningOutput});
+            return {
+                type: 'reasoning_delta' as const,
+                delta,
+                fullText: acc.reasoningOutput,
+            };
         };
 
         for await (const event of stream) {
@@ -551,20 +867,34 @@ export class ConversationSession {
                 item: event?.item,
             });
 
-            this.#emitTextDelta(event, emitText);
+            const delta1 = this.#extractTextDelta(event);
+            if (delta1) {
+                const e = emitText(delta1);
+                if (e) yield e;
+            }
             if (event?.data) {
-                this.#emitTextDelta(event.data, emitText);
+                const delta2 = this.#extractTextDelta(event.data);
+                if (delta2) {
+                    const e = emitText(delta2);
+                    if (e) yield e;
+                }
             }
 
-            // Handle reasoning items - look for reasoning_item_created event
+            // Handle reasoning items
             const reasoningDelta = (() => {
                 // OpenAI style
                 const data = event?.data;
-                if (data && typeof data === 'object' && (data as any).type === 'model') {
+                if (
+                    data &&
+                    typeof data === 'object' &&
+                    (data as any).type === 'model'
+                ) {
                     const eventDetail = (data as any).event;
                     if (
-                        eventDetail && typeof eventDetail === 'object' &&
-                        eventDetail.type === 'response.reasoning_summary_text.delta'
+                        eventDetail &&
+                        typeof eventDetail === 'object' &&
+                        eventDetail.type ===
+                            'response.reasoning_summary_text.delta'
                     ) {
                         return eventDetail.delta ?? '';
                     }
@@ -583,35 +913,47 @@ export class ConversationSession {
                 }
                 return '';
             })();
-            emitReasoning(reasoningDelta);
+            if (reasoningDelta) {
+                const e = emitReasoning(reasoningDelta);
+                if (e) yield e;
+            }
+
+            const maybeEmitCommandMessagesFromItems = (items: any[]) => {
+                this.#attachCachedArguments(items, toolCallArgumentsById);
+                const commandMessages = extractCommandMessages(items);
+                const out: ConversationEvent[] = [];
+
+                for (const cmdMsg of commandMessages) {
+                    if (acc.emittedCommandIds.has(cmdMsg.id)) {
+                        continue;
+                    }
+                    if (cmdMsg.isApprovalRejection) {
+                        continue;
+                    }
+                    acc.emittedCommandIds.add(cmdMsg.id);
+                    out.push({type: 'command_message', message: cmdMsg});
+                }
+                return out;
+            };
 
             if (event?.type === 'run_item_stream_event') {
                 this.#captureToolCallArguments(event.item, toolCallArgumentsById);
-                this.#emitCommandMessages(
-                    [event.item],
-                    emittedCommandIds,
-                    onCommandMessage,
-                    onEvent,
-                    toolCallArgumentsById,
-                );
+                for (const e of maybeEmitCommandMessagesFromItems([event.item])) {
+                    yield e;
+                }
             } else if (
                 event?.type === 'tool_call_output_item' ||
                 event?.rawItem?.type === 'function_call_output'
             ) {
                 this.#captureToolCallArguments(event, toolCallArgumentsById);
-                this.#emitCommandMessages(
-                    [event],
-                    emittedCommandIds,
-                    onCommandMessage,
-                    onEvent,
-                    toolCallArgumentsById,
-                );
+                for (const e of maybeEmitCommandMessagesFromItems([event])) {
+                    yield e;
+                }
             }
         }
 
         await stream.completed;
         this.flushStreamEventLog();
-        return {finalOutput, reasoningOutput, emittedCommandIds};
     }
 
     #captureToolCallArguments(
@@ -685,92 +1027,6 @@ export class ConversationSession {
 
             item.arguments = args;
         }
-    }
-
-    #emitCommandMessages(
-        items: any[] = [],
-        emittedCommandIds: Set<string>,
-        onCommandMessage?: (message: CommandMessage) => void,
-        onEvent?: (event: ConversationEvent) => void,
-        toolCallArgumentsById: Map<string, unknown> = new Map(),
-    ): void {
-        if (!items?.length || !onCommandMessage) {
-            return;
-        }
-
-        this.#attachCachedArguments(items, toolCallArgumentsById);
-        const commandMessages = extractCommandMessages(items);
-        let emittedCount = 0;
-        let skippedCount = 0;
-
-        for (const cmdMsg of commandMessages) {
-            if (emittedCommandIds.has(cmdMsg.id)) {
-                skippedCount++;
-                continue;
-            }
-
-            if (cmdMsg.isApprovalRejection) {
-                skippedCount++;
-                continue;
-            }
-
-            emittedCommandIds.add(cmdMsg.id);
-            onCommandMessage(cmdMsg);
-            onEvent?.({type: 'command_message', message: cmdMsg});
-            emittedCount++;
-        }
-    }
-
-    #emitTerminalEvent(
-        result: ConversationResult,
-        onEvent?: (event: ConversationEvent) => void,
-    ): void {
-        if (!onEvent) {
-            return;
-        }
-
-        if (result.type === 'approval_required') {
-            const interruption = result.approval.rawInterruption;
-            const callId =
-                interruption?.rawItem?.callId ??
-                interruption?.callId ??
-                interruption?.call_id ??
-                interruption?.tool_call_id ??
-                interruption?.toolCallId ??
-                interruption?.id;
-
-            const event: ApprovalRequiredEvent = {
-                type: 'approval_required',
-                approval: {
-                    agentName: result.approval.agentName,
-                    toolName: result.approval.toolName,
-                    argumentsText: result.approval.argumentsText,
-                    ...(callId ? {callId: String(callId)} : {}),
-                },
-            };
-            onEvent(event);
-            return;
-        }
-
-        const event: FinalResponseEvent = {
-            type: 'final',
-            finalText: result.finalText,
-            ...(result.reasoningText ? {reasoningText: result.reasoningText} : {}),
-            ...(result.commandMessages?.length
-                ? {commandMessages: result.commandMessages}
-                : {}),
-        };
-        onEvent(event);
-    }
-
-    #emitTextDelta(payload: any, emitText: (delta: string) => void): boolean {
-        const deltaText = this.#extractTextDelta(payload);
-        if (!deltaText) {
-            return false;
-        }
-
-        emitText(deltaText);
-        return true;
     }
 
     #extractTextDelta(payload: any): string | null {

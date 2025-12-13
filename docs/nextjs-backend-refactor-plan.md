@@ -144,7 +144,7 @@ This repo is already close: `ConversationService` and `OpenAIAgentClient` are th
 
 ---
 
-## Phase 4 — Move streaming to an async iterator / event emitter (still in-process)
+## Phase 4 — Move streaming to an async iterator / event emitter (still in-process) ✅ DONE
 
 **Intent**: make it trivial to bridge to SSE/WebSockets without UI callbacks.
 
@@ -159,6 +159,11 @@ This repo is already close: `ConversationService` and `OpenAIAgentClient` are th
 ### Acceptance
 - CLI still works.
 - Tests cover both APIs (old and new) to avoid regressions.
+
+### Implementation notes (what landed)
+- `ConversationSession.run()` and `ConversationSession.continue(...)` stream `ConversationEvent` via `AsyncIterable`.
+- The legacy callback-style APIs (`sendMessage`, `handleApprovalDecision`) now adapt over the event stream, keeping the CLI/UI unchanged.
+- Added tests that validate event ordering for both normal runs and approval continuations.
 
 ---
 

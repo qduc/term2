@@ -21,51 +21,102 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
     const glow = '#fbbf24';
     const slate = '#64748b'; // Slate 500 for better visibility than 400
 
-    return (
-        <Box marginBottom={1}>
-            <Box marginRight={1}>
-                <Text color={accent} bold>term</Text>
-                <Text color={glow} bold>²</Text>
-            </Box>
+	return (
+		<Box
+			flexDirection="column"
+			borderStyle="round"
+			borderColor={accent}
+			paddingX={2}
+			paddingY={1}
+		>
+			{/* Header */}
+			<Box justifyContent="space-between" alignItems="center">
+				<Box alignItems="center">
+					<Text color={glow} bold>
+						{'▌'}
+					</Text>
+					<Text color={accent} bold>
+						{' '}TUI Code Pilot
+					</Text>
+					<Text color={slate}>{'  •  fast, focused, keyboard-first'}</Text>
+				</Box>
 
-            <Text color={slate}>│</Text>
+				{/* Mode pill */}
+				<Box>
+					<Text
+						backgroundColor={mode === 'edit' ? '#1d4ed8' : '#0f766e'}
+						color="white"
+						bold
+					>
+						{' '}
+						{mode === 'edit' ? 'EDIT MODE' : 'DEFAULT'}
+						{' '}
+					</Text>
+				</Box>
+			</Box>
 
-            <Box marginX={1}>
-                {mode === 'edit' ? (
-                    <Text color={glow} bold>Auto Edit</Text>
-                ) : (
-                    <Text color={slate}>Manual Approval</Text>
-                )}
-            </Box>
-
-            {model && (
-                <>
-                    <Text color={slate}>│</Text>
-                    <Box marginX={1}>
-                        <Text color={accent}>{model}</Text>
-						<Text color={slate}>
-							{' '}({providerLabel})
+			{/* Status line */}
+			<Box justifyContent="space-between" marginTop={1} flexWrap="wrap">
+				<Box flexDirection="column" marginRight={3}>
+					<Text color={slate}>
+						Provider:{' '}
+						<Text color="white" bold>
+							{providerLabel}
 						</Text>
-                    </Box>
-                </>
-            )}
+					</Text>
+					<Text color={slate}>
+						Model:{' '}
+						<Text color="white" bold>
+							{model ? (model.length > 34 ? `${model.slice(0, 31)}…` : model) : '—'}
+						</Text>
+					</Text>
+				</Box>
 
-            {reasoningEffort && reasoningEffort !== 'default' && (
-                <>
-                    <Text color={slate}>│</Text>
-                    <Box marginX={1}>
-                        <Text color={glow}>
-                            {reasoningEffort === 'none' ? 'Reasoning: none' :
-                             reasoningEffort === 'minimal' ? 'Reasoning: minimal' :
-                             reasoningEffort === 'low' ? 'Reasoning: low' :
-                             reasoningEffort === 'medium' ? 'Reasoning: medium' :
-                             reasoningEffort === 'high' ? 'Reasoning: high' : 'Reasoning: default'}
-                        </Text>
-                    </Box>
-                </>
-            )}
-        </Box>
-    );
+				<Box flexDirection="column">
+					<Text color={slate}>
+						Reasoning:{' '}
+						<Text color="white" bold>
+							{reasoningEffort}
+						</Text>
+					</Text>
+					<Text color={slate}>
+						Hint:{' '}
+						<Text color={accent} bold>
+							Tab
+						</Text>
+						<Text color={slate}>
+							{' '}
+							complete •{' '}
+						</Text>
+						<Text color={accent} bold>
+							Enter
+						</Text>
+						<Text color={slate}>
+							{' '}
+							run •{' '}
+						</Text>
+						<Text color={accent} bold>
+							Esc
+						</Text>
+						<Text color={slate}>
+							{' '}
+							back
+						</Text>
+					</Text>
+				</Box>
+			</Box>
+
+			{/* Footer sparkle */}
+			<Box>
+				<Text color={glow} bold>
+					{'✦ '}
+				</Text>
+				<Text color={slate}>
+					Code with purpose. Ship with confidence.
+				</Text>
+			</Box>
+		</Box>
+	);
 };
 
 export default Banner;

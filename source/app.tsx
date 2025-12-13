@@ -144,6 +144,7 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                 description: 'Start a new conversation',
                 action: () => {
                     clearConversation();
+                    addSystemMessage('Welcome to TUI Code Pilot! Type a message to start chatting.');
                 },
             },
             {

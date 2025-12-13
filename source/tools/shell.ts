@@ -222,7 +222,13 @@ export const shellToolDefinition: ToolDefinition<ShellToolParams> = {
             const noteLine =
                 optimizedCommand !== command ? 'note: stripped redundant cd prefix' : '';
 
-            return [statusLine, combinedOutput, noteLine]
+            // Add helpful note when command succeeds with no output
+            const emptyOutputNote =
+                combinedOutput === '' && outcome.type === 'exit' && outcome.exitCode === 0
+                    ? 'note: command succeeded with no output'
+                    : '';
+
+            return [statusLine, combinedOutput, noteLine, emptyOutputNote]
                 .filter(Boolean)
                 .join('\n');
         } finally {

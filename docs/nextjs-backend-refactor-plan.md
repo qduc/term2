@@ -88,7 +88,7 @@ This repo is already close: `ConversationService` and `OpenAIAgentClient` are th
 
 ---
 
-## Phase 2 — Dependency injection: remove singleton imports from core paths
+## Phase 2 — Dependency injection: remove singleton imports from core paths ✅ DONE
 
 **Intent**: Make core session-safe and server-friendly.
 
@@ -110,6 +110,11 @@ This repo is already close: `ConversationService` and `OpenAIAgentClient` are th
 - CLI works.
 - Tests pass.
 - Add at least one test that constructs `ConversationService` with a fake logger/settings (proves decoupling).
+
+### Implementation notes (what landed)
+- `OpenAIAgentClient` accepts injected deps (`deps: { logger, settings }`) instead of importing singletons.
+- `ConversationService` accepts injected deps (`deps: { logger }`).
+- `source/cli.tsx` wires `SettingsService` + `loggingService` into the composition root.
 
 ---
 

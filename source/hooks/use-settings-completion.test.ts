@@ -14,7 +14,6 @@ const MOCK_SETTING_KEYS = {
 	AGENT_MAX_TURNS: 'agent.maxTurns',
 	AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
 	AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
-	AGENT_OPENROUTER_MODEL: 'agent.openrouter.model',
 	AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl',
 	AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer',
 	AGENT_OPENROUTER_TITLE: 'agent.openrouter.title',
@@ -38,7 +37,6 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
 	'agent.maxTurns': 'Maximum conversation turns',
 	'agent.retryAttempts': 'Number of retry attempts for failed requests',
 	'agent.openrouter.apiKey': 'OpenRouter API key',
-	'agent.openrouter.model': 'OpenRouter model name',
 	'agent.openrouter.baseUrl': 'OpenRouter base URL',
 	'agent.openrouter.referrer': 'OpenRouter referrer',
 	'agent.openrouter.title': 'OpenRouter title',
@@ -79,7 +77,6 @@ test('buildSettingsList - excludes sensitive settings by default', t => {
 
 	// Should include non-sensitive settings
 	t.true(keys.has('agent.model'));
-	t.true(keys.has('agent.openrouter.model'));
 	t.true(keys.has('shell.timeout'));
 });
 
@@ -104,7 +101,6 @@ test('buildSettingsList - includes all non-sensitive setting keys', t => {
 		'agent.model',
 		'agent.reasoningEffort',
 		'agent.maxTurns',
-		'agent.openrouter.model',
 		'shell.timeout',
 		'logging.logLevel',
 	];

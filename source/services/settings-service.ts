@@ -33,7 +33,6 @@ const AgentSettingsSchema = z.object({
     openrouter: z
         .object({
             apiKey: z.string().optional(),
-            model: z.string().optional(),
             baseUrl: z.string().url().optional(),
             referrer: z.string().optional(),
             title: z.string().optional(),
@@ -181,7 +180,6 @@ export const SETTING_KEYS = {
     AGENT_MAX_TURNS: 'agent.maxTurns',
     AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
     AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey', // Sensitive - env only
-    AGENT_OPENROUTER_MODEL: 'agent.openrouter.model',
     AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
     AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer', // Sensitive - env only
     AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only

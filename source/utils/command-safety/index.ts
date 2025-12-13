@@ -1,6 +1,12 @@
 import parse from 'bash-parser';
 import {loggingService} from '../../services/logging-service.js';
-import {SafetyStatus, ALLOWED_COMMANDS, BLOCKED_COMMANDS} from './constants.js';
+import {
+    SafetyStatus,
+    ALLOWED_COMMANDS,
+    BLOCKED_COMMANDS,
+    SAFE_GIT_COMMANDS,
+    DANGEROUS_GIT_COMMANDS,
+} from './constants.js';
 import {extractWordText} from './utils.js';
 import {hasFindDangerousExecution, hasFindSuspiciousFlags} from './find-helpers.js';
 import {analyzePathRisk} from './path-analysis.js';
@@ -57,6 +63,74 @@ export function classifyCommand(commandString: string): SafetyStatus {
                 }
 
                 const cmdName = typeof name === 'string' ? name : undefined;
+
+                // Special handling for git command
+                if (cmdName === 'git') {
+                    // Extract the git subcommand (first non-flag argument)
+                    let gitSubcommand: string | undefined;
+                    if (node.suffix) {
+                        for (const arg of node.suffix) {
+                            const argText = extractWordText(arg);
+                            if (argText && !argText.startsWith('-')) {
+                                gitSubcommand = argText;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!gitSubcommand) {
+                        // No subcommand found (e.g., just "git" or "git --version")
+                        upgradeStatus(
+                            SafetyStatus.YELLOW,
+                            'git without subcommand',
+                        );
+                        return;
+                    }
+
+                    // Check if it's a known dangerous command
+                    if (DANGEROUS_GIT_COMMANDS.has(gitSubcommand)) {
+                        upgradeStatus(
+                            SafetyStatus.YELLOW,
+                            `git ${gitSubcommand} (write operation)`,
+                        );
+                        return;
+                    }
+
+                    // Check if it's a known safe command
+                    if (SAFE_GIT_COMMANDS.has(gitSubcommand)) {
+                        // Check for dangerous flags that might make it unsafe
+                        const hasDangerousFlags = node.suffix.some((arg: any) => {
+                            const argText = extractWordText(arg);
+                            if (!argText) return false;
+
+                            // Flags that might modify repository state
+                            return (
+                                argText.startsWith('--force') ||
+                                argText.startsWith('-f') ||
+                                argText.startsWith('--hard') ||
+                                argText.startsWith('--delete') ||
+                                argText.startsWith('-d') ||
+                                argText.startsWith('-D')
+                            );
+                        });
+
+                        if (hasDangerousFlags) {
+                            upgradeStatus(
+                                SafetyStatus.YELLOW,
+                                `git ${gitSubcommand} with potentially dangerous flags`,
+                            );
+                        }
+                        // Otherwise stays GREEN - safe read-only git command
+                        return;
+                    }
+
+                    // Unknown git subcommand
+                    upgradeStatus(
+                        SafetyStatus.YELLOW,
+                        `git ${gitSubcommand} (unknown subcommand)`,
+                    );
+                    return;
+                }
 
                 // Special handling for find command
                 if (cmdName === 'find' && node.suffix) {

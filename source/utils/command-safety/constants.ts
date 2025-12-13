@@ -12,6 +12,8 @@ export const ALLOWED_COMMANDS = new Set([
     'tail',
     'sed',
     'find',
+    // Git read-only commands
+    'git',
 ]);
 export const BLOCKED_COMMANDS = new Set([
     // Filesystem
@@ -173,3 +175,83 @@ export const SENSITIVE_PATHS = [
     '/.bash_history',
     '/.zsh_history',
 ];
+
+// Git command classification
+export const SAFE_GIT_COMMANDS = new Set([
+    // Status and information
+    'status',
+    'log',
+    'show',
+    'diff',
+    'reflog',
+    // Inspection
+    'ls-files',
+    'ls-tree',
+    'ls-remote',
+    'describe',
+    'rev-parse',
+    'rev-list',
+    'show-ref',
+    'show-branch',
+    'name-rev',
+    // History viewing
+    'blame',
+    'shortlog',
+    'whatchanged',
+    // Object inspection
+    'cat-file',
+    'count-objects',
+    'verify-pack',
+    'verify-commit',
+    'verify-tag',
+    // Other read-only commands
+    'grep',
+    'help',
+    'version',
+    'fsck',
+    'check-ignore',
+    'check-attr',
+    'check-ref-format',
+]);
+
+export const DANGEROUS_GIT_COMMANDS = new Set([
+    // Write operations
+    'push',
+    'commit',
+    'add',
+    'rm',
+    'mv',
+    // Destructive operations
+    'reset',
+    'clean',
+    'rebase',
+    'merge',
+    'cherry-pick',
+    'revert',
+    // History rewriting
+    'filter-branch',
+    'filter-repo',
+    'replace',
+    // Branch/tag management
+    'checkout',
+    'switch',
+    'restore',
+    'branch',
+    'tag',
+    // Configuration changes
+    'config',
+    'remote',
+    // Submodule operations
+    'submodule',
+    'subtree',
+    // Other write operations
+    'stash',
+    'apply',
+    'fetch',
+    'pull',
+    'clone',
+    'init',
+    'gc',
+    'prune',
+    'worktree',
+]);

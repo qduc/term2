@@ -77,6 +77,7 @@ test('SettingsService initializes with defaults', async t => {
     t.truthy(service);
     t.is(service.get('agent.model'), 'gpt-5.1');
     t.is(service.get('agent.reasoningEffort'), 'default');
+    t.is(service.get('agent.temperature'), undefined);
     t.is(service.get('agent.maxTurns'), 100);
     t.is(service.get('agent.retryAttempts'), 2);
     t.is(service.get('shell.timeout'), 120000);
@@ -271,6 +272,10 @@ test('set() modifies runtime-modifiable settings', async t => {
     service.set('agent.model', 'gpt-4o');
     t.is(service.get('agent.model'), 'gpt-4o');
     t.is(service.getSource('agent.model'), 'cli');
+
+	service.set('agent.temperature', 0.2);
+	t.is(service.get('agent.temperature'), 0.2);
+	t.is(service.getSource('agent.temperature'), 'cli');
 });
 
 test('set() throws for startup-only settings', async t => {
@@ -300,6 +305,7 @@ test('isRuntimeModifiable identifies correct settings', async t => {
     // Runtime-modifiable settings
     t.true(service.isRuntimeModifiable('agent.model'));
     t.true(service.isRuntimeModifiable('agent.reasoningEffort'));
+	t.true(service.isRuntimeModifiable('agent.temperature'));
     t.true(service.isRuntimeModifiable('shell.timeout'));
     t.true(service.isRuntimeModifiable('shell.maxOutputLines'));
     t.true(service.isRuntimeModifiable('shell.maxOutputChars'));
@@ -372,7 +378,7 @@ test('SettingsService initialization applies logging.logLevel to loggingService'
         getLogLevel: () => mockLoggingService._level || 'info',
         _level: 'info'
     };
-    
+
     const service = new SettingsService({
         settingsDir,
         disableLogging: true,
@@ -393,7 +399,7 @@ test('SettingsService runtime set updates loggingService', async t => {
         getLogLevel: () => mockLoggingService._level || 'info',
         _level: 'info'
     };
-    
+
     const service = new SettingsService({
         settingsDir,
         disableLogging: true,

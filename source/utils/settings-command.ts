@@ -33,6 +33,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
             value: settings.agent.reasoningEffort.value,
             source: settings.agent.reasoningEffort.source,
         },
+        {
+            key: SETTING_KEYS.AGENT_TEMPERATURE,
+            value: settings.agent.temperature.value,
+            source: settings.agent.temperature.source,
+        },
         // agent.provider is hidden - it can only be changed in a new conversation via model menu
         {
             key: SETTING_KEYS.AGENT_MAX_TURNS,
@@ -160,6 +165,18 @@ export function createSettingsCommand({
                     `Cannot change provider mid-conversation. Use the model menu (Tab to switch provider) at the start of a new conversation.`,
                 );
                 return true;
+            }
+
+            // Validate temperature values early for a nicer UX.
+            if (key === SETTING_KEYS.AGENT_TEMPERATURE) {
+                if (typeof parsedValue !== 'number' || !Number.isFinite(parsedValue)) {
+                    addSystemMessage(`Error: ${SETTING_KEYS.AGENT_TEMPERATURE} must be a number between 0 and 2`);
+                    return true;
+                }
+                if (parsedValue < 0 || parsedValue > 2) {
+                    addSystemMessage(`Error: ${SETTING_KEYS.AGENT_TEMPERATURE} must be between 0 and 2`);
+                    return true;
+                }
             }
 
             if (!settingsService.isRuntimeModifiable(key)) {

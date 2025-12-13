@@ -59,6 +59,7 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
         setModel,
         setReasoningEffort,
         addSystemMessage,
+        setTemperature,
     } = useConversation({conversationService, loggingService});
 
 
@@ -94,6 +95,17 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                 return;
             }
 
+            if (key === 'agent.temperature') {
+                // Settings command parses numbers already; coerce just in case.
+                if (value == null) {
+                    setTemperature(undefined);
+                    return;
+                }
+                const numeric = typeof value === 'number' ? value : Number(value);
+                setTemperature(Number.isFinite(numeric) ? numeric : undefined);
+                return;
+            }
+
             if (key === 'agent.provider') {
                 // Provider changes require the agent to be recreated, which happens
                 // via the conversation service's setProvider method
@@ -113,7 +125,7 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                 setTrimConfig({maxCharacters: Number(value)});
             }
         },
-        [setModel, setReasoningEffort, conversationService],
+        [setModel, setReasoningEffort, setTemperature, conversationService],
     );
 
     // Define slash commands

@@ -588,6 +588,20 @@ test('setModel() delegates to agent client', t => {
     t.is(setModelCalledWith, 'gpt-4');
 });
 
+test('setTemperature() delegates to agent client when supported', t => {
+    let setTemperatureCalledWith = null;
+    const mockClient = {
+        setTemperature(value) {
+            setTemperatureCalledWith = value;
+        },
+    };
+
+    const service = new ConversationService({agentClient: mockClient, deps: {logger: mockLogger}});
+    service.setTemperature(0.7);
+
+    t.is(setTemperatureCalledWith, 0.7);
+});
+
 test('abort() delegates to agent client and clears pending approval', async t => {
     let abortCalled = false;
     const mockClient = {

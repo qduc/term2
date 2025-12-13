@@ -32,6 +32,7 @@ export class OpenAIAgentClient {
 	#model!: string;
 	// Accept 'default' here to denote 'do not pass this param; use API default'
 	#reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+	#temperature?: number;
 	#provider: string;
 	#maxTurns: number;
 	#retryAttempts: number;
@@ -67,6 +68,7 @@ export class OpenAIAgentClient {
 			settingsService: this.#settings,
 		});
 		this.#reasoningEffort = reasoningEffort;
+		this.#temperature = this.#settings.get<number | undefined>('agent.temperature');
 		this.#provider =
 			this.#settings.get<string>('agent.provider') || 'openai';
 		this.#maxTurns = maxTurns ?? 20;
@@ -76,6 +78,7 @@ export class OpenAIAgentClient {
 		this.#logger.info('OpenAI Agent Client initialized', {
 			model: model || this.#settings.get<string>('agent.model'),
 			reasoningEffort: reasoningEffort ?? 'default',
+			temperature: this.#temperature,
 			maxTurns: this.#maxTurns,
 			retryAttempts: this.#retryAttempts,
 		});
@@ -95,6 +98,15 @@ export class OpenAIAgentClient {
 		this.#agent = this.#createAgent({
 			model: this.#model,
 			reasoningEffort: effort,
+		});
+	}
+
+	setTemperature(temperature?: number): void {
+		this.#temperature = temperature;
+		this.#agent = this.#createAgent({
+			model: this.#model,
+			reasoningEffort: this.#reasoningEffort,
+			temperature,
 		});
 	}
 
@@ -356,12 +368,16 @@ export class OpenAIAgentClient {
 	#createAgent({
 		model,
 		reasoningEffort,
+		temperature,
 	}: {
 		model?: string;
 		reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+		temperature?: number;
 	} = {}): Agent {
 		const resolvedModel = model?.trim() || this.#settings.get<string>('agent.model');
 		this.#model = resolvedModel;
+		const resolvedTemperature =
+			temperature ?? this.#settings.get<number | undefined>('agent.temperature');
 		const {
 			name,
 			instructions,
@@ -486,6 +502,12 @@ export class OpenAIAgentClient {
 				effort: reasoningEffort,
 				summary: 'auto',
 			};
+		}
+
+		// Temperature: only pass when explicitly set (number). Undefined means
+		// provider/model default.
+		if (typeof resolvedTemperature === 'number' && Number.isFinite(resolvedTemperature)) {
+			modelSettings.temperature = resolvedTemperature;
 		}
 
 		const agent = new Agent({

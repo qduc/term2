@@ -40,6 +40,10 @@ export class ConversationService {
         this.#session.setReasoningEffort(effort);
     }
 
+    setTemperature(temperature: any): void {
+        (this.#session as any).setTemperature?.(temperature);
+    }
+
     setProvider(provider: string): void {
         this.#session.setProvider(provider);
     }

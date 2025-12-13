@@ -12,6 +12,7 @@ export type SettingCompletionItem = {
 const SETTING_DESCRIPTIONS: Record<string, string> = {
     [SETTING_KEYS.AGENT_MODEL]: 'The AI model to use (e.g. gpt-4, claude-3-opus)',
     [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort level (default, low, medium, high)',
+    [SETTING_KEYS.AGENT_TEMPERATURE]: 'Model temperature (0-2, controls randomness)',
     // agent.provider is hidden from UI - it can only be changed via model menu
     [SETTING_KEYS.AGENT_MAX_TURNS]: 'Maximum conversation turns',
     [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Number of retry attempts for failed requests',

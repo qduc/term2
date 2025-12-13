@@ -843,6 +843,13 @@ export const useConversation = ({
         [conversationService],
     );
 
+    const setTemperature = useCallback(
+        (temperature: any) => {
+            (conversationService as any).setTemperature?.(temperature);
+        },
+        [conversationService],
+    );
+
     const addSystemMessage = useCallback((text: string) => {
         setMessages(prev => [
             ...prev,
@@ -867,6 +874,7 @@ export const useConversation = ({
         stopProcessing,
         setModel,
         setReasoningEffort,
+        setTemperature,
         addSystemMessage,
     };
 };

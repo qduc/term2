@@ -181,6 +181,12 @@ export class ConversationSession {
         }
     }
 
+    setTemperature(temperature: any): void {
+        if (typeof (this.agentClient as any).setTemperature === 'function') {
+            (this.agentClient as any).setTemperature(temperature);
+        }
+    }
+
     setProvider(provider: string): void {
         if (typeof this.agentClient.setProvider === 'function') {
             (this.agentClient as any).setProvider(provider);

@@ -18,6 +18,9 @@ const AgentSettingsSchema = z.object({
     reasoningEffort: z
         .enum(['default', 'none', 'minimal', 'low', 'medium', 'high'])
         .default('default'),
+    // Temperature controls randomness. We keep it optional so providers/models
+    // can use their own defaults when unset.
+    temperature: z.number().min(0).max(2).optional(),
     maxTurns: z.number().int().positive().default(100),
     retryAttempts: z.number().int().nonnegative().default(2),
     maxConsecutiveToolFailures: z.number().int().positive().default(3),
@@ -133,6 +136,7 @@ export interface SettingsWithSources {
     agent: {
         model: SettingWithSource<string>;
         reasoningEffort: SettingWithSource<string>;
+        temperature: SettingWithSource<number | undefined>;
         maxTurns: SettingWithSource<number>;
         retryAttempts: SettingWithSource<number>;
         maxConsecutiveToolFailures: SettingWithSource<number>;
@@ -174,6 +178,7 @@ export interface SettingsWithSources {
 export const SETTING_KEYS = {
     AGENT_MODEL: 'agent.model',
     AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
+    AGENT_TEMPERATURE: 'agent.temperature',
     AGENT_PROVIDER: 'agent.provider',
     AGENT_MAX_TURNS: 'agent.maxTurns',
     AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
@@ -201,6 +206,7 @@ export const SETTING_KEYS = {
 const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
     SETTING_KEYS.AGENT_MODEL,
     SETTING_KEYS.AGENT_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_TEMPERATURE,
     SETTING_KEYS.AGENT_PROVIDER,
     SETTING_KEYS.SHELL_TIMEOUT,
     SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
@@ -311,7 +317,7 @@ export class SettingsService {
         this.settingsDir = settingsDir;
         this.disableLogging = disableLogging;
         this.sources = new Map();
-        
+
         // Use injected LoggingService or create a new one if not provided
         this.loggingService = loggingService || new LoggingService({
             disableLogging: this.disableLogging,
@@ -601,6 +607,10 @@ export class SettingsService {
                 reasoningEffort: {
                     value: this.settings.agent.reasoningEffort,
                     source: this.getSource('agent.reasoningEffort'),
+                },
+                temperature: {
+                    value: this.settings.agent.temperature,
+                    source: this.getSource('agent.temperature'),
                 },
                 maxTurns: {
                     value: this.settings.agent.maxTurns,

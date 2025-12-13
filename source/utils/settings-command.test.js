@@ -9,6 +9,7 @@ const baseSettings = {
     agent: {
         model: {value: 'gpt-5.1', source: 'default'},
         reasoningEffort: {value: 'default', source: 'default'},
+        temperature: {value: undefined, source: 'default'},
         provider: {value: 'openai', source: 'default'},
         maxTurns: {value: 20, source: 'default'},
         retryAttempts: {value: 2, source: 'default'},

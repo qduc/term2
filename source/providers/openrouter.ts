@@ -224,14 +224,40 @@ function convertAgentItemToOpenRouterMessage(item: any): any | null {
     return null;
 }
 
+/**
+ * Check if the model is an Anthropic/Claude model.
+ * Anthropic models support prompt caching via cache_control breakpoints.
+ */
+function isAnthropicModel(modelId: string): boolean {
+    const lowerModelId = modelId.toLowerCase();
+    return lowerModelId.includes('anthropic') || lowerModelId.includes('claude');
+}
+
 function buildMessagesFromRequest(
     req: ModelRequest,
+    modelId?: string,
 ): any[] {
     const messages: any[] = [];
 	let pendingReasoningDetails: any[] = [];
 
     if (req.systemInstructions && req.systemInstructions.trim().length > 0) {
-        messages.push({role: 'system', content: req.systemInstructions});
+        // For Anthropic models, use array format with cache_control for prompt caching.
+        // This enables caching of the system message (agent instructions) which is large and rarely changes.
+        // See: https://openrouter.ai/docs/guides/best-practices/prompt-caching#anthropic-claude
+        if (modelId && isAnthropicModel(modelId)) {
+            messages.push({
+                role: 'system',
+                content: [
+                    {
+                        type: 'text',
+                        text: req.systemInstructions,
+                        cache_control: {type: 'ephemeral'},
+                    },
+                ],
+            });
+        } else {
+            messages.push({role: 'system', content: req.systemInstructions});
+        }
     }
 
     // Note: History is managed by the SDK
@@ -272,7 +298,51 @@ function buildMessagesFromRequest(
         }
     }
 
+    // For Anthropic models, add cache_control to the last user message.
+    // This is an efficient caching strategy using 2 of 4 available cache points:
+    // 1. System message (static, large) - already cached above
+    // 2. Last user message (marks end of reusable conversation history)
+    // As the conversation grows, the cache automatically moves with the last user message.
+    // See: https://openrouter.ai/docs/guides/best-practices/prompt-caching#anthropic-claude
+    if (modelId && isAnthropicModel(modelId)) {
+        addCacheControlToLastUserMessage(messages);
+    }
+
     return messages;
+}
+
+/**
+ * Add cache_control to the last user message in the messages array.
+ * Transforms both string and array content formats appropriately.
+ */
+function addCacheControlToLastUserMessage(messages: any[]): void {
+    // Find the last user message by iterating from the end
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg.role === 'user') {
+            // Transform the message content to include cache_control
+            if (typeof msg.content === 'string') {
+                // Convert string content to array format with cache_control
+                msg.content = [
+                    {
+                        type: 'text',
+                        text: msg.content,
+                        cache_control: {type: 'ephemeral'},
+                    },
+                ];
+            } else if (Array.isArray(msg.content) && msg.content.length > 0) {
+                // Add cache_control to the last text item in the array
+                for (let j = msg.content.length - 1; j >= 0; j--) {
+                    const item = msg.content[j];
+                    if (item.type === 'text') {
+                        item.cache_control = {type: 'ephemeral'};
+                        break;
+                    }
+                }
+            }
+            break; // Only process the last user message
+        }
+    }
 }
 
 // Extract function tools from ModelRequest tools array
@@ -464,7 +534,8 @@ class OpenRouterModel implements Model {
         // as OpenAI Responses. We intentionally ignore previousResponseId and
         // expect the caller to provide full conversation context in `input`.
         // Note: History is managed by the SDK, not by this provider.
-        const messages = buildMessagesFromRequest(request);
+        const resolvedModelId = this.#resolveModelFromRequest(request) || this.#modelId;
+        const messages = buildMessagesFromRequest(request, resolvedModelId);
 
         this.#loggingService.debug('OpenRouter message', {messages});
 
@@ -475,7 +546,7 @@ class OpenRouterModel implements Model {
 
         const res = await callOpenRouter({
             apiKey,
-            model: this.#resolveModelFromRequest(request) || this.#modelId,
+            model: resolvedModelId,
             messages,
             stream: false,
             signal: request.signal,
@@ -604,7 +675,8 @@ class OpenRouterModel implements Model {
         }
         // See getResponse(): caller-managed history; do not chain via previousResponseId.
         // Note: History is managed by the SDK, not by this provider.
-        const messages = buildMessagesFromRequest(request);
+        const resolvedModelId = this.#resolveModelFromRequest(request) || this.#modelId;
+        const messages = buildMessagesFromRequest(request, resolvedModelId);
 
         const tools = extractFunctionToolsFromRequest(request);
 
@@ -619,7 +691,7 @@ class OpenRouterModel implements Model {
 
         const res = await callOpenRouter({
             apiKey,
-            model: this.#resolveModelFromRequest(request) || this.#modelId,
+            model: resolvedModelId,
             messages,
             stream: true,
             signal: request.signal,

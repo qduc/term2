@@ -966,3 +966,466 @@ test('OpenRouterError with empty headers', t => {
 	t.deepEqual(error.headers, {});
 	t.is(Object.keys(error.headers).length, 0);
 });
+
+// Anthropic prompt caching tests
+test.serial('applies cache_control to system message for Anthropic models', async t => {
+	const requests: any[] = [];
+
+	globalThis.fetch = async (_url, options: any) => {
+		const body = JSON.parse(options.body);
+		requests.push(body);
+		return createJsonResponse({
+			id: 'resp-1',
+			choices: [{message: {content: 'Hello'}}],
+			usage: {prompt_tokens: 10, completion_tokens: 5, total_tokens: 15},
+		});
+	};
+
+	const model = new OpenRouterModel({
+		settingsService: mockSettingsService,
+		loggingService: logger,
+		modelId: 'anthropic/claude-3.5-sonnet',
+	});
+
+	await model.getResponse({
+		systemInstructions: 'You are a helpful assistant.',
+		input: 'Hello',
+	} as any);
+
+	t.truthy(requests[0]);
+	t.deepEqual(requests[0].messages[0], {
+		role: 'system',
+		content: [
+			{
+				type: 'text',
+				text: 'You are a helpful assistant.',
+				cache_control: {type: 'ephemeral'},
+			},
+		],
+	});
+});
+
+test.serial('applies cache_control for Claude model variants', async t => {
+	const requests: any[] = [];
+
+	globalThis.fetch = async (_url, options: any) => {
+		const body = JSON.parse(options.body);
+		requests.push(body);
+		return createJsonResponse({
+			id: 'resp-1',
+			choices: [{message: {content: 'Hello'}}],
+			usage: {},
+		});
+	};
+
+	// Test with different Claude model IDs
+	const claudeModels = [
+		'anthropic/claude-3-opus',
+		'anthropic/claude-3.5-sonnet',
+		'anthropic/claude-3-haiku',
+		'openrouter/claude-instant',
+	];
+
+	for (const modelId of claudeModels) {
+		requests.length = 0;
+		const model = new OpenRouterModel({
+			settingsService: mockSettingsService,
+			loggingService: logger,
+			modelId,
+		});
+
+		await model.getResponse({
+			systemInstructions: 'System prompt',
+			input: 'Test',
+		} as any);
+
+		t.truthy(requests[0], `Failed for model: ${modelId}`);
+		t.is(requests[0].messages[0].role, 'system');
+		t.true(Array.isArray(requests[0].messages[0].content), `Content should be array for ${modelId}`);
+		t.deepEqual(
+			requests[0].messages[0].content[0].cache_control,
+			{type: 'ephemeral'},
+			`cache_control should be set for ${modelId}`,
+		);
+	}
+});
+
+test.serial('does not apply cache_control for non-Anthropic models', async t => {
+	const requests: any[] = [];
+
+	globalThis.fetch = async (_url, options: any) => {
+		const body = JSON.parse(options.body);
+		requests.push(body);
+		return createJsonResponse({
+			id: 'resp-1',
+			choices: [{message: {content: 'Hello'}}],
+			usage: {},
+		});
+	};
+
+	// Test with non-Anthropic models
+	const nonAnthropicModels = [
+		'openai/gpt-4o',
+		'google/gemini-pro',
+		'meta-llama/llama-3-70b',
+		'mistralai/mistral-large',
+		'openrouter/auto',
+	];
+
+	for (const modelId of nonAnthropicModels) {
+		requests.length = 0;
+		const model = new OpenRouterModel({
+			settingsService: mockSettingsService,
+			loggingService: logger,
+			modelId,
+		});
+
+		await model.getResponse({
+			systemInstructions: 'System prompt',
+			input: 'Test',
+		} as any);
+
+		t.truthy(requests[0], `Failed for model: ${modelId}`);
+		t.deepEqual(
+			requests[0].messages[0],
+			{role: 'system', content: 'System prompt'},
+			`System message should be plain string for ${modelId}`,
+		);
+	}
+});
+
+test.serial('applies cache_control in streamed response for Anthropic models', async t => {
+	const requests: any[] = [];
+
+	// Create a simple SSE stream response
+	const sseData = [
+		'data: {"id":"resp-1","choices":[{"delta":{"content":"Hi"}}]}\n\n',
+		'data: {"id":"resp-1","choices":[{"delta":{"content":"!"}}],"usage":{"prompt_tokens":10,"completion_tokens":2}}\n\n',
+		'data: [DONE]\n\n',
+	].join('');
+
+	globalThis.fetch = async (_url, options: any) => {
+		const body = JSON.parse(options.body);
+		requests.push(body);
+
+		const stream = new ReadableStream({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode(sseData));
+				controller.close();
+			},
+		});
+
+		return new Response(stream, {
+			status: 200,
+			headers: {'Content-Type': 'text/event-stream'},
+		});
+	};
+
+	const model = new OpenRouterModel({
+		settingsService: mockSettingsService,
+		loggingService: logger,
+		modelId: 'anthropic/claude-3.5-sonnet',
+	});
+
+	// Consume the stream
+	for await (const _event of model.getStreamedResponse({
+		systemInstructions: 'You are helpful.',
+		input: 'Hi',
+	} as any)) {
+		// Just consume the events
+	}
+
+	t.truthy(requests[0]);
+	t.deepEqual(requests[0].messages[0], {
+		role: 'system',
+		content: [
+			{
+				type: 'text',
+				text: 'You are helpful.',
+				cache_control: {type: 'ephemeral'},
+			},
+		],
+	});
+});
+
+// Tests for last user message caching (using 2 of 4 cache points efficiently)
+test.serial('applies cache_control to last user message for Anthropic models (string content)', async t => {
+	const requests: any[] = [];
+
+	globalThis.fetch = async (_url, options: any) => {
+		const body = JSON.parse(options.body);
+		requests.push(body);
+		return createJsonResponse({
+			id: 'resp-1',
+			choices: [{message: {content: 'Hello'}}],
+			usage: {prompt_tokens: 10, completion_tokens: 5, total_tokens: 15},
+		});
+	};
+
+	const model = new OpenRouterModel({
+		settingsService: mockSettingsService,
+		loggingService: logger,
+		modelId: 'anthropic/claude-3.5-sonnet',
+	});
+
+	await model.getResponse({
+		systemInstructions: 'You are a helpful assistant.',
+		input: 'Hello world',
+	} as any);
+
+	t.truthy(requests[0]);
+	// Verify system message has cache_control
+	t.deepEqual(requests[0].messages[0], {
+		role: 'system',
+		content: [
+			{
+				type: 'text',
+				text: 'You are a helpful assistant.',
+				cache_control: {type: 'ephemeral'},
+			},
+		],
+	});
+	// Verify last user message has cache_control (converted from string to array)
+	t.deepEqual(requests[0].messages[1], {
+		role: 'user',
+		content: [
+			{
+				type: 'text',
+				text: 'Hello world',
+				cache_control: {type: 'ephemeral'},
+			},
+		],
+	});
+});
+
+test.serial('applies cache_control to last user message in multi-turn conversation', async t => {
+	const requests: any[] = [];
+
+	globalThis.fetch = async (_url, options: any) => {
+		const body = JSON.parse(options.body);
+		requests.push(body);
+		return createJsonResponse({
+			id: 'resp-1',
+			choices: [{message: {content: 'Response'}}],
+			usage: {},
+		});
+	};
+
+	const model = new OpenRouterModel({
+		settingsService: mockSettingsService,
+		loggingService: logger,
+		modelId: 'anthropic/claude-3-opus',
+	});
+
+	// Simulate a multi-turn conversation
+	const conversationItems = [
+		{type: 'message', role: 'user', content: 'First question'},
+		{type: 'message', role: 'assistant', content: [{type: 'output_text', text: 'First answer'}], status: 'completed'},
+		{type: 'message', role: 'user', content: 'Second question'},
+		{type: 'message', role: 'assistant', content: [{type: 'output_text', text: 'Second answer'}], status: 'completed'},
+		{type: 'input_text', text: 'Third question'}, // Latest user input
+	];
+
+	await model.getResponse({
+		systemInstructions: 'System prompt',
+		input: conversationItems as any,
+	} as any);
+
+	t.truthy(requests[0]);
+	const messages = requests[0].messages;
+
+	// Find all user messages
+	const userMessages = messages.filter((m: any) => m.role === 'user');
+	t.is(userMessages.length, 3, 'Should have 3 user messages');
+
+	// First two user messages should NOT have cache_control (plain string)
+	t.is(userMessages[0].content, 'First question', 'First user message should be plain string');
+	t.is(userMessages[1].content, 'Second question', 'Second user message should be plain string');
+
+	// Only the LAST user message should have cache_control (array format)
+	t.deepEqual(userMessages[2], {
+		role: 'user',
+		content: [
+			{
+				type: 'text',
+				text: 'Third question',
+				cache_control: {type: 'ephemeral'},
+			},
+		],
+	}, 'Last user message should have cache_control');
+});
+
+test.serial('does not apply cache_control to user messages for non-Anthropic models', async t => {
+	const requests: any[] = [];
+
+	globalThis.fetch = async (_url, options: any) => {
+		const body = JSON.parse(options.body);
+		requests.push(body);
+		return createJsonResponse({
+			id: 'resp-1',
+			choices: [{message: {content: 'Hello'}}],
+			usage: {},
+		});
+	};
+
+	const model = new OpenRouterModel({
+		settingsService: mockSettingsService,
+		loggingService: logger,
+		modelId: 'openai/gpt-4o',
+	});
+
+	await model.getResponse({
+		systemInstructions: 'System prompt',
+		input: 'Hello',
+	} as any);
+
+	t.truthy(requests[0]);
+	// System message should be plain string for non-Anthropic
+	t.deepEqual(requests[0].messages[0], {role: 'system', content: 'System prompt'});
+	// User message should also be plain string
+	t.deepEqual(requests[0].messages[1], {role: 'user', content: 'Hello'});
+});
+
+test.serial('handles conversation with no user messages gracefully for Anthropic models', async t => {
+	const requests: any[] = [];
+
+	globalThis.fetch = async (_url, options: any) => {
+		const body = JSON.parse(options.body);
+		requests.push(body);
+		return createJsonResponse({
+			id: 'resp-1',
+			choices: [{message: {content: 'Hello'}}],
+			usage: {},
+		});
+	};
+
+	const model = new OpenRouterModel({
+		settingsService: mockSettingsService,
+		loggingService: logger,
+		modelId: 'anthropic/claude-3.5-sonnet',
+	});
+
+	// Pass empty input array (edge case)
+	await model.getResponse({
+		systemInstructions: 'System prompt',
+		input: [] as any,
+	} as any);
+
+	t.truthy(requests[0]);
+	// Should still have system message with cache_control
+	t.deepEqual(requests[0].messages[0], {
+		role: 'system',
+		content: [
+			{
+				type: 'text',
+				text: 'System prompt',
+				cache_control: {type: 'ephemeral'},
+			},
+		],
+	});
+	// Should only have system message, no user messages
+	t.is(requests[0].messages.length, 1);
+});
+
+test.serial('both system and last user message have cache_control for Anthropic', async t => {
+	const requests: any[] = [];
+
+	globalThis.fetch = async (_url, options: any) => {
+		const body = JSON.parse(options.body);
+		requests.push(body);
+		return createJsonResponse({
+			id: 'resp-1',
+			choices: [{message: {content: 'Response'}}],
+			usage: {},
+		});
+	};
+
+	const model = new OpenRouterModel({
+		settingsService: mockSettingsService,
+		loggingService: logger,
+		modelId: 'anthropic/claude-3.5-sonnet',
+	});
+
+	await model.getResponse({
+		systemInstructions: 'You are helpful.',
+		input: 'What is 2+2?',
+	} as any);
+
+	t.truthy(requests[0]);
+	const messages = requests[0].messages;
+
+	// Verify we use exactly 2 cache points: system + last user
+	const systemMsg = messages[0];
+	const userMsg = messages[1];
+
+	t.is(systemMsg.role, 'system');
+	t.truthy(systemMsg.content[0].cache_control, 'System message should have cache_control');
+	t.deepEqual(systemMsg.content[0].cache_control, {type: 'ephemeral'});
+
+	t.is(userMsg.role, 'user');
+	t.truthy(userMsg.content[0].cache_control, 'Last user message should have cache_control');
+	t.deepEqual(userMsg.content[0].cache_control, {type: 'ephemeral'});
+});
+
+test.serial('applies cache_control to last user message in streamed response for Anthropic', async t => {
+	const requests: any[] = [];
+
+	const sseData = [
+		'data: {"id":"resp-1","choices":[{"delta":{"content":"Hi"}}]}\n\n',
+		'data: {"id":"resp-1","choices":[{"delta":{"content":"!"}}],"usage":{"prompt_tokens":10,"completion_tokens":2}}\n\n',
+		'data: [DONE]\n\n',
+	].join('');
+
+	globalThis.fetch = async (_url, options: any) => {
+		const body = JSON.parse(options.body);
+		requests.push(body);
+
+		const stream = new ReadableStream({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode(sseData));
+				controller.close();
+			},
+		});
+
+		return new Response(stream, {
+			status: 200,
+			headers: {'Content-Type': 'text/event-stream'},
+		});
+	};
+
+	const model = new OpenRouterModel({
+		settingsService: mockSettingsService,
+		loggingService: logger,
+		modelId: 'anthropic/claude-3.5-sonnet',
+	});
+
+	for await (const _event of model.getStreamedResponse({
+		systemInstructions: 'You are helpful.',
+		input: 'Hi there',
+	} as any)) {
+		// Consume stream
+	}
+
+	t.truthy(requests[0]);
+	// Verify both system and user message have cache_control in streamed response
+	t.deepEqual(requests[0].messages[0], {
+		role: 'system',
+		content: [
+			{
+				type: 'text',
+				text: 'You are helpful.',
+				cache_control: {type: 'ephemeral'},
+			},
+		],
+	});
+	t.deepEqual(requests[0].messages[1], {
+		role: 'user',
+		content: [
+			{
+				type: 'text',
+				text: 'Hi there',
+				cache_control: {type: 'ephemeral'},
+			},
+		],
+	});
+});

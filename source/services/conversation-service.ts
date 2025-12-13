@@ -100,6 +100,7 @@ export class ConversationService {
         interruption: any;
         emittedCommandIds: Set<string>;
         toolCallArgumentsById: Map<string, unknown>;
+        removeInterceptor?: () => void;
     } | null = null;
     private abortedApprovalContext: {
         state: any;
@@ -357,6 +358,7 @@ export class ConversationService {
 
     async handleApprovalDecision(
         answer: string,
+        rejectionReason?: string,
         {
             onTextChunk,
             onReasoningChunk,
@@ -380,7 +382,31 @@ export class ConversationService {
         if (answer === 'y') {
             state.approve(interruption);
         } else {
-            state.reject(interruption);
+            // If rejection reason provided, inject it as a tool interceptor result
+            if (rejectionReason) {
+                const toolName = interruption.name ?? 'unknown';
+                const expectedCallId = (interruption as any).rawItem?.callId ?? (interruption as any).callId;
+                const rejectionMessage = `Tool execution was not approved. User's reason: ${rejectionReason}`;
+
+                const removeInterceptor = this.agentClient.addToolInterceptor(async (name: string, _params: any, toolCallId?: string) => {
+                    if (name === toolName && (!expectedCallId || toolCallId === expectedCallId)) {
+                        markToolCallAsApprovalRejection(toolCallId ?? expectedCallId);
+                        return rejectionMessage;
+                    }
+                    return null;
+                });
+
+                // Approve to continue but interceptor will return rejection message
+                state.approve(interruption);
+
+                // Store interceptor cleanup for after stream
+                this.pendingApprovalContext = {
+                    ...this.pendingApprovalContext,
+                    removeInterceptor,
+                };
+            } else {
+                state.reject(interruption);
+            }
         }
 
         // Restore cached tool-call arguments so continuation outputs can attach them
@@ -422,6 +448,11 @@ export class ConversationService {
             );
         } catch (error) {
             throw error;
+        } finally {
+            // Clean up interceptor if one was added for rejection reason
+            if (rejectionReason && this.pendingApprovalContext?.removeInterceptor) {
+                this.pendingApprovalContext.removeInterceptor();
+            }
         }
     }
 

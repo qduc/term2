@@ -49,6 +49,12 @@ const MessageList: FC<Props> = ({messages}) => {
                                             {msg.answer}
                                         </Text>
                                     )}
+                                    {msg.answer === 'n' && msg.rejectionReason && (
+                                        <Text color="gray" dimColor>
+                                            {' - '}
+                                            {msg.rejectionReason}
+                                        </Text>
+                                    )}
                                 </Text>
                             </Box>
                         ) : msg.sender === 'command' ? (

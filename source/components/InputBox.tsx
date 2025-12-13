@@ -20,6 +20,7 @@ type Props = {
     onHistoryUp: () => void;
     onHistoryDown: () => void;
     hasConversationHistory?: boolean;
+    waitingForRejectionReason?: boolean;
 };
 
 const InputBox: FC<Props> = ({
@@ -28,6 +29,7 @@ const InputBox: FC<Props> = ({
     onHistoryUp,
     onHistoryDown,
     hasConversationHistory = false,
+    waitingForRejectionReason = false,
 }) => {
     const {
         input: value,
@@ -367,7 +369,11 @@ const InputBox: FC<Props> = ({
                 }}
             />
             <Box>
-                <Text color="blue">❯ </Text>
+                {waitingForRejectionReason ? (
+                    <Text color="yellow">Why? </Text>
+                ) : (
+                    <Text color="blue">❯ </Text>
+                )}
                 <MultilineInput
                     value={value}
                     width={terminalWidth}
@@ -381,6 +387,11 @@ const InputBox: FC<Props> = ({
             {escHintVisible && (
                 <Text color="gray" dimColor>
                     Press ESC again to clear input
+                </Text>
+            )}
+            {waitingForRejectionReason && (
+                <Text color="gray" dimColor>
+                    (or ESC to cancel)
                 </Text>
             )}
         </Box>

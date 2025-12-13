@@ -44,6 +44,8 @@ const App: FC<AppProps> = ({conversationService}) => {
         messages,
         liveResponse,
         waitingForApproval,
+        waitingForRejectionReason,
+        setWaitingForRejectionReason,
         isProcessing,
         sendUserMessage,
         handleApprovalDecision,
@@ -199,21 +201,32 @@ const App: FC<AppProps> = ({conversationService}) => {
         }
     });
 
-    // Handle Esc to stop processing
+    // Handle Esc to stop processing or cancel rejection reason
     useInput((_input: string, key) => {
+        if (key.escape && waitingForRejectionReason) {
+            // Cancel rejection reason input and return to approval prompt
+            setWaitingForRejectionReason(false);
+            setInput('');
+            return;
+        }
+
         if (key.escape && (isProcessing || waitingForApproval)) {
             stopProcessing();
             addSystemMessage('Stopped');
+            setWaitingForRejectionReason(false);
         }
     });
 
     // Handle y/n key presses for approval prompts
     useInput(async (inputKey: string) => {
-        if (!waitingForApproval || isProcessing) return;
+        if (!waitingForApproval || isProcessing || waitingForRejectionReason) return;
 
         const answer = inputKey.toLowerCase();
-        if (answer === 'y' || answer === 'n') {
-            await handleApprovalDecision(answer);
+        if (answer === 'y') {
+            await handleApprovalDecision('y');
+        } else if (answer === 'n') {
+            // Enter rejection reason mode
+            setWaitingForRejectionReason(true);
         }
     });
 
@@ -227,6 +240,15 @@ const App: FC<AppProps> = ({conversationService}) => {
 
     const handleSubmit = async (value: string): Promise<void> => {
         if (!value.trim()) return;
+
+        // If waiting for rejection reason, handle it
+        if (waitingForRejectionReason) {
+            setWaitingForRejectionReason(false);
+            setInput('');
+            await handleApprovalDecision('n', value);
+            return;
+        }
+
         // If waiting for approval, ignore text input (handled by useInput)
         if (waitingForApproval) return;
 
@@ -293,15 +315,16 @@ const App: FC<AppProps> = ({conversationService}) => {
 
                 {/* Fixed bottom area for input / status */}
                 <Box flexDirection="column">
-                    {!isProcessing && !waitingForApproval && (
+                    {(!isProcessing && !waitingForApproval) || waitingForRejectionReason ? (
                         <InputBox
                             onSubmit={handleSubmit}
                             slashCommands={slashCommands}
                             onHistoryUp={handleHistoryUp}
                             onHistoryDown={handleHistoryDown}
                             hasConversationHistory={messages.filter(msg => msg.sender !== 'system').length > 0}
+                            waitingForRejectionReason={waitingForRejectionReason}
                         />
-                    )}
+                    ) : null}
 
                     {isProcessing && (
                         <Text color="gray" dimColor>

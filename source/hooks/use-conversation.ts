@@ -27,6 +27,7 @@ interface ApprovalMessage {
         isMaxTurnsPrompt?: boolean; // Special flag for max turns continuation
     };
     answer: string | null;
+    rejectionReason?: string; // Optional reason provided when user rejects
 }
 
 interface CommandMessage {
@@ -72,6 +73,8 @@ export const useConversation = ({
 }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [waitingForApproval, setWaitingForApproval] =
+        useState<boolean>(false);
+    const [waitingForRejectionReason, setWaitingForRejectionReason] =
         useState<boolean>(false);
     const [pendingApprovalMessageId, setPendingApprovalMessageId] = useState<
         number | null
@@ -387,7 +390,7 @@ export const useConversation = ({
     );
 
     const handleApprovalDecision = useCallback(
-        async (answer: string) => {
+        async (answer: string, rejectionReason?: string) => {
             if (!waitingForApproval) {
                 return;
             }
@@ -402,7 +405,7 @@ export const useConversation = ({
                 prev.map(msg =>
                     msg.sender === 'approval' &&
                     msg.id === pendingApprovalMessageId
-                        ? {...msg, answer}
+                        ? {...msg, answer, rejectionReason}
                         : msg,
                 ),
             );
@@ -576,6 +579,7 @@ export const useConversation = ({
             try {
                 const result = await conversationService.handleApprovalDecision(
                     answer,
+                    rejectionReason,
                     {
                         onTextChunk: (_fullText, chunk = '') => {
                             logDeduplicated('onTextChunk');
@@ -723,6 +727,7 @@ export const useConversation = ({
     const stopProcessing = useCallback(() => {
         conversationService.abort();
         setWaitingForApproval(false);
+        setWaitingForRejectionReason(false);
         setPendingApprovalMessageId(null);
         setIsProcessing(false);
         setLiveResponse(null);
@@ -757,6 +762,8 @@ export const useConversation = ({
         messages,
         liveResponse,
         waitingForApproval,
+        waitingForRejectionReason,
+        setWaitingForRejectionReason,
         isProcessing,
         sendUserMessage,
         handleApprovalDecision,

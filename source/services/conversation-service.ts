@@ -3,7 +3,7 @@ import {
     extractCommandMessages,
     markToolCallAsApprovalRejection,
 } from '../utils/extract-command-messages.js';
-import {loggingService} from './logging-service.js';
+import type {ILoggingService} from './service-interfaces.js';
 import {ConversationStore} from './conversation-store.js';
 import {ModelBehaviorError} from '@openai/agents';
 import type {
@@ -98,6 +98,7 @@ const isToolHallucinationError = (error: unknown): boolean => {
 
 export class ConversationService {
     private agentClient: OpenAIAgentClient;
+    private logger: ILoggingService;
     private conversationStore: ConversationStore;
     private previousResponseId: string | null = null;
     private pendingApprovalContext: {
@@ -128,7 +129,7 @@ export class ConversationService {
 		// Deduplicate consecutive identical event types
         if (eventType !== this.lastEventType) {
             if (this.lastEventType !== null && this.eventTypeCount > 0) {
-                loggingService.debug('Stream event summary', {
+                this.logger.debug('Stream event summary', {
                     eventType: this.lastEventType,
                     count: this.eventTypeCount,
                 });
@@ -136,7 +137,7 @@ export class ConversationService {
             this.lastEventType = eventType;
             this.eventTypeCount = 1;
             // Log the first occurrence with details
-            loggingService.debug('Stream event', {
+            this.logger.debug('Stream event', {
                 eventType,
                 ...eventData,
             });
@@ -146,7 +147,7 @@ export class ConversationService {
     };
     private flushStreamEventLog = () => {
         if (this.lastEventType !== null && this.eventTypeCount > 1) {
-            loggingService.debug('Stream event summary', {
+            this.logger.debug('Stream event summary', {
                 eventType: this.lastEventType,
                 count: this.eventTypeCount,
             });
@@ -155,8 +156,9 @@ export class ConversationService {
         this.eventTypeCount = 0;
     };
 
-    constructor({agentClient}: {agentClient: OpenAIAgentClient}) {
+    constructor({agentClient, deps}: {agentClient: OpenAIAgentClient; deps: {logger: ILoggingService}}) {
         this.agentClient = agentClient;
+        this.logger = deps.logger;
         this.conversationStore = new ConversationStore();
     }
 
@@ -200,7 +202,7 @@ export class ConversationService {
         if (this.pendingApprovalContext) {
             this.abortedApprovalContext = this.pendingApprovalContext;
             this.pendingApprovalContext = null;
-            loggingService.debug('Aborted approval - will handle rejection on next message');
+            this.logger.debug('Aborted approval - will handle rejection on next message');
         }
     }
 
@@ -227,7 +229,7 @@ export class ConversationService {
             // If there's an aborted approval, we need to resolve it first
             // The user's message is a new input, but the agent is stuck waiting for tool output
             if (this.abortedApprovalContext) {
-                loggingService.debug('Resolving aborted approval with fake execution', {
+                this.logger.debug('Resolving aborted approval with fake execution', {
                     message: text,
                 });
 
@@ -281,7 +283,7 @@ export class ConversationService {
 
                     // Check if another interruption occurred
                     if (stream.interruptions && stream.interruptions.length > 0) {
-                        loggingService.warn('Another interruption occurred after fake execution - handling as approval');
+                        this.logger.warn('Another interruption occurred after fake execution - handling as approval');
                         // Let the normal flow handle this
                         const result = this.#buildResult(
                             stream,
@@ -294,7 +296,7 @@ export class ConversationService {
                     }
 
                     // Successfully resolved - agent should now have processed the fake rejection
-                    loggingService.debug('Fake execution completed, agent received rejection message');
+                    this.logger.debug('Fake execution completed, agent received rejection message');
 
                     // Return the response from the agent processing the rejection
                     const result = this.#buildResult(
@@ -306,7 +308,7 @@ export class ConversationService {
                     this.#emitTerminalEvent(result, onEvent);
                     return result;
                 } catch (error) {
-                    loggingService.warn('Error resolving aborted approval with fake execution', {
+                    this.logger.warn('Error resolving aborted approval with fake execution', {
                         error: error instanceof Error ? error.message : String(error)
                     });
                     // Fall through to normal message flow
@@ -357,7 +359,7 @@ export class ConversationService {
                     ? error.message.match(/Tool (\S+) not found/)?.[1] || 'unknown'
                     : 'unknown';
 
-                loggingService.warn('Tool hallucination detected, retrying', {
+                this.logger.warn('Tool hallucination detected, retrying', {
                     toolName,
                     attempt: hallucinationRetryCount + 1,
                     maxRetries: MAX_HALLUCINATION_RETRIES,

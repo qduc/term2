@@ -20,8 +20,7 @@ import {getProvider} from '../providers/index.js';
 import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
 import {randomUUID} from 'node:crypto';
 import {DEFAULT_MODEL, getAgentDefinition} from '../agent.js';
-import {loggingService} from '../services/logging-service.js';
-import {settingsService} from '../services/settings-service.js';
+import type {ILoggingService, ISettingsService} from '../services/service-interfaces.js';
 import {editorImpl} from './editor-impl.js';
 
 /**
@@ -41,26 +40,35 @@ export class OpenAIAgentClient {
 	#retryCallback: (() => void) | null = null;
 	#runner: Runner | null = null;
 	#toolInterceptors: ((name: string, params: any, toolCallId?: string) => Promise<string | null>)[] = [];
+    #logger: ILoggingService;
+    #settings: ISettingsService;
 
 	constructor({
 		model,
 		reasoningEffort,
 		maxTurns,
 		retryAttempts,
+        deps,
 	}: {
 		model?: string;
 		reasoningEffort?: ModelSettingsReasoningEffort | 'default';
 		maxTurns?: number;
 		retryAttempts?: number;
-	} = {}) {
+        deps: {
+            logger: ILoggingService;
+            settings: ISettingsService;
+        };
+	}) {
+        this.#logger = deps.logger;
+        this.#settings = deps.settings;
 		this.#reasoningEffort = reasoningEffort;
 		this.#provider =
-			settingsService.get<string>('agent.provider') || 'openai';
+			this.#settings.get<string>('agent.provider') || 'openai';
 		this.#maxTurns = maxTurns ?? 20;
 		this.#retryAttempts = retryAttempts ?? 2;
 		this.#agent = this.#createAgent({model, reasoningEffort});
 		this.#runner = this.#createRunner();
-		loggingService.info('OpenAI Agent Client initialized', {
+		this.#logger.info('OpenAI Agent Client initialized', {
 			model: model || DEFAULT_MODEL,
 			reasoningEffort: reasoningEffort ?? 'default',
 			maxTurns: this.#maxTurns,
@@ -87,7 +95,7 @@ export class OpenAIAgentClient {
 
 	setProvider(provider: string): void {
     this.#provider = provider;
-    settingsService.set('agent.provider', provider);
+    this.#settings.set('agent.provider', provider);
     this.#agent = this.#createAgent({
         model: this.#model,
         reasoningEffort: this.#reasoningEffort,
@@ -114,7 +122,7 @@ export class OpenAIAgentClient {
 					return result;
 				}
 			} catch (error) {
-				loggingService.error('Tool interceptor threw an error', {
+				this.#logger.error('Tool interceptor threw an error', {
 					name,
 					params,
 					toolCallId,
@@ -132,7 +140,7 @@ export class OpenAIAgentClient {
 			return null;
 		}
 
-		return providerDef.createRunner({settingsService, loggingService});
+		return providerDef.createRunner({settingsService: this.#settings, loggingService: this.#logger});
 	}
 
 	setRetryCallback(callback: () => void): void {
@@ -148,10 +156,10 @@ export class OpenAIAgentClient {
 			this.#currentAbortController = null;
 		}
 		if (this.#currentCorrelationId) {
-			loggingService.clearCorrelationId();
+			this.#logger.clearCorrelationId();
 			this.#currentCorrelationId = null;
 		}
-		loggingService.debug('Agent operation aborted');
+		this.#logger.debug('Agent operation aborted');
 	}
 
 	clearConversations(): void {
@@ -170,12 +178,12 @@ export class OpenAIAgentClient {
 
 		// Create correlation ID for this stream
 		this.#currentCorrelationId = randomUUID();
-		loggingService.setCorrelationId(this.#currentCorrelationId);
+		this.#logger.setCorrelationId(this.#currentCorrelationId);
 
 		this.#currentAbortController = new AbortController();
 		const signal = this.#currentAbortController.signal;
 
-		loggingService.info('Agent stream started', {
+		this.#logger.info('Agent stream started', {
 			inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
 			inputLength: typeof userInput === 'string' ? userInput.length : undefined,
 			inputItems: Array.isArray(userInput) ? userInput.length : undefined,
@@ -199,7 +207,7 @@ export class OpenAIAgentClient {
 			);
 			return result;
 		} catch (error: any) {
-			loggingService.error('Agent stream failed', {
+			this.#logger.error('Agent stream failed', {
 				error: error instanceof Error ? error.message : String(error),
 				inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
 				inputLength: typeof userInput === 'string' ? userInput.length : undefined,
@@ -312,7 +320,7 @@ export class OpenAIAgentClient {
 
 				await new Promise(resolve => setTimeout(resolve, delay));
 
-				loggingService.warn('Agent operation retry', {
+				this.#logger.warn('Agent operation retry', {
 					errorType: error.constructor.name,
 					retriesRemaining: retries - 1,
 					delayMs: Math.round(delay),
@@ -368,7 +376,7 @@ export class OpenAIAgentClient {
 							// Check if this execution should be intercepted
 							const rejectionMessage = await this.#checkToolInterceptors(definition.name, params, toolCallId);
 							if (rejectionMessage) {
-								loggingService.info('Tool execution intercepted', {
+								this.#logger.info('Tool execution intercepted', {
 								tool: definition.name,
 								params: JSON.stringify(params).substring(0, 100),
 							});
@@ -408,7 +416,7 @@ export class OpenAIAgentClient {
 					}
 					const rejectionMessage = await this.#checkToolInterceptors('apply_patch', params, toolCallId);
 					if (rejectionMessage) {
-						loggingService.info('Native tool execution intercepted', {
+						this.#logger.info('Native tool execution intercepted', {
 							tool: 'apply_patch',
 							toolCallId,
 							params: JSON.stringify(params).substring(0, 100),
@@ -425,12 +433,12 @@ export class OpenAIAgentClient {
 			}
 
 			tools.push(nativePatchTool);
-			loggingService.info('Using native applyPatchTool from SDK', {
+			this.#logger.info('Using native applyPatchTool from SDK', {
 				model: resolvedModel,
 				provider: this.#provider,
 			});
 		} else {
-			loggingService.info('Using custom apply_patch implementation', {
+			this.#logger.info('Using custom apply_patch implementation', {
 				model: resolvedModel,
 				provider: this.#provider,
 			});

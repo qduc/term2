@@ -327,6 +327,13 @@ export class LoggingService {
 		this.correlationId = undefined;
 	}
 
+	/**
+	 * Get correlation ID
+	 */
+	getCorrelationId(): string | undefined {
+		return this.correlationId;
+	}
+
 	private log(
 		level: string,
 		message: string,

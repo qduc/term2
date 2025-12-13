@@ -7,6 +7,7 @@ import App from './app.js';
 import {OpenAIAgentClient} from './lib/openai-agent-client.js';
 import {ConversationService} from './services/conversation-service.js';
 import {SettingsService} from './services/settings-service.js';
+import {loggingService} from './services/logging-service.js';
 
 // Global Ctrl+C handler for immediate exit
 process.on('SIGINT', () => {
@@ -92,7 +93,14 @@ const conversationService = new ConversationService({
         reasoningEffort: usedReasoningEffort as ModelSettingsReasoningEffort,
         maxTurns: settings.get('agent.maxTurns'),
         retryAttempts: settings.get('agent.retryAttempts'),
+        deps: {
+            logger: loggingService,
+            settings: settings,
+        },
     }),
+    deps: {
+        logger: loggingService,
+    },
 });
 
 import { InputProvider } from './context/InputContext.js';

@@ -23,7 +23,6 @@ const AgentSettingsSchema = z.object({
     temperature: z.number().min(0).max(2).optional(),
     maxTurns: z.number().int().positive().default(100),
     retryAttempts: z.number().int().nonnegative().default(2),
-    maxConsecutiveToolFailures: z.number().int().positive().default(3),
     provider: z
         .string()
         .refine((val) => getProvider(val) !== undefined, {
@@ -139,7 +138,6 @@ export interface SettingsWithSources {
         temperature: SettingWithSource<number | undefined>;
         maxTurns: SettingWithSource<number>;
         retryAttempts: SettingWithSource<number>;
-        maxConsecutiveToolFailures: SettingWithSource<number>;
         provider: SettingWithSource<string>;
         openrouter: SettingWithSource<any>;
     };
@@ -182,7 +180,6 @@ export const SETTING_KEYS = {
     AGENT_PROVIDER: 'agent.provider',
     AGENT_MAX_TURNS: 'agent.maxTurns',
     AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
-    AGENT_MAX_CONSECUTIVE_TOOL_FAILURES: 'agent.maxConsecutiveToolFailures',
     AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey', // Sensitive - env only
     AGENT_OPENROUTER_MODEL: 'agent.openrouter.model',
     AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
@@ -229,7 +226,6 @@ const DEFAULT_SETTINGS: SettingsData = {
         reasoningEffort: 'default',
         maxTurns: 100,
         retryAttempts: 2,
-        maxConsecutiveToolFailures: 3,
         provider: 'openai',
         openrouter: {
             // defaults empty; can be provided via env or config
@@ -619,10 +615,6 @@ export class SettingsService {
                 retryAttempts: {
                     value: this.settings.agent.retryAttempts,
                     source: this.getSource('agent.retryAttempts'),
-                },
-                maxConsecutiveToolFailures: {
-                    value: this.settings.agent.maxConsecutiveToolFailures,
-                    source: this.getSource('agent.maxConsecutiveToolFailures'),
                 },
                 provider: {
                     value: this.settings.agent.provider,

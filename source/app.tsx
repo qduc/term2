@@ -211,7 +211,6 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
         const nextMode = currentMode === 'default' ? 'edit' : 'default';
 
         settingsService.set('app.mode', nextMode);
-        addSystemMessage(`Switched app.mode to ${nextMode}`);
     }, [addSystemMessage]);
 
     // Handle Ctrl+C to exit immediately

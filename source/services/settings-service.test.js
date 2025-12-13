@@ -696,7 +696,7 @@ test.serial('does not update config file when no new settings are added', async 
             maxTurns: 20,
             retryAttempts: 2,
 
-            maxConsecutiveToolFailures: 3,
+
             provider: 'openai',
             openrouter: {},
         },
@@ -764,7 +764,7 @@ test.serial('does not update config file when format differs but content is same
 
     // Write config with compact JSON (no formatting, different key order)
     const compactConfig = {
-        agent: {model: 'gpt-4o', reasoningEffort: 'default', maxTurns: 20, retryAttempts: 2, maxConsecutiveToolFailures: 3, provider: 'openai', openrouter: {}},
+        agent: {model: 'gpt-4o', reasoningEffort: 'default', maxTurns: 20, retryAttempts: 2, provider: 'openai', openrouter: {}},
         shell: {timeout: 120000, maxOutputLines: 1000, maxOutputChars: 10000},
         ui: {historySize: 1000},
         logging: {logLevel: 'info', disableLogging: false, debugLogging: false},

@@ -6,6 +6,11 @@ import {
 import {loggingService} from './logging-service.js';
 import {ConversationStore} from './conversation-store.js';
 import {ModelBehaviorError} from '@openai/agents';
+import type {
+    ConversationEvent,
+    ApprovalRequiredEvent,
+    FinalResponseEvent,
+} from './conversation-events.js';
 
 interface ApprovalResult {
     type: 'approval_required';
@@ -205,11 +210,13 @@ export class ConversationService {
             onTextChunk,
             onReasoningChunk,
             onCommandMessage,
+            onEvent,
             hallucinationRetryCount = 0,
         }: {
             onTextChunk?: (fullText: string, chunk: string) => void;
             onReasoningChunk?: (fullText: string, chunk: string) => void;
             onCommandMessage?: (message: CommandMessage) => void;
+            onEvent?: (event: ConversationEvent) => void;
             hallucinationRetryCount?: number;
         } = {},
     ): Promise<ConversationResult> {
@@ -266,6 +273,7 @@ export class ConversationService {
                         onTextChunk,
                         onReasoningChunk,
                         onCommandMessage,
+                        onEvent,
                         preserveExistingToolArgs: true,
                     });
                     this.previousResponseId = stream.lastResponseId;
@@ -275,14 +283,28 @@ export class ConversationService {
                     if (stream.interruptions && stream.interruptions.length > 0) {
                         loggingService.warn('Another interruption occurred after fake execution - handling as approval');
                         // Let the normal flow handle this
-                        return this.#buildResult(stream, finalOutput, reasoningOutput, emittedCommandIds);
+                        const result = this.#buildResult(
+                            stream,
+                            finalOutput,
+                            reasoningOutput,
+                            emittedCommandIds,
+                        );
+                        this.#emitTerminalEvent(result, onEvent);
+                        return result;
                     }
 
                     // Successfully resolved - agent should now have processed the fake rejection
                     loggingService.debug('Fake execution completed, agent received rejection message');
 
                     // Return the response from the agent processing the rejection
-                    return this.#buildResult(stream, finalOutput, reasoningOutput, emittedCommandIds);
+                    const result = this.#buildResult(
+                        stream,
+                        finalOutput,
+                        reasoningOutput,
+                        emittedCommandIds,
+                    );
+                    this.#emitTerminalEvent(result, onEvent);
+                    return result;
                 } catch (error) {
                     loggingService.warn('Error resolving aborted approval with fake execution', {
                         error: error instanceof Error ? error.message : String(error)
@@ -314,17 +336,20 @@ export class ConversationService {
                     onTextChunk,
                     onReasoningChunk,
                     onCommandMessage,
+                    onEvent,
                 });
             this.previousResponseId = stream.lastResponseId;
 			this.conversationStore.updateFromResult(stream);
 
             // Pass emittedCommandIds so we don't duplicate commands in the final result
-            return this.#buildResult(
+            const result = this.#buildResult(
                 stream,
                 finalOutput || undefined,
                 reasoningOutput || undefined,
                 emittedCommandIds,
             );
+            this.#emitTerminalEvent(result, onEvent);
+            return result;
         } catch (error) {
             // Handle tool hallucination: model called a non-existent tool
             if (isToolHallucinationError(error) && hallucinationRetryCount < MAX_HALLUCINATION_RETRIES) {
@@ -363,10 +388,12 @@ export class ConversationService {
             onTextChunk,
             onReasoningChunk,
             onCommandMessage,
+            onEvent,
         }: {
             onTextChunk?: (fullText: string, chunk: string) => void;
             onReasoningChunk?: (fullText: string, chunk: string) => void;
             onCommandMessage?: (message: CommandMessage) => void;
+            onEvent?: (event: ConversationEvent) => void;
         } = {},
     ): Promise<ConversationResult | null> {
         if (!this.pendingApprovalContext) {
@@ -427,6 +454,7 @@ export class ConversationService {
                     onTextChunk,
                     onReasoningChunk,
                     onCommandMessage,
+                    onEvent,
                     preserveExistingToolArgs: true,
                 });
 
@@ -440,12 +468,14 @@ export class ConversationService {
                 ...emittedCommandIds,
             ]);
 
-            return this.#buildResult(
+            const result = this.#buildResult(
                 stream,
                 finalOutput || undefined,
                 reasoningOutput || undefined,
                 allEmittedIds,
             );
+            this.#emitTerminalEvent(result, onEvent);
+            return result;
         } catch (error) {
             throw error;
         } finally {
@@ -462,11 +492,13 @@ export class ConversationService {
             onTextChunk,
             onReasoningChunk,
             onCommandMessage,
+            onEvent,
             preserveExistingToolArgs = false,
         }: {
             onTextChunk?: (fullText: string, chunk: string) => void;
             onReasoningChunk?: (fullText: string, chunk: string) => void;
             onCommandMessage?: (message: CommandMessage) => void;
+            onEvent?: (event: ConversationEvent) => void;
             preserveExistingToolArgs?: boolean;
         } = {},
     ): Promise<{
@@ -492,6 +524,7 @@ export class ConversationService {
             finalOutput += delta;
             this.textDeltaCount++;
             onTextChunk?.(finalOutput, delta);
+            onEvent?.({type: 'text_delta', delta, fullText: finalOutput});
         };
 
         const emitReasoning = (delta: string) => {
@@ -502,6 +535,7 @@ export class ConversationService {
             reasoningOutput += delta;
             this.reasoningDeltaCount++;
             onReasoningChunk?.(reasoningOutput, delta);
+            onEvent?.({type: 'reasoning_delta', delta, fullText: reasoningOutput});
         };
 
         for await (const event of stream) {
@@ -553,6 +587,7 @@ export class ConversationService {
                     [event.item],
                     emittedCommandIds,
                     onCommandMessage,
+                    onEvent,
                     toolCallArgumentsById,
                 );
             } else if (
@@ -564,6 +599,7 @@ export class ConversationService {
                     [event],
                     emittedCommandIds,
                     onCommandMessage,
+                    onEvent,
                     toolCallArgumentsById,
                 );
             }
@@ -651,6 +687,7 @@ export class ConversationService {
         items: any[] = [],
         emittedCommandIds: Set<string>,
         onCommandMessage?: (message: CommandMessage) => void,
+        onEvent?: (event: ConversationEvent) => void,
         toolCallArgumentsById: Map<string, unknown> = new Map(),
     ): void {
         if (!items?.length || !onCommandMessage) {
@@ -675,8 +712,51 @@ export class ConversationService {
 
             emittedCommandIds.add(cmdMsg.id);
             onCommandMessage(cmdMsg);
+            onEvent?.({type: 'command_message', message: cmdMsg});
             emittedCount++;
         }
+    }
+
+    #emitTerminalEvent(
+        result: ConversationResult,
+        onEvent?: (event: ConversationEvent) => void,
+    ): void {
+        if (!onEvent) {
+            return;
+        }
+
+        if (result.type === 'approval_required') {
+            const interruption = result.approval.rawInterruption;
+            const callId =
+                interruption?.rawItem?.callId ??
+                interruption?.callId ??
+                interruption?.call_id ??
+                interruption?.tool_call_id ??
+                interruption?.toolCallId ??
+                interruption?.id;
+
+            const event: ApprovalRequiredEvent = {
+                type: 'approval_required',
+                approval: {
+                    agentName: result.approval.agentName,
+                    toolName: result.approval.toolName,
+                    argumentsText: result.approval.argumentsText,
+                    ...(callId ? {callId: String(callId)} : {}),
+                },
+            };
+            onEvent(event);
+            return;
+        }
+
+        const event: FinalResponseEvent = {
+            type: 'final',
+            finalText: result.finalText,
+            ...(result.reasoningText ? {reasoningText: result.reasoningText} : {}),
+            ...(result.commandMessages?.length
+                ? {commandMessages: result.commandMessages}
+                : {}),
+        };
+        onEvent(event);
     }
 
     #emitTextDelta(payload: any, emitText: (delta: string) => void): boolean {

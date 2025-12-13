@@ -2,6 +2,7 @@ import {useCallback, useState} from 'react';
 import type {ConversationService} from '../services/conversation-service.js';
 import {loggingService} from '../services/logging-service.js';
 import {isAbortLikeError} from '../utils/error-helpers.js';
+import type {ConversationEvent} from '../services/conversation-events.js';
 
 interface UserMessage {
     id: number;
@@ -238,11 +239,11 @@ export const useConversation = ({
             // Create event logger with deduplication for this message send
             const {logDeduplicated, flush: flushLog} = createEventLogger();
 
-            try {
-                const result = await conversationService.sendMessage(value, {
-                    onTextChunk: (_fullText, chunk = '') => {
-                        logDeduplicated('onTextChunk');
-                        accumulatedText += chunk;
+            const applyConversationEvent = (event: ConversationEvent) => {
+                switch (event.type) {
+                    case 'text_delta': {
+                        logDeduplicated('text_delta');
+                        accumulatedText += event.delta;
                         setLiveResponse(prev =>
                             prev && prev.id === liveMessageId
                                 ? {...prev, text: accumulatedText}
@@ -252,9 +253,11 @@ export const useConversation = ({
                                         text: accumulatedText,
                                   },
                         );
-                    },
-                    onReasoningChunk: fullReasoningText => {
-                        logDeduplicated('onReasoningChunk');
+                        return;
+                    }
+                    case 'reasoning_delta': {
+                        logDeduplicated('reasoning_delta');
+                        const fullReasoningText = event.fullText ?? '';
                         // Only show reasoning text after what was already flushed
                         const newReasoningText = fullReasoningText.slice(
                             flushedReasoningLength,
@@ -285,9 +288,12 @@ export const useConversation = ({
                                 },
                             ];
                         });
-                    },
-                    onCommandMessage: cmdMsg => {
-                        logDeduplicated('onCommandMessage');
+                        return;
+                    }
+                    case 'command_message': {
+                        logDeduplicated('command_message');
+                        const cmdMsg = event.message as any;
+
                         // Before adding command message, flush reasoning and text separately
                         // This preserves the order: reasoning -> command -> response text
                         const messagesToAdd: Message[] = [];
@@ -320,6 +326,34 @@ export const useConversation = ({
 
                         // Add command messages in real-time as they execute
                         setMessages(prev => [...prev, cmdMsg]);
+                        return;
+                    }
+                    default:
+                        return;
+                }
+            };
+
+            try {
+                const result = await conversationService.sendMessage(value, {
+                    onTextChunk: (_fullText, chunk = '') => {
+                        applyConversationEvent({
+                            type: 'text_delta',
+                            delta: chunk,
+                            fullText: _fullText,
+                        });
+                    },
+                    onReasoningChunk: (fullReasoningText, chunk = '') => {
+                        applyConversationEvent({
+                            type: 'reasoning_delta',
+                            delta: chunk,
+                            fullText: fullReasoningText,
+                        });
+                    },
+                    onCommandMessage: cmdMsg => {
+                        applyConversationEvent({
+                            type: 'command_message',
+                            message: cmdMsg as any,
+                        });
                     },
                 });
 
@@ -440,13 +474,11 @@ export const useConversation = ({
 
                 const {logDeduplicated, flush: flushLog} = createEventLogger();
 
-                try {
-                    // Send a continuation message to resume work
-                    const continuationMessage = 'Please continue with your previous task.';
-                    const result = await conversationService.sendMessage(continuationMessage, {
-                        onTextChunk: (_fullText, chunk = '') => {
-                            logDeduplicated('onTextChunk');
-                            accumulatedText += chunk;
+                const applyConversationEvent = (event: ConversationEvent) => {
+                    switch (event.type) {
+                        case 'text_delta': {
+                            logDeduplicated('text_delta');
+                            accumulatedText += event.delta;
                             setLiveResponse(prev =>
                                 prev && prev.id === liveMessageId
                                     ? {...prev, text: accumulatedText}
@@ -456,9 +488,11 @@ export const useConversation = ({
                                             text: accumulatedText,
                                       },
                             );
-                        },
-                        onReasoningChunk: fullReasoningText => {
-                            logDeduplicated('onReasoningChunk');
+                            return;
+                        }
+                        case 'reasoning_delta': {
+                            logDeduplicated('reasoning_delta');
+                            const fullReasoningText = event.fullText ?? '';
                             const newReasoningText = fullReasoningText.slice(
                                 flushedReasoningLength,
                             );
@@ -486,9 +520,12 @@ export const useConversation = ({
                                     },
                                 ];
                             });
-                        },
-                        onCommandMessage: cmdMsg => {
-                            logDeduplicated('onCommandMessage');
+                            return;
+                        }
+                        case 'command_message': {
+                            logDeduplicated('command_message');
+                            const cmdMsg = event.message as any;
+
                             const messagesToAdd: Message[] = [];
 
                             if (accumulatedReasoningText.trim()) {
@@ -510,14 +547,41 @@ export const useConversation = ({
                             }
 
                             if (messagesToAdd.length > 0) {
-                                setMessages(prev => [
-                                    ...prev,
-                                    ...messagesToAdd,
-                                ]);
+                                setMessages(prev => [...prev, ...messagesToAdd]);
                                 setLiveResponse(null);
                             }
 
                             setMessages(prev => [...prev, cmdMsg]);
+                            return;
+                        }
+                        default:
+                            return;
+                    }
+                };
+
+                try {
+                    // Send a continuation message to resume work
+                    const continuationMessage = 'Please continue with your previous task.';
+                    const result = await conversationService.sendMessage(continuationMessage, {
+                        onTextChunk: (_fullText, chunk = '') => {
+                            applyConversationEvent({
+                                type: 'text_delta',
+                                delta: chunk,
+                                fullText: _fullText,
+                            });
+                        },
+                        onReasoningChunk: (fullReasoningText, chunk = '') => {
+                            applyConversationEvent({
+                                type: 'reasoning_delta',
+                                delta: chunk,
+                                fullText: fullReasoningText,
+                            });
+                        },
+                        onCommandMessage: cmdMsg => {
+                            applyConversationEvent({
+                                type: 'command_message',
+                                message: cmdMsg as any,
+                            });
                         },
                     });
 
@@ -576,93 +640,115 @@ export const useConversation = ({
             // Create event logger with deduplication for this approval decision
             const {logDeduplicated, flush: flushLog} = createEventLogger();
 
+            const applyConversationEvent = (event: ConversationEvent) => {
+                switch (event.type) {
+                    case 'text_delta': {
+                        logDeduplicated('text_delta');
+                        accumulatedText += event.delta;
+                        setLiveResponse(prev =>
+                            prev && prev.id === liveMessageId
+                                ? {...prev, text: accumulatedText}
+                                : {
+                                        id: liveMessageId,
+                                        sender: 'bot',
+                                        text: accumulatedText,
+                                  },
+                        );
+                        return;
+                    }
+                    case 'reasoning_delta': {
+                        logDeduplicated('reasoning_delta');
+                        const fullReasoningText = event.fullText ?? '';
+                        const newReasoningText = fullReasoningText.slice(
+                            flushedReasoningLength,
+                        );
+                        accumulatedReasoningText = newReasoningText;
+
+                        if (!newReasoningText.trim()) return;
+
+                        setMessages(prev => {
+                            if (currentReasoningMessageId !== null) {
+                                return prev.map(msg =>
+                                    msg.id === currentReasoningMessageId
+                                        ? {...msg, text: newReasoningText}
+                                        : msg,
+                                );
+                            }
+
+                            const newId = Date.now();
+                            currentReasoningMessageId = newId;
+                            return [
+                                ...prev,
+                                {
+                                    id: newId,
+                                    sender: 'reasoning',
+                                    text: newReasoningText,
+                                },
+                            ];
+                        });
+                        return;
+                    }
+                    case 'command_message': {
+                        logDeduplicated('command_message');
+                        const cmdMsg = event.message as any;
+
+                        const messagesToAdd: Message[] = [];
+
+                        if (accumulatedReasoningText.trim()) {
+                            flushedReasoningLength +=
+                                accumulatedReasoningText.length;
+                            accumulatedReasoningText = '';
+                            currentReasoningMessageId = null;
+                        }
+
+                        if (accumulatedText.trim()) {
+                            const textMessage: BotMessage = {
+                                id: Date.now() + 1,
+                                sender: 'bot',
+                                text: accumulatedText,
+                            };
+                            messagesToAdd.push(textMessage);
+                            accumulatedText = '';
+                            textWasFlushed = true;
+                        }
+
+                        if (messagesToAdd.length > 0) {
+                            setMessages(prev => [...prev, ...messagesToAdd]);
+                            setLiveResponse(null);
+                        }
+
+                        setMessages(prev => [...prev, cmdMsg]);
+                        return;
+                    }
+                    default:
+                        return;
+                }
+            };
+
             try {
                 const result = await conversationService.handleApprovalDecision(
                     answer,
                     rejectionReason,
                     {
                         onTextChunk: (_fullText, chunk = '') => {
-                            logDeduplicated('onTextChunk');
-                            accumulatedText += chunk;
-                            setLiveResponse(prev =>
-                                prev && prev.id === liveMessageId
-                                    ? {...prev, text: accumulatedText}
-                                    : {
-                                            id: liveMessageId,
-                                            sender: 'bot',
-                                            text: accumulatedText,
-                                      },
-                            );
+                            applyConversationEvent({
+                                type: 'text_delta',
+                                delta: chunk,
+                                fullText: _fullText,
+                            });
                         },
-                        onReasoningChunk: fullReasoningText => {
-                            logDeduplicated('onReasoningChunk');
-                            // Only show reasoning text after what was already flushed
-                            const newReasoningText = fullReasoningText.slice(
-                                flushedReasoningLength,
-                            );
-                            accumulatedReasoningText = newReasoningText;
-
-                            if (!newReasoningText.trim()) return;
-
-                            setMessages(prev => {
-                                // If we already have a reasoning message for this turn, update it by ID
-                                if (currentReasoningMessageId !== null) {
-                                    return prev.map(msg =>
-                                        msg.id === currentReasoningMessageId
-                                            ? {...msg, text: newReasoningText}
-                                            : msg,
-                                    );
-                                }
-
-                                // First chunk - create new reasoning message and store its ID
-                                const newId = Date.now();
-                                currentReasoningMessageId = newId;
-                                return [
-                                    ...prev,
-                                    {
-                                        id: newId,
-                                        sender: 'reasoning',
-                                        text: newReasoningText,
-                                    },
-                                ];
+                        onReasoningChunk: (fullReasoningText, chunk = '') => {
+                            applyConversationEvent({
+                                type: 'reasoning_delta',
+                                delta: chunk,
+                                fullText: fullReasoningText,
                             });
                         },
                         onCommandMessage: cmdMsg => {
-                            logDeduplicated('onCommandMessage');
-                            // Before adding command message, flush reasoning and text separately
-                            // This preserves the order: reasoning -> command -> response text
-                            const messagesToAdd: Message[] = [];
-
-                            if (accumulatedReasoningText.trim()) {
-                                // Reasoning is already in messages via stream updates
-                                flushedReasoningLength +=
-                                    accumulatedReasoningText.length;
-                                accumulatedReasoningText = '';
-                                currentReasoningMessageId = null; // Reset for potential post-command reasoning
-                            }
-
-                            if (accumulatedText.trim()) {
-                                const textMessage: BotMessage = {
-                                    id: Date.now() + 1,
-                                    sender: 'bot',
-                                    text: accumulatedText,
-                                };
-                                messagesToAdd.push(textMessage);
-                                accumulatedText = '';
-                                textWasFlushed = true;
-                            }
-
-                            if (messagesToAdd.length > 0) {
-                                setMessages(prev => [
-                                    ...prev,
-                                    ...messagesToAdd,
-                                ]);
-                                // Clear live response since we've committed the text
-                                setLiveResponse(null);
-                            }
-
-                            // Add command messages in real-time as they execute
-                            setMessages(prev => [...prev, cmdMsg]);
+                            applyConversationEvent({
+                                type: 'command_message',
+                                message: cmdMsg as any,
+                            });
                         },
                     },
                 );

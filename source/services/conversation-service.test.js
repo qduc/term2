@@ -58,6 +58,140 @@ test('emits live text chunks for response.output_text.delta events', async t => 
     t.is(result.finalText, 'Hello world');
 });
 
+test('emits ConversationEvents (text_delta → final) in order', async t => {
+    const events = [
+        {type: 'response.output_text.delta', delta: 'Hello'},
+        {type: 'response.output_text.delta', delta: ' world'},
+    ];
+
+    const mockClient = {
+        async startStream() {
+            return new MockStream(events);
+        },
+    };
+
+    const emitted = [];
+    const service = new ConversationService({agentClient: mockClient});
+    const result = await service.sendMessage('hi', {
+        onEvent(event) {
+            emitted.push(event);
+        },
+    });
+
+    t.is(result.type, 'response');
+    t.is(result.finalText, 'Hello world');
+    t.deepEqual(
+        emitted.map(e => e.type),
+        ['text_delta', 'text_delta', 'final'],
+    );
+});
+
+test('emits approval_required ConversationEvent for interruptions', async t => {
+    const interruption = {
+        name: 'bash',
+        agent: {name: 'CLI Agent'},
+        arguments: JSON.stringify({command: 'echo hi'}),
+        callId: 'call-xyz',
+    };
+
+    const initialStream = new MockStream([]);
+    initialStream.interruptions = [interruption];
+
+    const mockClient = {
+        async startStream() {
+            return initialStream;
+        },
+    };
+
+    const emitted = [];
+    const service = new ConversationService({agentClient: mockClient});
+    const result = await service.sendMessage('run command', {
+        onEvent(event) {
+            emitted.push(event);
+        },
+    });
+
+    t.is(result.type, 'approval_required');
+    t.is(emitted.length, 1);
+    t.is(emitted[0].type, 'approval_required');
+    t.is(emitted[0].approval.toolName, 'bash');
+    t.is(emitted[0].approval.argumentsText, 'echo hi');
+    t.is(emitted[0].approval.callId, 'call-xyz');
+});
+
+test('emits events when resolving aborted approval on next message', async t => {
+    const interruption = {
+        name: 'bash',
+        agent: {name: 'CLI Agent'},
+        arguments: JSON.stringify({command: 'echo hi'}),
+        callId: 'call-abort',
+    };
+
+    const initialStream = new MockStream([]);
+    initialStream.interruptions = [interruption];
+    initialStream.state = {
+        approveCalls: [],
+        rejectCalls: [],
+        approve(arg) {
+            this.approveCalls.push(arg);
+        },
+        reject(arg) {
+            this.rejectCalls.push(arg);
+        },
+    };
+
+    const continuationStream = new MockStream([
+        {type: 'response.output_text.delta', delta: 'After abort'},
+    ]);
+    continuationStream.finalOutput = 'After abort';
+
+    let interceptorCount = 0;
+    const mockClient = {
+        abort() {},
+        addToolInterceptor() {
+            interceptorCount++;
+            return () => {
+                interceptorCount--;
+            };
+        },
+        async startStream() {
+            return initialStream;
+        },
+        async continueRunStream(state, options) {
+            t.is(state, initialStream.state);
+            t.deepEqual(options, {previousResponseId: 'resp_test'});
+            return continuationStream;
+        },
+    };
+
+    const service = new ConversationService({agentClient: mockClient});
+
+    const approvalEvents = [];
+    const approvalResult = await service.sendMessage('run command', {
+        onEvent(event) {
+            approvalEvents.push(event);
+        },
+    });
+    t.is(approvalResult.type, 'approval_required');
+    t.is(approvalEvents[0].type, 'approval_required');
+
+    service.abort();
+
+    const resolvedEvents = [];
+    const resolvedResult = await service.sendMessage('new input', {
+        onEvent(event) {
+            resolvedEvents.push(event);
+        },
+    });
+
+    t.is(resolvedResult.type, 'response');
+    t.is(resolvedResult.finalText, 'After abort');
+    t.true(resolvedEvents.some(e => e.type === 'text_delta'));
+    t.true(resolvedEvents.some(e => e.type === 'final'));
+    t.is(interceptorCount, 0);
+    t.deepEqual(initialStream.state.approveCalls, [interruption]);
+});
+
 test('passes previous response ids into subsequent runs', async t => {
     const streams = [new MockStream([]), new MockStream([])];
     streams[0].lastResponseId = 'resp-1';
@@ -374,7 +508,7 @@ test('dedupes commands from initial stream when continuation history contains th
     t.is(emittedCommands[0].id, 'call-ls-123-0');
 
     // Handle approval - should emit 'sed' but NOT duplicate 'ls'
-    const finalResult = await service.handleApprovalDecision('y', {
+    const finalResult = await service.handleApprovalDecision('y', undefined, {
         onCommandMessage(message) {
             emittedCommands.push(message);
         },

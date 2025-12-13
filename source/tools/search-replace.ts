@@ -15,6 +15,104 @@ const searchReplaceParametersSchema = z.object({
 
 export type SearchReplaceToolParams = z.infer<typeof searchReplaceParametersSchema>;
 
+/**
+ * Information about exact matches found in content
+ */
+interface ExactMatchInfo {
+    type: 'exact';
+    count: number;
+}
+
+/**
+ * Information about relaxed matches found in content (with position details)
+ */
+interface RelaxedMatchInfo {
+    type: 'relaxed';
+    count: number;
+    matches: {startIndex: number, endIndex: number}[];
+}
+
+/**
+ * Information indicating no matches were found
+ */
+interface NoMatchInfo {
+    type: 'none';
+}
+
+type MatchInfo = ExactMatchInfo | RelaxedMatchInfo | NoMatchInfo;
+
+/**
+ * Parse file content into lines with position information
+ */
+function parseFileLines(content: string): {text: string, trimmed: string, start: number, end: number}[] {
+    const lineInfos: {text: string, trimmed: string, start: number, end: number}[] = [];
+    const regex = /([^\r\n]*)(\r?\n|$)/g;
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+        if (match.index === regex.lastIndex) {
+            regex.lastIndex++;
+        }
+        const fullMatch = match[0];
+        if (fullMatch.length === 0 && match.index >= content.length) break;
+
+        const lineContent = match[1];
+        lineInfos.push({
+            text: lineContent,
+            trimmed: lineContent.trim(),
+            start: match.index,
+            end: match.index + fullMatch.length
+        });
+
+        if (match.index + fullMatch.length === content.length) break;
+    }
+    return lineInfos;
+}
+
+/**
+ * Find matches in content using exact matching first, then relaxed matching.
+ * Returns detailed match information including positions for replacement.
+ */
+function findMatchesInContent(content: string, searchContent: string): MatchInfo {
+    // 1. Try exact match first
+    let matchCount = 0;
+    let index = content.indexOf(searchContent);
+    while (index !== -1) {
+        matchCount++;
+        index = content.indexOf(searchContent, index + 1);
+    }
+
+    if (matchCount > 0) {
+        return { type: 'exact', count: matchCount };
+    }
+
+    // 2. Try relaxed match (whitespace-insensitive line matching)
+    const searchLines = searchContent.split(/\r?\n/).map(l => l.trim());
+    const lineInfos = parseFileLines(content);
+
+    const matches: {startIndex: number, endIndex: number}[] = [];
+    for (let i = 0; i <= lineInfos.length - searchLines.length; i++) {
+        let isMatch = true;
+        for (let j = 0; j < searchLines.length; j++) {
+            if (lineInfos[i + j].trimmed !== searchLines[j]) {
+                isMatch = false;
+                break;
+            }
+        }
+        if (isMatch) {
+            matches.push({
+                startIndex: lineInfos[i].start,
+                endIndex: lineInfos[i + searchLines.length - 1].end
+            });
+        }
+    }
+
+    if (matches.length > 0) {
+        return { type: 'relaxed', count: matches.length, matches };
+    }
+
+    return { type: 'none' };
+}
+
 export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams> = {
     name: 'search_replace',
     description:
@@ -58,25 +156,20 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
                 return true;
             }
 
-            // 1. Exact match check
-            let matchCount = 0;
-            let index = content.indexOf(search_content);
-            while (index !== -1) {
-                matchCount++;
-                index = content.indexOf(search_content, index + 1);
-            }
+            // Find matches using shared logic
+            const matchInfo = findMatchesInContent(content, search_content);
 
-            if (matchCount > 0) {
-                if (!replace_all && matchCount > 1) {
+            if (matchInfo.type === 'exact') {
+                if (!replace_all && matchInfo.count > 1) {
                     loggingService.warn('search_replace validation: multiple exact matches, replace_all=false', {
                         path: filePath,
-                        count: matchCount,
+                        count: matchInfo.count,
                     });
                     return true;
                 }
                 loggingService.info('search_replace validation: exact match(es) found', {
                     path: filePath,
-                    count: matchCount,
+                    count: matchInfo.count,
                     replace_all,
                 });
                 if (mode === 'edit' && insideCwd) {
@@ -85,44 +178,29 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
                 return true;
             }
 
-            // 2. Relaxed match check
-            const searchLines = search_content.split(/\r?\n/).map(l => l.trim());
-            const fileLines = content.split(/\r?\n/);
-
-            let relaxedMatchCount = 0;
-            for (let i = 0; i <= fileLines.length - searchLines.length; i++) {
-                let match = true;
-                for (let j = 0; j < searchLines.length; j++) {
-                    if (fileLines[i + j].trim() !== searchLines[j]) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) {
-                    relaxedMatchCount++;
-                }
-            }
-
-            if (relaxedMatchCount > 0) {
-                if (!replace_all && relaxedMatchCount > 1) {
-                    loggingService.warn('search_replace validation: multiple relaxed matches, replace_all=false', {
+            if (matchInfo.type === 'relaxed') {
+                if (!replace_all && matchInfo.count > 1) {
+                    loggingService.warn('search_replace validation: multiple relaxed matches, replace_all=false - will fail in execute', {
                         path: filePath,
-                        count: relaxedMatchCount,
+                        count: matchInfo.count,
                     });
-                    return true;
+                    // Auto-approve - execute will handle the error gracefully
+                    return false;
                 }
                 loggingService.info('search_replace validation: relaxed match(es) found', {
                     path: filePath,
-                    count: relaxedMatchCount,
+                    count: matchInfo.count,
                     replace_all,
                 });
                 return true;
             }
 
-            loggingService.warn('search_replace validation: no match found', {
+            // matchInfo.type === 'none'
+            loggingService.warn('search_replace validation: no match found - will fail in execute', {
                 path: filePath,
             });
-            return true;
+            // Auto-approve - execute will handle the error gracefully
+            return false;
 
         } catch (error: any) {
             loggingService.error('search_replace needsApproval error', {
@@ -177,15 +255,10 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
                 });
             }
 
-            // 1. Try Exact Match
-            let matchCount = 0;
-            let index = content.indexOf(search_content);
-            while (index !== -1) {
-                matchCount++;
-                index = content.indexOf(search_content, index + 1);
-            }
+            // Find matches using shared logic
+            const matchInfo = findMatchesInContent(content, search_content);
 
-            if (matchCount > 0) {
+            if (matchInfo.type === 'exact') {
                 let newContent: string;
                 if (replace_all) {
                     newContent = content.replaceAll(search_content, replace_content);
@@ -199,7 +272,7 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
                     loggingService.info('File updated (exact match)', {
                         path: filePath,
                         replace_all,
-                        count: replace_all ? matchCount : 1,
+                        count: replace_all ? matchInfo.count : 1,
                     });
                 }
 
@@ -208,59 +281,17 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
                         success: true,
                         operation: 'search_replace',
                         path: filePath,
-                        message: `Updated ${filePath} (${replace_all ? matchCount : 1} exact match${replace_all && matchCount > 1 ? 'es' : ''})`
+                        message: `Updated ${filePath} (${replace_all ? matchInfo.count : 1} exact match${replace_all && matchInfo.count > 1 ? 'es' : ''})`
                     }]
                 });
             }
 
-            // 2. Try Relaxed Match
-            const searchLines = search_content.split(/\r?\n/).map(l => l.trim());
-
-            // Parse file into lines with indices
-            const lineInfos: {text: string, trimmed: string, start: number, end: number}[] = [];
-            const regex = /([^\r\n]*)(\r?\n|$)/g;
-            let match;
-            while ((match = regex.exec(content)) !== null) {
-                if (match.index === regex.lastIndex) {
-                    regex.lastIndex++;
-                }
-                const fullMatch = match[0];
-                if (fullMatch.length === 0 && match.index >= content.length) break;
-
-                const lineContent = match[1];
-                lineInfos.push({
-                    text: lineContent,
-                    trimmed: lineContent.trim(),
-                    start: match.index,
-                    end: match.index + fullMatch.length
-                });
-
-                if (match.index + fullMatch.length === content.length) break;
-            }
-
-            const matches: {startIndex: number, endIndex: number}[] = [];
-            for (let i = 0; i <= lineInfos.length - searchLines.length; i++) {
-                let isMatch = true;
-                for (let j = 0; j < searchLines.length; j++) {
-                    if (lineInfos[i + j].trimmed !== searchLines[j]) {
-                        isMatch = false;
-                        break;
-                    }
-                }
-                if (isMatch) {
-                    matches.push({
-                        startIndex: lineInfos[i].start,
-                        endIndex: lineInfos[i + searchLines.length - 1].end
-                    });
-                }
-            }
-
-            if (matches.length > 0) {
-                if (!replace_all && matches.length > 1) {
+            if (matchInfo.type === 'relaxed') {
+                if (!replace_all && matchInfo.count > 1) {
                     return JSON.stringify({
                         output: [{
                             success: false,
-                            error: `Found ${matches.length} relaxed matches. Please provide more context or set replace_all to true.`
+                            error: `Found ${matchInfo.count} relaxed matches. Please provide more context or set replace_all to true.`
                         }]
                     });
                 }
@@ -268,12 +299,12 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
                 let newContent = content;
                 if (replace_all) {
                     // Sort matches by startIndex descending to replace from end
-                    matches.sort((a, b) => b.startIndex - a.startIndex);
-                    for (const m of matches) {
+                    matchInfo.matches.sort((a, b) => b.startIndex - a.startIndex);
+                    for (const m of matchInfo.matches) {
                         newContent = newContent.substring(0, m.startIndex) + replace_content + newContent.substring(m.endIndex);
                     }
                 } else {
-                    const m = matches[0];
+                    const m = matchInfo.matches[0];
                     newContent = content.substring(0, m.startIndex) + replace_content + content.substring(m.endIndex);
                 }
                 await writeFile(targetPath, newContent, 'utf8');
@@ -282,7 +313,7 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
                     loggingService.info('File updated (relaxed match)', {
                         path: filePath,
                         replace_all,
-                        count: replace_all ? matches.length : 1,
+                        count: replace_all ? matchInfo.count : 1,
                     });
                 }
 
@@ -291,11 +322,12 @@ export const searchReplaceToolDefinition: ToolDefinition<SearchReplaceToolParams
                         success: true,
                         operation: 'search_replace',
                         path: filePath,
-                        message: `Updated ${filePath} (${replace_all ? matches.length : 1} relaxed match${replace_all && matches.length > 1 ? 'es' : ''})`
+                        message: `Updated ${filePath} (${replace_all ? matchInfo.count : 1} relaxed match${replace_all && matchInfo.count > 1 ? 'es' : ''})`
                     }]
                 });
             }
 
+            // matchInfo.type === 'none'
             return JSON.stringify({
                 output: [{
                     success: false,

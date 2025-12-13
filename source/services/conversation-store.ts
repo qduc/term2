@@ -101,6 +101,21 @@ export class ConversationStore {
 		this.#history = [];
 	}
 
+	/**
+	 * Remove the last user message from history.
+	 * Used when retrying after a tool hallucination error.
+	 */
+	removeLastUserMessage(): void {
+		for (let i = this.#history.length - 1; i >= 0; i--) {
+			const item: any = this.#history[i];
+			const raw = item?.rawItem ?? item;
+			if (raw?.role === 'user') {
+				this.#history.splice(i, 1);
+				return;
+			}
+		}
+	}
+
 	#cloneHistory(items: AgentInputItem[]): AgentInputItem[] {
 		// Avoid leaking references to external callers.
 		// structuredClone is available in modern Node; fall back to a shallow copy.

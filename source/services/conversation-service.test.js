@@ -573,3 +573,81 @@ test('emits live reasoning chunks', async t => {
     t.is(result.type, 'response');
     t.is(result.reasoningText, 'Thinking... Still thinking.');
 });
+
+test('retries on tool hallucination error (ModelBehaviorError)', async t => {
+    // Import ModelBehaviorError dynamically
+    const {ModelBehaviorError} = await import('@openai/agents');
+
+    let callCount = 0;
+    const mockClient = {
+        async startStream() {
+            callCount++;
+            if (callCount === 1) {
+                // First call: model hallucinates a non-existent tool
+                throw new ModelBehaviorError('Tool open_file not found in agent Terminal Assistant.');
+            }
+            // Second call: succeeds
+            const stream = new MockStream([
+                {type: 'response.output_text.delta', delta: 'Retried successfully'},
+            ]);
+            stream.finalOutput = 'Retried successfully';
+            return stream;
+        },
+    };
+
+    const service = new ConversationService({agentClient: mockClient});
+    const result = await service.sendMessage('explain this file');
+
+    // Should have retried and succeeded on second attempt
+    t.is(callCount, 2);
+    t.is(result.type, 'response');
+    t.is(result.finalText, 'Retried successfully');
+});
+
+test('stops retrying after max hallucination retries', async t => {
+    const {ModelBehaviorError} = await import('@openai/agents');
+
+    let callCount = 0;
+    const mockClient = {
+        async startStream() {
+            callCount++;
+            // Always throw hallucination error
+            throw new ModelBehaviorError('Tool fake_tool not found in agent Test Agent.');
+        },
+    };
+
+    const service = new ConversationService({agentClient: mockClient});
+
+    try {
+        await service.sendMessage('test message');
+        t.fail('Should have thrown error after max retries');
+    } catch (error) {
+        t.true(error instanceof ModelBehaviorError);
+        // Should have tried: initial + 2 retries = 3 total attempts
+        t.is(callCount, 3);
+    }
+});
+
+test('does not retry on non-hallucination ModelBehaviorError', async t => {
+    const {ModelBehaviorError} = await import('@openai/agents');
+
+    let callCount = 0;
+    const mockClient = {
+        async startStream() {
+            callCount++;
+            // Throw a different kind of ModelBehaviorError
+            throw new ModelBehaviorError('Model violated safety guidelines');
+        },
+    };
+
+    const service = new ConversationService({agentClient: mockClient});
+
+    try {
+        await service.sendMessage('test message');
+        t.fail('Should have thrown error');
+    } catch (error) {
+        t.true(error instanceof ModelBehaviorError);
+        // Should NOT retry - only 1 call
+        t.is(callCount, 1);
+    }
+});

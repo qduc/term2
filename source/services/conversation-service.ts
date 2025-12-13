@@ -5,6 +5,7 @@ import {
 } from '../utils/extract-command-messages.js';
 import {loggingService} from './logging-service.js';
 import {ConversationStore} from './conversation-store.js';
+import {ModelBehaviorError} from '@openai/agents';
 
 interface ApprovalResult {
     type: 'approval_required';
@@ -71,6 +72,23 @@ const getCommandFromArgs = (args: unknown): string => {
     }
 
     return String(args);
+};
+
+/**
+ * Maximum number of retries when the model hallucinates a tool
+ */
+const MAX_HALLUCINATION_RETRIES = 2;
+
+/**
+ * Check if an error is a tool hallucination error (model called a non-existent tool)
+ */
+const isToolHallucinationError = (error: unknown): boolean => {
+    if (!(error instanceof ModelBehaviorError)) {
+        return false;
+    }
+
+    const message = error.message.toLowerCase();
+    return message.includes('tool') && message.includes('not found');
 };
 
 export class ConversationService {
@@ -186,10 +204,12 @@ export class ConversationService {
             onTextChunk,
             onReasoningChunk,
             onCommandMessage,
+            hallucinationRetryCount = 0,
         }: {
             onTextChunk?: (fullText: string, chunk: string) => void;
             onReasoningChunk?: (fullText: string, chunk: string) => void;
             onCommandMessage?: (message: CommandMessage) => void;
+            hallucinationRetryCount?: number;
         } = {},
     ): Promise<ConversationResult> {
         try {
@@ -305,6 +325,32 @@ export class ConversationService {
                 emittedCommandIds,
             );
         } catch (error) {
+            // Handle tool hallucination: model called a non-existent tool
+            if (isToolHallucinationError(error) && hallucinationRetryCount < MAX_HALLUCINATION_RETRIES) {
+                const toolName = error instanceof Error
+                    ? error.message.match(/Tool (\S+) not found/)?.[1] || 'unknown'
+                    : 'unknown';
+
+                loggingService.warn('Tool hallucination detected, retrying', {
+                    toolName,
+                    attempt: hallucinationRetryCount + 1,
+                    maxRetries: MAX_HALLUCINATION_RETRIES,
+                    errorMessage: error instanceof Error ? error.message : String(error),
+                });
+
+                // Remove the user message from conversation store before retry
+                // so we don't duplicate it
+                this.conversationStore.removeLastUserMessage();
+
+                // Retry with the same message
+                return this.sendMessage(text, {
+                    onTextChunk,
+                    onReasoningChunk,
+                    onCommandMessage,
+                    hallucinationRetryCount: hallucinationRetryCount + 1,
+                });
+            }
+
             throw error;
         }
     }

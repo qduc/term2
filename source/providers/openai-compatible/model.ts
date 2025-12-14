@@ -168,6 +168,7 @@ export class OpenAICompatibleModel implements Model {
         this.#loggingService.debug('OpenAI-compatible stream start', {
             provider: this.#providerId,
             messageCount: Array.isArray(messages) ? messages.length : 0,
+            messageRoles: Array.isArray(messages) ? messages.map((m: any) => m.role) : [],
             toolsCount: Array.isArray(tools) ? tools.length : 0,
         });
 

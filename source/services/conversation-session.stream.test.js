@@ -123,3 +123,125 @@ test('continue() streams events after approval decision', async t => {
     t.is(cont[0].delta, 'Approved run');
     t.is(cont[1].finalText, 'Approved run');
 });
+
+test('run() sends text for OpenAI provider (server-side state)', async t => {
+    const stream = new MockStream([
+        {type: 'response.output_text.delta', delta: 'Response'},
+    ]);
+    stream.finalOutput = 'Response';
+
+    let receivedInput;
+    const mockClient = {
+        async startStream(input) {
+            receivedInput = input;
+            return stream;
+        },
+    };
+
+    const session = new ConversationSession('s1', {
+        agentClient: mockClient,
+        deps: {logger: mockLogger},
+    });
+
+    const emitted = [];
+    for await (const ev of session.run('Hello')) {
+        emitted.push(ev);
+    }
+
+    // OpenAI should receive just the text string (no getProvider means default 'openai')
+    t.is(typeof receivedInput, 'string');
+    t.is(receivedInput, 'Hello');
+    t.is(emitted[emitted.length - 1].type, 'final');
+});
+
+test('run() sends full history for non-OpenAI providers (client-side state)', async t => {
+    const stream = new MockStream([
+        {type: 'response.output_text.delta', delta: 'Response'},
+    ]);
+    stream.finalOutput = 'Response';
+    stream.history = [
+        {role: 'user', type: 'message', content: 'Hello'},
+        {role: 'assistant', type: 'message', content: [{type: 'output_text', text: 'Response'}]},
+    ];
+
+    let receivedInput;
+    const mockClient = {
+        async startStream(input) {
+            receivedInput = input;
+            return stream;
+        },
+        getProvider() {
+            return 'openrouter'; // Non-OpenAI provider
+        },
+    };
+
+    const session = new ConversationSession('s1', {
+        agentClient: mockClient,
+        deps: {logger: mockLogger},
+    });
+
+    const emitted = [];
+    for await (const ev of session.run('Hello')) {
+        emitted.push(ev);
+    }
+
+    // Non-OpenAI providers should receive full history array
+    t.true(Array.isArray(receivedInput));
+    t.is(receivedInput.length, 1); // Initial user message
+    t.is(receivedInput[0].role, 'user');
+    t.is(receivedInput[0].content, 'Hello');
+    t.is(emitted[emitted.length - 1].type, 'final');
+});
+
+test('run() sends full history for openai-compatible providers', async t => {
+    const stream = new MockStream([
+        {type: 'response.output_text.delta', delta: 'Response'},
+    ]);
+    stream.finalOutput = 'Response';
+    stream.history = [
+        {role: 'user', type: 'message', content: 'First message'},
+        {role: 'assistant', type: 'message', content: [{type: 'output_text', text: 'First response'}]},
+        {role: 'user', type: 'message', content: 'Second message'},
+        {role: 'assistant', type: 'message', content: [{type: 'output_text', text: 'Response'}]},
+    ];
+
+    let firstInput, secondInput;
+    let callCount = 0;
+    const mockClient = {
+        async startStream(input) {
+            callCount++;
+            if (callCount === 1) {
+                firstInput = input;
+            } else {
+                secondInput = input;
+            }
+            return stream;
+        },
+        getProvider() {
+            return 'deepseek'; // Custom openai-compatible provider
+        },
+    };
+
+    const session = new ConversationSession('s1', {
+        agentClient: mockClient,
+        deps: {logger: mockLogger},
+    });
+
+    // First message
+    for await (const ev of session.run('First message')) {
+        // consume events
+    }
+
+    // OpenAI-compatible provider should receive full history array
+    t.true(Array.isArray(firstInput));
+    t.is(firstInput.length, 1);
+    t.is(firstInput[0].content, 'First message');
+
+    // Second message should contain both previous and new message
+    for await (const ev of session.run('Second message')) {
+        // consume events
+    }
+
+    t.true(Array.isArray(secondInput));
+    t.true(secondInput.length >= 2, 'Second call should include conversation history');
+});

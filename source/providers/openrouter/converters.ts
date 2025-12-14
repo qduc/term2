@@ -216,6 +216,16 @@ export function buildMessagesFromRequest(
     const messages: any[] = [];
 	let pendingReasoningDetails: any[] = [];
 
+    const logger = loggingService || noOpLogger;
+    logger.debug('buildMessagesFromRequest: req.input', {
+        inputType: typeof req.input,
+        isArray: Array.isArray(req.input),
+        inputLength: Array.isArray(req.input) ? req.input.length : (typeof req.input === 'string' ? req.input.length : 'N/A'),
+        inputPreview: Array.isArray(req.input)
+            ? req.input.map((item: any) => ({role: item?.role || item?.rawItem?.role, type: item?.type || item?.rawItem?.type}))
+            : (typeof req.input === 'string' ? req.input.substring(0, 100) : 'non-string, non-array'),
+    });
+
     const isToolCallOnlyAssistant = (m: any): boolean => {
         return (
             m != null &&
@@ -283,6 +293,8 @@ export function buildMessagesFromRequest(
                 // Merge consecutive assistant messages with tool_calls to fix incorrect conversation flow
                 // when parallel tool calls are stored as separate history items.
                 const lastMessage = messages[messages.length - 1];
+
+                // Case 1: Both are tool-call-only assistant messages - merge tool_calls
                 if (
 					isToolCallOnlyAssistant(lastMessage) &&
 					isToolCallOnlyAssistant(converted)
@@ -296,6 +308,28 @@ export function buildMessagesFromRequest(
 					if (lastMessage.reasoning == null && converted.reasoning != null) {
 						lastMessage.reasoning = converted.reasoning;
 					}
+                    continue;
+                }
+
+                // Case 2: Last message is assistant (with or without content), current is tool-call-only assistant
+                // This happens when SDK history has assistant message followed by function_call items
+                if (
+                    lastMessage?.role === 'assistant' &&
+                    isToolCallOnlyAssistant(converted)
+                ) {
+                    // Merge the tool_calls into the previous assistant message
+                    if (!lastMessage.tool_calls) {
+                        lastMessage.tool_calls = [];
+                    }
+                    lastMessage.tool_calls.push(...converted.tool_calls);
+
+                    // Preserve reasoning
+                    if (lastMessage.reasoning_details == null && converted.reasoning_details != null) {
+                        lastMessage.reasoning_details = converted.reasoning_details;
+                    }
+                    if (lastMessage.reasoning == null && converted.reasoning != null) {
+                        lastMessage.reasoning = converted.reasoning;
+                    }
                     continue;
                 }
 

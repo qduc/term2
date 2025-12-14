@@ -403,8 +403,10 @@ export class ConversationSession {
                     ? (this.agentClient as any).getProvider()
                     : 'openai';
 
+            // Only OpenAI uses server-side conversation management via previousResponseId.
+            // All other providers (OpenRouter, openai-compatible) need full history.
             const stream = await this.agentClient.startStream(
-                provider === 'openrouter'
+                provider !== 'openai'
                     ? (this.conversationStore.getHistory() as any)
                     : text,
                 {

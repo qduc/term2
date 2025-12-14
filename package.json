@@ -13,7 +13,7 @@
 		"start": "node dist/cli.js",
 		"build": "tsc && npm run post-build",
 		"dev": "tsc --watch",
-		"test": "tsc && ava --tap 2>&1 | awk '/^not ok/{print; fail++} /^ok/{pass++} END{print pass\" passed\" (fail ? \", \"fail\" failed\" : \"\")}'",
+		"test": "npx ava --tap 2> /dev/null | npx tap-mocha-reporter min",
 		"test:verbose": "tsc && ava",
 		"lint": "prettier --check .",
 		"lint-fix": "prettier --write .",

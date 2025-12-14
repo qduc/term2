@@ -216,6 +216,16 @@ export function buildMessagesFromRequest(
     const messages: any[] = [];
 	let pendingReasoningDetails: any[] = [];
 
+    const isToolCallOnlyAssistant = (m: any): boolean => {
+        return (
+            m != null &&
+            m.role === 'assistant' &&
+            m.content == null &&
+            Array.isArray(m.tool_calls) &&
+            m.tool_calls.length > 0
+        );
+    };
+
     if (req.systemInstructions && req.systemInstructions.trim().length > 0) {
         // For Anthropic models, use array format with cache_control for prompt caching.
         // This enables caching of the system message (agent instructions) which is large and rarely changes.
@@ -274,22 +284,18 @@ export function buildMessagesFromRequest(
                 // when parallel tool calls are stored as separate history items.
                 const lastMessage = messages[messages.length - 1];
                 if (
-                    lastMessage &&
-                    lastMessage.role === 'assistant' &&
-                    converted.role === 'assistant' &&
-                    lastMessage.tool_calls &&
-                    converted.tool_calls &&
-                    !converted.content
+					isToolCallOnlyAssistant(lastMessage) &&
+					isToolCallOnlyAssistant(converted)
                 ) {
-                    lastMessage.tool_calls.push(...converted.tool_calls);
+					lastMessage.tool_calls.push(...converted.tool_calls);
 
                     // Preserve reasoning if the merged message didn't have it but the new one does
-                    if (!lastMessage.reasoning_details && converted.reasoning_details) {
-                        lastMessage.reasoning_details = converted.reasoning_details;
-                    }
-                    if (!lastMessage.reasoning && converted.reasoning) {
-                        lastMessage.reasoning = converted.reasoning;
-                    }
+					if (lastMessage.reasoning_details == null && converted.reasoning_details != null) {
+						lastMessage.reasoning_details = converted.reasoning_details;
+					}
+					if (lastMessage.reasoning == null && converted.reasoning != null) {
+						lastMessage.reasoning = converted.reasoning;
+					}
                     continue;
                 }
 

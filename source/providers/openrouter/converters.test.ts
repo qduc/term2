@@ -95,3 +95,83 @@ test('does not merge if intervening message', t => {
     t.is(messages[1].role, 'tool');
     t.is(messages[2].role, 'assistant');
 });
+
+test('does not merge if the first assistant tool_calls message has content', t => {
+    const input = [
+        {
+            type: 'message',
+            role: 'assistant',
+            content: [{type: 'output_text', text: 'Some text'}],
+            tool_calls: [
+                {
+                    id: 'call-1',
+                    type: 'function',
+                    function: {name: 'tool1', arguments: '{}'},
+                },
+            ],
+        },
+        {
+            type: 'function_call',
+            id: 'call-2',
+            name: 'tool2',
+            arguments: '{}',
+        },
+    ];
+
+    const messages = buildMessagesFromRequest(
+        {
+            input: input as any,
+            tools: [],
+        } as any,
+        'model-id',
+        logger,
+    );
+
+    // Preserve the text-bearing assistant message; don't merge tool calls into it.
+    t.is(messages.length, 2);
+    t.is(messages[0].role, 'assistant');
+    t.is(messages[0].content, 'Some text');
+    t.true(Array.isArray(messages[0].tool_calls));
+    t.is(messages[0].tool_calls.length, 1);
+    t.is(messages[1].role, 'assistant');
+    t.true(Array.isArray(messages[1].tool_calls));
+    t.is(messages[1].tool_calls.length, 1);
+});
+
+test('does not merge if the second assistant tool_calls message has content', t => {
+    const input = [
+        {
+            type: 'function_call',
+            id: 'call-1',
+            name: 'tool1',
+            arguments: '{}',
+        },
+        {
+            type: 'message',
+            role: 'assistant',
+            content: [{type: 'output_text', text: 'More text'}],
+            tool_calls: [
+                {
+                    id: 'call-2',
+                    type: 'function',
+                    function: {name: 'tool2', arguments: '{}'},
+                },
+            ],
+        },
+    ];
+
+    const messages = buildMessagesFromRequest(
+        {
+            input: input as any,
+            tools: [],
+        } as any,
+        'model-id',
+        logger,
+    );
+
+    // Second message has content, so don't merge.
+    t.is(messages.length, 2);
+    t.is(messages[0].role, 'assistant');
+    t.is(messages[1].role, 'assistant');
+    t.is(messages[1].content, 'More text');
+});

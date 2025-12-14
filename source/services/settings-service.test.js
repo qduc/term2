@@ -4,6 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {SettingsService} from '../../dist/services/settings-service.js';
 import {loggingService} from '../../dist/services/logging-service.js';
+import {getProvider, getAllProviders} from '../../dist/providers/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_BASE_DIR = path.join(__dirname, '../../test-settings');
@@ -260,6 +261,45 @@ test('config file overrides defaults', async t => {
     t.is(service.get('shell.timeout'), 60000);
     t.is(service.get('shell.maxOutputChars'), 5000);
     t.is(service.getSource('shell.timeout'), 'config');
+});
+
+test('registers custom OpenAI-compatible providers from settings.json', async t => {
+    const settingsDir = getTestSettingsDir();
+
+    const providerName = `lmstudio-${Date.now()}-${Math.random()}`;
+
+    // Create a config file with providers
+    const configFile = path.join(settingsDir, 'settings.json');
+    if (!fs.existsSync(settingsDir)) {
+        fs.mkdirSync(settingsDir, {recursive: true});
+    }
+
+    fs.writeFileSync(
+        configFile,
+        JSON.stringify({
+            providers: [
+                {
+                    name: providerName,
+                    baseUrl: 'http://localhost:1234',
+                    apiKey: 'my-secret-api-key',
+                },
+            ],
+            agent: {
+                provider: providerName,
+            },
+        }),
+        'utf-8',
+    );
+
+    const service = new SettingsService({
+        settingsDir,
+        disableLogging: true,
+    });
+
+    // Provider should be registered and selectable
+    t.truthy(getProvider(providerName));
+    t.true(getAllProviders().some(p => p.id === providerName));
+    t.is(service.get('agent.provider'), providerName);
 });
 
 test('set() modifies runtime-modifiable settings', async t => {

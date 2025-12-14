@@ -27,6 +27,12 @@ export interface ProviderDefinition {
 
     /** Settings keys that are sensitive and should not be persisted to disk */
     sensitiveSettingKeys?: string[];
+
+    /**
+     * True when this provider is defined at runtime (e.g. from settings.json).
+     * Used to prevent accidental overrides of built-in providers.
+     */
+    isRuntimeDefined?: boolean;
 }
 
 /**
@@ -39,11 +45,25 @@ const providers = new Map<string, ProviderDefinition>();
  * Register a provider definition.
  * Called by provider modules during initialization.
  */
-export function registerProvider(definition: ProviderDefinition): void {
-    if (providers.has(definition.id)) {
+export function registerProvider(
+    definition: ProviderDefinition,
+    options?: {allowOverride?: boolean},
+): void {
+    const allowOverride = options?.allowOverride === true;
+
+    if (providers.has(definition.id) && !allowOverride) {
         throw new Error(`Provider '${definition.id}' is already registered`);
     }
     providers.set(definition.id, definition);
+}
+
+/**
+ * Upsert a provider definition.
+ *
+ * Intended for runtime-defined providers (e.g. user-configured OpenAI-compatible providers).
+ */
+export function upsertProvider(definition: ProviderDefinition): void {
+    registerProvider(definition, {allowOverride: true});
 }
 
 /**

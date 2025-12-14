@@ -83,6 +83,42 @@ test.serial('fetchModels uses OpenAI models endpoint when provider is openai', a
 	t.truthy(calls[0].options?.headers?.Authorization);
 });
 
+test.serial('fetchModels uses /v1/models for custom OpenAI-compatible provider', async t => {
+	const providerId = `lmstudio-test-${Date.now()}-${Math.random()}`;
+	const settingsService = createMockSettingsService({
+		providers: [
+			{
+				name: providerId,
+				baseUrl: 'http://localhost:1234',
+				apiKey: 'local-key',
+			},
+		],
+	});
+
+	const calls: Array<{url: string; options: any}> = [];
+	const fakeFetch = async (url: string, options: any) => {
+		calls.push({url, options});
+		return {
+			ok: true,
+			json: async () => ({data: [{id: 'local-model-a'}, {id: 'local-model-b'}]}),
+		};
+	};
+
+	const models = await fetchModels(
+		{
+			settingsService,
+			loggingService: {warn: () => {}} as any,
+		},
+		providerId,
+		fakeFetch as any,
+	);
+
+	t.deepEqual(models.map(m => m.id), ['local-model-a', 'local-model-b']);
+	t.is(calls.length, 1);
+	t.is(calls[0].url, 'http://localhost:1234/v1/models');
+	t.is(calls[0].options?.headers?.Authorization, 'Bearer local-key');
+});
+
 test('filterModels matches by id or name and limits results', t => {
 	const models = [
 		{id: 'gpt-4o', name: 'OpenAI 4o', provider: 'openai' as const},

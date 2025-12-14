@@ -91,6 +91,31 @@ test('ModelSelectionMenu shows provider in header if specified', t => {
     t.true(lastFrame()?.includes('OpenAI'));
 });
 
+test('ModelSelectionMenu provider tabs include custom providers from settings', t => {
+    const providerId = `lmstudio-ui-${Date.now()}-${Math.random()}`;
+    const settingsService = createMockSettingsService({
+        providers: [
+            {
+                name: providerId,
+                baseUrl: 'http://localhost:1234',
+            },
+        ],
+    });
+
+    const {lastFrame} = render(
+        <ModelSelectionMenu
+            settingsService={settingsService}
+            items={mockModels}
+            selectedIndex={0}
+            query=""
+            provider="openai"
+        />,
+    );
+
+    const output = lastFrame();
+    t.true(output?.includes(providerId));
+});
+
 test('ModelSelectionMenu shows scroll indicators for long lists', t => {
     const longList: ModelInfo[] = Array.from({length: 20}, (_, i) => ({
         id: `model-${i}`,

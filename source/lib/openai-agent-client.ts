@@ -16,6 +16,7 @@ import {
 import {
 	OpenRouterError,
 } from '../providers/openrouter.js';
+import {OpenAICompatibleError} from '../providers/openai-compatible/api.js';
 import {getProvider} from '../providers/index.js';
 import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
 import {randomUUID} from 'node:crypto';
@@ -320,7 +321,13 @@ export class OpenAIAgentClient {
 				error instanceof OpenRouterError &&
 				(error.status === 429 || error.status >= 500);
 
-			const isRetryable = retries > 0 && (isTransientError || isOpenRouterRetryable);
+			const isOpenAICompatibleRetryable =
+				error instanceof OpenAICompatibleError &&
+				(error.status === 429 || error.status >= 500);
+
+			const isRetryable =
+				retries > 0 &&
+				(isTransientError || isOpenRouterRetryable || isOpenAICompatibleRetryable);
 
 			if (isRetryable) {
 				const attemptIndex = this.#retryAttempts - retries;
@@ -329,7 +336,9 @@ export class OpenAIAgentClient {
 				// Check for Retry-After header (both OpenAI and OpenRouter)
 				const retryAfterHeader =
 					(error instanceof RateLimitError && error.headers?.['retry-after']) ||
-					(error instanceof OpenRouterError && error.headers['retry-after']);
+					(error instanceof OpenRouterError && error.headers['retry-after']) ||
+					(error instanceof OpenAICompatibleError &&
+						error.headers['retry-after']);
 
 				if (retryAfterHeader) {
 					// Respect the Retry-After header
@@ -357,6 +366,7 @@ export class OpenAIAgentClient {
 					errorMessage:
 						error instanceof Error ? error.message : String(error),
 					...(error instanceof OpenRouterError && {status: error.status}),
+					...(error instanceof OpenAICompatibleError && {status: error.status}),
 				});
 				this.#retryCallback?.();
 				return this.#executeWithRetry(operation, retries - 1);

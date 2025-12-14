@@ -5,6 +5,7 @@ import './openrouter.provider.js';
 // Re-export registry API and types
 export {
     registerProvider,
+    upsertProvider,
     getProvider,
     getAllProviders,
     getProviderIds,

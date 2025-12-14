@@ -6,7 +6,8 @@ import deepEqual from 'fast-deep-equal';
 import {LoggingService} from './logging-service.js';
 // Import providers to ensure they're registered before schema construction
 import '../providers/index.js';
-import {getAllProviders, getProvider} from '../providers/index.js';
+import {getAllProviders, getProvider, upsertProvider} from '../providers/index.js';
+import {createOpenAICompatibleProviderDefinition} from '../providers/openai-compatible.provider.js';
 
 const paths = envPaths('term2');
 
@@ -23,13 +24,10 @@ const AgentSettingsSchema = z.object({
     temperature: z.number().min(0).max(2).optional(),
     maxTurns: z.number().int().positive().default(100),
     retryAttempts: z.number().int().nonnegative().default(2),
-    provider: z
-        .string()
-        .refine((val) => getProvider(val) !== undefined, {
-            message: 'Provider must be registered in the provider registry',
-        })
-        .default('openai')
-        .describe('Provider to use for the agent'),
+    // NOTE: We do NOT validate provider existence here because the provider
+    // registry can be extended at runtime from settings.json (custom providers).
+    // We validate/fallback after SettingsService loads and registers runtime providers.
+    provider: z.string().min(1).default('openai').describe('Provider to use for the agent'),
     openrouter: z
         .object({
             apiKey: z.string().optional(),
@@ -78,6 +76,12 @@ const DebugSettingsSchema = z.object({
     debugBashTool: z.boolean().optional().default(false),
 });
 
+const CustomProviderSchema = z.object({
+    name: z.string().min(1),
+    baseUrl: z.string().url(),
+    apiKey: z.string().optional(),
+});
+
 /**
  * Settings that are sensitive and should NEVER be saved to disk.
  * These are only loaded from environment variables.
@@ -102,6 +106,7 @@ function getSensitiveSettingKeys(): Set<string> {
 const SENSITIVE_SETTING_KEYS = getSensitiveSettingKeys();
 
 const SettingsSchema = z.object({
+    providers: z.array(CustomProviderSchema).optional().default([]),
     agent: AgentSettingsSchema.optional(),
     shell: ShellSettingsSchema.optional(),
     ui: UISettingsSchema.optional(),
@@ -114,6 +119,7 @@ const SettingsSchema = z.object({
 
 // Type definitions
 export interface SettingsData {
+    providers: Array<z.infer<typeof CustomProviderSchema>>;
     agent: z.infer<typeof AgentSettingsSchema>;
     shell: z.infer<typeof ShellSettingsSchema>;
     ui: z.infer<typeof UISettingsSchema>;
@@ -219,6 +225,7 @@ const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
 
 // Default settings
 const DEFAULT_SETTINGS: SettingsData = {
+    providers: [],
     agent: {
         model: 'gpt-5.1',
         reasoningEffort: 'default',
@@ -349,6 +356,14 @@ export class SettingsService {
         this.settings = this.merge(DEFAULT_SETTINGS, fileConfig, env, cli);
         this.trackSources(DEFAULT_SETTINGS, fileConfig, env, cli);
 
+        // Register any runtime-defined providers from settings.json so they appear
+        // in the model selection menu and can be selected as agent.provider.
+        this.registerRuntimeProviders();
+
+        // Validate selected provider and fall back if invalid (without rejecting the
+        // entire settings file).
+        this.validateSelectedProvider();
+
         // Apply logging level from settings to the logging service so it respects settings
         try {
             this.loggingService.setLogLevel(this.settings.logging.logLevel);
@@ -408,6 +423,60 @@ export class SettingsService {
                 }
             }
         }
+    }
+
+    private registerRuntimeProviders(): void {
+        const configured = this.settings?.providers;
+        if (!Array.isArray(configured) || configured.length === 0) return;
+
+        for (const p of configured) {
+            const providerId = (p as any)?.name;
+            const baseUrl = (p as any)?.baseUrl;
+            if (!providerId || !baseUrl) continue;
+
+            const existing = getProvider(providerId);
+            if (existing && !existing.isRuntimeDefined) {
+                if (!this.disableLogging) {
+                    this.loggingService.warn(
+                        'Skipping custom provider because it conflicts with a built-in provider id',
+                        {providerId},
+                    );
+                }
+                continue;
+            }
+
+            try {
+                upsertProvider(
+                    createOpenAICompatibleProviderDefinition({
+                        name: String(providerId),
+                        baseUrl: String(baseUrl),
+                        apiKey: (p as any)?.apiKey ? String((p as any).apiKey) : undefined,
+                    }),
+                );
+            } catch (error: any) {
+                if (!this.disableLogging) {
+                    this.loggingService.warn('Failed to register custom provider', {
+                        providerId,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+            }
+        }
+    }
+
+    private validateSelectedProvider(): void {
+        const current = this.settings?.agent?.provider || 'openai';
+        if (getProvider(current)) return;
+
+        if (!this.disableLogging) {
+            this.loggingService.warn(
+                'Configured agent.provider is not registered; falling back to openai',
+                {provider: current},
+            );
+        }
+
+        this.settings.agent.provider = 'openai';
+        this.sources.set('agent.provider', 'default');
     }
 
     /**
@@ -905,6 +974,7 @@ export class SettingsService {
 
         // Ensure all required fields are present
         const merged: SettingsData = {
+            providers: result.providers || JSON.parse(JSON.stringify(defaults.providers)),
             agent: result.agent || JSON.parse(JSON.stringify(defaults.agent)),
             shell: result.shell || JSON.parse(JSON.stringify(defaults.shell)),
             ui: result.ui || JSON.parse(JSON.stringify(defaults.ui)),
@@ -924,6 +994,7 @@ export class SettingsService {
         if (validated.success) {
             // Ensure we return a complete SettingsData object
             return {
+                providers: merged.providers,
                 agent: merged.agent,
                 shell: merged.shell,
                 ui: merged.ui,

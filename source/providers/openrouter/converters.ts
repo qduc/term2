@@ -269,6 +269,30 @@ export function buildMessagesFromRequest(
                     converted.reasoning_details = pendingReasoningDetails;
                     pendingReasoningDetails = [];
                 }
+
+                // Merge consecutive assistant messages with tool_calls to fix incorrect conversation flow
+                // when parallel tool calls are stored as separate history items.
+                const lastMessage = messages[messages.length - 1];
+                if (
+                    lastMessage &&
+                    lastMessage.role === 'assistant' &&
+                    converted.role === 'assistant' &&
+                    lastMessage.tool_calls &&
+                    converted.tool_calls &&
+                    !converted.content
+                ) {
+                    lastMessage.tool_calls.push(...converted.tool_calls);
+
+                    // Preserve reasoning if the merged message didn't have it but the new one does
+                    if (!lastMessage.reasoning_details && converted.reasoning_details) {
+                        lastMessage.reasoning_details = converted.reasoning_details;
+                    }
+                    if (!lastMessage.reasoning && converted.reasoning) {
+                        lastMessage.reasoning = converted.reasoning;
+                    }
+                    continue;
+                }
+
                 messages.push(converted);
             }
         }

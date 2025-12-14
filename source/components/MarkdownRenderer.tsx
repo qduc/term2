@@ -116,41 +116,53 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
     // Ensure alignment array matches number of columns
     const columnAlignment = align.length === numCols ? align : new Array(numCols).fill('left');
     
+    // Define vertical borders based on style
+    const getVerticalBorder = () => {
+        switch (style) {
+            case 'unicode': return { left: '│', middle: '│', right: '│' };
+            case 'compact': return { left: '', middle: '│', right: '' };
+            case 'ascii': default: return { left: '|', middle: '|', right: '|' };
+        }
+    };
+
+    const vertical = getVerticalBorder();
+
     // Render header row
     const renderHeaderRow = () => (
         <Box flexDirection="row">
+            {vertical.left ? <Text color="gray">{vertical.left}</Text> : null}
             {header.map((cell, index) => (
-                <Box 
-                    key={index} 
-                    width={columnWidths[index]}
-                    marginX={style === 'compact' ? 0 : 1}
-                >
-                    <Text bold>
-                        {renderCellContent(cell, columnWidths[index], columnAlignment[index] || 'left')}
-                    </Text>
-                </Box>
+                <React.Fragment key={index}>
+                    <Box width={columnWidths[index]}>
+                        <Text bold>
+                            {renderCellContent(cell, columnWidths[index], columnAlignment[index] || 'left')}
+                        </Text>
+                    </Box>
+                    {index < numCols - 1 && <Text color="gray">{vertical.middle}</Text>}
+                </React.Fragment>
             ))}
+            {vertical.right ? <Text color="gray">{vertical.right}</Text> : null}
         </Box>
     );
     
     // Render data row
     const renderDataRow = (row: TableCell[]) => (
         <Box flexDirection="row">
+            {vertical.left ? <Text color="gray">{vertical.left}</Text> : null}
             {row.map((cell, index) => (
-                <Box 
-                    key={index} 
-                    width={columnWidths[index]}
-                    marginX={style === 'compact' ? 0 : 1}
-                >
-                    {renderCellContent(cell, columnWidths[index], columnAlignment[index] || 'left')}
-                </Box>
+                <React.Fragment key={index}>
+                    <Box width={columnWidths[index]}>
+                        {renderCellContent(cell, columnWidths[index], columnAlignment[index] || 'left')}
+                    </Box>
+                    {index < numCols - 1 && <Text color="gray">{vertical.middle}</Text>}
+                </React.Fragment>
             ))}
+            {vertical.right ? <Text color="gray">{vertical.right}</Text> : null}
         </Box>
     );
     
     // Separator between header and data (only for bordered styles)
     const renderSeparator = () => {
-        if (style === 'compact') return null;
         return (
             <Box marginX={1}>
                 <Text color="gray">

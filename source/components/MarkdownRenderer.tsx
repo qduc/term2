@@ -2,6 +2,198 @@ import React from 'react';
 import {Box, Text, Newline} from 'ink';
 import {marked} from 'marked';
 
+// --- Table Rendering Utilities ---
+
+interface TableCell {
+    text: string;
+    tokens: any[];
+    header: boolean;
+    align: string | null;
+}
+
+interface TableToken {
+    type: 'table';
+    header: TableCell[];
+    rows: TableCell[][];
+    align: string[];
+    raw: string;
+}
+
+// Calculate column widths based on content
+const calculateColumnWidths = (header: TableCell[], rows: TableCell[][], padding = 2): number[] => {
+    const numCols = header.length;
+    const widths = new Array(numCols).fill(0);
+    
+    // Start with header widths
+    header.forEach((cell, index) => {
+        widths[index] = Math.max(widths[index], cell.text.length);
+    });
+    
+    // Check all rows for maximum width
+    rows.forEach(row => {
+        row.forEach((cell, index) => {
+            if (index < widths.length) {
+                widths[index] = Math.max(widths[index], cell.text.length);
+            }
+        });
+    });
+    
+    // Add padding
+    return widths.map(width => width + padding * 2);
+};
+
+// Pad content based on alignment
+const padContent = (content: string, width: number, align: string): string => {
+    const contentLength = content.length;
+    const padding = width - contentLength;
+    
+    switch (align) {
+        case 'center':
+            const leftPad = Math.floor(padding / 2);
+            const rightPad = padding - leftPad;
+            return ' '.repeat(leftPad) + content + ' '.repeat(rightPad);
+        case 'right':
+            return ' '.repeat(padding) + content;
+        case 'left':
+        default:
+            return content + ' '.repeat(padding);
+    }
+};
+
+// Render cell content with inline formatting
+const renderCellContent = (cell: TableCell, width: number, align: string): React.ReactNode => {
+    const paddedContent = padContent(cell.text, width, align);
+    return (
+        <Text key={cell.text}>
+            {paddedContent}
+        </Text>
+    );
+};
+
+// Generate table borders
+const generateBorder = (widths: number[], style: 'ascii' | 'unicode' | 'compact'): { top: string; middle: string; bottom: string } => {
+    switch (style) {
+        case 'unicode':
+            const unicodeTop = '┌' + widths.map(w => '─'.repeat(w)).join('┬') + '┐';
+            const unicodeMiddle = '├' + widths.map(w => '─'.repeat(w)).join('┼') + '┤';
+            const unicodeBottom = '└' + widths.map(w => '─'.repeat(w)).join('┴') + '┘';
+            return { top: unicodeTop, middle: unicodeMiddle, bottom: unicodeBottom };
+        
+        case 'compact':
+            // Just separators without borders
+            const separators = widths.map(w => '─'.repeat(w)).join('┼');
+            return { 
+                top: separators, 
+                middle: separators, 
+                bottom: separators 
+            };
+        
+        case 'ascii':
+        default:
+            const asciiTop = '+' + widths.map(w => '-'.repeat(w)).join('+') + '+';
+            const asciiMiddle = '+' + widths.map(w => '-'.repeat(w)).join('+') + '+';
+            const asciiBottom = '+' + widths.map(w => '-'.repeat(w)).join('+') + '+';
+            return { top: asciiTop, middle: asciiMiddle, bottom: asciiBottom };
+    }
+};
+
+// Table Renderer Component
+interface TableRendererProps {
+    token: TableToken;
+    style?: 'ascii' | 'unicode' | 'compact';
+}
+
+const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
+    const { header, rows, align } = token;
+    const numCols = header.length;
+    
+    // Calculate column widths
+    const columnWidths = calculateColumnWidths(header, rows);
+    
+    // Generate borders
+    const borders = generateBorder(columnWidths, style);
+    
+    // Ensure alignment array matches number of columns
+    const columnAlignment = align.length === numCols ? align : new Array(numCols).fill('left');
+    
+    // Render header row
+    const renderHeaderRow = () => (
+        <Box flexDirection="row">
+            {header.map((cell, index) => (
+                <Box 
+                    key={index} 
+                    width={columnWidths[index]}
+                    marginX={style === 'compact' ? 0 : 1}
+                >
+                    <Text bold>
+                        {renderCellContent(cell, columnWidths[index], columnAlignment[index] || 'left')}
+                    </Text>
+                </Box>
+            ))}
+        </Box>
+    );
+    
+    // Render data row
+    const renderDataRow = (row: TableCell[]) => (
+        <Box flexDirection="row">
+            {row.map((cell, index) => (
+                <Box 
+                    key={index} 
+                    width={columnWidths[index]}
+                    marginX={style === 'compact' ? 0 : 1}
+                >
+                    {renderCellContent(cell, columnWidths[index], columnAlignment[index] || 'left')}
+                </Box>
+            ))}
+        </Box>
+    );
+    
+    // Separator between header and data (only for bordered styles)
+    const renderSeparator = () => {
+        if (style === 'compact') return null;
+        return (
+            <Box marginX={1}>
+                <Text color="gray">
+                    {borders.middle}
+                </Text>
+            </Box>
+        );
+    };
+    
+    return (
+        <Box flexDirection="column" marginBottom={1}>
+            {/* Top border */}
+            <Box marginX={1}>
+                <Text color="gray">
+                    {borders.top}
+                </Text>
+            </Box>
+            
+            {/* Header */}
+            <Box marginX={1}>
+                {renderHeaderRow()}
+            </Box>
+            
+            {/* Separator */}
+            {renderSeparator()}
+            
+            {/* Data rows */}
+            {rows.map((row, rowIndex) => (
+                <Box key={rowIndex} marginX={1}>
+                    {renderDataRow(row)}
+                </Box>
+            ))}
+            
+            {/* Bottom border */}
+            <Box marginX={1}>
+                <Text color="gray">
+                    {borders.bottom}
+                </Text>
+            </Box>
+        </Box>
+    );
+};
+
 // --- Token Renderers ---
 
 // recursively render inline content (bold, italic, links, etc.)
@@ -184,6 +376,9 @@ const BlockRenderer = ({token}: {token: any}) => {
                     </Text>
                 </Box>
             );
+
+        case 'table':
+            return <TableRenderer token={token} />;
 
         default:
             // Fallback for unknown blocks

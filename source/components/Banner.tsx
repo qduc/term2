@@ -36,21 +36,22 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
 						{'▌'}
 					</Text>
 					<Text color={accent} bold>
-						{' '}TUI Code Pilot
+						{' '}
+						term²
 					</Text>
-					<Text color={slate}>{'  •  fast, focused, keyboard-first'}</Text>
 				</Box>
 
 				{/* Mode pill */}
 				<Box>
 					<Text
-						backgroundColor={mode === 'edit' ? '#1d4ed8' : '#0f766e'}
+						backgroundColor={
+							mode === 'edit' ? '#1d4ed8' : '#0f766e'
+						}
 						color="white"
 						bold
 					>
 						{' '}
-						{mode === 'edit' ? 'EDIT MODE' : 'DEFAULT'}
-						{' '}
+						{mode === 'edit' ? 'EDIT MODE' : 'DEFAULT'}{' '}
 					</Text>
 				</Box>
 			</Box>
@@ -67,53 +68,21 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
 					<Text color={slate}>
 						Model:{' '}
 						<Text color="white" bold>
-							{model ? (model.length > 34 ? `${model.slice(0, 31)}…` : model) : '—'}
+							{model
+								? model.length > 34
+									? `${model.slice(0, 31)}…`
+									: model
+								: '—'}
+						</Text>
+						{' - '}
+						<Text color={slate}>
+							Reasoning:{' '}
+							<Text color="white" bold>
+								{reasoningEffort}
+							</Text>
 						</Text>
 					</Text>
 				</Box>
-
-				<Box flexDirection="column">
-					<Text color={slate}>
-						Reasoning:{' '}
-						<Text color="white" bold>
-							{reasoningEffort}
-						</Text>
-					</Text>
-					<Text color={slate}>
-						Hint:{' '}
-						<Text color={accent} bold>
-							Tab
-						</Text>
-						<Text color={slate}>
-							{' '}
-							complete •{' '}
-						</Text>
-						<Text color={accent} bold>
-							Enter
-						</Text>
-						<Text color={slate}>
-							{' '}
-							run •{' '}
-						</Text>
-						<Text color={accent} bold>
-							Esc
-						</Text>
-						<Text color={slate}>
-							{' '}
-							back
-						</Text>
-					</Text>
-				</Box>
-			</Box>
-
-			{/* Footer sparkle */}
-			<Box>
-				<Text color={glow} bold>
-					{'✦ '}
-				</Text>
-				<Text color={slate}>
-					Code with purpose. Ship with confidence.
-				</Text>
 			</Box>
 		</Box>
 	);

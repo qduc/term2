@@ -217,6 +217,7 @@ export class OpenRouterModel implements Model {
 		let accumulatedReasoningText = '';
         const accumulatedReasoning: any[] = [];
         const accumulatedToolCalls: any[] = [];
+
         if (!reader) {
             const full = await this.getResponse(request);
             yield {
@@ -229,96 +230,29 @@ export class OpenRouterModel implements Model {
             } as any;
             return;
         }
+
+        const state = {
+            accumulated,
+            responseId,
+            usageData,
+            accumulatedReasoningText,
+            accumulatedReasoning,
+            accumulatedToolCalls,
+        };
+
         while (true) {
             const {done, value} = await reader.read();
             if (done) break;
+
             buffer += decoder.decode(value, {stream: true});
-            let idx: number;
-            while ((idx = buffer.indexOf('\n')) >= 0) {
-                const line = buffer.slice(0, idx).trim();
-                buffer = buffer.slice(idx + 1);
-                if (!line) continue;
-                if (line.startsWith('data:')) {
-                    const data = line.slice(5).trim();
-                    if (data === '[DONE]') {
-                        if (!responseId || responseId === 'unknown') {
-                            responseId = randomUUID();
-                        }
-                        const reasoningDetails =
-                            accumulatedReasoning.length > 0
-                                ? accumulatedReasoning
-                                : undefined;
 
-						this.#loggingService.debug('OpenRouter stream done', {
-							text: accumulated,
-							reasoningDetails,
-							toolCalls: accumulatedToolCalls,
-						});
+            for (const line of this.#splitBufferIntoLines(buffer)) {
+                buffer = line.remainingBuffer;
+                if (!line.content) continue;
 
-                        yield {
-                            type: 'response_done',
-                            response: {
-                                id: responseId,
-                                usage: normalizeUsage(usageData),
-                                output: this.#buildStreamOutput(
-                                    accumulated,
-                                    reasoningDetails,
-                                    accumulatedToolCalls,
-                                    accumulatedReasoningText,
-                                ),
-                            },
-                        } as any;
-						yield {
-							type: 'model',
-							event: data
-						}
-                        return;
-                    }
-                    try {
-                        const json = JSON.parse(data);
-						this.#loggingService.debug('OpenRouter SSE chunk', json);
-                        if (json?.id && responseId === 'unknown') {
-                            responseId = json.id;
-                        }
-                        if (json?.usage) {
-                            usageData = json.usage;
-                        }
-                        const reasoningDetails =
-                            json?.choices?.[0]?.delta?.reasoning_details;
-                        if (reasoningDetails) {
-                            if (Array.isArray(reasoningDetails)) {
-                                accumulatedReasoning.push(...reasoningDetails);
-                            } else {
-                                accumulatedReasoning.push(reasoningDetails);
-                            }
-                        }
-						const reasoningDelta =
-							json?.choices?.[0]?.delta?.reasoning;
-						if (typeof reasoningDelta === 'string' && reasoningDelta.length > 0) {
-							accumulatedReasoningText += reasoningDelta;
-						}
-                        const deltaToolCalls =
-                            json?.choices?.[0]?.delta?.tool_calls;
-                        if (deltaToolCalls) {
-                            this.#mergeToolCalls(accumulatedToolCalls, deltaToolCalls);
-                        }
-                        const delta =
-                            json?.choices?.[0]?.delta?.content ?? '';
-                        if (delta) {
-                            accumulated += delta;
-                            yield {
-                                type: 'output_text_delta',
-                                delta,
-                            } as any;
-                        }
-						yield {
-							type: 'model',
-							event: json
-						}
-                    } catch (err) {
-                        // ignore parse errors for keep-alive lines
-						this.#loggingService.error('OpenRouter stream parse error', {err})
-                    }
+                const events = this.#processSSELine(line.content, state);
+                for (const event of events) {
+                    yield event;
                 }
             }
         }
@@ -473,6 +407,135 @@ export class OpenRouterModel implements Model {
 
             accumulated[index] = existing;
         }
+    }
+
+    *#splitBufferIntoLines(buffer: string): Generator<{content: string; remainingBuffer: string}> {
+        let idx: number;
+        while ((idx = buffer.indexOf('\n')) >= 0) {
+            const line = buffer.slice(0, idx).trim();
+            buffer = buffer.slice(idx + 1);
+            yield {content: line, remainingBuffer: buffer};
+        }
+        yield {content: '', remainingBuffer: buffer};
+    }
+
+    *#processSSELine(line: string, state: any): Generator<any> {
+        if (!line.startsWith('data:')) return;
+
+        const data = line.slice(5).trim();
+        yield* this.#processSSEDataLine(data, state);
+    }
+
+    *#processSSEDataLine(data: string, state: any): Generator<any> {
+        if (data === '[DONE]') {
+            yield* this.#buildStreamCompleteEvent(state);
+            return;
+        }
+
+        try {
+            const json = JSON.parse(data);
+            this.#loggingService.debug('OpenRouter SSE chunk', json);
+            yield* this.#processStreamEventJSON(json, state);
+        } catch (err) {
+            // Ignore parse errors for keep-alive lines
+            this.#loggingService.error('OpenRouter stream parse error', {err});
+        }
+    }
+
+    *#buildStreamCompleteEvent(state: any): Generator<any> {
+        if (!state.responseId || state.responseId === 'unknown') {
+            state.responseId = randomUUID();
+        }
+
+        const reasoningDetails =
+            state.accumulatedReasoning.length > 0
+                ? state.accumulatedReasoning
+                : undefined;
+
+        this.#loggingService.debug('OpenRouter stream done', {
+            text: state.accumulated,
+            reasoningDetails,
+            toolCalls: state.accumulatedToolCalls,
+        });
+
+        yield {
+            type: 'response_done',
+            response: {
+                id: state.responseId,
+                usage: normalizeUsage(state.usageData),
+                output: this.#buildStreamOutput(
+                    state.accumulated,
+                    reasoningDetails,
+                    state.accumulatedToolCalls,
+                    state.accumulatedReasoningText,
+                ),
+            },
+        } as any;
+
+        yield {
+            type: 'model',
+            event: '[DONE]',
+        };
+    }
+
+    *#processStreamEventJSON(json: any, state: any): Generator<any> {
+        this.#extractStreamMetadata(json, state);
+        this.#accumulateReasoningFromStream(json, state);
+        this.#accumulateToolCallsFromStream(json, state);
+
+        const contentDeltaEvent = this.#extractContentDelta(json, state);
+        if (contentDeltaEvent) {
+            yield contentDeltaEvent;
+        }
+
+        yield {
+            type: 'model',
+            event: json,
+        };
+    }
+
+    #extractStreamMetadata(json: any, state: any): void {
+        if (json?.id && state.responseId === 'unknown') {
+            state.responseId = json.id;
+        }
+        if (json?.usage) {
+            state.usageData = json.usage;
+        }
+    }
+
+    #accumulateReasoningFromStream(json: any, state: any): void {
+        const reasoningDetails = json?.choices?.[0]?.delta?.reasoning_details;
+        if (reasoningDetails) {
+            if (Array.isArray(reasoningDetails)) {
+                state.accumulatedReasoning.push(...reasoningDetails);
+            } else {
+                state.accumulatedReasoning.push(reasoningDetails);
+            }
+        }
+
+        const reasoningDelta = json?.choices?.[0]?.delta?.reasoning;
+        if (typeof reasoningDelta === 'string' && reasoningDelta.length > 0) {
+            state.accumulatedReasoningText += reasoningDelta;
+        }
+    }
+
+    #accumulateToolCallsFromStream(json: any, state: any): void {
+        const deltaToolCalls = json?.choices?.[0]?.delta?.tool_calls;
+        if (deltaToolCalls) {
+            this.#mergeToolCalls(state.accumulatedToolCalls, deltaToolCalls);
+        }
+    }
+
+    #extractContentDelta(json: any, state: any): any | null {
+        const delta = json?.choices?.[0]?.delta?.content ?? '';
+        if (delta) {
+            state.accumulated += delta;
+            return {
+                type: 'output_text_delta',
+                delta,
+            } as any;
+        }
+        return null;
     }
 
     #resolveModelFromRequest(req: ModelRequest): string | undefined {

@@ -1,9 +1,36 @@
 import {
     type ModelRequest,
 } from '@openai/agents-core';
+import type {ILoggingService} from '../../services/service-interfaces.js';
 import {isAnthropicModel} from './utils.js';
 
-function convertAgentItemToOpenRouterMessage(item: any): any | null {
+// No-op logger for fallback when loggingService is not provided
+const noOpLogger: ILoggingService = {
+    debug: () => {},
+    error: () => {},
+    info: () => {},
+    warn: () => {},
+    security: () => {},
+    setCorrelationId: () => {},
+    getCorrelationId: () => undefined,
+    clearCorrelationId: () => {},
+};
+
+/**
+ * Converts an agent item into a structured OpenRouter message object that adheres to
+ * expected formats for roles such as user, assistant, or tool, based on the item's properties.
+ * Supports handling various item types like input text, messages, function calls, and function call outputs.
+ *
+ * @param {any} item - The agent item to be converted. It may represent different types of messages
+ * (e.g., user input, assistant messages, tool calls) and can contain nested properties like rawItem, content,
+ * reasoning, tool calls, or reasoning details.
+ * @param {ILoggingService} loggingService - Logging service for debug output
+ *
+ * @return {any|null} - Returns a structured OpenRouter message object with specified properties like `role`,
+ * `content`, `reasoning`, `reasoning_details`, or `tool_calls`. Returns `null` if the input `item` is null or
+ * cannot be converted into a recognized format.
+ */
+function convertAgentItemToOpenRouterMessage(item: any, loggingService: ILoggingService): any | null {
     if (!item) {
         return null;
     }
@@ -38,6 +65,10 @@ function convertAgentItemToOpenRouterMessage(item: any): any | null {
         const reasoningDetails =
 			rawItem.reasoning_details ?? item.reasoning_details;
         if (reasoningDetails != null) {
+			loggingService.debug(
+				'convertAgentItemToOpenRouterMessage: reasoning_details',
+				reasoningDetails,
+			);
             message.reasoning_details = reasoningDetails;
         }
 
@@ -180,6 +211,7 @@ export function addCacheControlToLastToolMessage(messages: any[]): void {
 export function buildMessagesFromRequest(
     req: ModelRequest,
     modelId?: string,
+    loggingService?: ILoggingService,
 ): any[] {
     const messages: any[] = [];
 	let pendingReasoningDetails: any[] = [];
@@ -225,7 +257,7 @@ export function buildMessagesFromRequest(
                 continue;
             }
 
-            const converted = convertAgentItemToOpenRouterMessage(item);
+            const converted = convertAgentItemToOpenRouterMessage(item, loggingService || noOpLogger);
             if (converted) {
                 // Attach any pending reasoning blocks to the next assistant message we
                 // emit (including assistant tool_calls messages), unless already present.

@@ -43,7 +43,7 @@ export class OpenRouterModel implements Model {
         // expect the caller to provide full conversation context in `input`.
         // Note: History is managed by the SDK, not by this provider.
         const resolvedModelId = this.#resolveModelFromRequest(request) || this.#modelId;
-        const messages = buildMessagesFromRequest(request, resolvedModelId);
+        const messages = buildMessagesFromRequest(request, resolvedModelId, this.#loggingService);
 
         this.#loggingService.debug('OpenRouter message', {messages});
 
@@ -184,18 +184,17 @@ export class OpenRouterModel implements Model {
         // See getResponse(): caller-managed history; do not chain via previousResponseId.
         // Note: History is managed by the SDK, not by this provider.
         const resolvedModelId = this.#resolveModelFromRequest(request) || this.#modelId;
-        const messages = buildMessagesFromRequest(request, resolvedModelId);
+        const messages = buildMessagesFromRequest(request, resolvedModelId, this.#loggingService);
 
         const tools = extractFunctionToolsFromRequest(request);
 
         this.#loggingService.debug('OpenRouter stream start', {
             messageCount: Array.isArray(messages) ? messages.length : 0,
+			modelRequest: request,
             messages,
             toolsCount: Array.isArray(tools) ? tools.length : 0,
             tools,
         });
-        this.#loggingService.debug('modelRequest', request)
-        this.#loggingService.debug('OpenRouter messages', {messages})
 
         const res = await callOpenRouter({
             apiKey,
@@ -256,34 +255,6 @@ export class OpenRouterModel implements Model {
                 }
             }
         }
-
-        // It never runs to here
-        const reasoningDetails =
-            accumulatedReasoning.length > 0 ? accumulatedReasoning : undefined;
-
-        if (!responseId || responseId === 'unknown') {
-            responseId = randomUUID();
-        }
-
-		this.#loggingService.debug('OpenRouter stream done', {
-			text: accumulated,
-			reasoningDetails,
-			toolCalls: accumulatedToolCalls,
-		})
-
-        yield {
-            type: 'response_done',
-            response: {
-                id: responseId,
-                usage: normalizeUsage(usageData),
-                output: this.#buildStreamOutput(
-                    accumulated,
-                    reasoningDetails,
-                    accumulatedToolCalls,
-					accumulatedReasoningText,
-                ),
-            },
-        } as any;
     }
 
     #buildStreamOutput(
@@ -434,7 +405,7 @@ export class OpenRouterModel implements Model {
 
         try {
             const json = JSON.parse(data);
-            this.#loggingService.debug('OpenRouter SSE chunk', json);
+            // this.#loggingService.debug('OpenRouter SSE chunk', json);
             yield* this.#processStreamEventJSON(json, state);
         } catch (err) {
             // Ignore parse errors for keep-alive lines
@@ -503,21 +474,53 @@ export class OpenRouterModel implements Model {
         }
     }
 
-    #accumulateReasoningFromStream(json: any, state: any): void {
-        const reasoningDetails = json?.choices?.[0]?.delta?.reasoning_details;
-        if (reasoningDetails) {
-            if (Array.isArray(reasoningDetails)) {
-                state.accumulatedReasoning.push(...reasoningDetails);
-            } else {
-                state.accumulatedReasoning.push(reasoningDetails);
-            }
-        }
+	#accumulateReasoningFromStream(json: any, state: any): void {
+		const reasoningDetails = json?.choices?.[0]?.delta?.reasoning_details;
+		if (reasoningDetails) {
+			const TYPE_FIELD_MAP = {
+				'reasoning.text': 'text',
+				'reasoning.summary': 'summary',
+				'reasoning.encrypted': 'data',
+			};
 
-        const reasoningDelta = json?.choices?.[0]?.delta?.reasoning;
-        if (typeof reasoningDelta === 'string' && reasoningDelta.length > 0) {
-            state.accumulatedReasoningText += reasoningDelta;
-        }
-    }
+			// Create a Map for O(1) lookup instead of O(n) array search
+			const reasoningMap = new Map(
+				state.accumulatedReasoning.map((item: any) => [
+					`${item.type}:${item.index}`,
+					item,
+				])
+			);
+
+			const details = !Array.isArray(reasoningDetails)
+				? [reasoningDetails]
+				: reasoningDetails;
+
+			for (const detail of details) {
+				const {type, index} = detail;
+				const fieldName = TYPE_FIELD_MAP[type];
+				if (!fieldName) return; // ignore unknown types safely
+
+				const key = `${type}:${index}`;
+				const existing = reasoningMap.get(key);
+
+				if (existing) {
+					existing[fieldName] += detail[fieldName];
+				} else {
+					const newItem = {
+						...detail,
+						[fieldName]: detail[fieldName],
+					};
+					state.accumulatedReasoning.push(newItem);
+					reasoningMap.set(key, newItem);
+				}
+			}
+		}
+
+		const reasoningDelta = json?.choices?.[0]?.delta?.reasoning;
+		if (typeof reasoningDelta === 'string' && reasoningDelta.length > 0) {
+			state.accumulatedReasoningText += reasoningDelta;
+		}
+	}
 
     #accumulateToolCallsFromStream(json: any, state: any): void {
         const deltaToolCalls = json?.choices?.[0]?.delta?.tool_calls;

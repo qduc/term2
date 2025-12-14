@@ -19,28 +19,11 @@ const searchParametersSchema = z.object({
         .describe(
             'The directory or file to search in. Use "." for current directory.',
         ),
-    case_sensitive: z
-        .boolean()
-        .describe('Whether the search should be case sensitive.'),
     file_pattern: z
         .string()
         .nullable()
         .describe(
             'Glob pattern for files to include (e.g., "*.ts"). Pass null to include all files.',
-        ),
-    exclude_pattern: z
-        .string()
-        .nullable()
-        .describe(
-            'Glob pattern for files to exclude. Pass null to exclude nothing.',
-        ),
-    max_results: z
-        .number()
-        .int()
-        .positive()
-        .nullable()
-        .describe(
-            'Maximum number of results to return. Pass null for default (100).',
         ),
 });
 
@@ -74,18 +57,24 @@ export const grepToolDefinition: ToolDefinition<SearchToolParams> = {
     parameters: searchParametersSchema,
     needsApproval: () => false, // Search is read-only and safe
     execute: async params => {
-        const {
-            pattern,
-            path,
-            case_sensitive,
-            file_pattern,
-            exclude_pattern,
-            max_results,
-        } = params;
+        const {pattern, path, file_pattern} = params;
+
+        // Validate pattern is not empty
+        if (!pattern || pattern.trim() === '') {
+            throw new Error(
+                'Search pattern cannot be empty. Please provide a valid search term.',
+            );
+        }
+
+        // Default values for removed parameters
+        const case_sensitive = false; // Case-insensitive by default
+        const exclude_pattern = null; // No exclusions (ripgrep respects .gitignore)
+        const max_results = 50; // Lowered to reduce output size
+
         const useRg = await checkRgAvailability();
         let command = '';
 
-        const limit = max_results ?? 100;
+        const limit = max_results;
 
         if (useRg) {
             const args = [
@@ -126,7 +115,14 @@ export const grepToolDefinition: ToolDefinition<SearchToolParams> = {
                 maxBuffer: 10 * 1024 * 1024, // 10MB buffer
             });
 
-            const result = trimOutput(stdout.trim(), limit);
+            const trimmed = stdout.trim();
+            const lineCount = trimmed.split('\n').length;
+            const result = trimOutput(trimmed, limit);
+
+            // Add hint if results were truncated
+            if (lineCount > limit) {
+                return `${result}\n\nNote: Results exceeded ${limit} lines. Consider narrowing your search with a more specific pattern or file_pattern.`;
+            }
 
             return result || 'No matches found.';
         } catch (error: any) {

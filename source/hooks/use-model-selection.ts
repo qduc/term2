@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useState, useRef} from 'react';
 import {useInputContext} from '../context/InputContext.js';
 import {
     fetchModels,
@@ -29,6 +29,8 @@ export const useModelSelection = (
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [provider, setProvider] = useState<string | null>(null);
     const [scrollOffset, setScrollOffset] = useState(0);
+    const failedProvidersRef = useRef<Set<string>>(new Set());
+    const isInitialLoadRef = useRef(true);
 
     const isOpen = mode === 'model_selection';
     const canSwitchProvider = !hasConversationHistory;
@@ -45,6 +47,8 @@ export const useModelSelection = (
                 'agent.provider',
             );
             setProvider(providerSetting);
+            failedProvidersRef.current.clear();
+            isInitialLoadRef.current = true;
         }
     }, [isOpen]);
 
@@ -52,16 +56,52 @@ export const useModelSelection = (
         if (!isOpen || !provider) return;
 
         const load = async () => {
+            // If already marked as failed, don't try again in this session
+            // unless it's the only one left (covered by logic below)
+            if (failedProvidersRef.current.has(provider) && !isInitialLoadRef.current) {
+                return;
+            }
+
             setLoading(true);
             setError(null);
 
             try {
                 const fetched = await fetchModels({settingsService, loggingService}, provider);
                 setModels(fetched);
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                setError(message);
-                loggingService.warn('Model selection fetch failed', {error: message});
+                isInitialLoadRef.current = false;
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                loggingService.warn(`Model selection fetch failed for ${provider}`, {error: message});
+
+                failedProvidersRef.current.add(provider);
+
+                const providerIds = getProviderIds();
+                const available = getAvailableProviderIds(settingsService, providerIds);
+
+                // Find next available provider that hasn't failed yet
+                const currentIndex = available.indexOf(provider);
+                if (currentIndex !== -1 && available.length > 1) {
+                    let nextIndex = (currentIndex + 1) % available.length;
+                    let foundNext = false;
+
+                    while (nextIndex !== currentIndex) {
+                        const candidate = available[nextIndex]!;
+                        if (!failedProvidersRef.current.has(candidate)) {
+                            setProvider(candidate);
+                            foundNext = true;
+                            break;
+                        }
+                        nextIndex = (nextIndex + 1) % available.length;
+                    }
+
+                    if (!foundNext) {
+                        // All available providers have been tried and failed
+                        setError(message);
+                    }
+                } else {
+                    // No other providers to try
+                    setError(message);
+                }
             } finally {
                 setLoading(false);
             }
@@ -147,7 +187,10 @@ export const useModelSelection = (
         setProvider(prev => {
             const currentIndex = availableProviders.indexOf(prev || availableProviders[0]);
             const nextIndex = (currentIndex + 1) % availableProviders.length;
-            return availableProviders[nextIndex];
+            const nextProvider = availableProviders[nextIndex];
+            // If the user manually selects it, we should allow retrying it
+            failedProvidersRef.current.delete(nextProvider);
+            return nextProvider;
         });
     }, []);
 

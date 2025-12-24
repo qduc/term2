@@ -15,7 +15,6 @@ const baseProps: BottomAreaProps = {
     waitingForApproval: false,
     waitingForRejectionReason: false,
     isProcessing: false,
-    dotCount: 1,
     onSubmit: async () => {},
     slashCommands: mockSlashCommands,
     onHistoryUp: () => {},
@@ -73,10 +72,9 @@ test('BottomArea shows processing indicator when busy', t => {
     const {lastFrame} = renderBottomArea({
         ...baseProps,
         isProcessing: true,
-        dotCount: 2,
     });
     const output = lastFrame() ?? '';
-    t.true(output.includes('processing..'));
+    t.true(output.includes('processing.'));
     t.false(output.includes('Allow this action?'));
     t.false(output.includes('❯'));
 });

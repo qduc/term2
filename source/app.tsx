@@ -1,4 +1,4 @@
-import React, {FC, useState, useMemo, useCallback, useEffect} from 'react';
+import React, {FC, useMemo, useCallback, useEffect} from 'react';
 import { useInputContext } from './context/InputContext.js';
 
 import {Box, useApp, useInput} from 'ink';
@@ -65,18 +65,6 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
 
 
     const {navigateUp, navigateDown, addToHistory} = useInputHistory(historyService);
-
-    const [dotCount, setDotCount] = useState(1);
-
-    useEffect(() => {
-        if (!isProcessing) return;
-
-        const interval = setInterval(() => {
-            setDotCount(prev => (prev === 3 ? 1 : prev + 1));
-        }, 500);
-
-        return () => clearInterval(interval);
-    }, [isProcessing]);
 
     useEffect(() => {
         conversationService.setRetryCallback(() =>
@@ -337,7 +325,6 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                     waitingForApproval={waitingForApproval}
                     waitingForRejectionReason={waitingForRejectionReason}
                     isProcessing={isProcessing}
-                    dotCount={dotCount}
                     onSubmit={handleSubmit}
                     slashCommands={slashCommands}
                     onHistoryUp={handleHistoryUp}

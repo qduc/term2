@@ -1,4 +1,4 @@
-import React, {FC} from 'react';
+import React, {FC, useEffect, useState} from 'react';
 import {Box, Text} from 'ink';
 import ApprovalPrompt from './ApprovalPrompt.js';
 import InputBox from './InputBox.js';
@@ -21,7 +21,6 @@ export type BottomAreaProps = {
     waitingForApproval: boolean;
     waitingForRejectionReason: boolean;
     isProcessing: boolean;
-    dotCount: number;
     onSubmit: (value: string) => Promise<void>;
     slashCommands: SlashCommand[];
     onHistoryUp: () => void;
@@ -38,7 +37,6 @@ const BottomArea: FC<BottomAreaProps> = ({
     waitingForApproval,
     waitingForRejectionReason,
     isProcessing,
-    dotCount,
     onSubmit,
     slashCommands,
     onHistoryUp,
@@ -49,6 +47,21 @@ const BottomArea: FC<BottomAreaProps> = ({
     onApprove,
     onReject,
 }) => {
+    const [dotCount, setDotCount] = useState(1);
+
+    useEffect(() => {
+        if (!isProcessing) {
+            setDotCount(1);
+            return;
+        }
+
+        const interval = setInterval(() => {
+            setDotCount(prev => (prev === 3 ? 1 : prev + 1));
+        }, 500);
+
+        return () => clearInterval(interval);
+    }, [isProcessing]);
+
     const showApprovalPrompt =
         waitingForApproval &&
         !isProcessing &&

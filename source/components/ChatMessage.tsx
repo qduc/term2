@@ -26,4 +26,4 @@ const ChatMessage: FC<Props> = ({msg}) => {
     );
 };
 
-export default ChatMessage;
+export default React.memo(ChatMessage);

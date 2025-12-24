@@ -117,4 +117,4 @@ const CommandMessage: FC<Props> = ({
     );
 };
 
-export default CommandMessage;
+export default React.memo(CommandMessage);

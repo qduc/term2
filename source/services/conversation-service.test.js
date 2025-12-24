@@ -316,6 +316,7 @@ test('dedupes command messages emitted live from run events', async t => {
     t.deepEqual(emitted, [
         {
             id: 'call-123-0',
+            callId: 'call-123',
             sender: 'command',
             command: 'ls',
             output: 'file.txt',
@@ -373,6 +374,7 @@ test('attaches cached shell args when output uses call_id', async t => {
     t.deepEqual(emitted, [
         {
             id: 'result-1-0',
+            callId: 'call-abc',
             sender: 'command',
             command: 'npm run lint',
             output: '> md-preview@0.0.0 lint\n> eslint .',

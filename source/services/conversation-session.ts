@@ -15,6 +15,7 @@ interface ApprovalResult {
         toolName: string;
         argumentsText: string;
         rawInterruption: any;
+        callId?: string;
     };
 }
 
@@ -26,6 +27,9 @@ export interface CommandMessage {
     success?: boolean;
     failureReason?: string;
     isApprovalRejection?: boolean;
+    callId?: string;
+    toolName?: string;
+    toolArgs?: any;
 }
 
 interface ResponseResult {
@@ -1140,6 +1144,14 @@ export class ConversationSession {
                 argumentsText = getCommandFromArgs(interruption.arguments);
             }
 
+            const callId =
+                interruption?.rawItem?.callId ??
+                interruption?.callId ??
+                interruption?.call_id ??
+                interruption?.tool_call_id ??
+                interruption?.toolCallId ??
+                interruption?.id;
+
             return {
                 type: 'approval_required',
                 approval: {
@@ -1147,6 +1159,7 @@ export class ConversationSession {
                     toolName: toolName ?? 'Unknown Tool',
                     argumentsText,
                     rawInterruption: interruption,
+                    ...(callId ? {callId: String(callId)} : {}),
                 },
             };
         }

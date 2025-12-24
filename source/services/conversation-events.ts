@@ -48,6 +48,9 @@ export interface CommandMessageEvent {
 		success?: boolean;
 		failureReason?: string;
 		isApprovalRejection?: boolean;
+		callId?: string;
+		toolName?: string;
+		toolArgs?: any;
 	};
 }
 

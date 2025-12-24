@@ -55,6 +55,7 @@ interface CommandMessage {
     isApprovalRejection?: boolean;
     toolName?: string;
     toolArgs?: any;
+    callId?: string;
 }
 
 const coerceToText = (value: unknown): string => {
@@ -221,6 +222,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
         }
 
         const isApprovalRejection = isApprovalRejectionForItem(item);
+        const callId = getCallIdFromItem(item);
 
         // Handle shell tool
         if (normalizedItem.toolName === SHELL_TOOL_NAME) {
@@ -304,6 +306,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 success,
                 failureReason,
                 isApprovalRejection,
+                ...(callId ? {callId} : {}),
             });
             continue;
         }
@@ -339,6 +342,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                     output,
                     success,
                     isApprovalRejection,
+                    ...(callId ? {callId} : {}),
                 });
             }
             continue;
@@ -348,10 +352,15 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
         if (normalizedItem.toolName === GREP_TOOL_NAME) {
             const parsedOutput = safeJsonParse(normalizedItem.outputText);
             const rawItem = item?.rawItem ?? item;
-            const callId = rawItem?.callId ?? rawItem?.id ?? item?.callId ?? item?.id;
+            const lookupCallId =
+                rawItem?.callId ??
+                rawItem?.id ??
+                item?.callId ??
+                item?.id ??
+                callId;
             const fallbackArgs =
-                callId && toolCallArgumentsById.has(callId)
-                    ? toolCallArgumentsById.get(callId)
+                lookupCallId && toolCallArgumentsById.has(lookupCallId)
+                    ? toolCallArgumentsById.get(lookupCallId)
                     : null;
             const args =
                 normalizeToolArguments(normalizedItem.arguments) ??
@@ -390,6 +399,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 output,
                 success,
                 isApprovalRejection,
+                ...(callId ? {callId} : {}),
             });
             continue;
         }
@@ -433,6 +443,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                         replace_content: replaceContent,
                         replace_all: args?.replace_all ?? false,
                     },
+                    ...(callId ? {callId} : {}),
                 });
             }
             continue;

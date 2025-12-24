@@ -1,4 +1,4 @@
-import {useCallback, useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
 import type {ConversationService} from '../services/conversation-service.js';
 import {isAbortLikeError} from '../utils/error-helpers.js';
 import type {ConversationEvent} from '../services/conversation-events.js';
@@ -17,18 +17,13 @@ interface BotMessage {
     reasoningText?: string;
 }
 
-interface ApprovalMessage {
-    id: number;
-    sender: 'approval';
-    approval: {
-        agentName: string;
-        toolName: string;
-        argumentsText: string;
-        rawInterruption: any;
-        isMaxTurnsPrompt?: boolean; // Special flag for max turns continuation
-    };
-    answer: string | null;
-    rejectionReason?: string; // Optional reason provided when user rejects
+interface PendingApproval {
+    agentName: string;
+    toolName: string;
+    argumentsText: string;
+    rawInterruption: any;
+    callId?: string;
+    isMaxTurnsPrompt?: boolean; // Special flag for max turns continuation
 }
 
 interface CommandMessage {
@@ -39,6 +34,10 @@ interface CommandMessage {
     success?: boolean;
     failureReason?: string;
     isApprovalRejection?: boolean;
+    callId?: string;
+    toolName?: string;
+    toolArgs?: any;
+    hadApproval?: boolean;
 }
 
 interface SystemMessage {
@@ -56,7 +55,6 @@ interface ReasoningMessage {
 type Message =
     | UserMessage
     | BotMessage
-    | ApprovalMessage
     | CommandMessage
     | SystemMessage
     | ReasoningMessage;
@@ -79,11 +77,14 @@ export const useConversation = ({
         useState<boolean>(false);
     const [waitingForRejectionReason, setWaitingForRejectionReason] =
         useState<boolean>(false);
-    const [pendingApprovalMessageId, setPendingApprovalMessageId] = useState<
-        number | null
-    >(null);
+    const [pendingApproval, setPendingApproval] =
+        useState<PendingApproval | null>(null);
     const [isProcessing, setIsProcessing] = useState<boolean>(false);
     const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
+    const approvedContextRef = useRef<{
+        callId?: string;
+        toolName?: string;
+    } | null>(null);
 
     // Helper to log events with deduplication
     // const createEventLogger = () => {
@@ -128,6 +129,32 @@ export const useConversation = ({
     //     return {logDeduplicated, flush};
     // };
 
+    const annotateCommandMessage = useCallback((cmdMsg: CommandMessage): CommandMessage => {
+        const approvalContext = approvedContextRef.current;
+        if (!approvalContext || cmdMsg.toolName !== 'search_replace') {
+            return cmdMsg;
+        }
+
+        const matchesCallId =
+            approvalContext.callId &&
+            cmdMsg.callId &&
+            approvalContext.callId === cmdMsg.callId;
+        const matchesToolName =
+            !approvalContext.callId &&
+            approvalContext.toolName &&
+            approvalContext.toolName === cmdMsg.toolName;
+
+        if (!matchesCallId && !matchesToolName) {
+            return cmdMsg;
+        }
+
+        if (matchesToolName && !approvalContext.callId) {
+            approvedContextRef.current = null;
+        }
+
+        return {...cmdMsg, hadApproval: true};
+    }, []);
+
     const applyServiceResult = useCallback(
         (
             result: any,
@@ -158,19 +185,8 @@ export const useConversation = ({
                     messagesToAdd.push(textMessage);
                 }
 
-                const approvalMessage: ApprovalMessage = {
-                    id: Date.now() + 2,
-                    sender: 'approval',
-                    approval: result.approval,
-                    answer: null,
-                };
-
-                setPendingApprovalMessageId(approvalMessage.id);
-                setMessages(prev => [
-                    ...prev,
-                    ...messagesToAdd,
-                    approvalMessage,
-                ]);
+                setMessages(prev => [...prev, ...messagesToAdd]);
+                setPendingApproval(result.approval);
                 // Set waiting state AFTER adding approval message to ensure proper render order
                 setWaitingForApproval(true);
                 return;
@@ -190,7 +206,11 @@ export const useConversation = ({
 
                 const withCommands =
                     result.commandMessages.length > 0
-                        ? [...prev, ...messagesToAdd, ...result.commandMessages]
+                        ? [
+                              ...prev,
+                              ...messagesToAdd,
+                              ...result.commandMessages.map(annotateCommandMessage),
+                          ]
                         : [...prev, ...messagesToAdd];
 
                 if (shouldAddBotMessage && finalText) {
@@ -205,9 +225,9 @@ export const useConversation = ({
                 return withCommands;
             });
             setWaitingForApproval(false);
-            setPendingApprovalMessageId(null);
+            setPendingApproval(null);
         },
-        [],
+        [annotateCommandMessage],
     );
 
     const sendUserMessage = useCallback(
@@ -295,6 +315,8 @@ export const useConversation = ({
                     case 'command_message': {
                         // logDeduplicated('command_message');
                         const cmdMsg = event.message as any;
+                        const annotated = annotateCommandMessage(cmdMsg as CommandMessage);
+                        const annotated = annotateCommandMessage(cmdMsg as CommandMessage);
 
                         // Before adding command message, flush reasoning and text separately
                         // This preserves the order: reasoning -> command -> response text
@@ -327,7 +349,7 @@ export const useConversation = ({
                         }
 
                         // Add command messages in real-time as they execute
-                        setMessages(prev => [...prev, cmdMsg]);
+                        setMessages(prev => [...prev, annotated]);
                         return;
                     }
                     default:
@@ -394,20 +416,13 @@ export const useConversation = ({
 
                 if (isMaxTurnsError) {
                     // Create an approval prompt for max turns continuation
-                    const approvalMessage: ApprovalMessage = {
-                        id: Date.now(),
-                        sender: 'approval',
-                        approval: {
-                            agentName: 'System',
-                            toolName: 'max_turns_exceeded',
-                            argumentsText: errorMessage,
-                            rawInterruption: null,
-                            isMaxTurnsPrompt: true,
-                        },
-                        answer: null,
-                    };
-                    setPendingApprovalMessageId(approvalMessage.id);
-                    setMessages(prev => [...prev, approvalMessage]);
+                    setPendingApproval({
+                        agentName: 'System',
+                        toolName: 'max_turns_exceeded',
+                        argumentsText: errorMessage,
+                        rawInterruption: null,
+                        isMaxTurnsPrompt: true,
+                    });
                     setWaitingForApproval(true);
                 } else {
                     // For other errors, just show the error message
@@ -419,7 +434,7 @@ export const useConversation = ({
                     setMessages(prev => [...prev, botErrorMessage]);
                     // Reset approval state on error to allow user to continue
                     setWaitingForApproval(false);
-                    setPendingApprovalMessageId(null);
+                    setPendingApproval(null);
                 }
             } finally {
                 loggingService.debug('sendUserMessage finally block - resetting state');
@@ -435,37 +450,31 @@ export const useConversation = ({
 
     const handleApprovalDecision = useCallback(
         async (answer: string, rejectionReason?: string) => {
-            if (!waitingForApproval) {
+            if (!waitingForApproval || !pendingApproval) {
                 return;
             }
 
             // Check if this is a max turns exceeded prompt
-            const approvalMessage = messages.find(
-                msg => msg.sender === 'approval' && msg.id === pendingApprovalMessageId
-            ) as ApprovalMessage | undefined;
-            const isMaxTurnsPrompt = approvalMessage?.approval?.isMaxTurnsPrompt;
+            const isMaxTurnsPrompt = pendingApproval.isMaxTurnsPrompt;
 
-            setMessages(prev =>
-                prev.map(msg =>
-                    msg.sender === 'approval' &&
-                    msg.id === pendingApprovalMessageId
-                        ? {...msg, answer, rejectionReason}
-                        : msg,
-                ),
-            );
+            if (answer === 'y' && pendingApproval.toolName === 'search_replace') {
+                approvedContextRef.current = {
+                    callId: pendingApproval.callId,
+                    toolName: pendingApproval.toolName,
+                };
+            }
+
+            setPendingApproval(null);
+            setWaitingForApproval(false);
 
             // Handle "n" answer for max turns - return to input
             if (isMaxTurnsPrompt && answer === 'n') {
-                setWaitingForApproval(false);
-                setPendingApprovalMessageId(null);
                 setIsProcessing(false);
                 return;
             }
 
             // Handle "y" answer for max turns - continue execution automatically
             if (isMaxTurnsPrompt && answer === 'y') {
-                setWaitingForApproval(false);
-                setPendingApprovalMessageId(null);
                 setIsProcessing(true);
 
                 const liveMessageId = Date.now();
@@ -535,6 +544,7 @@ export const useConversation = ({
                         case 'command_message': {
                             // logDeduplicated('command_message');
                             const cmdMsg = event.message as any;
+                            const annotated = annotateCommandMessage(cmdMsg as CommandMessage);
 
                             const messagesToAdd: Message[] = [];
 
@@ -561,7 +571,7 @@ export const useConversation = ({
                                 setLiveResponse(null);
                             }
 
-                            setMessages(prev => [...prev, cmdMsg]);
+                            setMessages(prev => [...prev, annotated]);
                             return;
                         }
                         default:
@@ -623,7 +633,7 @@ export const useConversation = ({
                     };
                     setMessages(prev => [...prev, botErrorMessage]);
                     setWaitingForApproval(false);
-                    setPendingApprovalMessageId(null);
+                    setPendingApproval(null);
                 } finally {
                     // flushLog();
                     setLiveResponse(null);
@@ -727,7 +737,7 @@ export const useConversation = ({
                             setLiveResponse(null);
                         }
 
-                        setMessages(prev => [...prev, cmdMsg]);
+                        setMessages(prev => [...prev, annotated]);
                         return;
                     }
                     default:
@@ -791,7 +801,7 @@ export const useConversation = ({
                 setMessages(prev => [...prev, botErrorMessage]);
                 // Reset approval state on error to allow user to continue
                 setWaitingForApproval(false);
-                setPendingApprovalMessageId(null);
+                setPendingApproval(null);
             } finally {
                 loggingService.debug('handleApprovalDecision finally block - resetting state');
                 // flushLog();
@@ -805,9 +815,8 @@ export const useConversation = ({
         [
             applyServiceResult,
             conversationService,
-            pendingApprovalMessageId,
             waitingForApproval,
-            messages,
+            pendingApproval,
         ],
     );
 
@@ -815,7 +824,8 @@ export const useConversation = ({
         conversationService.reset();
         setMessages([]);
         setWaitingForApproval(false);
-        setPendingApprovalMessageId(null);
+        setPendingApproval(null);
+        approvedContextRef.current = null;
         setIsProcessing(false);
         setLiveResponse(null);
     }, [conversationService]);
@@ -824,7 +834,8 @@ export const useConversation = ({
         conversationService.abort();
         setWaitingForApproval(false);
         setWaitingForRejectionReason(false);
-        setPendingApprovalMessageId(null);
+        setPendingApproval(null);
+        approvedContextRef.current = null;
         setIsProcessing(false);
         setLiveResponse(null);
     }, [conversationService]);
@@ -864,6 +875,7 @@ export const useConversation = ({
     return {
         messages,
         liveResponse,
+        pendingApproval,
         waitingForApproval,
         waitingForRejectionReason,
         setWaitingForRejectionReason,

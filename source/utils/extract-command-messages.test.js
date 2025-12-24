@@ -76,6 +76,7 @@ test('extracts shell command from matching function_call item', t => {
         t.is(messages.length, 1);
         t.deepEqual(messages[0], {
             id: 'call-abc-0',
+            callId: 'call-abc',
             sender: 'command',
             command: 'echo hi',
             output: 'hi',
@@ -115,6 +116,7 @@ test('extracts shell command from output items using call_id', t => {
         t.is(messages.length, 1);
         t.deepEqual(messages[0], {
             id: 'result-1-0',
+            callId: 'call-abc',
             sender: 'command',
             command: 'npm run lint',
             output: '> md-preview@0.0.0 lint\n> eslint .',
@@ -155,6 +157,7 @@ test('extracts grep output from plain text tool result', t => {
         t.is(messages.length, 1);
         t.deepEqual(messages[0], {
             id: 'call-grep-1',
+            callId: 'call-grep-1',
             sender: 'command',
             command: 'grep "hello" "source"',
             output: 'source/app.tsx:1:hello',
@@ -199,6 +202,7 @@ test('extracts grep command from matching function_call item', t => {
         t.is(messages.length, 1);
         t.deepEqual(messages[0], {
             id: 'call-grep-abc',
+            callId: 'call-grep-abc',
             sender: 'command',
             command: 'grep "DEFAULT_TRIM_CONFIG" "source" --case-sensitive --include "*.ts"',
             output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',

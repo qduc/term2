@@ -317,6 +317,10 @@ export function buildMessagesFromRequest(
                     lastMessage?.role === 'assistant' &&
                     isToolCallOnlyAssistant(converted)
                 ) {
+                    if (lastMessage.content != null) {
+                        messages.push(converted);
+                        continue;
+                    }
                     // Merge the tool_calls into the previous assistant message
                     if (!lastMessage.tool_calls) {
                         lastMessage.tool_calls = [];

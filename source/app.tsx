@@ -1,14 +1,13 @@
 import React, {FC, useState, useMemo, useCallback, useEffect} from 'react';
 import { useInputContext } from './context/InputContext.js';
 
-import {Box, Text, useApp, useInput} from 'ink';
+import {Box, useApp, useInput} from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
 import { useInputHistory } from './hooks/use-input-history.js';
 import Banner from './components/Banner.js';
-import StatusBar from './components/StatusBar.js';
 import MessageList from './components/MessageList.js';
-import InputBox from './components/InputBox.js';
 import LiveResponse from './components/LiveResponse.js';
+import BottomArea from './components/BottomArea.js';
 import {ErrorBoundary} from './components/ErrorBoundary.js';
 import type {SlashCommand} from './components/SlashCommandMenu.js';
 import type {ConversationService} from './services/conversation-service.js';
@@ -49,6 +48,7 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
     const {
         messages,
         liveResponse,
+        pendingApproval,
         waitingForApproval,
         waitingForRejectionReason,
         setWaitingForRejectionReason,
@@ -335,28 +335,20 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                 </Box>
 
                 {/* Fixed bottom area for input / status */}
-                <Box flexDirection="column">
-                    {(!isProcessing && !waitingForApproval) || waitingForRejectionReason ? (
-                        <InputBox
-                            onSubmit={handleSubmit}
-                            slashCommands={slashCommands}
-                            onHistoryUp={handleHistoryUp}
-                            onHistoryDown={handleHistoryDown}
-                            hasConversationHistory={messages.filter(msg => msg.sender !== 'system').length > 0}
-                            waitingForRejectionReason={waitingForRejectionReason}
-                            settingsService={settingsService}
-                            loggingService={loggingService}
-                        />
-                    ) : null}
-
-                    {isProcessing && (
-                        <Text color="gray" dimColor>
-                            processing{'.'.repeat(dotCount)}
-                        </Text>
-                    )}
-
-                    <StatusBar settingsService={settingsService} />
-                </Box>
+                <BottomArea
+                    pendingApproval={pendingApproval}
+                    waitingForApproval={waitingForApproval}
+                    waitingForRejectionReason={waitingForRejectionReason}
+                    isProcessing={isProcessing}
+                    dotCount={dotCount}
+                    onSubmit={handleSubmit}
+                    slashCommands={slashCommands}
+                    onHistoryUp={handleHistoryUp}
+                    onHistoryDown={handleHistoryDown}
+                    hasConversationHistory={messages.filter(msg => msg.sender !== 'system').length > 0}
+                    settingsService={settingsService}
+                    loggingService={loggingService}
+                />
             </Box>
         </ErrorBoundary>
     );

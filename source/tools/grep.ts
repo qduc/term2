@@ -16,14 +16,12 @@ const searchParametersSchema = z.object({
     pattern: z.string().describe('The text or regex pattern to search for'),
     path: z
         .string()
-        .optional()
-        .default('.')
         .describe(
             'The directory or file to search in. Use "." for current directory.',
         ),
     file_pattern: z
         .string()
-        .optional()
+        .nullable()
         .describe(
             'Glob pattern for files to include (e.g., "*.ts"). Pass null to include all files.',
         ),

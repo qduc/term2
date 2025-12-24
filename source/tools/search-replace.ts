@@ -9,7 +9,7 @@ const searchReplaceParametersSchema = z.object({
     path: z.string().describe('The absolute or relative path to the file'),
     search_content: z.string().describe('The exact content to search for'),
     replace_content: z.string().describe('The content to replace it with'),
-    replace_all: z.boolean().default(false).describe('Whether to replace all occurrences of the search content. If false, requires exactly one match.'),
+    replace_all: z.boolean().describe('Whether to replace all occurrences of the search content. If false, requires exactly one match.'),
 });
 
 export type SearchReplaceToolParams = z.infer<typeof searchReplaceParametersSchema>;

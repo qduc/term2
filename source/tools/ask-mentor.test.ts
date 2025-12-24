@@ -20,14 +20,14 @@ test('createAskMentorToolDefinition defines the tool correctly', t => {
 
     t.is(tool.name, 'ask_mentor');
     t.true(tool.description.includes('mentor'));
-    t.is(tool.needsApproval({question: 'test'}, undefined), false);
+    t.is(tool.needsApproval({question: 'test', context: null}, undefined), false);
 });
 
 test('createAskMentorToolDefinition executes correctly', async t => {
     const mockAskMentor = fn(async () => 'Expert advice');
     const tool = createAskMentorToolDefinition(mockAskMentor);
 
-    const result = await tool.execute({question: 'How do I center a div?'}, undefined);
+    const result = await tool.execute({question: 'How do I center a div?', context: null}, undefined);
 
     t.is(mockAskMentor.calls[0][0], 'How do I center a div?');
     t.is(result, 'Expert advice');
@@ -53,7 +53,7 @@ test('createAskMentorToolDefinition handles errors', async t => {
     const mockAskMentor = fn(async () => { throw new Error('API Error'); });
     const tool = createAskMentorToolDefinition(mockAskMentor);
 
-    const result = await tool.execute({question: 'fail'}, undefined);
+    const result = await tool.execute({question: 'fail', context: null}, undefined);
 
     t.true((result as string).includes('Failed to ask mentor: API Error'));
 });

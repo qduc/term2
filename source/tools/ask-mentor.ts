@@ -3,7 +3,7 @@ import type {ToolDefinition} from './types.js';
 
 const askMentorSchema = z.object({
     question: z.string().describe('The question to ask the mentor.'),
-    context: z.string().optional().describe('Additional context for the question.'),
+    context: z.string().nullable().describe('Additional context for the question.'),
 });
 
 export type AskMentorParams = z.infer<typeof askMentorSchema>;

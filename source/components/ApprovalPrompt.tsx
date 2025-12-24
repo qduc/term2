@@ -1,5 +1,5 @@
 import React, {FC} from 'react';
-import {Box, Text} from 'ink';
+import { Box, Text, useInput } from 'ink';
 import {generateDiff} from '../utils/diff.js';
 
 type Props = {
@@ -126,7 +126,35 @@ const SearchReplacePrompt: FC<{args: SearchReplaceArgs}> = ({args}) => {
     );
 };
 
-const ApprovalPrompt: FC<Props> = ({approval}) => {
+const ApprovalPrompt: FC<Props & { onApprove: () => void; onReject: () => void }> = ({
+    approval,
+    onApprove,
+    onReject,
+}) => {
+    const [selectedIndex, setSelectedIndex] = React.useState(0); // 0 = Approve, 1 = Reject
+
+    useInput((input, key) => {
+        if (key.upArrow || key.downArrow) {
+            setSelectedIndex(prev => (prev === 0 ? 1 : 0));
+        }
+
+        if (key.return) {
+            if (selectedIndex === 0) {
+                onApprove();
+            } else {
+                onReject();
+            }
+        }
+
+        if (input === 'y') {
+            onApprove();
+        }
+
+        if (input === 'n') {
+            onReject();
+        }
+    });
+
     // Special handling for max turns exceeded prompt
     if (approval.toolName === 'max_turns_exceeded') {
         return (
@@ -134,9 +162,17 @@ const ApprovalPrompt: FC<Props> = ({approval}) => {
                 <Text color="yellow" bold>
                     {approval.argumentsText}
                 </Text>
-                <Text color="yellow">
-                    Do you want to continue? (y/n)
-                </Text>
+                <Box flexDirection="column" marginTop={1}>
+                    <Text>Do you want to continue?</Text>
+                    <Box flexDirection="column" marginLeft={1}>
+                        <Text color={selectedIndex === 0 ? 'green' : undefined}>
+                            {selectedIndex === 0 ? '❯ ' : '  '}Yes
+                        </Text>
+                        <Text color={selectedIndex === 1 ? 'red' : undefined}>
+                            {selectedIndex === 1 ? '❯ ' : '  '}No
+                        </Text>
+                    </Box>
+                </Box>
             </Box>
         );
     }
@@ -176,9 +212,17 @@ const ApprovalPrompt: FC<Props> = ({approval}) => {
                 <Text bold>{approval.toolName}</Text>
             </Text>
             {content}
-            <Text>
-                <Text color="yellow">(y/n)</Text>
-            </Text>
+            <Box flexDirection="column" marginTop={1}>
+                <Text>Allow this action?</Text>
+                <Box flexDirection="column" marginLeft={1}>
+                    <Text color={selectedIndex === 0 ? 'green' : undefined}>
+                        {selectedIndex === 0 ? '❯ ' : '  '}Approve
+                    </Text>
+                    <Text color={selectedIndex === 1 ? 'red' : undefined}>
+                        {selectedIndex === 1 ? '❯ ' : '  '}Reject
+                    </Text>
+                </Box>
+            </Box>
         </Box>
     );
 };

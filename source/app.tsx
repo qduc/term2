@@ -238,18 +238,15 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
         }
     });
 
-    // Handle y/n key presses for approval prompts
-    useInput(async (inputKey: string) => {
-        if (!waitingForApproval || isProcessing || waitingForRejectionReason) return;
+    // Handle y/n key presses for approval prompts - MOVED TO ApprovalPrompt component
 
-        const answer = inputKey.toLowerCase();
-        if (answer === 'y') {
-            await handleApprovalDecision('y');
-        } else if (answer === 'n') {
-            // Enter rejection reason mode
-            setWaitingForRejectionReason(true);
-        }
-    });
+    const handleApprove = useCallback(async () => {
+        await handleApprovalDecision('y');
+    }, [handleApprovalDecision]);
+
+    const handleReject = useCallback(() => {
+        setWaitingForRejectionReason(true);
+    }, [setWaitingForRejectionReason]);
 
     // Toggle app.mode with Shift+Tab for quick approval profile switching
     useInput((input: string, key) => {
@@ -348,6 +345,8 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                     hasConversationHistory={messages.filter(msg => msg.sender !== 'system').length > 0}
                     settingsService={settingsService}
                     loggingService={loggingService}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
                 />
             </Box>
         </ErrorBoundary>

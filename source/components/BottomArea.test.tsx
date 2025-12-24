@@ -31,6 +31,8 @@ const baseProps: BottomAreaProps = {
         setCorrelationId: () => {},
         clearCorrelationId: () => {},
     } as any,
+    onApprove: () => { },
+    onReject: () => { },
 };
 
 const renderBottomArea = (props: typeof baseProps) =>
@@ -45,7 +47,7 @@ test('BottomArea shows input when idle', t => {
     const output = lastFrame() ?? '';
     t.true(output.includes('❯'));
     t.false(output.includes('processing'));
-    t.false(output.includes('(y/n)'));
+    t.false(output.includes('Allow this action?'));
 });
 
 test('BottomArea shows approval prompt when waiting for approval', t => {
@@ -60,7 +62,9 @@ test('BottomArea shows approval prompt when waiting for approval', t => {
         waitingForApproval: true,
     });
     const output = lastFrame() ?? '';
-    t.true(output.includes('(y/n)'));
+    t.true(output.includes('Allow this action?'));
+    t.true(output.includes('Approve'));
+    t.true(output.includes('Reject'));
     t.false(output.includes('processing'));
     t.false(output.includes('❯'));
 });
@@ -73,6 +77,6 @@ test('BottomArea shows processing indicator when busy', t => {
     });
     const output = lastFrame() ?? '';
     t.true(output.includes('processing..'));
-    t.false(output.includes('(y/n)'));
+    t.false(output.includes('Allow this action?'));
     t.false(output.includes('❯'));
 });

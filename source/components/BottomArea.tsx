@@ -29,6 +29,8 @@ export type BottomAreaProps = {
     hasConversationHistory: boolean;
     settingsService: SettingsService;
     loggingService: LoggingService;
+    onApprove: () => void;
+    onReject: () => void;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -44,6 +46,8 @@ const BottomArea: FC<BottomAreaProps> = ({
     hasConversationHistory,
     settingsService,
     loggingService,
+    onApprove,
+    onReject,
 }) => {
     const showApprovalPrompt =
         waitingForApproval &&
@@ -56,7 +60,11 @@ const BottomArea: FC<BottomAreaProps> = ({
     return (
         <Box flexDirection="column">
             {showApprovalPrompt ? (
-                <ApprovalPrompt approval={pendingApproval} />
+                <ApprovalPrompt
+                    approval={pendingApproval}
+                    onApprove={onApprove}
+                    onReject={onReject}
+                />
             ) : showInput ? (
                 <InputBox
                     onSubmit={onSubmit}

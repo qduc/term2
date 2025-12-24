@@ -3,6 +3,7 @@ import type {ConversationService} from '../services/conversation-service.js';
 import {isAbortLikeError} from '../utils/error-helpers.js';
 import type {ConversationEvent} from '../services/conversation-events.js';
 import type {ILoggingService} from '../services/service-interfaces.js';
+import {createThrottledFunction} from '../utils/throttle.js';
 
 interface UserMessage {
     id: number;
@@ -65,6 +66,8 @@ interface LiveResponse {
     text: string;
 }
 
+const LIVE_RESPONSE_THROTTLE_MS = 40;
+
 export const useConversation = ({
     conversationService,
     loggingService,
@@ -85,6 +88,21 @@ export const useConversation = ({
         callId?: string;
         toolName?: string;
     } | null>(null);
+    const createLiveResponseUpdater = useCallback(
+        (liveMessageId: number) =>
+            createThrottledFunction((text: string) => {
+                setLiveResponse(prev =>
+                    prev && prev.id === liveMessageId
+                        ? {...prev, text}
+                        : {
+                              id: liveMessageId,
+                              sender: 'bot',
+                              text,
+                          },
+                );
+            }, LIVE_RESPONSE_THROTTLE_MS),
+        [],
+    );
 
     // Helper to log events with deduplication
     // const createEventLogger = () => {
@@ -250,6 +268,7 @@ export const useConversation = ({
                 sender: 'bot',
                 text: '',
             });
+            const liveResponseUpdater = createLiveResponseUpdater(liveMessageId);
 
             // Track accumulated text so we can flush it before command messages
             let accumulatedText = '';
@@ -266,15 +285,7 @@ export const useConversation = ({
                     case 'text_delta': {
                         // logDeduplicated('text_delta');
                         accumulatedText += event.delta;
-                        setLiveResponse(prev =>
-                            prev && prev.id === liveMessageId
-                                ? {...prev, text: accumulatedText}
-                                : {
-                                        id: liveMessageId,
-                                        sender: 'bot',
-                                        text: accumulatedText,
-                                  },
-                        );
+                        liveResponseUpdater.throttled(accumulatedText);
                         return;
                     }
                     case 'reasoning_delta': {
@@ -344,6 +355,7 @@ export const useConversation = ({
                         if (messagesToAdd.length > 0) {
                             setMessages(prev => [...prev, ...messagesToAdd]);
                             // Clear live response since we've committed the text
+                            liveResponseUpdater.cancel();
                             setLiveResponse(null);
                         }
 
@@ -438,6 +450,7 @@ export const useConversation = ({
             } finally {
                 loggingService.debug('sendUserMessage finally block - resetting state');
                 // flushLog();
+                liveResponseUpdater.cancel();
                 setLiveResponse(null);
                 setIsProcessing(false);
                 // Don't reset waitingForApproval here - it's set by applyServiceResult
@@ -482,6 +495,8 @@ export const useConversation = ({
                     sender: 'bot',
                     text: '',
                 });
+                const liveResponseUpdater =
+                    createLiveResponseUpdater(liveMessageId);
 
                 // Track accumulated text so we can flush it before command messages
                 let accumulatedText = '';
@@ -497,15 +512,7 @@ export const useConversation = ({
                         case 'text_delta': {
                             // logDeduplicated('text_delta');
                             accumulatedText += event.delta;
-                            setLiveResponse(prev =>
-                                prev && prev.id === liveMessageId
-                                    ? {...prev, text: accumulatedText}
-                                    : {
-                                            id: liveMessageId,
-                                            sender: 'bot',
-                                            text: accumulatedText,
-                                      },
-                            );
+                            liveResponseUpdater.throttled(accumulatedText);
                             return;
                         }
                         case 'reasoning_delta': {
@@ -567,6 +574,7 @@ export const useConversation = ({
 
                             if (messagesToAdd.length > 0) {
                                 setMessages(prev => [...prev, ...messagesToAdd]);
+                                liveResponseUpdater.cancel();
                                 setLiveResponse(null);
                             }
 
@@ -635,6 +643,7 @@ export const useConversation = ({
                     setPendingApproval(null);
                 } finally {
                     // flushLog();
+                    liveResponseUpdater.cancel();
                     setLiveResponse(null);
                     setIsProcessing(false);
                 }
@@ -648,6 +657,7 @@ export const useConversation = ({
                 sender: 'bot',
                 text: '',
             });
+            const liveResponseUpdater = createLiveResponseUpdater(liveMessageId);
 
             // Track accumulated text so we can flush it before command messages
             let accumulatedText = '';
@@ -664,15 +674,7 @@ export const useConversation = ({
                     case 'text_delta': {
                         // logDeduplicated('text_delta');
                         accumulatedText += event.delta;
-                        setLiveResponse(prev =>
-                            prev && prev.id === liveMessageId
-                                ? {...prev, text: accumulatedText}
-                                : {
-                                        id: liveMessageId,
-                                        sender: 'bot',
-                                        text: accumulatedText,
-                                  },
-                        );
+                        liveResponseUpdater.throttled(accumulatedText);
                         return;
                     }
                     case 'reasoning_delta': {
@@ -734,6 +736,7 @@ export const useConversation = ({
 
                         if (messagesToAdd.length > 0) {
                             setMessages(prev => [...prev, ...messagesToAdd]);
+                            liveResponseUpdater.cancel();
                             setLiveResponse(null);
                         }
 
@@ -805,6 +808,7 @@ export const useConversation = ({
             } finally {
                 loggingService.debug('handleApprovalDecision finally block - resetting state');
                 // flushLog();
+                liveResponseUpdater.cancel();
                 setLiveResponse(null);
                 setIsProcessing(false);
                 // Don't reset approval state here - if the result is another approval_required,

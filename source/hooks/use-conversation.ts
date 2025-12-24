@@ -316,7 +316,6 @@ export const useConversation = ({
                         // logDeduplicated('command_message');
                         const cmdMsg = event.message as any;
                         const annotated = annotateCommandMessage(cmdMsg as CommandMessage);
-                        const annotated = annotateCommandMessage(cmdMsg as CommandMessage);
 
                         // Before adding command message, flush reasoning and text separately
                         // This preserves the order: reasoning -> command -> response text
@@ -711,6 +710,7 @@ export const useConversation = ({
                     case 'command_message': {
                         // logDeduplicated('command_message');
                         const cmdMsg = event.message as any;
+                        const annotated = annotateCommandMessage(cmdMsg as CommandMessage);
 
                         const messagesToAdd: Message[] = [];
 

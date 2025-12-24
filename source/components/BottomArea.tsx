@@ -7,15 +7,16 @@ import type {SlashCommand} from './SlashCommandMenu.js';
 import type {SettingsService} from '../services/settings-service.js';
 import type {LoggingService} from '../services/logging-service.js';
 
-type PendingApproval = {
+export type PendingApproval = {
     agentName: string;
     toolName: string;
     argumentsText: string;
     rawInterruption: any;
+    callId?: string;
     isMaxTurnsPrompt?: boolean;
 };
 
-type Props = {
+export type BottomAreaProps = {
     pendingApproval: PendingApproval | null;
     waitingForApproval: boolean;
     waitingForRejectionReason: boolean;
@@ -30,7 +31,7 @@ type Props = {
     loggingService: LoggingService;
 };
 
-const BottomArea: FC<Props> = ({
+const BottomArea: FC<BottomAreaProps> = ({
     pendingApproval,
     waitingForApproval,
     waitingForRejectionReason,

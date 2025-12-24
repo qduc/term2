@@ -2,7 +2,7 @@ import test from 'ava';
 import React from 'react';
 import {render} from 'ink-testing-library';
 import {InputProvider} from '../context/InputContext.js';
-import BottomArea from './BottomArea.js';
+import BottomArea, {type BottomAreaProps} from './BottomArea.js';
 import {createMockSettingsService} from '../services/settings-service.mock.js';
 import type {SlashCommand} from './SlashCommandMenu.js';
 
@@ -10,7 +10,7 @@ const mockSlashCommands: SlashCommand[] = [
     {name: '/clear', description: 'Clear screen', action: () => {}},
 ];
 
-const baseProps = {
+const baseProps: BottomAreaProps = {
     pendingApproval: null,
     waitingForApproval: false,
     waitingForRejectionReason: false,

@@ -5,7 +5,7 @@ import { useInputContext } from '../context/InputContext.js';
 import { useSlashCommands } from '../hooks/use-slash-commands.js';
 import { usePathCompletion } from '../hooks/use-path-completion.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
-import { useModelSelection, MODEL_TRIGGER, MODEL_CMD_TRIGGER } from '../hooks/use-model-selection.js';
+import { useModelSelection, MODEL_TRIGGER, MODEL_CMD_TRIGGER, MENTOR_TRIGGER } from '../hooks/use-model-selection.js';
 import { PopupManager } from './Input/PopupManager.js';
 import type { SlashCommand } from './SlashCommandMenu.js';
 import type { SettingsService } from '../services/settings-service.js';
@@ -109,6 +109,11 @@ const InputBox: FC<Props> = ({
 
         if (value.startsWith(MODEL_CMD_TRIGGER) && cursorOffset >= MODEL_CMD_TRIGGER.length) {
             models.open(MODEL_CMD_TRIGGER.length);
+            return;
+        }
+
+        if (value.startsWith(MENTOR_TRIGGER) && cursorOffset >= MENTOR_TRIGGER.length) {
+            models.open(MENTOR_TRIGGER.length);
             return;
         }
 
@@ -300,10 +305,22 @@ const InputBox: FC<Props> = ({
             if (!selection || triggerIdx === null) return false;
 
             const before = value.slice(0, triggerIdx);
+
+            // For mentor model, we DO NOT append the provider flag because settings-command
+            // treats it as a generic string setting and doesn't support --provider parsing for it yet.
+            // Also, we implicitly enforce 'same provider' for now.
+            const isMentor = value.startsWith(MENTOR_TRIGGER);
+
             // Use the current provider state instead of selection.provider to avoid stale data
             // when user presses Enter immediately after toggling providers
             const currentProvider = models.provider || 'openai';
-            const nextValue = `${before}${selection.id} --provider=${currentProvider}${submitAfterInsert ? '' : ' '}`;
+
+            let insertion = selection.id;
+            if (!isMentor) {
+                insertion += ` --provider=${currentProvider}`;
+            }
+
+            const nextValue = `${before}${insertion}${submitAfterInsert ? '' : ' '}`;
             onChange(nextValue);
             setCursorOverride(nextValue.length);
             models.close();

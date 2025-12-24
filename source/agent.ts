@@ -2,6 +2,7 @@ import {grepToolDefinition} from './tools/grep.js';
 import {createSearchReplaceToolDefinition} from './tools/search-replace.js';
 import { createApplyPatchToolDefinition } from './tools/apply-patch.js';
 import {createShellToolDefinition} from './tools/shell.js';
+import { createAskMentorToolDefinition } from './tools/ask-mentor.js';
 import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
@@ -79,8 +80,9 @@ function resolvePrompt(promptPath: string): string {
 export const getAgentDefinition = (deps: {
     settingsService: ISettingsService;
     loggingService: ILoggingService;
+    askMentor?: (question: string) => Promise<string>;
 }, model?: string): AgentDefinition => {
-    const {settingsService, loggingService} = deps;
+    const { settingsService, loggingService, askMentor } = deps;
     const defaultModel = settingsService.get<string>('agent.model');
     const resolvedModel = model?.trim() || defaultModel;
 
@@ -101,6 +103,12 @@ export const getAgentDefinition = (deps: {
         tools.push(createApplyPatchToolDefinition({settingsService, loggingService}));
     } else {
         tools.push(createSearchReplaceToolDefinition({settingsService, loggingService}));
+    }
+
+    // Add mentor tool if configured
+    const mentorModel = settingsService.get<string>('agent.mentorModel');
+    if (mentorModel && askMentor) {
+        tools.push(createAskMentorToolDefinition(askMentor));
     }
 
     return {

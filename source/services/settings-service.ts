@@ -36,6 +36,7 @@ const AgentSettingsSchema = z.object({
             title: z.string().optional(),
         })
         .optional(),
+    mentorModel: z.string().optional().describe('Model to use as a mentor'),
 });
 
 const ShellSettingsSchema = z.object({
@@ -145,6 +146,7 @@ export interface SettingsWithSources {
         retryAttempts: SettingWithSource<number>;
         provider: SettingWithSource<string>;
         openrouter: SettingWithSource<any>;
+        mentorModel: SettingWithSource<string | undefined>;
     };
     shell: {
         timeout: SettingWithSource<number>;
@@ -189,6 +191,7 @@ export const SETTING_KEYS = {
     AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
     AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer', // Sensitive - env only
     AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only
+    AGENT_MENTOR_MODEL: 'agent.mentorModel',
     SHELL_TIMEOUT: 'shell.timeout',
     SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
     SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
@@ -209,6 +212,7 @@ const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
     SETTING_KEYS.AGENT_REASONING_EFFORT,
     SETTING_KEYS.AGENT_TEMPERATURE,
     SETTING_KEYS.AGENT_PROVIDER,
+    SETTING_KEYS.AGENT_MENTOR_MODEL,
     SETTING_KEYS.SHELL_TIMEOUT,
     SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
     SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
@@ -234,7 +238,9 @@ const DEFAULT_SETTINGS: SettingsData = {
         provider: 'openai',
         openrouter: {
             // defaults empty; can be provided via env or config
+            // defaults empty; can be provided via env or config
         } as any,
+        mentorModel: undefined,
     },
     shell: {
         timeout: 120000,
@@ -690,6 +696,10 @@ export class SettingsService {
                 openrouter: {
                     value: this.settings.agent.openrouter,
                     source: this.getSource('agent.openrouter'),
+                },
+                mentorModel: {
+                    value: this.settings.agent.mentorModel,
+                    source: this.getSource('agent.mentorModel'),
                 },
             },
             shell: {

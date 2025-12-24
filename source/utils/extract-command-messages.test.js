@@ -382,3 +382,40 @@ test('extracts failed apply_patch operation', t => {
         restore();
     }
 });
+
+test('extracts ask_mentor output', t => {
+    const restore = withStubbedNow(1700000000700);
+
+    try {
+        const items = [
+            {
+                type: 'tool_call_output_item',
+                output: 'The answer is 42.',
+                rawItem: {
+                    type: 'function_call_result',
+                    name: 'ask_mentor',
+                    arguments: JSON.stringify({
+                        question: 'What is the meaning of life?',
+                    }),
+                },
+            },
+        ];
+        const messages = extractCommandMessages(items);
+
+        t.is(messages.length, 1);
+        t.deepEqual(messages[0], {
+            id: '1700000000700-0-0',
+            sender: 'command',
+            command: 'ask_mentor: What is the meaning of life?',
+            output: 'The answer is 42.',
+            success: true,
+            isApprovalRejection: false,
+            toolName: 'ask_mentor',
+            toolArgs: {
+                question: 'What is the meaning of life?',
+            },
+        });
+    } finally {
+        restore();
+    }
+});

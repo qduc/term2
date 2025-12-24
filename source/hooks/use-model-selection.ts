@@ -11,6 +11,7 @@ import type {ILoggingService, ISettingsService} from '../services/service-interf
 
 export const MODEL_TRIGGER = '/settings agent.model ';
 export const MODEL_CMD_TRIGGER = '/model ';
+export const MENTOR_TRIGGER = '/settings agent.mentorModel ';
 
 export const useModelSelection = (
     deps: {

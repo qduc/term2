@@ -105,6 +105,14 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                 return;
             }
 
+            if (key === 'agent.mentorModel') {
+                // Re-initialize the current model to refresh tools (in case mentor availability changes)
+                const currentModel = settingsService.get<string>('agent.model');
+                setModel(currentModel);
+                return;
+            }
+
+
             if (key === 'shell.maxOutputLines') {
                 setTrimConfig({maxLines: Number(value)});
                 return;

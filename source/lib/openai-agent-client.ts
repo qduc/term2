@@ -375,6 +375,106 @@ export class OpenAIAgentClient {
 		}
 	}
 
+	async chat(
+		message: string,
+		options: {
+			model?: string;
+			reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+		} = {},
+	): Promise<string> {
+		this.#logger.debug('Agent chat request', {
+			messageLength: message.length,
+			model: options.model || this.#model,
+		});
+
+		try {
+			// Create a temporary agent for this specific chat request if params differ
+			let agentForChat = this.#agent;
+			if (options.model || options.reasoningEffort) {
+				const tempModel = options.model || this.#model;
+				const tempEffort = options.reasoningEffort || this.#reasoningEffort;
+				const modelSettings: any = {};
+
+				if (tempEffort && tempEffort !== 'default') {
+					modelSettings.reasoning = {
+						effort: tempEffort,
+						summary: 'auto',
+					};
+				}
+
+				// For simple chat, we generally don't need tools, but we keep the system instructions
+				// Actually, for mentor mode, we might want a simpler agent without tools
+				agentForChat = new Agent({
+					name: 'Mentor',
+					model: tempModel,
+					...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
+					instructions: 'You are a helpful mentor assistant.',
+				});
+
+				// Ensure runner is compatible or use run()
+				if (!this.#runner && this.#provider !== 'openai') {
+					// Logic to ensure runner exists... same as #runAgent
+					const providerDef = getProvider(this.#provider);
+					if (!providerDef) throw new Error(`Provider ${this.#provider} not found`);
+					if (providerDef.createRunner) {
+						// We can't easily reuse the main runner if it's bound to the main agent
+						// But creating a new runner for every chat might be expensive?
+						// For now, let's assume we can just use `run` if no tools are needed,
+						// but some providers NEED a runner.
+						// Actually, most providers' runners are stateless or lightweight wrappers.
+					}
+				}
+			}
+
+			// We use a simplified run flow for chat
+			const result = await this.#runAgent(agentForChat, message, {
+				stream: false,
+				maxTurns: 1, // Chat is usually single turn
+			});
+
+			if (result.finalOutput) {
+				return result.finalOutput;
+			}
+
+			// Fallback: extract from messages if finalOutput is missing
+			if (result.messages && Array.isArray(result.messages)) {
+				const lastMessage = result.messages[result.messages.length - 1];
+				if (lastMessage && lastMessage.content) {
+					if (typeof lastMessage.content === 'string') {
+						return lastMessage.content;
+					}
+					if (Array.isArray(lastMessage.content)) {
+						return lastMessage.content
+							.map((part: any) => part.text || part.value || '')
+							.join('');
+					}
+				}
+			}
+
+			return '';
+		} catch (error) {
+			this.#logger.error('Agent chat failed', {
+				error: error instanceof Error ? error.message : String(error),
+			});
+			throw error; // Propagate error
+		}
+	}
+
+	#createMentor = async (question: string): Promise<string> => {
+		const mentorModel = this.#settings.get<string>('agent.mentorModel');
+		if (!mentorModel) {
+			throw new Error('Mentor model is not configured');
+		}
+
+		// Reuse this client's provider configuration but with a different model
+		// We purposefully create a 'sibling' behavior here.
+		// NOTE: This uses the SAME provider.
+
+		return this.chat(question, {
+			model: mentorModel,
+		});
+	};
+
 	#createAgent({
 		model,
 		reasoningEffort,
@@ -395,6 +495,8 @@ export class OpenAIAgentClient {
 		} = getAgentDefinition({
 			settingsService: this.#settings,
 			loggingService: this.#logger,
+			// @ts-ignore - Definition update coming next
+			askMentor: this.#createMentor,
 		}, resolvedModel);
 
 		// Determine if we should use the native applyPatchTool
@@ -435,7 +537,7 @@ export class OpenAIAgentClient {
 							});
 						}
 						// Normal execution
-						return definition.execute(params);
+						return definition.execute(params, _context);
 					},
 				}),
 			);

@@ -2,6 +2,7 @@ const SHELL_TOOL_NAME = 'shell';
 const GREP_TOOL_NAME = 'grep';
 const APPLY_PATCH_TOOL_NAME = 'apply_patch';
 const SEARCH_REPLACE_TOOL_NAME = 'search_replace';
+const ASK_MENTOR_TOOL_NAME = 'ask_mentor';
 
 const approvalRejectionCallIds = new Set<string>();
 
@@ -446,6 +447,46 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                     ...(callId ? {callId} : {}),
                 });
             }
+            continue;
+        }
+
+        // Handle ask_mentor tool
+        if (normalizedItem.toolName === ASK_MENTOR_TOOL_NAME) {
+            const rawItem = item?.rawItem ?? item;
+            const callId = getCallIdFromItem(item);
+            const fallbackArgs =
+                callId && toolCallArgumentsById.has(callId)
+                    ? toolCallArgumentsById.get(callId)
+                    : null;
+            const args =
+                normalizeToolArguments(normalizedItem.arguments) ??
+                normalizeToolArguments(fallbackArgs) ??
+                {};
+
+            const question = args?.question ?? 'Unknown question';
+            const command = `ask_mentor: ${question}`;
+            const output = normalizedItem.outputText || 'No response from mentor';
+            const success = !output.startsWith('Failed to ask mentor:');
+
+            const baseId =
+                rawItem?.id ??
+                rawItem?.callId ??
+                item?.id ??
+                item?.callId ??
+                `${Date.now()}-${index}`;
+            const stableId = `${baseId}-0`;
+
+            messages.push({
+                id: stableId,
+                sender: 'command',
+                command,
+                output,
+                success,
+                isApprovalRejection,
+                toolName: ASK_MENTOR_TOOL_NAME,
+                toolArgs: args,
+                ...(callId ? {callId} : {}),
+            });
             continue;
         }
     }

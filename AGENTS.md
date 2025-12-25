@@ -6,7 +6,7 @@ This is a terminal-based AI assistant built with React (Ink), OpenAI Agents SDK,
 
 A CLI app that lets users chat with an AI agent in real-time. The agent can execute shell commands and modify files, with interactive approval prompts for safety.
 
-**Key features**: streaming responses, command approval flow, slash commands (`/clear`, `/quit`, `/model`), input history, and markdown rendering in the terminal.
+**Key features**: streaming responses, command approval flow, slash commands (`/clear`, `/quit`, `/model`, `/setting`), input history, markdown rendering in the terminal, tool hallucination retry logic, and multi-provider support.
 
 ## Quick Start
 
@@ -33,14 +33,18 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 
 -   **Entry Points**: `source/cli.tsx` (entry), `source/app.tsx` (main React component)
 -   **State & Logic**:
-    -   `source/hooks/` - UI state (conversation, slash commands, input history)
-    -   `source/services/` - Business logic (conversation flow, approval, logging)
+    -   `source/hooks/` - UI state (conversation, slash commands, input history, settings)
+    -   `source/services/` - Business logic (conversation flow, approval, logging, history, settings)
 -   **Agent & Tools**:
     -   `source/agent.ts` - Agent configuration
     -   `source/lib/openai-agent-client.ts` - Agent client with tool interceptor pattern
-    -   `source/providers/` - Pluggable provider registry (OpenAI, OpenRouter)
-    -   `source/tools/` - Tool implementations (shell, search-replace, grep, apply-patch)
+    -   `source/providers/` - Pluggable provider registry (OpenAI, OpenRouter, OpenAI-compatible)
+    -   `source/tools/` - Tool implementations (shell, search-replace, grep, apply-patch, ask-mentor)
+    -   `source/prompts/` - System prompts for different model types
 -   **UI**: `source/components/` - React Ink components for terminal rendering
+-   **Utils**: `source/utils/` - Command safety, diff generation, output sanitization
+-   **Types**: `source/types/` - TypeScript type definitions
+-   **Context**: `source/context/` - React context providers
 -   **Docs**: `docs/agent-instructions.md`, `tsconfig.json`, `package.json`
 
 ## How It Works
@@ -58,11 +62,15 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 
 High-level architecture and design decisions (concise):
 
--   Pluggable provider registry with dependency-injected runner creation. Providers (e.g. OpenAI, OpenRouter) register via `source/providers` and may expose a `createRunner(deps)` factory so runners can be constructed without circular imports.
--   Provider-neutral conversation strategy: a client-side `ConversationStore` is used where providers don't manage server-side state; when supported we pass `previousResponseId` to OpenAI to enable server-side chaining.
--   Tool interceptor and approval model: tools (shell, apply-patch, search-replace, grep) run through centralized validation and an approval flow; utilities provide safe diff generation and output sanitization.
--   Dependency injection and testability: services accept interfaces (logging, settings) and a `SettingsService` mock exists to simplify unit tests and avoid I/O in tests.
--   Session & streaming model: conversation sessions stream deltas, capture reasoning, and surface tool calls for explicit approval; retry and failure-tracking behavior is configurable.
+-   **Pluggable provider registry** with dependency-injected runner creation. Providers (e.g. OpenAI, OpenRouter, OpenAI-compatible) register via `source/providers` and may expose a `createRunner(deps)` factory so runners can be constructed without circular imports.
+-   **Provider-neutral conversation strategy**: a client-side `ConversationStore` is used where providers don't manage server-side state; when supported we pass `previousResponseId` to OpenAI to enable server-side chaining.
+-   **Tool interceptor and approval model**: tools (shell, apply-patch, search-replace, grep, ask-mentor) run through centralized validation and an approval flow; utilities provide safe diff generation and output sanitization.
+-   **Tool hallucination retry logic**: automatic retry with partial stream recovery when the agent hallucinates tool responses (MAX_HALLUCINATION_RETRIES = 2). The system detects when an agent provides a tool result instead of calling the tool, discards the hallucinated response, and retries the request.
+-   **Upstream retry logic**: configurable retry attempts (default: 2) with exponential backoff for OpenRouter and other providers to handle transient upstream failures.
+-   **Dependency injection and testability**: services accept interfaces (logging, settings) and a `SettingsService` mock exists to simplify unit tests and avoid I/O in tests.
+-   **Session & streaming model**: conversation sessions stream deltas, capture reasoning separately for O1/O3 models, and surface tool calls for explicit approval; retry and failure-tracking behavior is configurable.
+-   **App mode support**: default mode requires approval for all tools; edit mode auto-approves apply_patch operations for faster file editing workflows.
+-   **Reasoning effort control**: supports reasoning effort levels (none, minimal, low, medium, high, default) for O1/O3 models with dynamic configuration.
 
 For implementation details, chronological change logs, and rationale, consult the source files under `source/` and the Git history — this document intentionally stays at a high level.
 
@@ -79,22 +87,29 @@ npx ava               # Unit tests
 ## Key Concepts
 
 -   **Tool Interceptors**: Centralized validation and approval flow for all tools
--   **Tool Approval**: Tools validate operations before execution; valid requests pause for user approval
+-   **Tool Approval**: Tools validate operations before execution; valid requests pause for user approval (except in edit mode for patches)
+-   **Tool Hallucination Recovery**: Automatic detection and retry when agent hallucinates tool results instead of calling tools
 -   **Failure Tracking**: Consecutive tool failures trigger automatic abort after threshold (default: 3)
--   **Streaming**: Responses and reasoning stream in real-time
--   **Provider Registry**: Pluggable provider support (OpenAI, OpenRouter) with dependency injection
+-   **Streaming**: Responses and reasoning stream in real-time with separate reasoning channel for O1/O3 models
+-   **Provider Registry**: Pluggable provider support (OpenAI, OpenRouter, OpenAI-compatible) with dependency injection
 -   **Conversation Store**: Client-side history for providers without server-side state management
+-   **Reasoning Effort**: Configurable reasoning levels for O1/O3 models (none, minimal, low, medium, high, default)
+-   **App Modes**: Default mode (manual approval) vs edit mode (auto-approve patches for faster workflows)
 
 ## Where to Look
 
--   **Adding a new slash command?** → `use-slash-commands.ts`
--   **Modifying agent behavior?** → `docs/agent-instructions.md`
--   **Adding a new tool?** → Create in `source/tools/`, add to `agent.ts`
+-   **Adding a new slash command?** → `source/hooks/use-slash-commands.ts`
+-   **Modifying agent behavior?** → `docs/agent-instructions.md` and `source/prompts/`
+-   **Adding a new tool?** → Create in `source/tools/`, add to `source/agent.ts`
+-   **Adding a new provider?** → Create in `source/providers/`, register in provider registry
 -   **Changing the UI?** → Components in `source/components/`
--   **Debugging message flow?** → Check `conversation-service.ts`
+-   **Debugging message flow?** → Check `source/services/conversation-service.ts` and `conversation-session.ts`
 -   **Styling/Output format?** → Components use Ink for terminal UI
 -   **Adding a new setting?** → `source/services/settings-service.ts` (update schema and defaults)
+-   **Command safety validation?** → `source/utils/command-safety.ts`
+-   **Diff generation?** → `source/utils/diff-utils.ts`
 -   **Modifying configuration?** → Edit `~/Library/Logs/term2-nodejs/settings.json` (macOS) or `~/.local/state/term2-nodejs/settings.json` (Linux), or use environment variables / CLI flags
+-   **Testing?** → See `test/` directory for test utilities, test files are co-located with source files
 
 ## Resources
 

@@ -1,9 +1,29 @@
 {
     "name": "term2",
-    "version": "0.0.0",
+    "version": "0.1.0",
+    "description": "A terminal-based AI assistant that can help you get things done on your computer",
     "license": "MIT",
+    "author": "qduc",
+    "keywords": [
+        "ai",
+        "assistant",
+        "cli",
+        "terminal",
+        "openai",
+        "agent",
+        "chat",
+        "gpt"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/qduc/term2.git"
+    },
+    "homepage": "https://github.com/qduc/term2",
+    "bugs": {
+        "url": "https://github.com/qduc/term2/issues"
+    },
     "bin": {
-        "tt": "dist/cli.js"
+        "term2": "dist/cli.js"
     },
     "type": "module",
     "engines": {

@@ -13,46 +13,50 @@ const mockModels: ModelInfo[] = [
 
 test('ModelSelectionMenu renders loading state', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu settingsService={createMockSettingsService()}
+        <ModelSelectionMenu
+            settingsService={createMockSettingsService()}
             items={[]}
             selectedIndex={0}
             query=""
             loading={true}
-        />
+        />,
     );
     t.true(lastFrame()?.includes('Loading models'));
 });
 
 test('ModelSelectionMenu renders error state', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu settingsService={createMockSettingsService()}
+        <ModelSelectionMenu
+            settingsService={createMockSettingsService()}
             items={[]}
             selectedIndex={0}
             query=""
             error="Failed to fetch"
-        />
+        />,
     );
     t.true(lastFrame()?.includes('Unable to load models: Failed to fetch'));
 });
 
 test('ModelSelectionMenu renders empty state', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu settingsService={createMockSettingsService()}
+        <ModelSelectionMenu
+            settingsService={createMockSettingsService()}
             items={[]}
             selectedIndex={0}
             query="xyz"
-        />
+        />,
     );
     t.true(lastFrame()?.includes('No models match "xyz"'));
 });
 
 test('ModelSelectionMenu renders list of models', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu settingsService={createMockSettingsService()}
+        <ModelSelectionMenu
+            settingsService={createMockSettingsService()}
             items={mockModels}
             selectedIndex={0}
             query=""
-        />
+        />,
     );
     const output = lastFrame();
     t.true(output?.includes('gpt-4o'));
@@ -69,11 +73,12 @@ test('ModelSelectionMenu highlights selected item', t => {
     // To be more specific, we could check for ANSI codes if we really wanted to,
     // but checking content is usually enough for unit tests here.
     const {lastFrame} = render(
-        <ModelSelectionMenu settingsService={createMockSettingsService()}
+        <ModelSelectionMenu
+            settingsService={createMockSettingsService()}
             items={mockModels}
             selectedIndex={1}
             query=""
-        />
+        />,
     );
     const output = lastFrame();
     t.true(output?.includes('gpt-4-turbo'));
@@ -81,12 +86,13 @@ test('ModelSelectionMenu highlights selected item', t => {
 
 test('ModelSelectionMenu shows provider in header if specified', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu settingsService={createMockSettingsService()}
+        <ModelSelectionMenu
+            settingsService={createMockSettingsService()}
             items={mockModels}
             selectedIndex={0}
             query=""
             provider="openai"
-        />
+        />,
     );
     t.true(lastFrame()?.includes('OpenAI'));
 });
@@ -124,13 +130,14 @@ test('ModelSelectionMenu shows scroll indicators for long lists', t => {
     }));
 
     const {lastFrame} = render(
-        <ModelSelectionMenu settingsService={createMockSettingsService()}
+        <ModelSelectionMenu
+            settingsService={createMockSettingsService()}
             items={longList}
             selectedIndex={5}
             query=""
             scrollOffset={2}
             maxHeight={10}
-        />
+        />,
     );
     const output = lastFrame();
     // Should show scroll position indicator
@@ -143,13 +150,14 @@ test('ModelSelectionMenu shows scroll indicators for long lists', t => {
 
 test('ModelSelectionMenu does not show scroll indicators for short lists', t => {
     const {lastFrame} = render(
-        <ModelSelectionMenu settingsService={createMockSettingsService()}
+        <ModelSelectionMenu
+            settingsService={createMockSettingsService()}
             items={mockModels}
             selectedIndex={0}
             query=""
             scrollOffset={0}
             maxHeight={10}
-        />
+        />,
     );
     const output = lastFrame();
     // Should not show position indicator for lists shorter than maxHeight

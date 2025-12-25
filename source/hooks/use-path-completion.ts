@@ -5,23 +5,19 @@ import {
     refreshWorkspaceEntries,
     type PathEntry,
 } from '../services/file-service.js';
-import { useInputContext } from '../context/InputContext.js';
+import {useInputContext} from '../context/InputContext.js';
 import type {ILoggingService} from '../services/service-interfaces.js';
 
 export type PathCompletionItem = PathEntry;
 
 const MAX_RESULTS = 12;
 
-export const usePathCompletion = (deps?: {loggingService?: ILoggingService}) => {
+export const usePathCompletion = (deps?: {
+    loggingService?: ILoggingService;
+}) => {
     const logger = deps?.loggingService;
-    const {
-        mode,
-        setMode,
-        input,
-        triggerIndex,
-        setTriggerIndex,
-        cursorOffset,
-    } = useInputContext();
+    const {mode, setMode, input, triggerIndex, setTriggerIndex, cursorOffset} =
+        useInputContext();
 
     const isOpen = mode === 'path_completion';
 
@@ -59,11 +55,17 @@ export const usePathCompletion = (deps?: {loggingService?: ILoggingService}) => 
 
     useEffect(() => {
         loadEntries().catch(error => {
-            const message = error instanceof Error ? error.message : String(error);
+            const message =
+                error instanceof Error ? error.message : String(error);
             if (logger) {
-                logger.error('Failed to load workspace entries', {error: message});
+                logger.error('Failed to load workspace entries', {
+                    error: message,
+                });
             } else {
-                console.error('[use-path-completion] Failed to load workspace entries', message);
+                console.error(
+                    '[use-path-completion] Failed to load workspace entries',
+                    message,
+                );
             }
         });
     }, [loadEntries, logger]);
@@ -96,14 +98,17 @@ export const usePathCompletion = (deps?: {loggingService?: ILoggingService}) => 
         });
     }, [filteredEntries.length]);
 
-    const open = useCallback((startIndex: number, _initialQuery = '') => {
-        // Preserve selection when already open to avoid resetting on re-renders
-        if (mode === 'path_completion') return;
-        setMode('path_completion');
-        setTriggerIndex(startIndex);
-        setSelectedIndex(0);
-        // initialQuery is ignored because we derive it
-    }, [mode, setMode, setTriggerIndex]);
+    const open = useCallback(
+        (startIndex: number, _initialQuery = '') => {
+            // Preserve selection when already open to avoid resetting on re-renders
+            if (mode === 'path_completion') return;
+            setMode('path_completion');
+            setTriggerIndex(startIndex);
+            setSelectedIndex(0);
+            // initialQuery is ignored because we derive it
+        },
+        [mode, setMode, setTriggerIndex],
+    );
 
     const close = useCallback(() => {
         if (mode === 'path_completion') {

@@ -41,7 +41,7 @@ function createTool(settingsService = createMockSettingsService()) {
 }
 
 test.serial('create_file: creates a new file with content', async t => {
-    await withTempDir(async (dir) => {
+    await withTempDir(async dir => {
         const tool = createTool();
         const filePath = 'new-file.txt';
         const diff = '@@ -0,0 +1 @@\n+Hello World';
@@ -62,7 +62,7 @@ test.serial('create_file: creates a new file with content', async t => {
 });
 
 test.serial('update_file: updates an existing file', async t => {
-    await withTempDir(async (dir) => {
+    await withTempDir(async dir => {
         const tool = createTool();
         const filePath = 'existing.txt';
         const absPath = path.join(dir, filePath);
@@ -114,34 +114,44 @@ test.serial('update_file: updates an existing file', async t => {
 //     });
 // });
 
-test.serial('needsApproval: requires approval for outside workspace', async t => {
-    await withTempDir(async () => {
-        const tool = createTool();
-        const result = await tool.needsApproval({
-            type: 'create_file',
-            path: '../outside.txt',
-            diff: '@@ -0,0 +1 @@\n+content',
+test.serial(
+    'needsApproval: requires approval for outside workspace',
+    async t => {
+        await withTempDir(async () => {
+            const tool = createTool();
+            const result = await tool.needsApproval({
+                type: 'create_file',
+                path: '../outside.txt',
+                diff: '@@ -0,0 +1 @@\n+content',
+            });
+            t.true(result);
         });
-        t.true(result);
-    });
-});
+    },
+);
 
-test.serial('needsApproval: auto-approves in edit mode for create/update inside cwd', async t => {
-    await withTempDir(async () => {
-        const tool = createTool(createMockSettingsService({app: {mode: 'edit'}}));
+test.serial(
+    'needsApproval: auto-approves in edit mode for create/update inside cwd',
+    async t => {
+        await withTempDir(async () => {
+            const tool = createTool(
+                createMockSettingsService({app: {mode: 'edit'}}),
+            );
 
-        const result = await tool.needsApproval({
-            type: 'create_file',
-            path: 'inside.txt',
-            diff: '@@ -0,0 +1 @@\n+content',
+            const result = await tool.needsApproval({
+                type: 'create_file',
+                path: 'inside.txt',
+                diff: '@@ -0,0 +1 @@\n+content',
+            });
+            t.false(result);
         });
-        t.false(result);
-    });
-});
+    },
+);
 
 test.serial('needsApproval: requires approval in default mode', async t => {
     await withTempDir(async () => {
-        const tool = createTool(createMockSettingsService({app: {mode: 'default'}}));
+        const tool = createTool(
+            createMockSettingsService({app: {mode: 'default'}}),
+        );
 
         const result = await tool.needsApproval({
             type: 'create_file',
@@ -152,19 +162,21 @@ test.serial('needsApproval: requires approval in default mode', async t => {
     });
 });
 
-
-test.serial('needsApproval: auto-approves invalid diffs (will fail in execute)', async t => {
-    await withTempDir(async () => {
-        const tool = createTool();
-        // Invalid diffs now return false (auto-approve) to avoid breaking the stream
-        const result = await tool.needsApproval({
-            type: 'create_file',
-            path: 'test.txt',
-            diff: 'garbage',
+test.serial(
+    'needsApproval: auto-approves invalid diffs (will fail in execute)',
+    async t => {
+        await withTempDir(async () => {
+            const tool = createTool();
+            // Invalid diffs now return false (auto-approve) to avoid breaking the stream
+            const result = await tool.needsApproval({
+                type: 'create_file',
+                path: 'test.txt',
+                diff: 'garbage',
+            });
+            t.false(result);
         });
-        t.false(result);
-    });
-});
+    },
+);
 
 test.serial('execute: rejects invalid diffs with proper error', async t => {
     await withTempDir(async () => {

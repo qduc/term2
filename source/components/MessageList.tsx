@@ -15,10 +15,7 @@ const MessageList: FC<Props> = ({messages}) => {
                 // Tighten spacing between messages from the same sender (no extra gap),
                 // but keep a small gap when the sender changes so different participants
                 // remain recognizable.
-                const marginTop =
-                    prev && prev.sender === msg.sender
-                        ? 0
-                        : 1;
+                const marginTop = prev && prev.sender === msg.sender ? 0 : 1;
 
                 return (
                     <Box key={msg.id} marginTop={marginTop}>

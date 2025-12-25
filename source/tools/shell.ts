@@ -14,15 +14,15 @@ import {
     type OutputTrimConfig,
 } from '../utils/output-trim.js';
 import type {ToolDefinition} from './types.js';
-import type {ILoggingService, ISettingsService} from '../services/service-interfaces.js';
+import type {
+    ILoggingService,
+    ISettingsService,
+} from '../services/service-interfaces.js';
 
 const execPromise = util.promisify(exec);
 
 const shellParametersSchema = z.object({
-    command: z
-        .string()
-        .min(1)
-        .describe('Single shell command to execute.'),
+    command: z.string().min(1).describe('Single shell command to execute.'),
     timeout_ms: z
         .union([z.number(), z.string().transform(val => parseInt(val, 10))])
         .pipe(z.number().int().positive())
@@ -86,166 +86,183 @@ export function createShellToolDefinition(deps: {
     const {loggingService, settingsService} = deps;
 
     // Create command logger function with dependencies
-    const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
+    const logValidationError = (message: string) =>
+        logValidationErrorUtil(settingsService, message);
 
     return {
-    name: 'shell',
-    description:
-        'Execute a single shell command. Use this to run a terminal command. Assert the safety of the command; if it does not change system state or read sensitive data, set needsApproval to false. Otherwise set needsApproval to true and wait for user approval before executing.',
-    parameters: shellParametersSchema,
-    needsApproval: async params => {
-        try {
-            const cwd = process.cwd();
-            const optimizedCommand = stripRedundantCd(params.command, cwd);
-            const isDangerous = validateCommandSafety(
-                optimizedCommand,
-                loggingService,
-            );
+        name: 'shell',
+        description:
+            'Execute a single shell command. Use this to run a terminal command. Assert the safety of the command; if it does not change system state or read sensitive data, set needsApproval to false. Otherwise set needsApproval to true and wait for user approval before executing.',
+        parameters: shellParametersSchema,
+        needsApproval: async params => {
+            try {
+                const cwd = process.cwd();
+                const optimizedCommand = stripRedundantCd(params.command, cwd);
+                const isDangerous = validateCommandSafety(
+                    optimizedCommand,
+                    loggingService,
+                );
 
-            // Log security event for all shell commands with dangerous flag
-            loggingService.security('Shell tool needsApproval check', {
-                commands: [params.command.substring(0, 100)], // Truncate for safety
-                optimizedCommand: optimizedCommand.substring(0, 100),
-                isDangerous,
-            });
-
-            return isDangerous;
-        } catch (error) {
-            const errorMessage =
-                error instanceof Error ? error.message : String(error);
-            logValidationError(`Validation failed: ${errorMessage}`);
-            loggingService.error('Shell tool validation error', {
-                error: errorMessage,
-                commands: [params.command.substring(0, 100)],
-            });
-            return true; // fail-safe: require approval on validation errors
-        }
-    },
-    execute: async ({command, timeout_ms, max_output_length}) => {
-        const cwd = process.cwd();
-        const correlationId = randomUUID();
-
-        // Set correlation ID for tracking related operations
-        loggingService.setCorrelationId(correlationId);
-
-        try {
-            // Use provided values or settings defaults or hardcoded defaults
-            const timeoutValue = timeout_ms ?? settingsService.get('shell.timeout');
-            const timeout = timeoutValue != null ? timeoutValue : undefined;
-            const maxOutputLengthValue =
-                max_output_length ??
-                settingsService.get('shell.maxOutputChars');
-            const maxOutputLength = maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
-
-            loggingService.info('Shell command execution started', {
-                commandCount: 1,
-                commands: [command],
-                timeout,
-                workingDirectory: cwd,
-                maxOutputLength,
-            });
-
-            // Strip redundant 'cd <path> &&' if it targets the current directory
-            const optimizedCommand = stripRedundantCd(command, cwd);
-            if (optimizedCommand !== command) {
-                loggingService.debug('Stripped redundant cd command', {
-                    original: command,
-                    optimized: optimizedCommand,
-                    cwd,
+                // Log security event for all shell commands with dangerous flag
+                loggingService.security('Shell tool needsApproval check', {
+                    commands: [params.command.substring(0, 100)], // Truncate for safety
+                    optimizedCommand: optimizedCommand.substring(0, 100),
+                    isDangerous,
                 });
+
+                return isDangerous;
+            } catch (error) {
+                const errorMessage =
+                    error instanceof Error ? error.message : String(error);
+                logValidationError(`Validation failed: ${errorMessage}`);
+                loggingService.error('Shell tool validation error', {
+                    error: errorMessage,
+                    commands: [params.command.substring(0, 100)],
+                });
+                return true; // fail-safe: require approval on validation errors
             }
-            let stdout = '';
-            let stderr = '';
-            let exitCode: number | null = 0;
-            let outcome: ShellCommandResult['outcome'] = {
-                type: 'exit',
-                exitCode: 0,
-            };
+        },
+        execute: async ({command, timeout_ms, max_output_length}) => {
+            const cwd = process.cwd();
+            const correlationId = randomUUID();
+
+            // Set correlation ID for tracking related operations
+            loggingService.setCorrelationId(correlationId);
 
             try {
-                const result = await execPromise(optimizedCommand, {
-                    cwd,
+                // Use provided values or settings defaults or hardcoded defaults
+                const timeoutValue =
+                    timeout_ms ?? settingsService.get('shell.timeout');
+                const timeout = timeoutValue != null ? timeoutValue : undefined;
+                const maxOutputLengthValue =
+                    max_output_length ??
+                    settingsService.get('shell.maxOutputChars');
+                const maxOutputLength =
+                    maxOutputLengthValue != null
+                        ? maxOutputLengthValue
+                        : undefined;
+
+                loggingService.info('Shell command execution started', {
+                    commandCount: 1,
+                    commands: [command],
                     timeout,
-                    maxBuffer: 1024 * 1024, // 1MB max buffer
+                    workingDirectory: cwd,
+                    maxOutputLength,
                 });
-                stdout = result.stdout;
-                stderr = result.stderr;
 
-                loggingService.debug('Shell command executed successfully', {
-                    command: optimizedCommand.substring(0, 100),
-                    exitCode: 0,
-                    stdoutLength: stdout.length,
-                    stderrLength: stderr.length,
-                });
-            } catch (error: any) {
-                exitCode = typeof error?.code === 'number' ? error.code : null;
-                stdout = error?.stdout ?? '';
-                stderr = error?.stderr ?? '';
-                outcome =
-                    error?.killed || error?.signal === 'SIGTERM'
-                        ? {type: 'timeout'}
-                        : {type: 'exit', exitCode};
-
-                if (outcome.type === 'timeout') {
-                    loggingService.warn('Shell command timeout', {
-                        command: optimizedCommand.substring(0, 100),
-                        timeout,
-                    });
-                } else {
-                    loggingService.debug('Shell command execution failed', {
-                        command: optimizedCommand.substring(0, 100),
-                        exitCode,
-                        errorMessage: error?.message ?? String(error),
-                        stderrLength: stderr.length,
+                // Strip redundant 'cd <path> &&' if it targets the current directory
+                const optimizedCommand = stripRedundantCd(command, cwd);
+                if (optimizedCommand !== command) {
+                    loggingService.debug('Stripped redundant cd command', {
+                        original: command,
+                        optimized: optimizedCommand,
+                        cwd,
                     });
                 }
+                let stdout = '';
+                let stderr = '';
+                let exitCode: number | null = 0;
+                let outcome: ShellCommandResult['outcome'] = {
+                    type: 'exit',
+                    exitCode: 0,
+                };
+
+                try {
+                    const result = await execPromise(optimizedCommand, {
+                        cwd,
+                        timeout,
+                        maxBuffer: 1024 * 1024, // 1MB max buffer
+                    });
+                    stdout = result.stdout;
+                    stderr = result.stderr;
+
+                    loggingService.debug(
+                        'Shell command executed successfully',
+                        {
+                            command: optimizedCommand.substring(0, 100),
+                            exitCode: 0,
+                            stdoutLength: stdout.length,
+                            stderrLength: stderr.length,
+                        },
+                    );
+                } catch (error: any) {
+                    exitCode =
+                        typeof error?.code === 'number' ? error.code : null;
+                    stdout = error?.stdout ?? '';
+                    stderr = error?.stderr ?? '';
+                    outcome =
+                        error?.killed || error?.signal === 'SIGTERM'
+                            ? {type: 'timeout'}
+                            : {type: 'exit', exitCode};
+
+                    if (outcome.type === 'timeout') {
+                        loggingService.warn('Shell command timeout', {
+                            command: optimizedCommand.substring(0, 100),
+                            timeout,
+                        });
+                    } else {
+                        loggingService.debug('Shell command execution failed', {
+                            command: optimizedCommand.substring(0, 100),
+                            exitCode,
+                            errorMessage: error?.message ?? String(error),
+                            stderrLength: stderr.length,
+                        });
+                    }
+                }
+
+                loggingService.info('Shell command execution completed', {
+                    commandCount: 1,
+                    successCount:
+                        outcome.type === 'exit' && outcome.exitCode === 0
+                            ? 1
+                            : 0,
+                    failureCount:
+                        outcome.type === 'exit' && outcome.exitCode !== 0
+                            ? 1
+                            : 0,
+                    timeoutCount: outcome.type === 'timeout' ? 1 : 0,
+                });
+
+                const stdoutTrimmed = trimOutput(
+                    stdout,
+                    undefined,
+                    maxOutputLength,
+                ).trimEnd();
+                const stderrTrimmed = trimOutput(
+                    stderr,
+                    undefined,
+                    maxOutputLength,
+                ).trimEnd();
+                const combinedOutput = [stdoutTrimmed, stderrTrimmed]
+                    .filter(Boolean)
+                    .join('\n')
+                    .trimEnd();
+
+                const statusLine =
+                    outcome.type === 'timeout'
+                        ? 'timeout'
+                        : `exit ${outcome.exitCode ?? 'null'}`;
+
+                const noteLine =
+                    optimizedCommand !== command
+                        ? 'note: stripped redundant cd prefix'
+                        : '';
+
+                // Add helpful note when command succeeds with no output
+                const emptyOutputNote =
+                    combinedOutput === '' &&
+                    outcome.type === 'exit' &&
+                    outcome.exitCode === 0
+                        ? 'note: command succeeded with no output'
+                        : '';
+
+                return [statusLine, combinedOutput, noteLine, emptyOutputNote]
+                    .filter(Boolean)
+                    .join('\n');
+            } finally {
+                // Always clear correlation ID
+                loggingService.clearCorrelationId();
             }
-
-            loggingService.info('Shell command execution completed', {
-                commandCount: 1,
-                successCount:
-                    outcome.type === 'exit' && outcome.exitCode === 0 ? 1 : 0,
-                failureCount:
-                    outcome.type === 'exit' && outcome.exitCode !== 0 ? 1 : 0,
-                timeoutCount: outcome.type === 'timeout' ? 1 : 0,
-            });
-
-            const stdoutTrimmed = trimOutput(
-                stdout,
-                undefined,
-                maxOutputLength,
-            ).trimEnd();
-            const stderrTrimmed = trimOutput(
-                stderr,
-                undefined,
-                maxOutputLength,
-            ).trimEnd();
-            const combinedOutput = [stdoutTrimmed, stderrTrimmed]
-                .filter(Boolean)
-                .join('\n')
-                .trimEnd();
-
-            const statusLine =
-                outcome.type === 'timeout'
-                    ? 'timeout'
-                    : `exit ${outcome.exitCode ?? 'null'}`;
-
-            const noteLine =
-                optimizedCommand !== command ? 'note: stripped redundant cd prefix' : '';
-
-            // Add helpful note when command succeeds with no output
-            const emptyOutputNote =
-                combinedOutput === '' && outcome.type === 'exit' && outcome.exitCode === 0
-                    ? 'note: command succeeded with no output'
-                    : '';
-
-            return [statusLine, combinedOutput, noteLine, emptyOutputNote]
-                .filter(Boolean)
-                .join('\n');
-        } finally {
-            // Always clear correlation ID
-            loggingService.clearCorrelationId();
-        }
-    },
-};
+        },
+    };
 }

@@ -1,5 +1,8 @@
 import {type ModelProvider, type Model} from '@openai/agents-core';
-import type {ILoggingService, ISettingsService} from '../../services/service-interfaces.js';
+import type {
+    ILoggingService,
+    ISettingsService,
+} from '../../services/service-interfaces.js';
 import {OpenRouterModel} from './model.js';
 
 export class OpenRouterProvider implements ModelProvider {

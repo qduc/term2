@@ -24,7 +24,9 @@ export type OpenRouterRetryOptions = {
 function isAbortError(err: unknown): boolean {
     return (
         (err instanceof DOMException && err.name === 'AbortError') ||
-        (typeof err === 'object' && err !== null && (err as any).name === 'AbortError')
+        (typeof err === 'object' &&
+            err !== null &&
+            (err as any).name === 'AbortError')
     );
 }
 
@@ -99,17 +101,22 @@ function computeRetryDelayMs(opts: {
 }
 
 export class OpenRouterError extends Error {
-	status: number;
-	headers: Record<string, string>;
-	responseBody?: string;
+    status: number;
+    headers: Record<string, string>;
+    responseBody?: string;
 
-	constructor(message: string, status: number, headers: Record<string, string>, responseBody?: string) {
-		super(message);
-		this.name = 'OpenRouterError';
-		this.status = status;
-		this.headers = headers;
-		this.responseBody = responseBody;
-	}
+    constructor(
+        message: string,
+        status: number,
+        headers: Record<string, string>,
+        responseBody?: string,
+    ) {
+        super(message);
+        this.name = 'OpenRouterError';
+        this.status = status;
+        this.headers = headers;
+        this.responseBody = responseBody;
+    }
 }
 
 export async function callOpenRouter({
@@ -121,9 +128,9 @@ export async function callOpenRouter({
     settings,
     tools,
     settingsService,
-	fetchImpl,
-	sleepImpl,
-	retry,
+    fetchImpl,
+    sleepImpl,
+    retry,
 }: {
     apiKey: string;
     model: string;
@@ -133,9 +140,9 @@ export async function callOpenRouter({
     settings?: any;
     tools?: any[];
     settingsService: ISettingsService;
-	fetchImpl?: FetchImpl;
-	sleepImpl?: SleepImpl;
-	retry?: OpenRouterRetryOptions;
+    fetchImpl?: FetchImpl;
+    sleepImpl?: SleepImpl;
+    retry?: OpenRouterRetryOptions;
 }): Promise<Response> {
     const url = `${getOpenRouterBaseUrl(settingsService)}/chat/completions`;
     const body: any = {
@@ -182,7 +189,8 @@ export async function callOpenRouter({
                         settingsService.get('agent.openrouter.referrer') ||
                         'http://localhost',
                     'X-Title':
-                        settingsService.get('agent.openrouter.title') || 'term2',
+                        settingsService.get('agent.openrouter.title') ||
+                        'term2',
                 },
                 body: JSON.stringify(body),
                 signal,
@@ -201,11 +209,16 @@ export async function callOpenRouter({
                 headers[key.toLowerCase()] = value;
             });
 
-            const message = `OpenRouter request failed: ${res.status} ${res.statusText}${
-                errText ? ` - ${errText}` : ''
-            }`;
+            const message = `OpenRouter request failed: ${res.status} ${
+                res.statusText
+            }${errText ? ` - ${errText}` : ''}`;
 
-            const error = new OpenRouterError(message, res.status, headers, errText);
+            const error = new OpenRouterError(
+                message,
+                res.status,
+                headers,
+                errText,
+            );
             const canRetry =
                 retryCfg.maxRetries > 0 &&
                 isRetryableStatus(res.status) &&

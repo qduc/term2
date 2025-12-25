@@ -121,13 +121,13 @@ export class ConversationSession {
     private lastEventType: string | null = null;
     private eventTypeCount = 0;
     // private logStreamEvent = (eventType: string, eventData: any) => {
-	// 	if (eventData.item) {
-	// 		eventType = eventData.item.type;
-	// 		eventData = eventData.item.rawItem;
-	// 		// this.logStreamEvent(eventType, eventData);
-	// 	}
-	//
-	// 	// Deduplicate consecutive identical event types
+    // 	if (eventData.item) {
+    // 		eventType = eventData.item.type;
+    // 		eventData = eventData.item.rawItem;
+    // 		// this.logStreamEvent(eventType, eventData);
+    // 	}
+    //
+    // 	// Deduplicate consecutive identical event types
     //     if (eventType !== this.lastEventType) {
     //         if (this.lastEventType !== null && this.eventTypeCount > 0) {
     //             this.logger.debug('Stream event summary', {
@@ -157,7 +157,13 @@ export class ConversationSession {
         this.eventTypeCount = 0;
     };
 
-    constructor(id: string, {agentClient, deps}: {agentClient: OpenAIAgentClient; deps: {logger: ILoggingService}}) {
+    constructor(
+        id: string,
+        {
+            agentClient,
+            deps,
+        }: {agentClient: OpenAIAgentClient; deps: {logger: ILoggingService}},
+    ) {
         this.id = id;
         this.agentClient = agentClient;
         this.logger = deps.logger;
@@ -170,7 +176,9 @@ export class ConversationSession {
         this.pendingApprovalContext = null;
         this.abortedApprovalContext = null;
         this.toolCallArgumentsById.clear();
-        if (typeof (this.agentClient as any).clearConversations === 'function') {
+        if (
+            typeof (this.agentClient as any).clearConversations === 'function'
+        ) {
             (this.agentClient as any).clearConversations();
         }
     }
@@ -210,7 +218,9 @@ export class ConversationSession {
         if (this.pendingApprovalContext) {
             this.abortedApprovalContext = this.pendingApprovalContext;
             this.pendingApprovalContext = null;
-            this.logger.debug('Aborted approval - will handle rejection on next message');
+            this.logger.debug(
+                'Aborted approval - will handle rejection on next message',
+            );
         }
     }
 
@@ -226,7 +236,7 @@ export class ConversationSession {
             skipUserMessage = false,
         }: {
             hallucinationRetryCount?: number;
-                skipUserMessage?: boolean;
+            skipUserMessage?: boolean;
         } = {},
     ): AsyncIterable<ConversationEvent> {
         let stream: any = null;
@@ -239,9 +249,12 @@ export class ConversationSession {
             // If there's an aborted approval, we need to resolve it first.
             // The user's message is a new input, but the agent is stuck waiting for tool output.
             if (this.abortedApprovalContext) {
-                this.logger.debug('Resolving aborted approval with fake execution', {
-                    message: text,
-                });
+                this.logger.debug(
+                    'Resolving aborted approval with fake execution',
+                    {
+                        message: text,
+                    },
+                );
 
                 const {
                     state,
@@ -254,7 +267,10 @@ export class ConversationSession {
                 // Restore cached tool-call arguments captured before abort so continuation can attach them
                 this.toolCallArgumentsById.clear();
                 if (toolCallArgumentsById?.size) {
-                    for (const [key, value] of toolCallArgumentsById.entries()) {
+                    for (const [
+                        key,
+                        value,
+                    ] of toolCallArgumentsById.entries()) {
                         this.toolCallArgumentsById.set(key, value);
                     }
                 }
@@ -285,9 +301,12 @@ export class ConversationSession {
                 state.approve(interruption);
 
                 try {
-                    const stream = await this.agentClient.continueRunStream(state, {
-                        previousResponseId: this.previousResponseId,
-                    });
+                    const stream = await this.agentClient.continueRunStream(
+                        state,
+                        {
+                            previousResponseId: this.previousResponseId,
+                        },
+                    );
 
                     const acc = {
                         finalOutput: '',
@@ -302,7 +321,10 @@ export class ConversationSession {
                     this.conversationStore.updateFromResult(stream);
 
                     // Check if another interruption occurred
-                    if (stream.interruptions && stream.interruptions.length > 0) {
+                    if (
+                        stream.interruptions &&
+                        stream.interruptions.length > 0
+                    ) {
                         this.logger.warn(
                             'Another interruption occurred after fake execution - handling as approval',
                         );
@@ -315,7 +337,8 @@ export class ConversationSession {
                         );
                         // Re-emit the terminal event explicitly.
                         if (result.type === 'approval_required') {
-                            const interruption = result.approval.rawInterruption;
+                            const interruption =
+                                result.approval.rawInterruption;
                             const callId =
                                 interruption?.rawItem?.callId ??
                                 interruption?.callId ??
@@ -328,7 +351,8 @@ export class ConversationSession {
                                 approval: {
                                     agentName: result.approval.agentName,
                                     toolName: result.approval.toolName,
-                                    argumentsText: result.approval.argumentsText,
+                                    argumentsText:
+                                        result.approval.argumentsText,
                                     ...(callId ? {callId: String(callId)} : {}),
                                 },
                             };
@@ -468,7 +492,9 @@ export class ConversationSession {
             yield {
                 type: 'final',
                 finalText: result.finalText,
-                ...(result.reasoningText ? {reasoningText: result.reasoningText} : {}),
+                ...(result.reasoningText
+                    ? {reasoningText: result.reasoningText}
+                    : {}),
                 ...(result.commandMessages?.length
                     ? {commandMessages: result.commandMessages}
                     : {}),
@@ -498,7 +524,8 @@ export class ConversationSession {
                     toolName,
                     attempt: hallucinationRetryCount + 1,
                     maxRetries: MAX_HALLUCINATION_RETRIES,
-                    errorMessage: error instanceof Error ? error.message : String(error),
+                    errorMessage:
+                        error instanceof Error ? error.message : String(error),
                 };
 
                 if (stream) {
@@ -533,15 +560,13 @@ export class ConversationSession {
      *
      * Named as a string-literal because `continue` is a keyword.
      */
-    async *['continue'](
-        {
-            answer,
-            rejectionReason,
-        }: {
-            answer: string;
-            rejectionReason?: string;
-        },
-    ): AsyncIterable<ConversationEvent> {
+    async *['continue']({
+        answer,
+        rejectionReason,
+    }: {
+        answer: string;
+        rejectionReason?: string;
+    }): AsyncIterable<ConversationEvent> {
         if (!this.pendingApprovalContext) {
             return;
         }
@@ -655,7 +680,9 @@ export class ConversationSession {
             yield {
                 type: 'final',
                 finalText: result.finalText,
-                ...(result.reasoningText ? {reasoningText: result.reasoningText} : {}),
+                ...(result.reasoningText
+                    ? {reasoningText: result.reasoningText}
+                    : {}),
                 ...(result.commandMessages?.length
                     ? {commandMessages: result.commandMessages}
                     : {}),
@@ -668,7 +695,10 @@ export class ConversationSession {
             throw error;
         } finally {
             // Clean up interceptor if one was added for rejection reason
-            if (rejectionReason && this.pendingApprovalContext?.removeInterceptor) {
+            if (
+                rejectionReason &&
+                this.pendingApprovalContext?.removeInterceptor
+            ) {
                 this.pendingApprovalContext.removeInterceptor();
             }
         }
@@ -716,7 +746,8 @@ export class ConversationSession {
                 case 'approval_required': {
                     sawTerminalEvent = event;
                     // pendingApprovalContext is set inside #buildResult during run()
-                    const rawInterruption = this.pendingApprovalContext?.interruption;
+                    const rawInterruption =
+                        this.pendingApprovalContext?.interruption;
                     return {
                         type: 'approval_required',
                         approval: {
@@ -804,7 +835,8 @@ export class ConversationSession {
                 }
                 case 'approval_required': {
                     sawTerminalEvent = event;
-                    const rawInterruption = this.pendingApprovalContext?.interruption;
+                    const rawInterruption =
+                        this.pendingApprovalContext?.interruption;
                     return {
                         type: 'approval_required',
                         approval: {
@@ -882,9 +914,9 @@ export class ConversationSession {
         };
 
         const emitReasoning = (delta: string) => {
-			if (!delta || delta.replaceAll('\n', '') === '') {
-				return null;
-			}
+            if (!delta || delta.replaceAll('\n', '') === '') {
+                return null;
+            }
             acc.reasoningOutput += delta;
             this.reasoningDeltaCount++;
             return {
@@ -973,8 +1005,13 @@ export class ConversationSession {
             };
 
             if (event?.type === 'run_item_stream_event') {
-                this.#captureToolCallArguments(event.item, toolCallArgumentsById);
-                for (const e of maybeEmitCommandMessagesFromItems([event.item])) {
+                this.#captureToolCallArguments(
+                    event.item,
+                    toolCallArgumentsById,
+                );
+                for (const e of maybeEmitCommandMessagesFromItems([
+                    event.item,
+                ])) {
                     yield e;
                 }
             } else if (
@@ -1015,7 +1052,8 @@ export class ConversationSession {
             return;
         }
 
-        const args = rawItem.arguments ?? rawItem.args ?? item?.arguments ?? item?.args;
+        const args =
+            rawItem.arguments ?? rawItem.args ?? item?.arguments ?? item?.args;
         if (!args) {
             return;
         }
@@ -1036,7 +1074,12 @@ export class ConversationSession {
                 continue;
             }
 
-            if (item.arguments || item.args || item?.rawItem?.arguments || item?.rawItem?.args) {
+            if (
+                item.arguments ||
+                item.args ||
+                item?.rawItem?.arguments ||
+                item?.rawItem?.args
+            ) {
                 continue;
             }
 

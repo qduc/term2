@@ -33,8 +33,8 @@ const baseProps: BottomAreaProps = {
         addMessage: () => {},
         clear: () => {},
     } as any,
-    onApprove: () => { },
-    onReject: () => { },
+    onApprove: () => {},
+    onReject: () => {},
 };
 
 const renderBottomArea = (props: typeof baseProps) =>

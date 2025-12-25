@@ -12,7 +12,7 @@ npm install bash-parser
 yarn add bash-parser
 ```
 
------
+---
 
 ### Step 1: Define the "Deny List"
 
@@ -22,15 +22,35 @@ Instead of complex regex patterns, we will create a clean `Set` of command names
 // The set of binary names strictly forbidden from automatic execution
 const BLOCKED_COMMANDS = new Set([
     // Filesystem
-    'rm', 'rmdir', 'mkfs', 'dd', 'mv', 'cp',
+    'rm',
+    'rmdir',
+    'mkfs',
+    'dd',
+    'mv',
+    'cp',
     // System
-    'sudo', 'su', 'chmod', 'chown', 'shutdown', 'reboot',
+    'sudo',
+    'su',
+    'chmod',
+    'chown',
+    'shutdown',
+    'reboot',
     // Network/Web
-    'curl', 'wget', 'ssh', 'scp', 'netstat',
+    'curl',
+    'wget',
+    'ssh',
+    'scp',
+    'netstat',
     // Package Managers (often modify global state)
-    'apt', 'yum', 'npm', 'pip', 'gem',
+    'apt',
+    'yum',
+    'npm',
+    'pip',
+    'gem',
     // Dangerous wrappers
-    'eval', 'exec', 'watch'
+    'eval',
+    'exec',
+    'watch',
 ]);
 ```
 
@@ -54,11 +74,34 @@ Here is the robust, AST-based replacement for your `isDangerousCommand` function
 import parse from 'bash-parser';
 
 const BLOCKED_COMMANDS = new Set([
-    'rm', 'rmdir', 'mkfs', 'dd', 'mv', 'cp',
-    'sudo', 'su', 'chmod', 'chown', 'shutdown', 'reboot',
-    'curl', 'wget', 'ssh', 'scp', 'netstat',
-    'apt', 'yum', 'npm', 'yarn', 'pnpm', 'pip', 'gem',
-    'eval', 'exec', 'kill', 'killall'
+    'rm',
+    'rmdir',
+    'mkfs',
+    'dd',
+    'mv',
+    'cp',
+    'sudo',
+    'su',
+    'chmod',
+    'chown',
+    'shutdown',
+    'reboot',
+    'curl',
+    'wget',
+    'ssh',
+    'scp',
+    'netstat',
+    'apt',
+    'yum',
+    'npm',
+    'yarn',
+    'pnpm',
+    'pip',
+    'gem',
+    'eval',
+    'exec',
+    'kill',
+    'killall',
 ]);
 
 /**
@@ -71,9 +114,9 @@ function containsDangerousCommand(node: any): boolean {
     if (node.type === 'Command') {
         // node.name can be undefined if it's a variable assignment like "x=1"
         if (node.name && node.name.text) {
-             if (BLOCKED_COMMANDS.has(node.name.text)) {
-                 return true;
-             }
+            if (BLOCKED_COMMANDS.has(node.name.text)) {
+                return true;
+            }
         }
 
         // CRITICAL: Check for subshells in arguments (e.g., "echo $(rm -rf /)")
@@ -88,7 +131,10 @@ function containsDangerousCommand(node: any): boolean {
 
     // CASE 2: Logical Operators (e.g., "git pull && npm install")
     if (node.type === 'LogicalExpression') {
-        return containsDangerousCommand(node.left) || containsDangerousCommand(node.right);
+        return (
+            containsDangerousCommand(node.left) ||
+            containsDangerousCommand(node.right)
+        );
     }
 
     // CASE 3: Pipelines (e.g., "cat file | grep secret")
@@ -115,18 +161,23 @@ export function validateCommandSafety(commandString: string): boolean {
 
         // 1. Parse string into AST
         // { mode: 'bash' } allows standard bash syntax parsing
-        const ast = parse(commandString, { mode: 'bash' });
+        const ast = parse(commandString, {mode: 'bash'});
 
         // 2. The AST is a list of commands (Script). Iterate them.
         if (ast.commands) {
-            return ast.commands.some((node: any) => containsDangerousCommand(node));
+            return ast.commands.some((node: any) =>
+                containsDangerousCommand(node),
+            );
         }
 
         return false;
     } catch (error) {
         // If the parser fails (invalid syntax), standard safety policy:
         // FAIL CLOSED (assume dangerous if we can't understand it).
-        console.warn('Command parsing failed, requiring manual approval:', error);
+        console.warn(
+            'Command parsing failed, requiring manual approval:',
+            error,
+        );
         return true;
     }
 }

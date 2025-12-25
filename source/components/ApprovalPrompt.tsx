@@ -1,5 +1,5 @@
 import React, {FC} from 'react';
-import { Box, Text, useInput } from 'ink';
+import {Box, Text, useInput} from 'ink';
 import {generateDiff} from '../utils/diff.js';
 
 type Props = {
@@ -57,7 +57,9 @@ const DiffView: FC<{diff: string}> = ({diff}) => {
                     );
                 })}
                 {truncated && (
-                    <Text dimColor>... ({lines.length - maxLines} more lines)</Text>
+                    <Text dimColor>
+                        ... ({lines.length - maxLines} more lines)
+                    </Text>
                 )}
             </Box>
         );
@@ -92,7 +94,9 @@ const ShellPrompt: FC<{args: ShellArgs}> = ({args}) => {
     return (
         <Box flexDirection="column" marginLeft={2}>
             <Box>
-                <Text color="cyan" bold>Command: </Text>
+                <Text color="cyan" bold>
+                    Command:{' '}
+                </Text>
                 <Text>{args.commands}</Text>
             </Box>
             {args.timeout_ms && (
@@ -102,7 +106,9 @@ const ShellPrompt: FC<{args: ShellArgs}> = ({args}) => {
             )}
             {args.max_output_length && (
                 <Box>
-                    <Text dimColor>Max output: {args.max_output_length} chars</Text>
+                    <Text dimColor>
+                        Max output: {args.max_output_length} chars
+                    </Text>
                 </Box>
             )}
         </Box>
@@ -115,7 +121,9 @@ const SearchReplacePrompt: FC<{args: SearchReplaceArgs}> = ({args}) => {
     return (
         <Box flexDirection="column">
             <Box>
-                <Text color="yellow" bold>[SEARCH & REPLACE]</Text>
+                <Text color="yellow" bold>
+                    [SEARCH & REPLACE]
+                </Text>
                 <Text> {args.path}</Text>
                 {args.replace_all && (
                     <Text color="magenta"> (all occurrences)</Text>
@@ -126,11 +134,9 @@ const SearchReplacePrompt: FC<{args: SearchReplaceArgs}> = ({args}) => {
     );
 };
 
-const ApprovalPrompt: FC<Props & { onApprove: () => void; onReject: () => void }> = ({
-    approval,
-    onApprove,
-    onReject,
-}) => {
+const ApprovalPrompt: FC<
+    Props & {onApprove: () => void; onReject: () => void}
+> = ({approval, onApprove, onReject}) => {
     const [selectedIndex, setSelectedIndex] = React.useState(0); // 0 = Approve, 1 = Reject
 
     useInput((input, key) => {

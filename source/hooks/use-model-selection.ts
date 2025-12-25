@@ -7,7 +7,10 @@ import {
 } from '../services/model-service.js';
 import {getProviderIds} from '../providers/index.js';
 import {getAvailableProviderIds} from '../utils/provider-credentials.js';
-import type {ILoggingService, ISettingsService} from '../services/service-interfaces.js';
+import type {
+    ILoggingService,
+    ISettingsService,
+} from '../services/service-interfaces.js';
 
 export const MODEL_TRIGGER = '/settings agent.model ';
 export const MODEL_CMD_TRIGGER = '/model ';
@@ -18,7 +21,7 @@ export const useModelSelection = (
         loggingService: ILoggingService;
         settingsService: ISettingsService;
     },
-    hasConversationHistory = false
+    hasConversationHistory = false,
 ) => {
     const {loggingService, settingsService} = deps;
     const {mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex} =
@@ -44,9 +47,8 @@ export const useModelSelection = (
 
     useEffect(() => {
         if (isOpen) {
-            const providerSetting = settingsService.get<string>(
-                'agent.provider',
-            );
+            const providerSetting =
+                settingsService.get<string>('agent.provider');
             setProvider(providerSetting);
             failedProvidersRef.current.clear();
             isInitialLoadRef.current = true;
@@ -59,7 +61,10 @@ export const useModelSelection = (
         const load = async () => {
             // If already marked as failed, don't try again in this session
             // unless it's the only one left (covered by logic below)
-            if (failedProvidersRef.current.has(provider) && !isInitialLoadRef.current) {
+            if (
+                failedProvidersRef.current.has(provider) &&
+                !isInitialLoadRef.current
+            ) {
                 return;
             }
 
@@ -67,17 +72,27 @@ export const useModelSelection = (
             setError(null);
 
             try {
-                const fetched = await fetchModels({settingsService, loggingService}, provider);
+                const fetched = await fetchModels(
+                    {settingsService, loggingService},
+                    provider,
+                );
                 setModels(fetched);
                 isInitialLoadRef.current = false;
             } catch (err) {
-                const message = err instanceof Error ? err.message : String(err);
-                loggingService.warn(`Model selection fetch failed for ${provider}`, {error: message});
+                const message =
+                    err instanceof Error ? err.message : String(err);
+                loggingService.warn(
+                    `Model selection fetch failed for ${provider}`,
+                    {error: message},
+                );
 
                 failedProvidersRef.current.add(provider);
 
                 const providerIds = getProviderIds();
-                const available = getAvailableProviderIds(settingsService, providerIds);
+                const available = getAvailableProviderIds(
+                    settingsService,
+                    providerIds,
+                );
 
                 // Find next available provider that hasn't failed yet
                 const currentIndex = available.indexOf(provider);
@@ -141,13 +156,16 @@ export const useModelSelection = (
         }
     }, [selectedIndex, scrollOffset]);
 
-    const open = useCallback((startIndex: number) => {
-        if (mode === 'model_selection') return;
-        setMode('model_selection');
-        setTriggerIndex(startIndex);
-        setSelectedIndex(0);
-        setScrollOffset(0);
-    }, [mode, setMode, setTriggerIndex]);
+    const open = useCallback(
+        (startIndex: number) => {
+            if (mode === 'model_selection') return;
+            setMode('model_selection');
+            setTriggerIndex(startIndex);
+            setSelectedIndex(0);
+            setScrollOffset(0);
+        },
+        [mode, setMode, setTriggerIndex],
+    );
 
     const close = useCallback(() => {
         if (mode === 'model_selection') {
@@ -180,13 +198,18 @@ export const useModelSelection = (
 
     const toggleProvider = useCallback(() => {
         const providerIds = getProviderIds();
-        const availableProviders = getAvailableProviderIds(settingsService, providerIds);
+        const availableProviders = getAvailableProviderIds(
+            settingsService,
+            providerIds,
+        );
 
         // If no providers available, stay on current
         if (availableProviders.length === 0) return;
 
         setProvider(prev => {
-            const currentIndex = availableProviders.indexOf(prev || availableProviders[0]);
+            const currentIndex = availableProviders.indexOf(
+                prev || availableProviders[0],
+            );
             const nextIndex = (currentIndex + 1) % availableProviders.length;
             const nextProvider = availableProviders[nextIndex];
             // If the user manually selects it, we should allow retrying it

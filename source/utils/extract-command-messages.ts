@@ -27,7 +27,9 @@ const getCallIdFromItem = (item: any): string | null => {
     );
 };
 
-export const markToolCallAsApprovalRejection = (callId?: string | null): void => {
+export const markToolCallAsApprovalRejection = (
+    callId?: string | null,
+): void => {
     if (!callId) {
         return;
     }
@@ -148,7 +150,10 @@ const coerceCommandText = (value: unknown): string => {
     }
 
     if (Array.isArray(value)) {
-        return value.map(part => coerceToText(part)).filter(Boolean).join('\n');
+        return value
+            .map(part => coerceToText(part))
+            .filter(Boolean)
+            .join('\n');
     }
 
     return coerceToText(value);
@@ -208,7 +213,8 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             continue;
         }
 
-        const args = rawItem.arguments ?? rawItem.args ?? item?.arguments ?? item?.args;
+        const args =
+            rawItem.arguments ?? rawItem.args ?? item?.arguments ?? item?.args;
         if (!args) {
             continue;
         }
@@ -257,9 +263,11 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                         .map(entry =>
                             typeof entry === 'string'
                                 ? entry
-                                : (entry && typeof entry === 'object' && 'command' in entry)
-                                    ? coerceCommandText((entry as any).command)
-                                    : coerceCommandText(entry),
+                                : entry &&
+                                  typeof entry === 'object' &&
+                                  'command' in entry
+                                ? coerceCommandText((entry as any).command)
+                                : coerceCommandText(entry),
                         )
                         .filter(Boolean)
                         .join('\n');
@@ -281,13 +289,20 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 firstLine.includes('Error') ||
                 firstLine.includes('failed') ||
                 firstLine.includes('Failed') ||
-                (!firstLine.startsWith('exit ') && firstLine !== 'timeout' && outputText && !outputText.includes('\n'));
+                (!firstLine.startsWith('exit ') &&
+                    firstLine !== 'timeout' &&
+                    outputText &&
+                    !outputText.includes('\n'));
 
             let output: string;
             let success: boolean | undefined;
             let failureReason: string | undefined;
 
-            if (isErrorMessage && !firstLine.startsWith('exit ') && firstLine !== 'timeout') {
+            if (
+                isErrorMessage &&
+                !firstLine.startsWith('exit ') &&
+                firstLine !== 'timeout'
+            ) {
                 // For error messages, use the entire output
                 output = outputText || 'No output';
                 success = false;
@@ -338,7 +353,8 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 
             // If JSON parsing failed or no output array, create error message
             if (patchOutputItems.length === 0) {
-                const args = normalizeToolArguments(normalizedItem.arguments) ?? {};
+                const args =
+                    normalizeToolArguments(normalizedItem.arguments) ?? {};
                 const operationType = args?.type ?? 'unknown';
                 const filePath = args?.path ?? 'unknown';
                 const command = `apply_patch ${operationType} ${filePath}`;
@@ -367,13 +383,19 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             }
 
             // Apply patch tool can have multiple operation outputs
-            for (const [patchIndex, patchResult] of patchOutputItems.entries()) {
-                const args = normalizeToolArguments(normalizedItem.arguments) ?? {};
-                const operationType = args?.type ?? patchResult?.operation ?? 'unknown';
+            for (const [
+                patchIndex,
+                patchResult,
+            ] of patchOutputItems.entries()) {
+                const args =
+                    normalizeToolArguments(normalizedItem.arguments) ?? {};
+                const operationType =
+                    args?.type ?? patchResult?.operation ?? 'unknown';
                 const filePath = args?.path ?? patchResult?.path ?? 'unknown';
 
                 const command = `apply_patch ${operationType} ${filePath}`;
-                const output = patchResult?.message ?? patchResult?.error ?? 'No output';
+                const output =
+                    patchResult?.message ?? patchResult?.error ?? 'No output';
                 const success = patchResult?.success ?? false;
 
                 const rawItem = item?.rawItem ?? item;
@@ -432,10 +454,14 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             }
 
             const command = parts.join(' ');
-            const output = parsedOutput?.output ?? normalizedItem.outputText ?? 'No output';
+            const output =
+                parsedOutput?.output ??
+                normalizedItem.outputText ??
+                'No output';
             // Check if output indicates an error
-            const hasError = output.toLowerCase().includes('error') ||
-                           output.toLowerCase().includes('failed');
+            const hasError =
+                output.toLowerCase().includes('error') ||
+                output.toLowerCase().includes('failed');
             const success = !hasError;
 
             const stableId =
@@ -464,7 +490,8 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 
             // If JSON parsing failed or no output array, create error message
             if (replaceOutputItems.length === 0) {
-                const args = normalizeToolArguments(normalizedItem.arguments) ?? {};
+                const args =
+                    normalizeToolArguments(normalizedItem.arguments) ?? {};
                 const filePath = args?.path ?? 'unknown';
                 const searchContent = args?.search_content ?? '';
                 const replaceContent = args?.replace_content ?? '';
@@ -501,14 +528,21 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             }
 
             // Search replace tool can have multiple operation outputs
-            for (const [replaceIndex, replaceResult] of replaceOutputItems.entries()) {
-                const args = normalizeToolArguments(normalizedItem.arguments) ?? {};
+            for (const [
+                replaceIndex,
+                replaceResult,
+            ] of replaceOutputItems.entries()) {
+                const args =
+                    normalizeToolArguments(normalizedItem.arguments) ?? {};
                 const filePath = args?.path ?? replaceResult?.path ?? 'unknown';
                 const searchContent = args?.search_content ?? '';
                 const replaceContent = args?.replace_content ?? '';
 
                 const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
-                const output = replaceResult?.message ?? replaceResult?.error ?? 'No output';
+                const output =
+                    replaceResult?.message ??
+                    replaceResult?.error ??
+                    'No output';
                 const success = replaceResult?.success ?? false;
 
                 const rawItem = item?.rawItem ?? item;
@@ -555,7 +589,8 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 
             const question = args?.question ?? 'Unknown question';
             const command = `ask_mentor: ${question}`;
-            const output = normalizedItem.outputText || 'No response from mentor';
+            const output =
+                normalizedItem.outputText || 'No response from mentor';
             const success = !output.startsWith('Failed to ask mentor:');
 
             const baseId =

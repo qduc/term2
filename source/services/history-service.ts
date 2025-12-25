@@ -26,7 +26,8 @@ export class HistoryService {
         historyFile?: string;
     }) {
         this.loggingService = deps.loggingService;
-        this.historyFile = deps.historyFile || path.join(paths.log, 'history.json');
+        this.historyFile =
+            deps.historyFile || path.join(paths.log, 'history.json');
         this.maxHistorySize = deps.settingsService.get('ui.historySize');
         this.load();
     }
@@ -139,9 +140,11 @@ export class HistoryService {
  * It's only allowed in test files for backwards compatibility.
  */
 const _historyServiceInstance = new HistoryService({
-    loggingService: new LoggingService({ disableLogging: false }),
+    loggingService: new LoggingService({disableLogging: false}),
     settingsService: new (class MockSettingsService {
-        get() { return 1000; } // Default history size
+        get() {
+            return 1000;
+        } // Default history size
     })() as any,
 });
 
@@ -173,12 +176,12 @@ export const historyService = new Proxy(_historyServiceInstance, {
 
         throw new Error(
             `DEPRECATED: Direct use of historyService singleton is not allowed.\n` +
-            `Called from: ${callerLine.trim()}\n\n` +
-            `Instead, pass HistoryService via dependency injection:\n` +
-            `  - In App component: Accept as prop from cli.tsx\n` +
-            `  - In services/tools: Accept via 'deps' constructor parameter\n` +
-            `  - In hooks: Accept as parameter or use a context provider\n\n` +
-            `The singleton pattern prevents proper testing and makes dependencies unclear.`
+                `Called from: ${callerLine.trim()}\n\n` +
+                `Instead, pass HistoryService via dependency injection:\n` +
+                `  - In App component: Accept as prop from cli.tsx\n` +
+                `  - In services/tools: Accept via 'deps' constructor parameter\n` +
+                `  - In hooks: Accept as parameter or use a context provider\n\n` +
+                `The singleton pattern prevents proper testing and makes dependencies unclear.`,
         );
-    }
+    },
 });

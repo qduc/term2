@@ -1,11 +1,10 @@
 import parse from 'bash-parser';
-import {
-    SafetyStatus,
-    ALLOWED_COMMANDS,
-    BLOCKED_COMMANDS,
-} from './constants.js';
+import {SafetyStatus, ALLOWED_COMMANDS, BLOCKED_COMMANDS} from './constants.js';
 import {extractWordText} from './utils.js';
-import {hasFindDangerousExecution, hasFindSuspiciousFlags} from './find-helpers.js';
+import {
+    hasFindDangerousExecution,
+    hasFindSuspiciousFlags,
+} from './find-helpers.js';
 import {analyzePathRisk} from './path-analysis.js';
 import {getCommandHandler} from './handlers/index.js';
 import type {CommandHandlerHelpers} from './handlers/index.js';
@@ -109,7 +108,8 @@ export function classifyCommand(
                         // Handle redirects
                         if (arg?.type === 'Redirect') {
                             const fileText = extractWordText(arg.file ?? arg);
-                            const pathStatus = analyzePathRiskWithLogger(fileText);
+                            const pathStatus =
+                                analyzePathRiskWithLogger(fileText);
                             upgradeStatus(
                                 pathStatus,
                                 `redirect to ${fileText ?? '<unknown>'}`,

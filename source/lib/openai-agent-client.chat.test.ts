@@ -1,7 +1,10 @@
 import test from 'ava';
-import { OpenAIAgentClient } from './openai-agent-client.js';
-import { registerProvider } from '../providers/registry.js';
-import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import {OpenAIAgentClient} from './openai-agent-client.js';
+import {registerProvider} from '../providers/registry.js';
+import type {
+    ILoggingService,
+    ISettingsService,
+} from '../services/service-interfaces.js';
 
 // Mock Logger
 const mockLogger: ILoggingService = {
@@ -30,7 +33,7 @@ class MockRunner {
     async run(_agent: any, _input: any, _options: any) {
         return {
             status: 'completed',
-            messages: [{ role: 'assistant', content: 'Fallback content' }],
+            messages: [{role: 'assistant', content: 'Fallback content'}],
             // finalOutput is missing
         };
     }
@@ -41,7 +44,7 @@ test.before(() => {
         id: 'mock-provider-chat',
         label: 'Mock Provider Chat',
         createRunner: () => new MockRunner() as any,
-        fetchModels: async () => [{ id: 'mock-model' }],
+        fetchModels: async () => [{id: 'mock-model'}],
     });
 });
 
@@ -50,7 +53,7 @@ test('OpenAIAgentClient.chat falls back to messages if finalOutput is missing', 
         deps: {
             logger: mockLogger,
             settings: mockSettings,
-        }
+        },
     });
 
     const response = await client.chat('Hello');

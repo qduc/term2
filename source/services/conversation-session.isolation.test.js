@@ -92,11 +92,15 @@ test('sessions do not share pending approval context', async t => {
         },
     };
 
-    const streamB = new MockStream([{type: 'response.output_text.delta', delta: 'Hello'}]);
+    const streamB = new MockStream([
+        {type: 'response.output_text.delta', delta: 'Hello'},
+    ]);
     streamB.finalOutput = 'Hello';
     streamB.lastResponseId = 'resp-B1';
 
-    const continuationA = new MockStream([{type: 'response.output_text.delta', delta: 'Approved'}]);
+    const continuationA = new MockStream([
+        {type: 'response.output_text.delta', delta: 'Approved'},
+    ]);
     continuationA.finalOutput = 'Approved';
 
     const mockClient = {

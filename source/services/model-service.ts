@@ -21,7 +21,8 @@ export async function fetchModels(
     fetchImpl: FetchFn = fetch as any,
 ): Promise<ModelInfo[]> {
     const {settingsService, loggingService} = deps;
-    const provider = providerOverride || settingsService.get<string>('agent.provider');
+    const provider =
+        providerOverride || settingsService.get<string>('agent.provider');
     const cacheKey = provider;
 
     if (cache.has(cacheKey)) {
@@ -34,7 +35,10 @@ export async function fetchModels(
             throw new Error(`Provider '${provider}' is not registered`);
         }
 
-        const rawModels = await providerDef.fetchModels({settingsService, loggingService}, fetchImpl);
+        const rawModels = await providerDef.fetchModels(
+            {settingsService, loggingService},
+            fetchImpl,
+        );
         const models: ModelInfo[] = rawModels.map(m => ({
             ...m,
             provider,
@@ -55,10 +59,7 @@ export function clearModelCache(): void {
     cache.clear();
 }
 
-export function filterModels(
-    models: ModelInfo[],
-    query: string,
-): ModelInfo[] {
+export function filterModels(models: ModelInfo[], query: string): ModelInfo[] {
     if (!query.trim()) {
         return models;
     }
@@ -69,7 +70,5 @@ export function filterModels(
         ignoreLocation: true,
     });
 
-    return fuse
-        .search(query.trim())
-        .map(match => match.item);
+    return fuse.search(query.trim()).map(match => match.item);
 }

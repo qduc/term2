@@ -9,10 +9,15 @@ interface StatusBarProps {
 }
 
 const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
-    const mode = useSetting<'default' | 'edit'>(settingsService, 'app.mode') ?? 'default';
+    const mode =
+        useSetting<'default' | 'edit'>(settingsService, 'app.mode') ??
+        'default';
     const model = useSetting<string>(settingsService, 'agent.model');
-    const providerKey = useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
-    const reasoningEffort = useSetting<string>(settingsService, 'agent.reasoningEffort') ?? 'default';
+    const providerKey =
+        useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
+    const reasoningEffort =
+        useSetting<string>(settingsService, 'agent.reasoningEffort') ??
+        'default';
 
     const providerDef = getProvider(providerKey);
     const providerLabel = providerDef?.label || providerKey;
@@ -25,7 +30,9 @@ const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
         <Box marginTop={1}>
             <Box marginRight={1}>
                 {mode === 'edit' ? (
-                    <Text color={glow} bold>Auto Edit</Text>
+                    <Text color={glow} bold>
+                        Auto Edit
+                    </Text>
                 ) : (
                     <Text color={slate}>Manual Approval</Text>
                 )}
@@ -45,9 +52,7 @@ const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
                 <>
                     <Text color={slate}>│</Text>
                     <Box marginX={1}>
-                        <Text color={glow}>
-                            Reasoning: {reasoningEffort}
-                        </Text>
+                        <Text color={glow}>Reasoning: {reasoningEffort}</Text>
                     </Box>
                 </>
             )}

@@ -10,8 +10,13 @@ export function decodeHtmlEntities(text: string): string {
         .replace(/&apos;/g, "'");
 }
 
-export function getOpenRouterBaseUrl(settingsService: ISettingsService): string {
-    return settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1';
+export function getOpenRouterBaseUrl(
+    settingsService: ISettingsService,
+): string {
+    return (
+        settingsService.get('agent.openrouter.baseUrl') ||
+        'https://openrouter.ai/api/v1'
+    );
 }
 
 export function normalizeUsage(openRouterUsage: any): {
@@ -30,5 +35,7 @@ export function normalizeUsage(openRouterUsage: any): {
 
 export function isAnthropicModel(modelId: string): boolean {
     const lowerModelId = modelId.toLowerCase();
-    return lowerModelId.includes('anthropic') || lowerModelId.includes('claude');
+    return (
+        lowerModelId.includes('anthropic') || lowerModelId.includes('claude')
+    );
 }

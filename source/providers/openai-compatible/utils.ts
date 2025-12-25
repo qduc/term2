@@ -4,7 +4,10 @@ export function normalizeBaseUrl(baseUrl: string): string {
     return trimmed.replace(/\/+$/g, '');
 }
 
-export function buildOpenAICompatibleUrl(baseUrl: string, path: string): string {
+export function buildOpenAICompatibleUrl(
+    baseUrl: string,
+    path: string,
+): string {
     const normalized = normalizeBaseUrl(baseUrl);
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     return `${normalized}${normalizedPath}`;

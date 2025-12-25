@@ -10,7 +10,7 @@ const baseSettings = {
         model: {value: 'gpt-5.1', source: 'default'},
         reasoningEffort: {value: 'default', source: 'default'},
         temperature: {value: undefined, source: 'default'},
-		mentorModel: {value: undefined, source: 'default'},
+        mentorModel: {value: undefined, source: 'default'},
         provider: {value: 'openai', source: 'default'},
         maxTurns: {value: 20, source: 'default'},
         retryAttempts: {value: 2, source: 'default'},
@@ -67,7 +67,9 @@ test('formatSettingsSummary renders values with sources', t => {
 test('viewing all settings with no args prompts for autocomplete', t => {
     const deps = createDeps();
     let inputValue = '';
-    deps.setInput = (value) => { inputValue = value; };
+    deps.setInput = value => {
+        inputValue = value;
+    };
     const command = createSettingsCommand(deps);
     const result = command.action();
 
@@ -130,18 +132,24 @@ test('parseSettingValue converts common primitives', t => {
 test('setting agent.model strips --provider flag from value', t => {
     const deps = createDeps();
     const command = createSettingsCommand(deps);
-    command.action('agent.model mistralai/devstral-2512:free --provider=openrouter');
+    command.action(
+        'agent.model mistralai/devstral-2512:free --provider=openrouter',
+    );
 
     // Should save the provider and the model ID
     t.deepEqual(deps.setCalls, [
         {key: 'agent.provider', value: 'openrouter'},
-        {key: 'agent.model', value: 'mistralai/devstral-2512:free'}
+        {key: 'agent.model', value: 'mistralai/devstral-2512:free'},
     ]);
     t.deepEqual(deps.applied, [
         {key: 'agent.provider', value: 'openrouter'},
-        {key: 'agent.model', value: 'mistralai/devstral-2512:free'}
+        {key: 'agent.model', value: 'mistralai/devstral-2512:free'},
     ]);
-    t.true(deps.messages[0].includes('Set agent.model to mistralai/devstral-2512:free'));
+    t.true(
+        deps.messages[0].includes(
+            'Set agent.model to mistralai/devstral-2512:free',
+        ),
+    );
 });
 
 test('setting agent.model strips --provider=openai flag from value', t => {
@@ -152,11 +160,11 @@ test('setting agent.model strips --provider=openai flag from value', t => {
     // Should save the provider and the model ID
     t.deepEqual(deps.setCalls, [
         {key: 'agent.provider', value: 'openai'},
-        {key: 'agent.model', value: 'gpt-4o'}
+        {key: 'agent.model', value: 'gpt-4o'},
     ]);
     t.deepEqual(deps.applied, [
         {key: 'agent.provider', value: 'openai'},
-        {key: 'agent.model', value: 'gpt-4o'}
+        {key: 'agent.model', value: 'gpt-4o'},
     ]);
     t.true(deps.messages[0].includes('Set agent.model to gpt-4o'));
 });

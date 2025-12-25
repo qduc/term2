@@ -5,9 +5,15 @@ import {
     type ResponseStreamEvent,
 } from '@openai/agents-core';
 import {randomUUID} from 'node:crypto';
-import type {ILoggingService, ISettingsService} from '../../services/service-interfaces.js';
+import type {
+    ILoggingService,
+    ISettingsService,
+} from '../../services/service-interfaces.js';
 import {callOpenAICompatibleChatCompletions} from './api.js';
-import {buildMessagesFromRequest, extractFunctionToolsFromRequest} from '../openrouter/converters.js';
+import {
+    buildMessagesFromRequest,
+    extractFunctionToolsFromRequest,
+} from '../openrouter/converters.js';
 import {normalizeUsage, decodeHtmlEntities} from '../openrouter/utils.js';
 
 export class OpenAICompatibleModel implements Model {
@@ -35,12 +41,19 @@ export class OpenAICompatibleModel implements Model {
         this.#baseUrl = deps.baseUrl;
         this.#apiKey = deps.apiKey;
         this.#modelId =
-            deps.modelId || this.#settingsService.get('agent.model') || 'gpt-4o-mini';
+            deps.modelId ||
+            this.#settingsService.get('agent.model') ||
+            'gpt-4o-mini';
     }
 
     async getResponse(request: ModelRequest): Promise<ModelResponse> {
-        const resolvedModelId = this.#resolveModelFromRequest(request) || this.#modelId;
-        const messages = buildMessagesFromRequest(request, resolvedModelId, this.#loggingService);
+        const resolvedModelId =
+            this.#resolveModelFromRequest(request) || this.#modelId;
+        const messages = buildMessagesFromRequest(
+            request,
+            resolvedModelId,
+            this.#loggingService,
+        );
 
         const tools = extractFunctionToolsFromRequest(request);
 
@@ -84,7 +97,10 @@ export class OpenAICompatibleModel implements Model {
                     providerData: reasoningItem,
                 };
 
-                if (reasoningItem.type === 'reasoning.text' && reasoningItem.text) {
+                if (
+                    reasoningItem.type === 'reasoning.text' &&
+                    reasoningItem.text
+                ) {
                     outputItem.content.push({
                         type: 'input_text',
                         text: reasoningItem.text,
@@ -139,7 +155,9 @@ export class OpenAICompatibleModel implements Model {
                         type: 'function_call',
                         callId: toolCall.id,
                         name: toolCall.function.name,
-                        arguments: decodeHtmlEntities(toolCall.function.arguments),
+                        arguments: decodeHtmlEntities(
+                            toolCall.function.arguments,
+                        ),
                         status: 'completed',
                         ...(typeof reasoning === 'string' ? {reasoning} : {}),
                         ...(reasoningDetails != null
@@ -161,14 +179,21 @@ export class OpenAICompatibleModel implements Model {
     async *getStreamedResponse(
         request: ModelRequest,
     ): AsyncIterable<ResponseStreamEvent> {
-        const resolvedModelId = this.#resolveModelFromRequest(request) || this.#modelId;
-        const messages = buildMessagesFromRequest(request, resolvedModelId, this.#loggingService);
+        const resolvedModelId =
+            this.#resolveModelFromRequest(request) || this.#modelId;
+        const messages = buildMessagesFromRequest(
+            request,
+            resolvedModelId,
+            this.#loggingService,
+        );
         const tools = extractFunctionToolsFromRequest(request);
 
         this.#loggingService.debug('OpenAI-compatible stream start', {
             provider: this.#providerId,
             messageCount: Array.isArray(messages) ? messages.length : 0,
-            messageRoles: Array.isArray(messages) ? messages.map((m: any) => m.role) : [],
+            messageRoles: Array.isArray(messages)
+                ? messages.map((m: any) => m.role)
+                : [],
             toolsCount: Array.isArray(tools) ? tools.length : 0,
         });
 
@@ -252,7 +277,10 @@ export class OpenAICompatibleModel implements Model {
                     providerData: reasoningItem,
                 };
 
-                if (reasoningItem.type === 'reasoning.text' && reasoningItem.text) {
+                if (
+                    reasoningItem.type === 'reasoning.text' &&
+                    reasoningItem.text
+                ) {
                     outputItem.content.push({
                         type: 'input_text',
                         text: reasoningItem.text,
@@ -292,7 +320,8 @@ export class OpenAICompatibleModel implements Model {
                         text: accumulatedText,
                     },
                 ],
-                ...(typeof reasoningText === 'string' && reasoningText.length > 0
+                ...(typeof reasoningText === 'string' &&
+                reasoningText.length > 0
                     ? {reasoning: reasoningText}
                     : {}),
                 ...(reasoningDetails != null
@@ -345,7 +374,9 @@ export class OpenAICompatibleModel implements Model {
                 existing.name += delta.function.name;
             }
             if (delta.function?.arguments) {
-                existing.arguments += decodeHtmlEntities(delta.function.arguments);
+                existing.arguments += decodeHtmlEntities(
+                    delta.function.arguments,
+                );
             }
 
             accumulatedCalls[index] = existing;
@@ -508,7 +539,8 @@ export class OpenAICompatibleModel implements Model {
     }
 
     #resolveModelFromRequest(req: ModelRequest): string | undefined {
-        if ((req as any)?.providerData?.model) return (req as any).providerData.model;
+        if ((req as any)?.providerData?.model)
+            return (req as any).providerData.model;
         return undefined;
     }
 }

@@ -5,7 +5,10 @@ import type {SettingsService} from '../services/settings-service.js';
  * Hook to subscribe to a specific setting value.
  * Updates the component whenever the setting changes.
  */
-export function useSetting<T>(settingsService: SettingsService, key: string): T {
+export function useSetting<T>(
+    settingsService: SettingsService,
+    key: string,
+): T {
     const [value, setValue] = useState<T>(() => settingsService.get<T>(key));
 
     useEffect(() => {
@@ -15,7 +18,7 @@ export function useSetting<T>(settingsService: SettingsService, key: string): T 
             setValue(currentValue);
         }
 
-        const unsubscribe = settingsService.onChange((changedKey) => {
+        const unsubscribe = settingsService.onChange(changedKey => {
             // optimized: only update if the relevant key changed
             // simpler version: just check if the value actually changed
             if (

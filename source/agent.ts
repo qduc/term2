@@ -1,15 +1,18 @@
 import {grepToolDefinition} from './tools/grep.js';
 import {createSearchReplaceToolDefinition} from './tools/search-replace.js';
-import { createApplyPatchToolDefinition } from './tools/apply-patch.js';
+import {createApplyPatchToolDefinition} from './tools/apply-patch.js';
 import {createShellToolDefinition} from './tools/shell.js';
-import { createAskMentorToolDefinition } from './tools/ask-mentor.js';
+import {createAskMentorToolDefinition} from './tools/ask-mentor.js';
 import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import type {ISettingsService, ILoggingService} from './services/service-interfaces.js';
+import type {
+    ISettingsService,
+    ILoggingService,
+} from './services/service-interfaces.js';
 
-const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts')
+const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 
 const DEFAULT_PROMPT = 'simple.md';
 const ANTHROPIC_PROMPT = 'anthropic.md';
@@ -18,10 +21,13 @@ const CODEX_PROMPT = 'codex.md';
 
 function getTopLevelEntries(cwd: string, limit = 50): string {
     try {
-        const entries = fs.readdirSync(cwd, { withFileTypes: true });
-        const names = entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
+        const entries = fs.readdirSync(cwd, {withFileTypes: true});
+        const names = entries.map(e =>
+            e.isDirectory() ? `${e.name}/` : e.name,
+        );
         const shown = names.slice(0, limit);
-        const more = names.length > limit ? `, ...(+${names.length - limit} more)` : '';
+        const more =
+            names.length > limit ? `, ...(+${names.length - limit} more)` : '';
         return shown.join(', ') + more;
     } catch (e: any) {
         return `failed to read: ${e.message}`;
@@ -54,43 +60,47 @@ export interface AgentDefinition {
 }
 
 function getPromptPath(model: string): string {
-	const normalizedModel = model.trim().toLowerCase();
+    const normalizedModel = model.trim().toLowerCase();
 
-	if (normalizedModel.includes('sonnet') || normalizedModel.includes('haiku'))
-		return path.join(BASE_PROMPT_PATH, ANTHROPIC_PROMPT);
-	if (normalizedModel.includes('gpt-5') && normalizedModel.includes('codex'))
-		return path.join(BASE_PROMPT_PATH, CODEX_PROMPT);
-	if (normalizedModel.includes('gpt-5'))
-		return path.join(BASE_PROMPT_PATH, GPT_PROMPT);
+    if (normalizedModel.includes('sonnet') || normalizedModel.includes('haiku'))
+        return path.join(BASE_PROMPT_PATH, ANTHROPIC_PROMPT);
+    if (normalizedModel.includes('gpt-5') && normalizedModel.includes('codex'))
+        return path.join(BASE_PROMPT_PATH, CODEX_PROMPT);
+    if (normalizedModel.includes('gpt-5'))
+        return path.join(BASE_PROMPT_PATH, GPT_PROMPT);
 
-	return path.join(BASE_PROMPT_PATH, DEFAULT_PROMPT);
+    return path.join(BASE_PROMPT_PATH, DEFAULT_PROMPT);
 }
 
 function resolvePrompt(promptPath: string): string {
-	try {
-		return fs.readFileSync(promptPath, 'utf-8').trim();
-	} catch (e: any) {
-		throw new Error(`Failed to read prompt file at ${promptPath}: ${e.message}`);
-	}
+    try {
+        return fs.readFileSync(promptPath, 'utf-8').trim();
+    } catch (e: any) {
+        throw new Error(
+            `Failed to read prompt file at ${promptPath}: ${e.message}`,
+        );
+    }
 }
 
 /**
  * Returns the agent definition with appropriate tools based on the model.
  */
-export const getAgentDefinition = (deps: {
-    settingsService: ISettingsService;
-    loggingService: ILoggingService;
-    askMentor?: (question: string) => Promise<string>;
-}, model?: string): AgentDefinition => {
-    const { settingsService, loggingService, askMentor } = deps;
+export const getAgentDefinition = (
+    deps: {
+        settingsService: ISettingsService;
+        loggingService: ILoggingService;
+        askMentor?: (question: string) => Promise<string>;
+    },
+    model?: string,
+): AgentDefinition => {
+    const {settingsService, loggingService, askMentor} = deps;
     const defaultModel = settingsService.get<string>('agent.model');
     const resolvedModel = model?.trim() || defaultModel;
 
-	if (!resolvedModel)
-		throw new Error('Model cannot be undefined or empty');
+    if (!resolvedModel) throw new Error('Model cannot be undefined or empty');
 
-	const promptPath = getPromptPath(resolvedModel);
-	const prompt = resolvePrompt(promptPath);
+    const promptPath = getPromptPath(resolvedModel);
+    const prompt = resolvePrompt(promptPath);
 
     const envInfo = getEnvInfo(settingsService);
 
@@ -99,10 +109,20 @@ export const getAgentDefinition = (deps: {
         grepToolDefinition,
     ];
 
-    if (resolvedModel.includes('gpt-5.1') || resolvedModel.includes('gpt-5.2')) {
-        tools.push(createApplyPatchToolDefinition({settingsService, loggingService}));
+    if (
+        resolvedModel.includes('gpt-5.1') ||
+        resolvedModel.includes('gpt-5.2')
+    ) {
+        tools.push(
+            createApplyPatchToolDefinition({settingsService, loggingService}),
+        );
     } else {
-        tools.push(createSearchReplaceToolDefinition({settingsService, loggingService}));
+        tools.push(
+            createSearchReplaceToolDefinition({
+                settingsService,
+                loggingService,
+            }),
+        );
     }
 
     // Add mentor tool if configured

@@ -20,15 +20,19 @@ interface TableToken {
 }
 
 // Calculate column widths based on content
-const calculateColumnWidths = (header: TableCell[], rows: TableCell[][], padding = 2): number[] => {
+const calculateColumnWidths = (
+    header: TableCell[],
+    rows: TableCell[][],
+    padding = 2,
+): number[] => {
     const numCols = header.length;
     const widths = new Array(numCols).fill(0);
-    
+
     // Start with header widths
     header.forEach((cell, index) => {
         widths[index] = Math.max(widths[index], cell.text.length);
     });
-    
+
     // Check all rows for maximum width
     rows.forEach(row => {
         row.forEach((cell, index) => {
@@ -37,7 +41,7 @@ const calculateColumnWidths = (header: TableCell[], rows: TableCell[][], padding
             }
         });
     });
-    
+
     // Add padding
     return widths.map(width => width + padding * 2);
 };
@@ -46,7 +50,7 @@ const calculateColumnWidths = (header: TableCell[], rows: TableCell[][], padding
 const padContent = (content: string, width: number, align: string): string => {
     const contentLength = content.length;
     const padding = width - contentLength;
-    
+
     switch (align) {
         case 'center':
             const leftPad = Math.floor(padding / 2);
@@ -61,39 +65,52 @@ const padContent = (content: string, width: number, align: string): string => {
 };
 
 // Render cell content with inline formatting
-const renderCellContent = (cell: TableCell, width: number, align: string): React.ReactNode => {
+const renderCellContent = (
+    cell: TableCell,
+    width: number,
+    align: string,
+): React.ReactNode => {
     const paddedContent = padContent(cell.text, width, align);
-    return (
-        <Text key={cell.text}>
-            {paddedContent}
-        </Text>
-    );
+    return <Text key={cell.text}>{paddedContent}</Text>;
 };
 
 // Generate table borders
-const generateBorder = (widths: number[], style: 'ascii' | 'unicode' | 'compact'): { top: string; middle: string; bottom: string } => {
+const generateBorder = (
+    widths: number[],
+    style: 'ascii' | 'unicode' | 'compact',
+): {top: string; middle: string; bottom: string} => {
     switch (style) {
         case 'unicode':
-            const unicodeTop = '┌' + widths.map(w => '─'.repeat(w)).join('┬') + '┐';
-            const unicodeMiddle = '├' + widths.map(w => '─'.repeat(w)).join('┼') + '┤';
-            const unicodeBottom = '└' + widths.map(w => '─'.repeat(w)).join('┴') + '┘';
-            return { top: unicodeTop, middle: unicodeMiddle, bottom: unicodeBottom };
-        
+            const unicodeTop =
+                '┌' + widths.map(w => '─'.repeat(w)).join('┬') + '┐';
+            const unicodeMiddle =
+                '├' + widths.map(w => '─'.repeat(w)).join('┼') + '┤';
+            const unicodeBottom =
+                '└' + widths.map(w => '─'.repeat(w)).join('┴') + '┘';
+            return {
+                top: unicodeTop,
+                middle: unicodeMiddle,
+                bottom: unicodeBottom,
+            };
+
         case 'compact':
             // Just separators without borders
             const separators = widths.map(w => '─'.repeat(w)).join('┼');
-            return { 
-                top: separators, 
-                middle: separators, 
-                bottom: separators 
+            return {
+                top: separators,
+                middle: separators,
+                bottom: separators,
             };
-        
+
         case 'ascii':
         default:
-            const asciiTop = '+' + widths.map(w => '-'.repeat(w)).join('+') + '+';
-            const asciiMiddle = '+' + widths.map(w => '-'.repeat(w)).join('+') + '+';
-            const asciiBottom = '+' + widths.map(w => '-'.repeat(w)).join('+') + '+';
-            return { top: asciiTop, middle: asciiMiddle, bottom: asciiBottom };
+            const asciiTop =
+                '+' + widths.map(w => '-'.repeat(w)).join('+') + '+';
+            const asciiMiddle =
+                '+' + widths.map(w => '-'.repeat(w)).join('+') + '+';
+            const asciiBottom =
+                '+' + widths.map(w => '-'.repeat(w)).join('+') + '+';
+            return {top: asciiTop, middle: asciiMiddle, bottom: asciiBottom};
     }
 };
 
@@ -103,25 +120,30 @@ interface TableRendererProps {
     style?: 'ascii' | 'unicode' | 'compact';
 }
 
-const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
-    const { header, rows, align } = token;
+const TableRenderer = ({token, style = 'ascii'}: TableRendererProps) => {
+    const {header, rows, align} = token;
     const numCols = header.length;
-    
+
     // Calculate column widths
     const columnWidths = calculateColumnWidths(header, rows);
-    
+
     // Generate borders
     const borders = generateBorder(columnWidths, style);
-    
+
     // Ensure alignment array matches number of columns
-    const columnAlignment = align.length === numCols ? align : new Array(numCols).fill('left');
-    
+    const columnAlignment =
+        align.length === numCols ? align : new Array(numCols).fill('left');
+
     // Define vertical borders based on style
     const getVerticalBorder = () => {
         switch (style) {
-            case 'unicode': return { left: '│', middle: '│', right: '│' };
-            case 'compact': return { left: '', middle: '│', right: '' };
-            case 'ascii': default: return { left: '|', middle: '|', right: '|' };
+            case 'unicode':
+                return {left: '│', middle: '│', right: '│'};
+            case 'compact':
+                return {left: '', middle: '│', right: ''};
+            case 'ascii':
+            default:
+                return {left: '|', middle: '|', right: '|'};
         }
     };
 
@@ -135,16 +157,22 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
                 <React.Fragment key={index}>
                     <Box width={columnWidths[index]}>
                         <Text bold>
-                            {renderCellContent(cell, columnWidths[index], columnAlignment[index] || 'left')}
+                            {renderCellContent(
+                                cell,
+                                columnWidths[index],
+                                columnAlignment[index] || 'left',
+                            )}
                         </Text>
                     </Box>
-                    {index < numCols - 1 && <Text color="gray">{vertical.middle}</Text>}
+                    {index < numCols - 1 && (
+                        <Text color="gray">{vertical.middle}</Text>
+                    )}
                 </React.Fragment>
             ))}
             {vertical.right ? <Text color="gray">{vertical.right}</Text> : null}
         </Box>
     );
-    
+
     // Render data row
     const renderDataRow = (row: TableCell[]) => (
         <Box flexDirection="row">
@@ -152,55 +180,53 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
             {row.map((cell, index) => (
                 <React.Fragment key={index}>
                     <Box width={columnWidths[index]}>
-                        {renderCellContent(cell, columnWidths[index], columnAlignment[index] || 'left')}
+                        {renderCellContent(
+                            cell,
+                            columnWidths[index],
+                            columnAlignment[index] || 'left',
+                        )}
                     </Box>
-                    {index < numCols - 1 && <Text color="gray">{vertical.middle}</Text>}
+                    {index < numCols - 1 && (
+                        <Text color="gray">{vertical.middle}</Text>
+                    )}
                 </React.Fragment>
             ))}
             {vertical.right ? <Text color="gray">{vertical.right}</Text> : null}
         </Box>
     );
-    
+
     // Separator between header and data (only for bordered styles)
     const renderSeparator = () => {
         return (
             <Box marginX={1}>
-                <Text color="gray">
-                    {borders.middle}
-                </Text>
+                <Text color="gray">{borders.middle}</Text>
             </Box>
         );
     };
-    
+
     return (
         <Box flexDirection="column" marginBottom={1}>
             {/* Top border */}
             <Box marginX={1}>
-                <Text color="gray">
-                    {borders.top}
-                </Text>
+                <Text color="gray">{borders.top}</Text>
             </Box>
-            
+
             {/* Header */}
-            <Box marginX={1}>
-                {renderHeaderRow()}
-            </Box>
-            
+            <Box marginX={1}>{renderHeaderRow()}</Box>
+
             {/* Separator */}
             {renderSeparator()}
-            
+
             {/* Data rows */}
             {rows.map((row, rowIndex) => (
                 <Box key={rowIndex} marginX={1}>
                     {renderDataRow(row)}
                 </Box>
             ))}
-            
+
             {/* Bottom border */}
             <Box marginX={1}>
-                <Text color="gray">
-                    {borders.bottom}
-                </Text>
+                <Text color="gray">{borders.bottom}</Text>
             </Box>
         </Box>
     );

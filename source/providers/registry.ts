@@ -17,10 +17,16 @@ export interface ProviderDefinition {
      * NOTE: This accepts dependencies from the caller to avoid providers importing
      * services directly (which can create ESM circular dependency issues).
      */
-    createRunner?: (deps: {settingsService: any; loggingService: any}) => Runner | null;
+    createRunner?: (deps: {
+        settingsService: any;
+        loggingService: any;
+    }) => Runner | null;
 
     /** Function to fetch available models for this provider */
-    fetchModels: (deps: {settingsService: any; loggingService: any}, fetchImpl?: (url: string, options?: any) => Promise<any>) => Promise<Array<{id: string; name?: string}>>;
+    fetchModels: (
+        deps: {settingsService: any; loggingService: any},
+        fetchImpl?: (url: string, options?: any) => Promise<any>,
+    ) => Promise<Array<{id: string; name?: string}>>;
 
     /** Optional function to clear conversation state for this provider */
     clearConversations?: () => void;

@@ -83,10 +83,15 @@ export async function callOpenAICompatibleChatCompletions({
             headersLower[key.toLowerCase()] = value;
         });
 
-        const message = `OpenAI-compatible request failed: ${res.status} ${res.statusText}${
-            errText ? ` - ${errText}` : ''
-        }`;
-        throw new OpenAICompatibleError(message, res.status, headersLower, errText);
+        const message = `OpenAI-compatible request failed: ${res.status} ${
+            res.statusText
+        }${errText ? ` - ${errText}` : ''}`;
+        throw new OpenAICompatibleError(
+            message,
+            res.status,
+            headersLower,
+            errText,
+        );
     }
 
     return res;

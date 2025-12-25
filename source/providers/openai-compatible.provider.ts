@@ -1,7 +1,10 @@
 import {Runner} from '@openai/agents';
 import type {ProviderDefinition} from './registry.js';
 import {OpenAICompatibleProvider} from './openai-compatible/provider.js';
-import {buildOpenAICompatibleUrl, normalizeBaseUrl} from './openai-compatible/utils.js';
+import {
+    buildOpenAICompatibleUrl,
+    normalizeBaseUrl,
+} from './openai-compatible/utils.js';
 
 export type CustomProviderConfig = {
     name: string;
@@ -51,7 +54,10 @@ export function createOpenAICompatibleProviderDefinition(
             });
         },
         fetchModels: async (deps, fetchImpl = fetch as any) => {
-            const resolved = findConfigFromSettings(deps.settingsService, providerId);
+            const resolved = findConfigFromSettings(
+                deps.settingsService,
+                providerId,
+            );
             if (!resolved) {
                 throw new Error(
                     `Custom provider '${providerId}' is not configured in settings.json`,

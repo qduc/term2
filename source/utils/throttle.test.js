@@ -19,7 +19,10 @@ test('throttle batches updates and uses latest args', async t => {
 
 test('flush emits pending call immediately', async t => {
     const calls = [];
-    const {throttled, flush} = createThrottledFunction(value => calls.push(value), 100);
+    const {throttled, flush} = createThrottledFunction(
+        value => calls.push(value),
+        100,
+    );
 
     throttled('a');
     throttled('b');
@@ -33,7 +36,10 @@ test('flush emits pending call immediately', async t => {
 
 test('cancel drops pending call', async t => {
     const calls = [];
-    const {throttled, cancel} = createThrottledFunction(value => calls.push(value), 50);
+    const {throttled, cancel} = createThrottledFunction(
+        value => calls.push(value),
+        50,
+    );
 
     throttled('a');
     throttled('b');

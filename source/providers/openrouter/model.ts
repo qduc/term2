@@ -5,9 +5,15 @@ import {
     type ResponseStreamEvent,
 } from '@openai/agents-core';
 import {randomUUID} from 'node:crypto';
-import type {ILoggingService, ISettingsService} from '../../services/service-interfaces.js';
+import type {
+    ILoggingService,
+    ISettingsService,
+} from '../../services/service-interfaces.js';
 import {callOpenRouter} from './api.js';
-import {buildMessagesFromRequest, extractFunctionToolsFromRequest} from './converters.js';
+import {
+    buildMessagesFromRequest,
+    extractFunctionToolsFromRequest,
+} from './converters.js';
 import {normalizeUsage, decodeHtmlEntities} from './utils.js';
 
 export class OpenRouterModel implements Model {
@@ -35,15 +41,20 @@ export class OpenRouterModel implements Model {
         if (!apiKey) {
             throw new Error(
                 'OpenRouter API key is not configured. Please set the OPENROUTER_API_KEY environment variable. ' +
-                'Get your API key from: https://openrouter.ai/keys'
+                    'Get your API key from: https://openrouter.ai/keys',
             );
         }
         // OpenRouter does not support server-side response chaining the same way
         // as OpenAI Responses. We intentionally ignore previousResponseId and
         // expect the caller to provide full conversation context in `input`.
         // Note: History is managed by the SDK, not by this provider.
-        const resolvedModelId = this.#resolveModelFromRequest(request) || this.#modelId;
-        const messages = buildMessagesFromRequest(request, resolvedModelId, this.#loggingService);
+        const resolvedModelId =
+            this.#resolveModelFromRequest(request) || this.#modelId;
+        const messages = buildMessagesFromRequest(
+            request,
+            resolvedModelId,
+            this.#loggingService,
+        );
 
         this.#loggingService.debug('OpenRouter message', {messages});
 
@@ -73,7 +84,7 @@ export class OpenRouterModel implements Model {
         const responseId = json?.id ?? randomUUID();
 
         const usage = normalizeUsage(json?.usage || {}) as any;
-		const reasoning = choice?.message?.reasoning;
+        const reasoning = choice?.message?.reasoning;
         const reasoningDetails = choice?.message?.reasoning_details;
         const toolCalls = choice?.message?.tool_calls;
 
@@ -85,13 +96,18 @@ export class OpenRouterModel implements Model {
             for (const reasoningItem of reasoningDetails) {
                 const outputItem: any = {
                     type: 'reasoning',
-                    id: reasoningItem.id || `reasoning-${Date.now()}-${reasoningItem.index || 0}`,
+                    id:
+                        reasoningItem.id ||
+                        `reasoning-${Date.now()}-${reasoningItem.index || 0}`,
                     content: [],
                     providerData: reasoningItem,
                 };
 
                 // Handle different reasoning types
-                if (reasoningItem.type === 'reasoning.text' && reasoningItem.text) {
+                if (
+                    reasoningItem.type === 'reasoning.text' &&
+                    reasoningItem.text
+                ) {
                     outputItem.content.push({
                         type: 'input_text',
                         text: reasoningItem.text,
@@ -100,7 +116,10 @@ export class OpenRouterModel implements Model {
                             index: reasoningItem.index,
                         },
                     });
-                } else if (reasoningItem.type === 'reasoning.summary' && reasoningItem.summary) {
+                } else if (
+                    reasoningItem.type === 'reasoning.summary' &&
+                    reasoningItem.summary
+                ) {
                     outputItem.content.push({
                         type: 'input_text',
                         text: reasoningItem.summary,
@@ -132,10 +151,10 @@ export class OpenRouterModel implements Model {
                         text: textContent,
                     },
                 ],
-				...(typeof reasoning === 'string' ? {reasoning} : {}),
-				...(reasoningDetails != null
-					? {reasoning_details: reasoningDetails}
-					: {}),
+                ...(typeof reasoning === 'string' ? {reasoning} : {}),
+                ...(reasoningDetails != null
+                    ? {reasoning_details: reasoningDetails}
+                    : {}),
             } as any);
         }
 
@@ -148,15 +167,17 @@ export class OpenRouterModel implements Model {
                         type: 'function_call',
                         callId: toolCall.id,
                         name: toolCall.function.name,
-                        arguments: decodeHtmlEntities(toolCall.function.arguments),
+                        arguments: decodeHtmlEntities(
+                            toolCall.function.arguments,
+                        ),
                         status: 'completed',
-						// Preserve reasoning blocks/tokens on tool calls so that when the
-						// caller replays history, we can attach them back onto the assistant
-						// tool_calls message (OpenRouter best practice).
-						...(typeof reasoning === 'string' ? {reasoning} : {}),
-						...(reasoningDetails != null
-							? {reasoning_details: reasoningDetails}
-							: {}),
+                        // Preserve reasoning blocks/tokens on tool calls so that when the
+                        // caller replays history, we can attach them back onto the assistant
+                        // tool_calls message (OpenRouter best practice).
+                        ...(typeof reasoning === 'string' ? {reasoning} : {}),
+                        ...(reasoningDetails != null
+                            ? {reasoning_details: reasoningDetails}
+                            : {}),
                     } as any);
                 }
             }
@@ -178,19 +199,24 @@ export class OpenRouterModel implements Model {
         if (!apiKey) {
             throw new Error(
                 'OpenRouter API key is not configured. Please set the OPENROUTER_API_KEY environment variable. ' +
-                'Get your API key from: https://openrouter.ai/keys'
+                    'Get your API key from: https://openrouter.ai/keys',
             );
         }
         // See getResponse(): caller-managed history; do not chain via previousResponseId.
         // Note: History is managed by the SDK, not by this provider.
-        const resolvedModelId = this.#resolveModelFromRequest(request) || this.#modelId;
-        const messages = buildMessagesFromRequest(request, resolvedModelId, this.#loggingService);
+        const resolvedModelId =
+            this.#resolveModelFromRequest(request) || this.#modelId;
+        const messages = buildMessagesFromRequest(
+            request,
+            resolvedModelId,
+            this.#loggingService,
+        );
 
         const tools = extractFunctionToolsFromRequest(request);
 
         this.#loggingService.debug('OpenRouter stream start', {
             messageCount: Array.isArray(messages) ? messages.length : 0,
-			modelRequest: request,
+            modelRequest: request,
             messages,
             toolsCount: Array.isArray(tools) ? tools.length : 0,
             tools,
@@ -213,7 +239,7 @@ export class OpenRouterModel implements Model {
         let accumulated = '';
         let responseId = 'unknown';
         let usageData: any = null;
-		let accumulatedReasoningText = '';
+        let accumulatedReasoningText = '';
         const accumulatedReasoning: any[] = [];
         const accumulatedToolCalls: any[] = [];
 
@@ -261,7 +287,7 @@ export class OpenRouterModel implements Model {
         accumulated: string,
         reasoningDetails?: any,
         toolCalls?: any[],
-		reasoningText?: string,
+        reasoningText?: string,
     ): any[] {
         const output: any[] = [];
 
@@ -270,13 +296,18 @@ export class OpenRouterModel implements Model {
             for (const reasoningItem of reasoningDetails) {
                 const outputItem: any = {
                     type: 'reasoning',
-                    id: reasoningItem.id || `reasoning-${Date.now()}-${reasoningItem.index || 0}`,
+                    id:
+                        reasoningItem.id ||
+                        `reasoning-${Date.now()}-${reasoningItem.index || 0}`,
                     content: [],
                     providerData: reasoningItem,
                 };
 
                 // Handle different reasoning types
-                if (reasoningItem.type === 'reasoning.text' && reasoningItem.text) {
+                if (
+                    reasoningItem.type === 'reasoning.text' &&
+                    reasoningItem.text
+                ) {
                     outputItem.content.push({
                         type: 'input_text',
                         text: reasoningItem.text,
@@ -285,7 +316,10 @@ export class OpenRouterModel implements Model {
                             index: reasoningItem.index,
                         },
                     });
-                } else if (reasoningItem.type === 'reasoning.summary' && reasoningItem.summary) {
+                } else if (
+                    reasoningItem.type === 'reasoning.summary' &&
+                    reasoningItem.summary
+                ) {
                     outputItem.content.push({
                         type: 'input_text',
                         text: reasoningItem.summary,
@@ -317,12 +351,13 @@ export class OpenRouterModel implements Model {
                         text: accumulated,
                     },
                 ],
-				...(typeof reasoningText === 'string' && reasoningText.length > 0
-					? {reasoning: reasoningText}
-					: {}),
-				...(reasoningDetails != null
-					? {reasoning_details: reasoningDetails}
-					: {}),
+                ...(typeof reasoningText === 'string' &&
+                reasoningText.length > 0
+                    ? {reasoning: reasoningText}
+                    : {}),
+                ...(reasoningDetails != null
+                    ? {reasoning_details: reasoningDetails}
+                    : {}),
             } as any);
         }
 
@@ -337,12 +372,13 @@ export class OpenRouterModel implements Model {
                         name: toolCall.name,
                         arguments: decodeHtmlEntities(toolCall.arguments),
                         status: 'completed',
-						...(typeof reasoningText === 'string' && reasoningText.length > 0
-							? {reasoning: reasoningText}
-							: {}),
-						...(reasoningDetails != null
-							? {reasoning_details: reasoningDetails}
-							: {}),
+                        ...(typeof reasoningText === 'string' &&
+                        reasoningText.length > 0
+                            ? {reasoning: reasoningText}
+                            : {}),
+                        ...(reasoningDetails != null
+                            ? {reasoning_details: reasoningDetails}
+                            : {}),
                     } as any);
                 }
             }
@@ -373,14 +409,18 @@ export class OpenRouterModel implements Model {
                 existing.name += delta.function.name;
             }
             if (delta.function?.arguments) {
-                existing.arguments += decodeHtmlEntities(delta.function.arguments);
+                existing.arguments += decodeHtmlEntities(
+                    delta.function.arguments,
+                );
             }
 
             accumulated[index] = existing;
         }
     }
 
-    *#splitBufferIntoLines(buffer: string): Generator<{content: string; remainingBuffer: string}> {
+    *#splitBufferIntoLines(
+        buffer: string,
+    ): Generator<{content: string; remainingBuffer: string}> {
         let idx: number;
         while ((idx = buffer.indexOf('\n')) >= 0) {
             const line = buffer.slice(0, idx).trim();
@@ -474,53 +514,53 @@ export class OpenRouterModel implements Model {
         }
     }
 
-	#accumulateReasoningFromStream(json: any, state: any): void {
-		const reasoningDetails = json?.choices?.[0]?.delta?.reasoning_details;
-		if (reasoningDetails) {
-			const TYPE_FIELD_MAP = {
-				'reasoning.text': 'text',
-				'reasoning.summary': 'summary',
-				'reasoning.encrypted': 'data',
-			};
+    #accumulateReasoningFromStream(json: any, state: any): void {
+        const reasoningDetails = json?.choices?.[0]?.delta?.reasoning_details;
+        if (reasoningDetails) {
+            const TYPE_FIELD_MAP = {
+                'reasoning.text': 'text',
+                'reasoning.summary': 'summary',
+                'reasoning.encrypted': 'data',
+            };
 
-			// Create a Map for O(1) lookup instead of O(n) array search
-			const reasoningMap = new Map(
-				state.accumulatedReasoning.map((item: any) => [
-					`${item.type}:${item.index}`,
-					item,
-				])
-			);
+            // Create a Map for O(1) lookup instead of O(n) array search
+            const reasoningMap = new Map(
+                state.accumulatedReasoning.map((item: any) => [
+                    `${item.type}:${item.index}`,
+                    item,
+                ]),
+            );
 
-			const details = !Array.isArray(reasoningDetails)
-				? [reasoningDetails]
-				: reasoningDetails;
+            const details = !Array.isArray(reasoningDetails)
+                ? [reasoningDetails]
+                : reasoningDetails;
 
-			for (const detail of details) {
-				const {type, index} = detail;
-				const fieldName = TYPE_FIELD_MAP[type];
-				if (!fieldName) return; // ignore unknown types safely
+            for (const detail of details) {
+                const {type, index} = detail;
+                const fieldName = TYPE_FIELD_MAP[type];
+                if (!fieldName) return; // ignore unknown types safely
 
-				const key = `${type}:${index}`;
-				const existing = reasoningMap.get(key);
+                const key = `${type}:${index}`;
+                const existing = reasoningMap.get(key);
 
-				if (existing) {
-					existing[fieldName] += detail[fieldName];
-				} else {
-					const newItem = {
-						...detail,
-						[fieldName]: detail[fieldName],
-					};
-					state.accumulatedReasoning.push(newItem);
-					reasoningMap.set(key, newItem);
-				}
-			}
-		}
+                if (existing) {
+                    existing[fieldName] += detail[fieldName];
+                } else {
+                    const newItem = {
+                        ...detail,
+                        [fieldName]: detail[fieldName],
+                    };
+                    state.accumulatedReasoning.push(newItem);
+                    reasoningMap.set(key, newItem);
+                }
+            }
+        }
 
-		const reasoningDelta = json?.choices?.[0]?.delta?.reasoning;
-		if (typeof reasoningDelta === 'string' && reasoningDelta.length > 0) {
-			state.accumulatedReasoningText += reasoningDelta;
-		}
-	}
+        const reasoningDelta = json?.choices?.[0]?.delta?.reasoning;
+        if (typeof reasoningDelta === 'string' && reasoningDelta.length > 0) {
+            state.accumulatedReasoningText += reasoningDelta;
+        }
+    }
 
     #accumulateToolCallsFromStream(json: any, state: any): void {
         const deltaToolCalls = json?.choices?.[0]?.delta?.tool_calls;
@@ -544,7 +584,8 @@ export class OpenRouterModel implements Model {
     #resolveModelFromRequest(req: ModelRequest): string | undefined {
         // If the agent explicitly set a model override in the prompt, prefer the runtime model.
         // For now, just return undefined to use constructor/default.
-        if ((req as any)?.providerData?.model) return (req as any).providerData.model;
+        if ((req as any)?.providerData?.model)
+            return (req as any).providerData.model;
         return undefined;
     }
 }

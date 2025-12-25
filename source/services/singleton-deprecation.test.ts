@@ -45,13 +45,18 @@ test('settingsService has deprecation documentation', async t => {
     const url = await import('node:url');
 
     const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-    const filePath = path.join(__dirname, '../../source/services/settings-service.ts');
+    const filePath = path.join(
+        __dirname,
+        '../../source/services/settings-service.ts',
+    );
 
     const content = await fs.readFile(filePath, 'utf-8');
 
     t.true(content.includes('@deprecated DO NOT USE'));
     t.true(content.includes('dependency injection'));
-    t.true(content.includes('DEPRECATED: Direct use of settingsService singleton'));
+    t.true(
+        content.includes('DEPRECATED: Direct use of settingsService singleton'),
+    );
 });
 
 test('loggingService has deprecation documentation', async t => {
@@ -61,11 +66,16 @@ test('loggingService has deprecation documentation', async t => {
     const url = await import('node:url');
 
     const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-    const filePath = path.join(__dirname, '../../source/services/logging-service.ts');
+    const filePath = path.join(
+        __dirname,
+        '../../source/services/logging-service.ts',
+    );
 
     const content = await fs.readFile(filePath, 'utf-8');
 
     t.true(content.includes('@deprecated DO NOT USE'));
     t.true(content.includes('dependency injection'));
-    t.true(content.includes('DEPRECATED: Direct use of loggingService singleton'));
+    t.true(
+        content.includes('DEPRECATED: Direct use of loggingService singleton'),
+    );
 });

@@ -204,7 +204,8 @@ test('extracts grep command from matching function_call item', t => {
             id: 'call-grep-abc',
             callId: 'call-grep-abc',
             sender: 'command',
-            command: 'grep "DEFAULT_TRIM_CONFIG" "source" --case-sensitive --include "*.ts"',
+            command:
+                'grep "DEFAULT_TRIM_CONFIG" "source" --case-sensitive --include "*.ts"',
             output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',
             success: true,
             isApprovalRejection: false,

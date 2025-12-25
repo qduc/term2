@@ -124,7 +124,7 @@ export const useConversation = ({
     //     let lastEventType: string | null = null;
     //     let eventCount = 0;
     //     let eventSequence: string[] = [];
-	//
+    //
     //     const logDeduplicated = (eventType: string) => {
     //         if (eventType !== lastEventType) {
     //             if (lastEventType !== null) {
@@ -144,7 +144,7 @@ export const useConversation = ({
     //             eventCount++;
     //         }
     //     };
-	//
+    //
     //     const flush = () => {
     //         if (lastEventType !== null) {
     //             loggingService.debug('Conversation event sequence final', {
@@ -158,35 +158,38 @@ export const useConversation = ({
     //             eventSequence = [];
     //         }
     //     };
-	//
+    //
     //     return {logDeduplicated, flush};
     // };
 
-    const annotateCommandMessage = useCallback((cmdMsg: CommandMessage): CommandMessage => {
-        const approvalContext = approvedContextRef.current;
-        if (!approvalContext || cmdMsg.toolName !== 'search_replace') {
-            return cmdMsg;
-        }
+    const annotateCommandMessage = useCallback(
+        (cmdMsg: CommandMessage): CommandMessage => {
+            const approvalContext = approvedContextRef.current;
+            if (!approvalContext || cmdMsg.toolName !== 'search_replace') {
+                return cmdMsg;
+            }
 
-        const matchesCallId =
-            approvalContext.callId &&
-            cmdMsg.callId &&
-            approvalContext.callId === cmdMsg.callId;
-        const matchesToolName =
-            !approvalContext.callId &&
-            approvalContext.toolName &&
-            approvalContext.toolName === cmdMsg.toolName;
+            const matchesCallId =
+                approvalContext.callId &&
+                cmdMsg.callId &&
+                approvalContext.callId === cmdMsg.callId;
+            const matchesToolName =
+                !approvalContext.callId &&
+                approvalContext.toolName &&
+                approvalContext.toolName === cmdMsg.toolName;
 
-        if (!matchesCallId && !matchesToolName) {
-            return cmdMsg;
-        }
+            if (!matchesCallId && !matchesToolName) {
+                return cmdMsg;
+            }
 
-        if (matchesToolName && !approvalContext.callId) {
-            approvedContextRef.current = null;
-        }
+            if (matchesToolName && !approvalContext.callId) {
+                approvedContextRef.current = null;
+            }
 
-        return {...cmdMsg, hadApproval: true};
-    }, []);
+            return {...cmdMsg, hadApproval: true};
+        },
+        [],
+    );
 
     const applyServiceResult = useCallback(
         (
@@ -276,7 +279,8 @@ export const useConversation = ({
                 sender: 'bot',
                 text: '',
             });
-            const liveResponseUpdater = createLiveResponseUpdater(liveMessageId);
+            const liveResponseUpdater =
+                createLiveResponseUpdater(liveMessageId);
 
             // Track accumulated text so we can flush it before command messages
             let accumulatedText = '';
@@ -338,7 +342,9 @@ export const useConversation = ({
                     case 'command_message': {
                         // logDeduplicated('command_message');
                         const cmdMsg = event.message as any;
-                        const annotated = annotateCommandMessage(cmdMsg as CommandMessage);
+                        const annotated = annotateCommandMessage(
+                            cmdMsg as CommandMessage,
+                        );
 
                         // Before adding command message, flush reasoning and text separately
                         // This preserves the order: reasoning -> command -> response text
@@ -379,7 +385,11 @@ export const useConversation = ({
                         const systemMessage: SystemMessage = {
                             id: Date.now(),
                             sender: 'system',
-                            text: `Tool hallucination detected (${(event as any).toolName}). Retrying... (Attempt ${(event as any).attempt}/${(event as any).maxRetries})`,
+                            text: `Tool hallucination detected (${
+                                (event as any).toolName
+                            }). Retrying... (Attempt ${
+                                (event as any).attempt
+                            }/${(event as any).maxRetries})`,
                         };
                         setMessages(prev => [...prev, systemMessage]);
                         return;
@@ -402,13 +412,16 @@ export const useConversation = ({
                 );
             } catch (error) {
                 loggingService.error('Error in sendUserMessage', {
-                    error: error instanceof Error ? error.message : String(error),
+                    error:
+                        error instanceof Error ? error.message : String(error),
                     stack: error instanceof Error ? error.stack : undefined,
                 });
 
                 // Don't show error messages for user-initiated aborts
                 if (isAbortLikeError(error)) {
-                    loggingService.debug('Suppressing abort error in sendUserMessage');
+                    loggingService.debug(
+                        'Suppressing abort error in sendUserMessage',
+                    );
                     // The finally block will handle cleanup
                     return;
                 }
@@ -417,15 +430,20 @@ export const useConversation = ({
                     error instanceof Error ? error.message : String(error);
 
                 // Enhance error messages for common issues
-                if (errorMessage.includes('OPENAI_API_KEY') ||
-                    errorMessage.includes('401') && errorMessage.toLowerCase().includes('unauthorized')) {
+                if (
+                    errorMessage.includes('OPENAI_API_KEY') ||
+                    (errorMessage.includes('401') &&
+                        errorMessage.toLowerCase().includes('unauthorized'))
+                ) {
                     errorMessage =
                         'OpenAI API key is not configured or invalid. Please set the OPENAI_API_KEY environment variable. ' +
                         'Get your API key from: https://platform.openai.com/api-keys';
                 }
 
                 // Check if this is a max turns exceeded error
-                const isMaxTurnsError = errorMessage.includes('Max turns') && errorMessage.includes('exceeded');
+                const isMaxTurnsError =
+                    errorMessage.includes('Max turns') &&
+                    errorMessage.includes('exceeded');
 
                 if (isMaxTurnsError) {
                     // Create an approval prompt for max turns continuation
@@ -450,7 +468,9 @@ export const useConversation = ({
                     setPendingApproval(null);
                 }
             } finally {
-                loggingService.debug('sendUserMessage finally block - resetting state');
+                loggingService.debug(
+                    'sendUserMessage finally block - resetting state',
+                );
                 // flushLog();
                 liveResponseUpdater.cancel();
                 setLiveResponse(null);
@@ -471,7 +491,10 @@ export const useConversation = ({
             // Check if this is a max turns exceeded prompt
             const isMaxTurnsPrompt = pendingApproval.isMaxTurnsPrompt;
 
-            if (answer === 'y' && pendingApproval.toolName === 'search_replace') {
+            if (
+                answer === 'y' &&
+                pendingApproval.toolName === 'search_replace'
+            ) {
                 approvedContextRef.current = {
                     callId: pendingApproval.callId,
                     toolName: pendingApproval.toolName,
@@ -558,7 +581,9 @@ export const useConversation = ({
                         case 'command_message': {
                             // logDeduplicated('command_message');
                             const cmdMsg = event.message as any;
-                            const annotated = annotateCommandMessage(cmdMsg as CommandMessage);
+                            const annotated = annotateCommandMessage(
+                                cmdMsg as CommandMessage,
+                            );
 
                             const messagesToAdd: Message[] = [];
 
@@ -593,7 +618,11 @@ export const useConversation = ({
                             const systemMessage: SystemMessage = {
                                 id: Date.now(),
                                 sender: 'system',
-                                text: `Tool hallucination detected (${(event as any).toolName}). Retrying... (Attempt ${(event as any).attempt}/${(event as any).maxRetries})`,
+                                text: `Tool hallucination detected (${
+                                    (event as any).toolName
+                                }). Retrying... (Attempt ${
+                                    (event as any).attempt
+                                }/${(event as any).maxRetries})`,
                             };
                             setMessages(prev => [...prev, systemMessage]);
                             return;
@@ -605,10 +634,14 @@ export const useConversation = ({
 
                 try {
                     // Send a continuation message to resume work
-                    const continuationMessage = 'Please continue with your previous task.';
-                    const result = await conversationService.sendMessage(continuationMessage, {
-                        onEvent: applyConversationEvent,
-                    });
+                    const continuationMessage =
+                        'Please continue with your previous task.';
+                    const result = await conversationService.sendMessage(
+                        continuationMessage,
+                        {
+                            onEvent: applyConversationEvent,
+                        },
+                    );
 
                     applyServiceResult(
                         result,
@@ -617,14 +650,25 @@ export const useConversation = ({
                         textWasFlushed,
                     );
                 } catch (error) {
-                    loggingService.error('Error in continuation after max turns', {
-                        error: error instanceof Error ? error.message : String(error),
-                        stack: error instanceof Error ? error.stack : undefined,
-                    });
+                    loggingService.error(
+                        'Error in continuation after max turns',
+                        {
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                            stack:
+                                error instanceof Error
+                                    ? error.stack
+                                    : undefined,
+                        },
+                    );
 
                     // Don't show error messages for user-initiated aborts
                     if (isAbortLikeError(error)) {
-                        loggingService.debug('Suppressing abort error in max turns continuation');
+                        loggingService.debug(
+                            'Suppressing abort error in max turns continuation',
+                        );
                         // The finally block will handle cleanup
                         return;
                     }
@@ -655,7 +699,8 @@ export const useConversation = ({
                 sender: 'bot',
                 text: '',
             });
-            const liveResponseUpdater = createLiveResponseUpdater(liveMessageId);
+            const liveResponseUpdater =
+                createLiveResponseUpdater(liveMessageId);
 
             // Track accumulated text so we can flush it before command messages
             let accumulatedText = '';
@@ -716,7 +761,9 @@ export const useConversation = ({
                     case 'command_message': {
                         // logDeduplicated('command_message');
                         const cmdMsg = event.message as any;
-                        const annotated = annotateCommandMessage(cmdMsg as CommandMessage);
+                        const annotated = annotateCommandMessage(
+                            cmdMsg as CommandMessage,
+                        );
 
                         const messagesToAdd: Message[] = [];
 
@@ -751,7 +798,11 @@ export const useConversation = ({
                         const systemMessage: SystemMessage = {
                             id: Date.now(),
                             sender: 'system',
-                            text: `Tool hallucination detected (${(event as any).toolName}). Retrying... (Attempt ${(event as any).attempt}/${(event as any).maxRetries})`,
+                            text: `Tool hallucination detected (${
+                                (event as any).toolName
+                            }). Retrying... (Attempt ${
+                                (event as any).attempt
+                            }/${(event as any).maxRetries})`,
                         };
                         setMessages(prev => [...prev, systemMessage]);
                         return;
@@ -777,13 +828,16 @@ export const useConversation = ({
                 );
             } catch (error) {
                 loggingService.error('Error in handleApprovalDecision', {
-                    error: error instanceof Error ? error.message : String(error),
+                    error:
+                        error instanceof Error ? error.message : String(error),
                     stack: error instanceof Error ? error.stack : undefined,
                 });
 
                 // Don't show error messages for user-initiated aborts
                 if (isAbortLikeError(error)) {
-                    loggingService.debug('Suppressing abort error in handleApprovalDecision');
+                    loggingService.debug(
+                        'Suppressing abort error in handleApprovalDecision',
+                    );
                     // The finally block will handle cleanup
                     return;
                 }
@@ -800,7 +854,9 @@ export const useConversation = ({
                 setWaitingForApproval(false);
                 setPendingApproval(null);
             } finally {
-                loggingService.debug('handleApprovalDecision finally block - resetting state');
+                loggingService.debug(
+                    'handleApprovalDecision finally block - resetting state',
+                );
                 // flushLog();
                 liveResponseUpdater.cancel();
                 setLiveResponse(null);

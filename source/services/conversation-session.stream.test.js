@@ -57,7 +57,10 @@ test('run() streams ConversationEvents (text_delta → final) in order', async t
         emitted.push(ev);
     }
 
-    t.deepEqual(emitted.map(e => e.type), ['text_delta', 'text_delta', 'final']);
+    t.deepEqual(
+        emitted.map(e => e.type),
+        ['text_delta', 'text_delta', 'final'],
+    );
     t.is(emitted[0].delta, 'Hello');
     t.is(emitted[0].fullText, 'Hello');
     t.is(emitted[1].delta, ' world');
@@ -119,7 +122,10 @@ test('continue() streams events after approval decision', async t => {
         cont.push(ev);
     }
 
-    t.deepEqual(cont.map(e => e.type), ['text_delta', 'final']);
+    t.deepEqual(
+        cont.map(e => e.type),
+        ['text_delta', 'final'],
+    );
     t.is(cont[0].delta, 'Approved run');
     t.is(cont[1].finalText, 'Approved run');
 });
@@ -161,7 +167,11 @@ test('run() sends full history for non-OpenAI providers (client-side state)', as
     stream.finalOutput = 'Response';
     stream.history = [
         {role: 'user', type: 'message', content: 'Hello'},
-        {role: 'assistant', type: 'message', content: [{type: 'output_text', text: 'Response'}]},
+        {
+            role: 'assistant',
+            type: 'message',
+            content: [{type: 'output_text', text: 'Response'}],
+        },
     ];
 
     let receivedInput;
@@ -200,9 +210,17 @@ test('run() sends full history for openai-compatible providers', async t => {
     stream.finalOutput = 'Response';
     stream.history = [
         {role: 'user', type: 'message', content: 'First message'},
-        {role: 'assistant', type: 'message', content: [{type: 'output_text', text: 'First response'}]},
+        {
+            role: 'assistant',
+            type: 'message',
+            content: [{type: 'output_text', text: 'First response'}],
+        },
         {role: 'user', type: 'message', content: 'Second message'},
-        {role: 'assistant', type: 'message', content: [{type: 'output_text', text: 'Response'}]},
+        {
+            role: 'assistant',
+            type: 'message',
+            content: [{type: 'output_text', text: 'Response'}],
+        },
     ];
 
     let firstInput, secondInput;
@@ -243,5 +261,8 @@ test('run() sends full history for openai-compatible providers', async t => {
     }
 
     t.true(Array.isArray(secondInput));
-    t.true(secondInput.length >= 2, 'Second call should include conversation history');
+    t.true(
+        secondInput.length >= 2,
+        'Second call should include conversation history',
+    );
 });

@@ -1,5 +1,8 @@
 import {type ModelProvider, type Model} from '@openai/agents-core';
-import type {ILoggingService, ISettingsService} from '../../services/service-interfaces.js';
+import type {
+    ILoggingService,
+    ISettingsService,
+} from '../../services/service-interfaces.js';
 import {OpenAICompatibleModel} from './model.js';
 
 export type CustomProviderConfig = {
@@ -8,7 +11,10 @@ export type CustomProviderConfig = {
     apiKey?: string;
 };
 
-function findCustomProviderConfig(settingsService: ISettingsService, providerId: string): CustomProviderConfig | null {
+function findCustomProviderConfig(
+    settingsService: ISettingsService,
+    providerId: string,
+): CustomProviderConfig | null {
     const list = settingsService.get<any>('providers');
     if (!Array.isArray(list)) return null;
 
@@ -38,11 +44,14 @@ export class OpenAICompatibleProvider implements ModelProvider {
     }
 
     getModel(modelName?: string): Promise<Model> | Model {
-        const config = findCustomProviderConfig(this.#settingsService, this.#providerId);
+        const config = findCustomProviderConfig(
+            this.#settingsService,
+            this.#providerId,
+        );
         if (!config) {
             throw new Error(
                 `Custom provider '${this.#providerId}' is not configured. ` +
-                `Please add it to settings.json under \"providers\".`
+                    `Please add it to settings.json under \"providers\".`,
             );
         }
 

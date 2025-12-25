@@ -58,11 +58,11 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 
 High-level architecture and design decisions (concise):
 
-- Pluggable provider registry with dependency-injected runner creation. Providers (e.g. OpenAI, OpenRouter) register via `source/providers` and may expose a `createRunner(deps)` factory so runners can be constructed without circular imports.
-- Provider-neutral conversation strategy: a client-side `ConversationStore` is used where providers don't manage server-side state; when supported we pass `previousResponseId` to OpenAI to enable server-side chaining.
-- Tool interceptor and approval model: tools (shell, apply-patch, search-replace, grep) run through centralized validation and an approval flow; utilities provide safe diff generation and output sanitization.
-- Dependency injection and testability: services accept interfaces (logging, settings) and a `SettingsService` mock exists to simplify unit tests and avoid I/O in tests.
-- Session & streaming model: conversation sessions stream deltas, capture reasoning, and surface tool calls for explicit approval; retry and failure-tracking behavior is configurable.
+-   Pluggable provider registry with dependency-injected runner creation. Providers (e.g. OpenAI, OpenRouter) register via `source/providers` and may expose a `createRunner(deps)` factory so runners can be constructed without circular imports.
+-   Provider-neutral conversation strategy: a client-side `ConversationStore` is used where providers don't manage server-side state; when supported we pass `previousResponseId` to OpenAI to enable server-side chaining.
+-   Tool interceptor and approval model: tools (shell, apply-patch, search-replace, grep) run through centralized validation and an approval flow; utilities provide safe diff generation and output sanitization.
+-   Dependency injection and testability: services accept interfaces (logging, settings) and a `SettingsService` mock exists to simplify unit tests and avoid I/O in tests.
+-   Session & streaming model: conversation sessions stream deltas, capture reasoning, and surface tool calls for explicit approval; retry and failure-tracking behavior is configurable.
 
 For implementation details, chronological change logs, and rationale, consult the source files under `source/` and the Git history — this document intentionally stays at a high level.
 

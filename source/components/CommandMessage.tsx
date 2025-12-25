@@ -39,7 +39,9 @@ const DiffView: FC<{diff: string}> = ({diff}) => {
                     );
                 })}
                 {truncated && (
-                    <Text dimColor>... ({lines.length - maxLines} more lines)</Text>
+                    <Text dimColor>
+                        ... ({lines.length - maxLines} more lines)
+                    </Text>
                 )}
             </Box>
         );
@@ -67,24 +69,29 @@ const CommandMessage: FC<Props> = ({
     const displayed =
         outputText && outputText !== '(no output)'
             ? (() => {
-                    const lines = (output || '').split('\n');
-                    return lines.length > 3
-                        ? `${lines.slice(0, 3).join('\n')}\n... (${
-                                lines.length - 3
-                          } more lines)`
-                        : output;
+                  const lines = (output || '').split('\n');
+                  return lines.length > 3
+                      ? `${lines.slice(0, 3).join('\n')}\n... (${
+                            lines.length - 3
+                        } more lines)`
+                      : output;
               })()
             : outputText;
 
     // Special handling for search_replace
     if (toolName === 'search_replace' && toolArgs) {
-        const diff = generateDiff(toolArgs.search_content, toolArgs.replace_content);
+        const diff = generateDiff(
+            toolArgs.search_content,
+            toolArgs.replace_content,
+        );
 
         // For search_replace that had an approval prompt (user said 'y'), only show output
         if (hadApproval) {
             return (
                 <Box flexDirection="column">
-                    <Text color={success === false ? 'red' : 'gray'}>{displayed}</Text>
+                    <Text color={success === false ? 'red' : 'gray'}>
+                        {displayed}
+                    </Text>
                 </Box>
             );
         }
@@ -93,15 +100,21 @@ const CommandMessage: FC<Props> = ({
         return (
             <Box flexDirection="column">
                 <Box>
-                    <Text color="yellow" bold>[SEARCH & REPLACE]</Text>
+                    <Text color="yellow" bold>
+                        [SEARCH & REPLACE]
+                    </Text>
                     <Text> {toolArgs.path}</Text>
                     {toolArgs.replace_all && (
                         <Text color="magenta"> (all occurrences)</Text>
                     )}
                 </Box>
                 <DiffView diff={diff} />
-                {failureReason && <Text color="red">Error: {failureReason}</Text>}
-                <Text color={success === false ? 'red' : 'gray'}>{displayed}</Text>
+                {failureReason && (
+                    <Text color="red">Error: {failureReason}</Text>
+                )}
+                <Text color={success === false ? 'red' : 'gray'}>
+                    {displayed}
+                </Text>
             </Box>
         );
     }

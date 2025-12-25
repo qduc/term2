@@ -6,7 +6,9 @@ import test from 'ava';
 test('applyRuntimeSetting - parses model without provider', t => {
     const value = 'gpt-4o';
     const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
-    const modelId = String(value).replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+    const modelId = String(value)
+        .replace(/\s*--provider=(openai|openrouter)\s*/, '')
+        .trim();
 
     t.is(providerMatch, null);
     t.is(modelId, 'gpt-4o');
@@ -15,7 +17,9 @@ test('applyRuntimeSetting - parses model without provider', t => {
 test('applyRuntimeSetting - parses model with openai provider', t => {
     const value = 'gpt-4o --provider=openai';
     const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
-    const modelId = String(value).replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+    const modelId = String(value)
+        .replace(/\s*--provider=(openai|openrouter)\s*/, '')
+        .trim();
 
     t.truthy(providerMatch);
     t.is(providerMatch[1], 'openai');
@@ -25,7 +29,9 @@ test('applyRuntimeSetting - parses model with openai provider', t => {
 test('applyRuntimeSetting - parses model with openrouter provider', t => {
     const value = 'anthropic/claude-3.5-sonnet --provider=openrouter';
     const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
-    const modelId = String(value).replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+    const modelId = String(value)
+        .replace(/\s*--provider=(openai|openrouter)\s*/, '')
+        .trim();
 
     t.truthy(providerMatch);
     t.is(providerMatch[1], 'openrouter');
@@ -35,7 +41,9 @@ test('applyRuntimeSetting - parses model with openrouter provider', t => {
 test('applyRuntimeSetting - handles model with provider and extra whitespace', t => {
     const value = 'gpt-4o    --provider=openai   ';
     const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
-    const modelId = String(value).replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
+    const modelId = String(value)
+        .replace(/\s*--provider=(openai|openrouter)\s*/, '')
+        .trim();
 
     t.truthy(providerMatch);
     t.is(providerMatch[1], 'openai');
@@ -46,7 +54,7 @@ test('insertSelectedModel - formats model ID with provider from current state', 
     // Simulate what insertSelectedModel does - uses current provider state, not selection.provider
     const selection = {
         id: 'anthropic/claude-3.5-sonnet',
-        provider: 'openai' // This could be stale
+        provider: 'openai', // This could be stale
     };
     const currentProvider = 'openrouter'; // This is the current provider state
 
@@ -60,7 +68,7 @@ test('insertSelectedModel - formats OpenAI model with provider from current stat
     // Simulate what insertSelectedModel does for OpenAI model
     const selection = {
         id: 'gpt-4o',
-        provider: 'openrouter' // This could be stale
+        provider: 'openrouter', // This could be stale
     };
     const currentProvider = 'openai'; // This is the current provider state
 

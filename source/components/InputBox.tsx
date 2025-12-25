@@ -1,15 +1,20 @@
 import React, {FC, useEffect, useState, useRef, useCallback} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {MultilineInput} from 'ink-prompt';
-import { useInputContext } from '../context/InputContext.js';
-import { useSlashCommands } from '../hooks/use-slash-commands.js';
-import { usePathCompletion } from '../hooks/use-path-completion.js';
-import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
-import { useModelSelection, MODEL_TRIGGER, MODEL_CMD_TRIGGER, MENTOR_TRIGGER } from '../hooks/use-model-selection.js';
-import { PopupManager } from './Input/PopupManager.js';
-import type { SlashCommand } from './SlashCommandMenu.js';
-import type { SettingsService } from '../services/settings-service.js';
-import type { LoggingService } from '../services/logging-service.js';
+import {useInputContext} from '../context/InputContext.js';
+import {useSlashCommands} from '../hooks/use-slash-commands.js';
+import {usePathCompletion} from '../hooks/use-path-completion.js';
+import {useSettingsCompletion} from '../hooks/use-settings-completion.js';
+import {
+    useModelSelection,
+    MODEL_TRIGGER,
+    MODEL_CMD_TRIGGER,
+    MENTOR_TRIGGER,
+} from '../hooks/use-model-selection.js';
+import {PopupManager} from './Input/PopupManager.js';
+import type {SlashCommand} from './SlashCommandMenu.js';
+import type {SettingsService} from '../services/settings-service.js';
+import type {LoggingService} from '../services/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';
 import { useInputHistory } from '../hooks/use-input-history.js';
 
@@ -62,10 +67,13 @@ const InputBox: FC<Props> = ({
 
     const path = usePathCompletion({loggingService});
     const settings = useSettingsCompletion(settingsService);
-    const models = useModelSelection({
-        loggingService,
-        settingsService,
-    }, hasConversationHistory);
+    const models = useModelSelection(
+        {
+            loggingService,
+            settingsService,
+        },
+        hasConversationHistory,
+    );
 
     const {navigateUp, navigateDown} = useInputHistory(historyService);
 
@@ -104,17 +112,26 @@ const InputBox: FC<Props> = ({
         // Allow trigger detection in all modes to enable menu transitions
 
         // Priority 0: Model selection for agent.model
-        if (value.startsWith(MODEL_TRIGGER) && cursorOffset >= MODEL_TRIGGER.length) {
+        if (
+            value.startsWith(MODEL_TRIGGER) &&
+            cursorOffset >= MODEL_TRIGGER.length
+        ) {
             models.open(MODEL_TRIGGER.length);
             return;
         }
 
-        if (value.startsWith(MODEL_CMD_TRIGGER) && cursorOffset >= MODEL_CMD_TRIGGER.length) {
+        if (
+            value.startsWith(MODEL_CMD_TRIGGER) &&
+            cursorOffset >= MODEL_CMD_TRIGGER.length
+        ) {
             models.open(MODEL_CMD_TRIGGER.length);
             return;
         }
 
-        if (value.startsWith(MENTOR_TRIGGER) && cursorOffset >= MENTOR_TRIGGER.length) {
+        if (
+            value.startsWith(MENTOR_TRIGGER) &&
+            cursorOffset >= MENTOR_TRIGGER.length
+        ) {
             models.open(MENTOR_TRIGGER.length);
             return;
         }
@@ -124,7 +141,10 @@ const InputBox: FC<Props> = ({
         }
 
         // Priority 1: Settings
-        if (value.startsWith(SETTINGS_TRIGGER) && cursorOffset >= SETTINGS_TRIGGER.length) {
+        if (
+            value.startsWith(SETTINGS_TRIGGER) &&
+            cursorOffset >= SETTINGS_TRIGGER.length
+        ) {
             settings.open(SETTINGS_TRIGGER.length);
             return;
         }
@@ -135,7 +155,11 @@ const InputBox: FC<Props> = ({
         }
 
         // Priority 2: Slash (only if at start)
-        if (value.startsWith('/') && !value.slice(1).includes(' ') && cursorOffset > 0) {
+        if (
+            value.startsWith('/') &&
+            !value.slice(1).includes(' ') &&
+            cursorOffset > 0
+        ) {
             // Only trigger if we haven't typed a space yet (simple command)
             // Or if we are just starting.
             // Existing logic: "value.startsWith('/')" -> open slash menu.
@@ -154,7 +178,11 @@ const InputBox: FC<Props> = ({
 
         // Priority 3: Path
         // We need to find the trigger '@' or similar backward from cursor
-        const pathTrigger = findPathTrigger(value, cursorOffset, STOP_CHAR_REGEX);
+        const pathTrigger = findPathTrigger(
+            value,
+            cursorOffset,
+            STOP_CHAR_REGEX,
+        );
         if (pathTrigger) {
             path.open(pathTrigger.start);
             return;
@@ -164,9 +192,7 @@ const InputBox: FC<Props> = ({
         if (mode === 'path_completion') {
             path.close();
         }
-
     }, [value, cursorOffset, mode, slash, path, settings, models]);
-
 
     // Handle inputs based on mode
     // ESC handling
@@ -183,13 +209,13 @@ const InputBox: FC<Props> = ({
 
             // In text mode: double ESC to clear
             if (escHintVisible) {
-                 if (escTimeoutRef.current) {
-                     clearTimeout(escTimeoutRef.current);
-                     escTimeoutRef.current = null;
-                 }
-                 setEscHintVisible(false);
-                 onChange('');
-             } else {
+                if (escTimeoutRef.current) {
+                    clearTimeout(escTimeoutRef.current);
+                    escTimeoutRef.current = null;
+                }
+                setEscHintVisible(false);
+                onChange('');
+            } else {
                 setEscHintVisible(true);
                 escTimeoutRef.current = setTimeout(() => {
                     setEscHintVisible(false);
@@ -262,7 +288,7 @@ const InputBox: FC<Props> = ({
                 }
             }
         },
-        [mode, slash, settings, path, models, navigateUp, navigateDown, value, onChange]
+        [mode, slash, settings, path, models, navigateUp, navigateDown, value, onChange],
     );
 
     const insertSelectedPath = useCallback(
@@ -289,7 +315,7 @@ const InputBox: FC<Props> = ({
             path.close();
             return true;
         },
-        [path, cursorOffset, value, onChange]
+        [path, cursorOffset, value, onChange],
     );
 
     const insertSelectedSetting = useCallback((): boolean => {
@@ -328,7 +354,9 @@ const InputBox: FC<Props> = ({
                 insertion += ` --provider=${currentProvider}`;
             }
 
-            const nextValue = `${before}${insertion}${submitAfterInsert ? '' : ' '}`;
+            const nextValue = `${before}${insertion}${
+                submitAfterInsert ? '' : ' '
+            }`;
             onChange(nextValue);
             setCursorOverride(nextValue.length);
             models.close();
@@ -339,34 +367,46 @@ const InputBox: FC<Props> = ({
 
             return true;
         },
-        [models, value, onChange, onSubmit]
+        [models, value, onChange, onSubmit],
     );
 
-    const handleWrapperSubmit = useCallback((submittedValue: string) => {
-        if (mode === 'path_completion') {
-            if (insertSelectedPath(true)) return;
-        }
-        if (mode === 'settings_completion') {
-            // Check if complete
-            const parts = submittedValue.slice(SETTINGS_TRIGGER.length).trim().split(/\s+/);
-            if (parts.length >= 2) {
-                 onSubmit(submittedValue);
-                 return;
-             }
-            if (insertSelectedSetting()) return;
-        }
-        if (mode === 'model_selection') {
-            if (insertSelectedModel(true)) return;
-        }
-        if (mode === 'slash_commands') {
-            slash.executeSelected();
-            setInputKey(prev => prev + 1);
-            return;
-        }
+    const handleWrapperSubmit = useCallback(
+        (submittedValue: string) => {
+            if (mode === 'path_completion') {
+                if (insertSelectedPath(true)) return;
+            }
+            if (mode === 'settings_completion') {
+                // Check if complete
+                const parts = submittedValue
+                    .slice(SETTINGS_TRIGGER.length)
+                    .trim()
+                    .split(/\s+/);
+                if (parts.length >= 2) {
+                    onSubmit(submittedValue);
+                    return;
+                }
+                if (insertSelectedSetting()) return;
+            }
+            if (mode === 'model_selection') {
+                if (insertSelectedModel(true)) return;
+            }
+            if (mode === 'slash_commands') {
+                slash.executeSelected();
+                setInputKey(prev => prev + 1);
+                return;
+            }
 
-        onSubmit(submittedValue);
-    }, [mode, onSubmit, insertSelectedPath, insertSelectedSetting, insertSelectedModel, slash]);
-
+            onSubmit(submittedValue);
+        },
+        [
+            mode,
+            onSubmit,
+            insertSelectedPath,
+            insertSelectedSetting,
+            insertSelectedModel,
+            slash,
+        ],
+    );
 
     return (
         <Box flexDirection="column">
@@ -375,7 +415,7 @@ const InputBox: FC<Props> = ({
                     isOpen: slash.isOpen,
                     commands: slash.filteredCommands,
                     selectedIndex: slash.selectedIndex,
-                    filter: slash.filter
+                    filter: slash.filter,
                 }}
                 path={{
                     isOpen: path.isOpen,
@@ -383,7 +423,7 @@ const InputBox: FC<Props> = ({
                     selectedIndex: path.selectedIndex,
                     query: path.query,
                     loading: path.loading,
-                    error: path.error
+                    error: path.error,
                 }}
                 models={{
                     isOpen: models.isOpen,
@@ -394,12 +434,12 @@ const InputBox: FC<Props> = ({
                     error: models.error,
                     provider: models.provider,
                     scrollOffset: models.scrollOffset,
-                    canSwitchProvider: models.canSwitchProvider
+                    canSwitchProvider: models.canSwitchProvider,
                 }}
                 settings={{
                     isOpen: settings.isOpen,
                     items: settings.filteredEntries,
-                    selectedIndex: settings.selectedIndex
+                    selectedIndex: settings.selectedIndex,
                 }}
                 settingsService={settingsService}
             />

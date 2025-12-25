@@ -1,8 +1,8 @@
 import React, {FC, useMemo, useCallback, useEffect} from 'react';
-import { useInputActions } from './context/InputContext.js';
+import {useInputActions} from './context/InputContext.js';
 
 import {Box, useApp, useInput} from 'ink';
-import { useConversation } from './hooks/use-conversation.js';
+import {useConversation} from './hooks/use-conversation.js';
 import Banner from './components/Banner.js';
 import MessageList from './components/MessageList.js';
 import LiveResponse from './components/LiveResponse.js';
@@ -19,19 +19,19 @@ import {getProvider} from './providers/index.js';
 
 // Pure function to parse slash commands
 type ParsedInput =
-	| {type: 'slash-command'; commandName: string; args: string}
-	| {type: 'message'; text: string};
+    | {type: 'slash-command'; commandName: string; args: string}
+    | {type: 'message'; text: string};
 
 function parseInput(value: string): ParsedInput {
-	if (!value.startsWith('/')) {
-		return {type: 'message', text: value};
-	}
+    if (!value.startsWith('/')) {
+        return {type: 'message', text: value};
+    }
 
-	const commandLine = value.slice(1); // Remove leading '/'
-	const [commandName, ...argsParts] = commandLine.split(/\s+/);
-	const args = argsParts.join(' ');
+    const commandLine = value.slice(1); // Remove leading '/'
+    const [commandName, ...argsParts] = commandLine.split(/\s+/);
+    const args = argsParts.join(' ');
 
-	return {type: 'slash-command', commandName, args};
+    return {type: 'slash-command', commandName, args};
 }
 
 interface AppProps {
@@ -41,9 +41,14 @@ interface AppProps {
     loggingService: LoggingService;
 }
 
-const App: FC<AppProps> = ({conversationService, settingsService, historyService, loggingService}) => {
+const App: FC<AppProps> = ({
+    conversationService,
+    settingsService,
+    historyService,
+    loggingService,
+}) => {
     const {exit} = useApp();
-    const { setInput } = useInputActions();
+    const { setInput} = useInputActions();
     const {
         messages,
         liveResponse,
@@ -85,7 +90,8 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                     setTemperature(undefined);
                     return;
                 }
-                const numeric = typeof value === 'number' ? value : Number(value);
+                const numeric =
+                    typeof value === 'number' ? value : Number(value);
                 setTemperature(Number.isFinite(numeric) ? numeric : undefined);
                 return;
             }
@@ -106,7 +112,6 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                 setModel(currentModel);
                 return;
             }
-
 
             if (key === 'shell.maxOutputLines') {
                 setTrimConfig({maxLines: Number(value)});
@@ -136,8 +141,8 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                 action: () => {
                     clearConversation();
                     addSystemMessage(
-						'Welcome to term²! Type a message to start chatting.',
-					);
+                        'Welcome to term²! Type a message to start chatting.',
+                    );
                 },
             },
             {
@@ -160,13 +165,17 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                     // Parse model and provider from args
                     // Format: "model-id --provider=providerid" or just "model-id"
                     const providerMatch = args.match(/--provider=(\w+)/);
-                    const modelId = args.replace(/\s*--provider=\w+\s*/, '').trim();
+                    const modelId = args
+                        .replace(/\s*--provider=\w+\s*/, '')
+                        .trim();
 
                     // Validate provider if specified
                     if (providerMatch) {
                         const provider = providerMatch[1];
                         if (!getProvider(provider)) {
-                            addSystemMessage(`Error: Unknown provider '${provider}'`);
+                            addSystemMessage(
+                                `Error: Unknown provider '${provider}'`,
+                            );
                             return false;
                         }
                     }
@@ -272,7 +281,9 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                 );
                 if (command) {
                     // Execute the command
-                    const shouldClearInput = command.action(parsed.args || undefined);
+                    const shouldClearInput = command.action(
+                        parsed.args || undefined,
+                    );
 
                     // Clear input unless command returned false
                     if (shouldClearInput !== false) {
@@ -316,7 +327,10 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                     isProcessing={isProcessing}
                     onSubmit={handleSubmit}
                     slashCommands={slashCommands}
-                    hasConversationHistory={messages.filter(msg => msg.sender !== 'system').length > 0}
+                    hasConversationHistory={
+                        messages.filter(msg => msg.sender !== 'system').length >
+                        0
+                    }
                     settingsService={settingsService}
                     loggingService={loggingService}
                     historyService={historyService}

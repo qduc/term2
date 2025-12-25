@@ -2,7 +2,10 @@ import type {OpenAIAgentClient} from '../lib/openai-agent-client.js';
 import type {ILoggingService} from './service-interfaces.js';
 import {ConversationSession} from './conversation-session.js';
 
-export type {ConversationResult, CommandMessage} from './conversation-session.js';
+export type {
+    ConversationResult,
+    CommandMessage,
+} from './conversation-session.js';
 
 /**
  * Backward-compatible facade for the CLI.
@@ -60,7 +63,9 @@ export class ConversationService {
         return this.#session.sendMessage(...args);
     }
 
-    handleApprovalDecision(...args: Parameters<ConversationSession['handleApprovalDecision']>) {
+    handleApprovalDecision(
+        ...args: Parameters<ConversationSession['handleApprovalDecision']>
+    ) {
         return this.#session.handleApprovalDecision(...args);
     }
 }

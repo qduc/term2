@@ -144,23 +144,33 @@ export function createSettingsCommand({
             let parsedValue = parseSettingValue(rawValue);
 
             // Special handling for agent.model: handle --provider flag
-            if (key === SETTING_KEYS.AGENT_MODEL && typeof parsedValue === 'string') {
+            if (
+                key === SETTING_KEYS.AGENT_MODEL &&
+                typeof parsedValue === 'string'
+            ) {
                 const providerMatch = parsedValue.match(/--provider=(\w+)/);
                 if (providerMatch) {
                     const provider = providerMatch[1];
                     // Validate provider
                     if (!getProvider(provider)) {
-                        addSystemMessage(`Error: Unknown provider '${provider}'`);
+                        addSystemMessage(
+                            `Error: Unknown provider '${provider}'`,
+                        );
                         return false;
                     }
                     // Update provider setting
                     settingsService.set(SETTING_KEYS.AGENT_PROVIDER, provider);
                     // Apply runtime provider change
                     if (applyRuntimeSetting) {
-                        applyRuntimeSetting(SETTING_KEYS.AGENT_PROVIDER, provider);
+                        applyRuntimeSetting(
+                            SETTING_KEYS.AGENT_PROVIDER,
+                            provider,
+                        );
                     }
                 }
-                parsedValue = parsedValue.replace(/\s*--provider=\w+\s*/, '').trim();
+                parsedValue = parsedValue
+                    .replace(/\s*--provider=\w+\s*/, '')
+                    .trim();
             }
 
             // Prevent changing provider via settings command - it can only be changed
@@ -174,12 +184,19 @@ export function createSettingsCommand({
 
             // Validate temperature values early for a nicer UX.
             if (key === SETTING_KEYS.AGENT_TEMPERATURE) {
-                if (typeof parsedValue !== 'number' || !Number.isFinite(parsedValue)) {
-                    addSystemMessage(`Error: ${SETTING_KEYS.AGENT_TEMPERATURE} must be a number between 0 and 2`);
+                if (
+                    typeof parsedValue !== 'number' ||
+                    !Number.isFinite(parsedValue)
+                ) {
+                    addSystemMessage(
+                        `Error: ${SETTING_KEYS.AGENT_TEMPERATURE} must be a number between 0 and 2`,
+                    );
                     return true;
                 }
                 if (parsedValue < 0 || parsedValue > 2) {
-                    addSystemMessage(`Error: ${SETTING_KEYS.AGENT_TEMPERATURE} must be between 0 and 2`);
+                    addSystemMessage(
+                        `Error: ${SETTING_KEYS.AGENT_TEMPERATURE} must be between 0 and 2`,
+                    );
                     return true;
                 }
             }

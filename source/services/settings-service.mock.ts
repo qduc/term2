@@ -32,9 +32,11 @@ function unflatten(data: Record<string, any>): Record<string, any> {
  * @param overrides - Optional settings to override defaults (supports dot-notation keys)
  * @returns A mock SettingsService instance
  */
-export function createMockSettingsService(overrides: Partial<{
-    [key: string]: any
-}> = {}): SettingsService {
+export function createMockSettingsService(
+    overrides: Partial<{
+        [key: string]: any;
+    }> = {},
+): SettingsService {
     // Create a unique temporary directory for each mock instance
     // This ensures tests running in parallel don't interfere with each other
     const tempDir = mkdtempSync(join(tmpdir(), 'term2-test-'));

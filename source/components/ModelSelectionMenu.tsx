@@ -40,15 +40,20 @@ const ProviderTabs: FC<{
                             <Box key={provider.id}>
                                 <Text
                                     inverse={isActive}
-                                    color={isActive ? 'magenta' : isDisabled ? 'red' : 'gray'}
+                                    color={
+                                        isActive
+                                            ? 'magenta'
+                                            : isDisabled
+                                            ? 'red'
+                                            : 'gray'
+                                    }
                                     bold={isActive}
                                     dimColor={!isActive || isDisabled}
                                     strikethrough={isDisabled}
                                 >
                                     {' '}
                                     {provider.label}
-                                    {isDisabled ? ' (no key)' : ''}
-                                    {' '}
+                                    {isDisabled ? ' (no key)' : ''}{' '}
                                 </Text>
                                 {index < providers.length - 1 && (
                                     <Text color="gray" dimColor>
@@ -140,7 +145,9 @@ const ModelSelectionMenu: FC<Props> = ({
                     </Text>
                     {items.length > maxHeight && (
                         <Text color="gray" dimColor>
-                            {scrollOffset + 1}-{Math.min(scrollOffset + maxHeight, items.length)}/{items.length}
+                            {scrollOffset + 1}-
+                            {Math.min(scrollOffset + maxHeight, items.length)}/
+                            {items.length}
                         </Text>
                     )}
                 </Box>
@@ -162,7 +169,10 @@ const ModelSelectionMenu: FC<Props> = ({
                                 {item.id}
                             </Text>
                             {item.name && (
-                                <Text color={isSelected ? 'white' : 'gray'} dimColor={!isSelected}>
+                                <Text
+                                    color={isSelected ? 'white' : 'gray'}
+                                    dimColor={!isSelected}
+                                >
                                     {' '}
                                     — {item.name}
                                 </Text>

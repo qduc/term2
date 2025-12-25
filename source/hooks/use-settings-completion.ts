@@ -1,7 +1,11 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import Fuse from 'fuse.js';
-import {SETTING_KEYS, SENSITIVE_SETTINGS, type SettingsService} from '../services/settings-service.js';
-import { useInputContext } from '../context/InputContext.js';
+import {
+    SETTING_KEYS,
+    SENSITIVE_SETTINGS,
+    type SettingsService,
+} from '../services/settings-service.js';
+import {useInputContext} from '../context/InputContext.js';
 
 export type SettingCompletionItem = {
     key: string;
@@ -10,26 +14,31 @@ export type SettingCompletionItem = {
 };
 
 const SETTING_DESCRIPTIONS: Record<string, string> = {
-    [SETTING_KEYS.AGENT_MODEL]: 'The AI model to use (e.g. gpt-4, claude-3-opus)',
-    [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort level (default, low, medium, high)',
-    [SETTING_KEYS.AGENT_TEMPERATURE]: 'Model temperature (0-2, controls randomness)',
+    [SETTING_KEYS.AGENT_MODEL]:
+        'The AI model to use (e.g. gpt-4, claude-3-opus)',
+    [SETTING_KEYS.AGENT_REASONING_EFFORT]:
+        'Reasoning effort level (default, low, medium, high)',
+    [SETTING_KEYS.AGENT_TEMPERATURE]:
+        'Model temperature (0-2, controls randomness)',
     // agent.provider is hidden from UI - it can only be changed via model menu
     [SETTING_KEYS.AGENT_MAX_TURNS]: 'Maximum conversation turns',
-    [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Number of retry attempts for failed requests',
+    [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]:
+        'Number of retry attempts for failed requests',
     [SETTING_KEYS.SHELL_TIMEOUT]: 'Shell command timeout in milliseconds',
-    [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Maximum lines of shell output to capture',
-    [SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS]: 'Maximum characters of shell output to capture',
+    [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]:
+        'Maximum lines of shell output to capture',
+    [SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS]:
+        'Maximum characters of shell output to capture',
     [SETTING_KEYS.UI_HISTORY_SIZE]: 'Number of history items to keep',
-    [SETTING_KEYS.LOGGING_LOG_LEVEL]: 'Logging level (debug, info, warn, error)',
+    [SETTING_KEYS.LOGGING_LOG_LEVEL]:
+        'Logging level (debug, info, warn, error)',
 };
 
 /**
  * Settings that should be hidden from the UI (not for security, but for UX/workflow)
  * - agent.provider: Can only be changed at the start of a new conversation via model menu
  */
-const HIDDEN_SETTINGS = new Set<string>([
-    SETTING_KEYS.AGENT_PROVIDER,
-]);
+const HIDDEN_SETTINGS = new Set<string>([SETTING_KEYS.AGENT_PROVIDER]);
 
 const MAX_RESULTS = 10;
 
@@ -43,7 +52,10 @@ function getSensitiveSettingKeysSet(): Set<string> {
 /**
  * Get the current value of a setting for display in the menu
  */
-function getCurrentSettingValue(settingsService: SettingsService, key: string): string | number | boolean | undefined {
+function getCurrentSettingValue(
+    settingsService: SettingsService,
+    key: string,
+): string | number | boolean | undefined {
     try {
         const value = settingsService.get(key);
         // Format the value for display
@@ -61,9 +73,11 @@ export function buildSettingsList(
     settingKeys: Record<string, string>,
     descriptions: Record<string, string>,
     excludeSensitive: boolean = true,
-    getCurrentValue?: (key: string) => string | number | boolean | undefined
+    getCurrentValue?: (key: string) => string | number | boolean | undefined,
 ): SettingCompletionItem[] {
-    const sensitiveKeys = excludeSensitive ? getSensitiveSettingKeysSet() : new Set<string>();
+    const sensitiveKeys = excludeSensitive
+        ? getSensitiveSettingKeysSet()
+        : new Set<string>();
 
     return Object.values(settingKeys)
         .filter(key => !sensitiveKeys.has(key) && !HIDDEN_SETTINGS.has(key))
@@ -78,7 +92,7 @@ export function filterSettingsByQuery(
     settings: SettingCompletionItem[],
     query: string,
     fuseInstance: Fuse<SettingCompletionItem>,
-    maxResults: number = 10
+    maxResults: number = 10,
 ): SettingCompletionItem[] {
     if (!query.trim()) {
         return settings.slice(0, maxResults);
@@ -98,7 +112,8 @@ export function clampIndex(currentIndex: number, arrayLength: number): number {
 }
 
 export const useSettingsCompletion = (settingsService: SettingsService) => {
-    const { mode, setMode, input, triggerIndex, setTriggerIndex } = useInputContext();
+    const {mode, setMode, input, triggerIndex, setTriggerIndex} =
+        useInputContext();
 
     const isOpen = mode === 'settings_completion';
 
@@ -126,7 +141,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
             SETTING_KEYS,
             SETTING_DESCRIPTIONS,
             true,
-            (key: string) => getCurrentSettingValue(settingsService, key)
+            (key: string) => getCurrentSettingValue(settingsService, key),
         );
     }, [settingsVersion, settingsService]);
 
@@ -145,13 +160,16 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
         setSelectedIndex(prev => clampIndex(prev, filteredEntries.length));
     }, [filteredEntries.length]);
 
-    const open = useCallback((startIndex: number, _initialQuery = '') => {
-        // If already in settings mode, do not reset selection.
-        if (mode === 'settings_completion') return;
-        setMode('settings_completion');
-        setTriggerIndex(startIndex);
-        setSelectedIndex(0);
-    }, [mode, setMode, setTriggerIndex]);
+    const open = useCallback(
+        (startIndex: number, _initialQuery = '') => {
+            // If already in settings mode, do not reset selection.
+            if (mode === 'settings_completion') return;
+            setMode('settings_completion');
+            setTriggerIndex(startIndex);
+            setSelectedIndex(0);
+        },
+        [mode, setMode, setTriggerIndex],
+    );
 
     const close = useCallback(() => {
         if (mode === 'settings_completion') {

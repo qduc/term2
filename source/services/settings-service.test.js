@@ -17,7 +17,7 @@ const getTestSettingsDir = () => {
     return path.join(TEST_BASE_DIR, `test-${testCounter}`);
 };
 
-const getSettingsFilePath = (settingsDir) =>
+const getSettingsFilePath = settingsDir =>
     path.join(settingsDir, 'settings.json');
 
 // AVA (and other runners) set environment variables that we use to detect a test environment.
@@ -97,7 +97,10 @@ test('skips file writes in test environment (constructor + set)', async t => {
         disableLogging: true,
     });
 
-    t.false(fs.existsSync(settingsFile), 'Should not create settings.json during tests');
+    t.false(
+        fs.existsSync(settingsFile),
+        'Should not create settings.json during tests',
+    );
 
     service.set('agent.model', 'gpt-4o');
     t.false(
@@ -106,52 +109,58 @@ test('skips file writes in test environment (constructor + set)', async t => {
     );
 });
 
-test.serial('disableFilePersistence: true prevents writes even outside test environment', async t => {
-    await withNonTestEnvironment(async () => {
-        const settingsDir = getTestSettingsDir();
-        const settingsFile = getSettingsFilePath(settingsDir);
+test.serial(
+    'disableFilePersistence: true prevents writes even outside test environment',
+    async t => {
+        await withNonTestEnvironment(async () => {
+            const settingsDir = getTestSettingsDir();
+            const settingsFile = getSettingsFilePath(settingsDir);
 
-        const service = new SettingsService({
-            settingsDir,
-            disableLogging: true,
-            disableFilePersistence: true,
+            const service = new SettingsService({
+                settingsDir,
+                disableLogging: true,
+                disableFilePersistence: true,
+            });
+
+            t.false(
+                fs.existsSync(settingsFile),
+                'Explicit disableFilePersistence should prevent settings.json creation at startup',
+            );
+
+            service.set('agent.model', 'gpt-4o');
+            t.false(
+                fs.existsSync(settingsFile),
+                'Explicit disableFilePersistence should prevent settings.json writes on set()',
+            );
         });
+    },
+);
 
-        t.false(
-            fs.existsSync(settingsFile),
-            'Explicit disableFilePersistence should prevent settings.json creation at startup',
-        );
+test.serial(
+    'normal operation persists settings.json when not in test environment',
+    async t => {
+        await withNonTestEnvironment(async () => {
+            const settingsDir = getTestSettingsDir();
+            const settingsFile = getSettingsFilePath(settingsDir);
 
-        service.set('agent.model', 'gpt-4o');
-        t.false(
-            fs.existsSync(settingsFile),
-            'Explicit disableFilePersistence should prevent settings.json writes on set()',
-        );
-    });
-});
+            const service = new SettingsService({
+                settingsDir,
+                disableLogging: true,
+            });
 
-test.serial('normal operation persists settings.json when not in test environment', async t => {
-    await withNonTestEnvironment(async () => {
-        const settingsDir = getTestSettingsDir();
-        const settingsFile = getSettingsFilePath(settingsDir);
+            t.true(
+                fs.existsSync(settingsFile),
+                'Should create settings.json at startup outside test environment',
+            );
 
-        const service = new SettingsService({
-            settingsDir,
-            disableLogging: true,
+            service.set('agent.model', 'gpt-4o');
+
+            const content = fs.readFileSync(settingsFile, 'utf-8');
+            const config = JSON.parse(content);
+            t.is(config.agent.model, 'gpt-4o');
         });
-
-        t.true(
-            fs.existsSync(settingsFile),
-            'Should create settings.json at startup outside test environment',
-        );
-
-        service.set('agent.model', 'gpt-4o');
-
-        const content = fs.readFileSync(settingsFile, 'utf-8');
-        const config = JSON.parse(content);
-        t.is(config.agent.model, 'gpt-4o');
-    });
-});
+    },
+);
 
 test('creates settings directory if it does not exist', async t => {
     const settingsDir = getTestSettingsDir();
@@ -159,8 +168,6 @@ test('creates settings directory if it does not exist', async t => {
         settingsDir,
         disableLogging: true,
     });
-
-
 
     t.true(fs.existsSync(settingsDir));
 });
@@ -313,9 +320,9 @@ test('set() modifies runtime-modifiable settings', async t => {
     t.is(service.get('agent.model'), 'gpt-4o');
     t.is(service.getSource('agent.model'), 'cli');
 
-	service.set('agent.temperature', 0.2);
-	t.is(service.get('agent.temperature'), 0.2);
-	t.is(service.getSource('agent.temperature'), 'cli');
+    service.set('agent.temperature', 0.2);
+    t.is(service.get('agent.temperature'), 0.2);
+    t.is(service.getSource('agent.temperature'), 'cli');
 });
 
 test('set() throws for startup-only settings', async t => {
@@ -345,7 +352,7 @@ test('isRuntimeModifiable identifies correct settings', async t => {
     // Runtime-modifiable settings
     t.true(service.isRuntimeModifiable('agent.model'));
     t.true(service.isRuntimeModifiable('agent.reasoningEffort'));
-	t.true(service.isRuntimeModifiable('agent.temperature'));
+    t.true(service.isRuntimeModifiable('agent.temperature'));
     t.true(service.isRuntimeModifiable('shell.timeout'));
     t.true(service.isRuntimeModifiable('shell.maxOutputLines'));
     t.true(service.isRuntimeModifiable('shell.maxOutputChars'));
@@ -414,9 +421,11 @@ test('getAll() returns all settings with sources', async t => {
 test('SettingsService initialization applies logging.logLevel to loggingService', async t => {
     const settingsDir = getTestSettingsDir();
     const mockLoggingService = {
-        setLogLevel: (level) => { mockLoggingService._level = level; },
+        setLogLevel: level => {
+            mockLoggingService._level = level;
+        },
         getLogLevel: () => mockLoggingService._level || 'info',
-        _level: 'info'
+        _level: 'info',
     };
 
     const service = new SettingsService({
@@ -435,9 +444,11 @@ test('SettingsService initialization applies logging.logLevel to loggingService'
 test('SettingsService runtime set updates loggingService', async t => {
     const settingsDir = getTestSettingsDir();
     const mockLoggingService = {
-        setLogLevel: (level) => { mockLoggingService._level = level; },
+        setLogLevel: level => {
+            mockLoggingService._level = level;
+        },
         getLogLevel: () => mockLoggingService._level || 'info',
-        _level: 'info'
+        _level: 'info',
     };
 
     const service = new SettingsService({
@@ -720,123 +731,155 @@ test.serial('updates config file when new settings are added', async t => {
     });
 });
 
-test.serial('does not update config file when no new settings are added', async t => {
-    const settingsDir = getTestSettingsDir();
-    const configFile = path.join(settingsDir, 'settings.json');
+test.serial(
+    'does not update config file when no new settings are added',
+    async t => {
+        const settingsDir = getTestSettingsDir();
+        const configFile = path.join(settingsDir, 'settings.json');
 
-    // Create a complete config file with all current settings
-    if (!fs.existsSync(settingsDir)) {
-        fs.mkdirSync(settingsDir, {recursive: true});
-    }
-
-    const originalConfig = {
-        agent: {
-            model: 'gpt-4o',
-            reasoningEffort: 'default',
-            maxTurns: 20,
-            retryAttempts: 2,
-
-
-            provider: 'openai',
-            openrouter: {},
-        },
-        shell: {
-            timeout: 120000,
-            maxOutputLines: 1000,
-            maxOutputChars: 10000,
-        },
-        ui: {
-            historySize: 1000,
-        },
-        logging: {
-            logLevel: 'info',
-            disableLogging: false,
-            debugLogging: false,
-        },
-        environment: {
-            nodeEnv: undefined,
-        },
-        app: {
-            shellPath: undefined,
-            mode: 'default',
-        },
-        tools: {
-            logFileOperations: true,
-        },
-        debug: {
-            debugBashTool: false,
-        },
-    };
-
-    fs.writeFileSync(configFile, JSON.stringify(originalConfig), 'utf-8');
-    // Spy on loggingService to ensure no update was triggered
-    let updateLogged = false;
-    const originalInfo = loggingService.info;
-    loggingService.info = (msg, meta) => {
-        // Only track updates for this specific test's settings file
-        if (msg.includes('Updated settings file') && meta?.settingsFile?.startsWith(settingsDir)) {
-            updateLogged = true;
+        // Create a complete config file with all current settings
+        if (!fs.existsSync(settingsDir)) {
+            fs.mkdirSync(settingsDir, {recursive: true});
         }
-    };
 
-    try {
-        // Initialize service - it should NOT update the file since all settings are present
-        // We must enable logging to catch the "update" log if it were to happen
-        new SettingsService({
-            settingsDir,
-            disableLogging: false,
-        });
-    } finally {
-        loggingService.info = originalInfo;
-    }
+        const originalConfig = {
+            agent: {
+                model: 'gpt-4o',
+                reasoningEffort: 'default',
+                maxTurns: 20,
+                retryAttempts: 2,
 
-    t.false(updateLogged, 'Should not have logged an update to the settings file');
-});
+                provider: 'openai',
+                openrouter: {},
+            },
+            shell: {
+                timeout: 120000,
+                maxOutputLines: 1000,
+                maxOutputChars: 10000,
+            },
+            ui: {
+                historySize: 1000,
+            },
+            logging: {
+                logLevel: 'info',
+                disableLogging: false,
+                debugLogging: false,
+            },
+            environment: {
+                nodeEnv: undefined,
+            },
+            app: {
+                shellPath: undefined,
+                mode: 'default',
+            },
+            tools: {
+                logFileOperations: true,
+            },
+            debug: {
+                debugBashTool: false,
+            },
+        };
 
-test.serial('does not update config file when format differs but content is same', async t => {
-    const settingsDir = getTestSettingsDir();
-    const configFile = path.join(settingsDir, 'settings.json');
+        fs.writeFileSync(configFile, JSON.stringify(originalConfig), 'utf-8');
+        // Spy on loggingService to ensure no update was triggered
+        let updateLogged = false;
+        const originalInfo = loggingService.info;
+        loggingService.info = (msg, meta) => {
+            // Only track updates for this specific test's settings file
+            if (
+                msg.includes('Updated settings file') &&
+                meta?.settingsFile?.startsWith(settingsDir)
+            ) {
+                updateLogged = true;
+            }
+        };
 
-    // Create directory
-    if (!fs.existsSync(settingsDir)) {
-        fs.mkdirSync(settingsDir, {recursive: true});
-    }
-
-    // Write config with compact JSON (no formatting, different key order)
-    const compactConfig = {
-        agent: {model: 'gpt-4o', reasoningEffort: 'default', maxTurns: 20, retryAttempts: 2, provider: 'openai', openrouter: {}},
-        shell: {timeout: 120000, maxOutputLines: 1000, maxOutputChars: 10000},
-        ui: {historySize: 1000},
-        logging: {logLevel: 'info', disableLogging: false, debugLogging: false},
-        environment: {nodeEnv: undefined},
-        app: {shellPath: undefined, mode: 'default'},
-        tools: {logFileOperations: true},
-        debug: {debugBashTool: false},
-    };
-
-    fs.writeFileSync(configFile, JSON.stringify(compactConfig), 'utf-8');
-    // Spy on loggingService to ensure no update was triggered
-    let updateLogged = false;
-    const originalInfo = loggingService.info;
-    loggingService.info = (msg, meta) => {
-        // Only track updates for this specific test's settings file
-        if (msg.includes('Updated settings file') && meta?.settingsFile?.startsWith(settingsDir)) {
-            updateLogged = true;
+        try {
+            // Initialize service - it should NOT update the file since all settings are present
+            // We must enable logging to catch the "update" log if it were to happen
+            new SettingsService({
+                settingsDir,
+                disableLogging: false,
+            });
+        } finally {
+            loggingService.info = originalInfo;
         }
-    };
 
-    try {
-        // Initialize service - it should NOT update the file even though format differs
-        new SettingsService({
-            settingsDir,
-            disableLogging: false,
-        });
-    } finally {
-        loggingService.info = originalInfo;
-    }
+        t.false(
+            updateLogged,
+            'Should not have logged an update to the settings file',
+        );
+    },
+);
 
-    t.false(updateLogged, 'Should not have logged an update to the settings file');
-});
+test.serial(
+    'does not update config file when format differs but content is same',
+    async t => {
+        const settingsDir = getTestSettingsDir();
+        const configFile = path.join(settingsDir, 'settings.json');
+
+        // Create directory
+        if (!fs.existsSync(settingsDir)) {
+            fs.mkdirSync(settingsDir, {recursive: true});
+        }
+
+        // Write config with compact JSON (no formatting, different key order)
+        const compactConfig = {
+            agent: {
+                model: 'gpt-4o',
+                reasoningEffort: 'default',
+                maxTurns: 20,
+                retryAttempts: 2,
+                provider: 'openai',
+                openrouter: {},
+            },
+            shell: {
+                timeout: 120000,
+                maxOutputLines: 1000,
+                maxOutputChars: 10000,
+            },
+            ui: {historySize: 1000},
+            logging: {
+                logLevel: 'info',
+                disableLogging: false,
+                debugLogging: false,
+            },
+            environment: {nodeEnv: undefined},
+            app: {shellPath: undefined, mode: 'default'},
+            tools: {logFileOperations: true},
+            debug: {debugBashTool: false},
+        };
+
+        fs.writeFileSync(configFile, JSON.stringify(compactConfig), 'utf-8');
+        // Spy on loggingService to ensure no update was triggered
+        let updateLogged = false;
+        const originalInfo = loggingService.info;
+        loggingService.info = (msg, meta) => {
+            // Only track updates for this specific test's settings file
+            if (
+                msg.includes('Updated settings file') &&
+                meta?.settingsFile?.startsWith(settingsDir)
+            ) {
+                updateLogged = true;
+            }
+        };
+
+        try {
+            // Initialize service - it should NOT update the file even though format differs
+            new SettingsService({
+                settingsDir,
+                disableLogging: false,
+            });
+        } finally {
+            loggingService.info = originalInfo;
+        }
+
+        t.false(
+            updateLogged,
+            'Should not have logged an update to the settings file',
+        );
+    },
+);
 test('isSensitive() identifies sensitive settings', async t => {
     const settingsDir = getTestSettingsDir();
     const service = new SettingsService({
@@ -869,11 +912,11 @@ test('set() throws for sensitive settings', async t => {
         () => {
             service.set('agent.openrouter.apiKey', 'sk-secret-key');
         },
-        {instanceOf: Error}
+        {instanceOf: Error},
     );
     t.true(
         error.message.includes('sensitive setting'),
-        'Error should mention sensitive setting'
+        'Error should mention sensitive setting',
     );
 });
 
@@ -888,11 +931,11 @@ test('reset() throws for sensitive settings', async t => {
         () => {
             service.reset('agent.openrouter.apiKey');
         },
-        {instanceOf: Error}
+        {instanceOf: Error},
     );
     t.true(
         error.message.includes('sensitive setting'),
-        'Error should mention sensitive setting'
+        'Error should mention sensitive setting',
     );
 });
 
@@ -931,8 +974,14 @@ test.serial('sensitive settings are never saved to config file', async t => {
 
         // Verify sensitive values are NOT in the file
         t.falsy(config.agent?.openrouter?.apiKey, 'apiKey should not be saved');
-        t.falsy(config.agent?.openrouter?.baseUrl, 'baseUrl should not be saved');
-        t.falsy(config.agent?.openrouter?.referrer, 'referrer should not be saved');
+        t.falsy(
+            config.agent?.openrouter?.baseUrl,
+            'baseUrl should not be saved',
+        );
+        t.falsy(
+            config.agent?.openrouter?.referrer,
+            'referrer should not be saved',
+        );
         t.falsy(config.agent?.openrouter?.title, 'title should not be saved');
         t.falsy(config.app?.shellPath, 'shellPath should not be saved');
 
@@ -941,38 +990,44 @@ test.serial('sensitive settings are never saved to config file', async t => {
     });
 });
 
-test.serial('sensitive settings loaded from env are accessible at runtime', async t => {
-    await withNonTestEnvironment(async () => {
-        const settingsDir = getTestSettingsDir();
+test.serial(
+    'sensitive settings loaded from env are accessible at runtime',
+    async t => {
+        await withNonTestEnvironment(async () => {
+            const settingsDir = getTestSettingsDir();
 
-        const service = new SettingsService({
-            settingsDir,
-            disableLogging: true,
-            env: {
-                agent: {
-                    openrouter: {
-                        apiKey: 'sk-secret-key',
-                        baseUrl: 'https://internal.api.com',
+            const service = new SettingsService({
+                settingsDir,
+                disableLogging: true,
+                env: {
+                    agent: {
+                        openrouter: {
+                            apiKey: 'sk-secret-key',
+                            baseUrl: 'https://internal.api.com',
+                        },
+                    },
+                    app: {
+                        shellPath: '/bin/bash',
                     },
                 },
-                app: {
-                    shellPath: '/bin/bash',
-                },
-            },
+            });
+
+            // Verify sensitive values ARE accessible at runtime
+            t.is(service.get('agent.openrouter.apiKey'), 'sk-secret-key');
+            t.is(
+                service.get('agent.openrouter.baseUrl'),
+                'https://internal.api.com',
+            );
+            t.is(service.get('app.shellPath'), '/bin/bash');
+
+            // But they should not be in the saved file
+            const configFile = path.join(settingsDir, 'settings.json');
+            const content = fs.readFileSync(configFile, 'utf-8');
+            const config = JSON.parse(content);
+
+            t.falsy(config.agent?.openrouter?.apiKey);
+            t.falsy(config.agent?.openrouter?.baseUrl);
+            t.falsy(config.app?.shellPath);
         });
-
-        // Verify sensitive values ARE accessible at runtime
-        t.is(service.get('agent.openrouter.apiKey'), 'sk-secret-key');
-        t.is(service.get('agent.openrouter.baseUrl'), 'https://internal.api.com');
-        t.is(service.get('app.shellPath'), '/bin/bash');
-
-        // But they should not be in the saved file
-        const configFile = path.join(settingsDir, 'settings.json');
-        const content = fs.readFileSync(configFile, 'utf-8');
-        const config = JSON.parse(content);
-
-        t.falsy(config.agent?.openrouter?.apiKey);
-        t.falsy(config.agent?.openrouter?.baseUrl);
-        t.falsy(config.app?.shellPath);
-    });
-});
+    },
+);

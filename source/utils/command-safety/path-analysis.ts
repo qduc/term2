@@ -84,10 +84,9 @@ export function analyzePathRisk(
 
         // Check for other sensitive extensions in home directory
         if (SENSITIVE_EXTENSIONS.some(ext => filename.endsWith(ext))) {
-            logger.security(
-                'Path risk: sensitive file in home directory',
-                {path: candidate},
-            );
+            logger.security('Path risk: sensitive file in home directory', {
+                path: candidate,
+            });
             return SafetyStatus.RED;
         }
     }

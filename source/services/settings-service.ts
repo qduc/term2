@@ -6,7 +6,11 @@ import deepEqual from 'fast-deep-equal';
 import {LoggingService} from './logging-service.js';
 // Import providers to ensure they're registered before schema construction
 import '../providers/index.js';
-import {getAllProviders, getProvider, upsertProvider} from '../providers/index.js';
+import {
+    getAllProviders,
+    getProvider,
+    upsertProvider,
+} from '../providers/index.js';
 import {createOpenAICompatibleProviderDefinition} from '../providers/openai-compatible.provider.js';
 
 const paths = envPaths('term2');
@@ -27,7 +31,11 @@ const AgentSettingsSchema = z.object({
     // NOTE: We do NOT validate provider existence here because the provider
     // registry can be extended at runtime from settings.json (custom providers).
     // We validate/fallback after SettingsService loads and registers runtime providers.
-    provider: z.string().min(1).default('openai').describe('Provider to use for the agent'),
+    provider: z
+        .string()
+        .min(1)
+        .default('openai')
+        .describe('Provider to use for the agent'),
     openrouter: z
         .object({
             apiKey: z.string().optional(),
@@ -88,9 +96,7 @@ const CustomProviderSchema = z.object({
  * These are only loaded from environment variables.
  */
 function getSensitiveSettingKeys(): Set<string> {
-    const keys = new Set<string>([
-        'app.shellPath',
-    ]);
+    const keys = new Set<string>(['app.shellPath']);
 
     // Add provider-specific sensitive keys
     for (const provider of getAllProviders()) {
@@ -326,9 +332,11 @@ export class SettingsService {
         this.sources = new Map();
 
         // Use injected LoggingService or create a new one if not provided
-        this.loggingService = loggingService || new LoggingService({
-            disableLogging: this.disableLogging,
-        });
+        this.loggingService =
+            loggingService ||
+            new LoggingService({
+                disableLogging: this.disableLogging,
+            });
 
         // Disk persistence can be explicitly disabled (e.g., for tests), and is
         // also automatically disabled when running under a known test runner.
@@ -411,9 +419,12 @@ export class SettingsService {
             if (!this.disableFilePersistence) {
                 this.saveToFile();
                 if (!this.disableLogging) {
-                    this.loggingService.info('Created settings file at startup', {
-                        settingsFile: settingsFilePath,
-                    });
+                    this.loggingService.info(
+                        'Created settings file at startup',
+                        {
+                            settingsFile: settingsFilePath,
+                        },
+                    );
                 }
             }
         } else if (shouldUpdateFile) {
@@ -456,15 +467,23 @@ export class SettingsService {
                     createOpenAICompatibleProviderDefinition({
                         name: String(providerId),
                         baseUrl: String(baseUrl),
-                        apiKey: (p as any)?.apiKey ? String((p as any).apiKey) : undefined,
+                        apiKey: (p as any)?.apiKey
+                            ? String((p as any).apiKey)
+                            : undefined,
                     }),
                 );
             } catch (error: any) {
                 if (!this.disableLogging) {
-                    this.loggingService.warn('Failed to register custom provider', {
-                        providerId,
-                        error: error instanceof Error ? error.message : String(error),
-                    });
+                    this.loggingService.warn(
+                        'Failed to register custom provider',
+                        {
+                            providerId,
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        },
+                    );
                 }
             }
         }
@@ -655,7 +674,10 @@ export class SettingsService {
             } catch (error: any) {
                 if (!this.disableLogging) {
                     this.loggingService.warn('Settings change listener threw', {
-                        error: error instanceof Error ? error.message : String(error),
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
                         changedKey,
                     });
                 }
@@ -844,7 +866,10 @@ export class SettingsService {
             // from formatting differences
             if (fs.existsSync(settingsFile)) {
                 try {
-                    const existingContent = fs.readFileSync(settingsFile, 'utf-8');
+                    const existingContent = fs.readFileSync(
+                        settingsFile,
+                        'utf-8',
+                    );
                     const existingParsed = JSON.parse(existingContent);
 
                     // Deep equality check that ignores formatting and key order
@@ -873,7 +898,9 @@ export class SettingsService {
     /**
      * Remove sensitive settings that should never be persisted to disk
      */
-    private stripSensitiveSettings(settings: SettingsData): Partial<SettingsData> {
+    private stripSensitiveSettings(
+        settings: SettingsData,
+    ): Partial<SettingsData> {
         const cleaned = JSON.parse(JSON.stringify(settings));
 
         // Remove sensitive openrouter fields (keep non-secret config)
@@ -900,7 +927,11 @@ export class SettingsService {
     /**
      * Check if target object is missing any keys that exist in source
      */
-    private hasMissingKeys(target: any, source: any, prefix: string = ''): boolean {
+    private hasMissingKeys(
+        target: any,
+        source: any,
+        prefix: string = '',
+    ): boolean {
         for (const key in source) {
             if (!source.hasOwnProperty(key)) continue;
 
@@ -984,7 +1015,9 @@ export class SettingsService {
 
         // Ensure all required fields are present
         const merged: SettingsData = {
-            providers: result.providers || JSON.parse(JSON.stringify(defaults.providers)),
+            providers:
+                result.providers ||
+                JSON.parse(JSON.stringify(defaults.providers)),
             agent: result.agent || JSON.parse(JSON.stringify(defaults.agent)),
             shell: result.shell || JSON.parse(JSON.stringify(defaults.shell)),
             ui: result.ui || JSON.parse(JSON.stringify(defaults.ui)),
@@ -1180,14 +1213,14 @@ export const settingsService = new Proxy(_settingsServiceInstance, {
 
         throw new Error(
             `DEPRECATED: Direct use of settingsService singleton is not allowed.\n` +
-            `Called from: ${callerLine.trim()}\n\n` +
-            `Instead, pass SettingsService via dependency injection:\n` +
-            `  - In App component: Accept as prop from cli.tsx\n` +
-            `  - In services/tools: Accept via 'deps' constructor parameter\n` +
-            `  - In hooks: Accept as parameter or use a context provider\n\n` +
-            `See source/app.tsx for an example of proper dependency injection.`
+                `Called from: ${callerLine.trim()}\n\n` +
+                `Instead, pass SettingsService via dependency injection:\n` +
+                `  - In App component: Accept as prop from cli.tsx\n` +
+                `  - In services/tools: Accept via 'deps' constructor parameter\n` +
+                `  - In hooks: Accept as parameter or use a context provider\n\n` +
+                `See source/app.tsx for an example of proper dependency injection.`,
         );
-    }
+    },
 });
 
 /**

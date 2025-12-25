@@ -6,7 +6,10 @@ import meow from 'meow';
 import App from './app.js';
 import {OpenAIAgentClient} from './lib/openai-agent-client.js';
 import {ConversationService} from './services/conversation-service.js';
-import {SettingsService, buildEnvOverrides} from './services/settings-service.js';
+import {
+    SettingsService,
+    buildEnvOverrides,
+} from './services/settings-service.js';
 import {LoggingService} from './services/logging-service.js';
 import {HistoryService} from './services/history-service.js';
 
@@ -117,12 +120,17 @@ const conversationService = new ConversationService({
     },
 });
 
-import { InputProvider } from './context/InputContext.js';
+import {InputProvider} from './context/InputContext.js';
 
 render(
     (
         <InputProvider>
-            <App conversationService={conversationService} settingsService={settings} historyService={history} loggingService={logger} />
+            <App
+                conversationService={conversationService}
+                settingsService={settings}
+                historyService={history}
+                loggingService={logger}
+            />
         </InputProvider>
     ) as ReactNode,
 );

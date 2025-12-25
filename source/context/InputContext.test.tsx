@@ -5,255 +5,263 @@ import {InputProvider, useInputContext} from './InputContext.js';
 
 // Test component that uses the hook and throws if outside provider
 const TestComponentOutsideProvider = () => {
-	useInputContext();
-	return null;
+    useInputContext();
+    return null;
 };
 
 // Test component that uses the hook inside provider
-const TestComponentInsideProvider = ({onMount}: {onMount: (ctx: any) => void}) => {
-	const context = useInputContext();
+const TestComponentInsideProvider = ({
+    onMount,
+}: {
+    onMount: (ctx: any) => void;
+}) => {
+    const context = useInputContext();
 
-	useEffect(() => {
-		onMount(context);
-	}, [context, onMount]);
+    useEffect(() => {
+        onMount(context);
+    }, [context, onMount]);
 
-	return null;
+    return null;
 };
 
 test('useInputContext throws error when used outside InputProvider', t => {
-	const {lastFrame} = render(<TestComponentOutsideProvider />);
-	const output = lastFrame();
-	// Ink displays the error in the terminal
-	t.truthy(output);
-	t.true(output!.includes('useInputContext must be used within an InputProvider'));
+    const {lastFrame} = render(<TestComponentOutsideProvider />);
+    const output = lastFrame();
+    // Ink displays the error in the terminal
+    t.truthy(output);
+    t.true(
+        output!.includes(
+            'useInputContext must be used within an InputProvider',
+        ),
+    );
 });
 
 test('InputProvider provides context with default values', t => {
-	let capturedContext: any;
+    let capturedContext: any;
 
-	render(
-		<InputProvider>
-			<TestComponentInsideProvider
-				onMount={ctx => {
-					capturedContext = ctx;
-				}}
-			/>
-		</InputProvider>
-	);
+    render(
+        <InputProvider>
+            <TestComponentInsideProvider
+                onMount={ctx => {
+                    capturedContext = ctx;
+                }}
+            />
+        </InputProvider>,
+    );
 
-	t.truthy(capturedContext);
-	t.is(capturedContext.input, '');
-	t.is(capturedContext.mode, 'text');
-	t.is(capturedContext.cursorOffset, 0);
-	t.is(capturedContext.triggerIndex, null);
+    t.truthy(capturedContext);
+    t.is(capturedContext.input, '');
+    t.is(capturedContext.mode, 'text');
+    t.is(capturedContext.cursorOffset, 0);
+    t.is(capturedContext.triggerIndex, null);
 });
 
 test('InputProvider provides all required setter functions', t => {
-	let capturedContext: any;
+    let capturedContext: any;
 
-	render(
-		<InputProvider>
-			<TestComponentInsideProvider
-				onMount={ctx => {
-					capturedContext = ctx;
-				}}
-			/>
-		</InputProvider>
-	);
+    render(
+        <InputProvider>
+            <TestComponentInsideProvider
+                onMount={ctx => {
+                    capturedContext = ctx;
+                }}
+            />
+        </InputProvider>,
+    );
 
-	t.truthy(capturedContext);
-	t.is(typeof capturedContext.setInput, 'function');
-	t.is(typeof capturedContext.setMode, 'function');
-	t.is(typeof capturedContext.setCursorOffset, 'function');
-	t.is(typeof capturedContext.setTriggerIndex, 'function');
+    t.truthy(capturedContext);
+    t.is(typeof capturedContext.setInput, 'function');
+    t.is(typeof capturedContext.setMode, 'function');
+    t.is(typeof capturedContext.setCursorOffset, 'function');
+    t.is(typeof capturedContext.setTriggerIndex, 'function');
 });
 
 test('setInput updates input value', t => {
-	const TestUpdater = () => {
-		const {input, setInput} = useInputContext();
+    const TestUpdater = () => {
+        const {input, setInput} = useInputContext();
 
-		useEffect(() => {
-			setInput('hello world');
-		}, [setInput]);
+        useEffect(() => {
+            setInput('hello world');
+        }, [setInput]);
 
-		return <>{input || 'EMPTY'}</>;
-	};
+        return <>{input || 'EMPTY'}</>;
+    };
 
-	const {lastFrame} = render(
-		<InputProvider>
-			<TestUpdater />
-		</InputProvider>
-	);
+    const {lastFrame} = render(
+        <InputProvider>
+            <TestUpdater />
+        </InputProvider>,
+    );
 
-	const output = lastFrame();
-	t.truthy(output);
-	// The component may not re-render immediately in tests, so we just verify it rendered
-	t.pass();
+    const output = lastFrame();
+    t.truthy(output);
+    // The component may not re-render immediately in tests, so we just verify it rendered
+    t.pass();
 });
 
 test('setInput accepts empty strings', t => {
-	const TestUpdater = () => {
-		const {input, setInput} = useInputContext();
+    const TestUpdater = () => {
+        const {input, setInput} = useInputContext();
 
-		useEffect(() => {
-			setInput('');
-		}, [setInput]);
+        useEffect(() => {
+            setInput('');
+        }, [setInput]);
 
-		return <>{input || 'EMPTY'}</>;
-	};
+        return <>{input || 'EMPTY'}</>;
+    };
 
-	const {lastFrame} = render(
-		<InputProvider>
-			<TestUpdater />
-		</InputProvider>
-	);
+    const {lastFrame} = render(
+        <InputProvider>
+            <TestUpdater />
+        </InputProvider>,
+    );
 
-	t.true(lastFrame()!.includes('EMPTY'));
+    t.true(lastFrame()!.includes('EMPTY'));
 });
 
 test('setInput accepts strings with special characters', t => {
-	const TestUpdater = () => {
-		const {setInput} = useInputContext();
+    const TestUpdater = () => {
+        const {setInput} = useInputContext();
 
-		useEffect(() => {
-			setInput('/settings @path/to/file.ts');
-		}, [setInput]);
+        useEffect(() => {
+            setInput('/settings @path/to/file.ts');
+        }, [setInput]);
 
-		return null;
-	};
+        return null;
+    };
 
-	const {lastFrame} = render(
-		<InputProvider>
-			<TestUpdater />
-		</InputProvider>
-	);
+    const {lastFrame} = render(
+        <InputProvider>
+            <TestUpdater />
+        </InputProvider>,
+    );
 
-	t.truthy(lastFrame());
-	t.pass();
+    t.truthy(lastFrame());
+    t.pass();
 });
 
 test('setMode accepts all mode values', t => {
-	const TestUpdater = () => {
-		const {setMode} = useInputContext();
+    const TestUpdater = () => {
+        const {setMode} = useInputContext();
 
-		useEffect(() => {
-			setMode('slash_commands');
-			setMode('path_completion');
-			setMode('settings_completion');
-			setMode('text');
-		}, [setMode]);
+        useEffect(() => {
+            setMode('slash_commands');
+            setMode('path_completion');
+            setMode('settings_completion');
+            setMode('text');
+        }, [setMode]);
 
-		return null;
-	};
+        return null;
+    };
 
-	const {lastFrame} = render(
-		<InputProvider>
-			<TestUpdater />
-		</InputProvider>
-	);
+    const {lastFrame} = render(
+        <InputProvider>
+            <TestUpdater />
+        </InputProvider>,
+    );
 
-	t.truthy(lastFrame());
-	t.pass();
+    t.truthy(lastFrame());
+    t.pass();
 });
 
 test('setCursorOffset accepts positive values', t => {
-	const TestUpdater = () => {
-		const {cursorOffset, setCursorOffset} = useInputContext();
+    const TestUpdater = () => {
+        const {cursorOffset, setCursorOffset} = useInputContext();
 
-		useEffect(() => {
-			setCursorOffset(42);
-		}, [setCursorOffset]);
+        useEffect(() => {
+            setCursorOffset(42);
+        }, [setCursorOffset]);
 
-		return <>{cursorOffset}</>;
-	};
+        return <>{cursorOffset}</>;
+    };
 
-	const {lastFrame} = render(
-		<InputProvider>
-			<TestUpdater />
-		</InputProvider>
-	);
+    const {lastFrame} = render(
+        <InputProvider>
+            <TestUpdater />
+        </InputProvider>,
+    );
 
-	t.true(lastFrame()!.includes('42'));
+    t.true(lastFrame()!.includes('42'));
 });
 
 test('setCursorOffset accepts zero', t => {
-	const TestUpdater = () => {
-		const {cursorOffset, setCursorOffset} = useInputContext();
+    const TestUpdater = () => {
+        const {cursorOffset, setCursorOffset} = useInputContext();
 
-		useEffect(() => {
-			setCursorOffset(0);
-		}, [setCursorOffset]);
+        useEffect(() => {
+            setCursorOffset(0);
+        }, [setCursorOffset]);
 
-		return <>{cursorOffset}</>;
-	};
+        return <>{cursorOffset}</>;
+    };
 
-	const {lastFrame} = render(
-		<InputProvider>
-			<TestUpdater />
-		</InputProvider>
-	);
+    const {lastFrame} = render(
+        <InputProvider>
+            <TestUpdater />
+        </InputProvider>,
+    );
 
-	t.true(lastFrame()!.includes('0'));
+    t.true(lastFrame()!.includes('0'));
 });
 
 test('setTriggerIndex accepts null value', t => {
-	const TestUpdater = () => {
-		const {triggerIndex, setTriggerIndex} = useInputContext();
+    const TestUpdater = () => {
+        const {triggerIndex, setTriggerIndex} = useInputContext();
 
-		useEffect(() => {
-			setTriggerIndex(null);
-		}, [setTriggerIndex]);
+        useEffect(() => {
+            setTriggerIndex(null);
+        }, [setTriggerIndex]);
 
-		return <>{triggerIndex === null ? 'NULL' : triggerIndex}</>;
-	};
+        return <>{triggerIndex === null ? 'NULL' : triggerIndex}</>;
+    };
 
-	const {lastFrame} = render(
-		<InputProvider>
-			<TestUpdater />
-		</InputProvider>
-	);
+    const {lastFrame} = render(
+        <InputProvider>
+            <TestUpdater />
+        </InputProvider>,
+    );
 
-	t.true(lastFrame()!.includes('NULL'));
+    t.true(lastFrame()!.includes('NULL'));
 });
 
 test('setTriggerIndex accepts index values', t => {
-	const TestUpdater = () => {
-		const {triggerIndex, setTriggerIndex} = useInputContext();
+    const TestUpdater = () => {
+        const {triggerIndex, setTriggerIndex} = useInputContext();
 
-		useEffect(() => {
-			setTriggerIndex(10);
-		}, [setTriggerIndex]);
+        useEffect(() => {
+            setTriggerIndex(10);
+        }, [setTriggerIndex]);
 
-		return <>{triggerIndex === null ? 'NULL' : triggerIndex}</>;
-	};
+        return <>{triggerIndex === null ? 'NULL' : triggerIndex}</>;
+    };
 
-	const {lastFrame} = render(
-		<InputProvider>
-			<TestUpdater />
-		</InputProvider>
-	);
+    const {lastFrame} = render(
+        <InputProvider>
+            <TestUpdater />
+        </InputProvider>,
+    );
 
-	t.true(lastFrame()!.includes('10'));
+    t.true(lastFrame()!.includes('10'));
 });
 
 test('Multiple components can use the context', t => {
-	const Component1 = () => {
-		const {input} = useInputContext();
-		return <>{input || 'C1'}</>;
-	};
+    const Component1 = () => {
+        const {input} = useInputContext();
+        return <>{input || 'C1'}</>;
+    };
 
-	const Component2 = () => {
-		const {mode} = useInputContext();
-		return <>{mode || 'C2'}</>;
-	};
+    const Component2 = () => {
+        const {mode} = useInputContext();
+        return <>{mode || 'C2'}</>;
+    };
 
-	const {lastFrame} = render(
-		<InputProvider>
-			<Component1 />
-			<Component2 />
-		</InputProvider>
-	);
+    const {lastFrame} = render(
+        <InputProvider>
+            <Component1 />
+            <Component2 />
+        </InputProvider>,
+    );
 
-	t.truthy(lastFrame());
-	t.pass();
+    t.truthy(lastFrame());
+    t.pass();
 });

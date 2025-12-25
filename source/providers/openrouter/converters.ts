@@ -1,6 +1,4 @@
-import {
-    type ModelRequest,
-} from '@openai/agents-core';
+import {type ModelRequest} from '@openai/agents-core';
 import type {ILoggingService} from '../../services/service-interfaces.js';
 import {isAnthropicModel} from './utils.js';
 
@@ -30,12 +28,15 @@ const noOpLogger: ILoggingService = {
  * `content`, `reasoning`, `reasoning_details`, or `tool_calls`. Returns `null` if the input `item` is null or
  * cannot be converted into a recognized format.
  */
-function convertAgentItemToOpenRouterMessage(item: any, loggingService: ILoggingService): any | null {
+function convertAgentItemToOpenRouterMessage(
+    item: any,
+    loggingService: ILoggingService,
+): any | null {
     if (!item) {
         return null;
     }
 
-	const rawItem = item.rawItem || item;
+    const rawItem = item.rawItem || item;
 
     if (rawItem.type === 'input_text' && typeof rawItem.text === 'string') {
         return {role: 'user', content: rawItem.text};
@@ -53,22 +54,22 @@ function convertAgentItemToOpenRouterMessage(item: any, loggingService: ILogging
             }
         }
 
-		// Preserve OpenRouter "reasoning" field (aka reasoning tokens) when present.
-		// This is distinct from reasoning_details blocks.
-		const reasoning = rawItem.reasoning ?? item.reasoning;
-		if (typeof reasoning === 'string') {
-			message.reasoning = reasoning;
-		}
+        // Preserve OpenRouter "reasoning" field (aka reasoning tokens) when present.
+        // This is distinct from reasoning_details blocks.
+        const reasoning = rawItem.reasoning ?? item.reasoning;
+        if (typeof reasoning === 'string') {
+            message.reasoning = reasoning;
+        }
 
         // Preserve reasoning_details EXACTLY as received (required by OpenRouter).
         // Some SDK history items may carry these fields under `rawItem`.
         const reasoningDetails =
-			rawItem.reasoning_details ?? item.reasoning_details;
+            rawItem.reasoning_details ?? item.reasoning_details;
         if (reasoningDetails != null) {
-			loggingService.debug(
-				'convertAgentItemToOpenRouterMessage: reasoning_details',
-				reasoningDetails,
-			);
+            loggingService.debug(
+                'convertAgentItemToOpenRouterMessage: reasoning_details',
+                reasoningDetails,
+            );
             message.reasoning_details = reasoningDetails;
         }
 
@@ -88,7 +89,12 @@ function convertAgentItemToOpenRouterMessage(item: any, loggingService: ILogging
 
         if (Array.isArray(rawItem.content)) {
             const textContent = rawItem.content
-                .filter((c: any) => (c?.type === 'input_text' || c?.type === 'output_text') && c?.text)
+                .filter(
+                    (c: any) =>
+                        (c?.type === 'input_text' ||
+                            c?.type === 'output_text') &&
+                        c?.text,
+                )
                 .map((c: any) => c.text)
                 .join('');
             if (textContent) {
@@ -98,11 +104,11 @@ function convertAgentItemToOpenRouterMessage(item: any, loggingService: ILogging
     }
 
     if (rawItem?.type === 'function_call') {
-		// Tool-call continuation: to preserve reasoning blocks across tool flows,
-		// we may need to replay reasoning_details/reasoning alongside tool_calls.
-		const reasoning = rawItem.reasoning ?? item.reasoning;
-		const reasoningDetails =
-			rawItem.reasoning_details ?? item.reasoning_details;
+        // Tool-call continuation: to preserve reasoning blocks across tool flows,
+        // we may need to replay reasoning_details/reasoning alongside tool_calls.
+        const reasoning = rawItem.reasoning ?? item.reasoning;
+        const reasoningDetails =
+            rawItem.reasoning_details ?? item.reasoning_details;
 
         return {
             role: 'assistant',
@@ -119,10 +125,10 @@ function convertAgentItemToOpenRouterMessage(item: any, loggingService: ILogging
                     },
                 },
             ],
-			...(typeof reasoning === 'string' ? {reasoning} : {}),
-			...(reasoningDetails != null
-				? {reasoning_details: reasoningDetails}
-				: {}),
+            ...(typeof reasoning === 'string' ? {reasoning} : {}),
+            ...(reasoningDetails != null
+                ? {reasoning_details: reasoningDetails}
+                : {}),
         };
     }
 
@@ -190,7 +196,7 @@ export function addCacheControlToLastToolMessage(messages: any[]): void {
                     {
                         type: 'text',
                         text: msg.content,
-                        cache_control: { type: 'ephemeral' },
+                        cache_control: {type: 'ephemeral'},
                     },
                 ];
             } else if (Array.isArray(msg.content) && msg.content.length > 0) {
@@ -198,7 +204,7 @@ export function addCacheControlToLastToolMessage(messages: any[]): void {
                 for (let j = msg.content.length - 1; j >= 0; j--) {
                     const item = msg.content[j];
                     if (item.type === 'text') {
-                        item.cache_control = { type: 'ephemeral' };
+                        item.cache_control = {type: 'ephemeral'};
                         break;
                     }
                 }
@@ -214,16 +220,25 @@ export function buildMessagesFromRequest(
     loggingService?: ILoggingService,
 ): any[] {
     const messages: any[] = [];
-	let pendingReasoningDetails: any[] = [];
+    let pendingReasoningDetails: any[] = [];
 
     const logger = loggingService || noOpLogger;
     logger.debug('buildMessagesFromRequest: req.input', {
         inputType: typeof req.input,
         isArray: Array.isArray(req.input),
-        inputLength: Array.isArray(req.input) ? req.input.length : (typeof req.input === 'string' ? req.input.length : 'N/A'),
+        inputLength: Array.isArray(req.input)
+            ? req.input.length
+            : typeof req.input === 'string'
+            ? req.input.length
+            : 'N/A',
         inputPreview: Array.isArray(req.input)
-            ? req.input.map((item: any) => ({role: item?.role || item?.rawItem?.role, type: item?.type || item?.rawItem?.type}))
-            : (typeof req.input === 'string' ? req.input.substring(0, 100) : 'non-string, non-array'),
+            ? req.input.map((item: any) => ({
+                  role: item?.role || item?.rawItem?.role,
+                  type: item?.type || item?.rawItem?.type,
+              }))
+            : typeof req.input === 'string'
+            ? req.input.substring(0, 100)
+            : 'non-string, non-array',
     });
 
     const isToolCallOnlyAssistant = (m: any): boolean => {
@@ -277,7 +292,10 @@ export function buildMessagesFromRequest(
                 continue;
             }
 
-            const converted = convertAgentItemToOpenRouterMessage(item, loggingService || noOpLogger);
+            const converted = convertAgentItemToOpenRouterMessage(
+                item,
+                loggingService || noOpLogger,
+            );
             if (converted) {
                 // Attach any pending reasoning blocks to the next assistant message we
                 // emit (including assistant tool_calls messages), unless already present.
@@ -296,18 +314,25 @@ export function buildMessagesFromRequest(
 
                 // Case 1: Both are tool-call-only assistant messages - merge tool_calls
                 if (
-					isToolCallOnlyAssistant(lastMessage) &&
-					isToolCallOnlyAssistant(converted)
+                    isToolCallOnlyAssistant(lastMessage) &&
+                    isToolCallOnlyAssistant(converted)
                 ) {
-					lastMessage.tool_calls.push(...converted.tool_calls);
+                    lastMessage.tool_calls.push(...converted.tool_calls);
 
                     // Preserve reasoning if the merged message didn't have it but the new one does
-					if (lastMessage.reasoning_details == null && converted.reasoning_details != null) {
-						lastMessage.reasoning_details = converted.reasoning_details;
-					}
-					if (lastMessage.reasoning == null && converted.reasoning != null) {
-						lastMessage.reasoning = converted.reasoning;
-					}
+                    if (
+                        lastMessage.reasoning_details == null &&
+                        converted.reasoning_details != null
+                    ) {
+                        lastMessage.reasoning_details =
+                            converted.reasoning_details;
+                    }
+                    if (
+                        lastMessage.reasoning == null &&
+                        converted.reasoning != null
+                    ) {
+                        lastMessage.reasoning = converted.reasoning;
+                    }
                     continue;
                 }
 
@@ -328,10 +353,17 @@ export function buildMessagesFromRequest(
                     lastMessage.tool_calls.push(...converted.tool_calls);
 
                     // Preserve reasoning
-                    if (lastMessage.reasoning_details == null && converted.reasoning_details != null) {
-                        lastMessage.reasoning_details = converted.reasoning_details;
+                    if (
+                        lastMessage.reasoning_details == null &&
+                        converted.reasoning_details != null
+                    ) {
+                        lastMessage.reasoning_details =
+                            converted.reasoning_details;
                     }
-                    if (lastMessage.reasoning == null && converted.reasoning != null) {
+                    if (
+                        lastMessage.reasoning == null &&
+                        converted.reasoning != null
+                    ) {
                         lastMessage.reasoning = converted.reasoning;
                     }
                     continue;
@@ -385,7 +417,8 @@ export function extractModelSettingsForRequest(settings: any): any {
 
     if (settings) {
         // Temperature: Supported by both SDK and OpenRouter
-        if (settings.temperature != null) body.temperature = settings.temperature;
+        if (settings.temperature != null)
+            body.temperature = settings.temperature;
 
         // Top P: Supported by both (SDK uses topP, OpenRouter uses top_p)
         if (settings.topP != null) body.top_p = settings.topP;
@@ -397,10 +430,12 @@ export function extractModelSettingsForRequest(settings: any): any {
         if (settings.topK != null) body.top_k = settings.topK;
 
         // Frequency Penalty: OpenAI standard parameter
-        if (settings.frequencyPenalty != null) body.frequency_penalty = settings.frequencyPenalty;
+        if (settings.frequencyPenalty != null)
+            body.frequency_penalty = settings.frequencyPenalty;
 
         // Presence Penalty: OpenAI standard parameter
-        if (settings.presencePenalty != null) body.presence_penalty = settings.presencePenalty;
+        if (settings.presencePenalty != null)
+            body.presence_penalty = settings.presencePenalty;
 
         const hasReasoningObj =
             settings.reasoning && typeof settings.reasoning === 'object';

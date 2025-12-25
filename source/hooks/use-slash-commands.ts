@@ -1,6 +1,6 @@
 import {useState, useCallback, useMemo} from 'react';
 import type {SlashCommand} from '../components/SlashCommandMenu.js';
-import { useInputContext } from '../context/InputContext.js';
+import {useInputContext} from '../context/InputContext.js';
 
 interface UseSlashCommandsOptions {
     commands: SlashCommand[];
@@ -9,7 +9,10 @@ interface UseSlashCommandsOptions {
 }
 
 // Pure functions exported for testing
-export function filterCommands(commands: SlashCommand[], filter: string): SlashCommand[] {
+export function filterCommands(
+    commands: SlashCommand[],
+    filter: string,
+): SlashCommand[] {
     return commands.filter(cmd => {
         const lowerFilter = filter.toLowerCase();
         const lowerName = cmd.name.toLowerCase();
@@ -24,7 +27,10 @@ export function filterCommands(commands: SlashCommand[], filter: string): SlashC
     });
 }
 
-export function shouldAutocomplete(command: SlashCommand, filter: string): boolean {
+export function shouldAutocomplete(
+    command: SlashCommand,
+    filter: string,
+): boolean {
     if (!command.expectsArgs) {
         return false;
     }
@@ -33,7 +39,10 @@ export function shouldAutocomplete(command: SlashCommand, filter: string): boole
     return !filter.toLowerCase().startsWith(fullCommandPrefix.toLowerCase());
 }
 
-export function extractCommandArgs(filter: string, commandName: string): string {
+export function extractCommandArgs(
+    filter: string,
+    commandName: string,
+): string {
     return filter.slice(commandName.length).trim();
 }
 
@@ -41,13 +50,17 @@ export const useSlashCommands = ({
     commands,
     onClose,
 }: UseSlashCommandsOptions) => {
-    const { mode, setMode, input, setInput } = useInputContext();
+    const {mode, setMode, input, setInput} = useInputContext();
     const [selectedIndex, setSelectedIndex] = useState(0);
 
     const isOpen = mode === 'slash_commands';
 
     // Derive filter from input directly
-    const filter = isOpen ? (input.startsWith('/') ? input.slice(1) : input) : '';
+    const filter = isOpen
+        ? input.startsWith('/')
+            ? input.slice(1)
+            : input
+        : '';
 
     const filteredCommands = useMemo(
         () => filterCommands(commands, filter),

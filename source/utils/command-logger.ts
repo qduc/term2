@@ -28,7 +28,10 @@ export function logCommandExecution(
 /**
  * Log validation errors for debugging
  */
-export function logValidationError(settingsService: ISettingsService, message: string): void {
+export function logValidationError(
+    settingsService: ISettingsService,
+    message: string,
+): void {
     if (!settingsService.get<boolean>('debug.debugBashTool')) {
         return;
     }

@@ -74,7 +74,8 @@ const AppSettingsSchema = z.object({
     // Global mode controlling behavior across the app
     // - 'default': operate exactly like now
     // - 'edit': enable relaxed approvals for apply_patch within cwd
-    mode: z.enum(['default', 'edit']).optional().default('default'),
+    // - 'mentor': collaborative mode where main agent works closely with mentor model
+    mode: z.enum(['default', 'edit', 'mentor']).optional().default('default'),
 });
 
 const ToolsSettingsSchema = z.object({
@@ -172,7 +173,7 @@ export interface SettingsWithSources {
     };
     app: {
         shellPath: SettingWithSource<string | undefined>;
-        mode: SettingWithSource<'default' | 'edit'>;
+        mode: SettingWithSource<'default' | 'edit' | 'mentor'>;
     };
     tools: {
         logFileOperations: SettingWithSource<boolean>;

@@ -146,7 +146,7 @@ export function createSearchReplaceToolDefinition(deps: {
         parameters: searchReplaceParametersSchema,
         needsApproval: async params => {
             try {
-                const mode = settingsService.get<'default' | 'edit'>(
+                const mode = settingsService.get<'default' | 'edit' | 'mentor'>(
                     'app.mode',
                 );
                 const {

@@ -84,7 +84,7 @@ export function createApplyPatchToolDefinition(deps: {
         parameters: applyPatchParametersSchema,
         needsApproval: async params => {
             try {
-                const mode = settingsService.get<'default' | 'edit'>(
+                const mode = settingsService.get<'default' | 'edit' | 'mentor'>(
                     'app.mode',
                 );
                 const {type, path: filePath, diff} = params;

@@ -18,6 +18,7 @@ const DEFAULT_PROMPT = 'simple.md';
 const ANTHROPIC_PROMPT = 'anthropic.md';
 const GPT_PROMPT = 'gpt-5.md';
 const CODEX_PROMPT = 'codex.md';
+const DEFAULT_MENTOR_PROMPT = 'simple-mentor.md';
 
 function getTopLevelEntries(cwd: string, limit = 50): string {
     try {
@@ -59,8 +60,13 @@ export interface AgentDefinition {
     model: string;
 }
 
-function getPromptPath(model: string): string {
+function getPromptPath(model: string, mode?: 'default' | 'edit' | 'mentor'): string {
     const normalizedModel = model.trim().toLowerCase();
+
+    // In mentor mode, use simplified mentor prompt for all models
+    if (mode === 'mentor') {
+        return path.join(BASE_PROMPT_PATH, DEFAULT_MENTOR_PROMPT);
+    }
 
     if (normalizedModel.includes('sonnet') || normalizedModel.includes('haiku'))
         return path.join(BASE_PROMPT_PATH, ANTHROPIC_PROMPT);
@@ -99,7 +105,8 @@ export const getAgentDefinition = (
 
     if (!resolvedModel) throw new Error('Model cannot be undefined or empty');
 
-    const promptPath = getPromptPath(resolvedModel);
+    const mode = settingsService.get<'default' | 'edit' | 'mentor'>('app.mode');
+    const promptPath = getPromptPath(resolvedModel, mode);
     const prompt = resolvePrompt(promptPath);
 
     const envInfo = getEnvInfo(settingsService);

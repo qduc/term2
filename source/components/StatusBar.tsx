@@ -10,9 +10,10 @@ interface StatusBarProps {
 
 const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
     const mode =
-        useSetting<'default' | 'edit'>(settingsService, 'app.mode') ??
+        useSetting<'default' | 'edit' | 'mentor'>(settingsService, 'app.mode') ??
         'default';
     const model = useSetting<string>(settingsService, 'agent.model');
+    const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
     const providerKey =
         useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
     const reasoningEffort =
@@ -33,6 +34,10 @@ const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
                     <Text color={glow} bold>
                         Auto Edit
                     </Text>
+                ) : mode === 'mentor' ? (
+                    <Text color="#a78bfa" bold>
+                        Mentor Mode
+                    </Text>
                 ) : (
                     <Text color={slate}>Manual Approval</Text>
                 )}
@@ -44,6 +49,16 @@ const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
                     <Box marginX={1}>
                         <Text color={accent}>{model}</Text>
                         <Text color={slate}> ({providerLabel})</Text>
+                    </Box>
+                </>
+            )}
+
+            {mode === 'mentor' && mentorModel && (
+                <>
+                    <Text color={slate}>│</Text>
+                    <Box marginX={1}>
+                        <Text color={slate}>Mentor: </Text>
+                        <Text color="#a78bfa">{mentorModel}</Text>
                     </Box>
                 </>
             )}

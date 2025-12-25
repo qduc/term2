@@ -113,6 +113,13 @@ const App: FC<AppProps> = ({
                 return;
             }
 
+            if (key === 'app.mode') {
+                // Re-initialize the agent to use the new mode's prompt
+                const currentModel = settingsService.get<string>('agent.model');
+                setModel(currentModel);
+                return;
+            }
+
             if (key === 'shell.maxOutputLines') {
                 setTrimConfig({maxLines: Number(value)});
                 return;
@@ -209,11 +216,19 @@ const App: FC<AppProps> = ({
     ]);
 
     const toggleAppMode = useCallback(() => {
-        const currentMode = settingsService.get<'default' | 'edit'>('app.mode');
-        const nextMode = currentMode === 'default' ? 'edit' : 'default';
+        const currentMode = settingsService.get<'default' | 'edit' | 'mentor'>('app.mode');
+        const nextMode = currentMode === 'default' ? 'edit' : currentMode === 'edit' ? 'mentor' : 'default';
 
         settingsService.set('app.mode', nextMode);
-    }, [addSystemMessage]);
+        applyRuntimeSetting('app.mode', nextMode);
+
+        const modeDescriptions = {
+            default: 'Default mode - manual approval for all operations',
+            edit: 'Edit mode - auto-approve file patches',
+            mentor: 'Mentor mode - collaborative work with mentor model'
+        };
+        addSystemMessage(`Switched to ${nextMode} mode: ${modeDescriptions[nextMode]}`);
+    }, [settingsService, applyRuntimeSetting, addSystemMessage]);
 
     // Handle Ctrl+C to exit immediately
     useInput((_input: string, key) => {

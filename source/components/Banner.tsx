@@ -10,9 +10,10 @@ interface BannerProps {
 
 const Banner: FC<BannerProps> = ({settingsService}) => {
     const mode =
-        useSetting<'default' | 'edit'>(settingsService, 'app.mode') ??
+        useSetting<'default' | 'edit' | 'mentor'>(settingsService, 'app.mode') ??
         'default';
     const model = useSetting<string>(settingsService, 'agent.model');
+    const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
     const providerKey =
         useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
     const reasoningEffort =
@@ -50,13 +51,21 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
                 <Box>
                     <Text
                         backgroundColor={
-                            mode === 'edit' ? '#1d4ed8' : '#0f766e'
+                            mode === 'edit'
+                                ? '#1d4ed8'
+                                : mode === 'mentor'
+                                  ? '#7c3aed'
+                                  : '#0f766e'
                         }
                         color="white"
                         bold
                     >
                         {' '}
-                        {mode === 'edit' ? 'EDIT MODE' : 'DEFAULT'}{' '}
+                        {mode === 'edit'
+                            ? 'EDIT MODE'
+                            : mode === 'mentor'
+                              ? 'MENTOR MODE'
+                              : 'DEFAULT'}{' '}
                     </Text>
                 </Box>
             </Box>
@@ -79,6 +88,17 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
                                     : model
                                 : '—'}
                         </Text>
+                        {mode === 'mentor' && mentorModel && (
+                            <>
+                                {' - '}
+                                Mentor:{' '}
+                                <Text color="white" bold>
+                                    {mentorModel.length > 34
+                                        ? `${mentorModel.slice(0, 31)}…`
+                                        : mentorModel}
+                                </Text>
+                            </>
+                        )}
                         {' - '}
                         <Text color={slate}>
                             Reasoning:{' '}

@@ -19,11 +19,15 @@ import {getProvider} from '../providers/index.js';
 import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
 import {randomUUID} from 'node:crypto';
 import {getAgentDefinition} from '../agent.js';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import type {
     ILoggingService,
     ISettingsService,
 } from '../services/service-interfaces.js';
 import {createEditorImpl} from './editor-impl.js';
+import {ConversationStore} from '../services/conversation-store.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -50,6 +54,9 @@ export class OpenAIAgentClient {
     #logger: ILoggingService;
     #settings: ISettingsService;
     #editor: ReturnType<typeof createEditorImpl>;
+    #mentorAgent: Agent | null = null;
+    #mentorStore: ConversationStore | null = null;
+    #mentorPreviousResponseId: string | null = null;
 
     constructor({
         model,
@@ -210,6 +217,13 @@ export class OpenAIAgentClient {
         if (providerDef?.clearConversations) {
             providerDef.clearConversations();
         }
+        // Also clear mentor conversation
+        if (this.#mentorStore) {
+            this.#mentorStore.clear();
+        }
+        this.#mentorPreviousResponseId = null;
+        this.#mentorAgent = null;
+        this.#mentorStore = null;
     }
 
     async startStream(
@@ -422,6 +436,7 @@ export class OpenAIAgentClient {
         options: {
             model?: string;
             reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+            instructions?: string;
         } = {},
     ): Promise<string> {
         this.#logger.debug('Agent chat request', {
@@ -453,7 +468,7 @@ export class OpenAIAgentClient {
                     ...(Object.keys(modelSettings).length > 0
                         ? {modelSettings}
                         : {}),
-                    instructions: 'You are a helpful mentor assistant.',
+                    instructions: options.instructions || 'You are a helpful mentor assistant.',
                 });
 
                 // Ensure runner is compatible or use run()
@@ -506,19 +521,116 @@ export class OpenAIAgentClient {
         }
     }
 
+    #getAgentsInstructions(): string {
+        const agentsPath = path.join(process.cwd(), 'AGENTS.md');
+        if (!fs.existsSync(agentsPath)) return '';
+
+        try {
+            const contents = fs.readFileSync(agentsPath, 'utf-8').trim();
+            return `\n\nAGENTS.md contents:\n${contents}`;
+        } catch (e: any) {
+            return `\n\nFailed to read AGENTS.md: ${e.message}`;
+        }
+    }
+
+    #getEnvInfo(): string {
+        return `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
+            this.#settings.get<string>('app.shellPath') || 'unknown'
+        }; cwd: ${process.cwd()}`;
+    }
+
     #createMentor = async (question: string): Promise<string> => {
         const mentorModel = this.#settings.get<string>('agent.mentorModel');
         if (!mentorModel) {
             throw new Error('Mentor model is not configured');
         }
 
-        // Reuse this client's provider configuration but with a different model
-        // We purposefully create a 'sibling' behavior here.
-        // NOTE: This uses the SAME provider.
+        const mode = this.#settings.get<'default' | 'edit' | 'mentor'>('app.mode');
 
-        return this.chat(question, {
-            model: mentorModel,
-        });
+        // Different instructions based on mode
+        let baseInstructions = mode === 'mentor'
+            ? 'You are a strategic mentor working collaboratively with a main agent. The main agent is the eyes and hands (gathers info, runs commands, modifies files), while you provide strategic guidance and make architectural decisions.\n\n' +
+              'The main agent will report observations and ask for your strategic direction. Provide clear, actionable guidance on:\n' +
+              '- Approach and implementation strategy\n' +
+              '- Architectural decisions and trade-offs\n' +
+              '- Next steps based on what the agent has discovered\n' +
+              '- Alternative approaches when stuck\n\n' +
+              'Be concise but thorough. Focus on guiding the agent toward the right solution.'
+            : 'You are a helpful mentor assistant. Provide advice and guidance on technical problems. Be concise and actionable.';
+
+        // Add environment info and AGENTS.md context
+        const instructions = `${baseInstructions}\n\nEnvironment: ${this.#getEnvInfo()}${this.#getAgentsInstructions()}`;
+
+        // Initialize mentor agent and conversation store if needed
+        if (!this.#mentorAgent) {
+            const modelSettings: any = {};
+
+            this.#mentorAgent = new Agent({
+                name: 'Mentor',
+                model: mentorModel,
+                ...(Object.keys(modelSettings).length > 0
+                    ? {modelSettings}
+                    : {}),
+                instructions,
+            });
+            this.#mentorStore = new ConversationStore();
+        }
+
+        try {
+            // Add user message to conversation history
+            this.#mentorStore!.addUserMessage(question);
+
+            // Determine input based on provider
+            // OpenAI uses previousResponseId for server-side history
+            // Others need full conversation history from store
+            const input = this.#provider !== 'openai'
+                ? this.#mentorStore!.getHistory()
+                : question;
+
+            const result = await this.#runAgent(
+                this.#mentorAgent,
+                input,
+                {
+                    stream: false,
+                    maxTurns: 1,
+                    ...(this.#provider === 'openai' && this.#mentorPreviousResponseId
+                        ? {previousResponseId: this.#mentorPreviousResponseId}
+                        : {}),
+                }
+            );
+
+            // Update conversation store with result
+            this.#mentorStore!.updateFromResult(result);
+
+            // Track previousResponseId for OpenAI
+            if (result.responseId) {
+                this.#mentorPreviousResponseId = result.responseId;
+            }
+
+            // Extract response
+            let response = '';
+            if (result.finalOutput) {
+                response = result.finalOutput;
+            } else if (result.messages && Array.isArray(result.messages)) {
+                const lastMessage = result.messages[result.messages.length - 1];
+                if (lastMessage && lastMessage.content) {
+                    if (typeof lastMessage.content === 'string') {
+                        response = lastMessage.content;
+                    } else if (Array.isArray(lastMessage.content)) {
+                        response = lastMessage.content
+                            .map((part: any) => part.text || part.value || '')
+                            .join('');
+                    }
+                }
+            }
+
+            return response;
+        } catch (error) {
+            this.#logger.error('Mentor consultation failed', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+            throw error;
+        }
     };
 
     #createAgent({

@@ -746,6 +746,46 @@ test.serial('handles encrypted reasoning details', async t => {
 });
 
 test.serial(
+    'adds fallback assistant message when response has empty content',
+    async t => {
+        globalThis.fetch = async (_url, options: any) => {
+            const body = JSON.parse(options.body);
+            t.truthy(body);
+            return createJsonResponse({
+                id: 'resp-empty-content',
+                choices: [
+                    {
+                        message: {
+                            content: '',
+                        },
+                    },
+                ],
+                usage: {
+                    prompt_tokens: 1,
+                    completion_tokens: 0,
+                    total_tokens: 1,
+                },
+            });
+        };
+
+        const model = new OpenRouterModel({
+            settingsService: mockSettingsService,
+            loggingService: logger,
+            modelId: 'mock-model',
+        });
+
+        const response = await model.getResponse({
+            systemInstructions: 'system message',
+            input: 'Hello?',
+        } as any);
+
+        t.is(response.output.length, 1);
+        t.is(response.output[0].type, 'message');
+        t.is(response.output[0].content[0].text, 'No response from model.');
+    },
+);
+
+test.serial(
     'correctly converts function_call_output to tool message',
     async t => {
         const requests: any[] = [];

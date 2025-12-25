@@ -47,7 +47,7 @@ test.serial(
     async t => {
         await withTempDir(async () => {
             const tool = createTool(
-                createMockSettingsService({app: {mode: 'edit'}}),
+                createMockSettingsService({app: {editMode: true}}),
             );
             const filePath = 'new-file.txt';
 
@@ -68,7 +68,7 @@ test.serial(
     async t => {
         await withTempDir(async dir => {
             const tool = createTool(
-                createMockSettingsService({app: {mode: 'edit'}}),
+                createMockSettingsService({app: {editMode: true}}),
             );
             const filePath = 'sample.txt';
             const absPath = path.join(dir, filePath);
@@ -91,7 +91,7 @@ test.serial(
     async t => {
         await withTempDir(async dir => {
             const tool = createTool(
-                createMockSettingsService({app: {mode: 'edit'}}),
+                createMockSettingsService({app: {editMode: true}}),
             );
             const filePath = 'sample.txt';
             const absPath = path.join(dir, filePath);

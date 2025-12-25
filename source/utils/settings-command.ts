@@ -43,6 +43,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
             value: settings.agent.mentorModel.value,
             source: settings.agent.mentorModel.source,
         },
+        {
+            key: SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
+            value: settings.agent.mentorReasoningEffort.value,
+            source: settings.agent.mentorReasoningEffort.source,
+        },
         // agent.provider is hidden - it can only be changed in a new conversation via model menu
         {
             key: SETTING_KEYS.AGENT_MAX_TURNS,

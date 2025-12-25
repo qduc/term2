@@ -45,6 +45,10 @@ const AgentSettingsSchema = z.object({
         })
         .optional(),
     mentorModel: z.string().optional().describe('Model to use as a mentor'),
+    mentorReasoningEffort: z
+        .enum(['default', 'none', 'minimal', 'low', 'medium', 'high'])
+        .default('default')
+        .describe('Reasoning effort for the mentor model'),
 });
 
 const ShellSettingsSchema = z.object({
@@ -71,11 +75,11 @@ const EnvironmentSettingsSchema = z.object({
 
 const AppSettingsSchema = z.object({
     shellPath: z.string().optional(),
-    // Global mode controlling behavior across the app
-    // - 'default': operate exactly like now
-    // - 'edit': enable relaxed approvals for apply_patch within cwd
-    // - 'mentor': collaborative mode where main agent works closely with mentor model
-    mode: z.enum(['default', 'edit', 'mentor']).optional().default('default'),
+    // Independent mode flags that can be enabled together and persist across sessions
+    // mentorMode: uses simplified mentor prompt and enables ask_mentor tool (if mentorModel configured)
+    // editMode: auto-approves apply_patch operations within cwd for faster file editing
+    mentorMode: z.boolean().optional().default(false),
+    editMode: z.boolean().optional().default(false),
 });
 
 const ToolsSettingsSchema = z.object({
@@ -154,6 +158,7 @@ export interface SettingsWithSources {
         provider: SettingWithSource<string>;
         openrouter: SettingWithSource<any>;
         mentorModel: SettingWithSource<string | undefined>;
+        mentorReasoningEffort: SettingWithSource<string>;
     };
     shell: {
         timeout: SettingWithSource<number>;
@@ -173,7 +178,8 @@ export interface SettingsWithSources {
     };
     app: {
         shellPath: SettingWithSource<string | undefined>;
-        mode: SettingWithSource<'default' | 'edit' | 'mentor'>;
+        mentorMode: SettingWithSource<boolean>;
+        editMode: SettingWithSource<boolean>;
     };
     tools: {
         logFileOperations: SettingWithSource<boolean>;
@@ -199,6 +205,7 @@ export const SETTING_KEYS = {
     AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer', // Sensitive - env only
     AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only
     AGENT_MENTOR_MODEL: 'agent.mentorModel',
+    AGENT_MENTOR_REASONING_EFFORT: 'agent.mentorReasoningEffort',
     SHELL_TIMEOUT: 'shell.timeout',
     SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
     SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
@@ -208,7 +215,8 @@ export const SETTING_KEYS = {
     LOGGING_DEBUG: 'logging.debugLogging',
     ENV_NODE_ENV: 'environment.nodeEnv',
     APP_SHELL_PATH: 'app.shellPath', // Sensitive - env only
-    APP_MODE: 'app.mode',
+    APP_MENTOR_MODE: 'app.mentorMode',
+    APP_EDIT_MODE: 'app.editMode',
     TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
     DEBUG_BASH_TOOL: 'debug.debugBashTool',
 } as const;
@@ -220,17 +228,20 @@ const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
     SETTING_KEYS.AGENT_TEMPERATURE,
     SETTING_KEYS.AGENT_PROVIDER,
     SETTING_KEYS.AGENT_MENTOR_MODEL,
+    SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
     SETTING_KEYS.SHELL_TIMEOUT,
     SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
     SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
     SETTING_KEYS.LOGGING_LOG_LEVEL,
-    SETTING_KEYS.APP_MODE,
+    SETTING_KEYS.APP_MENTOR_MODE,
+    SETTING_KEYS.APP_EDIT_MODE,
 ]);
 
 // Note: Sensitive settings are NOT in RUNTIME_MODIFIABLE_SETTINGS because they
 // cannot be modified at all - they can only be set via environment variables at startup.
 
-// Runtime-only settings: app.mode - modifiable at runtime but never persisted to disk
+// app.mentorMode and app.editMode are runtime-modifiable AND persisted to disk so they
+// survive across sessions (user's mode preference is preserved).
 // Some settings with default values are optional to persist
 const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
 
@@ -248,6 +259,7 @@ const DEFAULT_SETTINGS: SettingsData = {
             // defaults empty; can be provided via env or config
         } as any,
         mentorModel: undefined,
+        mentorReasoningEffort: 'default',
     },
     shell: {
         timeout: 120000,
@@ -267,7 +279,8 @@ const DEFAULT_SETTINGS: SettingsData = {
     },
     app: {
         shellPath: undefined,
-        mode: 'default',
+        mentorMode: false,
+        editMode: false,
     },
     tools: {
         logFileOperations: true,
@@ -724,6 +737,10 @@ export class SettingsService {
                     value: this.settings.agent.mentorModel,
                     source: this.getSource('agent.mentorModel'),
                 },
+                mentorReasoningEffort: {
+                    value: this.settings.agent.mentorReasoningEffort,
+                    source: this.getSource('agent.mentorReasoningEffort'),
+                },
             },
             shell: {
                 timeout: {
@@ -770,9 +787,13 @@ export class SettingsService {
                     value: this.settings.app.shellPath,
                     source: this.getSource('app.shellPath'),
                 },
-                mode: {
-                    value: this.settings.app.mode,
-                    source: this.getSource('app.mode'),
+                mentorMode: {
+                    value: this.settings.app.mentorMode,
+                    source: this.getSource('app.mentorMode'),
+                },
+                editMode: {
+                    value: this.settings.app.editMode,
+                    source: this.getSource('app.editMode'),
                 },
             },
             tools: {
@@ -919,7 +940,7 @@ export class SettingsService {
         // Remove sensitive app settings
         if (cleaned.app) {
             delete cleaned.app.shellPath;
-            delete cleaned.app.mode;
+            // mentorMode and editMode are persisted so they survive across sessions
         }
 
         return cleaned;

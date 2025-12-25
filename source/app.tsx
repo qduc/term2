@@ -106,17 +106,23 @@ const App: FC<AppProps> = ({
                 return;
             }
 
-            if (key === 'agent.mentorModel') {
-                // Re-initialize the current model to refresh tools (in case mentor availability changes)
+            if (key === 'agent.mentorModel' || key === 'agent.mentorReasoningEffort') {
+            // Re-initialize the current model to refresh tools (in case mentor availability or config changes)
                 const currentModel = settingsService.get<string>('agent.model');
                 setModel(currentModel);
                 return;
             }
 
-            if (key === 'app.mode') {
+            if (key === 'app.mentorMode') {
                 // Re-initialize the agent to use the new mode's prompt
                 const currentModel = settingsService.get<string>('agent.model');
                 setModel(currentModel);
+                return;
+            }
+
+            if (key === 'app.editMode') {
+                // Edit mode doesn't affect the agent, just the approval flow
+                // No need to re-initialize
                 return;
             }
 
@@ -204,6 +210,23 @@ const App: FC<AppProps> = ({
                     return true;
                 },
             },
+            {
+                name: 'mentor',
+                description: 'Toggle mentor mode (collaborative mode with mentor model)',
+                action: () => {
+                    const currentValue = settingsService.get<boolean>('app.mentorMode');
+                    const newValue = !currentValue;
+
+                    settingsService.set('app.mentorMode', newValue);
+                    applyRuntimeSetting('app.mentorMode', newValue);
+
+                    addSystemMessage(
+                        `Mentor mode ${newValue ? 'enabled' : 'disabled'}${newValue ? ' - using simplified mentor prompt and ask_mentor tool' : ''}`
+                    );
+
+                    return true;
+                },
+            },
             settingsCommand,
         ];
     }, [
@@ -213,21 +236,19 @@ const App: FC<AppProps> = ({
         exit,
         setModel,
         setInput,
+        settingsService,
     ]);
 
-    const toggleAppMode = useCallback(() => {
-        const currentMode = settingsService.get<'default' | 'edit' | 'mentor'>('app.mode');
-        const nextMode = currentMode === 'default' ? 'edit' : currentMode === 'edit' ? 'mentor' : 'default';
+    const toggleEditMode = useCallback(() => {
+        const currentValue = settingsService.get<boolean>('app.editMode');
+        const newValue = !currentValue;
 
-        settingsService.set('app.mode', nextMode);
-        applyRuntimeSetting('app.mode', nextMode);
+        settingsService.set('app.editMode', newValue);
+        applyRuntimeSetting('app.editMode', newValue);
 
-        const modeDescriptions = {
-            default: 'Default mode - manual approval for all operations',
-            edit: 'Edit mode - auto-approve file patches',
-            mentor: 'Mentor mode - collaborative work with mentor model'
-        };
-        addSystemMessage(`Switched to ${nextMode} mode: ${modeDescriptions[nextMode]}`);
+        addSystemMessage(
+            `Edit mode ${newValue ? 'enabled' : 'disabled'}${newValue ? ' - auto-approving file patches within workspace' : ''}`
+        );
     }, [settingsService, applyRuntimeSetting, addSystemMessage]);
 
     // Handle Ctrl+C to exit immediately
@@ -263,12 +284,12 @@ const App: FC<AppProps> = ({
         setWaitingForRejectionReason(true);
     }, [setWaitingForRejectionReason]);
 
-    // Toggle app.mode with Shift+Tab for quick approval profile switching
+    // Toggle edit mode with Shift+Tab for quick approval profile switching
     useInput((input: string, key) => {
         const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
         if (!isShiftTab) return;
 
-        toggleAppMode();
+        toggleEditMode();
     });
 
     const handleSubmit = async (value: string): Promise<void> => {

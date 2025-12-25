@@ -146,9 +146,7 @@ export function createSearchReplaceToolDefinition(deps: {
         parameters: searchReplaceParametersSchema,
         needsApproval: async params => {
             try {
-                const mode = settingsService.get<'default' | 'edit' | 'mentor'>(
-                    'app.mode',
-                );
+                const editMode = settingsService.get<boolean>('app.editMode');
                 const {
                     path: filePath,
                     search_content,
@@ -172,7 +170,7 @@ export function createSearchReplaceToolDefinition(deps: {
                                 path: filePath,
                             },
                         );
-                        if (mode === 'edit' && insideCwd) {
+                        if (editMode && insideCwd) {
                             return false;
                         }
                         return true;
@@ -219,7 +217,7 @@ export function createSearchReplaceToolDefinition(deps: {
                             replace_all,
                         },
                     );
-                    if (mode === 'edit' && insideCwd) {
+                    if (editMode && insideCwd) {
                         return false;
                     }
                     return true;

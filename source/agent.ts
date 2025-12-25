@@ -60,11 +60,11 @@ export interface AgentDefinition {
     model: string;
 }
 
-function getPromptPath(model: string, mode?: 'default' | 'edit' | 'mentor'): string {
+function getPromptPath(model: string, mentorMode: boolean): string {
     const normalizedModel = model.trim().toLowerCase();
 
     // In mentor mode, use simplified mentor prompt for all models
-    if (mode === 'mentor') {
+    if (mentorMode) {
         return path.join(BASE_PROMPT_PATH, DEFAULT_MENTOR_PROMPT);
     }
 
@@ -105,8 +105,8 @@ export const getAgentDefinition = (
 
     if (!resolvedModel) throw new Error('Model cannot be undefined or empty');
 
-    const mode = settingsService.get<'default' | 'edit' | 'mentor'>('app.mode');
-    const promptPath = getPromptPath(resolvedModel, mode);
+    const mentorMode = settingsService.get<boolean>('app.mentorMode');
+    const promptPath = getPromptPath(resolvedModel, mentorMode);
     const prompt = resolvePrompt(promptPath);
 
     const envInfo = getEnvInfo(settingsService);

@@ -138,9 +138,18 @@ export class OpenRouterModel implements Model {
             }
         }
 
-        // Add assistant message only if there's text content
+        const hasTextContent = textContent.length > 0;
+        const hasToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
+        const shouldAddFallbackMessage = !hasTextContent && !hasToolCalls;
+        const assistantText = hasTextContent
+            ? textContent
+            : shouldAddFallbackMessage
+              ? 'No response from model.'
+              : '';
+
+        // Add assistant message when we have text or we need a fallback
         // (Don't add empty message when there are only tool calls)
-        if (textContent) {
+        if (hasTextContent || shouldAddFallbackMessage) {
             output.push({
                 type: 'message',
                 role: 'assistant',
@@ -148,7 +157,7 @@ export class OpenRouterModel implements Model {
                 content: [
                     {
                         type: 'output_text',
-                        text: textContent,
+                        text: assistantText,
                     },
                 ],
                 ...(typeof reasoning === 'string' ? {reasoning} : {}),

@@ -84,9 +84,7 @@ export function createApplyPatchToolDefinition(deps: {
         parameters: applyPatchParametersSchema,
         needsApproval: async params => {
             try {
-                const mode = settingsService.get<'default' | 'edit' | 'mentor'>(
-                    'app.mode',
-                );
+                const editMode = settingsService.get<boolean>('app.editMode');
                 const {type, path: filePath, diff} = params;
 
                 // Validate diff syntax by attempting a dry-run (before approval)
@@ -141,7 +139,7 @@ export function createApplyPatchToolDefinition(deps: {
                     loggingService.security(
                         'apply_patch needsApproval: outside workspace',
                         {
-                            mode,
+                            editMode,
                             type,
                             path: filePath,
                             error: e?.message || String(e),
@@ -156,14 +154,14 @@ export function createApplyPatchToolDefinition(deps: {
 
                 // In edit mode, auto-approve create/update within cwd
                 if (
-                    mode === 'edit' &&
+                    editMode &&
                     insideCwd &&
                     (type === 'create_file' || type === 'update_file')
                 ) {
                     loggingService.security(
                         'apply_patch needsApproval: auto-approved in edit mode',
                         {
-                            mode,
+                            editMode,
                             type,
                             path: filePath,
                             targetPath,
@@ -176,7 +174,7 @@ export function createApplyPatchToolDefinition(deps: {
                 loggingService.security(
                     'apply_patch needsApproval: approval required',
                     {
-                        mode,
+                        editMode,
                         type,
                         path: filePath,
                         targetPath,

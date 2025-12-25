@@ -11,6 +11,7 @@ const baseSettings = {
         reasoningEffort: {value: 'default', source: 'default'},
         temperature: {value: undefined, source: 'default'},
         mentorModel: {value: undefined, source: 'default'},
+        mentorReasoningEffort: {value: 'default', source: 'default'},
         provider: {value: 'openai', source: 'default'},
         maxTurns: {value: 20, source: 'default'},
         retryAttempts: {value: 2, source: 'default'},
@@ -25,6 +26,10 @@ const baseSettings = {
     },
     logging: {
         logLevel: {value: 'info', source: 'default'},
+    },
+    app: {
+        mentorMode: {value: false, source: 'default'},
+        editMode: {value: false, source: 'default'},
     },
 };
 

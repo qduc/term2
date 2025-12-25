@@ -9,9 +9,8 @@ interface BannerProps {
 }
 
 const Banner: FC<BannerProps> = ({settingsService}) => {
-    const mode =
-        useSetting<'default' | 'edit' | 'mentor'>(settingsService, 'app.mode') ??
-        'default';
+    const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
+    const editMode = useSetting<boolean>(settingsService, 'app.editMode') ?? false;
     const model = useSetting<string>(settingsService, 'agent.model');
     const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
     const providerKey =
@@ -19,13 +18,19 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
     const reasoningEffort =
         useSetting<string>(settingsService, 'agent.reasoningEffort') ??
         'default';
+    const mentorReasoningEffort =
+        useSetting<string>(settingsService, 'agent.mentorReasoningEffort') ??
+        'default';
 
     const providerDef = getProvider(providerKey);
     const providerLabel = providerDef?.label || providerKey;
 
     const accent = '#0ed7b5';
     const glow = '#fbbf24';
-    const slate = '#64748b'; // Slate 500 for better visibility than 400
+    const slate = '#64748b';
+    const purple = '#a78bfa'; // Soft purple for mentor
+    const cyan = '#22d3ee'; // Soft cyan for provider
+    const lightSlate = '#94a3b8';
 
     return (
         <Box
@@ -47,26 +52,23 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
                     </Text>
                 </Box>
 
-                {/* Mode pill */}
-                <Box>
-                    <Text
-                        backgroundColor={
-                            mode === 'edit'
-                                ? '#1d4ed8'
-                                : mode === 'mentor'
-                                  ? '#7c3aed'
-                                  : '#0f766e'
-                        }
-                        color="white"
-                        bold
-                    >
-                        {' '}
-                        {mode === 'edit'
-                            ? 'EDIT MODE'
-                            : mode === 'mentor'
-                              ? 'MENTOR MODE'
-                              : 'DEFAULT'}{' '}
-                    </Text>
+                {/* Mode pills */}
+                <Box gap={1}>
+                    {editMode && (
+                        <Text backgroundColor="#1d4ed8" color="white" bold>
+                            {' '}EDIT{' '}
+                        </Text>
+                    )}
+                    {mentorMode && (
+                        <Text backgroundColor="#7c3aed" color="white" bold>
+                            {' '}MENTOR{' '}
+                        </Text>
+                    )}
+                    {!editMode && !mentorMode && (
+                        <Text backgroundColor="#0f766e" color="white" bold>
+                            {' '}DEFAULT{' '}
+                        </Text>
+                    )}
                 </Box>
             </Box>
 
@@ -75,38 +77,48 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
                 <Box flexDirection="column" marginRight={3}>
                     <Text color={slate}>
                         Provider:{' '}
-                        <Text color="white" bold>
+                        <Text color={cyan} bold>
                             {providerLabel}
                         </Text>
                     </Text>
-                    <Text color={slate}>
-                        Model:{' '}
-                        <Text color="white" bold>
-                            {model
-                                ? model.length > 34
-                                    ? `${model.slice(0, 31)}…`
-                                    : model
-                                : '—'}
+                    <Box flexDirection="column">
+                        <Text color={slate}>
+                            Model:{' '}
+                            <Text color={glow} bold>
+                                {model
+                                    ? model.length > 34
+                                        ? `${model.slice(0, 31)}…`
+                                        : model
+                                    : '—'}
+                            </Text>
+                            {reasoningEffort !== 'none' && (
+                                <Text color={slate}>
+                                    {' '}
+                                    <Text color={lightSlate}>
+                                        ({reasoningEffort})
+                                    </Text>
+                                </Text>
+                            )}
                         </Text>
-                        {mode === 'mentor' && mentorModel && (
-                            <>
-                                {' - '}
+                        {mentorMode && mentorModel && (
+                            <Text color={slate}>
                                 Mentor:{' '}
-                                <Text color="white" bold>
+                                <Text color={purple} bold>
                                     {mentorModel.length > 34
                                         ? `${mentorModel.slice(0, 31)}…`
                                         : mentorModel}
                                 </Text>
-                            </>
-                        )}
-                        {' - '}
-                        <Text color={slate}>
-                            Reasoning:{' '}
-                            <Text color="white" bold>
-                                {reasoningEffort}
+                                {mentorReasoningEffort !== 'none' && (
+                                    <Text color={slate}>
+                                        {' '}
+                                        <Text color={lightSlate}>
+                                            ({mentorReasoningEffort})
+                                        </Text>
+                                    </Text>
+                                )}
                             </Text>
-                        </Text>
-                    </Text>
+                        )}
+                    </Box>
                 </Box>
             </Box>
         </Box>

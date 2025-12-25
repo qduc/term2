@@ -9,9 +9,8 @@ interface StatusBarProps {
 }
 
 const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
-    const mode =
-        useSetting<'default' | 'edit' | 'mentor'>(settingsService, 'app.mode') ??
-        'default';
+    const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
+    const editMode = useSetting<boolean>(settingsService, 'app.editMode') ?? false;
     const model = useSetting<string>(settingsService, 'agent.model');
     const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
     const providerKey =
@@ -29,17 +28,19 @@ const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
 
     return (
         <Box marginTop={1}>
-            <Box marginRight={1}>
-                {mode === 'edit' ? (
+            <Box marginRight={1} gap={1}>
+                {editMode && (
                     <Text color={glow} bold>
-                        Auto Edit
+                        Edit
                     </Text>
-                ) : mode === 'mentor' ? (
+                )}
+                {mentorMode && (
                     <Text color="#a78bfa" bold>
-                        Mentor Mode
+                        Mentor
                     </Text>
-                ) : (
-                    <Text color={slate}>Manual Approval</Text>
+                )}
+                {!editMode && !mentorMode && (
+                    <Text color={slate}>Default</Text>
                 )}
             </Box>
 
@@ -53,7 +54,7 @@ const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
                 </>
             )}
 
-            {mode === 'mentor' && mentorModel && (
+            {mentorMode && mentorModel && (
                 <>
                     <Text color={slate}>│</Text>
                     <Box marginX={1}>

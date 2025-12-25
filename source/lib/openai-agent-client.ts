@@ -545,10 +545,10 @@ export class OpenAIAgentClient {
             throw new Error('Mentor model is not configured');
         }
 
-        const mode = this.#settings.get<'default' | 'edit' | 'mentor'>('app.mode');
+        const mentorMode = this.#settings.get<boolean>('app.mentorMode');
 
         // Different instructions based on mode
-        let baseInstructions = mode === 'mentor'
+        let baseInstructions = mentorMode
             ? 'You are a strategic mentor working collaboratively with a main agent. The main agent is the eyes and hands (gathers info, runs commands, modifies files), while you provide strategic guidance and make architectural decisions.\n\n' +
               'The main agent will report observations and ask for your strategic direction. Provide clear, actionable guidance on:\n' +
               '- Approach and implementation strategy\n' +
@@ -563,7 +563,15 @@ export class OpenAIAgentClient {
 
         // Initialize mentor agent and conversation store if needed
         if (!this.#mentorAgent) {
+            const reasoningEffort = this.#settings.get<string>('agent.mentorReasoningEffort');
             const modelSettings: any = {};
+
+            if (reasoningEffort && reasoningEffort !== 'default') {
+                modelSettings.reasoning = {
+                    effort: reasoningEffort,
+                    summary: 'auto',
+                };
+            }
 
             this.#mentorAgent = new Agent({
                 name: 'Mentor',

@@ -134,7 +134,7 @@ test.serial(
     async t => {
         await withTempDir(async () => {
             const tool = createTool(
-                createMockSettingsService({app: {mode: 'edit'}}),
+                createMockSettingsService({app: {editMode: true}}),
             );
 
             const result = await tool.needsApproval({

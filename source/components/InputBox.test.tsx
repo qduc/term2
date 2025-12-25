@@ -26,11 +26,14 @@ const defaultProps = {
         security: () => {},
         setCorrelationId: () => {},
         clearCorrelationId: () => {},
-    } as any,historyService: {
-		getMessages: () => [],
-		addMessage: () => {},
-		clear: () => {},
-	} as any,
+    } as any,
+    historyService: {
+        getMessages: () => [],
+        addMessage: () => {},
+        clear: () => {},
+    } as any,
+    onHistoryUp: () => {},
+    onHistoryDown: () => {},
 };
 
 // Helper to wrap InputBox with InputProvider

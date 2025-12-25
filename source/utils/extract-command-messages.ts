@@ -273,22 +273,41 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             })();
 
             const outputText = normalizedItem.outputText ?? '';
-            const [statusLineRaw, ...bodyLines] = outputText.split('\n');
-            const statusLine = (statusLineRaw ?? '').trim();
-            const bodyText = bodyLines.join('\n').trim();
-            const output = bodyText || 'No output';
 
+            // Check if this is an error message (doesn't start with expected status formats)
+            const firstLine = outputText.split('\n')[0]?.trim() || '';
+            const isErrorMessage =
+                firstLine.includes('error') ||
+                firstLine.includes('Error') ||
+                firstLine.includes('failed') ||
+                firstLine.includes('Failed') ||
+                (!firstLine.startsWith('exit ') && firstLine !== 'timeout' && outputText && !outputText.includes('\n'));
+
+            let output: string;
             let success: boolean | undefined;
             let failureReason: string | undefined;
 
-            if (statusLine === 'timeout') {
+            if (isErrorMessage && !firstLine.startsWith('exit ') && firstLine !== 'timeout') {
+                // For error messages, use the entire output
+                output = outputText || 'No output';
                 success = false;
-                failureReason = 'timeout';
-            } else if (statusLine.startsWith('exit ')) {
-                const parsedExitCode = Number(statusLine.slice(5).trim());
-                success = Number.isFinite(parsedExitCode)
-                    ? parsedExitCode === 0
-                    : undefined;
+                failureReason = 'error';
+            } else {
+                // For normal shell output, parse status line and body
+                const [statusLineRaw, ...bodyLines] = outputText.split('\n');
+                const statusLine = (statusLineRaw ?? '').trim();
+                const bodyText = bodyLines.join('\n').trim();
+                output = bodyText || 'No output';
+
+                if (statusLine === 'timeout') {
+                    success = false;
+                    failureReason = 'timeout';
+                } else if (statusLine.startsWith('exit ')) {
+                    const parsedExitCode = Number(statusLine.slice(5).trim());
+                    success = Number.isFinite(parsedExitCode)
+                        ? parsedExitCode === 0
+                        : undefined;
+                }
             }
 
             const baseId =
@@ -316,6 +335,36 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
         if (normalizedItem.toolName === APPLY_PATCH_TOOL_NAME) {
             const parsedOutput = safeJsonParse(normalizedItem.outputText);
             const patchOutputItems = parsedOutput?.output ?? [];
+
+            // If JSON parsing failed or no output array, create error message
+            if (patchOutputItems.length === 0) {
+                const args = normalizeToolArguments(normalizedItem.arguments) ?? {};
+                const operationType = args?.type ?? 'unknown';
+                const filePath = args?.path ?? 'unknown';
+                const command = `apply_patch ${operationType} ${filePath}`;
+                const output = normalizedItem.outputText || 'No output';
+                const success = false;
+
+                const rawItem = item?.rawItem ?? item;
+                const baseId =
+                    rawItem?.id ??
+                    rawItem?.callId ??
+                    item?.id ??
+                    item?.callId ??
+                    `${Date.now()}-${index}`;
+                const stableId = `${baseId}-0`;
+
+                messages.push({
+                    id: stableId,
+                    sender: 'command',
+                    command,
+                    output,
+                    success,
+                    isApprovalRejection,
+                    ...(callId ? {callId} : {}),
+                });
+                continue;
+            }
 
             // Apply patch tool can have multiple operation outputs
             for (const [patchIndex, patchResult] of patchOutputItems.entries()) {
@@ -384,7 +433,10 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
 
             const command = parts.join(' ');
             const output = parsedOutput?.output ?? normalizedItem.outputText ?? 'No output';
-            const success = true;
+            // Check if output indicates an error
+            const hasError = output.toLowerCase().includes('error') ||
+                           output.toLowerCase().includes('failed');
+            const success = !hasError;
 
             const stableId =
                 rawItem?.id ??
@@ -409,6 +461,44 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
         if (normalizedItem.toolName === SEARCH_REPLACE_TOOL_NAME) {
             const parsedOutput = safeJsonParse(normalizedItem.outputText);
             const replaceOutputItems = parsedOutput?.output ?? [];
+
+            // If JSON parsing failed or no output array, create error message
+            if (replaceOutputItems.length === 0) {
+                const args = normalizeToolArguments(normalizedItem.arguments) ?? {};
+                const filePath = args?.path ?? 'unknown';
+                const searchContent = args?.search_content ?? '';
+                const replaceContent = args?.replace_content ?? '';
+                const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
+                const output = normalizedItem.outputText || 'No output';
+                const success = false;
+
+                const rawItem = item?.rawItem ?? item;
+                const baseId =
+                    rawItem?.id ??
+                    rawItem?.callId ??
+                    item?.id ??
+                    item?.callId ??
+                    `${Date.now()}-${index}`;
+                const stableId = `${baseId}-0`;
+
+                messages.push({
+                    id: stableId,
+                    sender: 'command',
+                    command,
+                    output,
+                    success,
+                    isApprovalRejection,
+                    toolName: SEARCH_REPLACE_TOOL_NAME,
+                    toolArgs: {
+                        path: filePath,
+                        search_content: searchContent,
+                        replace_content: replaceContent,
+                        replace_all: args?.replace_all ?? false,
+                    },
+                    ...(callId ? {callId} : {}),
+                });
+                continue;
+            }
 
             // Search replace tool can have multiple operation outputs
             for (const [replaceIndex, replaceResult] of replaceOutputItems.entries()) {

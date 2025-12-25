@@ -6,6 +6,7 @@ import StatusBar from './StatusBar.js';
 import type {SlashCommand} from './SlashCommandMenu.js';
 import type {SettingsService} from '../services/settings-service.js';
 import type {LoggingService} from '../services/logging-service.js';
+import type {HistoryService} from '../services/history-service.js';
 
 export type PendingApproval = {
     agentName: string;
@@ -23,11 +24,10 @@ export type BottomAreaProps = {
     isProcessing: boolean;
     onSubmit: (value: string) => Promise<void>;
     slashCommands: SlashCommand[];
-    onHistoryUp: () => void;
-    onHistoryDown: () => void;
     hasConversationHistory: boolean;
     settingsService: SettingsService;
     loggingService: LoggingService;
+    historyService: HistoryService;
     onApprove: () => void;
     onReject: () => void;
 };
@@ -39,11 +39,10 @@ const BottomArea: FC<BottomAreaProps> = ({
     isProcessing,
     onSubmit,
     slashCommands,
-    onHistoryUp,
-    onHistoryDown,
     hasConversationHistory,
     settingsService,
     loggingService,
+    historyService,
     onApprove,
     onReject,
 }) => {
@@ -82,12 +81,11 @@ const BottomArea: FC<BottomAreaProps> = ({
                 <InputBox
                     onSubmit={onSubmit}
                     slashCommands={slashCommands}
-                    onHistoryUp={onHistoryUp}
-                    onHistoryDown={onHistoryDown}
                     hasConversationHistory={hasConversationHistory}
                     waitingForRejectionReason={waitingForRejectionReason}
                     settingsService={settingsService}
                     loggingService={loggingService}
+                    historyService={historyService}
                 />
             ) : null}
 

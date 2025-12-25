@@ -10,6 +10,8 @@ import { PopupManager } from './Input/PopupManager.js';
 import type { SlashCommand } from './SlashCommandMenu.js';
 import type { SettingsService } from '../services/settings-service.js';
 import type { LoggingService } from '../services/logging-service.js';
+import type { HistoryService } from '../services/history-service.js';
+import { useInputHistory } from '../hooks/use-input-history.js';
 
 // Constants
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
@@ -19,23 +21,21 @@ const SETTINGS_TRIGGER = '/settings ';
 type Props = {
     onSubmit: (v: string) => void;
     slashCommands: SlashCommand[];
-    onHistoryUp: () => void;
-    onHistoryDown: () => void;
     hasConversationHistory?: boolean;
     waitingForRejectionReason?: boolean;
     settingsService: SettingsService;
     loggingService: LoggingService;
+    historyService: HistoryService;
 };
 
 const InputBox: FC<Props> = ({
     onSubmit,
     slashCommands,
-    onHistoryUp,
-    onHistoryDown,
     settingsService,
     loggingService,
     hasConversationHistory = false,
     waitingForRejectionReason = false,
+    historyService,
 }) => {
     const {
         input: value,
@@ -66,6 +66,8 @@ const InputBox: FC<Props> = ({
         loggingService,
         settingsService,
     }, hasConversationHistory);
+
+    const {navigateUp, navigateDown} = useInputHistory(historyService);
 
     // Set terminal width
     useEffect(() => {
@@ -246,15 +248,21 @@ const InputBox: FC<Props> = ({
             } else {
                 // History
                 if (direction === 'up') {
-                    onHistoryUp();
-                    setInputKey(prev => prev + 1);
+                    const historyValue = navigateUp(value);
+                    if (historyValue !== null) {
+                        onChange(historyValue);
+                        setInputKey(prev => prev + 1);
+                    }
                 } else if (direction === 'down') {
-                    onHistoryDown();
-                    setInputKey(prev => prev + 1);
+                    const historyValue = navigateDown();
+                    if (historyValue !== null) {
+                        onChange(historyValue);
+                        setInputKey(prev => prev + 1);
+                    }
                 }
             }
         },
-        [mode, slash, settings, path, models, onHistoryUp, onHistoryDown]
+        [mode, slash, settings, path, models, navigateUp, navigateDown, value, onChange]
     );
 
     const insertSelectedPath = useCallback(
@@ -425,7 +433,7 @@ const InputBox: FC<Props> = ({
     );
 };
 
-export default InputBox;
+export default React.memo(InputBox);
 
 const whitespaceRegex = /\s/;
 

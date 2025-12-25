@@ -16,8 +16,6 @@ const mockSlashCommands: SlashCommand[] = [
 const defaultProps = {
 	onSubmit: () => {},
 	slashCommands: mockSlashCommands,
-	onHistoryUp: () => {},
-	onHistoryDown: () => {},
 	settingsService: createMockSettingsService(),
 	loggingService: {
 		info: () => {},
@@ -27,6 +25,11 @@ const defaultProps = {
 		security: () => {},
 		setCorrelationId: () => {},
 		clearCorrelationId: () => {},
+	} as any,
+	historyService: {
+		getMessages: () => [],
+		addMessage: () => {},
+		clear: () => {},
 	} as any,
 };
 
@@ -75,32 +78,5 @@ test('InputBox accepts slash commands prop', t => {
 	);
 
 	t.truthy(lastFrame());
-	t.pass();
-});
-
-test('InputBox accepts history callbacks', t => {
-	let historyUpCalled = false;
-	let historyDownCalled = false;
-
-	const onHistoryUp = () => {
-		historyUpCalled = true;
-	};
-
-	const onHistoryDown = () => {
-		historyDownCalled = true;
-	};
-
-	render(
-		<TestInputBox
-			{...defaultProps}
-			onHistoryUp={onHistoryUp}
-			onHistoryDown={onHistoryDown}
-		/>,
-	);
-
-	// Note: We can't easily trigger history navigation in this unit test
-	// This test just verifies the component accepts the callbacks
-	t.false(historyUpCalled);
-	t.false(historyDownCalled);
 	t.pass();
 });

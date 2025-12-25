@@ -4,6 +4,7 @@ import {isAbortLikeError} from '../utils/error-helpers.js';
 import type {ConversationEvent} from '../services/conversation-events.js';
 import type {ILoggingService} from '../services/service-interfaces.js';
 import {createThrottledFunction} from '../utils/throttle.js';
+import {appendMessagesCapped} from '../utils/message-buffer.js';
 
 interface UserMessage {
     id: number;
@@ -67,6 +68,7 @@ interface LiveResponse {
 }
 
 const LIVE_RESPONSE_THROTTLE_MS = 40;
+const MAX_MESSAGE_COUNT = 300;
 
 export const useConversation = ({
     conversationService,
@@ -102,6 +104,19 @@ export const useConversation = ({
                 );
             }, LIVE_RESPONSE_THROTTLE_MS),
         [],
+    );
+
+    const trimMessages = useCallback(
+        (list: Message[]) => appendMessagesCapped(list, [], MAX_MESSAGE_COUNT),
+        [],
+    );
+
+    const appendMessages = useCallback(
+        (additions: Message[]) => {
+            if (!additions.length) return;
+            setMessages(prev => trimMessages([...prev, ...additions]));
+        },
+        [trimMessages],
     );
 
     // Helper to log events with deduplication
@@ -203,7 +218,7 @@ export const useConversation = ({
                     messagesToAdd.push(textMessage);
                 }
 
-                setMessages(prev => [...prev, ...messagesToAdd]);
+                appendMessages(messagesToAdd);
                 setPendingApproval(result.approval);
                 // Set waiting state AFTER adding approval message to ensure proper render order
                 setWaitingForApproval(true);
@@ -220,16 +235,9 @@ export const useConversation = ({
 
             setMessages(prev => {
                 const messagesToAdd: Message[] = [];
-                // Reasoning is now streamed directly to messages, so we don't need to add it here
+                const annotatedCommands = result.commandMessages.map(annotateCommandMessage);
 
-                const withCommands =
-                    result.commandMessages.length > 0
-                        ? [
-                              ...prev,
-                              ...messagesToAdd,
-                              ...result.commandMessages.map(annotateCommandMessage),
-                          ]
-                        : [...prev, ...messagesToAdd];
+                let next = [...prev, ...messagesToAdd, ...annotatedCommands];
 
                 if (shouldAddBotMessage && finalText) {
                     const botMessage: BotMessage = {
@@ -237,15 +245,15 @@ export const useConversation = ({
                         sender: 'bot',
                         text: finalText,
                     };
-                    return [...withCommands, botMessage];
+                    next = [...next, botMessage];
                 }
 
-                return withCommands;
+                return trimMessages(next);
             });
             setWaitingForApproval(false);
             setPendingApproval(null);
         },
-        [annotateCommandMessage],
+        [annotateCommandMessage, appendMessages, trimMessages],
     );
 
     const sendUserMessage = useCallback(
@@ -259,7 +267,7 @@ export const useConversation = ({
                 sender: 'user',
                 text: value,
             };
-            setMessages(prev => [...prev, userMessage]);
+            appendMessages([userMessage]);
             setIsProcessing(true);
 
             const liveMessageId = Date.now();
@@ -300,26 +308,30 @@ export const useConversation = ({
                         if (!newReasoningText.trim()) return;
 
                         setMessages(prev => {
-                            // If we already have a reasoning message for this turn, update it by ID
                             if (currentReasoningMessageId !== null) {
-                                return prev.map(msg =>
-                                    msg.id === currentReasoningMessageId
-                                        ? {...msg, text: newReasoningText}
-                                        : msg,
+                                const index = prev.findIndex(
+                                    msg => msg.id === currentReasoningMessageId,
                                 );
+                                if (index === -1) return prev;
+                                const current = prev[index];
+                                if (current.sender !== 'reasoning') {
+                                    return prev;
+                                }
+                                const next = prev.slice();
+                                next[index] = {...current, text: newReasoningText};
+                                return trimMessages(next as Message[]);
                             }
 
-                            // First chunk - create new reasoning message and store its ID
                             const newId = Date.now();
                             currentReasoningMessageId = newId;
-                            return [
+                            return trimMessages([
                                 ...prev,
                                 {
                                     id: newId,
                                     sender: 'reasoning',
                                     text: newReasoningText,
                                 },
-                            ];
+                            ]);
                         });
                         return;
                     }
@@ -353,14 +365,14 @@ export const useConversation = ({
                         }
 
                         if (messagesToAdd.length > 0) {
-                            setMessages(prev => [...prev, ...messagesToAdd]);
+                            appendMessages(messagesToAdd);
                             // Clear live response since we've committed the text
                             liveResponseUpdater.cancel();
                             setLiveResponse(null);
                         }
 
                         // Add command messages in real-time as they execute
-                        setMessages(prev => [...prev, annotated]);
+                        appendMessages([annotated]);
                         return;
                     }
                     default:
@@ -442,7 +454,7 @@ export const useConversation = ({
                         sender: 'bot',
                         text: `Error: ${errorMessage}`,
                     };
-                    setMessages(prev => [...prev, botErrorMessage]);
+                    appendMessages([botErrorMessage]);
                     // Reset approval state on error to allow user to continue
                     setWaitingForApproval(false);
                     setPendingApproval(null);
@@ -457,7 +469,7 @@ export const useConversation = ({
                 // and should only be cleared by handleApprovalDecision or stopProcessing
             }
         },
-        [conversationService, applyServiceResult],
+        [conversationService, applyServiceResult, appendMessages, trimMessages, loggingService, createLiveResponseUpdater],
     );
 
     const handleApprovalDecision = useCallback(
@@ -527,23 +539,29 @@ export const useConversation = ({
 
                             setMessages(prev => {
                                 if (currentReasoningMessageId !== null) {
-                                    return prev.map(msg =>
-                                        msg.id === currentReasoningMessageId
-                                            ? {...msg, text: newReasoningText}
-                                            : msg,
+                                    const index = prev.findIndex(
+                                        msg => msg.id === currentReasoningMessageId,
                                     );
+                                    if (index === -1) return prev;
+                                    const current = prev[index];
+                                    if (current.sender !== 'reasoning') {
+                                        return prev;
+                                    }
+                                    const next = prev.slice();
+                                    next[index] = {...current, text: newReasoningText};
+                                    return trimMessages(next as Message[]);
                                 }
 
                                 const newId = Date.now();
                                 currentReasoningMessageId = newId;
-                                return [
+                                return trimMessages([
                                     ...prev,
                                     {
                                         id: newId,
                                         sender: 'reasoning',
                                         text: newReasoningText,
                                     },
-                                ];
+                                ]);
                             });
                             return;
                         }
@@ -573,12 +591,12 @@ export const useConversation = ({
                             }
 
                             if (messagesToAdd.length > 0) {
-                                setMessages(prev => [...prev, ...messagesToAdd]);
+                                appendMessages(messagesToAdd);
                                 liveResponseUpdater.cancel();
                                 setLiveResponse(null);
                             }
 
-                            setMessages(prev => [...prev, annotated]);
+                            appendMessages([annotated]);
                             return;
                         }
                         default:
@@ -638,7 +656,7 @@ export const useConversation = ({
                         sender: 'bot',
                         text: `Error: ${errorMessage}`,
                     };
-                    setMessages(prev => [...prev, botErrorMessage]);
+                    appendMessages([botErrorMessage]);
                     setWaitingForApproval(false);
                     setPendingApproval(null);
                 } finally {
@@ -689,23 +707,29 @@ export const useConversation = ({
 
                         setMessages(prev => {
                             if (currentReasoningMessageId !== null) {
-                                return prev.map(msg =>
-                                    msg.id === currentReasoningMessageId
-                                        ? {...msg, text: newReasoningText}
-                                        : msg,
+                                const index = prev.findIndex(
+                                    msg => msg.id === currentReasoningMessageId,
                                 );
+                                if (index === -1) return prev;
+                                const current = prev[index];
+                                if (current.sender !== 'reasoning') {
+                                    return prev;
+                                }
+                                const next = prev.slice();
+                                next[index] = {...current, text: newReasoningText};
+                                return trimMessages(next as Message[]);
                             }
 
                             const newId = Date.now();
                             currentReasoningMessageId = newId;
-                            return [
+                            return trimMessages([
                                 ...prev,
                                 {
                                     id: newId,
                                     sender: 'reasoning',
                                     text: newReasoningText,
                                 },
-                            ];
+                            ]);
                         });
                         return;
                     }
@@ -735,12 +759,12 @@ export const useConversation = ({
                         }
 
                         if (messagesToAdd.length > 0) {
-                            setMessages(prev => [...prev, ...messagesToAdd]);
+                            appendMessages(messagesToAdd);
                             liveResponseUpdater.cancel();
                             setLiveResponse(null);
                         }
 
-                        setMessages(prev => [...prev, annotated]);
+                        appendMessages([annotated]);
                         return;
                     }
                     default:
@@ -801,7 +825,7 @@ export const useConversation = ({
                     sender: 'bot',
                     text: `Error: ${errorMessage}`,
                 };
-                setMessages(prev => [...prev, botErrorMessage]);
+                appendMessages([botErrorMessage]);
                 // Reset approval state on error to allow user to continue
                 setWaitingForApproval(false);
                 setPendingApproval(null);
@@ -821,6 +845,10 @@ export const useConversation = ({
             conversationService,
             waitingForApproval,
             pendingApproval,
+            appendMessages,
+            trimMessages,
+            loggingService,
+            createLiveResponseUpdater,
         ],
     );
 
@@ -865,16 +893,18 @@ export const useConversation = ({
         [conversationService],
     );
 
-    const addSystemMessage = useCallback((text: string) => {
-        setMessages(prev => [
-            ...prev,
-            {
-                id: Date.now(),
-                sender: 'system',
-                text,
-            },
-        ]);
-    }, []);
+    const addSystemMessage = useCallback(
+        (text: string) => {
+            appendMessages([
+                {
+                    id: Date.now(),
+                    sender: 'system',
+                    text,
+                },
+            ]);
+        },
+        [appendMessages],
+    );
 
     return {
         messages,

@@ -1,4 +1,4 @@
-import React, {createContext, useContext, useState, ReactNode} from 'react';
+import React, {createContext, useContext, useMemo, useState, ReactNode} from 'react';
 
 export type InputMode =
     | 'text'
@@ -7,18 +7,22 @@ export type InputMode =
     | 'settings_completion'
     | 'model_selection';
 
-interface InputContextType {
+interface InputState {
     input: string;
-    setInput: (value: string) => void;
     mode: InputMode;
-    setMode: (mode: InputMode) => void;
     cursorOffset: number;
-    setCursorOffset: (offset: number) => void;
     triggerIndex: number | null;
+}
+
+interface InputActions {
+    setInput: (value: string) => void;
+    setMode: (mode: InputMode) => void;
+    setCursorOffset: (offset: number) => void;
     setTriggerIndex: (index: number | null) => void;
 }
 
-const InputContext = createContext<InputContextType | undefined>(undefined);
+const InputStateContext = createContext<InputState | undefined>(undefined);
+const InputActionsContext = createContext<InputActions | undefined>(undefined);
 
 export const InputProvider = ({children}: {children: ReactNode}) => {
     const [input, setInput] = useState('');
@@ -26,28 +30,46 @@ export const InputProvider = ({children}: {children: ReactNode}) => {
     const [cursorOffset, setCursorOffset] = useState(0);
     const [triggerIndex, setTriggerIndex] = useState<number | null>(null);
 
+    const state = useMemo<InputState>(
+        () => ({input, mode, cursorOffset, triggerIndex}),
+        [input, mode, cursorOffset, triggerIndex],
+    );
+
+    const actions = useMemo<InputActions>(
+        () => ({setInput, setMode, setCursorOffset, setTriggerIndex}),
+        [],
+    );
+
     return (
-        <InputContext.Provider
-            value={{
-                input,
-                setInput,
-                mode,
-                setMode,
-                cursorOffset,
-                setCursorOffset,
-                triggerIndex,
-                setTriggerIndex,
-            }}
-        >
-            {children}
-        </InputContext.Provider>
+        <InputStateContext.Provider value={state}>
+            <InputActionsContext.Provider value={actions}>
+                {children}
+            </InputActionsContext.Provider>
+        </InputStateContext.Provider>
     );
 };
 
 export const useInputContext = () => {
-    const context = useContext(InputContext);
-    if (!context) {
+    const state = useContext(InputStateContext);
+    const actions = useContext(InputActionsContext);
+    if (!state || !actions) {
         throw new Error('useInputContext must be used within an InputProvider');
     }
-    return context;
+    return {...state, ...actions};
+};
+
+export const useInputActions = () => {
+    const actions = useContext(InputActionsContext);
+    if (!actions) {
+        throw new Error('useInputActions must be used within an InputProvider');
+    }
+    return actions;
+};
+
+export const useInputState = () => {
+    const state = useContext(InputStateContext);
+    if (!state) {
+        throw new Error('useInputState must be used within an InputProvider');
+    }
+    return state;
 };

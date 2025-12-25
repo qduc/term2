@@ -1,9 +1,8 @@
 import React, {FC, useMemo, useCallback, useEffect} from 'react';
-import { useInputContext } from './context/InputContext.js';
+import { useInputActions } from './context/InputContext.js';
 
 import {Box, useApp, useInput} from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
-import { useInputHistory } from './hooks/use-input-history.js';
 import Banner from './components/Banner.js';
 import MessageList from './components/MessageList.js';
 import LiveResponse from './components/LiveResponse.js';
@@ -44,7 +43,7 @@ interface AppProps {
 
 const App: FC<AppProps> = ({conversationService, settingsService, historyService, loggingService}) => {
     const {exit} = useApp();
-    const { input, setInput } = useInputContext();
+    const { setInput } = useInputActions();
     const {
         messages,
         liveResponse,
@@ -62,10 +61,6 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
         addSystemMessage,
         setTemperature,
     } = useConversation({conversationService, loggingService});
-
-
-    const {navigateUp, navigateDown, addToHistory} = useInputHistory(historyService);
-
     useEffect(() => {
         conversationService.setRetryCallback(() =>
             addSystemMessage('Retrying due to upstream error...'),
@@ -291,7 +286,7 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
 
             case 'message':
                 // Regular message, send to AI agent
-                addToHistory(value);
+                historyService.addMessage(value);
                 setInput('');
                 await sendUserMessage(value);
                 return;
@@ -301,20 +296,6 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
         setInput('');
         await sendUserMessage(value);
     };
-
-    const handleHistoryUp = useCallback(() => {
-        const historyValue = navigateUp(input);
-        if (historyValue !== null) {
-            setInput(historyValue);
-        }
-    }, [navigateUp, input, setInput]);
-
-    const handleHistoryDown = useCallback(() => {
-        const historyValue = navigateDown();
-        if (historyValue !== null) {
-            setInput(historyValue);
-        }
-    }, [navigateDown, setInput]);
 
     return (
         <ErrorBoundary loggingService={loggingService}>
@@ -335,11 +316,10 @@ const App: FC<AppProps> = ({conversationService, settingsService, historyService
                     isProcessing={isProcessing}
                     onSubmit={handleSubmit}
                     slashCommands={slashCommands}
-                    onHistoryUp={handleHistoryUp}
-                    onHistoryDown={handleHistoryDown}
                     hasConversationHistory={messages.filter(msg => msg.sender !== 'system').length > 0}
                     settingsService={settingsService}
                     loggingService={loggingService}
+                    historyService={historyService}
                     onApprove={handleApprove}
                     onReject={handleReject}
                 />

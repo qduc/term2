@@ -17,8 +17,6 @@ const baseProps: BottomAreaProps = {
     isProcessing: false,
     onSubmit: async () => {},
     slashCommands: mockSlashCommands,
-    onHistoryUp: () => {},
-    onHistoryDown: () => {},
     hasConversationHistory: false,
     settingsService: createMockSettingsService(),
     loggingService: {
@@ -29,6 +27,11 @@ const baseProps: BottomAreaProps = {
         security: () => {},
         setCorrelationId: () => {},
         clearCorrelationId: () => {},
+    } as any,
+    historyService: {
+        getMessages: () => [],
+        addMessage: () => {},
+        clear: () => {},
     } as any,
     onApprove: () => { },
     onReject: () => { },

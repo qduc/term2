@@ -375,6 +375,15 @@ export const useConversation = ({
                         appendMessages([annotated]);
                         return;
                     }
+                    case 'retry': {
+                        const systemMessage: SystemMessage = {
+                            id: Date.now(),
+                            sender: 'system',
+                            text: `Tool hallucination detected (${(event as any).toolName}). Retrying... (Attempt ${(event as any).attempt}/${(event as any).maxRetries})`,
+                        };
+                        setMessages(prev => [...prev, systemMessage]);
+                        return;
+                    }
                     default:
                         return;
                 }
@@ -382,26 +391,7 @@ export const useConversation = ({
 
             try {
                 const result = await conversationService.sendMessage(value, {
-                    onTextChunk: (_fullText, chunk = '') => {
-                        applyConversationEvent({
-                            type: 'text_delta',
-                            delta: chunk,
-                            fullText: _fullText,
-                        });
-                    },
-                    onReasoningChunk: (fullReasoningText, chunk = '') => {
-                        applyConversationEvent({
-                            type: 'reasoning_delta',
-                            delta: chunk,
-                            fullText: fullReasoningText,
-                        });
-                    },
-                    onCommandMessage: cmdMsg => {
-                        applyConversationEvent({
-                            type: 'command_message',
-                            message: cmdMsg as any,
-                        });
-                    },
+                    onEvent: applyConversationEvent,
                 });
 
                 applyServiceResult(
@@ -599,6 +589,15 @@ export const useConversation = ({
                             appendMessages([annotated]);
                             return;
                         }
+                        case 'retry': {
+                            const systemMessage: SystemMessage = {
+                                id: Date.now(),
+                                sender: 'system',
+                                text: `Tool hallucination detected (${(event as any).toolName}). Retrying... (Attempt ${(event as any).attempt}/${(event as any).maxRetries})`,
+                            };
+                            setMessages(prev => [...prev, systemMessage]);
+                            return;
+                        }
                         default:
                             return;
                     }
@@ -608,26 +607,7 @@ export const useConversation = ({
                     // Send a continuation message to resume work
                     const continuationMessage = 'Please continue with your previous task.';
                     const result = await conversationService.sendMessage(continuationMessage, {
-                        onTextChunk: (_fullText, chunk = '') => {
-                            applyConversationEvent({
-                                type: 'text_delta',
-                                delta: chunk,
-                                fullText: _fullText,
-                            });
-                        },
-                        onReasoningChunk: (fullReasoningText, chunk = '') => {
-                            applyConversationEvent({
-                                type: 'reasoning_delta',
-                                delta: chunk,
-                                fullText: fullReasoningText,
-                            });
-                        },
-                        onCommandMessage: cmdMsg => {
-                            applyConversationEvent({
-                                type: 'command_message',
-                                message: cmdMsg as any,
-                            });
-                        },
+                        onEvent: applyConversationEvent,
                     });
 
                     applyServiceResult(
@@ -767,6 +747,15 @@ export const useConversation = ({
                         appendMessages([annotated]);
                         return;
                     }
+                    case 'retry': {
+                        const systemMessage: SystemMessage = {
+                            id: Date.now(),
+                            sender: 'system',
+                            text: `Tool hallucination detected (${(event as any).toolName}). Retrying... (Attempt ${(event as any).attempt}/${(event as any).maxRetries})`,
+                        };
+                        setMessages(prev => [...prev, systemMessage]);
+                        return;
+                    }
                     default:
                         return;
                 }
@@ -777,26 +766,7 @@ export const useConversation = ({
                     answer,
                     rejectionReason,
                     {
-                        onTextChunk: (_fullText, chunk = '') => {
-                            applyConversationEvent({
-                                type: 'text_delta',
-                                delta: chunk,
-                                fullText: _fullText,
-                            });
-                        },
-                        onReasoningChunk: (fullReasoningText, chunk = '') => {
-                            applyConversationEvent({
-                                type: 'reasoning_delta',
-                                delta: chunk,
-                                fullText: fullReasoningText,
-                            });
-                        },
-                        onCommandMessage: cmdMsg => {
-                            applyConversationEvent({
-                                type: 'command_message',
-                                message: cmdMsg as any,
-                            });
-                        },
+                        onEvent: applyConversationEvent,
                     },
                 );
                 applyServiceResult(

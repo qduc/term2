@@ -223,13 +223,18 @@ export class ConversationSession {
         text: string,
         {
             hallucinationRetryCount = 0,
+            skipUserMessage = false,
         }: {
             hallucinationRetryCount?: number;
+                skipUserMessage?: boolean;
         } = {},
     ): AsyncIterable<ConversationEvent> {
+        let stream: any = null;
         try {
             // Maintain canonical local history regardless of provider.
-            this.conversationStore.addUserMessage(text);
+            if (!skipUserMessage) {
+                this.conversationStore.addUserMessage(text);
+            }
 
             // If there's an aborted approval, we need to resolve it first.
             // The user's message is a new input, but the agent is stuck waiting for tool output.
@@ -409,7 +414,8 @@ export class ConversationSession {
 
             // Only OpenAI uses server-side conversation management via previousResponseId.
             // All other providers (OpenRouter, openai-compatible) need full history.
-            const stream = await this.agentClient.startStream(
+
+            stream = await this.agentClient.startStream(
                 provider !== 'openai'
                     ? (this.conversationStore.getHistory() as any)
                     : text,
@@ -487,12 +493,30 @@ export class ConversationSession {
                         error instanceof Error ? error.message : String(error),
                 });
 
-                // Remove the user message from conversation store before retry so we don't duplicate it
-                this.conversationStore.removeLastUserMessage();
+                yield {
+                    type: 'retry',
+                    toolName,
+                    attempt: hallucinationRetryCount + 1,
+                    maxRetries: MAX_HALLUCINATION_RETRIES,
+                    errorMessage: error instanceof Error ? error.message : String(error),
+                };
 
-                yield* this.run(text, {
-                    hallucinationRetryCount: hallucinationRetryCount + 1,
-                });
+                if (stream) {
+                    // Update conversation store with partial results (successful tool calls)
+                    this.conversationStore.updateFromResult(stream);
+                    // Retry from current state without re-adding user message
+                    yield* this.run(text, {
+                        hallucinationRetryCount: hallucinationRetryCount + 1,
+                        skipUserMessage: true,
+                    });
+                } else {
+                    // Failed to start stream at all - clean slate retry
+                    this.conversationStore.removeLastUserMessage();
+                    yield* this.run(text, {
+                        hallucinationRetryCount: hallucinationRetryCount + 1,
+                        // skipUserMessage defaults to false, so user message is re-added
+                    });
+                }
                 return;
             }
 

@@ -4,7 +4,16 @@ export type ConversationEvent =
 	| CommandMessageEvent
 	| ApprovalRequiredEvent
 	| FinalResponseEvent
-	| ErrorEvent;
+	| ErrorEvent
+	| RetryEvent;
+
+export interface RetryEvent {
+	type: 'retry';
+	toolName: string;
+	attempt: number;
+	maxRetries: number;
+	errorMessage: string;
+}
 
 /**
  * Transport-friendly text streaming event.

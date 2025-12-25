@@ -22,6 +22,7 @@ const searchParametersSchema = z.object({
     file_pattern: z
         .string()
         .nullable()
+        .optional()
         .describe(
             'Glob pattern for files to include (e.g., "*.ts"). Pass null to include all files.',
         ),

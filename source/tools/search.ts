@@ -35,9 +35,8 @@ const searchParametersSchema = z.object({
             'Glob pattern for files to exclude. Pass null to exclude nothing.',
         ),
     max_results: z
-        .number()
-        .int()
-        .positive()
+        .union([z.number(), z.string().transform(val => parseInt(val, 10))])
+        .pipe(z.number().int().positive())
         .nullable()
         .describe(
             'Maximum number of results to return. Pass null for default (100).',

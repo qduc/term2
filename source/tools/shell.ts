@@ -24,18 +24,16 @@ const shellParametersSchema = z.object({
         .min(1)
         .describe('Single shell command to execute.'),
     timeout_ms: z
-        .number()
-        .int()
-        .positive()
+        .union([z.number(), z.string().transform(val => parseInt(val, 10))])
+        .pipe(z.number().int().positive())
         .optional()
         .nullable()
         .describe(
             'Optional timeout in milliseconds for each command. Defaults to 120000 ms (2 minutes) if not specified.',
         ),
     max_output_length: z
-        .number()
-        .int()
-        .positive()
+        .union([z.number(), z.string().transform(val => parseInt(val, 10))])
+        .pipe(z.number().int().positive())
         .optional()
         .nullable()
         .describe(
@@ -132,10 +130,12 @@ export function createShellToolDefinition(deps: {
 
         try {
             // Use provided values or settings defaults or hardcoded defaults
-            const timeout = timeout_ms ?? settingsService.get('shell.timeout');
-            const maxOutputLength =
+            const timeoutValue = timeout_ms ?? settingsService.get('shell.timeout');
+            const timeout = timeoutValue != null ? timeoutValue : undefined;
+            const maxOutputLengthValue =
                 max_output_length ??
                 settingsService.get('shell.maxOutputChars');
+            const maxOutputLength = maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
 
             loggingService.info('Shell command execution started', {
                 commandCount: 1,

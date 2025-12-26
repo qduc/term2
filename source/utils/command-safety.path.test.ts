@@ -367,3 +367,78 @@ test('Path risk - empty or undefined paths (GREEN)', t => {
         );
     }
 });
+
+// ============================================================================
+// NEW: Absolute paths within current project should be treated as local paths
+// ============================================================================
+
+test('Path risk - absolute paths within project (GREEN for safe files)', t => {
+    const cwd = process.cwd();
+    // These are safe files that should be GREEN when referenced with absolute paths within project
+    const paths = [
+        `${cwd}/package.json`,
+        `${cwd}/source/main.ts`,
+        `${cwd}/src/utils/helper.js`,
+        `${cwd}/config/settings.json`,
+    ];
+
+    for (const path of paths) {
+        const result = analyzePathRisk(path);
+        t.is(result, SafetyStatus.GREEN, `"${path}" should be GREEN (safe file within project)`);
+    }
+});
+
+test('Path risk - absolute paths within project (YELLOW for hidden files)', t => {
+    const cwd = process.cwd();
+    // Hidden files should still be YELLOW even within project
+    const paths = [
+        `${cwd}/.env`,
+        `${cwd}/src/.hidden`,
+    ];
+
+    for (const path of paths) {
+        const result = analyzePathRisk(path);
+        t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (hidden file within project)`);
+    }
+});
+
+test('Path risk - absolute paths within project (YELLOW for sensitive extensions)', t => {
+    const cwd = process.cwd();
+    // Sensitive extensions are still YELLOW even within project
+    const paths = [
+        `${cwd}/.env`,
+        `${cwd}/key.pem`,
+        `${cwd}/cert.key`,
+    ];
+
+    for (const path of paths) {
+        const result = analyzePathRisk(path);
+        t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (sensitive extension within project)`);
+    }
+});
+
+test('Path risk - absolute paths outside project (YELLOW)', t => {
+    const paths = [
+        '/tmp/test.txt',
+        '/opt/app.log',
+        '/home/other/file.txt',
+    ];
+
+    for (const path of paths) {
+        const result = analyzePathRisk(path);
+        t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (outside project)`);
+    }
+});
+
+test('Path risk - absolute system paths still RED regardless of project', t => {
+    const paths = [
+        '/etc/passwd',
+        '/var/log/system.log',
+        '/usr/bin/node',
+    ];
+
+    for (const path of paths) {
+        const result = analyzePathRisk(path);
+        t.is(result, SafetyStatus.RED, `"${path}" should be RED (system path)`);
+    }
+});

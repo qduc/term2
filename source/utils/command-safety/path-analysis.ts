@@ -33,6 +33,8 @@ export function analyzePathRisk(
     const candidate = inputPath?.trim();
     if (!candidate) return SafetyStatus.GREEN;
 
+    const cwd = process.cwd();
+
     // RED: Home directory and sensitive paths
     // Check for various home directory representations
     const isHomeRelated = HOME_PATTERNS.some(pattern =>
@@ -110,11 +112,23 @@ export function analyzePathRisk(
             });
             return SafetyStatus.RED;
         }
-        // Other absolute paths are suspicious -> audit
-        logger.security('Path risk: absolute non-system path', {
-            path: candidate,
-        });
-        return SafetyStatus.YELLOW;
+
+        // Check if absolute path is within current project directory
+        const normalizedCandidate = path.normalize(candidate);
+        const normalizedCwd = path.normalize(cwd);
+        const isWithinProject = normalizedCandidate.startsWith(normalizedCwd + path.sep) ||
+                                normalizedCandidate === normalizedCwd;
+
+        if (!isWithinProject) {
+            // Absolute paths outside project are suspicious -> audit
+            logger.security('Path risk: absolute non-system path', {
+                path: candidate,
+            });
+            return SafetyStatus.YELLOW;
+        }
+
+        // If within project, continue with normal flow (treat like relative path)
+        // Fall through to continue checking for sensitive files, hidden files, etc.
     }
 
     // RED: Directory Traversal

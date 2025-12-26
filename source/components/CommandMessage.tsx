@@ -250,7 +250,7 @@ const CommandMessage: FC<Props> = ({
         <Box flexDirection="column">
             <Text color={success === false ? 'red' : isRunning ? 'yellow' : 'cyan'}>
                 $ <Text bold>{command}</Text>
-                {isRunning && formattedArgs && <Text color="yellow"> {formattedArgs}</Text>}
+                {isRunning && formattedArgs && command === toolName && <Text color="yellow"> {formattedArgs}</Text>}
             </Text>
             {failureReason && <Text color="red">Error: {failureReason}</Text>}
             <Text color={success === false ? 'red' : 'gray'}>{displayed}</Text>

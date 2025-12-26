@@ -57,6 +57,81 @@ const DiffView: FC<{diff: string}> = ({diff}) => {
     }
 };
 
+const formatToolArgs = (toolName: string | undefined, args: any): string => {
+    if (!args || typeof args !== 'object' || !toolName) {
+        return '';
+    }
+
+    try {
+        // Format based on tool type to match extract-command-messages.ts
+        switch (toolName) {
+            case 'shell': {
+                const command = args.command || args.commands;
+                if (typeof command === 'string') {
+                    return command.length > 80
+                        ? `${command.slice(0, 80)}...`
+                        : command;
+                }
+                return '';
+            }
+
+            case 'grep': {
+                const pattern = args.pattern || '';
+                const path = args.path || '.';
+                const parts = [`"${pattern}"`, `"${path}"`];
+
+                if (args.case_sensitive) parts.push('--case-sensitive');
+                if (args.file_pattern) parts.push(`--include "${args.file_pattern}"`);
+                if (args.exclude_pattern) parts.push(`--exclude "${args.exclude_pattern}"`);
+
+                return parts.join(' ');
+            }
+
+            case 'apply_patch': {
+                const type = args.type || 'unknown';
+                const path = args.path || 'unknown';
+                return `${type} ${path}`;
+            }
+
+            case 'search_replace': {
+                const searchContent = args.search_content || '';
+                const replaceContent = args.replace_content || '';
+                const path = args.path || 'unknown';
+                const search = searchContent.length > 30
+                    ? `${searchContent.slice(0, 30)}...`
+                    : searchContent;
+                const replace = replaceContent.length > 30
+                    ? `${replaceContent.slice(0, 30)}...`
+                    : replaceContent;
+                return `"${search}" → "${replace}" "${path}"`;
+            }
+
+            case 'ask_mentor': {
+                const question = args.question || 'Unknown question';
+                return question.length > 80
+                    ? `${question.slice(0, 80)}...`
+                    : question;
+            }
+
+            default:
+                // Generic fallback for unknown tools
+                const entries = Object.entries(args);
+                if (entries.length === 0) return '';
+
+                return entries
+                    .map(([key, value]) => {
+                        const stringValue = typeof value === 'string'
+                            ? (value.length > 50 ? `${value.slice(0, 50)}...` : value)
+                            : JSON.stringify(value);
+                        return `${key}=${stringValue}`;
+                    })
+                    .join(' ');
+        }
+    } catch {
+        return '';
+    }
+};
+
 const CommandMessage: FC<Props> = ({
     command,
     output,
@@ -122,11 +197,13 @@ const CommandMessage: FC<Props> = ({
         );
     }
 
+    const formattedArgs = toolArgs ? formatToolArgs(toolName, toolArgs) : '';
+
     return (
         <Box flexDirection="column">
             <Text color={success === false ? 'red' : isRunning ? 'yellow' : 'cyan'}>
                 $ <Text bold>{command}</Text>
-                {isRunning && <Text color="yellow"> ●●●</Text>}
+                {isRunning && formattedArgs && <Text color="yellow"> {formattedArgs}</Text>}
             </Text>
             {failureReason && <Text color="red">Error: {failureReason}</Text>}
             <Text color={success === false ? 'red' : 'gray'}>{displayed}</Text>

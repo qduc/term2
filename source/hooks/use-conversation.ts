@@ -417,8 +417,28 @@ export const useConversation = ({
                             setLiveResponse(null);
                         }
 
-                        // Add command messages in real-time as they execute
-                        appendMessages([annotated]);
+                        // Replace pending message with completed one, or add new if not found
+                        setMessages(prev => {
+                            // Try to find the pending message by callId
+                            const pendingIndex = annotated.callId
+                                ? prev.findIndex(
+                                      msg =>
+                                          msg.sender === 'command' &&
+                                          msg.callId === annotated.callId &&
+                                          msg.status === 'running',
+                                  )
+                                : -1;
+
+                            if (pendingIndex !== -1) {
+                                // Replace the pending message with the completed one
+                                const next = [...prev];
+                                next[pendingIndex] = annotated;
+                                return trimMessages(next);
+                            }
+
+                            // If no pending message found, append the completed one
+                            return trimMessages([...prev, annotated]);
+                        });
                         return;
                     }
                     case 'retry': {
@@ -618,6 +638,42 @@ export const useConversation = ({
                             });
                             return;
                         }
+                        case 'tool_started': {
+                            const {toolCallId, toolName, arguments: args} = event as any;
+
+                            const command = (() => {
+                                if (toolName === 'shell' && args?.command) {
+                                    return args.command;
+                                }
+                                if (toolName === 'grep' && args?.pattern) {
+                                    return `grep "${args.pattern}" ${args.path ?? '.'}`;
+                                }
+                                if (toolName === 'search_replace') {
+                                    return `search_replace "${args.search_content ?? ''}" → "${args.replace_content ?? ''}" ${args.path ?? ''}`;
+                                }
+                                if (toolName === 'apply_patch') {
+                                    return `apply_patch ${args?.type ?? 'unknown'} ${args?.path ?? ''}`;
+                                }
+                                if (toolName === 'ask_mentor') {
+                                    return `ask_mentor: ${args?.question ?? ''}`;
+                                }
+                                return `${toolName ?? 'unknown_tool'}`;
+                            })();
+
+                            const pendingMessage: CommandMessage = {
+                                id: toolCallId ?? String(Date.now()),
+                                sender: 'command',
+                                status: 'running',
+                                command,
+                                output: '',
+                                callId: toolCallId,
+                                toolName,
+                                toolArgs: args,
+                            };
+
+                            appendMessages([pendingMessage as any]);
+                            return;
+                        }
                         case 'command_message': {
                             // logDeduplicated('command_message');
                             const cmdMsg = event.message as any;
@@ -651,7 +707,25 @@ export const useConversation = ({
                                 setLiveResponse(null);
                             }
 
-                            appendMessages([annotated]);
+                            // Replace pending message with completed one, or add new if not found
+                            setMessages(prev => {
+                                const pendingIndex = annotated.callId
+                                    ? prev.findIndex(
+                                          msg =>
+                                              msg.sender === 'command' &&
+                                              msg.callId === annotated.callId &&
+                                              msg.status === 'running',
+                                      )
+                                    : -1;
+
+                                if (pendingIndex !== -1) {
+                                    const next = [...prev];
+                                    next[pendingIndex] = annotated;
+                                    return trimMessages(next);
+                                }
+
+                                return trimMessages([...prev, annotated]);
+                            });
                             return;
                         }
                         case 'retry': {
@@ -798,6 +872,42 @@ export const useConversation = ({
                         });
                         return;
                     }
+                    case 'tool_started': {
+                        const {toolCallId, toolName, arguments: args} = event as any;
+
+                        const command = (() => {
+                            if (toolName === 'shell' && args?.command) {
+                                return args.command;
+                            }
+                            if (toolName === 'grep' && args?.pattern) {
+                                return `grep "${args.pattern}" ${args.path ?? '.'}`;
+                            }
+                            if (toolName === 'search_replace') {
+                                return `search_replace "${args.search_content ?? ''}" → "${args.replace_content ?? ''}" ${args.path ?? ''}`;
+                            }
+                            if (toolName === 'apply_patch') {
+                                return `apply_patch ${args?.type ?? 'unknown'} ${args?.path ?? ''}`;
+                            }
+                            if (toolName === 'ask_mentor') {
+                                return `ask_mentor: ${args?.question ?? ''}`;
+                            }
+                            return `${toolName ?? 'unknown_tool'}`;
+                        })();
+
+                        const pendingMessage: CommandMessage = {
+                            id: toolCallId ?? String(Date.now()),
+                            sender: 'command',
+                            status: 'running',
+                            command,
+                            output: '',
+                            callId: toolCallId,
+                            toolName,
+                            toolArgs: args,
+                        };
+
+                        appendMessages([pendingMessage as any]);
+                        return;
+                    }
                     case 'command_message': {
                         // logDeduplicated('command_message');
                         const cmdMsg = event.message as any;
@@ -831,7 +941,25 @@ export const useConversation = ({
                             setLiveResponse(null);
                         }
 
-                        appendMessages([annotated]);
+                        // Replace pending message with completed one, or add new if not found
+                        setMessages(prev => {
+                            const pendingIndex = annotated.callId
+                                ? prev.findIndex(
+                                      msg =>
+                                          msg.sender === 'command' &&
+                                          msg.callId === annotated.callId &&
+                                          msg.status === 'running',
+                                  )
+                                : -1;
+
+                            if (pendingIndex !== -1) {
+                                const next = [...prev];
+                                next[pendingIndex] = annotated;
+                                return trimMessages(next);
+                            }
+
+                            return trimMessages([...prev, annotated]);
+                        });
                         return;
                     }
                     case 'retry': {

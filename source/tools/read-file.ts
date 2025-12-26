@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import * as fs from 'fs/promises';
-import {resolveWorkspacePath} from './utils.js';
+import { resolveWorkspacePath, relaxedNumber } from './utils.js';
 import {trimOutput} from '../utils/output-trim.js';
 import type {ToolDefinition, CommandMessage} from './types.js';
 import {
@@ -12,14 +12,12 @@ import {
 
 const readFileParametersSchema = z.object({
     path: z.string().describe('File path relative to workspace root'),
-    start_line: z
-        .number()
+    start_line: relaxedNumber
         .int()
         .positive()
         .optional()
         .describe('Starting line number (1-indexed). If not provided, reads from the beginning.'),
-    end_line: z
-        .number()
+    end_line: relaxedNumber
         .int()
         .positive()
         .optional()

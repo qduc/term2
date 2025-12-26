@@ -4,6 +4,7 @@ import util from 'util';
 import process from 'process';
 import path from 'path';
 import {randomUUID} from 'node:crypto';
+import { relaxedNumber } from './utils.js';
 import {validateCommandSafety} from '../utils/command-safety/index.js';
 import {logValidationError as logValidationErrorUtil} from '../utils/command-logger.js';
 import {
@@ -30,17 +31,17 @@ const execPromise = util.promisify(exec);
 
 const shellParametersSchema = z.object({
     command: z.string().min(1).describe('Single shell command to execute.'),
-    timeout_ms: z
-        .union([z.number(), z.string().transform(val => parseInt(val, 10))])
-        .pipe(z.number().int().positive())
+    timeout_ms: relaxedNumber
+        .int()
+        .positive()
         .optional()
         .nullable()
         .describe(
             'Optional timeout in milliseconds for each command. Defaults to 120000 ms (2 minutes) if not specified.',
         ),
-    max_output_length: z
-        .union([z.number(), z.string().transform(val => parseInt(val, 10))])
-        .pipe(z.number().int().positive())
+    max_output_length: relaxedNumber
+        .int()
+        .positive()
         .optional()
         .nullable()
         .describe(

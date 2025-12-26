@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {exec} from 'child_process';
 import util from 'util';
+import { relaxedNumber } from './utils.js';
 import {
     trimOutput,
     setTrimConfig,
@@ -40,9 +41,9 @@ const searchParametersSchema = z.object({
         .describe(
             'Glob pattern for files to exclude. Pass null to exclude nothing.',
         ),
-    max_results: z
-        .union([z.number(), z.string().transform(val => parseInt(val, 10))])
-        .pipe(z.number().int().positive())
+    max_results: relaxedNumber
+        .int()
+        .positive()
         .nullable()
         .describe(
             'Maximum number of results to return. Pass null for default (100).',

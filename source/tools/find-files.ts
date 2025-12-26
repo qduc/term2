@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {exec} from 'child_process';
 import util from 'util';
-import {resolveWorkspacePath} from './utils.js';
+import { resolveWorkspacePath, relaxedNumber } from './utils.js';
 import type {ToolDefinition, CommandMessage} from './types.js';
 import {
     getOutputText,
@@ -25,8 +25,7 @@ const findFilesParametersSchema = z.object({
 		.describe(
 			'Directory to search in. Use "." for current directory. Defaults to current directory.',
 		),
-	max_results: z
-		.number()
+	max_results: relaxedNumber
 		.int()
 		.positive()
 		.optional()

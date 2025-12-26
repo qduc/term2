@@ -1,4 +1,4 @@
-import React, {FC} from 'react';
+import React, { FC, useState, useEffect } from 'react';
 import {Box, Text} from 'ink';
 import {generateDiff} from '../utils/diff.js';
 
@@ -172,6 +172,24 @@ const CommandMessage: FC<Props> = ({
     hadApproval,
 }) => {
     const isRunning = status === 'pending' || status === 'running';
+    const [isVisible, setIsVisible] = useState(!isRunning);
+
+    useEffect(() => {
+        if (!isRunning) {
+            setIsVisible(true);
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            setIsVisible(true);
+        }, 1000);
+
+        return () => clearTimeout(timer);
+    }, [isRunning]);
+
+    if (!isVisible) {
+        return null;
+    }
     const outputText = output?.trim() ? output : (isRunning ? '(running...)' : '(no output)');
     const displayed =
         outputText && outputText !== '(no output)'

@@ -1,4 +1,5 @@
 import {grepToolDefinition} from './tools/grep.js';
+import {readFileToolDefinition} from './tools/read-file.js';
 import {createSearchReplaceToolDefinition} from './tools/search-replace.js';
 import {createApplyPatchToolDefinition} from './tools/apply-patch.js';
 import {createShellToolDefinition} from './tools/shell.js';
@@ -114,6 +115,7 @@ export const getAgentDefinition = (
     const tools: ToolDefinition[] = [
         createShellToolDefinition({settingsService, loggingService}),
         grepToolDefinition,
+        readFileToolDefinition,
     ];
 
     if (

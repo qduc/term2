@@ -24,6 +24,7 @@ const MOCK_SETTING_KEYS = {
     LOGGING_LOG_LEVEL: 'logging.logLevel',
     LOGGING_DISABLE: 'logging.disableLogging',
     LOGGING_DEBUG: 'logging.debugLogging',
+    LOGGING_SUPPRESS_CONSOLE: 'logging.suppressConsoleOutput',
     ENV_NODE_ENV: 'environment.nodeEnv',
     APP_SHELL_PATH: 'app.shellPath',
     TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
@@ -48,6 +49,8 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
     'logging.logLevel': 'Logging level (debug, info, warn, error)',
     'logging.disableLogging': 'Disable all logging',
     'logging.debugLogging': 'Enable debug logging',
+    'logging.suppressConsoleOutput':
+        'Suppress console output to avoid interfering with Ink UI',
     'environment.nodeEnv': 'Node environment (development, production)',
     'app.shellPath': 'Path to shell executable',
     'tools.logFileOperations': 'Log file operations to disk',

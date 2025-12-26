@@ -764,6 +764,7 @@ test.serial(
                 logLevel: 'info',
                 disableLogging: false,
                 debugLogging: false,
+                suppressConsoleOutput: true,
             },
             environment: {
                 nodeEnv: undefined,
@@ -843,6 +844,7 @@ test.serial(
                 logLevel: 'info',
                 disableLogging: false,
                 debugLogging: false,
+                suppressConsoleOutput: true,
             },
             environment: {nodeEnv: undefined},
             app: {shellPath: undefined, mode: 'default'},

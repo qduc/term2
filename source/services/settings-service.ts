@@ -67,6 +67,7 @@ const LoggingSettingsSchema = z.object({
         .default('info'),
     disableLogging: z.boolean().optional().default(false),
     debugLogging: z.boolean().optional().default(false),
+    suppressConsoleOutput: z.boolean().optional().default(true),
 });
 
 const EnvironmentSettingsSchema = z.object({
@@ -172,6 +173,7 @@ export interface SettingsWithSources {
         logLevel: SettingWithSource<string>;
         disableLogging: SettingWithSource<boolean>;
         debugLogging: SettingWithSource<boolean>;
+        suppressConsoleOutput: SettingWithSource<boolean>;
     };
     environment: {
         nodeEnv: SettingWithSource<string | undefined>;
@@ -213,6 +215,7 @@ export const SETTING_KEYS = {
     LOGGING_LOG_LEVEL: 'logging.logLevel',
     LOGGING_DISABLE: 'logging.disableLogging',
     LOGGING_DEBUG: 'logging.debugLogging',
+    LOGGING_SUPPRESS_CONSOLE: 'logging.suppressConsoleOutput',
     ENV_NODE_ENV: 'environment.nodeEnv',
     APP_SHELL_PATH: 'app.shellPath', // Sensitive - env only
     APP_MENTOR_MODE: 'app.mentorMode',
@@ -233,6 +236,7 @@ const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
     SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
     SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
     SETTING_KEYS.LOGGING_LOG_LEVEL,
+    SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE,
     SETTING_KEYS.APP_MENTOR_MODE,
     SETTING_KEYS.APP_EDIT_MODE,
 ]);
@@ -273,6 +277,7 @@ const DEFAULT_SETTINGS: SettingsData = {
         logLevel: 'info',
         disableLogging: false,
         debugLogging: false,
+        suppressConsoleOutput: true,
     },
     environment: {
         nodeEnv: undefined,
@@ -395,6 +400,9 @@ export class SettingsService {
         // Apply logging level from settings to the logging service so it respects settings
         try {
             this.loggingService.setLogLevel(this.settings.logging.logLevel);
+            this.loggingService.setSuppressConsoleOutput(
+                this.settings.logging.suppressConsoleOutput,
+            );
         } catch (error: any) {
             if (!this.disableLogging) {
                 this.loggingService.warn(
@@ -614,6 +622,25 @@ export class SettingsService {
             }
         }
 
+        if (key === 'logging.suppressConsoleOutput') {
+            try {
+                this.loggingService.setSuppressConsoleOutput(Boolean(value));
+            } catch (err: any) {
+                if (!this.disableLogging) {
+                    this.loggingService.warn(
+                        'Failed to update console output suppression at runtime',
+                        {
+                            error:
+                                err instanceof Error
+                                    ? err.message
+                                    : String(err),
+                            suppressConsoleOutput: value,
+                        },
+                    );
+                }
+            }
+        }
+
         // Persist to file
         if (!this.disableFilePersistence) {
             this.saveToFile();
@@ -774,6 +801,10 @@ export class SettingsService {
                 debugLogging: {
                     value: this.settings.logging.debugLogging,
                     source: this.getSource('logging.debugLogging'),
+                },
+                suppressConsoleOutput: {
+                    value: this.settings.logging.suppressConsoleOutput,
+                    source: this.getSource('logging.suppressConsoleOutput'),
                 },
             },
             environment: {

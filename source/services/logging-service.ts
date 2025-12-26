@@ -18,6 +18,7 @@ interface LoggingServiceConfig {
     disableLogging?: boolean;
     console?: boolean;
     debugLogging?: boolean;
+    suppressConsoleOutput?: boolean;
 }
 
 /**
@@ -35,6 +36,7 @@ export class LoggingService {
     private logger: winston.Logger;
     private correlationId: string | undefined;
     private debugLogging: boolean;
+    private suppressConsoleOutput: boolean;
     private openrouterLogger!: winston.Logger;
 
     constructor(config: LoggingServiceConfig = {}) {
@@ -44,9 +46,11 @@ export class LoggingService {
             disableLogging = false,
             console: enableConsole = false,
             debugLogging = false,
+            suppressConsoleOutput = true,
         } = config;
 
         this.debugLogging = debugLogging;
+        this.suppressConsoleOutput = suppressConsoleOutput;
 
         // Determine log directory
         const finalLogDir = logDir || path.join(envPaths('term2').log, 'logs');
@@ -59,11 +63,9 @@ export class LoggingService {
                 }
             } catch (error: any) {
                 // Graceful degradation: log creation errors to stderr only
-                if (this.debugLogging) {
-                    console.error(
-                        `[LoggingService] Failed to create log directory: ${error.message}`,
-                    );
-                }
+                this.emitConsoleError(
+                    `[LoggingService] Failed to create log directory: ${error.message}`,
+                );
             }
         }
 
@@ -85,20 +87,16 @@ export class LoggingService {
 
                 // Handle transport errors gracefully
                 fileTransport.on('error', (error: any) => {
-                    if (this.debugLogging) {
-                        console.error(
-                            `[LoggingService] File transport error: ${error.message}`,
-                        );
-                    }
+                    this.emitConsoleError(
+                        `[LoggingService] File transport error: ${error.message}`,
+                    );
                 });
 
                 transports.push(fileTransport);
             } catch (error: any) {
-                if (this.debugLogging) {
-                    console.error(
-                        `[LoggingService] Failed to configure file transport: ${error.message}`,
-                    );
-                }
+                this.emitConsoleError(
+                    `[LoggingService] Failed to configure file transport: ${error.message}`,
+                );
             }
         }
 
@@ -151,11 +149,9 @@ export class LoggingService {
                     level: logLevel,
                 });
                 openrouterTransport.on('error', (error: any) => {
-                    if (this.debugLogging) {
-                        console.error(
-                            `[LoggingService] OpenRouter file transport error: ${error.message}`,
-                        );
-                    }
+                    this.emitConsoleError(
+                        `[LoggingService] OpenRouter file transport error: ${error.message}`,
+                    );
                 });
                 this.openrouterLogger = winston.createLogger({
                     levels: LOG_LEVELS,
@@ -184,7 +180,7 @@ export class LoggingService {
                 });
             } catch (error: any) {
                 if (this.debugLogging) {
-                    console.error(
+                    this.emitConsoleError(
                         `[LoggingService] Failed to configure openrouter transport: ${error.message}`,
                     );
                 }
@@ -215,15 +211,19 @@ export class LoggingService {
         }
     }
 
+    setSuppressConsoleOutput(value: boolean): void {
+        this.suppressConsoleOutput = value;
+    }
+
     /**
      * Set the current log level at runtime; updates logger and all transports
      */
     setLogLevel(level: string): void {
         if (!Object.prototype.hasOwnProperty.call(LOG_LEVELS, level)) {
             // If invalid, ignore
-            if (this.debugLogging) {
-                console.error(`[LoggingService] Invalid log level: ${level}`);
-            }
+            this.emitConsoleError(
+                `[LoggingService] Invalid log level: ${level}`,
+            );
             return;
         }
 
@@ -248,13 +248,11 @@ export class LoggingService {
                 }
             });
         } catch (error: any) {
-            if (this.debugLogging) {
-                console.error(
-                    `[LoggingService] Failed to set log level: ${
-                        (error as Error).message
-                    }`,
-                );
-            }
+            this.emitConsoleError(
+                `[LoggingService] Failed to set log level: ${
+                    (error as Error).message
+                }`,
+            );
         }
     }
 
@@ -305,11 +303,9 @@ export class LoggingService {
             };
             this.openrouterLogger.log(level, message, metadata);
         } catch (error: any) {
-            if (this.debugLogging) {
-                console.error(
-                    `[LoggingService] Error logging to openrouter: ${error.message}`,
-                );
-            }
+            this.emitConsoleError(
+                `[LoggingService] Error logging to openrouter: ${error.message}`,
+            );
         }
     }
 
@@ -355,16 +351,21 @@ export class LoggingService {
             }
         } catch (error: any) {
             // Gracefully handle logging errors
-            if (this.debugLogging) {
-                console.error(
-                    `[LoggingService] Error logging message: ${error.message}`,
-                );
-            }
+            this.emitConsoleError(
+                `[LoggingService] Error logging message: ${error.message}`,
+            );
         }
     }
 
     #log(level: string, message: string, meta?: Record<string, any>): void {
         this.log(level, message, meta);
+    }
+
+    private emitConsoleError(message: string): void {
+        if (!this.debugLogging || this.suppressConsoleOutput) {
+            return;
+        }
+        console.error(message);
     }
 }
 

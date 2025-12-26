@@ -56,7 +56,7 @@ const BottomArea: FC<BottomAreaProps> = ({
 
         const interval = setInterval(() => {
             setDotCount(prev => (prev === 3 ? 1 : prev + 1));
-        }, 500);
+        }, 800);
 
         return () => clearInterval(interval);
     }, [isProcessing]);

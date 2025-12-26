@@ -32,6 +32,8 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
     [SETTING_KEYS.UI_HISTORY_SIZE]: 'Number of history items to keep',
     [SETTING_KEYS.LOGGING_LOG_LEVEL]:
         'Logging level (debug, info, warn, error)',
+    [SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE]:
+        'Suppress console output to avoid interfering with Ink UI',
 };
 
 /**

@@ -125,6 +125,31 @@ test('supports custom log levels including security', async t => {
     t.pass();
 });
 
+test('suppresses console output when configured', async t => {
+    const logDir = getTestLogDir();
+    const originalConsoleError = console.error;
+    const calls = [];
+
+    console.error = (...args) => {
+        calls.push(args);
+    };
+
+    try {
+        const logger = new LoggingService({
+            logDir,
+            disableLogging: false,
+            debugLogging: true,
+            suppressConsoleOutput: true,
+        });
+
+        logger.setLogLevel('not-a-level');
+
+        t.is(calls.length, 0);
+    } finally {
+        console.error = originalConsoleError;
+    }
+});
+
 test('tracks correlation IDs', async t => {
     const logDir = getTestLogDir();
     const logger = new LoggingService({

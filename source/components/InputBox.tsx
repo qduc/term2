@@ -82,10 +82,22 @@ const InputBox: FC<Props> = ({
         const calculateTerminalWidth = () =>
             Math.max(0, (process.stdout.columns ?? 0) - TERMINAL_PADDING);
         setTerminalWidth(calculateTerminalWidth());
-        const handleResize = () => setTerminalWidth(calculateTerminalWidth());
+        let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+        const handleResize = () => {
+            if (resizeTimeout) {
+                clearTimeout(resizeTimeout);
+            }
+            resizeTimeout = setTimeout(() => {
+                resizeTimeout = null;
+                setTerminalWidth(calculateTerminalWidth());
+            }, 120);
+        };
         process.stdout.on('resize', handleResize);
         return () => {
             process.stdout.off('resize', handleResize);
+            if (resizeTimeout) {
+                clearTimeout(resizeTimeout);
+            }
         };
     }, []);
 

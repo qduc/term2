@@ -3,7 +3,7 @@ import type {ConversationService} from '../services/conversation-service.js';
 import {isAbortLikeError} from '../utils/error-helpers.js';
 import type {ConversationEvent} from '../services/conversation-events.js';
 import type {ILoggingService} from '../services/service-interfaces.js';
-import {createThrottledFunction} from '../utils/throttle.js';
+import {createStreamingUpdateCoordinator} from '../utils/streaming-updater.js';
 import {appendMessagesCapped} from '../utils/message-buffer.js';
 
 interface UserMessage {
@@ -68,7 +68,8 @@ interface LiveResponse {
     text: string;
 }
 
-const LIVE_RESPONSE_THROTTLE_MS = 40;
+const LIVE_RESPONSE_THROTTLE_MS = 80;
+const REASONING_RESPONSE_THROTTLE_MS = 120;
 const MAX_MESSAGE_COUNT = 300;
 
 export const filterPendingCommandMessagesForApproval = (
@@ -126,7 +127,7 @@ export const useConversation = ({
     } | null>(null);
     const createLiveResponseUpdater = useCallback(
         (liveMessageId: number) =>
-            createThrottledFunction((text: string) => {
+            createStreamingUpdateCoordinator((text: string) => {
                 setLiveResponse(prev =>
                     prev && prev.id === liveMessageId
                         ? {...prev, text}
@@ -333,6 +334,37 @@ export const useConversation = ({
             let flushedReasoningLength = 0; // Track how much reasoning has been flushed
             let textWasFlushed = false;
             let currentReasoningMessageId: number | null = null; // Track current reasoning message ID
+            const reasoningUpdater = createStreamingUpdateCoordinator(
+                (newReasoningText: string) => {
+                    setMessages(prev => {
+                        if (currentReasoningMessageId !== null) {
+                            const index = prev.findIndex(
+                                msg => msg.id === currentReasoningMessageId,
+                            );
+                            if (index === -1) return prev;
+                            const current = prev[index];
+                            if (current.sender !== 'reasoning') {
+                                return prev;
+                            }
+                            const next = prev.slice();
+                            next[index] = {...current, text: newReasoningText};
+                            return trimMessages(next as Message[]);
+                        }
+
+                        const newId = Date.now();
+                        currentReasoningMessageId = newId;
+                        return trimMessages([
+                            ...prev,
+                            {
+                                id: newId,
+                                sender: 'reasoning',
+                                text: newReasoningText,
+                            },
+                        ]);
+                    });
+                },
+                REASONING_RESPONSE_THROTTLE_MS,
+            );
 
             // Create event logger with deduplication for this message send
             // const {logDeduplicated, flush: flushLog} = createEventLogger();
@@ -342,7 +374,7 @@ export const useConversation = ({
                     case 'text_delta': {
                         // logDeduplicated('text_delta');
                         accumulatedText += event.delta;
-                        liveResponseUpdater.throttled(accumulatedText);
+                        liveResponseUpdater.push(accumulatedText);
                         return;
                     }
                     case 'reasoning_delta': {
@@ -355,38 +387,13 @@ export const useConversation = ({
                         accumulatedReasoningText = newReasoningText;
 
                         if (!newReasoningText.trim()) return;
-
-                        setMessages(prev => {
-                            if (currentReasoningMessageId !== null) {
-                                const index = prev.findIndex(
-                                    msg => msg.id === currentReasoningMessageId,
-                                );
-                                if (index === -1) return prev;
-                                const current = prev[index];
-                                if (current.sender !== 'reasoning') {
-                                    return prev;
-                                }
-                                const next = prev.slice();
-                                next[index] = {...current, text: newReasoningText};
-                                return trimMessages(next as Message[]);
-                            }
-
-                            const newId = Date.now();
-                            currentReasoningMessageId = newId;
-                            return trimMessages([
-                                ...prev,
-                                {
-                                    id: newId,
-                                    sender: 'reasoning',
-                                    text: newReasoningText,
-                                },
-                            ]);
-                        });
+                        reasoningUpdater.push(newReasoningText);
                         return;
                     }
                     case 'tool_started': {
                         // Flush reasoning state
                         if (accumulatedReasoningText.trim()) {
+                            reasoningUpdater.flush();
                             flushedReasoningLength += accumulatedReasoningText.length;
                             accumulatedReasoningText = '';
                             currentReasoningMessageId = null;
@@ -479,6 +486,7 @@ export const useConversation = ({
                         const messagesToAdd: Message[] = [];
 
                         if (accumulatedReasoningText.trim()) {
+                            reasoningUpdater.flush();
                             // Reasoning is already in messages via stream updates.
                             // We just need to track what we've "flushed" (sealed) so next reasoning chunks start fresh.
                             flushedReasoningLength +=
@@ -620,6 +628,7 @@ export const useConversation = ({
                     'sendUserMessage finally block - resetting state',
                 );
                 // flushLog();
+                reasoningUpdater.flush();
                 liveResponseUpdater.cancel();
                 setLiveResponse(null);
                 setIsProcessing(false);
@@ -677,6 +686,40 @@ export const useConversation = ({
                 let flushedReasoningLength = 0;
                 let textWasFlushed = false;
                 let currentReasoningMessageId: number | null = null;
+                const reasoningUpdater = createStreamingUpdateCoordinator(
+                    (newReasoningText: string) => {
+                        setMessages(prev => {
+                            if (currentReasoningMessageId !== null) {
+                                const index = prev.findIndex(
+                                    msg => msg.id === currentReasoningMessageId,
+                                );
+                                if (index === -1) return prev;
+                                const current = prev[index];
+                                if (current.sender !== 'reasoning') {
+                                    return prev;
+                                }
+                                const next = prev.slice();
+                                next[index] = {
+                                    ...current,
+                                    text: newReasoningText,
+                                };
+                                return trimMessages(next as Message[]);
+                            }
+
+                            const newId = Date.now();
+                            currentReasoningMessageId = newId;
+                            return trimMessages([
+                                ...prev,
+                                {
+                                    id: newId,
+                                    sender: 'reasoning',
+                                    text: newReasoningText,
+                                },
+                            ]);
+                        });
+                    },
+                    REASONING_RESPONSE_THROTTLE_MS,
+                );
 
                 // const {logDeduplicated, flush: flushLog} = createEventLogger();
 
@@ -685,7 +728,7 @@ export const useConversation = ({
                         case 'text_delta': {
                             // logDeduplicated('text_delta');
                             accumulatedText += event.delta;
-                            liveResponseUpdater.throttled(accumulatedText);
+                            liveResponseUpdater.push(accumulatedText);
                             return;
                         }
                         case 'reasoning_delta': {
@@ -697,38 +740,13 @@ export const useConversation = ({
                             accumulatedReasoningText = newReasoningText;
 
                             if (!newReasoningText.trim()) return;
-
-                            setMessages(prev => {
-                                if (currentReasoningMessageId !== null) {
-                                    const index = prev.findIndex(
-                                        msg => msg.id === currentReasoningMessageId,
-                                    );
-                                    if (index === -1) return prev;
-                                    const current = prev[index];
-                                    if (current.sender !== 'reasoning') {
-                                        return prev;
-                                    }
-                                    const next = prev.slice();
-                                    next[index] = {...current, text: newReasoningText};
-                                    return trimMessages(next as Message[]);
-                                }
-
-                                const newId = Date.now();
-                                currentReasoningMessageId = newId;
-                                return trimMessages([
-                                    ...prev,
-                                    {
-                                        id: newId,
-                                        sender: 'reasoning',
-                                        text: newReasoningText,
-                                    },
-                                ]);
-                            });
+                            reasoningUpdater.push(newReasoningText);
                             return;
                         }
                         case 'tool_started': {
                             // Flush reasoning state
                             if (accumulatedReasoningText.trim()) {
+                                reasoningUpdater.flush();
                                 flushedReasoningLength += accumulatedReasoningText.length;
                                 accumulatedReasoningText = '';
                                 currentReasoningMessageId = null;
@@ -814,6 +832,7 @@ export const useConversation = ({
                             const messagesToAdd: Message[] = [];
 
                             if (accumulatedReasoningText.trim()) {
+                                reasoningUpdater.flush();
                                 flushedReasoningLength +=
                                     accumulatedReasoningText.length;
                                 accumulatedReasoningText = '';
@@ -929,6 +948,7 @@ export const useConversation = ({
                     setPendingApproval(null);
                 } finally {
                     // flushLog();
+                    reasoningUpdater.flush();
                     liveResponseUpdater.cancel();
                     setLiveResponse(null);
                     setIsProcessing(false);
@@ -952,6 +972,37 @@ export const useConversation = ({
             let flushedReasoningLength = 0; // Track how much reasoning has been flushed
             let textWasFlushed = false;
             let currentReasoningMessageId: number | null = null; // Track current reasoning message ID
+            const reasoningUpdater = createStreamingUpdateCoordinator(
+                (newReasoningText: string) => {
+                    setMessages(prev => {
+                        if (currentReasoningMessageId !== null) {
+                            const index = prev.findIndex(
+                                msg => msg.id === currentReasoningMessageId,
+                            );
+                            if (index === -1) return prev;
+                            const current = prev[index];
+                            if (current.sender !== 'reasoning') {
+                                return prev;
+                            }
+                            const next = prev.slice();
+                            next[index] = {...current, text: newReasoningText};
+                            return trimMessages(next as Message[]);
+                        }
+
+                        const newId = Date.now();
+                        currentReasoningMessageId = newId;
+                        return trimMessages([
+                            ...prev,
+                            {
+                                id: newId,
+                                sender: 'reasoning',
+                                text: newReasoningText,
+                            },
+                        ]);
+                    });
+                },
+                REASONING_RESPONSE_THROTTLE_MS,
+            );
 
             // Create event logger with deduplication for this approval decision
             // const {logDeduplicated, flush: flushLog} = createEventLogger();
@@ -961,7 +1012,7 @@ export const useConversation = ({
                     case 'text_delta': {
                         // logDeduplicated('text_delta');
                         accumulatedText += event.delta;
-                        liveResponseUpdater.throttled(accumulatedText);
+                        liveResponseUpdater.push(accumulatedText);
                         return;
                     }
                     case 'reasoning_delta': {
@@ -973,38 +1024,13 @@ export const useConversation = ({
                         accumulatedReasoningText = newReasoningText;
 
                         if (!newReasoningText.trim()) return;
-
-                        setMessages(prev => {
-                            if (currentReasoningMessageId !== null) {
-                                const index = prev.findIndex(
-                                    msg => msg.id === currentReasoningMessageId,
-                                );
-                                if (index === -1) return prev;
-                                const current = prev[index];
-                                if (current.sender !== 'reasoning') {
-                                    return prev;
-                                }
-                                const next = prev.slice();
-                                next[index] = {...current, text: newReasoningText};
-                                return trimMessages(next as Message[]);
-                            }
-
-                            const newId = Date.now();
-                            currentReasoningMessageId = newId;
-                            return trimMessages([
-                                ...prev,
-                                {
-                                    id: newId,
-                                    sender: 'reasoning',
-                                    text: newReasoningText,
-                                },
-                            ]);
-                        });
+                        reasoningUpdater.push(newReasoningText);
                         return;
                     }
                     case 'tool_started': {
                         // Flush reasoning state
                         if (accumulatedReasoningText.trim()) {
+                            reasoningUpdater.flush();
                             flushedReasoningLength += accumulatedReasoningText.length;
                             accumulatedReasoningText = '';
                             currentReasoningMessageId = null;
@@ -1092,6 +1118,7 @@ export const useConversation = ({
                         const messagesToAdd: Message[] = [];
 
                         if (accumulatedReasoningText.trim()) {
+                            reasoningUpdater.flush();
                             flushedReasoningLength +=
                                 accumulatedReasoningText.length;
                             accumulatedReasoningText = '';
@@ -1200,6 +1227,7 @@ export const useConversation = ({
                     'handleApprovalDecision finally block - resetting state',
                 );
                 // flushLog();
+                reasoningUpdater.flush();
                 liveResponseUpdater.cancel();
                 setLiveResponse(null);
                 setIsProcessing(false);

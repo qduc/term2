@@ -13,6 +13,9 @@ export function logCommandExecution(
     if (!settingsService.get<boolean>('debug.debugBashTool')) {
         return;
     }
+    if (settingsService.get<boolean>('logging.suppressConsoleOutput')) {
+        return;
+    }
 
     const timestamp = new Date().toISOString();
     const context = {
@@ -33,6 +36,9 @@ export function logValidationError(
     message: string,
 ): void {
     if (!settingsService.get<boolean>('debug.debugBashTool')) {
+        return;
+    }
+    if (settingsService.get<boolean>('logging.suppressConsoleOutput')) {
         return;
     }
 

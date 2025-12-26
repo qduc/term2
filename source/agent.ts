@@ -113,22 +113,21 @@ export const getAgentDefinition = (
 
     const envInfo = getEnvInfo(settingsService);
 
+    const isGpt5 = resolvedModel.toLowerCase().includes('gpt-5');
+
     const tools: ToolDefinition[] = [
         createShellToolDefinition({settingsService, loggingService}),
-        grepToolDefinition,
-        readFileToolDefinition,
-        findFilesToolDefinition,
     ];
 
-    if (
-        resolvedModel.includes('gpt-5.1') ||
-        resolvedModel.includes('gpt-5.2')
-    ) {
+    if (isGpt5) {
         tools.push(
             createApplyPatchToolDefinition({settingsService, loggingService}),
         );
     } else {
         tools.push(
+            grepToolDefinition,
+            readFileToolDefinition,
+            findFilesToolDefinition,
             createSearchReplaceToolDefinition({
                 settingsService,
                 loggingService,

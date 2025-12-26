@@ -39,6 +39,7 @@ test('extracts failure reason from shell command outcome', t => {
         t.deepEqual(messages[0], {
             id: '1700000000200-0-0',
             sender: 'command',
+            status: 'completed',
             command: 'rg -n "DEFAULT_TRIM_CONFIG"',
             output: 'No output',
             success: false,
@@ -78,6 +79,7 @@ test('extracts shell command from matching function_call item', t => {
             id: 'call-abc-0',
             callId: 'call-abc',
             sender: 'command',
+            status: 'completed',
             command: 'echo hi',
             output: 'hi',
             success: true,
@@ -118,6 +120,7 @@ test('extracts shell command from output items using call_id', t => {
             id: 'result-1-0',
             callId: 'call-abc',
             sender: 'command',
+            status: 'completed',
             command: 'npm run lint',
             output: '> md-preview@0.0.0 lint\n> eslint .',
             success: true,
@@ -159,6 +162,7 @@ test('extracts grep output from plain text tool result', t => {
             id: 'call-grep-1',
             callId: 'call-grep-1',
             sender: 'command',
+            status: 'completed',
             command: 'grep "hello" "source"',
             output: 'source/app.tsx:1:hello',
             success: true,
@@ -204,6 +208,7 @@ test('extracts grep command from matching function_call item', t => {
             id: 'call-grep-abc',
             callId: 'call-grep-abc',
             sender: 'command',
+            status: 'completed',
             command:
                 'grep "DEFAULT_TRIM_CONFIG" "source" --case-sensitive --include "*.ts"',
             output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',
@@ -335,6 +340,7 @@ test('extracts successful apply_patch create_file operation', t => {
         t.deepEqual(messages[0], {
             id: '1700000000300-0-0',
             sender: 'command',
+            status: 'completed',
             command: 'apply_patch create_file test.txt',
             output: 'Created test.txt',
             success: true,
@@ -378,6 +384,7 @@ test('extracts successful apply_patch update_file operation', t => {
         t.deepEqual(messages[0], {
             id: '1700000000400-0-0',
             sender: 'command',
+            status: 'completed',
             command: 'apply_patch update_file existing.txt',
             output: 'Updated existing.txt',
             success: true,
@@ -461,6 +468,7 @@ test('extracts failed apply_patch operation', t => {
         t.deepEqual(messages[0], {
             id: '1700000000600-0-0',
             sender: 'command',
+            status: 'completed',
             command: 'apply_patch update_file bad.txt',
             output: 'Invalid diff format',
             success: false,
@@ -494,6 +502,7 @@ test('extracts ask_mentor output', t => {
         t.deepEqual(messages[0], {
             id: '1700000000700-0-0',
             sender: 'command',
+            status: 'completed',
             command: 'ask_mentor: What is the meaning of life?',
             output: 'The answer is 42.',
             success: true,

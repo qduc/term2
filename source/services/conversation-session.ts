@@ -22,6 +22,7 @@ interface ApprovalResult {
 export interface CommandMessage {
     id: string;
     sender: 'command';
+    status: 'pending' | 'running' | 'completed' | 'failed';
     command: string;
     output: string;
     success?: boolean;
@@ -1009,6 +1010,32 @@ export class ConversationSession {
                     event.item,
                     toolCallArgumentsById,
                 );
+
+                // Emit tool_started event when a function_call is detected
+                const rawItem = event.item?.rawItem ?? event.item;
+                if (rawItem?.type === 'function_call') {
+                    const callId =
+                        rawItem.callId ??
+                        rawItem.call_id ??
+                        rawItem.tool_call_id ??
+                        rawItem.toolCallId ??
+                        rawItem.id;
+                    if (callId) {
+                        const toolName = rawItem.name ?? event.item?.name;
+                        const args =
+                            rawItem.arguments ??
+                            rawItem.args ??
+                            event.item?.arguments ??
+                            event.item?.args;
+                        yield {
+                            type: 'tool_started' as const,
+                            toolCallId: callId,
+                            toolName: toolName ?? 'unknown',
+                            arguments: args,
+                        };
+                    }
+                }
+
                 for (const e of maybeEmitCommandMessagesFromItems([
                     event.item,
                 ])) {

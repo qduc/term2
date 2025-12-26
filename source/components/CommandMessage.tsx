@@ -5,6 +5,7 @@ import {generateDiff} from '../utils/diff.js';
 type Props = {
     command: string;
     output?: string;
+    status?: 'pending' | 'running' | 'completed' | 'failed';
     success?: boolean | null;
     failureReason?: string;
     toolName?: string;
@@ -59,13 +60,15 @@ const DiffView: FC<{diff: string}> = ({diff}) => {
 const CommandMessage: FC<Props> = ({
     command,
     output,
+    status,
     success,
     failureReason,
     toolName,
     toolArgs,
     hadApproval,
 }) => {
-    const outputText = output?.trim() ? output : '(no output)';
+    const isRunning = status === 'pending' || status === 'running';
+    const outputText = output?.trim() ? output : (isRunning ? '(running...)' : '(no output)');
     const displayed =
         outputText && outputText !== '(no output)'
             ? (() => {
@@ -121,8 +124,9 @@ const CommandMessage: FC<Props> = ({
 
     return (
         <Box flexDirection="column">
-            <Text color={success === false ? 'red' : 'cyan'}>
+            <Text color={success === false ? 'red' : isRunning ? 'yellow' : 'cyan'}>
                 $ <Text bold>{command}</Text>
+                {isRunning && <Text color="yellow"> ●●●</Text>}
             </Text>
             {failureReason && <Text color="red">Error: {failureReason}</Text>}
             <Text color={success === false ? 'red' : 'gray'}>{displayed}</Text>

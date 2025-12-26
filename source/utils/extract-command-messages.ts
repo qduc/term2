@@ -51,6 +51,7 @@ const isApprovalRejectionForItem = (item: any): boolean => {
 interface CommandMessage {
     id: string;
     sender: 'command';
+    status: 'pending' | 'running' | 'completed' | 'failed';
     command: string;
     output: string;
     success?: boolean;
@@ -336,6 +337,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             messages.push({
                 id: stableId,
                 sender: 'command',
+                status: 'completed',
                 command,
                 output,
                 success,
@@ -373,6 +375,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 messages.push({
                     id: stableId,
                     sender: 'command',
+                    status: 'completed',
                     command,
                     output,
                     success,
@@ -410,6 +413,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 messages.push({
                     id: stableId,
                     sender: 'command',
+                    status: 'completed',
                     command,
                     output,
                     success,
@@ -472,6 +476,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             messages.push({
                 id: stableId,
                 sender: 'command',
+                status: 'completed',
                 command,
                 output,
                 success,
@@ -509,6 +514,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 messages.push({
                     id: stableId,
                     sender: 'command',
+                    status: 'completed',
                     command,
                     output,
                     success,
@@ -555,6 +561,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 messages.push({
                     id: stableId,
                     sender: 'command',
+                    status: 'completed',
                     command,
                     output,
                     success,
@@ -602,6 +609,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
             messages.push({
                 id: stableId,
                 sender: 'command',
+                status: 'completed',
                 command,
                 output,
                 success,

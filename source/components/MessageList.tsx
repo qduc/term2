@@ -23,6 +23,7 @@ const MessageList: FC<Props> = ({messages}) => {
                             <CommandMessage
                                 command={msg.command}
                                 output={msg.output}
+                                status={msg.status}
                                 success={msg.success}
                                 failureReason={msg.failureReason}
                                 toolName={msg.toolName}

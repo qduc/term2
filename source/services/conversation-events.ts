@@ -1,6 +1,7 @@
 export type ConversationEvent =
     | TextDeltaEvent
     | ReasoningDeltaEvent
+    | ToolStartedEvent
     | CommandMessageEvent
     | ApprovalRequiredEvent
     | FinalResponseEvent
@@ -36,6 +37,17 @@ export interface ReasoningDeltaEvent {
     fullText?: string;
 }
 
+/**
+ * Emitted when a tool is called but hasn't completed yet.
+ * Allows UI to show immediate feedback that a tool is running.
+ */
+export interface ToolStartedEvent {
+    type: 'tool_started';
+    toolCallId: string;
+    toolName: string;
+    arguments: any;
+}
+
 export interface ApprovalRequiredEvent {
     type: 'approval_required';
     approval: {
@@ -52,6 +64,7 @@ export interface CommandMessageEvent {
     message: {
         id: string;
         sender: 'command';
+        status: 'pending' | 'running' | 'completed' | 'failed';
         command: string;
         output: string;
         success?: boolean;

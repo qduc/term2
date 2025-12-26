@@ -31,6 +31,7 @@ interface PendingApproval {
 interface CommandMessage {
     id: string;
     sender: 'command';
+    status: 'pending' | 'running' | 'completed' | 'failed';
     command: string;
     output: string;
     success?: boolean;
@@ -337,6 +338,45 @@ export const useConversation = ({
                                 },
                             ]);
                         });
+                        return;
+                    }
+                    case 'tool_started': {
+                        // Emit a "pending" command message when tool starts running
+                        // This provides immediate UI feedback before output is available
+                        const {toolCallId, toolName, arguments: args} = event as any;
+
+                        // Create a command string from the tool info
+                        const command = (() => {
+                            if (toolName === 'shell' && args?.command) {
+                                return args.command;
+                            }
+                            if (toolName === 'grep' && args?.pattern) {
+                                return `grep "${args.pattern}" ${args.path ?? '.'}`;
+                            }
+                            if (toolName === 'search_replace') {
+                                return `search_replace "${args.search_content ?? ''}" → "${args.replace_content ?? ''}" ${args.path ?? ''}`;
+                            }
+                            if (toolName === 'apply_patch') {
+                                return `apply_patch ${args?.type ?? 'unknown'} ${args?.path ?? ''}`;
+                            }
+                            if (toolName === 'ask_mentor') {
+                                return `ask_mentor: ${args?.question ?? ''}`;
+                            }
+                            return `${toolName ?? 'unknown_tool'}`;
+                        })();
+
+                        const pendingMessage: CommandMessage = {
+                            id: toolCallId ?? String(Date.now()),
+                            sender: 'command',
+                            status: 'running',
+                            command,
+                            output: '',
+                            callId: toolCallId,
+                            toolName,
+                            toolArgs: args,
+                        };
+
+                        appendMessages([pendingMessage as any]);
                         return;
                     }
                     case 'command_message': {

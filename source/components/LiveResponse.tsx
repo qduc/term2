@@ -2,7 +2,7 @@ import React, {FC} from 'react';
 import {Box, Text} from 'ink';
 
 type Props = {
-    text?: string;
+    text: string;
 };
 
 /**
@@ -14,7 +14,7 @@ type Props = {
 const LiveResponse: FC<Props> = ({text}) => {
     return (
         <Box marginBottom={1} flexDirection="column">
-            <Text>{text || ' '}</Text>
+            <Text>{text}</Text>
         </Box>
     );
 };

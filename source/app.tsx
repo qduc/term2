@@ -352,7 +352,7 @@ const App: FC<AppProps> = ({
                 <Box flexDirection="column" flexGrow={1}>
                     <MessageList messages={messages} />
 
-                    {liveResponse && <LiveResponse text={liveResponse.text} />}
+                    {liveResponse && liveResponse.text && <LiveResponse text={liveResponse.text} />}
                 </Box>
 
                 {/* Fixed bottom area for input / status */}

@@ -33,6 +33,19 @@ export function analyzePathRisk(
     const candidate = inputPath?.trim();
     if (!candidate) return SafetyStatus.GREEN;
 
+    // GREEN: Safe pseudo-devices
+    const safeDevices = new Set([
+        '/dev/null',
+        '/dev/stdout',
+        '/dev/stderr',
+        '/dev/zero',
+        '/dev/random',
+        '/dev/urandom',
+    ]);
+    if (safeDevices.has(candidate)) {
+        return SafetyStatus.GREEN;
+    }
+
     const cwd = process.cwd();
 
     // RED: Home directory and sensitive paths

@@ -12,6 +12,7 @@ export const ALLOWED_COMMANDS = new Set([
     'tail',
     'sed',
     'find',
+    'wc',
     // Git read-only commands
     'git',
 ]);

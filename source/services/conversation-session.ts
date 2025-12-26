@@ -1027,11 +1027,31 @@ export class ConversationSession {
                             rawItem.args ??
                             event.item?.arguments ??
                             event.item?.args;
+
+                        // Providers sometimes surface arguments as a JSON string.
+                        // Normalize here so downstream UI (pending/running display)
+                        // can reliably render parameters.
+                        const normalizedArgs = (() => {
+                            if (typeof args !== 'string') {
+                                return args;
+                            }
+
+                            const trimmed = args.trim();
+                            if (!trimmed) {
+                                return args;
+                            }
+
+                            try {
+                                return JSON.parse(trimmed);
+                            } catch {
+                                return args;
+                            }
+                        })();
                         yield {
                             type: 'tool_started' as const,
                             toolCallId: callId,
                             toolName: toolName ?? 'unknown',
-                            arguments: args,
+                            arguments: normalizedArgs,
                         };
                     }
                 }

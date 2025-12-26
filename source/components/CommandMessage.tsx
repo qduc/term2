@@ -58,7 +58,28 @@ const DiffView: FC<{diff: string}> = ({diff}) => {
 };
 
 const formatToolArgs = (toolName: string | undefined, args: any): string => {
-    if (!args || typeof args !== 'object' || !toolName) {
+    if (!args || !toolName) {
+        return '';
+    }
+
+    const normalizedArgs: any = (() => {
+        if (typeof args !== 'string') {
+            return args;
+        }
+
+        const trimmed = args.trim();
+        if (!trimmed) {
+            return null;
+        }
+
+        try {
+            return JSON.parse(trimmed);
+        } catch {
+            return null;
+        }
+    })();
+
+    if (!normalizedArgs || typeof normalizedArgs !== 'object') {
         return '';
     }
 
@@ -66,37 +87,45 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
         // Format based on tool type to match extract-command-messages.ts
         switch (toolName) {
             case 'shell': {
-                const command = args.command || args.commands;
-                if (typeof command === 'string') {
-                    return command.length > 80
-                        ? `${command.slice(0, 80)}...`
-                        : command;
+                const command = normalizedArgs.command ?? normalizedArgs.commands;
+
+                const commandText =
+                    typeof command === 'string'
+                        ? command
+                        : Array.isArray(command)
+                            ? command.join(' && ')
+                            : '';
+
+                if (typeof commandText === 'string' && commandText.trim()) {
+                    return commandText.length > 80
+                        ? `${commandText.slice(0, 80)}...`
+                        : commandText;
                 }
                 return '';
             }
 
             case 'grep': {
-                const pattern = args.pattern || '';
-                const path = args.path || '.';
+                const pattern = normalizedArgs.pattern || '';
+                const path = normalizedArgs.path || '.';
                 const parts = [`"${pattern}"`, `"${path}"`];
 
-                if (args.case_sensitive) parts.push('--case-sensitive');
-                if (args.file_pattern) parts.push(`--include "${args.file_pattern}"`);
-                if (args.exclude_pattern) parts.push(`--exclude "${args.exclude_pattern}"`);
+                if (normalizedArgs.case_sensitive) parts.push('--case-sensitive');
+                if (normalizedArgs.file_pattern) parts.push(`--include "${normalizedArgs.file_pattern}"`);
+                if (normalizedArgs.exclude_pattern) parts.push(`--exclude "${normalizedArgs.exclude_pattern}"`);
 
                 return parts.join(' ');
             }
 
             case 'apply_patch': {
-                const type = args.type || 'unknown';
-                const path = args.path || 'unknown';
+                const type = normalizedArgs.type || 'unknown';
+                const path = normalizedArgs.path || 'unknown';
                 return `${type} ${path}`;
             }
 
             case 'search_replace': {
-                const searchContent = args.search_content || '';
-                const replaceContent = args.replace_content || '';
-                const path = args.path || 'unknown';
+                const searchContent = normalizedArgs.search_content || '';
+                const replaceContent = normalizedArgs.replace_content || '';
+                const path = normalizedArgs.path || 'unknown';
                 const search = searchContent.length > 30
                     ? `${searchContent.slice(0, 30)}...`
                     : searchContent;
@@ -107,7 +136,7 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
             }
 
             case 'ask_mentor': {
-                const question = args.question || 'Unknown question';
+                const question = normalizedArgs.question || 'Unknown question';
                 return question.length > 80
                     ? `${question.slice(0, 80)}...`
                     : question;
@@ -115,7 +144,7 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
 
             default:
                 // Generic fallback for unknown tools
-                const entries = Object.entries(args);
+                const entries = Object.entries(normalizedArgs);
                 if (entries.length === 0) return '';
 
                 return entries

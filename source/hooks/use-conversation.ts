@@ -71,6 +71,39 @@ interface LiveResponse {
 const LIVE_RESPONSE_THROTTLE_MS = 40;
 const MAX_MESSAGE_COUNT = 300;
 
+export const filterPendingCommandMessagesForApproval = (
+    messages: any[],
+    approval: {callId?: string; toolName?: string} | null | undefined,
+): any[] => {
+    if (!Array.isArray(messages) || messages.length === 0) {
+        return messages ?? [];
+    }
+
+    const callId = approval?.callId ? String(approval.callId) : undefined;
+    const toolName = approval?.toolName;
+
+    if (!callId && !toolName) {
+        return messages;
+    }
+
+    return messages.filter(msg => {
+        if (!msg || msg.sender !== 'command') {
+            return true;
+        }
+
+        if (msg.status !== 'pending' && msg.status !== 'running') {
+            return true;
+        }
+
+        const matchesCallId =
+            callId && msg.callId && String(msg.callId) === callId;
+        const matchesToolName =
+            !callId && toolName && msg.toolName === toolName;
+
+        return !(matchesCallId || matchesToolName);
+    });
+};
+
 export const useConversation = ({
     conversationService,
     loggingService,
@@ -223,6 +256,17 @@ export const useConversation = ({
                 }
 
                 appendMessages(messagesToAdd);
+
+                // If a tool call requires approval, we show it in the approval prompt.
+                // Don't also show the transient pending/running command message.
+                setMessages(prev =>
+                    trimMessages(
+                        filterPendingCommandMessagesForApproval(
+                            prev as any,
+                            result.approval,
+                        ) as any,
+                    ),
+                );
                 setPendingApproval(result.approval);
                 // Set waiting state AFTER adding approval message to ensure proper render order
                 setWaitingForApproval(true);
@@ -343,12 +387,35 @@ export const useConversation = ({
                     case 'tool_started': {
                         // Emit a "pending" command message when tool starts running
                         // This provides immediate UI feedback before output is available
-                        const {toolCallId, toolName, arguments: args} = event as any;
+                        const {toolCallId, toolName, arguments: rawArgs} = event as any;
+
+                        // tool_started.arguments may be either an object or a JSON string
+                        // depending on provider. Normalize so we can render params.
+                        const args = (() => {
+                            if (typeof rawArgs !== 'string') {
+                                return rawArgs;
+                            }
+                            const trimmed = rawArgs.trim();
+                            if (!trimmed) {
+                                return rawArgs;
+                            }
+                            try {
+                                return JSON.parse(trimmed);
+                            } catch {
+                                return rawArgs;
+                            }
+                        })();
 
                         // Create a command string from the tool info
                         const command = (() => {
-                            if (toolName === 'shell' && args?.command) {
-                                return args.command;
+                            if (toolName === 'shell') {
+                                const cmd = args?.command ?? args?.commands;
+                                if (typeof cmd === 'string' && cmd.trim()) {
+                                    return cmd;
+                                }
+                                if (Array.isArray(cmd) && cmd.length > 0) {
+                                    return cmd.join('\n');
+                                }
                             }
                             if (toolName === 'grep' && args?.pattern) {
                                 return `grep "${args.pattern}" ${args.path ?? '.'}`;
@@ -639,11 +706,32 @@ export const useConversation = ({
                             return;
                         }
                         case 'tool_started': {
-                            const {toolCallId, toolName, arguments: args} = event as any;
+                            const {toolCallId, toolName, arguments: rawArgs} = event as any;
+
+                            const args = (() => {
+                                if (typeof rawArgs !== 'string') {
+                                    return rawArgs;
+                                }
+                                const trimmed = rawArgs.trim();
+                                if (!trimmed) {
+                                    return rawArgs;
+                                }
+                                try {
+                                    return JSON.parse(trimmed);
+                                } catch {
+                                    return rawArgs;
+                                }
+                            })();
 
                             const command = (() => {
-                                if (toolName === 'shell' && args?.command) {
-                                    return args.command;
+                                if (toolName === 'shell') {
+                                    const cmd = args?.command ?? args?.commands;
+                                    if (typeof cmd === 'string' && cmd.trim()) {
+                                        return cmd;
+                                    }
+                                    if (Array.isArray(cmd) && cmd.length > 0) {
+                                        return cmd.join('\n');
+                                    }
                                 }
                                 if (toolName === 'grep' && args?.pattern) {
                                     return `grep "${args.pattern}" ${args.path ?? '.'}`;
@@ -873,11 +961,34 @@ export const useConversation = ({
                         return;
                     }
                     case 'tool_started': {
-                        const {toolCallId, toolName, arguments: args} = event as any;
+                        const {toolCallId, toolName, arguments: rawArgs} = event as any;
+
+                        // tool_started.arguments may be either an object or a JSON string
+                        // depending on provider. Normalize so we can render params.
+                        const args = (() => {
+                            if (typeof rawArgs !== 'string') {
+                                return rawArgs;
+                            }
+                            const trimmed = rawArgs.trim();
+                            if (!trimmed) {
+                                return rawArgs;
+                            }
+                            try {
+                                return JSON.parse(trimmed);
+                            } catch {
+                                return rawArgs;
+                            }
+                        })();
 
                         const command = (() => {
-                            if (toolName === 'shell' && args?.command) {
-                                return args.command;
+                            if (toolName === 'shell') {
+                                const cmd = args?.command ?? args?.commands;
+                                if (typeof cmd === 'string' && cmd.trim()) {
+                                    return cmd;
+                                }
+                                if (Array.isArray(cmd) && cmd.length > 0) {
+                                    return cmd.join('\n');
+                                }
                             }
                             if (toolName === 'grep' && args?.pattern) {
                                 return `grep "${args.pattern}" ${args.path ?? '.'}`;

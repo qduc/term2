@@ -385,6 +385,27 @@ export const useConversation = ({
                         return;
                     }
                     case 'tool_started': {
+                        // Flush reasoning state
+                        if (accumulatedReasoningText.trim()) {
+                            flushedReasoningLength += accumulatedReasoningText.length;
+                            accumulatedReasoningText = '';
+                            currentReasoningMessageId = null;
+                        }
+
+                        // Flush any accumulated text before showing the tool call
+                        if (accumulatedText.trim()) {
+                            const textMessage: BotMessage = {
+                                id: Date.now() + 1,
+                                sender: 'bot',
+                                text: accumulatedText,
+                            };
+                            appendMessages([textMessage]);
+                            accumulatedText = '';
+                            textWasFlushed = true;
+                            liveResponseUpdater.cancel();
+                            setLiveResponse(null);
+                        }
+
                         // Emit a "pending" command message when tool starts running
                         // This provides immediate UI feedback before output is available
                         const {toolCallId, toolName, arguments: rawArgs} = event as any;
@@ -706,6 +727,27 @@ export const useConversation = ({
                             return;
                         }
                         case 'tool_started': {
+                            // Flush reasoning state
+                            if (accumulatedReasoningText.trim()) {
+                                flushedReasoningLength += accumulatedReasoningText.length;
+                                accumulatedReasoningText = '';
+                                currentReasoningMessageId = null;
+                            }
+
+                            // Flush any accumulated text before showing the tool call
+                            if (accumulatedText.trim()) {
+                                const textMessage: BotMessage = {
+                                    id: Date.now() + 1,
+                                    sender: 'bot',
+                                    text: accumulatedText,
+                                };
+                                appendMessages([textMessage]);
+                                accumulatedText = '';
+                                textWasFlushed = true;
+                                liveResponseUpdater.cancel();
+                                setLiveResponse(null);
+                            }
+
                             const {toolCallId, toolName, arguments: rawArgs} = event as any;
 
                             const args = (() => {
@@ -961,6 +1003,27 @@ export const useConversation = ({
                         return;
                     }
                     case 'tool_started': {
+                        // Flush reasoning state
+                        if (accumulatedReasoningText.trim()) {
+                            flushedReasoningLength += accumulatedReasoningText.length;
+                            accumulatedReasoningText = '';
+                            currentReasoningMessageId = null;
+                        }
+
+                        // Flush any accumulated text before showing the tool call
+                        if (accumulatedText.trim()) {
+                            const textMessage: BotMessage = {
+                                id: Date.now() + 1,
+                                sender: 'bot',
+                                text: accumulatedText,
+                            };
+                            appendMessages([textMessage]);
+                            accumulatedText = '';
+                            textWasFlushed = true;
+                            liveResponseUpdater.cancel();
+                            setLiveResponse(null);
+                        }
+
                         const {toolCallId, toolName, arguments: rawArgs} = event as any;
 
                         // tool_started.arguments may be either an object or a JSON string

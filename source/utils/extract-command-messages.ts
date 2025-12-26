@@ -458,11 +458,9 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
                 parsedOutput?.output ??
                 normalizedItem.outputText ??
                 'No output';
-            // Check if output indicates an error
-            const hasError =
-                output.toLowerCase().includes('error') ||
-                output.toLowerCase().includes('failed');
-            const success = !hasError;
+            // Success is determined by the grep tool - it returns "No matches found."
+            // for empty results and throws for actual errors
+            const success = true;
 
             const stableId =
                 rawItem?.id ??

@@ -215,6 +215,93 @@ test('extracts grep command from matching function_call item', t => {
     }
 });
 
+test('grep output containing "error" or "failed" should still be success', t => {
+    const restore = withStubbedNow(1700000000270);
+
+    try {
+        // Test case where grep results contain the word "error" in the matched content
+        const items = [
+            {
+                type: 'tool_call_output_item',
+                output: 'source/utils/error-handler.ts:5:  if (error) {',
+                rawItem: {
+                    type: 'function_call_result',
+                    name: 'grep',
+                    id: 'call-grep-error-1',
+                    arguments: JSON.stringify({
+                        pattern: 'error',
+                        path: 'source',
+                    }),
+                },
+            },
+        ];
+
+        const messages = extractCommandMessages(items);
+        t.is(messages.length, 1);
+        t.is(messages[0].success, true, 'grep result with "error" in content should be success');
+
+        // Test case where grep results contain the word "failed"
+        const items2 = [
+            {
+                type: 'tool_call_output_item',
+                output: 'source/test/test.ts:10:it("should handle failed state", () => {})',
+                rawItem: {
+                    type: 'function_call_result',
+                    name: 'grep',
+                    id: 'call-grep-failed-1',
+                    arguments: JSON.stringify({
+                        pattern: 'failed',
+                        path: 'source',
+                    }),
+                },
+            },
+        ];
+
+        const messages2 = extractCommandMessages(items2);
+        t.is(messages2.length, 1);
+        t.is(
+            messages2[0].success,
+            true,
+            'grep result with "failed" in content should be success',
+        );
+    } finally {
+        restore();
+    }
+});
+
+test('grep with no matches is still a success', t => {
+    const restore = withStubbedNow(1700000000275);
+
+    try {
+        const items = [
+            {
+                type: 'tool_call_output_item',
+                output: 'No matches found.',
+                rawItem: {
+                    type: 'function_call_result',
+                    name: 'grep',
+                    id: 'call-grep-nomatch-1',
+                    arguments: JSON.stringify({
+                        pattern: 'nonexistent_pattern_12345',
+                        path: 'source',
+                    }),
+                },
+            },
+        ];
+
+        const messages = extractCommandMessages(items);
+        t.is(messages.length, 1);
+        t.is(
+            messages[0].success,
+            true,
+            'grep with no matches should be success, not error',
+        );
+        t.is(messages[0].output, 'No matches found.');
+    } finally {
+        restore();
+    }
+});
+
 test('extracts successful apply_patch create_file operation', t => {
     const restore = withStubbedNow(1700000000300);
 

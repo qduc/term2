@@ -23,6 +23,7 @@ import {
     getOutputText,
     normalizeToolArguments,
     createBaseMessage,
+    getCallIdFromItem,
 } from './format-helpers.js';
 
 const execPromise = util.promisify(exec);
@@ -100,12 +101,12 @@ const coerceCommandText = (value: unknown): string => {
     return coerceToText(value);
 };
 
-const formatShellCommandMessage = (
+export const formatShellCommandMessage = (
     item: any,
     index: number,
     toolCallArgumentsById: Map<string, unknown>,
 ): CommandMessage[] => {
-    const callId = item?.rawItem?.callId ?? item?.callId;
+    const callId = getCallIdFromItem(item);
     const fallbackArgs =
         callId && toolCallArgumentsById.has(callId)
             ? toolCallArgumentsById.get(callId)

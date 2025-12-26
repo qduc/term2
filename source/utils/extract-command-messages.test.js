@@ -159,7 +159,7 @@ test('extracts grep output from plain text tool result', t => {
         const messages = extractCommandMessages(items);
         t.is(messages.length, 1);
         t.deepEqual(messages[0], {
-            id: 'call-grep-1',
+            id: 'call-grep-1-0',
             callId: 'call-grep-1',
             sender: 'command',
             status: 'completed',
@@ -205,7 +205,7 @@ test('extracts grep command from matching function_call item', t => {
         const messages = extractCommandMessages(items);
         t.is(messages.length, 1);
         t.deepEqual(messages[0], {
-            id: 'call-grep-abc',
+            id: 'call-grep-abc-0',
             callId: 'call-grep-abc',
             sender: 'command',
             status: 'completed',
@@ -510,6 +510,48 @@ test('extracts ask_mentor output', t => {
             toolName: 'ask_mentor',
             toolArgs: {
                 question: 'What is the meaning of life?',
+            },
+        });
+    } finally {
+        restore();
+    }
+});
+
+test('extracts read_file output', t => {
+    const restore = withStubbedNow(1700000000800);
+
+    try {
+        const items = [
+            {
+                type: 'tool_call_output_item',
+                output: '1\tline one\n2\tline two',
+                rawItem: {
+                    type: 'function_call_result',
+                    name: 'read_file',
+                    arguments: JSON.stringify({
+                        path: 'test.txt',
+                        start_line: 1,
+                        end_line: 2,
+                    }),
+                },
+            },
+        ];
+        const messages = extractCommandMessages(items);
+
+        t.is(messages.length, 1);
+        t.deepEqual(messages[0], {
+            id: '1700000000800-0-0',
+            sender: 'command',
+            status: 'completed',
+            command: 'read_file "test.txt" --lines 1-2',
+            output: '1\tline one\n2\tline two',
+            success: true,
+            isApprovalRejection: false,
+            toolName: 'read_file',
+            toolArgs: {
+                path: 'test.txt',
+                start_line: 1,
+                end_line: 2,
             },
         });
     } finally {

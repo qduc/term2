@@ -137,7 +137,7 @@ function findMatchesInContent(
     return {type: 'none'};
 }
 
-const formatSearchReplaceCommandMessage = (
+export const formatSearchReplaceCommandMessage = (
     item: any,
     index: number,
     _toolCallArgumentsById: Map<string, unknown>,

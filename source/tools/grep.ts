@@ -58,7 +58,7 @@ async function checkRgAvailability(): Promise<boolean> {
     return hasRg;
 }
 
-const formatGrepCommandMessage = (
+export const formatGrepCommandMessage = (
     item: any,
     index: number,
     toolCallArgumentsById: Map<string, unknown>,

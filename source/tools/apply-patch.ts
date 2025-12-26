@@ -35,7 +35,7 @@ const applyPatchParametersSchema = z.object({
 
 export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;
 
-const formatApplyPatchCommandMessage = (
+export const formatApplyPatchCommandMessage = (
     item: any,
     index: number,
     _toolCallArgumentsById: Map<string, unknown>,

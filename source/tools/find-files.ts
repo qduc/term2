@@ -49,7 +49,7 @@ async function checkFdAvailability(): Promise<boolean> {
 	return hasFd;
 }
 
-const formatFindFilesCommandMessage = (
+export const formatFindFilesCommandMessage = (
 	item: any,
 	index: number,
 	toolCallArgumentsById: Map<string, unknown>,

@@ -28,7 +28,7 @@ const readFileParametersSchema = z.object({
 
 export type ReadFileToolParams = z.infer<typeof readFileParametersSchema>;
 
-const formatReadFileCommandMessage = (
+export const formatReadFileCommandMessage = (
     item: any,
     index: number,
     toolCallArgumentsById: Map<string, unknown>,

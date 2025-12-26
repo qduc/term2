@@ -17,7 +17,7 @@ const askMentorSchema = z.object({
 
 export type AskMentorParams = z.infer<typeof askMentorSchema>;
 
-const formatAskMentorCommandMessage = (
+export const formatAskMentorCommandMessage = (
     item: any,
     index: number,
     toolCallArgumentsById: Map<string, unknown>,

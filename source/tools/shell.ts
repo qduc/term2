@@ -13,11 +13,17 @@ import {
     DEFAULT_TRIM_CONFIG,
     type OutputTrimConfig,
 } from '../utils/output-trim.js';
-import type {ToolDefinition} from './types.js';
+import type {ToolDefinition, CommandMessage} from './types.js';
 import type {
     ILoggingService,
     ISettingsService,
 } from '../services/service-interfaces.js';
+import {
+    coerceToText,
+    getOutputText,
+    normalizeToolArguments,
+    createBaseMessage,
+} from './format-helpers.js';
 
 const execPromise = util.promisify(exec);
 
@@ -78,6 +84,129 @@ function stripRedundantCd(command: string, cwd: string): string {
 
     return command;
 }
+
+const coerceCommandText = (value: unknown): string => {
+    if (typeof value === 'string') {
+        return value;
+    }
+
+    if (Array.isArray(value)) {
+        return value
+            .map(part => coerceToText(part))
+            .filter(Boolean)
+            .join('\n');
+    }
+
+    return coerceToText(value);
+};
+
+const formatShellCommandMessage = (
+    item: any,
+    index: number,
+    toolCallArgumentsById: Map<string, unknown>,
+): CommandMessage[] => {
+    const callId = item?.rawItem?.callId ?? item?.callId;
+    const fallbackArgs =
+        callId && toolCallArgumentsById.has(callId)
+            ? toolCallArgumentsById.get(callId)
+            : null;
+    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+    const args =
+        normalizeToolArguments(normalizedArgs) ??
+        normalizeToolArguments(fallbackArgs) ??
+        {};
+
+    const command = (() => {
+        if (typeof args === 'string') {
+            return args;
+        }
+
+        const directCommand = coerceCommandText((args as any)?.command);
+        if (directCommand) {
+            return directCommand;
+        }
+
+        const commandsValue = (args as any)?.commands;
+        if (typeof commandsValue === 'string') {
+            return commandsValue;
+        }
+
+        if (Array.isArray(commandsValue)) {
+            const commands = commandsValue
+                .map(entry =>
+                    typeof entry === 'string'
+                        ? entry
+                        : entry &&
+                          typeof entry === 'object' &&
+                          'command' in entry
+                        ? coerceCommandText((entry as any).command)
+                        : coerceCommandText(entry),
+                )
+                .filter(Boolean)
+                .join('\n');
+
+            if (commands) {
+                return commands;
+            }
+        }
+
+        return 'Unknown command';
+    })();
+
+    const outputText = getOutputText(item);
+
+    // Check if this is an error message (doesn't start with expected status formats)
+    const firstLine = outputText.split('\n')[0]?.trim() || '';
+    const isErrorMessage =
+        firstLine.includes('error') ||
+        firstLine.includes('Error') ||
+        firstLine.includes('failed') ||
+        firstLine.includes('Failed') ||
+        (!firstLine.startsWith('exit ') &&
+            firstLine !== 'timeout' &&
+            outputText &&
+            !outputText.includes('\n'));
+
+    let output: string;
+    let success: boolean | undefined;
+    let failureReason: string | undefined;
+
+    if (
+        isErrorMessage &&
+        !firstLine.startsWith('exit ') &&
+        firstLine !== 'timeout'
+    ) {
+        // For error messages, use the entire output
+        output = outputText || 'No output';
+        success = false;
+        failureReason = 'error';
+    } else {
+        // For normal shell output, parse status line and body
+        const [statusLineRaw, ...bodyLines] = outputText.split('\n');
+        const statusLine = (statusLineRaw ?? '').trim();
+        const bodyText = bodyLines.join('\n').trim();
+        output = bodyText || 'No output';
+
+        if (statusLine === 'timeout') {
+            success = false;
+            failureReason = 'timeout';
+        } else if (statusLine.startsWith('exit ')) {
+            const parsedExitCode = Number(statusLine.slice(5).trim());
+            success = Number.isFinite(parsedExitCode)
+                ? parsedExitCode === 0
+                : undefined;
+        }
+    }
+
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command,
+            output,
+            success,
+            failureReason,
+        }),
+    ];
+};
 
 export function createShellToolDefinition(deps: {
     loggingService: ILoggingService;
@@ -264,5 +393,6 @@ export function createShellToolDefinition(deps: {
                 loggingService.clearCorrelationId();
             }
         },
+        formatCommandMessage: formatShellCommandMessage,
     };
 }

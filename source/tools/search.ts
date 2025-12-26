@@ -8,7 +8,13 @@ import {
     DEFAULT_TRIM_CONFIG,
     type OutputTrimConfig,
 } from '../utils/output-trim.js';
-import type {ToolDefinition} from './types.js';
+import type {ToolDefinition, CommandMessage} from './types.js';
+import {
+    getOutputText,
+    safeJsonParse,
+    normalizeToolArguments,
+    createBaseMessage,
+} from './format-helpers.js';
 
 const execPromise = util.promisify(exec);
 
@@ -65,6 +71,46 @@ async function checkRgAvailability(): Promise<boolean> {
     }
     return hasRg;
 }
+
+const formatSearchCommandMessage = (
+    item: any,
+    index: number,
+    _toolCallArgumentsById: Map<string, unknown>,
+): CommandMessage[] => {
+    const parsedOutput = safeJsonParse(getOutputText(item));
+    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+    const args =
+        normalizeToolArguments(normalizedArgs) ?? parsedOutput?.arguments ?? {};
+    const pattern = args?.pattern ?? '';
+    const searchPath = args?.path ?? '.';
+
+    const parts = [`grep "${pattern}"`, `"${searchPath}"`];
+
+    if (args?.case_sensitive) {
+        parts.push('--case-sensitive');
+    }
+    if (args?.file_pattern) {
+        parts.push(`--include "${args.file_pattern}"`);
+    }
+    if (args?.exclude_pattern) {
+        parts.push(`--exclude "${args.exclude_pattern}"`);
+    }
+
+    const command = parts.join(' ');
+    const output =
+        parsedOutput?.output ?? getOutputText(item) ?? 'No output';
+    // Success is determined by the grep tool - it returns "No matches found."
+    // for empty results and throws for actual errors
+    const success = true;
+
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command,
+            output,
+            success,
+        }),
+    ];
+};
 
 export const grepToolDefinition: ToolDefinition<SearchToolParams> = {
     name: 'grep',
@@ -142,4 +188,5 @@ export const grepToolDefinition: ToolDefinition<SearchToolParams> = {
             throw new Error(`Search failed: ${error.message}`);
         }
     },
+    formatCommandMessage: formatSearchCommandMessage,
 };

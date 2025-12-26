@@ -2,7 +2,13 @@ import {z} from 'zod';
 import {exec} from 'child_process';
 import util from 'util';
 import {resolveWorkspacePath} from './utils.js';
-import type {ToolDefinition} from './types.js';
+import type {ToolDefinition, CommandMessage} from './types.js';
+import {
+    getOutputText,
+    normalizeToolArguments,
+    createBaseMessage,
+    getCallIdFromItem,
+} from './format-helpers.js';
 
 const execPromise = util.promisify(exec);
 
@@ -42,6 +48,50 @@ async function checkFdAvailability(): Promise<boolean> {
 	}
 	return hasFd;
 }
+
+const formatFindFilesCommandMessage = (
+	item: any,
+	index: number,
+	toolCallArgumentsById: Map<string, unknown>,
+): CommandMessage[] => {
+	const callId = getCallIdFromItem(item);
+	const fallbackArgs =
+		callId && toolCallArgumentsById.has(callId)
+			? toolCallArgumentsById.get(callId)
+			: null;
+	const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+	const args =
+		normalizeToolArguments(normalizedArgs) ??
+		normalizeToolArguments(fallbackArgs) ??
+		{};
+
+	const pattern = args?.pattern ?? '';
+	const searchPath = args?.path ?? '.';
+	const maxResults = args?.max_results;
+
+	const parts = [`find_files "${pattern}"`];
+	if (searchPath !== '.' && searchPath) {
+		parts.push(`"${searchPath}"`);
+	}
+	if (maxResults) {
+		parts.push(`--max ${maxResults}`);
+	}
+
+	const command = parts.join(' ');
+	const output = getOutputText(item) || 'No output';
+	const success =
+		!output.startsWith('Error:') && !output.startsWith('No files found');
+
+	return [
+		createBaseMessage(item, index, 0, false, {
+			command,
+			output,
+			success,
+			toolName: 'find_files',
+			toolArgs: args,
+		}),
+	];
+};
 
 export const findFilesToolDefinition: ToolDefinition<FindFilesToolParams> = {
 	name: 'find_files',
@@ -140,4 +190,5 @@ export const findFilesToolDefinition: ToolDefinition<FindFilesToolParams> = {
 			return `Error: ${error.message || String(error)}`;
 		}
 	},
+	formatCommandMessage: formatFindFilesCommandMessage,
 };

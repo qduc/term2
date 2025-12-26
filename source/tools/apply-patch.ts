@@ -3,11 +3,17 @@ import {readFile, writeFile, mkdir} from 'fs/promises';
 import path from 'path';
 import {applyDiff} from '@openai/agents';
 import {resolveWorkspacePath} from './utils.js';
-import type {ToolDefinition} from './types.js';
+import type {ToolDefinition, CommandMessage} from './types.js';
 import type {
     ILoggingService,
     ISettingsService,
 } from '../services/service-interfaces.js';
+import {
+    getOutputText,
+    safeJsonParse,
+    normalizeToolArguments,
+    createBaseMessage,
+} from './format-helpers.js';
 
 /**
  * Error thrown when patch validation fails (malformed diff)
@@ -28,6 +34,58 @@ const applyPatchParametersSchema = z.object({
 });
 
 export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;
+
+const formatApplyPatchCommandMessage = (
+    item: any,
+    index: number,
+    _toolCallArgumentsById: Map<string, unknown>,
+): CommandMessage[] => {
+    const parsedOutput = safeJsonParse(getOutputText(item));
+    const patchOutputItems = parsedOutput?.output ?? [];
+
+    // If JSON parsing failed or no output array, create error message
+    if (patchOutputItems.length === 0) {
+        const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+        const args = normalizeToolArguments(normalizedArgs) ?? {};
+        const operationType = args?.type ?? 'unknown';
+        const filePath = args?.path ?? 'unknown';
+        const command = `apply_patch ${operationType} ${filePath}`;
+        const output = getOutputText(item) || 'No output';
+        const success = false;
+
+        return [
+            createBaseMessage(item, index, 0, false, {
+                command,
+                output,
+                success,
+            }),
+        ];
+    }
+
+    // Apply patch tool can have multiple operation outputs
+    const messages: CommandMessage[] = [];
+    for (const [patchIndex, patchResult] of patchOutputItems.entries()) {
+        const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+        const args = normalizeToolArguments(normalizedArgs) ?? {};
+        const operationType =
+            args?.type ?? patchResult?.operation ?? 'unknown';
+        const filePath = args?.path ?? patchResult?.path ?? 'unknown';
+
+        const command = `apply_patch ${operationType} ${filePath}`;
+        const output =
+            patchResult?.message ?? patchResult?.error ?? 'No output';
+        const success = patchResult?.success ?? false;
+
+        messages.push(
+            createBaseMessage(item, index, patchIndex, false, {
+                command,
+                output,
+                success,
+            }),
+        );
+    }
+    return messages;
+};
 
 export function createApplyPatchToolDefinition(deps: {
     loggingService: ILoggingService;
@@ -391,5 +449,6 @@ export function createApplyPatchToolDefinition(deps: {
                 });
             }
         },
+        formatCommandMessage: formatApplyPatchCommandMessage,
     };
 }

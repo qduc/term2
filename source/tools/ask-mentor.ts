@@ -1,5 +1,11 @@
 import {z} from 'zod';
-import type {ToolDefinition} from './types.js';
+import type {ToolDefinition, CommandMessage} from './types.js';
+import {
+    getOutputText,
+    normalizeToolArguments,
+    createBaseMessage,
+    getCallIdFromItem,
+} from './format-helpers.js';
 
 const askMentorSchema = z.object({
     question: z.string().describe('The question to ask the mentor.'),
@@ -10,6 +16,38 @@ const askMentorSchema = z.object({
 });
 
 export type AskMentorParams = z.infer<typeof askMentorSchema>;
+
+const formatAskMentorCommandMessage = (
+    item: any,
+    index: number,
+    toolCallArgumentsById: Map<string, unknown>,
+): CommandMessage[] => {
+    const callId = getCallIdFromItem(item);
+    const fallbackArgs =
+        callId && toolCallArgumentsById.has(callId)
+            ? toolCallArgumentsById.get(callId)
+            : null;
+    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+    const args =
+        normalizeToolArguments(normalizedArgs) ??
+        normalizeToolArguments(fallbackArgs) ??
+        {};
+
+    const question = args?.question ?? 'Unknown question';
+    const command = `ask_mentor: ${question}`;
+    const output = getOutputText(item) || 'No response from mentor';
+    const success = !output.startsWith('Failed to ask mentor:');
+
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command,
+            output,
+            success,
+            toolName: 'ask_mentor',
+            toolArgs: args,
+        }),
+    ];
+};
 
 export const createAskMentorToolDefinition = (
     askMentor: (question: string) => Promise<string>,
@@ -30,4 +68,5 @@ export const createAskMentorToolDefinition = (
             return `Failed to ask mentor: ${error.message}. Ensure mentor model is configured in settings.`;
         }
     },
+    formatCommandMessage: formatAskMentorCommandMessage,
 });

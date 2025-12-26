@@ -2,11 +2,17 @@ import {z} from 'zod';
 import {readFile, writeFile} from 'fs/promises';
 import path from 'path';
 import {resolveWorkspacePath} from './utils.js';
-import type {ToolDefinition} from './types.js';
+import type {ToolDefinition, CommandMessage} from './types.js';
 import type {
     ILoggingService,
     ISettingsService,
 } from '../services/service-interfaces.js';
+import {
+    getOutputText,
+    safeJsonParse,
+    normalizeToolArguments,
+    createBaseMessage,
+} from './format-helpers.js';
 
 const searchReplaceParametersSchema = z.object({
     path: z.string().describe('The absolute or relative path to the file'),
@@ -130,6 +136,73 @@ function findMatchesInContent(
 
     return {type: 'none'};
 }
+
+const formatSearchReplaceCommandMessage = (
+    item: any,
+    index: number,
+    _toolCallArgumentsById: Map<string, unknown>,
+): CommandMessage[] => {
+    const parsedOutput = safeJsonParse(getOutputText(item));
+    const replaceOutputItems = parsedOutput?.output ?? [];
+
+    // If JSON parsing failed or no output array, create error message
+    if (replaceOutputItems.length === 0) {
+        const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+        const args = normalizeToolArguments(normalizedArgs) ?? {};
+        const filePath = args?.path ?? 'unknown';
+        const searchContent = args?.search_content ?? '';
+        const replaceContent = args?.replace_content ?? '';
+        const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
+        const output = getOutputText(item) || 'No output';
+        const success = false;
+
+        return [
+            createBaseMessage(item, index, 0, false, {
+                command,
+                output,
+                success,
+                toolName: 'search_replace',
+                toolArgs: {
+                    path: filePath,
+                    search_content: searchContent,
+                    replace_content: replaceContent,
+                    replace_all: args?.replace_all ?? false,
+                },
+            }),
+        ];
+    }
+
+    // Search replace tool can have multiple operation outputs
+    const messages: CommandMessage[] = [];
+    for (const [replaceIndex, replaceResult] of replaceOutputItems.entries()) {
+        const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+        const args = normalizeToolArguments(normalizedArgs) ?? {};
+        const filePath = args?.path ?? replaceResult?.path ?? 'unknown';
+        const searchContent = args?.search_content ?? '';
+        const replaceContent = args?.replace_content ?? '';
+
+        const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
+        const output =
+            replaceResult?.message ?? replaceResult?.error ?? 'No output';
+        const success = replaceResult?.success ?? false;
+
+        messages.push(
+            createBaseMessage(item, index, replaceIndex, false, {
+                command,
+                output,
+                success,
+                toolName: 'search_replace',
+                toolArgs: {
+                    path: filePath,
+                    search_content: searchContent,
+                    replace_content: replaceContent,
+                    replace_all: args?.replace_all ?? false,
+                },
+            }),
+        );
+    }
+    return messages;
+};
 
 export function createSearchReplaceToolDefinition(deps: {
     loggingService: ILoggingService;
@@ -461,5 +534,6 @@ export function createSearchReplaceToolDefinition(deps: {
                 });
             }
         },
+        formatCommandMessage: formatSearchReplaceCommandMessage,
     };
 }

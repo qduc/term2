@@ -2,7 +2,13 @@ import {z} from 'zod';
 import * as fs from 'fs/promises';
 import {resolveWorkspacePath} from './utils.js';
 import {trimOutput} from '../utils/output-trim.js';
-import type {ToolDefinition} from './types.js';
+import type {ToolDefinition, CommandMessage} from './types.js';
+import {
+    getOutputText,
+    normalizeToolArguments,
+    createBaseMessage,
+    getCallIdFromItem,
+} from './format-helpers.js';
 
 const readFileParametersSchema = z.object({
     path: z.string().describe('File path relative to workspace root'),
@@ -21,6 +27,47 @@ const readFileParametersSchema = z.object({
 });
 
 export type ReadFileToolParams = z.infer<typeof readFileParametersSchema>;
+
+const formatReadFileCommandMessage = (
+    item: any,
+    index: number,
+    toolCallArgumentsById: Map<string, unknown>,
+): CommandMessage[] => {
+    const callId = getCallIdFromItem(item);
+    const fallbackArgs =
+        callId && toolCallArgumentsById.has(callId)
+            ? toolCallArgumentsById.get(callId)
+            : null;
+    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+    const args =
+        normalizeToolArguments(normalizedArgs) ??
+        normalizeToolArguments(fallbackArgs) ??
+        {};
+
+    const filePath = args?.path ?? 'unknown';
+    const startLine = args?.start_line;
+    const endLine = args?.end_line;
+
+    let command = `read_file "${filePath}"`;
+    if (startLine !== undefined || endLine !== undefined) {
+        const start = startLine ?? 1;
+        const end = endLine ?? 'end';
+        command += ` --lines ${start}-${end}`;
+    }
+
+    const output = getOutputText(item) || 'No output';
+    const success = !output.startsWith('Error:');
+
+    return [
+        createBaseMessage(item, index, 0, false, {
+            command,
+            output,
+            success,
+            toolName: 'read_file',
+            toolArgs: args,
+        }),
+    ];
+};
 
 export const readFileToolDefinition: ToolDefinition<ReadFileToolParams> = {
     name: 'read_file',
@@ -81,4 +128,5 @@ export const readFileToolDefinition: ToolDefinition<ReadFileToolParams> = {
             return `Error: ${error.message || String(error)}`;
         }
     },
+    formatCommandMessage: formatReadFileCommandMessage,
 };

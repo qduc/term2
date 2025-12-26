@@ -48,13 +48,22 @@ export function analyzePathRisk(
 
     const cwd = process.cwd();
 
+    // Pre-calculate project membership for absolute paths
+    const isAbsolute = path.isAbsolute(candidate);
+    const normalizedCandidate = path.normalize(candidate);
+    const normalizedCwd = path.normalize(cwd);
+    const isWithinProject =
+        isAbsolute &&
+        (normalizedCandidate.startsWith(normalizedCwd + path.sep) ||
+            normalizedCandidate === normalizedCwd);
+
     // RED: Home directory and sensitive paths
     // Check for various home directory representations
     const isHomeRelated = HOME_PATTERNS.some(pattern =>
         pattern.test(candidate),
     );
 
-    if (isHomeRelated) {
+    if (isHomeRelated && !isWithinProject) {
         // Extract the path after home prefix for further analysis
         const sliced = candidate
             .replace(/^~/, '')
@@ -127,11 +136,6 @@ export function analyzePathRisk(
         }
 
         // Check if absolute path is within current project directory
-        const normalizedCandidate = path.normalize(candidate);
-        const normalizedCwd = path.normalize(cwd);
-        const isWithinProject = normalizedCandidate.startsWith(normalizedCwd + path.sep) ||
-                                normalizedCandidate === normalizedCwd;
-
         if (!isWithinProject) {
             // Absolute paths outside project are suspicious -> audit
             logger.security('Path risk: absolute non-system path', {

@@ -22,6 +22,7 @@ import {getAgentDefinition} from '../agent.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import {normalizeToolInput, wrapToolInvoke} from './tool-invoke.js';
 import type {
     ILoggingService,
     ISettingsService,
@@ -695,44 +696,49 @@ export class OpenAIAgentClient {
                 return true;
             })
             .map(definition =>
-                createTool({
-                    name: definition.name,
-                    description: definition.description,
-                    parameters: definition.parameters,
-                    needsApproval: async (context, params) =>
-                        definition.needsApproval(params, context),
-                    execute: async (params, _context, details) => {
-                        // Extract tool call ID from details if available
-                        const toolCallId = details?.toolCall?.callId;
-                        // Check if this execution should be intercepted
-                        const rejectionMessage =
-                            await this.#checkToolInterceptors(
-                                definition.name,
-                                params,
-                                toolCallId,
-                            );
-                        if (rejectionMessage) {
-                            this.#logger.info('Tool execution intercepted', {
-                                tool: definition.name,
-                                params: JSON.stringify(params).substring(
-                                    0,
-                                    100,
-                                ),
-                            });
-                            // Return a failure response that all tools should understand
-                            return JSON.stringify({
-                                output: [
+                wrapToolInvoke(
+                    createTool({
+                        name: definition.name,
+                        description: definition.description,
+                        parameters: definition.parameters,
+                        needsApproval: async (context, params) =>
+                            definition.needsApproval(params, context),
+                        execute: async (params, _context, details) => {
+                            // Extract tool call ID from details if available
+                            const toolCallId = details?.toolCall?.callId;
+                            // Check if this execution should be intercepted
+                            const rejectionMessage =
+                                await this.#checkToolInterceptors(
+                                    definition.name,
+                                    params,
+                                    toolCallId,
+                                );
+                            if (rejectionMessage) {
+                                this.#logger.info(
+                                    'Tool execution intercepted',
                                     {
-                                        success: false,
-                                        error: rejectionMessage,
+                                        tool: definition.name,
+                                        params: JSON.stringify(params).substring(
+                                            0,
+                                            100,
+                                        ),
                                     },
-                                ],
-                            });
-                        }
-                        // Normal execution
-                        return definition.execute(params, _context);
-                    },
-                }),
+                                );
+                                // Return a failure response that all tools should understand
+                                return JSON.stringify({
+                                    output: [
+                                        {
+                                            success: false,
+                                            error: rejectionMessage,
+                                        },
+                                    ],
+                                });
+                            }
+                            // Normal execution
+                            return definition.execute(params, _context);
+                        },
+                    }),
+                ),
             );
 
         // Add native applyPatchTool for gpt-5.1 on OpenAI provider
@@ -753,6 +759,7 @@ export class OpenAIAgentClient {
                     // Extract tool call ID from details if available
                     const toolCallId = details?.toolCall?.callId;
                     // Parse input to get params for logging
+                    const normalizedInput = normalizeToolInput(input);
                     let params: any;
                     try {
                         params =
@@ -785,7 +792,7 @@ export class OpenAIAgentClient {
                     return originalInvoke.call(
                         nativePatchTool,
                         runContext,
-                        input,
+                        normalizedInput,
                         details,
                     );
                 };

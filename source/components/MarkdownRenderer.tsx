@@ -432,6 +432,18 @@ interface MarkdownRendererProps {
     tokens?: any[];
 }
 
+// Generate a stable key for a token based on its type and content
+// This prevents unnecessary re-renders when the AST structure changes during streaming
+const getTokenKey = (token: any, index: number): string => {
+    // If token has an id property, use it
+    if (token.id) {
+        return String(token.id);
+    }
+    // Use type + first 30 chars of raw content for stable identification
+    const rawPreview = token.raw ? token.raw.slice(0, 30).replace(/\s+/g, ' ') : '';
+    return `${token.type}-${rawPreview}-${index}`;
+};
+
 const MarkdownRenderer = ({children, tokens}: MarkdownRendererProps) => {
     // Allow passing raw text (which we parse) OR pre-parsed tokens
     const ast = useMemo(
@@ -442,7 +454,7 @@ const MarkdownRenderer = ({children, tokens}: MarkdownRendererProps) => {
     return (
         <Box flexDirection="column">
             {ast.map((token: any, index: number) => (
-                <BlockRenderer key={index} token={token} />
+                <BlockRenderer key={getTokenKey(token, index)} token={token} />
             ))}
         </Box>
     );

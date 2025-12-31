@@ -1,4 +1,4 @@
-import React, {FC} from 'react';
+import React, {FC, useMemo} from 'react';
 import { Box, Static } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import ChatMessage from './ChatMessage.js';
@@ -13,13 +13,14 @@ const MessageList: FC<Props> = ({messages}) => {
     // Split messages into history (rendered once via Static) and active (rendered normally)
     const historyEndPoint = Math.max(0, messages.length - WINDOW_SIZE);
 
-    // We only want to move "stable" messages to history.
-    // However, for simplicity and performance, we assume messages outside the window
-    // are stable enough or that the trade-off is worth it.
-    // In a sliding window, the visual continuity is preserved.
-
-    const history = messages.slice(0, historyEndPoint);
-    const active = messages.slice(historyEndPoint);
+    // Use useMemo to prevent array recreation on every render.
+    // This stabilizes the references passed to Static and the active Box,
+    // preventing unnecessary re-renders and fixing flickering in long sessions.
+    const {history, active} = useMemo(() => {
+        const hist = messages.slice(0, historyEndPoint);
+        const act = messages.slice(historyEndPoint);
+        return {history: hist, active: act};
+    }, [messages, historyEndPoint]);
 
     const renderMessage = (msg: any, idx: number, collection: any[]) => {
         // Use consistent marginBottom instead of dynamic marginTop to prevent layout reflow.

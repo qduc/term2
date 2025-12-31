@@ -22,17 +22,13 @@ const MessageList: FC<Props> = ({messages}) => {
     const active = messages.slice(historyEndPoint);
 
     const renderMessage = (msg: any, idx: number, collection: any[]) => {
-        const prev = idx === 0
-            ? (collection === active ? history[history.length - 1] : undefined)
-            : collection[idx - 1];
-
-        // Tighten spacing between messages from the same sender (no extra gap),
-        // but keep a small gap when the sender changes so different participants
-        // remain recognizable.
-        const marginTop = prev && prev.sender === msg.sender ? 0 : 1;
+        // Use consistent marginBottom instead of dynamic marginTop to prevent layout reflow.
+        // This ensures stable spacing regardless of message order or streaming updates.
+        // The first message in each collection has no top margin to avoid extra space.
+        const isFirst = idx === 0 && collection === active && history.length === 0;
 
         return (
-            <Box key={msg.id} marginTop={marginTop}>
+            <Box key={msg.id} marginTop={isFirst ? 0 : 1}>
                 {msg.sender === 'command' ? (
                     <CommandMessage
                         command={msg.command}

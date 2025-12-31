@@ -346,7 +346,7 @@ const App: FC<AppProps> = ({
 
     return (
         <ErrorBoundary loggingService={loggingService}>
-            <Box flexDirection="column" flexGrow={1}>
+            <Box flexDirection="column" flexGrow={1} paddingX={2}>
                 <Banner settingsService={settingsService} />
                 {/* Main content area grows to fill available vertical space */}
                 <Box flexDirection="column" flexGrow={1}>

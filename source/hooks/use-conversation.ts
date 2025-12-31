@@ -68,8 +68,8 @@ interface LiveResponse {
     text: string;
 }
 
-const LIVE_RESPONSE_THROTTLE_MS = 80;
-const REASONING_RESPONSE_THROTTLE_MS = 120;
+const LIVE_RESPONSE_THROTTLE_MS = 150;
+const REASONING_RESPONSE_THROTTLE_MS = 200;
 const MAX_MESSAGE_COUNT = 300;
 
 export const filterPendingCommandMessagesForApproval = (

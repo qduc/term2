@@ -12,9 +12,12 @@ type Props = {
  * Reasoning text is displayed in light gray before the main response.
  */
 const LiveResponse: FC<Props> = ({text}) => {
+    // Trim trailing empty lines
+    const trimmedText = text.replace(/\n\s*$/, '');
+
     return (
         <Box marginBottom={1} flexDirection="column">
-            <Text>{text}</Text>
+            <Text>{trimmedText}</Text>
         </Box>
     );
 };

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useMemo} from 'react';
 import {Box, Text, Newline} from 'ink';
 import {marked} from 'marked';
 
@@ -434,7 +434,10 @@ interface MarkdownRendererProps {
 
 const MarkdownRenderer = ({children, tokens}: MarkdownRendererProps) => {
     // Allow passing raw text (which we parse) OR pre-parsed tokens
-    const ast = tokens || marked.lexer(String(children || ''));
+    const ast = useMemo(
+        () => tokens || marked.lexer(String(children || '')),
+        [tokens, children],
+    );
 
     return (
         <Box flexDirection="column">

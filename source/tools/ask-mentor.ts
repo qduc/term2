@@ -54,7 +54,7 @@ export const createAskMentorToolDefinition = (
 ): ToolDefinition<AskMentorParams> => ({
     name: 'ask_mentor',
     description:
-        'Ask a mentor (a smarter model) for advice or clarification on a problem.',
+        'Ask a mentor (a smarter model) for advice or clarification on a problem. The mentor does not see your thinking, files you have read, or conversation context - you must fully explain the situation in your question.',
     parameters: askMentorSchema,
     needsApproval: () => false,
     execute: async ({question, context}) => {

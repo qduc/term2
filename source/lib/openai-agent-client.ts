@@ -329,6 +329,14 @@ export class OpenAIAgentClient {
     }
 
     #runAgent(agent: Agent, input: any, options: any): Promise<any> {
+        // The Agents SDK enables tracing by default and exports spans to OpenAI.
+        // When using non-OpenAI providers (e.g., OpenRouter), this export can fail noisily
+        // (e.g., 503 errors). Disable tracing per-run for any non-OpenAI provider.
+        const effectiveOptions: any = options ? {...options} : {};
+        if (this.#provider !== 'openai') {
+            effectiveOptions.tracingDisabled = true;
+        }
+
         // Check if provider is configured but runner failed to initialize
         if (!this.#runner && this.#provider !== 'openai') {
             const providerDef = getProvider(this.#provider);
@@ -343,9 +351,9 @@ export class OpenAIAgentClient {
 
         // Use runner if available (custom provider), otherwise use run() directly (OpenAI)
         if (this.#runner) {
-            return this.#runner.run(agent, input, options);
+            return this.#runner.run(agent, input, effectiveOptions);
         }
-        return run(agent, input, options);
+        return run(agent, input, effectiveOptions);
     }
 
     async #executeWithRetry<T>(

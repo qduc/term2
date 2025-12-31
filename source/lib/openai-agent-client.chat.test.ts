@@ -29,8 +29,10 @@ const mockSettings: ISettingsService = {
 } as any;
 
 // Mock Runner
+let lastRunOptions: any = null;
 class MockRunner {
     async run(_agent: any, _input: any, _options: any) {
+        lastRunOptions = _options;
         return {
             status: 'completed',
             messages: [{role: 'assistant', content: 'Fallback content'}],
@@ -58,4 +60,19 @@ test('OpenAIAgentClient.chat falls back to messages if finalOutput is missing', 
 
     const response = await client.chat('Hello');
     t.is(response, 'Fallback content');
+});
+
+test('disables Agents SDK tracing for non-OpenAI providers', async t => {
+    lastRunOptions = null;
+
+    const client = new OpenAIAgentClient({
+        deps: {
+            logger: mockLogger,
+            settings: mockSettings,
+        },
+    });
+
+    await client.chat('Hello again');
+    t.truthy(lastRunOptions);
+    t.is(lastRunOptions.tracingDisabled, true);
 });

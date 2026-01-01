@@ -46,3 +46,14 @@ export type {OutputType} from './output-classifier.js';
 
 export {StatusBar} from './components/status-bar.js';
 export type {StatusBarProps} from './components/status-bar.js';
+
+export {
+    parseCompanionInput,
+    isShellPrompt,
+    extractCommandFromPromptLine,
+    CommandOutputBuffer,
+} from './input-parser.js';
+export type {ParsedInput} from './input-parser.js';
+
+export {CompanionSession} from './companion-session.js';
+export type {CompanionSessionDeps, CompanionEvent} from './companion-session.js';

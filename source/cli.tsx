@@ -110,6 +110,8 @@ const history = new HistoryService({
 const usedModel = settings.get('agent.model');
 const usedReasoningEffort = settings.get('agent.reasoningEffort');
 
+// Note: ESM requires static imports, so both mode's dependencies are loaded upfront.
+// For significant startup optimization, consider dynamic import() for companion mode.
 import {InputProvider} from './context/InputContext.js';
 import {CompanionApp} from './modes/companion/index.js';
 

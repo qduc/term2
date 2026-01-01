@@ -57,3 +57,11 @@ export type {ParsedInput} from './input-parser.js';
 
 export {CompanionSession} from './companion-session.js';
 export type {CompanionSessionDeps, CompanionEvent} from './companion-session.js';
+
+export {
+    classifyCommandSafety,
+    shouldAutoApprove,
+    shouldBlock,
+    getSafetyDescription,
+} from './safety-classifier.js';
+export type {SafetyLevel, SafetyClassification} from './safety-classifier.js';

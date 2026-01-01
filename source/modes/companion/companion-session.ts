@@ -3,6 +3,7 @@ import type {ContextBuffer} from './context-buffer.js';
 import type {Summarizer} from './summarizer.js';
 import type {ISettingsService, ILoggingService} from '../../services/service-interfaces.js';
 import {generateCommandIndexPrompt} from './command-index.js';
+import type {CompanionMode} from './mode-manager.js';
 
 export interface CompanionSessionDeps {
     contextBuffer: ContextBuffer;
@@ -10,8 +11,6 @@ export interface CompanionSessionDeps {
     settings: ISettingsService;
     logger: ILoggingService;
 }
-
-export type CompanionMode = 'watch' | 'auto';
 
 export interface CompanionEvent {
     type: 'text' | 'tool_call' | 'complete' | 'error' | 'approval_required' | 'blocked';

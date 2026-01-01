@@ -56,7 +56,11 @@ export class PTYWrapper extends EventEmitter {
                 cols,
                 rows,
                 cwd: this.#cwd,
-                env: this.#env as {[key: string]: string},
+                // Filter out undefined env values for type safety
+                env: Object.fromEntries(
+                    Object.entries(this.#env)
+                        .filter((entry): entry is [string, string] => entry[1] !== undefined)
+                ),
             });
 
             this.#isStarted = true;

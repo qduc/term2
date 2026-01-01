@@ -10,6 +10,41 @@ import {CompanionSession} from './companion-session.js';
 import {parseCompanionInput, CommandOutputBuffer} from './input-parser.js';
 import type {ISettingsService, ILoggingService} from '../../services/service-interfaces.js';
 
+/** Height reserved at bottom of terminal for status bar and AI response */
+const STATUS_BAR_RESERVED_ROWS = 4;
+
+/**
+ * Infer exit code from command output patterns.
+ * Since PTY doesn't provide per-command exit codes, we use heuristics.
+ */
+function inferExitCodeFromOutput(output: string): number {
+    const lowerOutput = output.toLowerCase();
+
+    // Common error patterns that indicate failure
+    const errorPatterns = [
+        /\berror\b/i,
+        /\bfail(ed|ure)?\b/i,
+        /\bfatal\b/i,
+        /\bexception\b/i,
+        /\bcommand not found\b/i,
+        /\bno such file\b/i,
+        /\bpermission denied\b/i,
+        /\bdoes not exist\b/i,
+        /\bcannot\b/i,
+        /\bexit status [1-9]/i,
+        /\bexit code [1-9]/i,
+        /\breturned [1-9]/i,
+    ];
+
+    for (const pattern of errorPatterns) {
+        if (pattern.test(lowerOutput)) {
+            return 1;
+        }
+    }
+
+    return 0; // Assume success if no error patterns found
+}
+
 export interface CompanionAppProps {
     settingsService: ISettingsService;
     loggingService: ILoggingService;
@@ -138,10 +173,13 @@ export const CompanionApp: React.FC<CompanionAppProps> = ({
             // Process output for command boundary detection
             const completed = commandOutputBuffer.processData(data);
             if (completed) {
+                // Infer exit code from output patterns when not available directly
+                // This is a heuristic since PTY doesn't provide per-command exit codes
+                const inferredExitCode = inferExitCodeFromOutput(completed.output);
                 const entry: CommandEntry = {
                     command: completed.command,
                     output: completed.output,
-                    exitCode: 0, // We'll need to track this differently
+                    exitCode: inferredExitCode,
                     timestamp: Date.now(),
                     outputLines: completed.output.split('\n').length,
                 };
@@ -176,11 +214,10 @@ export const CompanionApp: React.FC<CompanionAppProps> = ({
         // Setup terminal resize handling
         const handleResize = () => {
             if (process.stdout.columns && process.stdout.rows) {
-                // Reserve bottom rows for status bar
-                const statusBarHeight = 2;
+                // Reserve bottom rows for status bar and AI response
                 ptyWrapper.resize(
                     process.stdout.columns,
-                    process.stdout.rows - statusBarHeight,
+                    process.stdout.rows - STATUS_BAR_RESERVED_ROWS,
                 );
             }
         };
@@ -222,38 +259,58 @@ export const CompanionApp: React.FC<CompanionAppProps> = ({
             setHint(undefined);
         }
 
-        // Track input line for ?? and !auto detection
+        // Build up input line to detect ?? and !auto commands
+        let newInputLine = inputLine;
+
         if (input === '\r' || input === '\n') {
             const parsed = parseCompanionInput(inputLine);
 
             if (parsed.type === 'query') {
-                // ?? query detected - handle with AI
+                // ?? query detected - handle with AI instead of passing to shell
                 handleQuery(parsed.content);
                 setInputLine('');
+                // Write newline to keep terminal output clean
+                process.stdout.write('\n');
                 return;
             }
 
             if (parsed.type === 'auto') {
-                // !auto command detected - handle with AI
+                // !auto command detected - handle with AI instead of passing to shell
                 handleAutoTask(parsed.content);
                 setInputLine('');
+                // Write newline to keep terminal output clean
+                process.stdout.write('\n');
                 return;
             }
 
-            // Normal command - track for context
+            // Normal command - pass Enter to PTY and track for context
+            ptyWrapper.write(input);
             if (inputLine.trim()) {
                 commandOutputBuffer.startCommand(inputLine.trim());
             }
-
             setInputLine('');
-        } else if (key.backspace || key.delete) {
-            setInputLine(prev => prev.slice(0, -1));
-        } else {
-            setInputLine(prev => prev + input);
+            return;
         }
 
-        // Pass input to PTY (except for ?? and !auto)
-        if (!inputLine.startsWith('??') && !inputLine.startsWith('!auto')) {
+        if (key.backspace || key.delete) {
+            newInputLine = inputLine.slice(0, -1);
+            setInputLine(newInputLine);
+            // Pass backspace to PTY
+            ptyWrapper.write(input);
+            return;
+        }
+
+        // Accumulate input
+        newInputLine = inputLine + input;
+        setInputLine(newInputLine);
+
+        // Check if we're building a ?? or !auto command
+        // If so, echo locally but don't send to PTY yet
+        if (newInputLine.startsWith('??') || newInputLine.startsWith('!auto')) {
+            // Echo the character locally (since we're not sending to PTY)
+            process.stdout.write(input);
+        } else {
+            // Normal input - pass through to PTY
             ptyWrapper.write(input);
         }
     });
@@ -269,11 +326,16 @@ export const CompanionApp: React.FC<CompanionAppProps> = ({
 
     // The main rendering is handled by PTY direct output to stdout
     // We only render the status bar and AI response via Ink
+    const defaultRows = 24; // Standard terminal height fallback
+    const marginTop = process.stdout.rows
+        ? process.stdout.rows - STATUS_BAR_RESERVED_ROWS
+        : defaultRows - STATUS_BAR_RESERVED_ROWS;
+
     return (
         <Box
             flexDirection="column"
             position="absolute"
-            marginTop={process.stdout.rows ? process.stdout.rows - 4 : 20}
+            marginTop={marginTop}
         >
             {aiResponse && (
                 <Box borderStyle="single" borderColor="cyan" paddingX={1} marginBottom={1}>

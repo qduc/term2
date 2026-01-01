@@ -138,13 +138,24 @@ export class ContextBuffer {
 
     /**
      * Calculate the approximate size of an entry in bytes.
+     *
+     * Size calculation methodology:
+     * - Command string length in bytes
+     * - Output string length in bytes
+     * - Fixed metadata overhead (100 bytes) accounts for:
+     *   - exitCode: number (~8 bytes in V8)
+     *   - timestamp: number (~8 bytes in V8)
+     *   - outputLines: number (~8 bytes in V8)
+     *   - Object overhead and references (~76 bytes estimated)
+     *
+     * This is intentionally conservative to ensure we don't exceed memory limits.
      */
     #calculateEntrySize(entry: CommandEntry): number {
-        // Approximate: command + output + metadata overhead
+        const METADATA_OVERHEAD_BYTES = 100;
         return (
             (entry.command?.length || 0) +
             (entry.output?.length || 0) +
-            100 // Approximate overhead for metadata
+            METADATA_OVERHEAD_BYTES
         );
     }
 

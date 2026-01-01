@@ -26,9 +26,11 @@ const cli = meow(
         Options
           -m, --model  Override the default OpenAI model (e.g. gpt-4o)
           -r, --reasoning  Set the reasoning effort for reasoning models (e.g. medium, high)
+          -c, --companion  Start in companion mode (watches your terminal and assists when needed)
 
         Examples
           $ term2 -m gpt-4o
+          $ term2 --companion
     `,
     {
         importMeta: import.meta,
@@ -40,6 +42,10 @@ const cli = meow(
             reasoning: {
                 type: 'string',
                 alias: 'r',
+            },
+            companion: {
+                type: 'boolean',
+                alias: 'c',
             },
         },
     },
@@ -104,33 +110,46 @@ const history = new HistoryService({
 const usedModel = settings.get('agent.model');
 const usedReasoningEffort = settings.get('agent.reasoningEffort');
 
-const conversationService = new ConversationService({
-    agentClient: new OpenAIAgentClient({
-        model: usedModel,
-        reasoningEffort: usedReasoningEffort as ModelSettingsReasoningEffort,
-        maxTurns: settings.get('agent.maxTurns'),
-        retryAttempts: settings.get('agent.retryAttempts'),
+import {InputProvider} from './context/InputContext.js';
+import {CompanionApp} from './modes/companion/index.js';
+
+// Check if companion mode is requested
+if (cli.flags.companion) {
+    // Companion mode - wrap user's shell with AI assistance
+    render(
+        (<CompanionApp
+            settingsService={settings}
+            loggingService={logger}
+        />) as ReactNode,
+    );
+} else {
+    // Default chat mode
+    const conversationService = new ConversationService({
+        agentClient: new OpenAIAgentClient({
+            model: usedModel,
+            reasoningEffort: usedReasoningEffort as ModelSettingsReasoningEffort,
+            maxTurns: settings.get('agent.maxTurns'),
+            retryAttempts: settings.get('agent.retryAttempts'),
+            deps: {
+                logger: logger,
+                settings: settings,
+            },
+        }),
         deps: {
             logger: logger,
-            settings: settings,
         },
-    }),
-    deps: {
-        logger: logger,
-    },
-});
+    });
 
-import {InputProvider} from './context/InputContext.js';
-
-render(
-    (
-        <InputProvider>
-            <App
-                conversationService={conversationService}
-                settingsService={settings}
-                historyService={history}
-                loggingService={logger}
-            />
-        </InputProvider>
-    ) as ReactNode,
-);
+    render(
+        (
+            <InputProvider>
+                <App
+                    conversationService={conversationService}
+                    settingsService={settings}
+                    historyService={history}
+                    loggingService={logger}
+                />
+            </InputProvider>
+        ) as ReactNode,
+    );
+}

@@ -91,6 +91,40 @@ const DebugSettingsSchema = z.object({
     debugBashTool: z.boolean().optional().default(false),
 });
 
+const CompanionSettingsSchema = z.object({
+    // Feature toggles
+    enabled: z.boolean().default(false)
+        .describe('Enable companion mode features'),
+    showHints: z.boolean().default(true)
+        .describe('Show smart hints in status bar'),
+
+    // Smart trigger thresholds
+    errorCascadeThreshold: z.number().int().min(1).default(3)
+        .describe('Consecutive failures before showing hint'),
+    retryLoopThreshold: z.number().int().min(1).default(2)
+        .describe('Repeated commands before showing hint'),
+    pauseHintDelayMs: z.number().int().min(0).default(30000)
+        .describe('Milliseconds of inactivity after error before hint'),
+
+    // Context management
+    maxContextBufferSize: z.number().int().min(1024).default(1048576)
+        .describe('Maximum buffer size in bytes (default: 1MB)'),
+    maxCommandIndexSize: z.number().int().min(1).max(50).default(10)
+        .describe('Number of commands in lightweight index'),
+
+    // Summarizer configuration
+    summarizerModel: z.string().default('gpt-4o-mini')
+        .describe('Model for output summarization'),
+    summarizerProvider: z.string().default('openai')
+        .describe('Provider for summarizer model'),
+    summarizerMaxTokens: z.number().int().min(100).default(500)
+        .describe('Max tokens for summarization response'),
+
+    // Auto mode settings
+    autoModeTimeout: z.number().int().min(0).default(300000)
+        .describe('Auto mode timeout in ms (default: 5 minutes)'),
+});
+
 const CustomProviderSchema = z.object({
     name: z.string().min(1),
     baseUrl: z.string().url(),
@@ -128,6 +162,7 @@ const SettingsSchema = z.object({
     app: AppSettingsSchema.optional(),
     tools: ToolsSettingsSchema.optional(),
     debug: DebugSettingsSchema.optional(),
+    companion: CompanionSettingsSchema.optional(),
 });
 
 // Type definitions
@@ -141,6 +176,7 @@ export interface SettingsData {
     app: z.infer<typeof AppSettingsSchema>;
     tools: z.infer<typeof ToolsSettingsSchema>;
     debug: z.infer<typeof DebugSettingsSchema>;
+    companion: z.infer<typeof CompanionSettingsSchema>;
 }
 
 type SettingSource = 'cli' | 'env' | 'config' | 'default';
@@ -292,6 +328,19 @@ const DEFAULT_SETTINGS: SettingsData = {
     },
     debug: {
         debugBashTool: false,
+    },
+    companion: {
+        enabled: false,
+        showHints: true,
+        errorCascadeThreshold: 3,
+        retryLoopThreshold: 2,
+        pauseHintDelayMs: 30000,
+        maxContextBufferSize: 1048576,
+        maxCommandIndexSize: 10,
+        summarizerModel: 'gpt-4o-mini',
+        summarizerProvider: 'openai',
+        summarizerMaxTokens: 500,
+        autoModeTimeout: 300000,
     },
 };
 
@@ -1082,6 +1131,9 @@ export class SettingsService {
             app: result.app || JSON.parse(JSON.stringify(defaults.app)),
             tools: result.tools || JSON.parse(JSON.stringify(defaults.tools)),
             debug: result.debug || JSON.parse(JSON.stringify(defaults.debug)),
+            companion:
+                result.companion ||
+                JSON.parse(JSON.stringify(defaults.companion)),
         };
 
         // Validate final result
@@ -1099,6 +1151,7 @@ export class SettingsService {
                 app: merged.app,
                 tools: merged.tools,
                 debug: merged.debug,
+                companion: merged.companion,
             };
         }
 

@@ -26,9 +26,11 @@ const cli = meow(
         Options
           -m, --model  Override the default OpenAI model (e.g. gpt-4o)
           -r, --reasoning  Set the reasoning effort for reasoning models (e.g. medium, high)
+          -c, --companion  Enable companion mode (watches terminal and assists on-demand)
 
         Examples
           $ term2 -m gpt-4o
+          $ term2 --companion
     `,
     {
         importMeta: import.meta,
@@ -40,6 +42,10 @@ const cli = meow(
             reasoning: {
                 type: 'string',
                 alias: 'r',
+            },
+            companion: {
+                type: 'boolean',
+                alias: 'c',
             },
         },
     },
@@ -122,15 +128,24 @@ const conversationService = new ConversationService({
 
 import {InputProvider} from './context/InputContext.js';
 
-render(
-    (
-        <InputProvider>
-            <App
-                conversationService={conversationService}
-                settingsService={settings}
-                historyService={history}
-                loggingService={logger}
-            />
-        </InputProvider>
-    ) as ReactNode,
-);
+// Conditional mode selection based on flags
+if (cli.flags.companion) {
+    // Companion mode - to be fully implemented in Phase 2-6
+    const CompanionApp = (await import('./modes/companion/companion-app.js'))
+        .default;
+    render(<CompanionApp /> as ReactNode);
+} else {
+    // Default chat mode
+    render(
+        (
+            <InputProvider>
+                <App
+                    conversationService={conversationService}
+                    settingsService={settings}
+                    historyService={history}
+                    loggingService={logger}
+                />
+            </InputProvider>
+        ) as ReactNode,
+    );
+}

@@ -10,7 +10,7 @@ A powerful terminal-based AI assistant that helps you get things done on your co
 
 -   🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, and OpenAI-compatible APIs
 -   🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
--   🛠️ **Advanced Tools** - Shell execution, file patching, search/replace, grep, and mentor consultation
+-   🛠️ **Advanced Tools** - Shell execution, file patching, search/replace, grep, find files, file reading, and mentor consultation
 -   💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/setting` for easy control
 -   📝 **Smart Context** - The assistant understands your environment and provides relevant help
 -   🎯 **Streaming Responses** - See the AI's thoughts and reasoning in real-time
@@ -108,6 +108,8 @@ While in the chat, you can use these commands:
 -   `/clear` - Clear the conversation history
 -   `/quit` or `/exit` - Exit the application
 -   `/model [model-name]` - Switch to a different model
+-   `/mentor` - Toggle mentor mode (collaborative mode with mentor model)
+-   `/lite` - Toggle lite mode (minimal context, no codebase)
 -   `/setting [key] [value]` - Modify runtime settings (e.g., `/setting agent.temperature 0.7`)
 -   `/help` - Show available commands
 
@@ -196,6 +198,19 @@ Consult a smarter model for advice:
 - Query a different/better model for complex questions
 - Configurable mentor model via settings
 - Useful for getting second opinions
+
+### Find Files Tool
+Search for files in the workspace:
+- High-performance file search using `fd`
+- Supports glob patterns and exclusions
+- Respects `.gitignore` by default
+
+### Read File Tool
+Read file contents with precision:
+- Read entire files or specific line ranges
+- Optimizes context usage for large files
+- Support for reading multiple files
+
 
 ## Supported Models
 

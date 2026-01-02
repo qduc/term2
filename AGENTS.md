@@ -39,7 +39,7 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
     -   `source/agent.ts` - Agent configuration
     -   `source/lib/openai-agent-client.ts` - Agent client with tool interceptor pattern
     -   `source/providers/` - Pluggable provider registry (OpenAI, OpenRouter, OpenAI-compatible)
-    -   `source/tools/` - Tool implementations (shell, search-replace, grep, apply-patch, ask-mentor)
+    -   `source/tools/` - Tool implementations (shell, search-replace, grep, apply-patch, ask-mentor, find-files, read-file)
     -   `source/prompts/` - System prompts for different model types
 -   **UI**: `source/components/` - React Ink components for terminal rendering
 -   **Utils**: `source/utils/` - Command safety, diff generation, output sanitization
@@ -71,6 +71,7 @@ High-level architecture and design decisions (concise):
 -   **Session & streaming model**: conversation sessions stream deltas, capture reasoning separately for O1/O3 models, and surface tool calls for explicit approval; retry and failure-tracking behavior is configurable.
 -   **App mode support**: default mode requires approval for all tools; edit mode auto-approves apply_patch operations for faster file editing workflows.
 -   **Reasoning effort control**: supports reasoning effort levels (none, minimal, low, medium, high, default) for O1/O3 models with dynamic configuration.
+-   **Decentralized tool message formatting**: Tool command message formatting is co-located with tool implementations to ensure self-contained tool definitions and prevent extraction logic drift.
 
 For implementation details, chronological change logs, and rationale, consult the source files under `source/` and the Git history — this document intentionally stays at a high level.
 
@@ -100,7 +101,7 @@ npx ava               # Unit tests
 
 -   **Adding a new slash command?** → `source/hooks/use-slash-commands.ts`
 -   **Modifying agent behavior?** → `docs/agent-instructions.md` and `source/prompts/`
--   **Adding a new tool?** → Create in `source/tools/`, add to `source/agent.ts`
+-   **Adding a new tool?** → Create in `source/tools/` (including `formatCommandMessage`), add to `source/agent.ts`
 -   **Adding a new provider?** → Create in `source/providers/`, register in provider registry
 -   **Changing the UI?** → Components in `source/components/`
 -   **Debugging message flow?** → Check `source/services/conversation-service.ts` and `conversation-session.ts`

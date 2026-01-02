@@ -104,6 +104,9 @@ term2 --reasoning medium       # Set reasoning effort to medium
 # SSH Mode - execute on remote servers
 term2 --ssh user@host --remote-dir /path/to/project
 term2 --ssh deploy@server.com --remote-dir /var/www/app --ssh-port 2222
+
+# Combine SSH with lite mode for remote terminal assistance
+term2 --ssh user@host --remote-dir /path --lite
 ```
 
 ### Slash Commands
@@ -189,6 +192,20 @@ When SSH mode is enabled:
 3. File operations (read, write, patch) are performed remotely using shell commands (`cat`, heredocs)
 4. The working directory is set to `--remote-dir` on the remote server
 5. The connection is automatically closed when you exit term2
+
+### Combining with Lite Mode
+
+SSH mode works seamlessly with lite mode for lightweight remote terminal assistance:
+
+```bash
+term2 --ssh user@host --remote-dir /path/to/project --lite
+```
+
+This combination provides:
+- Remote command execution over SSH
+- Read-only tools (grep, find_files, read_file) for exploration
+- Minimal context and faster responses
+- No file editing tools (safer for production servers)
 
 ### Limitations
 

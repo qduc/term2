@@ -7,6 +7,7 @@ import type {SlashCommand} from './SlashCommandMenu.js';
 import type {SettingsService} from '../services/settings-service.js';
 import type {LoggingService} from '../services/logging-service.js';
 import type {HistoryService} from '../services/history-service.js';
+import type {SSHInfo} from '../app.js';
 
 export type PendingApproval = {
     agentName: string;
@@ -31,6 +32,7 @@ export type BottomAreaProps = {
     historyService: HistoryService;
     onApprove: () => void;
     onReject: () => void;
+    sshInfo?: SSHInfo;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -47,6 +49,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     historyService,
     onApprove,
     onReject,
+    sshInfo,
 }) => {
     const [dotCount, setDotCount] = useState(1);
 
@@ -101,6 +104,7 @@ const BottomArea: FC<BottomAreaProps> = ({
             <StatusBar
                 settingsService={settingsService}
                 isShellMode={isShellMode}
+                sshInfo={sshInfo}
             />
         </Box>
     );

@@ -3,7 +3,7 @@ import React from 'react';
 import type {ReactNode} from 'react';
 import {render} from 'ink';
 import meow from 'meow';
-import App from './app.js';
+import App, {SSHInfo} from './app.js';
 import {OpenAIAgentClient} from './lib/openai-agent-client.js';
 import {ConversationService} from './services/conversation-service.js';
 import {
@@ -15,7 +15,10 @@ import {HistoryService} from './services/history-service.js';
 import { SSHService, SSHConfig } from './services/ssh-service.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { ISSHService } from './services/service-interfaces.js';
+import { resolveSSHHost } from './utils/ssh-config-parser.js';
 import os from 'os';
+import fs from 'fs';
+import path from 'path';
 
 // Global Ctrl+C handler for immediate exit
 process.on('SIGINT', () => {
@@ -134,6 +137,7 @@ const sshPortFlag = cli.flags.sshPort;
 
 let sshService: ISSHService | undefined;
 let executionContext: ExecutionContext | undefined;
+let sshInfo: SSHInfo | undefined;
 
 if (sshFlag) {
     if (!remoteDirFlag) {
@@ -147,11 +151,34 @@ if (sshFlag) {
         [user, host] = sshFlag.split('@');
     }
 
+    // Try to resolve host from ~/.ssh/config
+    const sshConfigPath = path.join(os.homedir(), '.ssh', 'config');
+    let resolvedHost = host;
+    let resolvedUser = user;
+    let resolvedPort = sshPortFlag || 22;
+    let identityFile: string | undefined;
+
+    if (fs.existsSync(sshConfigPath)) {
+        try {
+            const configContent = fs.readFileSync(sshConfigPath, 'utf-8');
+            const hostConfig = resolveSSHHost(host, configContent);
+            if (hostConfig) {
+                resolvedHost = hostConfig.hostName || host;
+                resolvedUser = user || hostConfig.user || '';
+                resolvedPort = sshPortFlag !== 22 ? sshPortFlag : (hostConfig.port || 22);
+                identityFile = hostConfig.identityFile;
+            }
+        } catch {
+            // Ignore errors reading SSH config, fall back to direct host
+        }
+    }
+
     const sshConfig: SSHConfig = {
-        host,
-        port: sshPortFlag || 22,
-        username: user || os.userInfo().username,
+        host: resolvedHost,
+        port: resolvedPort,
+        username: resolvedUser || os.userInfo().username,
         agent: process.env.SSH_AUTH_SOCK,
+        identityFile,
     };
 
     const service = new SSHService(sshConfig);
@@ -162,6 +189,13 @@ if (sshFlag) {
         console.log(`Connecting to ${host}...`);
         await service.connect();
         sshService = service;
+
+        // Create SSH info for status bar display
+        sshInfo = {
+            host: host,  // Use original alias for display
+            user: sshConfig.username,
+            remoteDir: remoteDirFlag,
+        };
 
         // Setup cleanup
         const cleanup = () => {
@@ -233,6 +267,7 @@ render(
                 settingsService={settings}
                 historyService={history}
                 loggingService={logger}
+                sshInfo={sshInfo}
             />
         </InputProvider>
     ) as ReactNode,

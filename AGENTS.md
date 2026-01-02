@@ -97,7 +97,7 @@ npx ava               # Unit tests
 -   **Conversation Store**: Client-side history for providers without server-side state management
 -   **Reasoning Effort**: Configurable reasoning levels for O1/O3 models (none, minimal, low, medium, high, default)
 -   **App Modes**: Default mode (manual approval) vs edit mode (auto-approve patches for faster workflows)
--   **SSH Mode**: Remote execution over SSH via `--ssh user@host --remote-dir /path` flags; uses `ExecutionContext` to abstract local vs remote execution
+-   **SSH Mode**: Remote execution over SSH via `--ssh user@host --remote-dir /path` flags; uses `ExecutionContext` to abstract local vs remote execution; compatible with lite mode for lightweight remote assistance
 -   **Execution Context**: Abstraction layer that tools query via `isRemote()` to branch between local and SSH execution paths
 
 ## Where to Look

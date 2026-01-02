@@ -3,13 +3,15 @@ import {Box, Text} from 'ink';
 import {useSetting} from '../hooks/use-setting.js';
 import {getProvider} from '../providers/index.js';
 import type {SettingsService} from '../services/settings-service.js';
+import type {SSHInfo} from '../app.js';
 
 interface StatusBarProps {
     settingsService: SettingsService;
     isShellMode?: boolean;
+    sshInfo?: SSHInfo;
 }
 
-const StatusBar: FC<StatusBarProps> = ({settingsService, isShellMode = false}) => {
+const StatusBar: FC<StatusBarProps> = ({settingsService, isShellMode = false, sshInfo}) => {
     const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
     const editMode = useSetting<boolean>(settingsService, 'app.editMode') ?? false;
     const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
@@ -30,7 +32,18 @@ const StatusBar: FC<StatusBarProps> = ({settingsService, isShellMode = false}) =
 
     return (
         <Box marginTop={1}>
-            <Box marginRight={1} gap={1}>
+            {sshInfo && (
+                <>
+                    <Box marginRight={1}>
+                        <Text color="#f97316" bold>
+                            SSH
+                        </Text>
+                        <Text color={slate}> {sshInfo.user}@{sshInfo.host}:{sshInfo.remoteDir}</Text>
+                    </Box>
+                    <Text color={slate}>│</Text>
+                </>
+            )}
+            <Box marginRight={1} marginLeft={sshInfo ? 1 : 0} gap={1}>
                 {liteMode && (
                     <>
                         <Text color="#10b981" bold>

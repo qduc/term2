@@ -38,11 +38,18 @@ function parseInput(value: string): ParsedInput {
 
 const SHELL_MAX_BUFFER = 1024 * 1024;
 
+export interface SSHInfo {
+    host: string;
+    user: string;
+    remoteDir: string;
+}
+
 interface AppProps {
     conversationService: ConversationService;
     settingsService: SettingsService;
     historyService: HistoryService;
     loggingService: LoggingService;
+    sshInfo?: SSHInfo;
 }
 
 interface ShellHistoryEntry {
@@ -57,6 +64,7 @@ const App: FC<AppProps> = ({
     settingsService,
     historyService,
     loggingService,
+    sshInfo,
 }) => {
     const {exit} = useApp();
     const { setInput} = useInputActions();
@@ -576,6 +584,7 @@ const App: FC<AppProps> = ({
                     historyService={historyService}
                     onApprove={handleApprove}
                     onReject={handleReject}
+                    sshInfo={sshInfo}
                 />
             </Box>
         </ErrorBoundary>

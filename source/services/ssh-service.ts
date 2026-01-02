@@ -1,4 +1,6 @@
 import {Client} from 'ssh2';
+import {readFileSync} from 'fs';
+import {homedir} from 'os';
 import {ISSHService} from './service-interfaces.js';
 
 export interface SSHConfig {
@@ -6,6 +8,7 @@ export interface SSHConfig {
     port: number;
     username: string;
     agent?: string;
+    identityFile?: string;
 }
 
 export class SSHService implements ISSHService {
@@ -18,6 +21,25 @@ export class SSHService implements ISSHService {
 
     async connect(): Promise<void> {
         return new Promise((resolve, reject) => {
+            // Build connection config, including private key if identity file specified
+            const connectConfig: any = {
+                host: this.config.host,
+                port: this.config.port,
+                username: this.config.username,
+                agent: this.config.agent,
+            };
+
+            if (this.config.identityFile) {
+                try {
+                    // Expand ~ to home directory
+                    const keyPath = this.config.identityFile.replace(/^~/, homedir());
+                    connectConfig.privateKey = readFileSync(keyPath);
+                } catch (err: any) {
+                    reject(new Error(`Failed to read identity file: ${err.message}`));
+                    return;
+                }
+            }
+
             this.client
                 .on('ready', () => {
                     this.connected = true;
@@ -30,7 +52,7 @@ export class SSHService implements ISSHService {
                 .on('end', () => {
                     this.connected = false;
                 })
-                .connect(this.config);
+                .connect(connectConfig);
         });
     }
 

@@ -27,6 +27,7 @@ import type {
     ILoggingService,
     ISettingsService,
 } from '../services/service-interfaces.js';
+import { ExecutionContext } from '../services/execution-context.js';
 import {createEditorImpl} from './editor-impl.js';
 import {ConversationStore} from '../services/conversation-store.js';
 
@@ -54,6 +55,7 @@ export class OpenAIAgentClient {
     ) => Promise<string | null>)[] = [];
     #logger: ILoggingService;
     #settings: ISettingsService;
+    #executionContext?: ExecutionContext;
     #editor: ReturnType<typeof createEditorImpl>;
     #mentorAgent: Agent | null = null;
     #mentorStore: ConversationStore | null = null;
@@ -73,13 +75,16 @@ export class OpenAIAgentClient {
         deps: {
             logger: ILoggingService;
             settings: ISettingsService;
+            executionContext?: ExecutionContext;
         };
     }) {
         this.#logger = deps.logger;
         this.#settings = deps.settings;
+        this.#executionContext = deps.executionContext;
         this.#editor = createEditorImpl({
             loggingService: this.#logger,
             settingsService: this.#settings,
+            executionContext: this.#executionContext,
         });
         this.#reasoningEffort = reasoningEffort;
         this.#temperature = this.#settings.get<number | undefined>(
@@ -674,6 +679,7 @@ export class OpenAIAgentClient {
             {
                 settingsService: this.#settings,
                 loggingService: this.#logger,
+                executionContext: this.#executionContext,
                 // @ts-ignore - Definition update coming next
                 askMentor: this.#createMentor,
             },

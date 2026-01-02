@@ -2,7 +2,9 @@ import test from 'ava';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import {readFileToolDefinition} from './read-file.js';
+import { createReadFileToolDefinition } from './read-file.js';
+
+const readFileToolDefinition = createReadFileToolDefinition();
 
 // Helper to create a temp dir and change cwd to it
 async function withTempDir(run: (dir: string) => Promise<void>) {

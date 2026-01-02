@@ -12,6 +12,10 @@ import {
 } from './services/settings-service.js';
 import {LoggingService} from './services/logging-service.js';
 import {HistoryService} from './services/history-service.js';
+import { SSHService, SSHConfig } from './services/ssh-service.js';
+import { ExecutionContext } from './services/execution-context.js';
+import { ISSHService } from './services/service-interfaces.js';
+import os from 'os';
 
 // Global Ctrl+C handler for immediate exit
 process.on('SIGINT', () => {
@@ -24,9 +28,12 @@ const cli = meow(
           $ term2
 
         Options
-          -m, --model  Override the default OpenAI model (e.g. gpt-4o)
-          -r, --reasoning  Set the reasoning effort for reasoning models (e.g. medium, high)
-          -l, --lite  Start in lite mode (minimal context for general terminal assistance)
+          -m, --model       Override the default OpenAI model (e.g. gpt-4o)
+          -r, --reasoning   Set the reasoning effort for reasoning models (e.g. medium, high)
+          -l, --lite        Start in lite mode (minimal context for general terminal assistance)
+          --ssh             Enable SSH mode (user@host)
+          --remote-dir      Required remote working directory for SSH mode
+          --ssh-port        Optional SSH port (default: 22)
 
         Examples
           $ term2 -m gpt-4o
@@ -47,6 +54,16 @@ const cli = meow(
                 type: 'boolean',
                 alias: 'l',
                 default: false,
+            },
+            ssh: {
+                type: 'string',
+            },
+            remoteDir: {
+                type: 'string',
+            },
+            sshPort: {
+                type: 'number',
+                default: 22,
             },
         },
     },
@@ -110,6 +127,62 @@ const settings = new SettingsService({
     loggingService: logger,
 });
 
+// SSH Handling
+const sshFlag = cli.flags.ssh;
+const remoteDirFlag = cli.flags.remoteDir;
+const sshPortFlag = cli.flags.sshPort;
+
+let sshService: ISSHService | undefined;
+let executionContext: ExecutionContext | undefined;
+
+if (sshFlag) {
+    if (!remoteDirFlag) {
+        console.error('Error: --remote-dir is required when using --ssh');
+        process.exit(1);
+    }
+
+    let user = '';
+    let host = sshFlag;
+    if (sshFlag.includes('@')) {
+        [user, host] = sshFlag.split('@');
+    }
+
+    const sshConfig: SSHConfig = {
+        host,
+        port: sshPortFlag || 22,
+        username: user || os.userInfo().username,
+        agent: process.env.SSH_AUTH_SOCK,
+    };
+
+    const service = new SSHService(sshConfig);
+
+    try {
+        // We use top-level await here assuming node16+ / esm
+        // To provide feedback, we can log to console before UI starts
+        console.log(`Connecting to ${host}...`);
+        await service.connect();
+        sshService = service;
+
+        // Setup cleanup
+        const cleanup = () => {
+            if (sshService?.isConnected()) {
+                sshService.disconnect();
+            }
+        };
+        process.on('exit', cleanup);
+        process.on('SIGINT', cleanup);
+        process.on('SIGTERM', cleanup);
+
+    } catch (e: any) {
+        console.error(`Failed to connect via SSH to ${host}:`, e.message);
+        process.exit(1);
+    }
+
+    executionContext = new ExecutionContext(sshService, remoteDirFlag);
+} else {
+    executionContext = new ExecutionContext();
+}
+
 // Enforce mutual exclusion between lite mode and edit/mentor modes at startup
 const liteMode = settings.get<boolean>('app.liteMode');
 const editMode = settings.get<boolean>('app.editMode');
@@ -142,6 +215,7 @@ const conversationService = new ConversationService({
         deps: {
             logger: logger,
             settings: settings,
+            executionContext: executionContext,
         },
     }),
     deps: {

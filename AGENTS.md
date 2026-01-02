@@ -6,7 +6,7 @@ This is a terminal-based AI assistant built with React (Ink), OpenAI Agents SDK,
 
 A CLI app that lets users chat with an AI agent in real-time. The agent can execute shell commands and modify files, with interactive approval prompts for safety.
 
-**Key features**: streaming responses, command approval flow, slash commands (`/clear`, `/quit`, `/model`, `/setting`), input history, markdown rendering in the terminal, tool hallucination retry logic, and multi-provider support.
+**Key features**: streaming responses, command approval flow, slash commands (`/clear`, `/quit`, `/model`, `/setting`), input history, markdown rendering in the terminal, tool hallucination retry logic, multi-provider support, and SSH mode for remote execution.
 
 ## Quick Start
 
@@ -34,7 +34,7 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 -   **Entry Points**: `source/cli.tsx` (entry), `source/app.tsx` (main React component)
 -   **State & Logic**:
     -   `source/hooks/` - UI state (conversation, slash commands, input history, settings)
-    -   `source/services/` - Business logic (conversation flow, approval, logging, history, settings)
+    -   `source/services/` - Business logic (conversation flow, approval, logging, history, settings, SSH)
 -   **Agent & Tools**:
     -   `source/agent.ts` - Agent configuration
     -   `source/lib/openai-agent-client.ts` - Agent client with tool interceptor pattern
@@ -72,6 +72,7 @@ High-level architecture and design decisions (concise):
 -   **App mode support**: default mode requires approval for all tools; edit mode auto-approves apply_patch operations for faster file editing workflows.
 -   **Reasoning effort control**: supports reasoning effort levels (none, minimal, low, medium, high, default) for O1/O3 models with dynamic configuration.
 -   **Decentralized tool message formatting**: Tool command message formatting is co-located with tool implementations to ensure self-contained tool definitions and prevent extraction logic drift.
+-   **SSH mode for remote execution**: Optional `--ssh user@host` flag enables remote command execution and file operations over SSH. Uses `ssh2` library with SSH agent authentication. An `ExecutionContext` abstraction allows tools to transparently execute locally or remotely.
 
 For implementation details, chronological change logs, and rationale, consult the source files under `source/` and the Git history — this document intentionally stays at a high level.
 
@@ -96,6 +97,8 @@ npx ava               # Unit tests
 -   **Conversation Store**: Client-side history for providers without server-side state management
 -   **Reasoning Effort**: Configurable reasoning levels for O1/O3 models (none, minimal, low, medium, high, default)
 -   **App Modes**: Default mode (manual approval) vs edit mode (auto-approve patches for faster workflows)
+-   **SSH Mode**: Remote execution over SSH via `--ssh user@host --remote-dir /path` flags; uses `ExecutionContext` to abstract local vs remote execution
+-   **Execution Context**: Abstraction layer that tools query via `isRemote()` to branch between local and SSH execution paths
 
 ## Where to Look
 
@@ -111,6 +114,7 @@ npx ava               # Unit tests
 -   **Diff generation?** → `source/utils/diff-utils.ts`
 -   **Modifying configuration?** → Edit `~/Library/Logs/term2-nodejs/settings.json` (macOS) or `~/.local/state/term2-nodejs/settings.json` (Linux), or use environment variables / CLI flags
 -   **Testing?** → See `test/` directory for test utilities, test files are co-located with source files
+-   **SSH mode?** → `source/services/ssh-service.ts` (SSH connection and operations), `source/services/execution-context.ts` (local/remote abstraction)
 
 ## Resources
 

@@ -35,17 +35,36 @@ const findFilesParametersSchema = z.object({
 
 export type FindFilesToolParams = z.infer<typeof findFilesParametersSchema>;
 
-let hasFd: boolean | null = null;
+import { ExecutionContext } from '../services/execution-context.js';
+import { executeShellCommand } from '../utils/execute-shell.js';
 
-async function checkFdAvailability(): Promise<boolean> {
-	if (hasFd !== null) return hasFd;
-	try {
-		await execPromise('fd --version');
-		hasFd = true;
-	} catch {
-		hasFd = false;
+let hasFd: boolean | null = null;
+let hasFdRemote: boolean | null = null;
+
+async function checkFdAvailability(executionContext?: ExecutionContext): Promise<boolean> {
+	const isRemote = executionContext?.isRemote() ?? false;
+
+	if (isRemote) {
+		if (hasFdRemote !== null) return hasFdRemote;
+		try {
+			const sshService = executionContext?.getSSHService();
+			if (!sshService) return false;
+			await sshService.executeCommand('fd --version');
+			hasFdRemote = true;
+		} catch {
+			hasFdRemote = false;
+		}
+		return hasFdRemote;
+	} else {
+		if (hasFd !== null) return hasFd;
+		try {
+			await execPromise('fd --version');
+			hasFd = true;
+		} catch {
+			hasFd = false;
+		}
+		return hasFd;
 	}
-	return hasFd;
 }
 
 export const formatFindFilesCommandMessage = (
@@ -92,102 +111,117 @@ export const formatFindFilesCommandMessage = (
 	];
 };
 
-export const findFilesToolDefinition: ToolDefinition<FindFilesToolParams> = {
-	name: 'find_files',
-	description:
-		'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files.',
-	parameters: findFilesParametersSchema,
-	needsApproval: () => false, // Search is read-only and safe
-	execute: async params => {
-		const {pattern, path: searchPath, max_results} = params;
+export const createFindFilesToolDefinition = (deps: { executionContext?: ExecutionContext } = {}): ToolDefinition<FindFilesToolParams> => {
+	const { executionContext } = deps;
+	return {
+		name: 'find_files',
+		description:
+			'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files.',
+		parameters: findFilesParametersSchema,
+		needsApproval: () => false, // Search is read-only and safe
+		execute: async params => {
+			const { pattern, path: searchPath, max_results } = params;
 
-		// Validate pattern is not empty
-		if (!pattern || pattern.trim() === '') {
-			return 'Error: Search pattern cannot be empty. Please provide a valid file name or glob pattern.';
-		}
+			// Validate pattern is not empty
+			if (!pattern || pattern.trim() === '') {
+				return 'Error: Search pattern cannot be empty. Please provide a valid file name or glob pattern.';
+			}
 
-		const limit = max_results ?? 50;
-		const targetPath = searchPath?.trim() || '.';
+			const limit = max_results ?? 50;
+			const targetPath = searchPath?.trim() || '.';
+			const cwd = executionContext?.getCwd() || process.cwd();
 
-		try {
+			try {
 			// Validate path is within workspace
-			const absolutePath = resolveWorkspacePath(targetPath);
+				const absolutePath = resolveWorkspacePath(targetPath, cwd);
 
-			const useFd = await checkFdAvailability();
-			let command = '';
+				const useFd = await checkFdAvailability(executionContext);
+				let command = '';
 
-			if (useFd) {
-				// Use fd (faster and more user-friendly)
-				const args = [
-					'fd',
-					'--color=never',
-					'--type',
-					'f', // files only
-					'--glob', // use glob pattern matching
-				];
+				if (useFd) {
+					// Use fd (faster and more user-friendly)
+					const args = [
+						'fd',
+						'--color=never',
+						'--type',
+						'f', // files only
+						'--glob', // use glob pattern matching
+					];
 
-				// Escape pattern for shell
-				args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
-				args.push(`'${absolutePath.replace(/'/g, "'\\''")}'`);
+					// Escape pattern for shell
+					args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
+					args.push(`'${absolutePath.replace(/'/g, "'\\''")}'`);
 
-				command = args.join(' ');
-			} else {
-				// Fallback to find
-				const args = [
-					'find',
-					`'${absolutePath.replace(/'/g, "'\\''")}'`,
-					'-type',
-					'f',
-					'-name',
-				];
+					command = args.join(' ');
+				} else {
+					// Fallback to find
+					const args = [
+						'find',
+						`'${absolutePath.replace(/'/g, "'\\''")}'`,
+						'-type',
+						'f',
+						'-name',
+					];
 
-				// Escape pattern for shell
-				args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
+					// Escape pattern for shell
+					args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
 
-				command = args.join(' ');
+					command = args.join(' ');
+				}
+
+				const sshService = executionContext?.getSSHService();
+
+				const result = await executeShellCommand(command, {
+					maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+					cwd,
+					sshService,
+				});
+
+				if (result.exitCode === 1) {
+					return `No files found matching pattern: ${pattern}`;
+				}
+
+				if (result.exitCode !== 0 && result.exitCode !== null) {
+					throw new Error(result.stderr || 'Unknown error');
+				}
+
+				const trimmed = result.stdout.trim();
+
+				if (!trimmed) {
+					return `No files found matching pattern: ${pattern}`;
+				}
+
+				const lines = trimmed.split('\n');
+
+				// Remove './' prefix from paths for cleaner output
+				const cleanedLines = lines.map(line =>
+					line.startsWith('./') ? line.substring(2) : line,
+				);
+
+				// Apply limit
+				let resultText = cleanedLines.slice(0, limit).join('\n');
+
+				// Add note if results were truncated
+				if (cleanedLines.length > limit) {
+					resultText += `\n\nNote: Results limited to ${limit} files. Found ${cleanedLines.length} total matches. Use max_results parameter to see more.`;
+				}
+
+				return resultText;
+			} catch (error: any) {
+				// Handle path resolution errors
+				if (error.message?.includes('outside workspace')) {
+					return `Error: ${error.message}`;
+				}
+
+				// fd/find returns exit code 1 if no matches found
+				if (error.code === 1) {
+					return `No files found matching pattern: ${pattern}`;
+				}
+
+				// Handle other errors
+				return `Error: ${error.message || String(error)}`;
 			}
-
-			const {stdout} = await execPromise(command, {
-				maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-				cwd: process.cwd(), // Run command from current working directory
-			});
-
-			const trimmed = stdout.trim();
-
-			if (!trimmed) {
-				return `No files found matching pattern: ${pattern}`;
-			}
-
-			const lines = trimmed.split('\n');
-
-			// Remove './' prefix from paths for cleaner output
-			const cleanedLines = lines.map(line =>
-				line.startsWith('./') ? line.substring(2) : line,
-			);
-
-			// Apply limit
-			let result = cleanedLines.slice(0, limit).join('\n');
-
-			// Add note if results were truncated
-			if (cleanedLines.length > limit) {
-				result += `\n\nNote: Results limited to ${limit} files. Found ${cleanedLines.length} total matches. Use max_results parameter to see more.`;
-			}
-
-			return result;
-		} catch (error: any) {
-			// Handle path resolution errors
-			if (error.message?.includes('outside workspace')) {
-				return `Error: ${error.message}`;
-			}
-
-			// fd/find returns exit code 1 if no matches found
-			if (error.code === 1) {
-				return `No files found matching pattern: ${pattern}`;
-			}
-
-			// Handle other errors
-			return `Error: ${error.message || String(error)}`;
-		}
-	},
-	formatCommandMessage: formatFindFilesCommandMessage,
+		},
+		formatCommandMessage: formatFindFilesCommandMessage,
+	};
 };

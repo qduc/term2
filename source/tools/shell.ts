@@ -25,6 +25,7 @@ import {
     createBaseMessage,
     getCallIdFromItem,
 } from './format-helpers.js';
+import { ExecutionContext } from '../services/execution-context.js';
 
 const shellParametersSchema = z.object({
     command: z.string().min(1).describe('Single shell command to execute.'),
@@ -210,8 +211,9 @@ export const formatShellCommandMessage = (
 export function createShellToolDefinition(deps: {
     loggingService: ILoggingService;
     settingsService: ISettingsService;
+    executionContext?: ExecutionContext;
 }): ToolDefinition<ShellToolParams> {
-    const {loggingService, settingsService} = deps;
+    const { loggingService, settingsService, executionContext } = deps;
 
     // Create command logger function with dependencies
     const logValidationError = (message: string) =>
@@ -224,7 +226,7 @@ export function createShellToolDefinition(deps: {
         parameters: shellParametersSchema,
         needsApproval: async params => {
             try {
-                const cwd = process.cwd();
+                const cwd = executionContext?.getCwd() || process.cwd();
                 const optimizedCommand = stripRedundantCd(params.command, cwd);
                 const isDangerous = validateCommandSafety(
                     optimizedCommand,
@@ -251,7 +253,8 @@ export function createShellToolDefinition(deps: {
             }
         },
         execute: async ({command, timeout_ms, max_output_length}) => {
-            const cwd = process.cwd();
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
             const correlationId = randomUUID();
 
             // Set correlation ID for tracking related operations
@@ -291,6 +294,7 @@ export function createShellToolDefinition(deps: {
                     cwd,
                     timeout,
                     maxBuffer: 1024 * 1024, // 1MB max buffer
+                    sshService,
                 });
 
                 const stdout = result.stdout ?? '';

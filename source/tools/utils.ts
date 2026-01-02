@@ -4,11 +4,10 @@ import {z} from 'zod';
 /**
  * Resolves a relative path and ensures it's within the workspace
  */
-export function resolveWorkspacePath(relativePath: string): string {
-    const workspaceRoot = process.cwd();
-    const resolved = path.resolve(workspaceRoot, relativePath);
+export function resolveWorkspacePath(relativePath: string, baseDir: string = process.cwd()): string {
+    const resolved = path.resolve(baseDir, relativePath);
 
-    if (!resolved.startsWith(workspaceRoot)) {
+    if (!resolved.startsWith(baseDir)) {
         throw new Error(`Operation outside workspace: ${relativePath}`);
     }
 

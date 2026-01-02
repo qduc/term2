@@ -1,6 +1,6 @@
-import {grepToolDefinition} from './tools/grep.js';
-import {readFileToolDefinition} from './tools/read-file.js';
-import {findFilesToolDefinition} from './tools/find-files.js';
+import { createGrepToolDefinition } from './tools/grep.js';
+import { createReadFileToolDefinition } from './tools/read-file.js';
+import { createFindFilesToolDefinition } from './tools/find-files.js';
 import {createSearchReplaceToolDefinition} from './tools/search-replace.js';
 import {createApplyPatchToolDefinition} from './tools/apply-patch.js';
 import {createShellToolDefinition} from './tools/shell.js';
@@ -13,6 +13,7 @@ import type {
     ISettingsService,
     ILoggingService,
 } from './services/service-interfaces.js';
+import { ExecutionContext } from './services/execution-context.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 
@@ -38,13 +39,28 @@ function getTopLevelEntries(cwd: string, limit = 50): string {
     }
 }
 
-function getEnvInfo(settingsService: ISettingsService, lite = false): string {
+function getEnvInfo(settingsService: ISettingsService, executionContext?: ExecutionContext, lite = false): string {
     const shellPath = settingsService.get<string>('app.shellPath') || 'unknown';
+    const cwd = executionContext?.getCwd() || process.cwd();
+    const osType = os.type();
+    const osRelease = os.release();
+    const osPlatform = os.platform();
+
     if (lite) {
         // Minimal env info for lite mode - no cwd listing
-        return `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${shellPath}`;
+        return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}`;
     }
-    return `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${shellPath}; cwd: ${process.cwd()}; top-level: ${getTopLevelEntries(process.cwd())}`;
+
+    // For remote sessions, we might not be able to list top-level entries efficiently or at all easily here synchronously
+    // We'll skip top-level entries for now if remote, or maybe we can't get them sync.
+    // getTopLevelEntries is sync and uses fs.readdirSync. This won't work for remote.
+    // So if remote, we skip that part.
+    let topLevel = '';
+    if (!executionContext?.isRemote()) {
+        topLevel = `; top-level: ${getTopLevelEntries(cwd)}`;
+    }
+
+    return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd: ${cwd}${topLevel}`;
 }
 
 function getAgentsInstructions(): string {
@@ -106,11 +122,12 @@ export const getAgentDefinition = (
     deps: {
         settingsService: ISettingsService;
         loggingService: ILoggingService;
+        executionContext?: ExecutionContext;
         askMentor?: (question: string) => Promise<string>;
     },
     model?: string,
 ): AgentDefinition => {
-    const {settingsService, loggingService, askMentor} = deps;
+    const { settingsService, loggingService, executionContext, askMentor } = deps;
     const defaultModel = settingsService.get<string>('agent.model');
     const resolvedModel = model?.trim() || defaultModel;
 
@@ -121,31 +138,36 @@ export const getAgentDefinition = (
     const promptPath = getPromptPath(resolvedModel, mentorMode, liteMode);
     const prompt = resolvePrompt(promptPath);
 
-    const envInfo = getEnvInfo(settingsService, liteMode);
+    const envInfo = getEnvInfo(settingsService, executionContext, liteMode);
 
     const tools: ToolDefinition[] = [
-        createShellToolDefinition({settingsService, loggingService}),
+        createShellToolDefinition({ settingsService, loggingService, executionContext }),
     ];
 
     if (liteMode) {
         // Lite mode: shell + read-only tools only (no editing tools)
-        tools.push(grepToolDefinition, readFileToolDefinition, findFilesToolDefinition);
+        tools.push(
+            createGrepToolDefinition({ executionContext }),
+            createReadFileToolDefinition({ executionContext }),
+            createFindFilesToolDefinition({ executionContext })
+        );
     } else {
         // Full mode: all tools based on model
         const isGpt5 = resolvedModel.toLowerCase().includes('gpt-5');
 
         if (isGpt5) {
             tools.push(
-                createApplyPatchToolDefinition({settingsService, loggingService}),
+                createApplyPatchToolDefinition({ settingsService, loggingService, executionContext }),
             );
         } else {
             tools.push(
-                grepToolDefinition,
-                readFileToolDefinition,
-                findFilesToolDefinition,
+                createGrepToolDefinition({ executionContext }),
+                createReadFileToolDefinition({ executionContext }),
+                createFindFilesToolDefinition({ executionContext }),
                 createSearchReplaceToolDefinition({
                     settingsService,
                     loggingService,
+                    executionContext,
                 }),
             );
         }

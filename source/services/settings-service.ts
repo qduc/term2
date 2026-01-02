@@ -93,6 +93,14 @@ const DebugSettingsSchema = z.object({
     debugBashTool: z.boolean().optional().default(false),
 });
 
+const SSHSettingsSchema = z.object({
+    enabled: z.boolean().default(false),
+    host: z.string().optional(),
+    port: z.number().int().positive().default(22),
+    username: z.string().optional(),
+    remoteDir: z.string().optional(),
+});
+
 const CustomProviderSchema = z.object({
     name: z.string().min(1),
     baseUrl: z.string().url(),
@@ -130,6 +138,7 @@ const SettingsSchema = z.object({
     app: AppSettingsSchema.optional(),
     tools: ToolsSettingsSchema.optional(),
     debug: DebugSettingsSchema.optional(),
+    ssh: SSHSettingsSchema.optional(),
 });
 
 // Type definitions
@@ -143,6 +152,7 @@ export interface SettingsData {
     app: z.infer<typeof AppSettingsSchema>;
     tools: z.infer<typeof ToolsSettingsSchema>;
     debug: z.infer<typeof DebugSettingsSchema>;
+    ssh: z.infer<typeof SSHSettingsSchema>;
 }
 
 type SettingSource = 'cli' | 'env' | 'config' | 'default';
@@ -192,6 +202,13 @@ export interface SettingsWithSources {
     debug: {
         debugBashTool: SettingWithSource<boolean>;
     };
+    ssh: {
+        enabled: SettingWithSource<boolean>;
+        host: SettingWithSource<string | undefined>;
+        port: SettingWithSource<number>;
+        username: SettingWithSource<string | undefined>;
+        remoteDir: SettingWithSource<string | undefined>;
+    };
 }
 
 /**
@@ -226,6 +243,11 @@ export const SETTING_KEYS = {
     APP_LITE_MODE: 'app.liteMode',
     TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
     DEBUG_BASH_TOOL: 'debug.debugBashTool',
+    SSH_ENABLED: 'ssh.enabled',
+    SSH_HOST: 'ssh.host',
+    SSH_PORT: 'ssh.port',
+    SSH_USERNAME: 'ssh.username',
+    SSH_REMOTE_DIR: 'ssh.remoteDir',
 } as const;
 
 // Define which settings are modifiable at runtime
@@ -298,6 +320,10 @@ const DEFAULT_SETTINGS: SettingsData = {
     },
     debug: {
         debugBashTool: false,
+    },
+    ssh: {
+        enabled: false,
+        port: 22,
     },
 };
 
@@ -852,6 +878,28 @@ export class SettingsService {
                     source: this.getSource('debug.debugBashTool'),
                 },
             },
+            ssh: {
+                enabled: {
+                    value: this.settings.ssh.enabled,
+                    source: this.getSource('ssh.enabled'),
+                },
+                host: {
+                    value: this.settings.ssh.host,
+                    source: this.getSource('ssh.host'),
+                },
+                port: {
+                    value: this.settings.ssh.port,
+                    source: this.getSource('ssh.port'),
+                },
+                username: {
+                    value: this.settings.ssh.username,
+                    source: this.getSource('ssh.username'),
+                },
+                remoteDir: {
+                    value: this.settings.ssh.remoteDir,
+                    source: this.getSource('ssh.remoteDir'),
+                },
+            },
         };
     }
 
@@ -1095,6 +1143,7 @@ export class SettingsService {
             app: result.app || JSON.parse(JSON.stringify(defaults.app)),
             tools: result.tools || JSON.parse(JSON.stringify(defaults.tools)),
             debug: result.debug || JSON.parse(JSON.stringify(defaults.debug)),
+            ssh: result.ssh || JSON.parse(JSON.stringify(defaults.ssh)),
         };
 
         // Validate final result
@@ -1112,6 +1161,7 @@ export class SettingsService {
                 app: merged.app,
                 tools: merged.tools,
                 debug: merged.debug,
+                ssh: merged.ssh,
             };
         }
 

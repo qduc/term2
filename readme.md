@@ -18,6 +18,7 @@ A powerful terminal-based AI assistant that helps you get things done on your co
 -   ⚡ **Command History** - Navigate previous inputs with arrow keys
 -   🎨 **Markdown Rendering** - Formatted code blocks and text in the terminal
 -   🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
+-   🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
 
 ## Demo
 
@@ -99,6 +100,10 @@ term2 -m gpt-4o                # Use a specific model
 term2 --model gpt-4o-mini      # Use GPT-4o mini for faster/cheaper responses
 term2 -r high                  # Set reasoning effort to high (for O1/O3 models)
 term2 --reasoning medium       # Set reasoning effort to medium
+
+# SSH Mode - execute on remote servers
+term2 --ssh user@host --remote-dir /path/to/project
+term2 --ssh deploy@server.com --remote-dir /var/www/app --ssh-port 2222
 ```
 
 ### Slash Commands
@@ -140,6 +145,11 @@ export TERM2_SHELL_MAX_OUTPUT_LINES="1000"
 
 # App settings
 export TERM2_APP_MODE="default"  # or "edit" for automatic patch approval
+
+# SSH settings (alternative to CLI flags)
+export TERM2_SSH_HOST="user@server.com"
+export TERM2_SSH_PORT="22"
+export TERM2_SSH_REMOTE_DIR="/path/to/project"
 ```
 
 ## How It Works
@@ -150,6 +160,41 @@ export TERM2_APP_MODE="default"  # or "edit" for automatic patch approval
 4. After approval, the command runs and results are shown
 5. The AI uses the results to provide a helpful response
 6. You stay in full control - reject any command with 'n'
+
+## SSH Mode
+
+SSH mode enables term2 to execute commands and modify files on remote servers over SSH. This is useful for managing remote deployments, debugging server issues, or working on remote development environments.
+
+### Requirements
+
+- SSH agent running with your keys loaded (`ssh-add`)
+- SSH access to the target server
+- `--remote-dir` is required to specify the working directory on the remote server
+
+### Usage
+
+```bash
+# Basic usage
+term2 --ssh user@hostname --remote-dir /path/to/project
+
+# With custom SSH port
+term2 --ssh user@hostname --remote-dir /path/to/project --ssh-port 2222
+```
+
+### How It Works
+
+When SSH mode is enabled:
+1. term2 establishes an SSH connection using your SSH agent for authentication
+2. All shell commands are executed on the remote server via SSH
+3. File operations (read, write, patch) are performed remotely using shell commands (`cat`, heredocs)
+4. The working directory is set to `--remote-dir` on the remote server
+5. The connection is automatically closed when you exit term2
+
+### Limitations
+
+- Authentication is via SSH agent only (no password prompts)
+- Binary file operations are not supported (text files only)
+- Large file transfers may be slower than local operations
 
 ## Safety Features
 
@@ -287,6 +332,31 @@ sudo npm install --global term2
 
 Or configure npm to install globally without sudo: https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally
 
+### SSH connection failed
+
+Make sure your SSH agent is running and has your keys loaded:
+
+```bash
+# Start SSH agent if not running
+eval "$(ssh-agent -s)"
+
+# Add your SSH key
+ssh-add ~/.ssh/id_rsa
+
+# Verify the key is loaded
+ssh-add -l
+```
+
+Also verify you can connect manually: `ssh user@hostname`
+
+### SSH mode: "remote-dir is required"
+
+When using `--ssh`, you must also specify `--remote-dir`:
+
+```bash
+term2 --ssh user@host --remote-dir /home/user/project
+```
+
 ## Tips
 
 -   The assistant won't run dangerous commands without your approval
@@ -310,6 +380,7 @@ Built with:
 -   [OpenAI Agents SDK](https://github.com/openai/openai-agents-js)
 -   [Ink](https://github.com/vadimdemedes/ink) - React for CLI
 -   [TypeScript](https://www.typescriptlang.org/)
+-   [ssh2](https://github.com/mscdex/ssh2) - SSH client for Node.js
 
 ---
 

@@ -14,6 +14,7 @@ import {
     normalizeToolArguments,
     createBaseMessage,
 } from './format-helpers.js';
+import { ExecutionContext } from '../services/execution-context.js';
 
 /**
  * Error thrown when patch validation fails (malformed diff)
@@ -90,8 +91,9 @@ export const formatApplyPatchCommandMessage = (
 export function createApplyPatchToolDefinition(deps: {
     loggingService: ILoggingService;
     settingsService: ISettingsService;
+    executionContext?: ExecutionContext;
 }): ToolDefinition<ApplyPatchToolParams> {
-    const {loggingService, settingsService} = deps;
+    const { loggingService, settingsService, executionContext } = deps;
 
     return {
         name: 'apply_patch',
@@ -188,10 +190,10 @@ export function createApplyPatchToolDefinition(deps: {
                 // }
 
                 // Resolve and ensure target within workspace
-                const workspaceRoot = process.cwd();
+                const workspaceRoot = executionContext?.getCwd() || process.cwd();
                 let targetPath: string;
                 try {
-                    targetPath = resolveWorkspacePath(filePath);
+                    targetPath = resolveWorkspacePath(filePath, workspaceRoot);
                 } catch (e: any) {
                     // Outside workspace => require approval
                     loggingService.security(
@@ -252,10 +254,28 @@ export function createApplyPatchToolDefinition(deps: {
             const enableFileLogging = settingsService.get<boolean>(
                 'tools.logFileOperations',
             );
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
+            const isRemote = executionContext?.isRemote() && !!sshService;
+
+            const readFileFn = async (p: string) => {
+                if (isRemote && sshService) return sshService.readFile(p);
+                return readFile(p, 'utf8');
+            };
+
+            const writeFileFn = async (p: string, c: string) => {
+                if (isRemote && sshService) return sshService.writeFile(p, c);
+                return writeFile(p, c, 'utf8');
+            };
+
+            const mkdirFn = async (p: string) => {
+                if (isRemote && sshService) return sshService.mkdir(p);
+                return mkdir(p, { recursive: true });
+            };
 
             try {
                 const {type, path: filePath, diff} = params;
-                const targetPath = resolveWorkspacePath(filePath);
+                const targetPath = resolveWorkspacePath(filePath, cwd);
 
                 if (enableFileLogging) {
                     loggingService.info(`File operation started: ${type}`, {
@@ -272,7 +292,7 @@ export function createApplyPatchToolDefinition(deps: {
                             applyDiff('', diff);
                         } else {
                             // Test applying diff to existing file content
-                            const original = await readFile(targetPath, 'utf8');
+                            const original = await readFileFn(targetPath);
                             applyDiff(original, diff);
                         }
                     } catch (validationError: any) {
@@ -303,13 +323,11 @@ export function createApplyPatchToolDefinition(deps: {
                 switch (type) {
                     case 'create_file': {
                         // Ensure parent directory exists
-                        await mkdir(path.dirname(targetPath), {
-                            recursive: true,
-                        });
+                        await mkdirFn(path.dirname(targetPath));
 
                         // Apply diff to empty content for new file
                         const content = applyDiff('', diff);
-                        await writeFile(targetPath, content, 'utf8');
+                        await writeFileFn(targetPath, content);
 
                         if (enableFileLogging) {
                             try {
@@ -338,7 +356,7 @@ export function createApplyPatchToolDefinition(deps: {
                         // Read existing file
                         let original: string;
                         try {
-                            original = await readFile(targetPath, 'utf8');
+                            original = await readFileFn(targetPath);
                         } catch (error: any) {
                             if (error?.code === 'ENOENT') {
                                 if (enableFileLogging) {
@@ -365,7 +383,7 @@ export function createApplyPatchToolDefinition(deps: {
 
                         // Apply diff to existing content
                         const patched = applyDiff(original, diff);
-                        await writeFile(targetPath, patched, 'utf8');
+                        await writeFileFn(targetPath, patched);
 
                         if (enableFileLogging) {
                             try {

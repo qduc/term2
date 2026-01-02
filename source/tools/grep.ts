@@ -45,18 +45,178 @@ export {
     type OutputTrimConfig,
 };
 
-let hasRg: boolean | null = null;
+import { ExecutionContext } from '../services/execution-context.js';
+import { executeShellCommand } from '../utils/execute-shell.js';
 
-async function checkRgAvailability(): Promise<boolean> {
-    if (hasRg !== null) return hasRg;
-    try {
-        await execPromise('rg --version');
-        hasRg = true;
-    } catch {
-        hasRg = false;
+let hasRg: boolean | null = null;
+let hasRgRemote: boolean | null = null;
+
+async function checkRgAvailability(executionContext?: ExecutionContext): Promise<boolean> {
+    const isRemote = executionContext?.isRemote() ?? false;
+
+    if (isRemote) {
+        if (hasRgRemote !== null) return hasRgRemote;
+        try {
+            const sshService = executionContext?.getSSHService();
+            if (!sshService) return false;
+            await sshService.executeCommand('rg --version');
+            hasRgRemote = true;
+        } catch {
+            hasRgRemote = false;
+        }
+        return hasRgRemote;
+    } else {
+        if (hasRg !== null) return hasRg;
+        try {
+            await execPromise('rg --version');
+            hasRg = true;
+        } catch {
+            hasRg = false;
+        }
+        return hasRg;
     }
-    return hasRg;
 }
+
+export const createGrepToolDefinition = (deps: { executionContext?: ExecutionContext } = {}): ToolDefinition<SearchToolParams> => {
+    const { executionContext } = deps;
+    return {
+        name: 'grep',
+        description:
+            'Search for text in the codebase. Useful for exploring code, finding usages, etc.',
+        parameters: searchParametersSchema,
+        needsApproval: () => false, // Search is read-only and safe
+        execute: async params => {
+            const { pattern, path: searchPath, file_pattern } = params;
+
+            // Validate pattern is not empty
+            if (!pattern || pattern.trim() === '') {
+                throw new Error(
+                    'Search pattern cannot be empty. Please provide a valid search term.',
+                );
+            }
+
+            // Default values for removed parameters
+            const case_sensitive = false; // Case-insensitive by default
+            const exclude_pattern = null; // No exclusions (ripgrep respects .gitignore)
+            const max_results = 50; // Lowered to reduce output size
+
+            const useRg = await checkRgAvailability(executionContext);
+            let command = '';
+
+            const limit = max_results;
+
+            if (useRg) {
+                const args = [
+                    'rg',
+                    '--line-number',
+                    '--no-heading',
+                    '--color=never',
+                ];
+                if (!case_sensitive) args.push('--ignore-case');
+                if (file_pattern) args.push('-g', `'${file_pattern}'`);
+                if (exclude_pattern) args.push('-g', `'!${exclude_pattern}'`);
+
+                // Escape pattern
+                args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
+
+                args.push(searchPath);
+                command = args.join(' ');
+            } else {
+                // Fallback to grep
+                const args = ['grep', '-r', '-n', '-I']; // -I to ignore binary
+                if (!case_sensitive) args.push('-i');
+                if (file_pattern) args.push(`--include='${file_pattern}'`);
+                if (exclude_pattern) args.push(`--exclude='${exclude_pattern}'`);
+
+                // Escape pattern
+                args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
+
+                args.push(searchPath);
+                command = args.join(' ');
+            }
+
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
+
+            try {
+                const { stdout } = await executeShellCommand(command, {
+                    maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+                    cwd,
+                    sshService,
+                });
+
+                const trimmed = stdout.trim();
+                const lineCount = trimmed.split('\n').length;
+                const result = trimOutput(trimmed, limit);
+
+                // Add hint if results were truncated
+                if (lineCount > limit) {
+                    return `${result}\n\nNote: Results exceeded ${limit} lines. Consider narrowing your search with a more specific pattern or file_pattern.`;
+                }
+
+                return result || 'No matches found.';
+            } catch (error: any) {
+                // grep/rg returns exit code 1 if no matches found, which executeShellCommand might NOT treat as error if we handle it there?
+                // executeShellCommand catches errors.
+                // sshService.executeCommand catches error? no, creates promise.
+                // Wait, executeShellCommand wraps exec and returns object even on error.
+                // But if it THROWS, we catch it here.
+
+                // executeShellCommand returns object with exitCode. It does NOT throw for non-zero exit code usually?
+                // Let's check executeShellCommand implementation.
+                // "const exitCode = typeof error?.code === 'number' ? error.code : null;" in catch block.
+                // It catches exec exceptions and returns ShellExecutionResult.
+
+                // So result.exitCode check is needed.
+                // But wait, I am destructuring {stdout} and ignoring exitCode.
+                // If grep returns 1, stdout is likely empty.
+
+                // Let's refine the try/catch logic or result inspection.
+                // executeShellCommand returns {stdout, stderr, exitCode}.
+                // If grep fails (exit 1), exitCode is 1.
+
+                // However, previous code used `execPromise` which throws on exit code != 0.
+                // executeShellCommand handles parsing.
+
+                // I should capture result and check exitCode.
+                // But wait, executeShellCommand throws?
+                // No, look at implementation: it catches error and returns object.
+
+                // So my destructing was: const {stdout} = await executeShellCommand(...)
+                // If exitCode is 1 (no match), stdout is empty.
+                // If exitCode is 2 (error), stderr has content.
+
+                // So I should check stderr?
+            }
+
+            // Re-implementing try block with proper check
+            const result = await executeShellCommand(command, {
+                maxBuffer: 10 * 1024 * 1024,
+                cwd,
+                sshService,
+            });
+
+            if (result.exitCode === 1) {
+                return 'No matches found.';
+            }
+
+            if (result.exitCode !== 0 && result.exitCode !== null) {
+                throw new Error(`Search failed: ${result.stderr}`);
+            }
+
+            const trimmed = result.stdout.trim();
+            const lineCount = trimmed.split('\n').length;
+            const outputTrimmed = trimOutput(trimmed, limit);
+
+            if (lineCount > limit) {
+                return `${outputTrimmed}\n\nNote: Results exceeded ${limit} lines. Consider narrowing your search with a more specific pattern or file_pattern.`;
+            }
+
+            return outputTrimmed || 'No matches found.';
+        },
+        formatCommandMessage: formatGrepCommandMessage,
+    };
+};
 
 export const formatGrepCommandMessage = (
     item: any,
@@ -111,88 +271,3 @@ export const formatGrepCommandMessage = (
     ];
 };
 
-export const grepToolDefinition: ToolDefinition<SearchToolParams> = {
-    name: 'grep',
-    description:
-        'Search for text in the codebase. Useful for exploring code, finding usages, etc.',
-    parameters: searchParametersSchema,
-    needsApproval: () => false, // Search is read-only and safe
-    execute: async params => {
-        const {pattern, path, file_pattern} = params;
-
-        // Validate pattern is not empty
-        if (!pattern || pattern.trim() === '') {
-            throw new Error(
-                'Search pattern cannot be empty. Please provide a valid search term.',
-            );
-        }
-
-        // Default values for removed parameters
-        const case_sensitive = false; // Case-insensitive by default
-        const exclude_pattern = null; // No exclusions (ripgrep respects .gitignore)
-        const max_results = 50; // Lowered to reduce output size
-
-        const useRg = await checkRgAvailability();
-        let command = '';
-
-        const limit = max_results;
-
-        if (useRg) {
-            const args = [
-                'rg',
-                '--line-number',
-                '--no-heading',
-                '--color=never',
-            ];
-            if (!case_sensitive) args.push('--ignore-case');
-            if (file_pattern) args.push('-g', `'${file_pattern}'`);
-            if (exclude_pattern) args.push('-g', `'!${exclude_pattern}'`);
-            // rg doesn't have a direct max results flag that stops searching globally easily across files in a simple way without piping,
-            // but we can limit output length later or use `head`.
-            // Actually `rg` has `--max-count` but that is per file.
-            // We'll just run it and slice the output for simplicity and consistency.
-
-            // Escape pattern
-            args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
-
-            args.push(path);
-            command = args.join(' ');
-        } else {
-            // Fallback to grep
-            const args = ['grep', '-r', '-n', '-I']; // -I to ignore binary
-            if (!case_sensitive) args.push('-i');
-            if (file_pattern) args.push(`--include='${file_pattern}'`);
-            if (exclude_pattern) args.push(`--exclude='${exclude_pattern}'`);
-
-            // Escape pattern
-            args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
-
-            args.push(path);
-            command = args.join(' ');
-        }
-
-        try {
-            const {stdout} = await execPromise(command, {
-                maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-            });
-
-            const trimmed = stdout.trim();
-            const lineCount = trimmed.split('\n').length;
-            const result = trimOutput(trimmed, limit);
-
-            // Add hint if results were truncated
-            if (lineCount > limit) {
-                return `${result}\n\nNote: Results exceeded ${limit} lines. Consider narrowing your search with a more specific pattern or file_pattern.`;
-            }
-
-            return result || 'No matches found.';
-        } catch (error: any) {
-            // grep/rg returns exit code 1 if no matches found, which execPromise treats as error
-            if (error.code === 1) {
-                return 'No matches found.';
-            }
-            throw new Error(`Search failed: ${error.message}`);
-        }
-    },
-    formatCommandMessage: formatGrepCommandMessage,
-};

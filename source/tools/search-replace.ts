@@ -13,6 +13,7 @@ import {
     normalizeToolArguments,
     createBaseMessage,
 } from './format-helpers.js';
+import { ExecutionContext } from '../services/execution-context.js';
 
 const searchReplaceParametersSchema = z.object({
     path: z.string().describe('The absolute or relative path to the file'),
@@ -207,8 +208,9 @@ export const formatSearchReplaceCommandMessage = (
 export function createSearchReplaceToolDefinition(deps: {
     loggingService: ILoggingService;
     settingsService: ISettingsService;
+    executionContext?: ExecutionContext;
 }): ToolDefinition<SearchReplaceToolParams> {
-    const {loggingService, settingsService} = deps;
+    const { loggingService, settingsService, executionContext } = deps;
 
     return {
         name: 'search_replace',
@@ -225,16 +227,24 @@ export function createSearchReplaceToolDefinition(deps: {
                     search_content,
                     replace_all = false,
                 } = params;
-                const targetPath = resolveWorkspacePath(filePath);
-                const workspaceRoot = process.cwd();
+                const cwd = executionContext?.getCwd() || process.cwd();
+                const targetPath = resolveWorkspacePath(filePath, cwd);
+                const workspaceRoot = cwd;
                 const insideCwd = targetPath.startsWith(
                     workspaceRoot + path.sep,
                 );
 
+                const sshService = executionContext?.getSSHService();
+                const isRemote = executionContext?.isRemote() && !!sshService;
+
                 // Read file content
                 let content: string;
                 try {
-                    content = await readFile(targetPath, 'utf8');
+                    if (isRemote && sshService) {
+                        content = await sshService.readFile(targetPath);
+                    } else {
+                        content = await readFile(targetPath, 'utf8');
+                    }
                 } catch (error: any) {
                     if (search_content === '' && error?.code === 'ENOENT') {
                         loggingService.info(
@@ -346,7 +356,21 @@ export function createSearchReplaceToolDefinition(deps: {
                     replace_content,
                     replace_all = false,
                 } = params;
-                const targetPath = resolveWorkspacePath(filePath);
+                const cwd = executionContext?.getCwd() || process.cwd();
+                const targetPath = resolveWorkspacePath(filePath, cwd);
+
+                const sshService = executionContext?.getSSHService();
+                const isRemote = executionContext?.isRemote() && !!sshService;
+
+                const readFileFn = async (p: string) => {
+                    if (isRemote && sshService) return sshService.readFile(p);
+                    return readFile(p, 'utf8');
+                };
+
+                const writeFileFn = async (p: string, c: string) => {
+                    if (isRemote && sshService) return sshService.writeFile(p, c);
+                    return writeFile(p, c, 'utf8');
+                };
 
                 if (enableFileLogging) {
                     loggingService.info(
@@ -361,10 +385,10 @@ export function createSearchReplaceToolDefinition(deps: {
 
                 let content: string;
                 try {
-                    content = await readFile(targetPath, 'utf8');
+                    content = await readFileFn(targetPath);
                 } catch (error: any) {
                     if (search_content === '' && error?.code === 'ENOENT') {
-                        await writeFile(targetPath, replace_content, 'utf8');
+                        await writeFileFn(targetPath, replace_content);
                         if (enableFileLogging) {
                             loggingService.info(
                                 'File created (search_content empty)',
@@ -417,7 +441,7 @@ export function createSearchReplaceToolDefinition(deps: {
                                 firstIndex + search_content.length,
                             );
                     }
-                    await writeFile(targetPath, newContent, 'utf8');
+                    await writeFileFn(targetPath, newContent);
 
                     if (enableFileLogging) {
                         loggingService.info('File updated (exact match)', {
@@ -476,7 +500,7 @@ export function createSearchReplaceToolDefinition(deps: {
                             replace_content +
                             content.substring(m.endIndex);
                     }
-                    await writeFile(targetPath, newContent, 'utf8');
+                    await writeFileFn(targetPath, newContent);
 
                     if (enableFileLogging) {
                         loggingService.info('File updated (relaxed match)', {

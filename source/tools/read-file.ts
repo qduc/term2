@@ -67,7 +67,11 @@ export const formatReadFileCommandMessage = (
     ];
 };
 
-export const readFileToolDefinition: ToolDefinition<ReadFileToolParams> = {
+import { ExecutionContext } from '../services/execution-context.js';
+
+export const createReadFileToolDefinition = (deps: { executionContext?: ExecutionContext } = {}): ToolDefinition<ReadFileToolParams> => {
+    const { executionContext } = deps;
+    return {
     name: 'read_file',
     description:
         'Read file content from the workspace. Returns content with line numbers prefixed (like cat -n). Supports reading specific line ranges.',
@@ -75,13 +79,20 @@ export const readFileToolDefinition: ToolDefinition<ReadFileToolParams> = {
     needsApproval: () => false, // Read-only operation, safe
     execute: async params => {
         const {path: filePath, start_line, end_line} = params;
+        const cwd = executionContext?.getCwd() || process.cwd();
 
         try {
             // Validate path is within workspace
-            const absolutePath = resolveWorkspacePath(filePath);
+            const absolutePath = resolveWorkspacePath(filePath, cwd);
 
             // Read file content
-            const content = await fs.readFile(absolutePath, 'utf8');
+            let content: string;
+            const sshService = executionContext?.getSSHService();
+            if (executionContext?.isRemote() && sshService) {
+                content = await sshService.readFile(absolutePath);
+            } else {
+                content = await fs.readFile(absolutePath, 'utf8');
+            }
 
             // Handle empty file
             if (content === '') {
@@ -127,4 +138,5 @@ export const readFileToolDefinition: ToolDefinition<ReadFileToolParams> = {
         }
     },
     formatCommandMessage: formatReadFileCommandMessage,
+};
 };

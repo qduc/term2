@@ -13,3 +13,18 @@ export interface ISettingsService {
     get<T = any>(key: string): T;
     set(key: string, value: any): void;
 }
+
+export interface ISSHService {
+    connect(): Promise<void>;
+    disconnect(): Promise<void>;
+    isConnected(): boolean;
+    executeCommand(cmd: string, opts?: { cwd?: string }): Promise<{
+        stdout: string;
+        stderr: string;
+        exitCode: number | null;
+        timedOut: boolean;
+    }>;
+    readFile(path: string): Promise<string>;
+    writeFile(path: string, content: string): Promise<void>;
+    mkdir(path: string, opts?: { recursive?: boolean }): Promise<void>;
+}

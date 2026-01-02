@@ -11,17 +11,24 @@ export interface ShellExecutionResult {
     timedOut: boolean;
 }
 
+import { ISSHService } from '../services/service-interfaces.js';
+
 export interface ExecuteShellOptions {
     cwd?: string;
     timeout?: number;
     maxBuffer?: number;
+    sshService?: ISSHService;
 }
 
 export async function executeShellCommand(
     command: string,
     options: ExecuteShellOptions = {},
 ): Promise<ShellExecutionResult> {
-    const {cwd = process.cwd(), timeout, maxBuffer} = options;
+    const { cwd = process.cwd(), timeout, maxBuffer, sshService } = options;
+
+    if (sshService) {
+        return sshService.executeCommand(command, { cwd });
+    }
 
     try {
         const result = await execPromise(command, {

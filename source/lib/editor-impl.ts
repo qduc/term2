@@ -6,12 +6,13 @@ import type {
     ILoggingService,
     ISettingsService,
 } from '../services/service-interfaces.js';
+import { ExecutionContext } from '../services/execution-context.js';
 
 /**
  * Resolves a relative path and ensures it's within the workspace
  */
-function resolveWorkspacePath(relativePath: string): string {
-    const workspaceRoot = process.cwd();
+function resolveWorkspacePath(relativePath: string, baseDir: string = process.cwd()): string {
+    const workspaceRoot = baseDir;
     const resolved = path.resolve(workspaceRoot, relativePath);
 
     if (!resolved.startsWith(workspaceRoot)) {
@@ -28,8 +29,9 @@ function resolveWorkspacePath(relativePath: string): string {
 export function createEditorImpl(deps: {
     loggingService: ILoggingService;
     settingsService: ISettingsService;
+    executionContext?: ExecutionContext;
 }) {
-    const {loggingService, settingsService} = deps;
+    const { loggingService, settingsService, executionContext } = deps;
 
     return {
         async createFile(
@@ -39,9 +41,12 @@ export function createEditorImpl(deps: {
                 'tools.logFileOperations',
             );
             const {path: filePath, diff} = operation;
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
+            const isRemote = executionContext?.isRemote() && !!sshService;
 
             try {
-                const targetPath = resolveWorkspacePath(filePath);
+                const targetPath = resolveWorkspacePath(filePath, cwd);
 
                 if (enableFileLogging) {
                     loggingService.info('File operation started: create_file', {
@@ -72,11 +77,20 @@ export function createEditorImpl(deps: {
                 }
 
                 // Ensure parent directory exists
-                await mkdir(path.dirname(targetPath), {recursive: true});
+                if (isRemote && sshService) {
+                    await sshService.mkdir(path.dirname(targetPath));
+                } else {
+                    await mkdir(path.dirname(targetPath), { recursive: true });
+                }
 
                 // Apply diff to empty content for new file
                 const content = applyDiff('', diff);
-                await writeFile(targetPath, content, 'utf8');
+
+                if (isRemote && sshService) {
+                    await sshService.writeFile(targetPath, content);
+                } else {
+                    await writeFile(targetPath, content, 'utf8');
+                }
 
                 if (enableFileLogging) {
                     loggingService.info('File created', {
@@ -114,9 +128,12 @@ export function createEditorImpl(deps: {
                 'tools.logFileOperations',
             );
             const {path: filePath, diff} = operation;
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
+            const isRemote = executionContext?.isRemote() && !!sshService;
 
             try {
-                const targetPath = resolveWorkspacePath(filePath);
+                const targetPath = resolveWorkspacePath(filePath, cwd);
 
                 if (enableFileLogging) {
                     loggingService.info('File operation started: update_file', {
@@ -128,7 +145,11 @@ export function createEditorImpl(deps: {
                 // Read existing file
                 let original: string;
                 try {
-                    original = await readFile(targetPath, 'utf8');
+                    if (isRemote && sshService) {
+                        original = await sshService.readFile(targetPath);
+                    } else {
+                        original = await readFile(targetPath, 'utf8');
+                    }
                 } catch (error: any) {
                     if (error?.code === 'ENOENT') {
                         if (enableFileLogging) {
@@ -168,7 +189,11 @@ export function createEditorImpl(deps: {
 
                 // Apply diff to existing content
                 const patched = applyDiff(original, diff);
-                await writeFile(targetPath, patched, 'utf8');
+                if (isRemote && sshService) {
+                    await sshService.writeFile(targetPath, patched);
+                } else {
+                    await writeFile(targetPath, patched, 'utf8');
+                }
 
                 if (enableFileLogging) {
                     loggingService.info('File updated', {
@@ -207,9 +232,12 @@ export function createEditorImpl(deps: {
                 'tools.logFileOperations',
             );
             const {path: filePath} = operation;
+            const cwd = executionContext?.getCwd() || process.cwd();
+            const sshService = executionContext?.getSSHService();
+            const isRemote = executionContext?.isRemote() && !!sshService;
 
             try {
-                const targetPath = resolveWorkspacePath(filePath);
+                const targetPath = resolveWorkspacePath(filePath, cwd);
 
                 if (enableFileLogging) {
                     loggingService.info('File operation started: delete_file', {
@@ -218,7 +246,14 @@ export function createEditorImpl(deps: {
                     });
                 }
 
-                await rm(targetPath, {force: true});
+                if (isRemote && sshService) {
+                    // SSHService doesn't have rm yet? It has executeCommand.
+                    // But wait, I didn't see rm in ISSHService definition I read in summary?
+                    // I will use executeCommand('rm -f ...')
+                    await sshService.executeCommand(`rm -f "${targetPath}"`);
+                } else {
+                    await rm(targetPath, { force: true });
+                }
 
                 if (enableFileLogging) {
                     loggingService.info('File deleted', {

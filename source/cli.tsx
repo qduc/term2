@@ -140,7 +140,7 @@ let executionContext: ExecutionContext | undefined;
 let sshInfo: SSHInfo | undefined;
 
 if (sshFlag) {
-    if (!remoteDirFlag) {
+    if (!remoteDirFlag && !cli.flags.lite) {
         console.error('Error: --remote-dir is required when using --ssh');
         process.exit(1);
     }
@@ -183,6 +183,9 @@ if (sshFlag) {
 
     const service = new SSHService(sshConfig);
 
+    // Initialize remoteDir with the flag value
+    let remoteDir = remoteDirFlag;
+
     try {
         // We use top-level await here assuming node16+ / esm
         // To provide feedback, we can log to console before UI starts
@@ -190,11 +193,23 @@ if (sshFlag) {
         await service.connect();
         sshService = service;
 
+        // If remoteDir was not specified (only allowed in lite mode), auto-detect it
+        if (!remoteDir) {
+            try {
+                const { stdout } = await service.executeCommand('pwd');
+                remoteDir = stdout.trim();
+                console.log(`Defaulting to remote directory: ${remoteDir}`);
+            } catch (e: any) {
+                console.warn('Failed to detect remote home directory, defaulting to "."', e.message);
+                remoteDir = '.';
+            }
+        }
+
         // Create SSH info for status bar display
         sshInfo = {
             host: host,  // Use original alias for display
             user: sshConfig.username,
-            remoteDir: remoteDirFlag,
+            remoteDir: remoteDir,
         };
 
         // Setup cleanup
@@ -212,7 +227,7 @@ if (sshFlag) {
         process.exit(1);
     }
 
-    executionContext = new ExecutionContext(sshService, remoteDirFlag);
+    executionContext = new ExecutionContext(sshService, remoteDir);
 } else {
     executionContext = new ExecutionContext();
 }

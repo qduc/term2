@@ -11,6 +11,7 @@ interface BannerProps {
 const Banner: FC<BannerProps> = ({settingsService}) => {
     const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
     const editMode = useSetting<boolean>(settingsService, 'app.editMode') ?? false;
+    const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
     const model = useSetting<string>(settingsService, 'agent.model');
     const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
     const providerKey =
@@ -54,6 +55,11 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
 
                 {/* Mode pills */}
                 <Box gap={1}>
+                    {liteMode && (
+                        <Text backgroundColor="#059669" color="white" bold>
+                            {' '}LITE{' '}
+                        </Text>
+                    )}
                     {editMode && (
                         <Text backgroundColor="#1d4ed8" color="white" bold>
                             {' '}EDIT{' '}
@@ -64,7 +70,7 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
                             {' '}MENTOR{' '}
                         </Text>
                     )}
-                    {!editMode && !mentorMode && (
+                    {!editMode && !mentorMode && !liteMode && (
                         <Text backgroundColor="#0f766e" color="white" bold>
                             {' '}DEFAULT{' '}
                         </Text>

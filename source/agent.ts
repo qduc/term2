@@ -21,6 +21,7 @@ const ANTHROPIC_PROMPT = 'anthropic.md';
 const GPT_PROMPT = 'gpt-5.md';
 const CODEX_PROMPT = 'codex.md';
 const DEFAULT_MENTOR_PROMPT = 'simple-mentor.md';
+const LITE_PROMPT = 'lite.md';
 
 function getTopLevelEntries(cwd: string, limit = 50): string {
     try {
@@ -37,10 +38,13 @@ function getTopLevelEntries(cwd: string, limit = 50): string {
     }
 }
 
-function getEnvInfo(settingsService: ISettingsService): string {
-    return `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
-        settingsService.get<string>('app.shellPath') || 'unknown'
-    }; cwd: ${process.cwd()}; top-level: ${getTopLevelEntries(process.cwd())}`;
+function getEnvInfo(settingsService: ISettingsService, lite = false): string {
+    const shellPath = settingsService.get<string>('app.shellPath') || 'unknown';
+    if (lite) {
+        // Minimal env info for lite mode - no cwd listing
+        return `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${shellPath}`;
+    }
+    return `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${shellPath}; cwd: ${process.cwd()}; top-level: ${getTopLevelEntries(process.cwd())}`;
 }
 
 function getAgentsInstructions(): string {
@@ -62,8 +66,13 @@ export interface AgentDefinition {
     model: string;
 }
 
-function getPromptPath(model: string, mentorMode: boolean): string {
+function getPromptPath(model: string, mentorMode: boolean, liteMode: boolean): string {
     const normalizedModel = model.trim().toLowerCase();
+
+    // Lite mode takes precedence - minimal context for terminal assistance
+    if (liteMode) {
+        return path.join(BASE_PROMPT_PATH, LITE_PROMPT);
+    }
 
     // In mentor mode, use simplified mentor prompt for all models
     if (mentorMode) {
@@ -108,42 +117,52 @@ export const getAgentDefinition = (
     if (!resolvedModel) throw new Error('Model cannot be undefined or empty');
 
     const mentorMode = settingsService.get<boolean>('app.mentorMode');
-    const promptPath = getPromptPath(resolvedModel, mentorMode);
+    const liteMode = settingsService.get<boolean>('app.liteMode');
+    const promptPath = getPromptPath(resolvedModel, mentorMode, liteMode);
     const prompt = resolvePrompt(promptPath);
 
-    const envInfo = getEnvInfo(settingsService);
-
-    const isGpt5 = resolvedModel.toLowerCase().includes('gpt-5');
+    const envInfo = getEnvInfo(settingsService, liteMode);
 
     const tools: ToolDefinition[] = [
         createShellToolDefinition({settingsService, loggingService}),
     ];
 
-    if (isGpt5) {
-        tools.push(
-            createApplyPatchToolDefinition({settingsService, loggingService}),
-        );
+    if (liteMode) {
+        // Lite mode: shell + read-only tools only (no editing tools)
+        tools.push(grepToolDefinition, readFileToolDefinition, findFilesToolDefinition);
     } else {
-        tools.push(
-            grepToolDefinition,
-            readFileToolDefinition,
-            findFilesToolDefinition,
-            createSearchReplaceToolDefinition({
-                settingsService,
-                loggingService,
-            }),
-        );
+        // Full mode: all tools based on model
+        const isGpt5 = resolvedModel.toLowerCase().includes('gpt-5');
+
+        if (isGpt5) {
+            tools.push(
+                createApplyPatchToolDefinition({settingsService, loggingService}),
+            );
+        } else {
+            tools.push(
+                grepToolDefinition,
+                readFileToolDefinition,
+                findFilesToolDefinition,
+                createSearchReplaceToolDefinition({
+                    settingsService,
+                    loggingService,
+                }),
+            );
+        }
+
+        // Add mentor tool if configured (not in lite mode)
+        const mentorModel = settingsService.get<string>('agent.mentorModel');
+        if (mentorModel && askMentor) {
+            tools.push(createAskMentorToolDefinition(askMentor));
+        }
     }
 
-    // Add mentor tool if configured
-    const mentorModel = settingsService.get<string>('agent.mentorModel');
-    if (mentorModel && askMentor) {
-        tools.push(createAskMentorToolDefinition(askMentor));
-    }
+    // In lite mode, skip AGENTS.md loading
+    const agentsInstructions = liteMode ? '' : getAgentsInstructions();
 
     return {
         name: 'Terminal Assistant',
-        instructions: `${prompt}\n\nEnvironment: ${envInfo}${getAgentsInstructions()}`,
+        instructions: `${prompt}\n\nEnvironment: ${envInfo}${agentsInstructions}`,
         tools,
         model: resolvedModel,
     };

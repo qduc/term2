@@ -126,6 +126,13 @@ const App: FC<AppProps> = ({
                 return;
             }
 
+            if (key === 'app.liteMode') {
+                // Re-initialize the agent to use the new mode's prompt and tools
+                const currentModel = settingsService.get<string>('agent.model');
+                setModel(currentModel);
+                return;
+            }
+
             if (key === 'shell.maxOutputLines') {
                 setTrimConfig({maxLines: Number(value)});
                 return;
@@ -217,6 +224,15 @@ const App: FC<AppProps> = ({
                     const currentValue = settingsService.get<boolean>('app.mentorMode');
                     const newValue = !currentValue;
 
+                    // Mentor mode is mutually exclusive with lite mode
+                    if (newValue) {
+                        const liteMode = settingsService.get<boolean>('app.liteMode');
+                        if (liteMode) {
+                            settingsService.set('app.liteMode', false);
+                            applyRuntimeSetting('app.liteMode', false);
+                        }
+                    }
+
                     settingsService.set('app.mentorMode', newValue);
                     applyRuntimeSetting('app.mentorMode', newValue);
 
@@ -227,6 +243,46 @@ const App: FC<AppProps> = ({
                     return true;
                 },
             },
+            {
+                name: 'lite',
+                description: 'Toggle lite mode (minimal context for general terminal assistance)',
+                action: () => {
+                    const hasHistory = messages.filter(msg => msg.sender !== 'system').length > 0;
+
+                    if (hasHistory) {
+                        addSystemMessage(
+                            'Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first, then `/lite`.'
+                        );
+                        return true;
+                    }
+
+                    const currentValue = settingsService.get<boolean>('app.liteMode');
+                    const newValue = !currentValue;
+
+                    // Lite mode is mutually exclusive with edit/mentor modes
+                    if (newValue) {
+                        const editMode = settingsService.get<boolean>('app.editMode');
+                        const mentorMode = settingsService.get<boolean>('app.mentorMode');
+
+                        if (editMode) {
+                            settingsService.set('app.editMode', false);
+                            applyRuntimeSetting('app.editMode', false);
+                        }
+                        if (mentorMode) {
+                            settingsService.set('app.mentorMode', false);
+                            applyRuntimeSetting('app.mentorMode', false);
+                        }
+                    }
+
+                    settingsService.set('app.liteMode', newValue);
+                    applyRuntimeSetting('app.liteMode', newValue);
+
+                    addSystemMessage(
+                        `Lite mode ${newValue ? 'enabled - using minimal prompt, no codebase context' : 'disabled'}`
+                    );
+                    return true;
+                },
+            },
             settingsCommand,
         ];
     }, [
@@ -234,6 +290,7 @@ const App: FC<AppProps> = ({
         applyRuntimeSetting,
         clearConversation,
         exit,
+        messages,
         setModel,
         setInput,
         settingsService,
@@ -242,6 +299,15 @@ const App: FC<AppProps> = ({
     const toggleEditMode = useCallback(() => {
         const currentValue = settingsService.get<boolean>('app.editMode');
         const newValue = !currentValue;
+
+        // Edit mode is mutually exclusive with lite mode
+        if (newValue) {
+            const liteMode = settingsService.get<boolean>('app.liteMode');
+            if (liteMode) {
+                settingsService.set('app.liteMode', false);
+                applyRuntimeSetting('app.liteMode', false);
+            }
+        }
 
         settingsService.set('app.editMode', newValue);
         applyRuntimeSetting('app.editMode', newValue);

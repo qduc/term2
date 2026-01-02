@@ -79,8 +79,10 @@ const AppSettingsSchema = z.object({
     // Independent mode flags that can be enabled together and persist across sessions
     // mentorMode: uses simplified mentor prompt and enables ask_mentor tool (if mentorModel configured)
     // editMode: auto-approves apply_patch operations within cwd for faster file editing
+    // liteMode: minimal context for general terminal assistance (no codebase tools/prompts)
     mentorMode: z.boolean().optional().default(false),
     editMode: z.boolean().optional().default(false),
+    liteMode: z.boolean().optional().default(false),
 });
 
 const ToolsSettingsSchema = z.object({
@@ -182,6 +184,7 @@ export interface SettingsWithSources {
         shellPath: SettingWithSource<string | undefined>;
         mentorMode: SettingWithSource<boolean>;
         editMode: SettingWithSource<boolean>;
+        liteMode: SettingWithSource<boolean>;
     };
     tools: {
         logFileOperations: SettingWithSource<boolean>;
@@ -220,6 +223,7 @@ export const SETTING_KEYS = {
     APP_SHELL_PATH: 'app.shellPath', // Sensitive - env only
     APP_MENTOR_MODE: 'app.mentorMode',
     APP_EDIT_MODE: 'app.editMode',
+    APP_LITE_MODE: 'app.liteMode',
     TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
     DEBUG_BASH_TOOL: 'debug.debugBashTool',
 } as const;
@@ -239,6 +243,7 @@ const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
     SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE,
     SETTING_KEYS.APP_MENTOR_MODE,
     SETTING_KEYS.APP_EDIT_MODE,
+    SETTING_KEYS.APP_LITE_MODE,
 ]);
 
 // Note: Sensitive settings are NOT in RUNTIME_MODIFIABLE_SETTINGS because they
@@ -286,6 +291,7 @@ const DEFAULT_SETTINGS: SettingsData = {
         shellPath: undefined,
         mentorMode: false,
         editMode: false,
+        liteMode: false,
     },
     tools: {
         logFileOperations: true,
@@ -825,6 +831,10 @@ export class SettingsService {
                 editMode: {
                     value: this.settings.app.editMode,
                     source: this.getSource('app.editMode'),
+                },
+                liteMode: {
+                    value: this.settings.app.liteMode,
+                    source: this.getSource('app.liteMode'),
                 },
             },
             tools: {

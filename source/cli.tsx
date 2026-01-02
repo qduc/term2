@@ -26,9 +26,11 @@ const cli = meow(
         Options
           -m, --model  Override the default OpenAI model (e.g. gpt-4o)
           -r, --reasoning  Set the reasoning effort for reasoning models (e.g. medium, high)
+          -l, --lite  Start in lite mode (minimal context for general terminal assistance)
 
         Examples
           $ term2 -m gpt-4o
+          $ term2 --lite
     `,
     {
         importMeta: import.meta,
@@ -40,6 +42,11 @@ const cli = meow(
             reasoning: {
                 type: 'string',
                 alias: 'r',
+            },
+            lite: {
+                type: 'boolean',
+                alias: 'l',
+                default: false,
             },
         },
     },
@@ -85,6 +92,13 @@ if (validatedReasoningEffort) {
     };
 }
 
+if (cli.flags.lite) {
+    cliOverrides.app = {
+        ...cliOverrides.app,
+        liteMode: true,
+    };
+}
+
 // Create LoggingService instance
 const logger = new LoggingService({
     disableLogging: false,
@@ -95,6 +109,21 @@ const settings = new SettingsService({
     cli: Object.keys(cliOverrides).length > 0 ? cliOverrides : undefined,
     loggingService: logger,
 });
+
+// Enforce mutual exclusion between lite mode and edit/mentor modes at startup
+const liteMode = settings.get<boolean>('app.liteMode');
+const editMode = settings.get<boolean>('app.editMode');
+const mentorMode = settings.get<boolean>('app.mentorMode');
+
+if (liteMode && (editMode || mentorMode)) {
+    // Lite mode takes precedence, disable edit/mentor modes
+    if (editMode) {
+        settings.set('app.editMode', false);
+    }
+    if (mentorMode) {
+        settings.set('app.mentorMode', false);
+    }
+}
 
 const history = new HistoryService({
     loggingService: logger,

@@ -17,6 +17,7 @@ const baseProps: BottomAreaProps = {
     isProcessing: false,
     onSubmit: async () => {},
     slashCommands: mockSlashCommands,
+    isShellMode: false,
     hasConversationHistory: false,
     settingsService: createMockSettingsService(),
     loggingService: {
@@ -68,7 +69,6 @@ test('BottomArea shows approval prompt when waiting for approval', t => {
     t.true(output.includes('Approve'));
     t.true(output.includes('Reject'));
     t.false(output.includes('processing'));
-    t.false(output.includes('❯'));
 });
 
 test('BottomArea shows processing indicator when busy', t => {

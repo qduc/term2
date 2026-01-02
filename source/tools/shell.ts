@@ -1,12 +1,11 @@
 import {z} from 'zod';
-import {exec} from 'child_process';
-import util from 'util';
 import process from 'process';
 import path from 'path';
 import {randomUUID} from 'node:crypto';
 import { relaxedNumber } from './utils.js';
 import {validateCommandSafety} from '../utils/command-safety/index.js';
 import {logValidationError as logValidationErrorUtil} from '../utils/command-logger.js';
+import {executeShellCommand} from '../utils/execute-shell.js';
 import {
     trimOutput,
     setTrimConfig,
@@ -26,8 +25,6 @@ import {
     createBaseMessage,
     getCallIdFromItem,
 } from './format-helpers.js';
-
-const execPromise = util.promisify(exec);
 
 const shellParametersSchema = z.object({
     command: z.string().min(1).describe('Single shell command to execute.'),
@@ -290,23 +287,25 @@ export function createShellToolDefinition(deps: {
                         cwd,
                     });
                 }
-                let stdout = '';
-                let stderr = '';
-                let exitCode: number | null = 0;
-                let outcome: ShellCommandResult['outcome'] = {
-                    type: 'exit',
-                    exitCode: 0,
-                };
+                const result = await executeShellCommand(optimizedCommand, {
+                    cwd,
+                    timeout,
+                    maxBuffer: 1024 * 1024, // 1MB max buffer
+                });
 
-                try {
-                    const result = await execPromise(optimizedCommand, {
-                        cwd,
+                const stdout = result.stdout ?? '';
+                const stderr = result.stderr ?? '';
+                const exitCode = result.exitCode ?? null;
+                const outcome: ShellCommandResult['outcome'] = result.timedOut
+                    ? {type: 'timeout'}
+                    : {type: 'exit', exitCode};
+
+                if (result.timedOut) {
+                    loggingService.warn('Shell command timeout', {
+                        command: optimizedCommand.substring(0, 100),
                         timeout,
-                        maxBuffer: 1024 * 1024, // 1MB max buffer
                     });
-                    stdout = result.stdout;
-                    stderr = result.stderr;
-
+                } else if (exitCode === 0) {
                     loggingService.debug(
                         'Shell command executed successfully',
                         {
@@ -316,29 +315,12 @@ export function createShellToolDefinition(deps: {
                             stderrLength: stderr.length,
                         },
                     );
-                } catch (error: any) {
-                    exitCode =
-                        typeof error?.code === 'number' ? error.code : null;
-                    stdout = error?.stdout ?? '';
-                    stderr = error?.stderr ?? '';
-                    outcome =
-                        error?.killed || error?.signal === 'SIGTERM'
-                            ? {type: 'timeout'}
-                            : {type: 'exit', exitCode};
-
-                    if (outcome.type === 'timeout') {
-                        loggingService.warn('Shell command timeout', {
-                            command: optimizedCommand.substring(0, 100),
-                            timeout,
-                        });
-                    } else {
-                        loggingService.debug('Shell command execution failed', {
-                            command: optimizedCommand.substring(0, 100),
-                            exitCode,
-                            errorMessage: error?.message ?? String(error),
-                            stderrLength: stderr.length,
-                        });
-                    }
+                } else {
+                    loggingService.debug('Shell command execution failed', {
+                        command: optimizedCommand.substring(0, 100),
+                        exitCode,
+                        stderrLength: stderr.length,
+                    });
                 }
 
                 loggingService.info('Shell command execution completed', {

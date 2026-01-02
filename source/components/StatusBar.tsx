@@ -6,9 +6,10 @@ import type {SettingsService} from '../services/settings-service.js';
 
 interface StatusBarProps {
     settingsService: SettingsService;
+    isShellMode?: boolean;
 }
 
-const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
+const StatusBar: FC<StatusBarProps> = ({settingsService, isShellMode = false}) => {
     const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
     const editMode = useSetting<boolean>(settingsService, 'app.editMode') ?? false;
     const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
@@ -31,9 +32,14 @@ const StatusBar: FC<StatusBarProps> = ({settingsService}) => {
         <Box marginTop={1}>
             <Box marginRight={1} gap={1}>
                 {liteMode && (
-                    <Text color="#10b981" bold>
-                        Lite
-                    </Text>
+                    <>
+                        <Text color="#10b981" bold>
+                            Lite
+                        </Text>
+                        <Text color={isShellMode ? '#ca8a04' : '#3b82f6'} bold>
+                            {isShellMode ? 'Shell' : 'Ask'}
+                        </Text>
+                    </>
                 )}
                 {editMode && (
                     <Text color={glow} bold>

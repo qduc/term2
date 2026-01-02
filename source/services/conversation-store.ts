@@ -21,6 +21,19 @@ export class ConversationStore {
         this.#history.push(item);
     }
 
+    addShellContext(historyText: string): void {
+        const trimmed = historyText ?? '';
+        if (!trimmed.trim()) {
+            return;
+        }
+        const item: AgentInputItem = {
+            role: 'user',
+            type: 'message',
+            content: trimmed,
+        };
+        this.#history.push(item);
+    }
+
     updateFromResult(result: any): void {
         const incoming = result?.history;
         if (!Array.isArray(incoming) || incoming.length === 0) {

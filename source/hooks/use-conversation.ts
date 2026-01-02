@@ -1302,6 +1302,38 @@ export const useConversation = ({
         [appendMessages],
     );
 
+    const addShellMessage = useCallback(
+        (
+            command: string,
+            output: string,
+            exitCode: number | null,
+            timedOut: boolean,
+        ) => {
+            const success = !timedOut && exitCode === 0;
+            const failureReason = timedOut
+                ? 'timeout'
+                : exitCode == null
+                ? 'error'
+                : exitCode !== 0
+                ? `exit ${exitCode}`
+                : undefined;
+
+            appendMessages([
+                {
+                    id: String(Date.now()),
+                    sender: 'command',
+                    status: success ? 'completed' : 'failed',
+                    command,
+                    output,
+                    success,
+                    failureReason,
+                    toolName: 'shell',
+                },
+            ]);
+        },
+        [appendMessages],
+    );
+
     return {
         messages,
         liveResponse,
@@ -1318,5 +1350,6 @@ export const useConversation = ({
         setReasoningEffort,
         setTemperature,
         addSystemMessage,
+        addShellMessage,
     };
 };

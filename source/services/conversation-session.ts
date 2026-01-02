@@ -210,6 +210,10 @@ export class ConversationSession {
             this.agentClient.setRetryCallback(callback);
         }
     }
+
+    addShellContext(historyText: string): void {
+        this.conversationStore.addShellContext(historyText);
+    }
     /**
      * Abort the current running operation
      */

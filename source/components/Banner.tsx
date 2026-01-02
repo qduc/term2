@@ -6,9 +6,10 @@ import type {SettingsService} from '../services/settings-service.js';
 
 interface BannerProps {
     settingsService: SettingsService;
+    isShellMode?: boolean;
 }
 
-const Banner: FC<BannerProps> = ({settingsService}) => {
+const Banner: FC<BannerProps> = ({settingsService, isShellMode = false}) => {
     const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
     const editMode = useSetting<boolean>(settingsService, 'app.editMode') ?? false;
     const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
@@ -55,10 +56,16 @@ const Banner: FC<BannerProps> = ({settingsService}) => {
 
                 {/* Mode pills */}
                 <Box gap={1}>
-                    {liteMode && (
-                        <Text backgroundColor="#059669" color="white" bold>
-                            {' '}LITE{' '}
+                    {liteMode && isShellMode ? (
+                        <Text backgroundColor="#ca8a04" color="white" bold>
+                            {' '}SHELL{' '}
                         </Text>
+                    ) : (
+                        liteMode && (
+                            <Text backgroundColor="#059669" color="white" bold>
+                                {' '}LITE{' '}
+                            </Text>
+                        )
                     )}
                     {editMode && (
                         <Text backgroundColor="#1d4ed8" color="white" bold>

@@ -28,6 +28,7 @@ type Props = {
     slashCommands: SlashCommand[];
     hasConversationHistory?: boolean;
     waitingForRejectionReason?: boolean;
+    isShellMode?: boolean;
     settingsService: SettingsService;
     loggingService: LoggingService;
     historyService: HistoryService;
@@ -40,6 +41,7 @@ const InputBox: FC<Props> = ({
     loggingService,
     hasConversationHistory = false,
     waitingForRejectionReason = false,
+    isShellMode = false,
     historyService,
 }) => {
     const {
@@ -458,6 +460,8 @@ const InputBox: FC<Props> = ({
             <Box>
                 {waitingForRejectionReason ? (
                     <Text color="yellow">Why? </Text>
+                ) : isShellMode ? (
+                    <Text color="green">$ </Text>
                 ) : (
                     <Text color="blue">❯ </Text>
                 )}

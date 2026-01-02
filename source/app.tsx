@@ -1,4 +1,4 @@
-import React, {FC, useMemo, useCallback, useEffect} from 'react';
+import React, {FC, useMemo, useCallback, useEffect, useState} from 'react';
 import {useInputActions} from './context/InputContext.js';
 
 import {Box, useApp, useInput} from 'ink';
@@ -14,8 +14,10 @@ import type {SettingsService} from './services/settings-service.js';
 import type {HistoryService} from './services/history-service.js';
 import type {LoggingService} from './services/logging-service.js';
 import {createSettingsCommand} from './utils/settings-command.js';
-import {setTrimConfig} from './utils/output-trim.js';
+import {setTrimConfig, trimOutput} from './utils/output-trim.js';
 import {getProvider} from './providers/index.js';
+import {executeShellCommand} from './utils/execute-shell.js';
+import {useSetting} from './hooks/use-setting.js';
 
 // Pure function to parse slash commands
 type ParsedInput =
@@ -34,11 +36,20 @@ function parseInput(value: string): ParsedInput {
     return {type: 'slash-command', commandName, args};
 }
 
+const SHELL_MAX_BUFFER = 1024 * 1024;
+
 interface AppProps {
     conversationService: ConversationService;
     settingsService: SettingsService;
     historyService: HistoryService;
     loggingService: LoggingService;
+}
+
+interface ShellHistoryEntry {
+    command: string;
+    output: string;
+    exitCode: number | null;
+    timedOut: boolean;
 }
 
 const App: FC<AppProps> = ({
@@ -49,6 +60,9 @@ const App: FC<AppProps> = ({
 }) => {
     const {exit} = useApp();
     const { setInput} = useInputActions();
+    const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
+    const [isShellMode, setIsShellMode] = useState(false);
+    const [shellHistory, setShellHistory] = useState<ShellHistoryEntry[]>([]);
     const {
         messages,
         liveResponse,
@@ -65,12 +79,67 @@ const App: FC<AppProps> = ({
         setReasoningEffort,
         addSystemMessage,
         setTemperature,
+        addShellMessage,
     } = useConversation({conversationService, loggingService});
     useEffect(() => {
         conversationService.setRetryCallback(() =>
             addSystemMessage('Retrying due to upstream error...'),
         );
     }, [conversationService, addSystemMessage]);
+
+    const formatShellHistory = useCallback((entries: ShellHistoryEntry[]) => {
+        if (entries.length === 0) {
+            return '';
+        }
+
+        const blocks = entries.map(entry => {
+            const lines = [`$ ${entry.command}`];
+            const output = entry.output.trim();
+            if (output) {
+                lines.push(output);
+            }
+            lines.push(
+                `Exit: ${
+                    entry.timedOut
+                        ? 'timeout'
+                        : entry.exitCode != null
+                        ? entry.exitCode
+                        : 'null'
+                }`,
+            );
+            return lines.join('\n');
+        });
+
+        return ['[Previous Shell Session]', ...blocks].join('\n\n');
+    }, []);
+
+    const flushShellHistory = useCallback(() => {
+        if (shellHistory.length === 0) {
+            return;
+        }
+        const historyText = formatShellHistory(shellHistory);
+        if (historyText) {
+            conversationService.addShellContext(historyText);
+        }
+        setShellHistory([]);
+    }, [shellHistory, formatShellHistory, conversationService]);
+
+    const toggleShellMode = useCallback(() => {
+        setIsShellMode(prev => {
+            const next = !prev;
+            if (prev && !next) {
+                flushShellHistory();
+            }
+            return next;
+        });
+    }, [flushShellHistory]);
+
+    useEffect(() => {
+        if (!liteMode && isShellMode) {
+            setIsShellMode(false);
+            flushShellHistory();
+        }
+    }, [liteMode, isShellMode, flushShellHistory]);
 
     const applyRuntimeSetting = useCallback(
         (key: string, value: any) => {
@@ -355,8 +424,68 @@ const App: FC<AppProps> = ({
         const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
         if (!isShiftTab) return;
 
+        if (liteMode) {
+            toggleShellMode();
+            return;
+        }
+
         toggleEditMode();
     });
+
+    const handleShellSubmit = useCallback(
+        async (value: string) => {
+            const commandText = value.trim();
+            if (!commandText) {
+                return;
+            }
+
+            const timeoutValue = settingsService.get<number>('shell.timeout');
+            const timeout = timeoutValue != null ? timeoutValue : undefined;
+            const maxOutputLengthValue =
+                settingsService.get<number>('shell.maxOutputChars');
+            const maxOutputLength =
+                maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
+
+            setInput('');
+
+            const result = await executeShellCommand(commandText, {
+                timeout,
+                maxBuffer: SHELL_MAX_BUFFER,
+            });
+
+            const stdoutTrimmed = trimOutput(
+                result.stdout ?? '',
+                undefined,
+                maxOutputLength,
+            ).trimEnd();
+            const stderrTrimmed = trimOutput(
+                result.stderr ?? '',
+                undefined,
+                maxOutputLength,
+            ).trimEnd();
+            const combinedOutput = [stdoutTrimmed, stderrTrimmed]
+                .filter(Boolean)
+                .join('\n')
+                .trimEnd();
+
+            addShellMessage(
+                commandText,
+                combinedOutput,
+                result.exitCode,
+                result.timedOut,
+            );
+            setShellHistory(prev => [
+                ...prev,
+                {
+                    command: commandText,
+                    output: combinedOutput,
+                    exitCode: result.exitCode,
+                    timedOut: result.timedOut,
+                },
+            ]);
+        },
+        [settingsService, setInput, addShellMessage],
+    );
 
     const handleSubmit = async (value: string): Promise<void> => {
         if (!value.trim()) return;
@@ -371,6 +500,11 @@ const App: FC<AppProps> = ({
 
         // If waiting for approval, ignore text input (handled by useInput)
         if (waitingForApproval) return;
+
+        if (liteMode && isShellMode) {
+            await handleShellSubmit(value);
+            return;
+        }
 
         // Parse the input to determine what to do
         const parsed = parseInput(value);
@@ -413,7 +547,10 @@ const App: FC<AppProps> = ({
     return (
         <ErrorBoundary loggingService={loggingService}>
             <Box flexDirection="column" flexGrow={1} paddingX={2}>
-                <Banner settingsService={settingsService} />
+                <Banner
+                    settingsService={settingsService}
+                    isShellMode={isShellMode}
+                />
                 {/* Main content area grows to fill available vertical space */}
                 <Box flexDirection="column" flexGrow={1}>
                     <MessageList messages={messages} />
@@ -427,6 +564,7 @@ const App: FC<AppProps> = ({
                     waitingForApproval={waitingForApproval}
                     waitingForRejectionReason={waitingForRejectionReason}
                     isProcessing={isProcessing}
+                    isShellMode={isShellMode}
                     onSubmit={handleSubmit}
                     slashCommands={slashCommands}
                     hasConversationHistory={

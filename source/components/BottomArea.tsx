@@ -22,6 +22,7 @@ export type BottomAreaProps = {
     waitingForApproval: boolean;
     waitingForRejectionReason: boolean;
     isProcessing: boolean;
+    isShellMode?: boolean;
     onSubmit: (value: string) => Promise<void>;
     slashCommands: SlashCommand[];
     hasConversationHistory: boolean;
@@ -37,6 +38,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     waitingForApproval,
     waitingForRejectionReason,
     isProcessing,
+    isShellMode = false,
     onSubmit,
     slashCommands,
     hasConversationHistory,
@@ -83,6 +85,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                     slashCommands={slashCommands}
                     hasConversationHistory={hasConversationHistory}
                     waitingForRejectionReason={waitingForRejectionReason}
+                    isShellMode={isShellMode}
                     settingsService={settingsService}
                     loggingService={loggingService}
                     historyService={historyService}
@@ -95,7 +98,10 @@ const BottomArea: FC<BottomAreaProps> = ({
                 </Text>
             )}
 
-            <StatusBar settingsService={settingsService} />
+            <StatusBar
+                settingsService={settingsService}
+                isShellMode={isShellMode}
+            />
         </Box>
     );
 };

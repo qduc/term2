@@ -16,6 +16,7 @@ const mockSlashCommands: SlashCommand[] = [
 const defaultProps = {
     onSubmit: () => {},
     slashCommands: mockSlashCommands,
+    isShellMode: false,
 
     settingsService: createMockSettingsService(),
     loggingService: {
@@ -54,6 +55,15 @@ test('InputBox shows the input prompt', t => {
     t.truthy(output);
     // Should show the prompt character
     t.true(output!.includes('❯'));
+});
+
+test('InputBox shows the shell prompt when in shell mode', t => {
+    const {lastFrame} = render(
+        <TestInputBox {...defaultProps} isShellMode />,
+    );
+    const output = lastFrame();
+    t.truthy(output);
+    t.true(output!.includes('$'));
 });
 
 test('InputBox can be submitted', t => {

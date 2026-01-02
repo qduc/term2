@@ -190,3 +190,18 @@ test('clear() resets history', t => {
     t.is(store.getHistory().length, 0);
     t.is(store.getLastUserMessage(), '');
 });
+
+test('addShellContext() appends shell history as user message', t => {
+    const store = new ConversationStore();
+    store.addUserMessage('Hello');
+
+    const historyText = '[Previous Shell Session]\n$ ls\nExit: 0';
+    store.addShellContext(historyText);
+
+    const history = store.getHistory();
+    t.is(history.length, 2);
+    const item: any = history[1];
+    t.is(item.role, 'user');
+    t.is(item.type, 'message');
+    t.is(item.content, historyText);
+});

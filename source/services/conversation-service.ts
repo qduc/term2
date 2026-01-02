@@ -55,6 +55,10 @@ export class ConversationService {
         this.#session.setRetryCallback(callback);
     }
 
+    addShellContext(historyText: string): void {
+        this.#session.addShellContext(historyText);
+    }
+
     abort(): void {
         this.#session.abort();
     }

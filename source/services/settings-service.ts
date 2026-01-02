@@ -352,8 +352,11 @@ export class SettingsService {
             loggingService,
         } = options ?? {};
 
+        const resolvedDisableLogging =
+            disableLogging || parseBooleanEnv(process.env.DISABLE_LOGGING);
+
         this.settingsDir = settingsDir;
-        this.disableLogging = disableLogging;
+        this.disableLogging = resolvedDisableLogging;
         this.sources = new Map();
 
         // Use injected LoggingService or create a new one if not provided
@@ -1228,6 +1231,25 @@ export function buildEnvOverrides(): Partial<SettingsData> {
     } as Partial<SettingsData>;
 }
 
+const parseBooleanEnv = (value: unknown): boolean => {
+    if (typeof value !== 'string') {
+        return false;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+};
+
+const isTestEnvironment = () => {
+    return (
+        process.env.NODE_ENV === 'test' ||
+        process.env.VITEST !== undefined ||
+        process.env.AVA_PATH !== undefined ||
+        process.env.JEST_WORKER_ID !== undefined ||
+        process.env.TERM2_TEST_MODE === 'true'
+    );
+};
+
 /**
  * @deprecated DO NOT USE - Singleton pattern is deprecated
  *
@@ -1244,19 +1266,12 @@ export function buildEnvOverrides(): Partial<SettingsData> {
 const _settingsServiceInstance = new SettingsService({
     env: buildEnvOverrides(),
     loggingService: new LoggingService({
-        disableLogging: false,
+        disableLogging:
+            parseBooleanEnv(process.env.DISABLE_LOGGING) ||
+            isTestEnvironment(),
+        debugLogging: parseBooleanEnv(process.env.DEBUG_LOGGING),
     }),
 });
-
-const isTestEnvironment = () => {
-    return (
-        process.env.NODE_ENV === 'test' ||
-        process.env.VITEST !== undefined ||
-        process.env.AVA_PATH !== undefined ||
-        process.env.JEST_WORKER_ID !== undefined ||
-        process.env.TERM2_TEST_MODE === 'true'
-    );
-};
 
 export const settingsService = new Proxy(_settingsServiceInstance, {
     get(target, prop) {

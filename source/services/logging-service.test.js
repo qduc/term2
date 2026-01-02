@@ -68,6 +68,27 @@ test('respects DISABLE_LOGGING flag', async t => {
     t.pass();
 });
 
+test('uses DISABLE_LOGGING env when disableLogging is omitted', async t => {
+    const logDir = getTestLogDir();
+    const originalDisableLogging = process.env.DISABLE_LOGGING;
+    process.env.DISABLE_LOGGING = '1';
+
+    try {
+        new LoggingService({logDir});
+
+        // Give it a moment
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        t.false(fs.existsSync(logDir));
+    } finally {
+        if (originalDisableLogging === undefined) {
+            delete process.env.DISABLE_LOGGING;
+        } else {
+            process.env.DISABLE_LOGGING = originalDisableLogging;
+        }
+    }
+});
+
 test('logs messages with correct format', async t => {
     const logDir = getTestLogDir();
     const logger = new LoggingService({

@@ -12,6 +12,15 @@ const LOG_LEVELS = {
     debug: 4,
 };
 
+const parseBooleanEnv = (value: unknown): boolean => {
+    if (typeof value !== 'string') {
+        return false;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+};
+
 interface LoggingServiceConfig {
     logDir?: string;
     logLevel?: string;
@@ -43,11 +52,16 @@ export class LoggingService {
         const {
             logDir,
             logLevel = 'info',
-            disableLogging = false,
+            disableLogging,
             console: enableConsole = false,
             debugLogging = false,
             suppressConsoleOutput = true,
         } = config;
+
+        const resolvedDisableLogging =
+            disableLogging ??
+            (parseBooleanEnv(process.env.DISABLE_LOGGING) ||
+                Boolean(process.env.AVA));
 
         this.debugLogging = debugLogging;
         this.suppressConsoleOutput = suppressConsoleOutput;
@@ -56,7 +70,7 @@ export class LoggingService {
         const finalLogDir = logDir || path.join(envPaths('term2').log, 'logs');
 
         // Create log directory if needed and logging is enabled
-        if (!disableLogging) {
+        if (!resolvedDisableLogging) {
             try {
                 if (!fs.existsSync(finalLogDir)) {
                     fs.mkdirSync(finalLogDir, {recursive: true});
@@ -72,7 +86,7 @@ export class LoggingService {
         // Configure Winston logger
         const transports: winston.transport[] = [];
 
-        if (!disableLogging) {
+        if (!resolvedDisableLogging) {
             try {
                 // File transport with daily rotation
                 const fileTransport = new DailyRotateFile({
@@ -137,7 +151,7 @@ export class LoggingService {
         });
 
         // Create openrouter logger
-        if (!disableLogging) {
+        if (!resolvedDisableLogging) {
             try {
                 const openrouterTransport = new DailyRotateFile({
                     dirname: finalLogDir,
@@ -368,15 +382,6 @@ export class LoggingService {
         console.error(message);
     }
 }
-
-const parseBooleanEnv = (value: unknown): boolean => {
-    if (typeof value !== 'string') {
-        return false;
-    }
-
-    const normalized = value.trim().toLowerCase();
-    return normalized === '1' || normalized === 'true' || normalized === 'yes';
-};
 
 const isTestEnvironment = () => {
     return (

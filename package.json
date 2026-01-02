@@ -33,7 +33,7 @@
         "start": "node dist/cli.js",
         "build": "tsc && npm run post-build",
         "dev": "tsc --watch",
-        "test": "npx ava --tap 2> /dev/null | npx tap-mocha-reporter min",
+        "test": "DISABLE_LOGGING=1 ava --reporter=min | grep -v '✔'",
         "test:verbose": "tsc && ava",
         "lint": "prettier --check .",
         "lint-fix": "prettier --write .",

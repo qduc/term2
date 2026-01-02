@@ -88,7 +88,7 @@
             "rewritePaths": {
                 "source/": "dist/"
             },
-            "compile": false
+            "compile": "tsc"
         }
     },
     "xo": {

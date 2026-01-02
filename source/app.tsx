@@ -14,6 +14,7 @@ import type {SettingsService} from './services/settings-service.js';
 import type {HistoryService} from './services/history-service.js';
 import type {LoggingService} from './services/logging-service.js';
 import {createSettingsCommand} from './utils/settings-command.js';
+import { ISSHService } from './services/service-interfaces.js';
 import {setTrimConfig, trimOutput} from './utils/output-trim.js';
 import {getProvider} from './providers/index.js';
 import {executeShellCommand} from './utils/execute-shell.js';
@@ -50,6 +51,7 @@ interface AppProps {
     historyService: HistoryService;
     loggingService: LoggingService;
     sshInfo?: SSHInfo;
+    sshService?: ISSHService;
 }
 
 interface ShellHistoryEntry {
@@ -65,6 +67,7 @@ const App: FC<AppProps> = ({
     historyService,
     loggingService,
     sshInfo,
+    sshService,
 }) => {
     const {exit} = useApp();
     const { setInput} = useInputActions();
@@ -459,6 +462,8 @@ const App: FC<AppProps> = ({
             const result = await executeShellCommand(commandText, {
                 timeout,
                 maxBuffer: SHELL_MAX_BUFFER,
+                sshService,
+                cwd: sshInfo?.remoteDir,
             });
 
             const stdoutTrimmed = trimOutput(
@@ -492,7 +497,7 @@ const App: FC<AppProps> = ({
                 },
             ]);
         },
-        [settingsService, setInput, addShellMessage],
+        [settingsService, setInput, addShellMessage, sshService, sshInfo],
     );
 
     const handleSubmit = async (value: string): Promise<void> => {

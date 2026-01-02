@@ -259,7 +259,7 @@ const conversationService = new ConversationService({
 
 import {InputProvider} from './context/InputContext.js';
 
-render(
+const { waitUntilExit } = render(
     (
         <InputProvider>
             <App
@@ -268,7 +268,11 @@ render(
                 historyService={history}
                 loggingService={logger}
                 sshInfo={sshInfo}
+                sshService={sshService}
             />
         </InputProvider>
     ) as ReactNode,
 );
+
+await waitUntilExit();
+process.exit(0);

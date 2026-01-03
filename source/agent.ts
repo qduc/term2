@@ -5,6 +5,7 @@ import {createSearchReplaceToolDefinition} from './tools/search-replace.js';
 import {createApplyPatchToolDefinition} from './tools/apply-patch.js';
 import {createShellToolDefinition} from './tools/shell.js';
 import {createAskMentorToolDefinition} from './tools/ask-mentor.js';
+import {createWebSearchToolDefinition} from './tools/web-search.js';
 import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
@@ -177,6 +178,14 @@ export const getAgentDefinition = (
         if (mentorModel && askMentor) {
             tools.push(createAskMentorToolDefinition(askMentor));
         }
+
+        // Add web search tool (available in full mode)
+        tools.push(
+            createWebSearchToolDefinition({
+                settingsService,
+                loggingService,
+            })
+        );
     }
 
     // In lite mode, skip AGENTS.md loading

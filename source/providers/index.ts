@@ -2,6 +2,9 @@
 import './openai.provider.js';
 import './openrouter.provider.js';
 
+// Import web search provider registration
+import './web-search/index.js';
+
 // Re-export registry API and types
 export {
     registerProvider,

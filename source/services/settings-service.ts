@@ -11,6 +11,7 @@ import {
     getProvider,
     upsertProvider,
 } from '../providers/index.js';
+import { getAllWebSearchProviders } from '../providers/web-search/index.js';
 import {createOpenAICompatibleProviderDefinition} from '../providers/openai-compatible.provider.js';
 
 const paths = envPaths('term2');
@@ -101,6 +102,13 @@ const SSHSettingsSchema = z.object({
     remoteDir: z.string().optional(),
 });
 
+const WebSearchSettingsSchema = z.object({
+    provider: z.string().optional(),
+    tavily: z.object({
+        apiKey: z.string().optional(),
+    }).optional(),
+});
+
 const CustomProviderSchema = z.object({
     name: z.string().min(1),
     baseUrl: z.string().url(),
@@ -116,6 +124,15 @@ function getSensitiveSettingKeys(): Set<string> {
 
     // Add provider-specific sensitive keys
     for (const provider of getAllProviders()) {
+        if (provider.sensitiveSettingKeys) {
+            for (const key of provider.sensitiveSettingKeys) {
+                keys.add(key);
+            }
+        }
+    }
+
+    // Add web search provider-specific sensitive keys
+    for (const provider of getAllWebSearchProviders()) {
         if (provider.sensitiveSettingKeys) {
             for (const key of provider.sensitiveSettingKeys) {
                 keys.add(key);
@@ -139,6 +156,7 @@ const SettingsSchema = z.object({
     tools: ToolsSettingsSchema.optional(),
     debug: DebugSettingsSchema.optional(),
     ssh: SSHSettingsSchema.optional(),
+    webSearch: WebSearchSettingsSchema.optional(),
 });
 
 // Type definitions
@@ -153,6 +171,7 @@ export interface SettingsData {
     tools: z.infer<typeof ToolsSettingsSchema>;
     debug: z.infer<typeof DebugSettingsSchema>;
     ssh: z.infer<typeof SSHSettingsSchema>;
+    webSearch: z.infer<typeof WebSearchSettingsSchema>;
 }
 
 type SettingSource = 'cli' | 'env' | 'config' | 'default';
@@ -209,6 +228,10 @@ export interface SettingsWithSources {
         username: SettingWithSource<string | undefined>;
         remoteDir: SettingWithSource<string | undefined>;
     };
+    webSearch: {
+        provider: SettingWithSource<string | undefined>;
+        tavily: SettingWithSource<{ apiKey?: string } | undefined>;
+    };
 }
 
 /**
@@ -248,6 +271,8 @@ export const SETTING_KEYS = {
     SSH_PORT: 'ssh.port',
     SSH_USERNAME: 'ssh.username',
     SSH_REMOTE_DIR: 'ssh.remoteDir',
+    WEB_SEARCH_PROVIDER: 'webSearch.provider',
+    WEB_SEARCH_TAVILY_API_KEY: 'webSearch.tavily.apiKey', // Sensitive - env only
 } as const;
 
 // Define which settings are modifiable at runtime
@@ -324,6 +349,10 @@ const DEFAULT_SETTINGS: SettingsData = {
     ssh: {
         enabled: false,
         port: 22,
+    },
+    webSearch: {
+        provider: 'tavily',
+        tavily: {},
     },
 };
 
@@ -900,6 +929,16 @@ export class SettingsService {
                     source: this.getSource('ssh.remoteDir'),
                 },
             },
+            webSearch: {
+                provider: {
+                    value: this.settings.webSearch?.provider,
+                    source: this.getSource('webSearch.provider'),
+                },
+                tavily: {
+                    value: this.settings.webSearch?.tavily,
+                    source: this.getSource('webSearch.tavily'),
+                },
+            },
         };
     }
 
@@ -1144,6 +1183,9 @@ export class SettingsService {
             tools: result.tools || JSON.parse(JSON.stringify(defaults.tools)),
             debug: result.debug || JSON.parse(JSON.stringify(defaults.debug)),
             ssh: result.ssh || JSON.parse(JSON.stringify(defaults.ssh)),
+            webSearch:
+                result.webSearch ||
+                JSON.parse(JSON.stringify(defaults.webSearch)),
         };
 
         // Validate final result
@@ -1162,6 +1204,7 @@ export class SettingsService {
                 tools: merged.tools,
                 debug: merged.debug,
                 ssh: merged.ssh,
+                webSearch: merged.webSearch,
             };
         }
 
@@ -1269,6 +1312,14 @@ export function buildEnvOverrides(): Partial<SettingsData> {
     const debug: any = {};
     if (env.DEBUG_BASH_TOOL !== undefined) debug.debugBashTool = true;
 
+    const webSearch: any = {};
+    if (env.TAVILY_API_KEY) {
+        webSearch.tavily = { apiKey: env.TAVILY_API_KEY };
+    }
+    if (env.WEB_SEARCH_PROVIDER) {
+        webSearch.provider = env.WEB_SEARCH_PROVIDER;
+    }
+
     const agent: any = {openrouter};
 
     return {
@@ -1278,6 +1329,7 @@ export function buildEnvOverrides(): Partial<SettingsData> {
         app,
         tools,
         debug,
+        webSearch,
     } as Partial<SettingsData>;
 }
 

@@ -10,7 +10,7 @@ A powerful terminal-based AI assistant that helps you get things done on your co
 
 -   🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, and OpenAI-compatible APIs
 -   🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
--   🛠️ **Advanced Tools** - Shell execution, file patching, search/replace, grep, find files, file reading, and mentor consultation
+-   🛠️ **Advanced Tools** - Shell execution, file patching, search/replace, grep, find files, file reading, web search, and mentor consultation
 -   💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/setting` for easy control
 -   📝 **Smart Context** - The assistant understands your environment and provides relevant help
 -   🎯 **Streaming Responses** - See the AI's thoughts and reasoning in real-time
@@ -147,6 +147,10 @@ export TERM2_AGENT_OPENROUTER_API_KEY="your-key"
 export TERM2_SHELL_TIMEOUT="180000"
 export TERM2_SHELL_MAX_OUTPUT_LINES="1000"
 
+# Web Search settings
+export TAVILY_API_KEY="tvly-..."      # Your Tavily API key
+export TERM2_WEBSEARCH_PROVIDER="tavily"  # Web search provider (default: tavily)
+
 # App settings
 export TERM2_APP_MODE="default"  # or "edit" for automatic patch approval
 
@@ -273,6 +277,14 @@ Read file contents with precision:
 - Read entire files or specific line ranges
 - Optimizes context usage for large files
 - Support for reading multiple files
+
+### Web Search Tool
+Search the web for information:
+- Uses Tavily API by default for web search
+- Converts results to markdown for readability
+- Pluggable architecture ready to swap in other providers (Serper, Brave, etc.)
+- Read-only operation (no approval needed)
+- Requires `TAVILY_API_KEY` environment variable or settings configuration
 
 
 ## Supported Models

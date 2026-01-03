@@ -325,7 +325,7 @@ const App: FC<AppProps> = ({
             },
             {
                 name: 'lite',
-                description: 'Toggle lite mode (minimal context for general terminal assistance)',
+                description: 'Toggle lite mode (minimal context, session-only)',
                 action: () => {
                     const hasHistory = messages.filter(msg => msg.sender !== 'system').length > 0;
 

@@ -33,7 +33,7 @@ const cli = meow(
         Options
           -m, --model       Override the default OpenAI model (e.g. gpt-4o)
           -r, --reasoning   Set the reasoning effort for reasoning models (e.g. medium, high)
-          -l, --lite        Start in lite mode (minimal context for general terminal assistance)
+          -l, --lite        Start in lite mode (minimal context, session-only)
           --ssh             Enable SSH mode (user@host)
           --remote-dir      Required remote working directory for SSH mode
           --ssh-port        Optional SSH port (default: 22)
@@ -112,12 +112,12 @@ if (validatedReasoningEffort) {
     };
 }
 
-if (cli.flags.lite) {
-    cliOverrides.app = {
-        ...cliOverrides.app,
-        liteMode: true,
-    };
-}
+// Always set liteMode based on CLI flag (true if --lite passed, false otherwise)
+// This ensures users can always get back to codebase mode by running without --lite
+cliOverrides.app = {
+    ...cliOverrides.app,
+    liteMode: cli.flags.lite,
+};
 
 // Create LoggingService instance
 const logger = new LoggingService({

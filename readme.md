@@ -100,6 +100,7 @@ term2 -m gpt-4o                # Use a specific model
 term2 --model gpt-4o-mini      # Use GPT-4o mini for faster/cheaper responses
 term2 -r high                  # Set reasoning effort to high (for O1/O3 models)
 term2 --reasoning medium       # Set reasoning effort to medium
+term2 --lite                   # Start in lite mode (session-only, minimal context)
 
 # SSH Mode - execute on remote servers
 term2 --ssh user@host --remote-dir /path/to/project
@@ -117,7 +118,7 @@ While in the chat, you can use these commands:
 -   `/quit` or `/exit` - Exit the application
 -   `/model [model-name]` - Switch to a different model
 -   `/mentor` - Toggle mentor mode (collaborative mode with mentor model)
--   `/lite` - Toggle lite mode (minimal context, no codebase)
+-   `/lite` - Toggle lite mode (minimal context, session-only)
 -   `/setting [key] [value]` - Modify runtime settings (e.g., `/setting agent.temperature 0.7`)
 -   `/help` - Show available commands
 

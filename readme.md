@@ -85,7 +85,7 @@ Mentor mode gives you two AI minds working together on your codebase. Your prima
 4. Mentor challenges assumptions and provides strategic guidance
 5. AI implements the solution based on the guidance
 
-**Important:** The mentor model doesn't have direct access to your codebase. Your primary AI must share all relevant information (code snippets, file paths, findings) when consulting the mentor. This forces clear problem articulation.
+**Important:** The mentor model doesn't have direct access to your codebase. Your primary AI must share all relevant information (code snippets, file paths, findings) when consulting the mentor. This forces clear problem articulation and save cost on the more expensive mentor model.
 
 **When to use Mentor mode:**
 - Architectural decisions with multiple valid approaches
@@ -95,8 +95,8 @@ Mentor mode gives you two AI minds working together on your codebase. Your prima
 - Getting a pre-commit review of your approach
 
 **Requirements:**
-- Configure `agent.mentorModel` in settings (e.g., `gpt-4o`, `claude-sonnet-4.5`)
-- Mentor model can be different from your main model
+- Configure `agent.mentorModel` in settings (e.g., `gpt-5.2`, `claude-opus-4.5` or `gemini-3-pro-preview`)
+- Mentor model should be more capable than primary model for best results
 - Toggle with `/mentor` command mid-session
 
 **Example workflow:**
@@ -134,18 +134,6 @@ Modes are mutually exclusive—each represents a different working style matched
 
 <!-- Add a demo GIF or screenshot here -->
 
-```
-$ term2
-You: What files are in my current directory?
-Assistant: I'll list the files for you.
-
-📋 Command to execute:
-ls -la
-
-Approve? (y/n): y
-...
-```
-
 ## Installation
 
 **Requirements:**
@@ -159,18 +147,11 @@ Install globally via npm:
 npm install --global @qduc/term2
 ```
 
-Set your API key as an environment variable:
+Set your API key as an environment variable (see [Configuration](#configuration) section for details):
 
 ```bash
-# For OpenAI (default)
 export OPENAI_API_KEY="your-api-key-here"
-
-# For OpenRouter
-export TERM2_AGENT_PROVIDER="openrouter"
-export TERM2_AGENT_OPENROUTER_API_KEY="your-openrouter-key"
 ```
-
-To make it permanent, add the export to your shell configuration file (`~/.bashrc`, `~/.zshrc`, or `~/.profile`).
 
 ## Usage
 
@@ -249,40 +230,48 @@ term2 stores its configuration in:
 -   **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
 -   **Linux**: `~/.local/state/term2-nodejs/settings.json`
 
-You can also configure settings via environment variables (prefix with `TERM2_`):
+### Environment Variables (API Keys Only)
+
+API keys should be set as environment variables for security (never commit them to git):
 
 ```bash
-# Agent settings
-export TERM2_AGENT_MODEL="gpt-4o"
-export TERM2_AGENT_PROVIDER="openai"  # or "openrouter"
-export TERM2_AGENT_REASONING_EFFORT="medium"  # none, minimal, low, medium, high, default
-export TERM2_AGENT_TEMPERATURE="0.7"  # 0.0 to 2.0
-export TERM2_AGENT_MAX_TURNS="100"
-export TERM2_AGENT_RETRY_ATTEMPTS="2"
+# OpenAI (default provider)
+export OPENAI_API_KEY="sk-..."
 
-# Mentor mode settings (see "Operating Modes" section)
-export TERM2_AGENT_MENTOR_MODEL="gpt-4o"  # Model to use for mentor consultations
-export TERM2_APP_MENTOR_MODE="false"  # Start with mentor mode enabled
+# OpenRouter (for Claude, Gemini, and other models)
+export OPENROUTER_API_KEY="sk-or-v1-..."
 
-# Provider-specific settings
-export TERM2_AGENT_OPENROUTER_API_KEY="your-key"
+# Web Search (Tavily)
+export TAVILY_API_KEY="tvly-..."
+```
 
-# Tool settings
-export TERM2_SHELL_TIMEOUT="180000"
-export TERM2_SHELL_MAX_OUTPUT_LINES="1000"
+To make them permanent, add these exports to your shell configuration file (`~/.bashrc`, `~/.zshrc`, or `~/.profile`).
 
-# Web Search settings
-export TAVILY_API_KEY="tvly-..."      # Your Tavily API key
-export TERM2_WEBSEARCH_PROVIDER="tavily"  # Web search provider (default: tavily)
+### Configuring Other Settings
 
-# App settings
-export TERM2_APP_MODE="default"  # or "edit" for automatic patch approval
-export TERM2_APP_LITE_MODE="false"  # Start in lite mode (see "Operating Modes" section)
+All other settings (model, temperature, reasoning effort, timeouts, etc.) can be configured via:
 
-# SSH settings (alternative to CLI flags)
-export TERM2_SSH_HOST="user@server.com"
-export TERM2_SSH_PORT="22"
-export TERM2_SSH_REMOTE_DIR="/path/to/project"
+1. **App menu** - Use `/settings` command during a session for interactive configuration
+2. **Settings file** - Manually edit the JSON file:
+   - **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
+   - **Linux**: `~/.local/state/term2-nodejs/settings.json`
+3. **CLI flags** - Override for a single session (e.g., `-m gpt-5.2`, `-r high`)
+
+Example settings file:
+```json
+{
+  "agent": {
+    "model": "gpt-5.1",
+    "reasoningEffort": "medium",
+    "temperature": 0.7,
+    "provider": "openai",
+    "mentorModel": "gpt-5.2"
+  },
+  "shell": {
+    "timeout": 120000,
+    "maxOutputLines": 1000
+  }
+}
 ```
 
 ## How It Works
@@ -392,7 +381,7 @@ Search codebase for patterns:
 Consult a smarter model for advice:
 - Query a different/better model for complex questions
 - Available when mentor mode is enabled (see "Operating Modes" section)
-- Configure via `agent.mentorModel` setting (e.g., `gpt-4o`, `claude-sonnet-4.5`)
+- Configure via `agent.mentorModel` setting (e.g., `gpt-5.1`, `claude-sonnet-4.5`)
 - Useful for architectural decisions and getting second opinions
 - Mentor provides strategic guidance without direct codebase access
 
@@ -428,8 +417,8 @@ term2 works with multiple AI providers:
 -   `gpt-5-mini`
 -   `gpt-4.1`
 -   `gpt-4.1-mini`
--   `gpt-4o`
--   `gpt-4o-mini`
+-   `gpt-5.1`
+-   `gpt-5.1-mini`
 -   `o3` (supports reasoning effort)
 -   `o3-mini` (supports reasoning effort)
 -   `o1` (supports reasoning effort)
@@ -440,7 +429,7 @@ Access hundreds of models through OpenRouter including:
 -   Gemini models (Google)
 -   Open-source models (Deepseek, GLM, Minimax, Devstral, etc.)
 
-Set `TERM2_AGENT_PROVIDER="openrouter"` to use OpenRouter.
+Use CLI flags (`-m model-name`) or settings file to select OpenRouter models.
 
 ### OpenAI-Compatible
 Any OpenAI-compatible API endpoint can be configured through runtime settings.

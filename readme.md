@@ -1,6 +1,6 @@
 # term2
 
-[![npm version](https://img.shields.io/npm/v/term2.svg)](https://www.npmjs.com/package/term2)
+[![npm version](https://img.shields.io/npm/v/@qduc/term2.svg)](https://www.npmjs.com/package/@qduc/term2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/node/v/term2.svg)](https://nodejs.org)
 
@@ -8,10 +8,11 @@ A powerful terminal-based AI assistant that helps you get things done on your co
 
 ## Features
 
+-   🎭 **Three Operating Modes** - Default (full-power), Lite (fast & safe), and Mentor (collaborative problem-solving)
 -   🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, and OpenAI-compatible APIs
 -   🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
 -   🛠️ **Advanced Tools** - Shell execution, file patching, search/replace, grep, find files, file reading, web search, and mentor consultation
--   💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/setting` for easy control
+-   💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite` for easy control
 -   📝 **Smart Context** - The assistant understands your environment and provides relevant help
 -   🎯 **Streaming Responses** - See the AI's thoughts and reasoning in real-time
 -   🧠 **Reasoning Effort Control** - Configurable reasoning levels (minimal to high) for O1/O3 models
@@ -19,6 +20,115 @@ A powerful terminal-based AI assistant that helps you get things done on your co
 -   🎨 **Markdown Rendering** - Formatted code blocks and text in the terminal
 -   🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
 -   🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
+
+## Operating Modes
+
+term2 offers three modes tailored to different workflows. Choose the mode that matches your current task.
+
+### Quick Reference
+
+| Mode | Start with | Best for | Tools Available | Context |
+|------|------------|----------|-----------------|---------|
+| **Default** | `term2` | Codebase work & development | All editing tools | Full codebase |
+| **Lite** | `term2 --lite` | General terminal tasks (no codebase) | Read-only | None |
+| **Mentor** | Use `/mentor` | Complex codebase problems | All + mentor | Full codebase |
+
+### Lite Mode - Everyday Terminal Assistant
+
+**The problem it solves:** You need a general-purpose terminal assistant for everyday system tasks—not working with a codebase or project.
+
+Lite mode is designed for general terminal work: system administration, file management, running commands, investigating logs, and SSH sessions. It's **not** for codebase/project work (no code editing tools, no project context loading). Think of it as your everyday terminal companion for non-coding tasks.
+
+**Key benefits:**
+- 🚀 **Fast and lightweight** - No codebase context, no project file loading, quick startup
+- 🔧 **General terminal tools** - Shell commands, grep, read files, find files (no code editing)
+- 🌐 **Perfect for SSH** - Ideal for remote server management and investigation
+- 🔄 **Toggleable** - Switch on/off mid-session with `/lite` command
+- 🐚 **Shell mode** - Press Shift+Tab to toggle direct shell command execution
+
+**When to use Lite mode:**
+- System administration and server management tasks
+- Investigating logs, config files, and system issues
+- File system navigation and organization
+- SSH into servers for maintenance or debugging
+- General terminal help when not working on a codebase
+- Quick command help and syntax lookups
+
+**Example:**
+```bash
+# Everyday terminal assistant (not working with code)
+term2 --lite
+
+# SSH server management and investigation
+term2 --ssh deploy@server.com --lite
+
+# Remote server debugging
+term2 --ssh user@host --remote-dir /var/log --lite
+```
+
+### Mentor Mode - Collaborative Problem Solving
+
+**The problem it solves:** You're tackling a complex codebase problem and need a different perspective or expert consultation.
+
+Mentor mode gives you two AI minds working together on your codebase. Your primary AI does the reconnaissance and implementation work, while a separate (often more powerful) mentor model provides strategic guidance, challenges assumptions, and suggests alternatives. Think of it as pair programming with an expert consultant.
+
+**Key benefits:**
+- 🧠 **Two minds, better solutions** - Primary AI gathers context, mentor provides strategic guidance
+- 🔍 **Structured problem-solving** - Forces clear articulation of findings before jumping to solutions
+- ❓ **Challenges assumptions** - Mentor actively probes for gaps and alternative approaches
+- 🎯 **You stay in control** - Mentor advises, primary AI implements your decisions
+
+**How it works:**
+1. You give the AI a task or problem
+2. The AI does quick reconnaissance of your codebase
+3. AI consults the mentor using `ask_mentor` tool with findings and questions
+4. Mentor challenges assumptions and provides strategic guidance
+5. AI implements the solution based on the guidance
+
+**Important:** The mentor model doesn't have direct access to your codebase. Your primary AI must share all relevant information (code snippets, file paths, findings) when consulting the mentor. This forces clear problem articulation.
+
+**When to use Mentor mode:**
+- Architectural decisions with multiple valid approaches
+- "Am I missing something?" sanity checks before major refactoring
+- Stuck on a problem after trying multiple solutions
+- Designing new features that must fit existing patterns
+- Getting a pre-commit review of your approach
+
+**Requirements:**
+- Configure `agent.mentorModel` in settings (e.g., `gpt-4o`, `claude-sonnet-4.5`)
+- Mentor model can be different from your main model
+- Toggle with `/mentor` command mid-session
+
+**Example workflow:**
+```
+You: "Add dark mode support to the app"
+
+AI: [Searches for theme infrastructure]
+    [Finds ThemeProvider at src/context/ThemeContext.tsx]
+
+AI: [Consults mentor] "User wants dark mode. Found ThemeProvider that uses
+    CSS variables like --background-color. Currently fixed to 'light' theme.
+    Propose extending this provider to toggle themes. Confidence: High.
+    Does this approach make sense?"
+
+Mentor: "Good find. Before proceeding, check:
+         1. Are CSS variables used consistently across all components?
+         2. Any third-party UI libraries that need theme integration?
+         3. Should theme preference persist across sessions?
+         Missing any of these could create inconsistent theming."
+
+AI: [Does additional checks based on mentor's questions]
+    [Implements solution addressing all concerns]
+```
+
+### Switching Modes
+
+Modes are mutually exclusive—each represents a different working style matched to your task. You can switch modes mid-session:
+
+- `/lite` - Toggle lite mode (clears history when switching)
+- `/mentor` - Toggle mentor mode
+- Switching to lite mode automatically disables edit/mentor modes
+- Enabling edit or mentor mode automatically disables lite mode
 
 ## Demo
 
@@ -46,7 +156,7 @@ Approve? (y/n): y
 Install globally via npm:
 
 ```bash
-npm install --global term2
+npm install --global @qduc/term2
 ```
 
 Set your API key as an environment variable:
@@ -67,10 +177,18 @@ To make it permanent, add the export to your shell configuration file (`~/.bashr
 Start the assistant:
 
 ```bash
-term2
+term2              # Start in default mode (full capabilities)
+term2 --lite       # Start in lite mode (fast, read-only)
 ```
 
 Then simply chat with the AI! Type your question or request, press Enter, and the assistant will help you.
+
+**New to term2?**
+- Working on a codebase/project? Use default mode: `term2`
+- Just need general terminal help? Use lite mode: `term2 --lite`
+- Tackling a complex problem? Enable mentor mode with `/mentor` command
+
+See the "Operating Modes" section below for full details.
 
 ### Basic Examples
 
@@ -95,18 +213,21 @@ Then simply chat with the AI! Type your question or request, press Enter, and th
 ### Command Line Options
 
 ```bash
-term2                           # Start with default model (gpt-5.1)
-term2 -m gpt-4o                # Use a specific model
-term2 --model gpt-4o-mini      # Use GPT-4o mini for faster/cheaper responses
-term2 -r high                  # Set reasoning effort to high (for O1/O3 models)
+# Model selection
+term2                          # Start with default model (gpt-5.1)
+term2 -m gpt-5.2               # Use a specific model
+term2 --model gpt-5-mini      # Use GPT-5 mini for faster/cheaper responses
+term2 -r high                  # Set reasoning effort to high (for GPT-5 models)
 term2 --reasoning medium       # Set reasoning effort to medium
-term2 --lite                   # Start in lite mode (session-only, minimal context)
+
+# Operating modes (see "Operating Modes" section above for details)
+term2 --lite                   # Start in lite mode for general terminal work (no codebase)
 
 # SSH Mode - execute on remote servers
 term2 --ssh user@host --remote-dir /path/to/project
 term2 --ssh deploy@server.com --remote-dir /var/www/app --ssh-port 2222
 
-# Combine SSH with lite mode for remote terminal assistance
+# Combine SSH with lite mode for lightweight remote assistance
 term2 --ssh user@host --remote-dir /path --lite
 ```
 
@@ -115,12 +236,11 @@ term2 --ssh user@host --remote-dir /path --lite
 While in the chat, you can use these commands:
 
 -   `/clear` - Clear the conversation history
--   `/quit` or `/exit` - Exit the application
+-   `/quit` - Exit the application
 -   `/model [model-name]` - Switch to a different model
--   `/mentor` - Toggle mentor mode (collaborative mode with mentor model)
--   `/lite` - Toggle lite mode (minimal context, session-only)
--   `/setting [key] [value]` - Modify runtime settings (e.g., `/setting agent.temperature 0.7`)
--   `/help` - Show available commands
+-   `/mentor` - Toggle mentor mode (see "Operating Modes" section for details)
+-   `/lite` - Toggle lite mode (see "Operating Modes" section for details)
+-   `/settings [key] [value]` - Modify runtime settings (e.g., `/settings agent.temperature 0.7`)
 
 ## Configuration
 
@@ -140,6 +260,10 @@ export TERM2_AGENT_TEMPERATURE="0.7"  # 0.0 to 2.0
 export TERM2_AGENT_MAX_TURNS="100"
 export TERM2_AGENT_RETRY_ATTEMPTS="2"
 
+# Mentor mode settings (see "Operating Modes" section)
+export TERM2_AGENT_MENTOR_MODEL="gpt-4o"  # Model to use for mentor consultations
+export TERM2_APP_MENTOR_MODE="false"  # Start with mentor mode enabled
+
 # Provider-specific settings
 export TERM2_AGENT_OPENROUTER_API_KEY="your-key"
 
@@ -153,6 +277,7 @@ export TERM2_WEBSEARCH_PROVIDER="tavily"  # Web search provider (default: tavily
 
 # App settings
 export TERM2_APP_MODE="default"  # or "edit" for automatic patch approval
+export TERM2_APP_LITE_MODE="false"  # Start in lite mode (see "Operating Modes" section)
 
 # SSH settings (alternative to CLI flags)
 export TERM2_SSH_HOST="user@server.com"
@@ -177,7 +302,7 @@ SSH mode enables term2 to execute commands and modify files on remote servers ov
 
 - SSH agent running with your keys loaded (`ssh-add`)
 - SSH access to the target server
-- `--remote-dir` is required to specify the working directory on the remote server
+- `--remote-dir` is required to specify the working directory (optional in lite mode - will auto-detect)
 
 ### Usage
 
@@ -187,6 +312,9 @@ term2 --ssh user@hostname --remote-dir /path/to/project
 
 # With custom SSH port
 term2 --ssh user@hostname --remote-dir /path/to/project --ssh-port 2222
+
+# With lite mode (auto-detects remote directory)
+term2 --ssh user@hostname --lite
 ```
 
 ### How It Works
@@ -230,7 +358,7 @@ This combination provides:
 
 ## Available Tools
 
-The AI assistant has access to these tools to help you:
+The AI assistant has access to these tools to help you. **Note:** Tool availability depends on your operating mode—see the "Operating Modes" section above for details.
 
 ### Shell Tool
 Execute shell commands with safety validation:
@@ -263,8 +391,10 @@ Search codebase for patterns:
 ### Ask Mentor Tool
 Consult a smarter model for advice:
 - Query a different/better model for complex questions
-- Configurable mentor model via settings
-- Useful for getting second opinions
+- Available when mentor mode is enabled (see "Operating Modes" section)
+- Configure via `agent.mentorModel` setting (e.g., `gpt-4o`, `claude-sonnet-4.5`)
+- Useful for architectural decisions and getting second opinions
+- Mentor provides strategic guidance without direct codebase access
 
 ### Find Files Tool
 Search for files in the workspace:
@@ -292,20 +422,23 @@ Search the web for information:
 term2 works with multiple AI providers:
 
 ### OpenAI (default)
+-   `gpt-5.2` (latest)
 -   `gpt-5.1` (default)
+-   `gpt-5`
+-   `gpt-5-mini`
+-   `gpt-4.1`
+-   `gpt-4.1-mini`
 -   `gpt-4o`
 -   `gpt-4o-mini`
--   `o1` (supports reasoning effort)
+-   `o3` (supports reasoning effort)
 -   `o3-mini` (supports reasoning effort)
--   `gpt-4-turbo`
--   `gpt-4`
--   `gpt-3.5-turbo`
+-   `o1` (supports reasoning effort)
 
 ### OpenRouter
 Access hundreds of models through OpenRouter including:
 -   Claude models (Anthropic)
 -   Gemini models (Google)
--   Open-source models (Llama, Mistral, etc.)
+-   Open-source models (Deepseek, GLM, Minimax, Devstral, etc.)
 
 Set `TERM2_AGENT_PROVIDER="openrouter"` to use OpenRouter.
 
@@ -357,7 +490,7 @@ source ~/.bashrc  # or ~/.zshrc
 If you get permission errors during global installation, use:
 
 ```bash
-sudo npm install --global term2
+sudo npm install --global @qduc/term2
 ```
 
 Or configure npm to install globally without sudo: https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally
@@ -381,19 +514,28 @@ Also verify you can connect manually: `ssh user@hostname`
 
 ### SSH mode: "remote-dir is required"
 
-When using `--ssh`, you must also specify `--remote-dir`:
+When using `--ssh` without `--lite`, you must also specify `--remote-dir`:
 
 ```bash
 term2 --ssh user@host --remote-dir /home/user/project
 ```
 
+With `--lite` mode, `--remote-dir` is optional and will auto-detect:
+
+```bash
+term2 --ssh user@host --lite
+```
+
 ## Tips
 
+-   **Choose the right mode** - Use lite mode for general terminal work (not codebase), default mode for codebase work, mentor mode for complex codebase problems (see "Operating Modes" section)
 -   The assistant won't run dangerous commands without your approval
--   You can reject any command by pressing 'n' when prompted
+-   You can reject any command by choosing 'No' when prompted
 -   Press Ctrl+C to exit the chat at any time
 -   Use arrow keys to navigate through your command history
 -   Be specific in your requests for better results
+-   Use `/mentor` to get expert consultation on difficult architectural decisions
+-   Use `--lite` flag when SSH'ing to servers for general system work without codebase context
 
 ## License
 

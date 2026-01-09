@@ -5,6 +5,10 @@
 
 A powerful terminal-based AI assistant that helps you get things done on your computer through natural conversation.
 
+## Demo
+
+https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
+
 ## Features
 
 -   🎭 **Three Operating Modes** - Default (full-power), Lite (fast & safe), and Mentor (collaborative problem-solving)
@@ -19,6 +23,96 @@ A powerful terminal-based AI assistant that helps you get things done on your co
 -   🎨 **Markdown Rendering** - Formatted code blocks and text in the terminal
 -   🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
 -   🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
+
+## Installation
+
+**Requirements:**
+
+-   Node.js 16 or higher
+-   An API key from OpenAI, OpenRouter, or any OpenAI-compatible provider
+
+Install globally via npm:
+
+```bash
+npm install --global @qduc/term2
+```
+
+Set your API key as an environment variable (see [Configuration](#configuration) section for details):
+
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+## Usage
+
+Start the assistant:
+
+```bash
+term2              # Start in default mode (full capabilities)
+term2 --lite       # Start in lite mode (fast, read-only)
+```
+
+Then simply chat with the AI! Type your question or request, press Enter, and the assistant will help you.
+
+**New to term2?**
+
+-   Working on a codebase/project? Use default mode: `term2`
+-   Just need general terminal help? Use lite mode: `term2 --lite`
+-   Tackling a complex problem? Enable mentor mode with `/mentor` command
+
+See the "Operating Modes" section below for full details.
+
+### Basic Examples
+
+```
+"What files are in my current directory?"
+"Show me my git status"
+"Create a backup of my documents folder"
+"What's using port 3000?"
+```
+
+### Advanced Examples
+
+```
+"Find all TODO comments in my JavaScript files"
+"Help me debug why my server won't start on port 8080"
+"Create a new React component called UserProfile"
+"Show me the disk usage of my home directory"
+"What processes are consuming the most memory?"
+"Search for the word 'config' in all .json files"
+```
+
+### Command Line Options
+
+```bash
+# Model selection
+term2                          # Start with default model (gpt-5.1)
+term2 -m gpt-5.2               # Use a specific model
+term2 --model gpt-5-mini      # Use GPT-5 mini for faster/cheaper responses
+term2 -r high                  # Set reasoning effort to high (for GPT-5 models)
+term2 --reasoning medium       # Set reasoning effort to medium
+
+# Operating modes (see "Operating Modes" section above for details)
+term2 --lite                   # Start in lite mode for general terminal work (no codebase)
+
+# SSH Mode - execute on remote servers
+term2 --ssh user@host --remote-dir /path/to/project
+term2 --ssh deploy@server.com --remote-dir /var/www/app --ssh-port 2222
+
+# Combine SSH with lite mode for lightweight remote assistance
+term2 --ssh user@host --remote-dir /path --lite
+```
+
+### Slash Commands
+
+While in the chat, you can use these commands:
+
+-   `/clear` - Clear the conversation history
+-   `/quit` - Exit the application
+-   `/model [model-name]` - Switch to a different model
+-   `/mentor` - Toggle mentor mode (see "Operating Modes" section for details)
+-   `/lite` - Toggle lite mode (see "Operating Modes" section for details)
+-   `/settings [key] [value]` - Modify runtime settings (e.g., `/settings agent.temperature 0.7`)
 
 ## Operating Modes
 
@@ -137,99 +231,59 @@ Modes are mutually exclusive—each represents a different working style matched
 -   Switching to lite mode automatically disables edit/mentor modes
 -   Enabling edit or mentor mode automatically disables lite mode
 
-## Demo
+## SSH Mode
 
-<!-- Add a demo GIF or screenshot here -->
+SSH mode enables term2 to execute commands and modify files on remote servers over SSH. This is useful for managing remote deployments, debugging server issues, or working on remote development environments.
 
-## Installation
+### Requirements
 
-**Requirements:**
+-   SSH agent running with your keys loaded (`ssh-add`)
+-   SSH access to the target server
+-   `--remote-dir` is required to specify the working directory (optional in lite mode - will auto-detect)
 
--   Node.js 16 or higher
--   An API key from OpenAI, OpenRouter, or any OpenAI-compatible provider
-
-Install globally via npm:
-
-```bash
-npm install --global @qduc/term2
-```
-
-Set your API key as an environment variable (see [Configuration](#configuration) section for details):
+### Usage
 
 ```bash
-export OPENAI_API_KEY="your-api-key-here"
+# Basic usage
+term2 --ssh user@hostname --remote-dir /path/to/project
+
+# With custom SSH port
+term2 --ssh user@hostname --remote-dir /path/to/project --ssh-port 2222
+
+# With lite mode (auto-detects remote directory)
+term2 --ssh user@hostname --lite
 ```
 
-## Usage
+### How It Works
 
-Start the assistant:
+When SSH mode is enabled:
+
+1. term2 establishes an SSH connection using your SSH agent for authentication
+2. All shell commands are executed on the remote server via SSH
+3. File operations (read, write, patch) are performed remotely using shell commands (`cat`, heredocs)
+4. The working directory is set to `--remote-dir` on the remote server
+5. The connection is automatically closed when you exit term2
+
+### Combining with Lite Mode
+
+SSH mode works seamlessly with lite mode for lightweight remote terminal assistance:
 
 ```bash
-term2              # Start in default mode (full capabilities)
-term2 --lite       # Start in lite mode (fast, read-only)
+term2 --ssh user@host --remote-dir /path/to/project --lite
 ```
 
-Then simply chat with the AI! Type your question or request, press Enter, and the assistant will help you.
+This combination provides:
 
-**New to term2?**
+-   Remote command execution over SSH
+-   Read-only tools (grep, find_files, read_file) for exploration
+-   Minimal context and faster responses
+-   No file editing tools (safer for production servers)
 
--   Working on a codebase/project? Use default mode: `term2`
--   Just need general terminal help? Use lite mode: `term2 --lite`
--   Tackling a complex problem? Enable mentor mode with `/mentor` command
+### Limitations
 
-See the "Operating Modes" section below for full details.
-
-### Basic Examples
-
-```
-"What files are in my current directory?"
-"Show me my git status"
-"Create a backup of my documents folder"
-"What's using port 3000?"
-```
-
-### Advanced Examples
-
-```
-"Find all TODO comments in my JavaScript files"
-"Help me debug why my server won't start on port 8080"
-"Create a new React component called UserProfile"
-"Show me the disk usage of my home directory"
-"What processes are consuming the most memory?"
-"Search for the word 'config' in all .json files"
-```
-
-### Command Line Options
-
-```bash
-# Model selection
-term2                          # Start with default model (gpt-5.1)
-term2 -m gpt-5.2               # Use a specific model
-term2 --model gpt-5-mini      # Use GPT-5 mini for faster/cheaper responses
-term2 -r high                  # Set reasoning effort to high (for GPT-5 models)
-term2 --reasoning medium       # Set reasoning effort to medium
-
-# Operating modes (see "Operating Modes" section above for details)
-term2 --lite                   # Start in lite mode for general terminal work (no codebase)
-
-# SSH Mode - execute on remote servers
-term2 --ssh user@host --remote-dir /path/to/project
-term2 --ssh deploy@server.com --remote-dir /var/www/app --ssh-port 2222
-
-# Combine SSH with lite mode for lightweight remote assistance
-term2 --ssh user@host --remote-dir /path --lite
-```
-
-### Slash Commands
-
-While in the chat, you can use these commands:
-
--   `/clear` - Clear the conversation history
--   `/quit` - Exit the application
--   `/model [model-name]` - Switch to a different model
--   `/mentor` - Toggle mentor mode (see "Operating Modes" section for details)
--   `/lite` - Toggle lite mode (see "Operating Modes" section for details)
--   `/settings [key] [value]` - Modify runtime settings (e.g., `/settings agent.temperature 0.7`)
+-   Authentication is via SSH agent only (no password prompts)
+-   Binary file operations are not supported (text files only)
+-   Large file transfers may be slower than local operations
 
 ## Configuration
 
@@ -345,79 +399,6 @@ _LM Studio Example:_
 }
 ```
 
-## How It Works
-
-1. You type a message and press Enter
-2. The AI analyzes your request and determines if it needs to execute commands
-3. If a command is needed, you'll see a preview and approval prompt
-4. After approval, the command runs and results are shown
-5. The AI uses the results to provide a helpful response
-6. You stay in full control - reject any command with 'n'
-
-## SSH Mode
-
-SSH mode enables term2 to execute commands and modify files on remote servers over SSH. This is useful for managing remote deployments, debugging server issues, or working on remote development environments.
-
-### Requirements
-
--   SSH agent running with your keys loaded (`ssh-add`)
--   SSH access to the target server
--   `--remote-dir` is required to specify the working directory (optional in lite mode - will auto-detect)
-
-### Usage
-
-```bash
-# Basic usage
-term2 --ssh user@hostname --remote-dir /path/to/project
-
-# With custom SSH port
-term2 --ssh user@hostname --remote-dir /path/to/project --ssh-port 2222
-
-# With lite mode (auto-detects remote directory)
-term2 --ssh user@hostname --lite
-```
-
-### How It Works
-
-When SSH mode is enabled:
-
-1. term2 establishes an SSH connection using your SSH agent for authentication
-2. All shell commands are executed on the remote server via SSH
-3. File operations (read, write, patch) are performed remotely using shell commands (`cat`, heredocs)
-4. The working directory is set to `--remote-dir` on the remote server
-5. The connection is automatically closed when you exit term2
-
-### Combining with Lite Mode
-
-SSH mode works seamlessly with lite mode for lightweight remote terminal assistance:
-
-```bash
-term2 --ssh user@host --remote-dir /path/to/project --lite
-```
-
-This combination provides:
-
--   Remote command execution over SSH
--   Read-only tools (grep, find_files, read_file) for exploration
--   Minimal context and faster responses
--   No file editing tools (safer for production servers)
-
-### Limitations
-
--   Authentication is via SSH agent only (no password prompts)
--   Binary file operations are not supported (text files only)
--   Large file transfers may be slower than local operations
-
-## Safety Features
-
--   **Command Approval** - Every destructive operation requires your explicit confirmation
--   **Diff Preview** - See exact file changes before approving patches or edits
--   **Risk Analysis** - Dangerous operations (like `rm -rf`, `git push --force`) are flagged
--   **Path Safety** - Operations on sensitive directories require extra caution
--   **Dry-Run Validation** - Patches are validated before approval to prevent errors
--   **No Hidden Actions** - All tool usage is transparent and visible
--   **Retry Limits** - Automatic abort after consecutive tool failures (default: 3)
-
 ## Supported Models
 
 term2 works with multiple AI providers:
@@ -453,6 +434,25 @@ term2 can connect to any OpenAI-compatible API. This allows you to use:
 -   **Local Models**: Run private models locally via Ollama, LM Studio, vLLM, or LocalAI.
 -   **Self-Hosted**: Connect to private deployments of models.
 -   **Other Providers**: Any service offering an OpenAI-compatible endpoint (e.g., Groq, Together AI).
+
+## Safety Features
+
+-   **Command Approval** - Every destructive operation requires your explicit confirmation
+-   **Diff Preview** - See exact file changes before approving patches or edits
+-   **Risk Analysis** - Dangerous operations (like `rm -rf`, `git push --force`) are flagged
+-   **Path Safety** - Operations on sensitive directories require extra caution
+-   **Dry-Run Validation** - Patches are validated before approval to prevent errors
+-   **No Hidden Actions** - All tool usage is transparent and visible
+-   **Retry Limits** - Automatic abort after consecutive tool failures (default: 3)
+
+## How It Works
+
+1. You type a message and press Enter
+2. The AI analyzes your request and determines if it needs to execute commands
+3. If a command is needed, you'll see a preview and approval prompt
+4. After approval, the command runs and results are shown
+5. The AI uses the results to provide a helpful response
+6. You stay in full control - reject any command with 'n'
 
 ## Development
 
@@ -546,13 +546,13 @@ term2 --ssh user@host --lite
 -   Use `/mentor` to get expert consultation on difficult architectural decisions
 -   Use `--lite` flag when SSH'ing to servers for general system work without codebase context
 
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request or open an Issue on [GitHub](https://github.com/qduc/term2).
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details
 
 ## Acknowledgments
 

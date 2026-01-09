@@ -2,7 +2,6 @@
 
 [![npm version](https://img.shields.io/npm/v/@qduc/term2.svg)](https://www.npmjs.com/package/@qduc/term2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/node/v/term2.svg)](https://nodejs.org)
 
 A powerful terminal-based AI assistant that helps you get things done on your computer through natural conversation.
 
@@ -27,11 +26,11 @@ term2 offers three modes tailored to different workflows. Choose the mode that m
 
 ### Quick Reference
 
-| Mode | Start with | Best for | Tools Available | Context |
-|------|------------|----------|-----------------|---------|
-| **Default** | `term2` | Codebase work & development | All editing tools | Full codebase |
-| **Lite** | `term2 --lite` | General terminal tasks (no codebase) | Read-only | None |
-| **Mentor** | Use `/mentor` | Complex codebase problems | All + mentor | Full codebase |
+| Mode        | Start with     | Best for                             | Tools Available   | Context       |
+| ----------- | -------------- | ------------------------------------ | ----------------- | ------------- |
+| **Default** | `term2`        | Codebase work & development          | All editing tools | Full codebase |
+| **Lite**    | `term2 --lite` | General terminal tasks (no codebase) | Read-only         | None          |
+| **Mentor**  | Use `/mentor`  | Complex codebase problems            | All + mentor      | Full codebase |
 
 ### Lite Mode - Everyday Terminal Assistant
 
@@ -40,21 +39,24 @@ term2 offers three modes tailored to different workflows. Choose the mode that m
 Lite mode is designed for general terminal work: system administration, file management, running commands, investigating logs, and SSH sessions. It's **not** for codebase/project work (no code editing tools, no project context loading). Think of it as your everyday terminal companion for non-coding tasks.
 
 **Key benefits:**
-- 🚀 **Fast and lightweight** - No codebase context, no project file loading, quick startup
-- 🔧 **General terminal tools** - Shell commands, grep, read files, find files (no code editing)
-- 🌐 **Perfect for SSH** - Ideal for remote server management and investigation
-- 🔄 **Toggleable** - Switch on/off mid-session with `/lite` command
-- 🐚 **Shell mode** - Press Shift+Tab to toggle direct shell command execution
+
+-   🚀 **Fast and lightweight** - No codebase context, no project file loading, quick startup
+-   🔧 **General terminal tools** - Shell commands, grep, read files, find files (no code editing)
+-   🌐 **Perfect for SSH** - Ideal for remote server management and investigation
+-   🔄 **Toggleable** - Switch on/off mid-session with `/lite` command
+-   🐚 **Shell mode** - Press Shift+Tab to toggle direct shell command execution
 
 **When to use Lite mode:**
-- System administration and server management tasks
-- Investigating logs, config files, and system issues
-- File system navigation and organization
-- SSH into servers for maintenance or debugging
-- General terminal help when not working on a codebase
-- Quick command help and syntax lookups
+
+-   System administration and server management tasks
+-   Investigating logs, config files, and system issues
+-   File system navigation and organization
+-   SSH into servers for maintenance or debugging
+-   General terminal help when not working on a codebase
+-   Quick command help and syntax lookups
 
 **Example:**
+
 ```bash
 # Everyday terminal assistant (not working with code)
 term2 --lite
@@ -73,12 +75,14 @@ term2 --ssh user@host --remote-dir /var/log --lite
 Mentor mode gives you two AI minds working together on your codebase. Your primary AI does the reconnaissance and implementation work, while a separate (often more powerful) mentor model provides strategic guidance, challenges assumptions, and suggests alternatives. Think of it as pair programming with an expert consultant.
 
 **Key benefits:**
-- 🧠 **Two minds, better solutions** - Primary AI gathers context, mentor provides strategic guidance
-- 🔍 **Structured problem-solving** - Forces clear articulation of findings before jumping to solutions
-- ❓ **Challenges assumptions** - Mentor actively probes for gaps and alternative approaches
-- 🎯 **You stay in control** - Mentor advises, primary AI implements your decisions
+
+-   🧠 **Two minds, better solutions** - Primary AI gathers context, mentor provides strategic guidance
+-   🔍 **Structured problem-solving** - Forces clear articulation of findings before jumping to solutions
+-   ❓ **Challenges assumptions** - Mentor actively probes for gaps and alternative approaches
+-   🎯 **You stay in control** - Mentor advises, primary AI implements your decisions
 
 **How it works:**
+
 1. You give the AI a task or problem
 2. The AI does quick reconnaissance of your codebase
 3. AI consults the mentor using `ask_mentor` tool with findings and questions
@@ -88,18 +92,21 @@ Mentor mode gives you two AI minds working together on your codebase. Your prima
 **Important:** The mentor model doesn't have direct access to your codebase. Your primary AI must share all relevant information (code snippets, file paths, findings) when consulting the mentor. This forces clear problem articulation and save cost on the more expensive mentor model.
 
 **When to use Mentor mode:**
-- Architectural decisions with multiple valid approaches
-- "Am I missing something?" sanity checks before major refactoring
-- Stuck on a problem after trying multiple solutions
-- Designing new features that must fit existing patterns
-- Getting a pre-commit review of your approach
+
+-   Architectural decisions with multiple valid approaches
+-   "Am I missing something?" sanity checks before major refactoring
+-   Stuck on a problem after trying multiple solutions
+-   Designing new features that must fit existing patterns
+-   Getting a pre-commit review of your approach
 
 **Requirements:**
-- Configure `agent.mentorModel` in settings (e.g., `gpt-5.2`, `claude-opus-4.5` or `gemini-3-pro-preview`)
-- Mentor model should be more capable than primary model for best results
-- Toggle with `/mentor` command mid-session
+
+-   Configure `agent.mentorModel` in settings (e.g., `gpt-5.2`, `claude-opus-4.5` or `gemini-3-pro-preview`)
+-   Mentor model should be more capable than primary model for best results
+-   Toggle with `/mentor` command mid-session
 
 **Example workflow:**
+
 ```
 You: "Add dark mode support to the app"
 
@@ -125,10 +132,10 @@ AI: [Does additional checks based on mentor's questions]
 
 Modes are mutually exclusive—each represents a different working style matched to your task. You can switch modes mid-session:
 
-- `/lite` - Toggle lite mode (clears history when switching)
-- `/mentor` - Toggle mentor mode
-- Switching to lite mode automatically disables edit/mentor modes
-- Enabling edit or mentor mode automatically disables lite mode
+-   `/lite` - Toggle lite mode (clears history when switching)
+-   `/mentor` - Toggle mentor mode
+-   Switching to lite mode automatically disables edit/mentor modes
+-   Enabling edit or mentor mode automatically disables lite mode
 
 ## Demo
 
@@ -165,9 +172,10 @@ term2 --lite       # Start in lite mode (fast, read-only)
 Then simply chat with the AI! Type your question or request, press Enter, and the assistant will help you.
 
 **New to term2?**
-- Working on a codebase/project? Use default mode: `term2`
-- Just need general terminal help? Use lite mode: `term2 --lite`
-- Tackling a complex problem? Enable mentor mode with `/mentor` command
+
+-   Working on a codebase/project? Use default mode: `term2`
+-   Just need general terminal help? Use lite mode: `term2 --lite`
+-   Tackling a complex problem? Enable mentor mode with `/mentor` command
 
 See the "Operating Modes" section below for full details.
 
@@ -249,28 +257,91 @@ To make them permanent, add these exports to your shell configuration file (`~/.
 
 ### Configuring Other Settings
 
-All other settings (model, temperature, reasoning effort, timeouts, etc.) can be configured via:
+Settings (model, provider, temperature, etc.) can be configured via:
 
-1. **App menu** - Use `/settings` command during a session for interactive configuration
+1. **App menu** - Use `/settings` command during a session (e.g., `/settings agent.model gpt-5.2`)
 2. **Settings file** - Manually edit the JSON file:
-   - **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
-   - **Linux**: `~/.local/state/term2-nodejs/settings.json`
-3. **CLI flags** - Override for a single session (e.g., `-m gpt-5.2`, `-r high`)
+    - **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
+    - **Linux**: `~/.local/state/term2-nodejs/settings.json`
+3. **CLI flags** - Override for a single session (e.g., `-m gpt-5.2`)
 
-Example settings file:
+### Provider Configuration Examples
+
+You can easily switch between providers by editing `settings.json`.
+
+**1. OpenAI (Default)**
+
 ```json
 {
-  "agent": {
-    "model": "gpt-5.1",
-    "reasoningEffort": "medium",
-    "temperature": 0.7,
-    "provider": "openai",
-    "mentorModel": "gpt-5.2"
-  },
-  "shell": {
-    "timeout": 120000,
-    "maxOutputLines": 1000
-  }
+    "agent": {
+        "provider": "openai",
+        "model": "gpt-5.1",
+        "temperature": 0.7
+    }
+}
+```
+
+**2. OpenRouter (Claude, Gemini, DeepSeek)**
+Access a wide range of models.
+
+```json
+{
+    "agent": {
+        "provider": "openrouter",
+        "model": "anthropic/claude-4.5-sonnet"
+    }
+}
+```
+
+**3. Local LLMs (Llama.cpp, LM Studio, vLLM)**
+Run entirely locally for privacy and zero cost. To use a local provider, add it to the `providers` list and then select it.
+
+_Llama.cpp Example:_
+
+```json
+{
+    "providers": [
+        {
+            "name": "llama.cpp",
+            "baseUrl": "http://127.0.0.1:8080/v1"
+        }
+    ],
+    "agent": {
+        "provider": "llama.cpp",
+        "model": "qwen3-coder"
+    }
+}
+```
+
+_LM Studio Example:_
+
+```json
+{
+    "providers": [
+        {
+            "name": "lm-studio",
+            "baseUrl": "http://localhost:1234/v1"
+        }
+    ],
+    "agent": {
+        "provider": "lm-studio",
+        "model": "local-model"
+    }
+}
+```
+
+### General Settings
+
+```json
+{
+    "shell": {
+        "timeout": 120000,
+        "maxOutputLines": 1000
+    },
+    "agent": {
+        "reasoningEffort": "medium",
+        "mentorModel": "gpt-5.2"
+    }
 }
 ```
 
@@ -289,9 +360,9 @@ SSH mode enables term2 to execute commands and modify files on remote servers ov
 
 ### Requirements
 
-- SSH agent running with your keys loaded (`ssh-add`)
-- SSH access to the target server
-- `--remote-dir` is required to specify the working directory (optional in lite mode - will auto-detect)
+-   SSH agent running with your keys loaded (`ssh-add`)
+-   SSH access to the target server
+-   `--remote-dir` is required to specify the working directory (optional in lite mode - will auto-detect)
 
 ### Usage
 
@@ -309,6 +380,7 @@ term2 --ssh user@hostname --lite
 ### How It Works
 
 When SSH mode is enabled:
+
 1. term2 establishes an SSH connection using your SSH agent for authentication
 2. All shell commands are executed on the remote server via SSH
 3. File operations (read, write, patch) are performed remotely using shell commands (`cat`, heredocs)
@@ -324,16 +396,17 @@ term2 --ssh user@host --remote-dir /path/to/project --lite
 ```
 
 This combination provides:
-- Remote command execution over SSH
-- Read-only tools (grep, find_files, read_file) for exploration
-- Minimal context and faster responses
-- No file editing tools (safer for production servers)
+
+-   Remote command execution over SSH
+-   Read-only tools (grep, find_files, read_file) for exploration
+-   Minimal context and faster responses
+-   No file editing tools (safer for production servers)
 
 ### Limitations
 
-- Authentication is via SSH agent only (no password prompts)
-- Binary file operations are not supported (text files only)
-- Large file transfers may be slower than local operations
+-   Authentication is via SSH agent only (no password prompts)
+-   Binary file operations are not supported (text files only)
+-   Large file transfers may be slower than local operations
 
 ## Safety Features
 
@@ -345,72 +418,12 @@ This combination provides:
 -   **No Hidden Actions** - All tool usage is transparent and visible
 -   **Retry Limits** - Automatic abort after consecutive tool failures (default: 3)
 
-## Available Tools
-
-The AI assistant has access to these tools to help you. **Note:** Tool availability depends on your operating mode—see the "Operating Modes" section above for details.
-
-### Shell Tool
-Execute shell commands with safety validation:
-- Detects dangerous patterns (`rm -rf`, force operations)
-- Validates paths to prevent operations on sensitive directories
-- Configurable timeout and output limits
-- Requires explicit approval before execution
-
-### Apply Patch Tool
-Apply file changes using unified diff format:
-- Create new files or update existing ones
-- Dry-run validation before approval
-- Clear diff preview showing exact changes
-- Supports "edit mode" for automatic approval
-
-### Search & Replace Tool
-Find and replace text in files:
-- Exact match with fallback to line-by-line matching
-- Diff generation for user preview
-- Single or multiple replacements
-- Requires approval before making changes
-
-### Grep Tool
-Search codebase for patterns:
-- Uses ripgrep when available (fast!)
-- Supports regex patterns
-- Respects .gitignore
-- Read-only operation (no approval needed)
-
-### Ask Mentor Tool
-Consult a smarter model for advice:
-- Query a different/better model for complex questions
-- Available when mentor mode is enabled (see "Operating Modes" section)
-- Configure via `agent.mentorModel` setting (e.g., `gpt-5.1`, `claude-sonnet-4.5`)
-- Useful for architectural decisions and getting second opinions
-- Mentor provides strategic guidance without direct codebase access
-
-### Find Files Tool
-Search for files in the workspace:
-- High-performance file search using `fd`
-- Supports glob patterns and exclusions
-- Respects `.gitignore` by default
-
-### Read File Tool
-Read file contents with precision:
-- Read entire files or specific line ranges
-- Optimizes context usage for large files
-- Support for reading multiple files
-
-### Web Search Tool
-Search the web for information:
-- Uses Tavily API by default for web search
-- Converts results to markdown for readability
-- Pluggable architecture ready to swap in other providers (Serper, Brave, etc.)
-- Read-only operation (no approval needed)
-- Requires `TAVILY_API_KEY` environment variable or settings configuration
-
-
 ## Supported Models
 
 term2 works with multiple AI providers:
 
 ### OpenAI (default)
+
 -   `gpt-5.2` (latest)
 -   `gpt-5.1` (default)
 -   `gpt-5`
@@ -424,15 +437,22 @@ term2 works with multiple AI providers:
 -   `o1` (supports reasoning effort)
 
 ### OpenRouter
+
 Access hundreds of models through OpenRouter including:
+
 -   Claude models (Anthropic)
 -   Gemini models (Google)
 -   Open-source models (Deepseek, GLM, Minimax, Devstral, etc.)
 
 Use CLI flags (`-m model-name`) or settings file to select OpenRouter models.
 
-### OpenAI-Compatible
-Any OpenAI-compatible API endpoint can be configured through runtime settings.
+### OpenAI-Compatible & Local LLMs
+
+term2 can connect to any OpenAI-compatible API. This allows you to use:
+
+-   **Local Models**: Run private models locally via Ollama, LM Studio, vLLM, or LocalAI.
+-   **Self-Hosted**: Connect to private deployments of models.
+-   **Other Providers**: Any service offering an OpenAI-compatible endpoint (e.g., Groq, Together AI).
 
 ## Development
 

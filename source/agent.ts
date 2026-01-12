@@ -143,6 +143,10 @@ export const getAgentDefinition = (
 
     const tools: ToolDefinition[] = [
         createShellToolDefinition({ settingsService, loggingService, executionContext }),
+        createWebSearchToolDefinition({
+            settingsService,
+            loggingService,
+        }),
     ];
 
     if (liteMode) {
@@ -178,14 +182,6 @@ export const getAgentDefinition = (
         if (mentorModel && askMentor) {
             tools.push(createAskMentorToolDefinition(askMentor));
         }
-
-        // Add web search tool (available in full mode)
-        tools.push(
-            createWebSearchToolDefinition({
-                settingsService,
-                loggingService,
-            })
-        );
     }
 
     // In lite mode, skip AGENTS.md loading

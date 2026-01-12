@@ -27,3 +27,7 @@ Search for files by name or glob pattern. Use when the user wants to find files.
 ## grep
 
 Search for patterns in files. Use when the user wants to search file contents.
+
+## web_search
+
+Search the web for current information, documentation, or troubleshooting steps. Use when the user's query requires information beyond the local codebase or general knowledge.

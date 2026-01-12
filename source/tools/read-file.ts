@@ -69,12 +69,16 @@ export const formatReadFileCommandMessage = (
 
 import { ExecutionContext } from '../services/execution-context.js';
 
-export const createReadFileToolDefinition = (deps: { executionContext?: ExecutionContext } = {}): ToolDefinition<ReadFileToolParams> => {
-    const { executionContext } = deps;
+export const createReadFileToolDefinition = (deps: {
+    executionContext?: ExecutionContext;
+    allowOutsideWorkspace?: boolean;
+} = {}): ToolDefinition<ReadFileToolParams> => {
+    const { executionContext, allowOutsideWorkspace = false } = deps;
     return {
     name: 'read_file',
-    description:
-        'Read file content from the workspace. Returns content with line numbers prefixed (like cat -n). Supports reading specific line ranges.',
+    description: allowOutsideWorkspace
+        ? 'Read file content from the filesystem. Returns content with line numbers prefixed (like cat -n). Supports reading specific line ranges.'
+        : 'Read file content from the workspace. Returns content with line numbers prefixed (like cat -n). Supports reading specific line ranges.',
     parameters: readFileParametersSchema,
     needsApproval: () => false, // Read-only operation, safe
     execute: async params => {
@@ -82,8 +86,10 @@ export const createReadFileToolDefinition = (deps: { executionContext?: Executio
         const cwd = executionContext?.getCwd() || process.cwd();
 
         try {
-            // Validate path is within workspace
-            const absolutePath = resolveWorkspacePath(filePath, cwd);
+            // In Lite Mode we may allow reading outside the current workspace.
+            const absolutePath = resolveWorkspacePath(filePath, cwd, {
+                allowOutsideWorkspace,
+            });
 
             // Read file content
             let content: string;

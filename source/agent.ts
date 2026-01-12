@@ -153,8 +153,14 @@ export const getAgentDefinition = (
         // Lite mode: shell + read-only tools only (no editing tools)
         tools.push(
             createGrepToolDefinition({ executionContext }),
-            createReadFileToolDefinition({ executionContext }),
-            createFindFilesToolDefinition({ executionContext })
+			createReadFileToolDefinition({
+				executionContext,
+				allowOutsideWorkspace: true,
+			}),
+			createFindFilesToolDefinition({
+				executionContext,
+				allowOutsideWorkspace: true,
+			}),
         );
     } else {
         // Full mode: all tools based on model

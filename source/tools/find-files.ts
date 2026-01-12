@@ -111,12 +111,16 @@ export const formatFindFilesCommandMessage = (
 	];
 };
 
-export const createFindFilesToolDefinition = (deps: { executionContext?: ExecutionContext } = {}): ToolDefinition<FindFilesToolParams> => {
-	const { executionContext } = deps;
+export const createFindFilesToolDefinition = (deps: {
+	executionContext?: ExecutionContext;
+	allowOutsideWorkspace?: boolean;
+} = {}): ToolDefinition<FindFilesToolParams> => {
+	const { executionContext, allowOutsideWorkspace = false } = deps;
 	return {
 		name: 'find_files',
-		description:
-			'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files.',
+		description: allowOutsideWorkspace
+			? 'Search for files by name on the filesystem. Useful for finding files by pattern, exploring directory structure, or locating specific files.'
+			: 'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files.',
 		parameters: findFilesParametersSchema,
 		needsApproval: () => false, // Search is read-only and safe
 		execute: async params => {
@@ -132,8 +136,10 @@ export const createFindFilesToolDefinition = (deps: { executionContext?: Executi
 			const cwd = executionContext?.getCwd() || process.cwd();
 
 			try {
-			// Validate path is within workspace
-				const absolutePath = resolveWorkspacePath(targetPath, cwd);
+				// In Lite Mode we may allow searching outside the current workspace.
+				const absolutePath = resolveWorkspacePath(targetPath, cwd, {
+					allowOutsideWorkspace,
+				});
 
 				const useFd = await checkFdAvailability(executionContext);
 				let command = '';

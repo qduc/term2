@@ -5,20 +5,25 @@ import * as os from 'os';
 import { createReadFileToolDefinition } from './read-file.js';
 
 const readFileToolDefinition = createReadFileToolDefinition();
+const readFileToolDefinitionAllowOutside = createReadFileToolDefinition({
+    allowOutsideWorkspace: true,
+});
 
 // Helper to create a temp dir and change cwd to it
 async function withTempDir(run: (dir: string) => Promise<void>) {
     const originalCwd = process.cwd;
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-test-'));
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-test-'));
+    const workspaceDir = path.join(rootDir, 'workspace');
+    await fs.mkdir(workspaceDir, {recursive: true});
 
-    // Mock process.cwd
-    process.cwd = () => tempDir;
+    // Mock process.cwd (treat workspaceDir as the "workspace")
+    process.cwd = () => workspaceDir;
 
     try {
-        await run(tempDir);
+        await run(workspaceDir);
     } finally {
         process.cwd = originalCwd;
-        await fs.rm(tempDir, {recursive: true, force: true});
+        await fs.rm(rootDir, {recursive: true, force: true});
     }
 }
 
@@ -98,6 +103,21 @@ test.serial('execute: rejects path outside workspace', async t => {
 
         t.true(result.includes('Error'));
         t.true(result.includes('outside workspace'));
+    });
+});
+
+test.serial('execute: in allowOutsideWorkspace mode, can read outside workspace', async t => {
+    await withTempDir(async dir => {
+        const outsidePath = path.join(dir, '..', 'outside.txt');
+        await fs.writeFile(outsidePath, 'outside\ncontent');
+
+        const result = await readFileToolDefinitionAllowOutside.execute({
+            path: '../outside.txt',
+        });
+
+        t.true(result.includes('1\toutside'));
+        t.true(result.includes('2\tcontent'));
+        t.false(result.includes('outside workspace'));
     });
 });
 

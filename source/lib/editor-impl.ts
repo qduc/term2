@@ -12,10 +12,14 @@ import { ExecutionContext } from '../services/execution-context.js';
  * Resolves a relative path and ensures it's within the workspace
  */
 function resolveWorkspacePath(relativePath: string, baseDir: string = process.cwd()): string {
-    const workspaceRoot = baseDir;
+    const workspaceRoot = path.resolve(baseDir);
     const resolved = path.resolve(workspaceRoot, relativePath);
+    const rootPrefix = workspaceRoot.endsWith(path.sep)
+        ? workspaceRoot
+        : workspaceRoot + path.sep;
+    const isInside = resolved === workspaceRoot || resolved.startsWith(rootPrefix);
 
-    if (!resolved.startsWith(workspaceRoot)) {
+    if (!isInside) {
         throw new Error(`Operation outside workspace: ${relativePath}`);
     }
 

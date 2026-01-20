@@ -23,7 +23,6 @@ const DEFAULT_PROMPT = 'simple.md';
 const ANTHROPIC_PROMPT = 'anthropic.md';
 const GPT_PROMPT = 'gpt-5.md';
 const CODEX_PROMPT = 'codex.md';
-const DEFAULT_MENTOR_PROMPT = 'simple-mentor.md';
 const LITE_PROMPT = 'lite.md';
 
 function getTopLevelEntries(cwd: string, limit = 50): string {
@@ -84,17 +83,12 @@ export interface AgentDefinition {
     model: string;
 }
 
-function getPromptPath(model: string, mentorMode: boolean, liteMode: boolean): string {
+function getPromptPath(model: string, liteMode: boolean): string {
     const normalizedModel = model.trim().toLowerCase();
 
     // Lite mode takes precedence - minimal context for terminal assistance
     if (liteMode) {
         return path.join(BASE_PROMPT_PATH, LITE_PROMPT);
-    }
-
-    // In mentor mode, use simplified mentor prompt for all models
-    if (mentorMode) {
-        return path.join(BASE_PROMPT_PATH, DEFAULT_MENTOR_PROMPT);
     }
 
     if (normalizedModel.includes('sonnet') || normalizedModel.includes('haiku'))
@@ -137,8 +131,18 @@ export const getAgentDefinition = (
 
     const mentorMode = settingsService.get<boolean>('app.mentorMode');
     const liteMode = settingsService.get<boolean>('app.liteMode');
-    const promptPath = getPromptPath(resolvedModel, mentorMode, liteMode);
-    const prompt = resolvePrompt(promptPath);
+    const promptPath = getPromptPath(resolvedModel, liteMode);
+    let prompt = resolvePrompt(promptPath);
+
+    if (mentorMode && !liteMode) {
+        const addonPath = path.join(BASE_PROMPT_PATH, 'mentor-addon.md');
+        try {
+            const addon = resolvePrompt(addonPath);
+            prompt = `${prompt}\n\n${addon}`;
+        } catch (e) {
+            loggingService.error(`Failed to load mentor addon: ${e}`);
+        }
+    }
 
     const envInfo = getEnvInfo(settingsService, executionContext, liteMode);
 

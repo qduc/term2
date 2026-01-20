@@ -21,6 +21,11 @@ fi
 CURRENT_VERSION=$(node -p "require('./package.json').version")
 echo -e "Current version: ${YELLOW}$CURRENT_VERSION${NC}"
 
+# 2.5 Run tests and build to ensure health
+echo -e "${BLUE}Running tests and building to ensure health...${NC}"
+npm test
+npm run build
+
 # 3. Select bump type
 echo "Select release type:"
 options=("Patch" "Minor" "Major" "Custom")
@@ -110,6 +115,11 @@ fi
 
 # Bump version again (permanently this time)
 npm version $NEW_VERSION --no-git-tag-version --allow-same-version
+
+# Final verification before commit
+echo -e "${BLUE}Running final verification tests for v$NEW_VERSION...${NC}"
+npm test
+npm run build
 
 # Commit
 echo -e "${BLUE}Committing changes...${NC}"

@@ -1,6 +1,6 @@
 {
     "name": "@qduc/term2",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "A terminal-based AI assistant that can help you get things done on your computer",
     "license": "MIT",
     "author": "qduc",

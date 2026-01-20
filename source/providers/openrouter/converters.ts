@@ -61,6 +61,11 @@ function convertAgentItemToOpenRouterMessage(
             message.reasoning = reasoning;
         }
 
+        const reasoningContent = rawItem.reasoning_content ?? item.reasoning_content;
+        if (typeof reasoningContent === 'string') {
+            message.reasoning_content = reasoningContent;
+        }
+
         // Preserve reasoning_details EXACTLY as received (required by OpenRouter).
         // Some SDK history items may carry these fields under `rawItem`.
         const reasoningDetails =
@@ -107,6 +112,7 @@ function convertAgentItemToOpenRouterMessage(
         // Tool-call continuation: to preserve reasoning blocks across tool flows,
         // we may need to replay reasoning_details/reasoning alongside tool_calls.
         const reasoning = rawItem.reasoning ?? item.reasoning;
+        const reasoningContent = rawItem.reasoning_content ?? item.reasoning_content;
         const reasoningDetails =
             rawItem.reasoning_details ?? item.reasoning_details;
 
@@ -126,6 +132,9 @@ function convertAgentItemToOpenRouterMessage(
                 },
             ],
             ...(typeof reasoning === 'string' ? {reasoning} : {}),
+            ...(typeof reasoningContent === 'string'
+                ? { reasoning_content: reasoningContent }
+                : {}),
             ...(reasoningDetails != null
                 ? {reasoning_details: reasoningDetails}
                 : {}),

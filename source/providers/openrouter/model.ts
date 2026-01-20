@@ -84,7 +84,7 @@ export class OpenRouterModel implements Model {
         const responseId = json?.id ?? randomUUID();
 
         const usage = normalizeUsage(json?.usage || {}) as any;
-        const reasoning = choice?.message?.reasoning;
+        const reasoning = choice?.message?.reasoning || choice?.message?.reasoning_content;
         const reasoningDetails = choice?.message?.reasoning_details;
         const toolCalls = choice?.message?.tool_calls;
 
@@ -565,7 +565,7 @@ export class OpenRouterModel implements Model {
             }
         }
 
-        const reasoningDelta = json?.choices?.[0]?.delta?.reasoning;
+        const reasoningDelta = json?.choices?.[0]?.delta?.reasoning || json?.choices?.[0]?.delta?.reasoning_content;
         if (typeof reasoningDelta === 'string' && reasoningDelta.length > 0) {
             state.accumulatedReasoningText += reasoningDelta;
         }

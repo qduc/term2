@@ -168,8 +168,8 @@ export class ConversationStore {
             }
 
             // Preserve OpenRouter "reasoning" (reasoning tokens) field as well.
-            const incomingReasoningText = iAny?.reasoning ?? iRaw?.reasoning;
-            const existingReasoningText = eAny?.reasoning ?? eRaw?.reasoning;
+            const incomingReasoningText = iAny?.reasoning ?? iRaw?.reasoning ?? iAny?.reasoning_content ?? iRaw?.reasoning_content;
+            const existingReasoningText = eAny?.reasoning ?? eRaw?.reasoning ?? eAny?.reasoning_content ?? eRaw?.reasoning_content;
             if (
                 existingReasoningText == null &&
                 incomingReasoningText != null

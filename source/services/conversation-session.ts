@@ -977,12 +977,12 @@ export class ConversationSession {
                 const choices = event?.data?.event?.choices;
                 if (!choices) return '';
                 if (Array.isArray(choices)) {
-                    return choices[0]?.delta?.reasoning ?? '';
+                    return choices[0]?.delta?.reasoning ?? choices[0]?.delta?.reasoning_content ?? '';
                 }
                 if (typeof choices === 'object') {
                     const byZero = (choices as Record<string, any>)['0'];
                     const first = byZero ?? choices[Object.keys(choices)[0]];
-                    return first?.delta?.reasoning ?? '';
+                    return first?.delta?.reasoning ?? first?.delta?.reasoning_content ?? '';
                 }
                 return '';
             })();

@@ -6,6 +6,7 @@ import {createApplyPatchToolDefinition} from './tools/apply-patch.js';
 import {createShellToolDefinition} from './tools/shell.js';
 import {createAskMentorToolDefinition} from './tools/ask-mentor.js';
 import {createWebSearchToolDefinition} from './tools/web-search.js';
+import { createCreateFileToolDefinition } from './tools/create-file.js';
 import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
@@ -175,6 +176,11 @@ export const getAgentDefinition = (
                 createGrepToolDefinition({ executionContext }),
                 createReadFileToolDefinition({ executionContext }),
                 createFindFilesToolDefinition({ executionContext }),
+                createCreateFileToolDefinition({
+                    settingsService,
+                    loggingService,
+                    executionContext,
+                }),
                 createSearchReplaceToolDefinition({
                     settingsService,
                     loggingService,

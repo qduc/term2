@@ -92,6 +92,14 @@ Search for files by name or glob pattern in the workspace.
 -   Returns up to 50 results by default (configurable with `max_results`)
 -   Prefer this over Shell commands like `ls` or `rg --files`
 
+## create_file
+
+Create a new file with the specified content.
+
+-   Use this for explicitly creating new files
+-   Fails if the file already exists (use `search_replace` for existing files)
+-   Automatically creates parent directories if they don't exist
+
 ## search_replace
 
 Modify files with exact text replacement.

@@ -39,6 +39,7 @@
         "lint-fix": "prettier --write .",
         "post-build": "cp -r source/prompts dist/",
         "prepublishOnly": "npm run build && npm test",
+        "release": "./scripts/release.sh",
         "logs": "node tools/log_viewer/src/server.js"
     },
     "files": [

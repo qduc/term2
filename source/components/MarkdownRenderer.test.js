@@ -230,9 +230,7 @@ test('renders indented code block', t => {
 
 // --- Blockquotes ---
 
-// NOTE: Blockquote rendering has a known issue - it wraps BlockRenderer (which returns Box)
-// inside Text, which violates Ink's component nesting rules. These tests are skipped until fixed.
-test.skip('renders blockquote', t => {
+test('renders blockquote', t => {
     const {lastFrame} = render(
         React.createElement(
             MarkdownRenderer,
@@ -245,7 +243,7 @@ test.skip('renders blockquote', t => {
     t.true(frame.includes('with multiple lines'));
 });
 
-test.skip('renders nested blockquote', t => {
+test('renders nested blockquote', t => {
     const {lastFrame} = render(
         React.createElement(
             MarkdownRenderer,

@@ -393,13 +393,13 @@ const BlockRenderer = ({token}: {token: any}) => {
                     borderBottom={false}
                     borderColor="magenta"
                     marginBottom={1}
+                    flexDirection="column"
                 >
-                    <Text italic dimColor>
-                        {/* Blockquotes often contain nested paragraphs */}
-                        {token.tokens.map((t: any, i: number) => (
-                            <BlockRenderer key={i} token={t} />
-                        ))}
-                    </Text>
+                    {/* Blockquotes often contain nested paragraphs which render as Boxes */}
+                    {/* We cannot wrap them in Text because Box in Text causes a crash */}
+                    {token.tokens.map((t: any, i: number) => (
+                        <BlockRenderer key={i} token={t} />
+                    ))}
                 </Box>
             );
 

@@ -17,9 +17,9 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
     [SETTING_KEYS.AGENT_MODEL]:
         'The AI model to use (e.g. gpt-4, claude-3-opus)',
     [SETTING_KEYS.AGENT_REASONING_EFFORT]:
-        'Reasoning effort level (default, low, medium, high)',
+        'Reasoning effort (none|minimal|low|medium|high|default)',
     [SETTING_KEYS.AGENT_TEMPERATURE]:
-        'Model temperature (0-2, controls randomness)',
+        'Model temperature (0–2, controls randomness)',
     // agent.provider is hidden from UI - it can only be changed via model menu
     [SETTING_KEYS.AGENT_MAX_TURNS]: 'Maximum conversation turns',
     [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]:
@@ -33,7 +33,7 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
     [SETTING_KEYS.LOGGING_LOG_LEVEL]:
         'Logging level (debug, info, warn, error)',
     [SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE]:
-        'Suppress console output to avoid interfering with Ink UI',
+        'Suppress console output (true|false) to avoid interfering with Ink UI',
 };
 
 /**
@@ -43,6 +43,45 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
 const HIDDEN_SETTINGS = new Set<string>([SETTING_KEYS.AGENT_PROVIDER]);
 
 const MAX_RESULTS = 10;
+
+const COMMON_SETTINGS: string[] = [
+    SETTING_KEYS.AGENT_MODEL,
+    SETTING_KEYS.AGENT_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_TEMPERATURE,
+    SETTING_KEYS.AGENT_MAX_TURNS,
+    SETTING_KEYS.LOGGING_LOG_LEVEL,
+    SETTING_KEYS.SHELL_TIMEOUT,
+];
+
+function categoryRank(key: string): number {
+    const prefix = key.split('.')[0] || '';
+    const ranks: Record<string, number> = {
+        common: 0,
+        agent: 1,
+        shell: 2,
+        ui: 3,
+        logging: 4,
+        providers: 5,
+        webSearch: 6,
+    };
+    return ranks[prefix] ?? 50;
+}
+
+function sortSettings(a: SettingCompletionItem, b: SettingCompletionItem): number {
+    const aCommonIndex = COMMON_SETTINGS.indexOf(a.key);
+    const bCommonIndex = COMMON_SETTINGS.indexOf(b.key);
+    const aIsCommon = aCommonIndex !== -1;
+    const bIsCommon = bCommonIndex !== -1;
+
+    if (aIsCommon && bIsCommon) return aCommonIndex - bCommonIndex;
+    if (aIsCommon) return -1;
+    if (bIsCommon) return 1;
+
+    const aRank = categoryRank(a.key);
+    const bRank = categoryRank(b.key);
+    if (aRank !== bRank) return aRank - bRank;
+    return a.key.localeCompare(b.key);
+}
 
 /**
  * Get the set of sensitive setting keys that should not appear in the UI
@@ -87,7 +126,8 @@ export function buildSettingsList(
             key,
             description: descriptions[key] || '',
             currentValue: getCurrentValue?.(key),
-        }));
+        }))
+        .sort(sortSettings);
 }
 
 export function filterSettingsByQuery(
@@ -114,7 +154,7 @@ export function clampIndex(currentIndex: number, arrayLength: number): number {
 }
 
 export const useSettingsCompletion = (settingsService: SettingsService) => {
-    const {mode, setMode, input, triggerIndex, setTriggerIndex} =
+    const {mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex} =
         useInputContext();
 
     const isOpen = mode === 'settings_completion';
@@ -124,8 +164,9 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
         if (!isOpen || triggerIndex === null) return '';
         // triggerIndex is the end of "/settings " prefix
         if (triggerIndex > input.length) return '';
-        return input.slice(triggerIndex);
-    }, [isOpen, triggerIndex, input]);
+        const end = Math.min(cursorOffset, input.length);
+        return input.slice(triggerIndex, end);
+    }, [isOpen, triggerIndex, input, cursorOffset]);
 
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [settingsVersion, setSettingsVersion] = useState(0);

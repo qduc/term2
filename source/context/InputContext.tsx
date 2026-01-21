@@ -5,6 +5,7 @@ export type InputMode =
     | 'slash_commands'
     | 'path_completion'
     | 'settings_completion'
+    | 'settings_value_completion'
     | 'model_selection';
 
 interface InputState {

@@ -2,9 +2,11 @@ import React, {FC} from 'react';
 import SlashCommandMenu, {SlashCommand} from '../SlashCommandMenu.js';
 import PathSelectionMenu from '../PathSelectionMenu.js';
 import SettingsSelectionMenu from '../SettingsSelectionMenu.js';
+import SettingsValueSelectionMenu from '../SettingsValueSelectionMenu.js';
 import ModelSelectionMenu from '../ModelSelectionMenu.js';
 import type {PathCompletionItem} from '../../hooks/use-path-completion.js';
 import type {SettingCompletionItem} from '../../hooks/use-settings-completion.js';
+import type {SettingValueSuggestion} from '../../hooks/use-settings-value-completion.js';
 import type {ModelInfo} from '../../services/model-service.js';
 import type {SettingsService} from '../../services/settings-service.js';
 
@@ -38,6 +40,14 @@ interface PopupManagerProps {
         isOpen: boolean;
         items: SettingCompletionItem[];
         selectedIndex: number;
+        query: string;
+    };
+    settingsValue: {
+        isOpen: boolean;
+        settingKey: string | null;
+        items: SettingValueSuggestion[];
+        selectedIndex: number;
+        query: string;
     };
     settingsService: SettingsService;
 }
@@ -47,6 +57,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
     path,
     models,
     settings,
+    settingsValue,
     settingsService,
 }) => {
     return (
@@ -84,6 +95,15 @@ export const PopupManager: FC<PopupManagerProps> = ({
                 <SettingsSelectionMenu
                     items={settings.items}
                     selectedIndex={settings.selectedIndex}
+                    query={settings.query}
+                />
+            )}
+            {settingsValue.isOpen && settingsValue.settingKey && (
+                <SettingsValueSelectionMenu
+                    settingKey={settingsValue.settingKey}
+                    items={settingsValue.items}
+                    selectedIndex={settingsValue.selectedIndex}
+                    query={settingsValue.query}
                 />
             )}
         </>

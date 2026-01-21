@@ -5,6 +5,7 @@ import {useInputContext} from '../context/InputContext.js';
 import {useSlashCommands} from '../hooks/use-slash-commands.js';
 import {usePathCompletion} from '../hooks/use-path-completion.js';
 import {useSettingsCompletion} from '../hooks/use-settings-completion.js';
+import {useSettingsValueCompletion} from '../hooks/use-settings-value-completion.js';
 import {
     useModelSelection,
     MODEL_TRIGGER,
@@ -22,6 +23,7 @@ import { useInputHistory } from '../hooks/use-input-history.js';
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 const TERMINAL_PADDING = 3;
 const SETTINGS_TRIGGER = '/settings ';
+const SETTINGS_RESET_TRIGGER = '/settings reset ';
 
 type Props = {
     onSubmit: (v: string) => void;
@@ -69,6 +71,7 @@ const InputBox: FC<Props> = ({
 
     const path = usePathCompletion({loggingService});
     const settings = useSettingsCompletion(settingsService);
+    const settingsValue = useSettingsValueCompletion(settingsService);
     const models = useModelSelection(
         {
             loggingService,
@@ -155,18 +158,37 @@ const InputBox: FC<Props> = ({
         }
 
         // Priority 1: Settings
-        if (
-            value.startsWith(SETTINGS_TRIGGER) &&
-            cursorOffset >= SETTINGS_TRIGGER.length
-        ) {
-            settings.open(SETTINGS_TRIGGER.length);
-            return;
+        if (value.startsWith(SETTINGS_RESET_TRIGGER)) {
+            if (cursorOffset >= SETTINGS_RESET_TRIGGER.length) {
+                settings.open(SETTINGS_RESET_TRIGGER.length);
+                return;
+            }
+        } else if (value.startsWith(SETTINGS_TRIGGER)) {
+            const end = Math.min(cursorOffset, value.length);
+            const afterPrefix = value.slice(SETTINGS_TRIGGER.length, end);
+
+            // If the user has typed a full key followed by whitespace, switch to value completion.
+            // Example: "/settings logging.logLevel "
+            const keyAndSpaceMatch = afterPrefix.match(/^(\S+)\s+/);
+            if (keyAndSpaceMatch) {
+                const key = keyAndSpaceMatch[1] ?? '';
+                const valueStartIndex =
+                    SETTINGS_TRIGGER.length + (keyAndSpaceMatch[0]?.length ?? 0);
+                // Model selection handles agent.model / mentorModel earlier with higher priority.
+                settingsValue.open(key, valueStartIndex);
+                return;
+            }
+
+            // Otherwise, still selecting / filtering setting keys.
+            if (cursorOffset >= SETTINGS_TRIGGER.length) {
+                settings.open(SETTINGS_TRIGGER.length);
+                return;
+            }
         }
 
-        // If no settings match, close settings menu if it was open
-        if (mode === 'settings_completion') {
-            settings.close();
-        }
+        // Close settings popups if triggers no longer apply
+        if (mode === 'settings_completion') settings.close();
+        if (mode === 'settings_value_completion') settingsValue.close();
 
         // Priority 2: Slash (only if at start)
         if (
@@ -262,6 +284,12 @@ const InputBox: FC<Props> = ({
             }
         }
 
+        if (mode === 'settings_value_completion') {
+            if (key.tab && !key.shift) {
+                insertSelectedSettingValue(false);
+            }
+        }
+
         if (mode === 'model_selection') {
             if (key.tab && !key.shift && models.canSwitchProvider) {
                 models.toggleProvider();
@@ -279,6 +307,9 @@ const InputBox: FC<Props> = ({
             } else if (mode === 'settings_completion') {
                 if (direction === 'up') settings.moveUp();
                 if (direction === 'down') settings.moveDown();
+            } else if (mode === 'settings_value_completion') {
+                if (direction === 'up') settingsValue.moveUp();
+                if (direction === 'down') settingsValue.moveDown();
             } else if (mode === 'path_completion') {
                 if (direction === 'up') path.moveUp();
                 if (direction === 'down') path.moveDown();
@@ -336,14 +367,47 @@ const InputBox: FC<Props> = ({
         const selection = settings.getSelectedItem();
         if (!selection) return false;
 
-        if (!value.startsWith(SETTINGS_TRIGGER)) return false;
+        const isReset = value.startsWith(SETTINGS_RESET_TRIGGER);
+        const prefix = isReset ? SETTINGS_RESET_TRIGGER : SETTINGS_TRIGGER;
+        if (!value.startsWith(prefix)) return false;
 
-        const newValue = SETTINGS_TRIGGER + selection.key + ' ';
+        const newValue = prefix + selection.key + ' ';
         onChange(newValue);
         setCursorOverride(newValue.length);
         settings.close();
         return true;
     }, [settings, value, onChange]);
+
+    const insertSelectedSettingValue = useCallback(
+        (submitAfterInsert: boolean): boolean => {
+            const suggestion = settingsValue.getSelectedItem();
+            if (!suggestion) {
+                // No suggestion selected: allow normal submit flow.
+                return false;
+            }
+
+            if (!value.startsWith(SETTINGS_TRIGGER)) return false;
+            if (!settingsValue.settingKey) return false;
+
+            // Replace the value portion (from triggerIndex to cursor) with the suggestion.
+            const triggerIdx = settingsValue.triggerIndex;
+            if (triggerIdx === null) return false;
+
+            const safeCursor = Math.min(cursorOffset, value.length);
+            const before = value.slice(0, triggerIdx);
+            const after = value.slice(safeCursor);
+            const nextValue = `${before}${suggestion.value}${after}`;
+            onChange(nextValue);
+            setCursorOverride(before.length + suggestion.value.length);
+            settingsValue.close();
+
+            if (submitAfterInsert) {
+                onSubmit(nextValue);
+            }
+            return true;
+        },
+        [settingsValue, value, onChange, cursorOffset, onSubmit],
+    );
 
     const insertSelectedModel = useCallback(
         (submitAfterInsert: boolean): boolean => {
@@ -401,6 +465,12 @@ const InputBox: FC<Props> = ({
                 }
                 if (insertSelectedSetting()) return;
             }
+            if (mode === 'settings_value_completion') {
+                if (insertSelectedSettingValue(true)) return;
+                // Fall back to submitting whatever the user typed
+                onSubmit(submittedValue);
+                return;
+            }
             if (mode === 'model_selection') {
                 if (insertSelectedModel(true)) return;
             }
@@ -454,6 +524,14 @@ const InputBox: FC<Props> = ({
                     isOpen: settings.isOpen,
                     items: settings.filteredEntries,
                     selectedIndex: settings.selectedIndex,
+                    query: settings.query,
+                }}
+                settingsValue={{
+                    isOpen: settingsValue.isOpen,
+                    settingKey: settingsValue.settingKey,
+                    items: settingsValue.filteredEntries,
+                    selectedIndex: settingsValue.selectedIndex,
+                    query: settingsValue.query,
                 }}
                 settingsService={settingsService}
             />

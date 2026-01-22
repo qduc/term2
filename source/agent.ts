@@ -40,7 +40,11 @@ function getTopLevelEntries(cwd: string, limit = 50): string {
     }
 }
 
-function getEnvInfo(settingsService: ISettingsService, executionContext?: ExecutionContext, lite = false): string {
+export function getEnvInfo(
+    settingsService: ISettingsService,
+    executionContext?: ExecutionContext,
+    lite = false,
+): string {
     const shellPath = settingsService.get<string>('app.shellPath') || 'unknown';
     const cwd = executionContext?.getCwd() || process.cwd();
     const osType = os.type();
@@ -64,8 +68,8 @@ function getEnvInfo(settingsService: ISettingsService, executionContext?: Execut
     return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd: ${cwd}${topLevel}`;
 }
 
-function getAgentsInstructions(): string {
-    const agentsPath = path.join(process.cwd(), 'AGENTS.md');
+export function getAgentsInstructions(cwd: string): string {
+    const agentsPath = path.join(cwd, 'AGENTS.md');
     if (!fs.existsSync(agentsPath)) return '';
 
     try {
@@ -145,6 +149,7 @@ export const getAgentDefinition = (
     }
 
     const envInfo = getEnvInfo(settingsService, executionContext, liteMode);
+    const cwd = executionContext?.getCwd() || process.cwd();
 
     const tools: ToolDefinition[] = [
         createShellToolDefinition({ settingsService, loggingService, executionContext }),
@@ -200,8 +205,12 @@ export const getAgentDefinition = (
         }
     }
 
-    // In lite mode, skip AGENTS.md loading
-    const agentsInstructions = liteMode ? '' : getAgentsInstructions();
+    // In lite mode, skip AGENTS.md loading.
+    // In remote mode, we also skip because we can't synchronously read from remote disk.
+    const agentsInstructions =
+        liteMode || executionContext?.isRemote()
+            ? ''
+            : getAgentsInstructions(cwd);
 
     return {
         name: 'Terminal Assistant',

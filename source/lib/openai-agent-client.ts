@@ -18,10 +18,7 @@ import {OpenAICompatibleError} from '../providers/openai-compatible/api.js';
 import {getProvider} from '../providers/index.js';
 import {type ModelSettingsReasoningEffort} from '@openai/agents-core/model';
 import {randomUUID} from 'node:crypto';
-import {getAgentDefinition} from '../agent.js';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import {getAgentDefinition, getEnvInfo, getAgentsInstructions} from '../agent.js';
 import {normalizeToolInput, wrapToolInvoke} from './tool-invoke.js';
 import type {
     ILoggingService,
@@ -203,6 +200,16 @@ export class OpenAIAgentClient {
         this.#retryCallback = callback;
     }
 
+    #refreshAgent(): void {
+        this.#agent = this.#createAgent({
+            model: this.#model,
+            reasoningEffort: this.#reasoningEffort as any,
+            temperature: this.#temperature,
+        });
+        // Null out mentor agent so it also gets fresh instructions on next use
+        this.#mentorAgent = null;
+    }
+
     /**
      * Abort the current running stream/operation
      */
@@ -223,13 +230,17 @@ export class OpenAIAgentClient {
         if (providerDef?.clearConversations) {
             providerDef.clearConversations();
         }
+
+        this.#refreshAgent();
+
         // Also clear mentor conversation
         if (this.#mentorStore) {
             this.#mentorStore.clear();
         }
         this.#mentorPreviousResponseId = null;
-        this.#mentorAgent = null;
         this.#mentorStore = null;
+
+        this.#logger.info('Conversation and agent refreshed');
     }
 
     async startStream(
@@ -238,6 +249,17 @@ export class OpenAIAgentClient {
     ): Promise<any> {
         // Abort any previous operation
         this.abort();
+
+        // Refresh agent instructions for the first message of a session to ensure
+        // directory structure and AGENTS.md content are up to date.
+        const isFirstMessage =
+            !previousResponseId &&
+            (!Array.isArray(userInput) ||
+                (userInput.length > 0 && userInput.length <= 1));
+
+        if (isFirstMessage) {
+            this.#refreshAgent();
+        }
 
         // Create correlation ID for this stream
         this.#currentCorrelationId = randomUUID();
@@ -535,24 +557,6 @@ export class OpenAIAgentClient {
         }
     }
 
-    #getAgentsInstructions(): string {
-        const agentsPath = path.join(process.cwd(), 'AGENTS.md');
-        if (!fs.existsSync(agentsPath)) return '';
-
-        try {
-            const contents = fs.readFileSync(agentsPath, 'utf-8').trim();
-            return `\n\nAGENTS.md contents:\n${contents}`;
-        } catch (e: any) {
-            return `\n\nFailed to read AGENTS.md: ${e.message}`;
-        }
-    }
-
-    #getEnvInfo(): string {
-        return `OS: ${os.type()} ${os.release()} (${os.platform()}); shell: ${
-            this.#settings.get<string>('app.shellPath') || 'unknown'
-        }; cwd: ${process.cwd()}`;
-    }
-
     #createMentor = async (question: string): Promise<string> => {
         const mentorModel = this.#settings.get<string>('agent.mentorModel');
         if (!mentorModel) {
@@ -574,7 +578,12 @@ export class OpenAIAgentClient {
             : 'You are a helpful mentor assistant. Provide advice and guidance on technical problems. Be concise and actionable.';
 
         // Add environment info and AGENTS.md context
-        const instructions = `${baseInstructions}\n\nEnvironment: ${this.#getEnvInfo()}${this.#getAgentsInstructions()}`;
+        const envInfo = getEnvInfo(this.#settings, this.#executionContext);
+        const cwd = this.#executionContext?.getCwd() ?? process.cwd();
+        const agentsInstructions = this.#executionContext?.isRemote()
+            ? ''
+            : getAgentsInstructions(cwd);
+        const instructions = `${baseInstructions}\n\nEnvironment: ${envInfo}${agentsInstructions}`;
 
         // Initialize mentor agent and conversation store if needed
         if (!this.#mentorAgent) {

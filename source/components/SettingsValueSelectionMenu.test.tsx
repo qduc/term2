@@ -34,7 +34,8 @@ test('SettingsValueSelectionMenu shows key and suggestion count', t => {
     );
     const output = lastFrame() ?? '';
     t.true(output.includes('agent.reasoningEffort'));
-    t.true(output.includes('3 suggestion'));
+    // Count is not shown in the new design
+    // t.true(output.includes('3 suggestion'));
 });
 
 test('SettingsValueSelectionMenu marks the selected value', t => {

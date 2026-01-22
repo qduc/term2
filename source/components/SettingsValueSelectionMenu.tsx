@@ -9,6 +9,8 @@ type Props = {
     query: string;
 };
 
+const VISIBLE_COUNT = 10;
+
 const SettingsValueSelectionMenu: FC<Props> = ({
     settingKey,
     items,
@@ -17,61 +19,77 @@ const SettingsValueSelectionMenu: FC<Props> = ({
 }) => {
     if (items.length === 0) {
         return (
-            <Box flexDirection="column">
-                <Box
-                    borderStyle="round"
-                    borderColor="green"
-                    paddingX={1}
-                    flexDirection="column"
-                >
-                    <Text color="#64748b">
-                        {settingKey} · No values match "{query || '*'}"
+            <Box flexDirection="column" borderStyle="round" borderColor="red" paddingX={1}>
+                <Text color="red" bold>No matching values</Text>
+                <Text color="gray">
+                    {settingKey} · No values match "{query || '*'}"
+                </Text>
+                <Box marginTop={1}>
+                     <Text color="gray">
+                        Enter → apply typed value · Esc → cancel
                     </Text>
                 </Box>
-                <Text color="#64748b">
-                    Enter → apply typed value · Esc → cancel · ↑↓ → navigate
-                </Text>
             </Box>
         );
     }
 
+    // Calculate viewport
+    let viewportStart = 0;
+    if (items.length > VISIBLE_COUNT) {
+        const half = Math.floor(VISIBLE_COUNT / 2);
+        if (selectedIndex <= half) {
+            viewportStart = 0;
+        } else if (selectedIndex >= items.length - half) {
+            viewportStart = items.length - VISIBLE_COUNT;
+        } else {
+            viewportStart = selectedIndex - half;
+        }
+    }
+    viewportStart = Math.max(0, Math.min(viewportStart, items.length - VISIBLE_COUNT));
+    const visibleItems = items.slice(viewportStart, viewportStart + VISIBLE_COUNT);
+
     return (
-        <Box flexDirection="column">
-            <Box
-                borderStyle="round"
-                borderColor="green"
-                paddingX={1}
-                flexDirection="column"
-            >
-                <Text color="#64748b">
-                    {settingKey} · "{query || '*'}" · {items.length} suggestion
-                    {items.length === 1 ? '' : 's'}
-                </Text>
-                {items.map((item, index) => {
-                    const isSelected = index === selectedIndex;
-                    return (
-                        <Box key={item.value}>
-                            <Text
-                                color={isSelected ? 'green' : undefined}
-                                inverse={isSelected}
-                            >
-                                {isSelected ? '▶ ' : '  '}
-                                {item.value}
-                            </Text>
-                            {item.description && (
-                                <Text color="#64748b">
-                                    {' '}
-                                    — {item.description}
-                                </Text>
-                            )}
-                        </Box>
-                    );
-                })}
+        <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
+            <Box marginBottom={1} borderStyle="single" borderBottom={false} borderLeft={false} borderRight={false} borderTop={false}>
+                <Text color="gray">Value for </Text>
+                <Text color="cyan" bold>{settingKey}</Text>
+                <Text color="gray"> · </Text>
+                {query ? (
+                     <Text>Filter: "<Text color="white" bold>{query}</Text>"</Text>
+                ) : (
+                    <Text color="gray">Select a value</Text>
+                )}
             </Box>
-            <Text color="#64748b">
-                Enter → set value · Tab → insert value · Esc → cancel · ↑↓ →
-                navigate
-            </Text>
+
+            {visibleItems.map((item, index) => {
+                const realIndex = viewportStart + index;
+                const isSelected = realIndex === selectedIndex;
+
+                return (
+                    <Box key={item.value}>
+                        <Text
+                            color={isSelected ? 'green' : 'gray'}
+                        >
+                            {isSelected ? '▶ ' : '  '}
+                        </Text>
+                        <Text color={isSelected ? 'green' : 'white'} bold={isSelected}>
+                            {item.value}
+                        </Text>
+                        {item.description && (
+                            <Text color="gray">
+                                {' '}
+                                — {item.description}
+                            </Text>
+                        )}
+                    </Box>
+                );
+            })}
+
+            <Box marginTop={1} borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor="gray">
+                <Text color="gray" dimColor>
+                    <Text bold>Enter</Text> confirm · <Text bold>Esc</Text> cancel · <Text bold>↑↓</Text> navigate
+                </Text>
+            </Box>
         </Box>
     );
 };

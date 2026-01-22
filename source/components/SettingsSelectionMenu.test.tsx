@@ -31,7 +31,7 @@ test('SettingsSelectionMenu shows query and suggestion count', t => {
     );
     const output = lastFrame() ?? '';
     t.true(output.includes('ag'));
-    t.true(output.includes('2 suggestion'));
+    t.true(output.includes('2 items'));
 });
 
 test('SettingsSelectionMenu shows category headers', t => {
@@ -39,8 +39,7 @@ test('SettingsSelectionMenu shows category headers', t => {
         <SettingsSelectionMenu items={items} selectedIndex={0} query="" />,
     );
     const output = lastFrame() ?? '';
-    t.true(output.includes('Agent'));
-    t.true(output.includes('Shell'));
+    t.true(output.includes('Common Settings'));
 });
 
 test('SettingsSelectionMenu marks the selected item', t => {

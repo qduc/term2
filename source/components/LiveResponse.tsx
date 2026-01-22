@@ -9,7 +9,7 @@ type Props = {
  * LiveResponse displays streaming text as plain text to avoid
  * issues with Markdown parsing of incomplete/partial content.
  * The final response will be rendered with full Markdown formatting.
- * Reasoning text is displayed in light gray before the main response.
+ * Reasoning text is displayed in slate (#64748b) before the main response.
  */
 const LiveResponse: FC<Props> = ({text}) => {
     // Trim trailing empty lines

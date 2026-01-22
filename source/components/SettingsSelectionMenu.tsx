@@ -46,7 +46,7 @@ function formatValue(value: string | number | boolean): {
     if (typeof value === 'boolean') {
         return {
             text: value ? 'on' : 'off',
-            color: value ? 'green' : 'gray',
+            color: value ? 'green' : '#64748b',
         };
     }
     if (typeof value === 'number') {
@@ -84,15 +84,15 @@ const SettingsSelectionMenu: FC<Props> = ({items, selectedIndex, query}) => {
                     paddingX={1}
                     marginBottom={0}
                 >
-                    <Text color="gray" dimColor>
+                    <Text color="#64748b">
                         settings: "{query || '*'}" · No settings match
                     </Text>
-                    <Text color="gray" dimColor>
+                    <Text color="#64748b">
                         Try searching by key (e.g. "shell") or description
                         (e.g. "timeout")
                     </Text>
                 </Box>
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     Esc → cancel · ↑↓ → navigate
                 </Text>
             </Box>
@@ -108,7 +108,7 @@ const SettingsSelectionMenu: FC<Props> = ({items, selectedIndex, query}) => {
                 paddingX={1}
                 marginBottom={0}
             >
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     settings: "{query || '*'}" · {items.length} suggestion
                     {items.length === 1 ? '' : 's'}
                 </Text>
@@ -122,7 +122,7 @@ const SettingsSelectionMenu: FC<Props> = ({items, selectedIndex, query}) => {
                     const categoryHeader =
                         category !== prevCategory ? (
                             <Box>
-                                <Text color="gray" dimColor>
+                                <Text color="#64748b">
                                     {titleCaseCategory(category)}
                                 </Text>
                             </Box>
@@ -158,7 +158,7 @@ const SettingsSelectionMenu: FC<Props> = ({items, selectedIndex, query}) => {
                             </Box>
                             {description && (
                                 <Box>
-                                    <Text color="gray" dimColor>
+                                    <Text color="#64748b">
                                         {''.padEnd(descIndent, ' ')}
                                         {description}
                                     </Text>
@@ -168,7 +168,7 @@ const SettingsSelectionMenu: FC<Props> = ({items, selectedIndex, query}) => {
                     );
                 })}
             </Box>
-            <Text color="gray" dimColor>
+            <Text color="#64748b">
                 Enter → insert key · Tab → insert key · Esc → cancel · ↑↓ →
                 navigate
             </Text>

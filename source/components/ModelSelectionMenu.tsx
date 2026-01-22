@@ -45,10 +45,9 @@ const ProviderTabs: FC<{
                                             ? 'magenta'
                                             : isDisabled
                                             ? 'red'
-                                            : 'gray'
+                                            : '#64748b'
                                     }
                                     bold={isActive}
-                                    dimColor={!isActive || isDisabled}
                                     strikethrough={isDisabled}
                                 >
                                     {' '}
@@ -56,7 +55,7 @@ const ProviderTabs: FC<{
                                     {isDisabled ? ' (no key)' : ''}{' '}
                                 </Text>
                                 {index < providers.length - 1 && (
-                                    <Text color="gray" dimColor>
+                                    <Text color="#64748b">
                                         {' │ '}
                                     </Text>
                                 )}
@@ -65,14 +64,14 @@ const ProviderTabs: FC<{
                     })}
                 </Box>
                 {canSwitch && (
-                    <Text color="gray" dimColor>
+                    <Text color="#64748b">
                         Tab → switch provider
                     </Text>
                 )}
             </Box>
             {!canSwitch && (
                 <Box marginTop={0}>
-                    <Text color="yellow" dimColor>
+                    <Text color="yellow">
                         ⚠ Provider can only be changed at the start of a new
                         conversation (/clear to reset)
                     </Text>
@@ -115,7 +114,7 @@ const ModelSelectionMenu: FC<Props> = ({
     if (items.length === 0) {
         return (
             <Box borderStyle="round" borderColor="magenta" paddingX={1}>
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     No models match "{query || '*'}"
                 </Text>
             </Box>
@@ -140,11 +139,11 @@ const ModelSelectionMenu: FC<Props> = ({
                 flexDirection="column"
             >
                 <Box justifyContent="space-between">
-                    <Text color="gray" dimColor>
+                    <Text color="#64748b">
                         {items.length} suggestion{items.length === 1 ? '' : 's'}
                     </Text>
                     {items.length > maxHeight && (
-                        <Text color="gray" dimColor>
+                        <Text color="#64748b">
                             {scrollOffset + 1}-
                             {Math.min(scrollOffset + maxHeight, items.length)}/
                             {items.length}
@@ -152,7 +151,7 @@ const ModelSelectionMenu: FC<Props> = ({
                     )}
                 </Box>
                 {hasScrollUp && (
-                    <Text color="gray" dimColor>
+                    <Text color="#64748b">
                         ↑ {scrollOffset} more
                     </Text>
                 )}
@@ -170,8 +169,7 @@ const ModelSelectionMenu: FC<Props> = ({
                             </Text>
                             {item.name && (
                                 <Text
-                                    color={isSelected ? 'white' : 'gray'}
-                                    dimColor={!isSelected}
+                                    color={isSelected ? 'white' : '#64748b'}
                                 >
                                     {' '}
                                     — {item.name}
@@ -181,12 +179,12 @@ const ModelSelectionMenu: FC<Props> = ({
                     );
                 })}
                 {hasScrollDown && (
-                    <Text color="gray" dimColor>
+                    <Text color="#64748b">
                         ↓ {items.length - scrollOffset - maxHeight} more
                     </Text>
                 )}
             </Box>
-            <Text color="gray" dimColor>
+            <Text color="#64748b">
                 Enter → set model · Esc → cancel · ↑↓ → scroll
             </Text>
         </Box>

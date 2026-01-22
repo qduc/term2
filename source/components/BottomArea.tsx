@@ -96,7 +96,7 @@ const BottomArea: FC<BottomAreaProps> = ({
             ) : null}
 
             {isProcessing && (
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     processing{'.'.repeat(dotCount)}
                 </Text>
             )}

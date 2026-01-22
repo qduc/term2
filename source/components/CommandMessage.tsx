@@ -34,13 +34,13 @@ const DiffView: FC<{diff: string}> = ({diff}) => {
                     }
 
                     return (
-                        <Text key={i} color={color} dimColor={!color}>
+                        <Text key={i} color={color || '#64748b'}>
                             {line}
                         </Text>
                     );
                 })}
                 {truncated && (
-                    <Text dimColor>
+                    <Text color="#64748b">
                         ... ({lines.length - maxLines} more lines)
                     </Text>
                 )}
@@ -48,8 +48,8 @@ const DiffView: FC<{diff: string}> = ({diff}) => {
         );
     } catch (error) {
         return (
-            <Box marginLeft={2}>
-                <Text color="red" dimColor>
+            <Box flexDirection="row" marginLeft={2}>
+                <Text color="red">
                     [Failed to render diff preview]
                 </Text>
             </Box>
@@ -214,7 +214,7 @@ const CommandMessage: FC<Props> = ({
         if (hadApproval) {
             return (
                 <Box flexDirection="column">
-                    <Text color={success === false ? 'red' : 'gray'}>
+                    <Text color={success === false ? 'red' : '#64748b'}>
                         {displayed}
                     </Text>
                 </Box>
@@ -237,7 +237,7 @@ const CommandMessage: FC<Props> = ({
                 {failureReason && (
                     <Text color="red">Error: {failureReason}</Text>
                 )}
-                <Text color={success === false ? 'red' : 'gray'}>
+                <Text color={success === false ? 'red' : '#64748b'}>
                     {displayed}
                 </Text>
             </Box>
@@ -253,7 +253,7 @@ const CommandMessage: FC<Props> = ({
                 {isRunning && formattedArgs && command === toolName && <Text color="yellow"> {formattedArgs}</Text>}
             </Text>
             {failureReason && <Text color="red">Error: {failureReason}</Text>}
-            <Text color={success === false ? 'red' : 'gray'}>{displayed}</Text>
+            <Text color={success === false ? 'red' : '#64748b'}>{displayed}</Text>
         </Box>
     );
 };

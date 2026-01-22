@@ -24,11 +24,11 @@ const SettingsValueSelectionMenu: FC<Props> = ({
                     paddingX={1}
                     flexDirection="column"
                 >
-                    <Text color="gray" dimColor>
+                    <Text color="#64748b">
                         {settingKey} · No values match "{query || '*'}"
                     </Text>
                 </Box>
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     Enter → apply typed value · Esc → cancel · ↑↓ → navigate
                 </Text>
             </Box>
@@ -43,7 +43,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
                 paddingX={1}
                 flexDirection="column"
             >
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     {settingKey} · "{query || '*'}" · {items.length} suggestion
                     {items.length === 1 ? '' : 's'}
                 </Text>
@@ -59,7 +59,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
                                 {item.value}
                             </Text>
                             {item.description && (
-                                <Text color="gray" dimColor>
+                                <Text color="#64748b">
                                     {' '}
                                     — {item.description}
                                 </Text>
@@ -68,7 +68,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
                     );
                 })}
             </Box>
-            <Text color="gray" dimColor>
+            <Text color="#64748b">
                 Enter → set value · Tab → insert value · Esc → cancel · ↑↓ →
                 navigate
             </Text>

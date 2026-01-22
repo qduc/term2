@@ -22,7 +22,7 @@ const SlashCommandMenu: FC<Props> = ({commands, selectedIndex, filter}) => {
     if (filteredCommands.length === 0) {
         return (
             <Box flexDirection="column" marginLeft={2}>
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     No matching commands
                 </Text>
             </Box>
@@ -46,7 +46,7 @@ const SlashCommandMenu: FC<Props> = ({commands, selectedIndex, filter}) => {
                         {' '}
                         /{cmd.name}{' '}
                     </Text>
-                    <Text color="gray"> - {cmd.description}</Text>
+                    <Text color="#64748b"> - {cmd.description}</Text>
                 </Box>
             ))}
         </Box>

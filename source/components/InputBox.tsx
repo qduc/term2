@@ -554,12 +554,12 @@ const InputBox: FC<Props> = ({
                 />
             </Box>
             {escHintVisible && (
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     Press ESC again to clear input
                 </Text>
             )}
             {waitingForRejectionReason && (
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     (or ESC to cancel)
                 </Text>
             )}

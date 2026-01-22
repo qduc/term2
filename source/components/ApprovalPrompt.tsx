@@ -51,13 +51,13 @@ const DiffView: FC<{diff: string}> = ({diff}) => {
                     }
 
                     return (
-                        <Text key={i} color={color} dimColor={!color}>
+                        <Text key={i} color={color || '#64748b'}>
                             {line}
                         </Text>
                     );
                 })}
                 {truncated && (
-                    <Text dimColor>
+                    <Text color="#64748b">
                         ... ({lines.length - maxLines} more lines)
                     </Text>
                 )}
@@ -66,7 +66,7 @@ const DiffView: FC<{diff: string}> = ({diff}) => {
     } catch (error) {
         return (
             <Box marginLeft={2}>
-                <Text color="red" dimColor>
+                <Text color="red">
                     [Failed to render diff preview]
                 </Text>
             </Box>
@@ -101,12 +101,12 @@ const ShellPrompt: FC<{args: ShellArgs}> = ({args}) => {
             </Box>
             {args.timeout_ms && (
                 <Box>
-                    <Text dimColor>Timeout: {args.timeout_ms}ms</Text>
+                    <Text color="#64748b">Timeout: {args.timeout_ms}ms</Text>
                 </Box>
             )}
             {args.max_output_length && (
                 <Box>
-                    <Text dimColor>
+                    <Text color="#64748b">
                         Max output: {args.max_output_length} chars
                     </Text>
                 </Box>
@@ -185,7 +185,7 @@ const ApprovalPrompt: FC<
 
     // Try to parse and render arguments nicely based on tool type
     let content: React.ReactNode = (
-        <Text dimColor>{approval.argumentsText}</Text>
+        <Text color="#64748b">{approval.argumentsText}</Text>
     );
 
     if (approval.toolName === 'apply_patch') {

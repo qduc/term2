@@ -51,7 +51,7 @@ const PathSelectionMenu: FC<Props> = ({
                 paddingX={1}
                 flexDirection="column"
             >
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     No matches for "@{query}"
                 </Text>
             </Box>
@@ -66,7 +66,7 @@ const PathSelectionMenu: FC<Props> = ({
                 paddingX={1}
                 flexDirection="column"
             >
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     @{query || '*'} · {items.length} suggestion
                     {items.length === 1 ? '' : 's'}
                 </Text>
@@ -85,7 +85,7 @@ const PathSelectionMenu: FC<Props> = ({
                     );
                 })}
             </Box>
-            <Text color="gray" dimColor>
+            <Text color="#64748b">
                 Enter → insert with space · Tab → insert w/o trailing space ·
                 Esc → cancel
             </Text>

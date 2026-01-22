@@ -86,7 +86,7 @@ export class ErrorBoundary extends Component<
                             <Text color="yellow">Error: {error.message}</Text>
                             {error.stack && (
                                 <Box marginTop={1}>
-                                    <Text dimColor>
+                                    <Text color="#64748b">
                                         {error.stack
                                             .split('\n')
                                             .slice(0, 5)
@@ -110,7 +110,7 @@ export class ErrorBoundary extends Component<
 
                     {errorInfo?.componentStack && (
                         <Box marginTop={1}>
-                            <Text dimColor>
+                            <Text color="#64748b">
                                 Component:{' '}
                                 {errorInfo.componentStack
                                     .split('\n')[1]

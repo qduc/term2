@@ -152,7 +152,7 @@ const TableRenderer = ({token, style = 'ascii'}: TableRendererProps) => {
     // Render header row
     const renderHeaderRow = () => (
         <Box flexDirection="row">
-            {vertical.left ? <Text color="gray">{vertical.left}</Text> : null}
+            {vertical.left ? <Text color="#64748b">{vertical.left}</Text> : null}
             {header.map((cell, index) => (
                 <React.Fragment key={index}>
                     <Box width={columnWidths[index]}>
@@ -165,18 +165,18 @@ const TableRenderer = ({token, style = 'ascii'}: TableRendererProps) => {
                         </Text>
                     </Box>
                     {index < numCols - 1 && (
-                        <Text color="gray">{vertical.middle}</Text>
+                        <Text color="#64748b">{vertical.middle}</Text>
                     )}
                 </React.Fragment>
             ))}
-            {vertical.right ? <Text color="gray">{vertical.right}</Text> : null}
+            {vertical.right ? <Text color="#64748b">{vertical.right}</Text> : null}
         </Box>
     );
 
     // Render data row
     const renderDataRow = (row: TableCell[]) => (
         <Box flexDirection="row">
-            {vertical.left ? <Text color="gray">{vertical.left}</Text> : null}
+            {vertical.left ? <Text color="#64748b">{vertical.left}</Text> : null}
             {row.map((cell, index) => (
                 <React.Fragment key={index}>
                     <Box width={columnWidths[index]}>
@@ -187,11 +187,11 @@ const TableRenderer = ({token, style = 'ascii'}: TableRendererProps) => {
                         )}
                     </Box>
                     {index < numCols - 1 && (
-                        <Text color="gray">{vertical.middle}</Text>
+                        <Text color="#64748b">{vertical.middle}</Text>
                     )}
                 </React.Fragment>
             ))}
-            {vertical.right ? <Text color="gray">{vertical.right}</Text> : null}
+            {vertical.right ? <Text color="#64748b">{vertical.right}</Text> : null}
         </Box>
     );
 
@@ -199,7 +199,7 @@ const TableRenderer = ({token, style = 'ascii'}: TableRendererProps) => {
     const renderSeparator = () => {
         return (
             <Box marginX={1}>
-                <Text color="gray">{borders.middle}</Text>
+                <Text color="#64748b">{borders.middle}</Text>
             </Box>
         );
     };
@@ -208,7 +208,7 @@ const TableRenderer = ({token, style = 'ascii'}: TableRendererProps) => {
         <Box flexDirection="column" marginBottom={1}>
             {/* Top border */}
             <Box marginX={1}>
-                <Text color="gray">{borders.top}</Text>
+                <Text color="#64748b">{borders.top}</Text>
             </Box>
 
             {/* Header */}
@@ -226,7 +226,7 @@ const TableRenderer = ({token, style = 'ascii'}: TableRendererProps) => {
 
             {/* Bottom border */}
             <Box marginX={1}>
-                <Text color="gray">{borders.bottom}</Text>
+                <Text color="#64748b">{borders.bottom}</Text>
             </Box>
         </Box>
     );
@@ -291,7 +291,7 @@ const InlineContent = ({tokens}: {tokens: any[]}) => {
 
                     case 'image':
                         return (
-                            <Text key={key} color="gray">
+                            <Text key={key} color="#64748b">
                                 {' '}
                                 [Image: {token.text}]{' '}
                             </Text>
@@ -373,7 +373,7 @@ const BlockRenderer = ({token}: {token: any}) => {
             return (
                 <Box
                     borderStyle="round"
-                    borderColor="gray"
+                    borderColor="#64748b"
                     paddingX={1}
                     marginBottom={1}
                     flexDirection="column"
@@ -409,7 +409,7 @@ const BlockRenderer = ({token}: {token: any}) => {
         case 'hr':
             return (
                 <Box marginY={1}>
-                    <Text color="gray">
+                    <Text color="#64748b">
                         ────────────────────────────────────────
                     </Text>
                 </Box>

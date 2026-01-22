@@ -12,7 +12,7 @@ const ChatMessage: FC<Props> = ({msg}) => {
             {msg.sender === 'user' ? (
                 <Text color="blue">❯ {msg.text}</Text>
             ) : msg.sender === 'system' ? (
-                <Text color="gray" dimColor>
+                <Text color="#64748b">
                     {msg.text}
                 </Text>
             ) : msg.sender === 'reasoning' ? (

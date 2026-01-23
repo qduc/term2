@@ -31,6 +31,8 @@ test.serial('needsApproval: returns false for read-only operation', async t => {
     await withTempDir(async () => {
         const result = await readFileToolDefinition.needsApproval({
             path: 'test.txt',
+            start_line: null,
+            end_line: null,
         });
         t.false(result);
     });
@@ -44,6 +46,8 @@ test.serial('execute: successfully reads a file', async t => {
 
         const result = await readFileToolDefinition.execute({
             path: filePath,
+            start_line: null,
+            end_line: null,
         });
 
         // Result should include line numbers
@@ -84,6 +88,7 @@ test.serial('execute: reads file from start_line to end', async t => {
         const result = await readFileToolDefinition.execute({
             path: filePath,
             start_line: 3,
+            end_line: null,
         });
 
         // Should include lines 3-5
@@ -99,6 +104,8 @@ test.serial('execute: rejects path outside workspace', async t => {
     await withTempDir(async () => {
         const result = await readFileToolDefinition.execute({
             path: '../outside.txt',
+            start_line: null,
+            end_line: null,
         });
 
         t.true(result.includes('Error'));
@@ -113,6 +120,8 @@ test.serial('execute: in allowOutsideWorkspace mode, can read outside workspace'
 
         const result = await readFileToolDefinitionAllowOutside.execute({
             path: '../outside.txt',
+            start_line: null,
+            end_line: null,
         });
 
         t.true(result.includes('1\toutside'));
@@ -125,6 +134,8 @@ test.serial('execute: handles file not found', async t => {
     await withTempDir(async () => {
         const result = await readFileToolDefinition.execute({
             path: 'nonexistent.txt',
+            start_line: null,
+            end_line: null,
         });
 
         t.true(result.includes('Error'));
@@ -139,6 +150,8 @@ test.serial('execute: handles empty file', async t => {
 
         const result = await readFileToolDefinition.execute({
             path: filePath,
+            start_line: null,
+            end_line: null,
         });
 
         t.is(result.trim(), '');

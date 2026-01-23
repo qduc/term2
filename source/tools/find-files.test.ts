@@ -31,6 +31,8 @@ test.serial('needsApproval: returns false for read-only operation', async t => {
 	await withTempDir(async () => {
 		const result = await findFilesToolDefinition.needsApproval({
 			pattern: '*.ts',
+			path: null,
+			max_results: null,
 		});
 		t.false(result);
 	});
@@ -44,6 +46,8 @@ test.serial('execute: finds files by exact name', async t => {
 
 		const result = await findFilesToolDefinition.execute({
 			pattern: 'test.ts',
+			path: null,
+			max_results: null,
 		});
 
 		t.true(result.includes('test.ts'));
@@ -60,6 +64,8 @@ test.serial('execute: finds files by glob pattern', async t => {
 
 		const result = await findFilesToolDefinition.execute({
 			pattern: '*.ts',
+			path: null,
+			max_results: null,
 		});
 
 		t.true(result.includes('file1.ts'));
@@ -81,6 +87,8 @@ test.serial(
 
 			const result = await findFilesToolDefinition.execute({
 				pattern: '*.ts',
+				path: null,
+				max_results: null,
 			});
 
 			t.true(result.includes('src/index.ts') || result.includes('index.ts'));
@@ -104,6 +112,7 @@ test.serial('execute: restricts search to specified path', async t => {
 		const result = await findFilesToolDefinition.execute({
 			pattern: '*.ts',
 			path: 'src',
+			max_results: null,
 		});
 
 		t.true(result.includes('app.ts'));
@@ -120,6 +129,7 @@ test.serial('execute: respects max_results limit', async t => {
 
 		const result = await findFilesToolDefinition.execute({
 			pattern: '*.ts',
+			path: null,
 			max_results: 5,
 		});
 
@@ -136,6 +146,8 @@ test.serial('execute: handles no matches found', async t => {
 
 		const result = await findFilesToolDefinition.execute({
 			pattern: '*.ts',
+			path: null,
+			max_results: null,
 		});
 
 		t.true(result.includes('No files found'));
@@ -147,6 +159,7 @@ test.serial('execute: rejects path outside workspace', async t => {
 		const result = await findFilesToolDefinition.execute({
 			pattern: '*.ts',
 			path: '../outside',
+			max_results: null,
 		});
 
 		t.true(result.includes('Error'));
@@ -164,6 +177,7 @@ test.serial('execute: in allowOutsideWorkspace mode, can search outside workspac
 		const result = await findFilesToolDefinitionAllowOutside.execute({
 			pattern: '*.ts',
 			path: '../outside',
+			max_results: null,
 		});
 
 		t.true(result.includes('outside.ts'));
@@ -177,6 +191,7 @@ test.serial('execute: handles non-existent directory', async t => {
 		const result = await findFilesToolDefinition.execute({
 			pattern: '*.ts',
 			path: 'nonexistent',
+			max_results: null,
 		});
 
 		t.true(result.includes('Error') || result.includes('No files found'));

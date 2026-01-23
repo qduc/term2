@@ -87,6 +87,8 @@ npx prettier --check . # Format check
 npx ava               # Unit tests
 ```
 
+**Note**: When running `npx ava` on a single test file, use the compiled version in the `dist/` directory (e.g., `npx ava dist/path/to/test.js`), not the TypeScript source file.
+
 ## Key Concepts
 
 -   **Tool Interceptors**: Centralized validation and approval flow for all tools

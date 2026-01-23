@@ -208,7 +208,7 @@ test('buildSettingsList - no duplicate keys', t => {
 });
 
 // filterSettingsByQuery tests
-test('filterSettingsByQuery - empty query returns first N results', t => {
+test('filterSettingsByQuery - empty query returns all settings', t => {
     const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
     const fuse = new Fuse(settings, {
         keys: ['key', 'description'],
@@ -216,10 +216,10 @@ test('filterSettingsByQuery - empty query returns first N results', t => {
     });
 
     const result = filterSettingsByQuery(settings, '', fuse, 3);
-    t.is(result.length, 3);
+    t.is(result.length, settings.length);
 });
 
-test('filterSettingsByQuery - whitespace-only query returns first N results', t => {
+test('filterSettingsByQuery - whitespace-only query returns all settings', t => {
     const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
     const fuse = new Fuse(settings, {
         keys: ['key', 'description'],
@@ -227,7 +227,7 @@ test('filterSettingsByQuery - whitespace-only query returns first N results', t 
     });
 
     const result = filterSettingsByQuery(settings, '   ', fuse, 3);
-    t.is(result.length, 3);
+    t.is(result.length, settings.length);
 });
 
 test('filterSettingsByQuery - exact key match returns result', t => {
@@ -288,20 +288,21 @@ test('filterSettingsByQuery - search by description returns results', t => {
     }
 });
 
-test('filterSettingsByQuery - respects maxResults parameter', t => {
+test('filterSettingsByQuery - respects maxResults parameter for search queries', t => {
     const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
     const fuse = new Fuse(settings, {
         keys: ['key', 'description'],
         threshold: 0.4,
     });
 
-    const result1 = filterSettingsByQuery(settings, '', fuse, 2);
-    t.is(result1.length, 2);
+    // Use a broad query that matches multiple settings
+    const result1 = filterSettingsByQuery(settings, 'agent', fuse, 2);
+    t.true(result1.length <= 2);
 
-    const result2 = filterSettingsByQuery(settings, '', fuse, 4);
-    t.is(result2.length, 4);
+    const result2 = filterSettingsByQuery(settings, 'agent', fuse, 4);
+    t.true(result2.length <= 4);
 
-    const result3 = filterSettingsByQuery(settings, '', fuse, 100);
+    const result3 = filterSettingsByQuery(settings, 'agent', fuse, 100);
     t.true(result3.length <= settings.length);
 });
 

@@ -1,9 +1,21 @@
 import test from 'ava';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {SettingsService} from '../services/settings-service.js';
 import {SETTING_KEYS} from '../services/settings-service.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const TEST_BASE_DIR = path.join(__dirname, '../../test-settings-flex');
+let testCounter = 0;
+
+const getTestSettingsDir = () => {
+    testCounter += 1;
+    return path.join(TEST_BASE_DIR, `test-${testCounter}`);
+};
+
 test('OpenAI Flex Service Tier setting can be enabled', t => {
     const settings = new SettingsService({
+        settingsDir: getTestSettingsDir(),
         disableFilePersistence: true,
         disableLogging: true,
     });
@@ -18,6 +30,7 @@ test('OpenAI Flex Service Tier setting can be enabled', t => {
 
 test('OpenAI Flex Service Tier setting is disabled by default', t => {
     const settings = new SettingsService({
+        settingsDir: getTestSettingsDir(),
         disableFilePersistence: true,
         disableLogging: true,
     });
@@ -29,6 +42,7 @@ test('OpenAI Flex Service Tier setting is disabled by default', t => {
 
 test('OpenAI Flex Service Tier setting can be disabled', t => {
     const settings = new SettingsService({
+        settingsDir: getTestSettingsDir(),
         disableFilePersistence: true,
         disableLogging: true,
     });
@@ -44,6 +58,7 @@ test('OpenAI Flex Service Tier setting can be disabled', t => {
 
 test('OpenAI Flex Service Tier setting is runtime modifiable', t => {
     const settings = new SettingsService({
+        settingsDir: getTestSettingsDir(),
         disableFilePersistence: true,
         disableLogging: true,
     });
@@ -54,6 +69,7 @@ test('OpenAI Flex Service Tier setting is runtime modifiable', t => {
 
 test('OpenAI Flex Service Tier setting is included in getAll()', t => {
     const settings = new SettingsService({
+        settingsDir: getTestSettingsDir(),
         disableFilePersistence: true,
         disableLogging: true,
     });

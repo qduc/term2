@@ -139,7 +139,7 @@ export function filterSettingsByQuery(
     maxResults: number = 10,
 ): SettingCompletionItem[] {
     if (!query.trim()) {
-        return settings.slice(0, maxResults);
+        return settings;
     }
 
     return fuseInstance
@@ -205,13 +205,32 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
         setSelectedIndex(prev => clampIndex(prev, filteredEntries.length));
     }, [filteredEntries.length]);
 
+    const [targetKey, setTargetKey] = useState<string | null>(null);
+
+    // Effect to select a target key once it appears in filteredEntries
+    useEffect(() => {
+        if (targetKey && filteredEntries.length > 0) {
+            const index = filteredEntries.findIndex(
+                item => item.key === targetKey,
+            );
+            if (index !== -1) {
+                setSelectedIndex(index);
+                setTargetKey(null);
+            }
+        }
+    }, [filteredEntries, targetKey]);
+
     const open = useCallback(
-        (startIndex: number, _initialQuery = '') => {
+        (startIndex: number, initialSelectionKey?: string) => {
             // If already in settings mode, do not reset selection.
             if (mode === 'settings_completion') return;
             setMode('settings_completion');
             setTriggerIndex(startIndex);
-            setSelectedIndex(0);
+            if (initialSelectionKey) {
+                setTargetKey(initialSelectionKey);
+            } else {
+                setSelectedIndex(0);
+            }
         },
         [mode, setMode, setTriggerIndex],
     );

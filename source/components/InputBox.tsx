@@ -238,6 +238,21 @@ const InputBox: FC<Props> = ({
             escPressedRef.current = true;
 
             if (mode !== 'text') {
+                if (
+                    mode === 'settings_value_completion' &&
+                    settingsValue.settingKey
+                ) {
+                    const prefix = SETTINGS_TRIGGER;
+                    // Reset input to just the trigger (showing full menu)
+                    onChange(prefix);
+                    setCursorOverride(prefix.length);
+
+                    settingsValue.close();
+                    // Open settings menu, requesting highlighting of the current key
+                    settings.open(prefix.length, settingsValue.settingKey);
+                    return;
+                }
+
                 // Close menu
                 setMode('text');
                 return;

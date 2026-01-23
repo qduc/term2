@@ -20,6 +20,8 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
         'Reasoning effort (none|minimal|low|medium|high|default)',
     [SETTING_KEYS.AGENT_TEMPERATURE]:
         'Model temperature (0–2, controls randomness)',
+    [SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER]:
+        'Use OpenAI Flex Service Tier to reduce costs (true|false, OpenAI only)',
     // agent.provider is hidden from UI - it can only be changed via model menu
     [SETTING_KEYS.AGENT_MAX_TURNS]: 'Maximum conversation turns',
     [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]:

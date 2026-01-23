@@ -50,6 +50,11 @@ const AgentSettingsSchema = z.object({
         .enum(['default', 'none', 'minimal', 'low', 'medium', 'high'])
         .default('default')
         .describe('Reasoning effort for the mentor model'),
+    useFlexServiceTier: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe('Use OpenAI Flex Service Tier to reduce costs (OpenAI only)'),
 });
 
 const ShellSettingsSchema = z.object({
@@ -191,6 +196,7 @@ export interface SettingsWithSources {
         openrouter: SettingWithSource<any>;
         mentorModel: SettingWithSource<string | undefined>;
         mentorReasoningEffort: SettingWithSource<string>;
+        useFlexServiceTier: SettingWithSource<boolean>;
     };
     shell: {
         timeout: SettingWithSource<number>;
@@ -251,6 +257,7 @@ export const SETTING_KEYS = {
     AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only
     AGENT_MENTOR_MODEL: 'agent.mentorModel',
     AGENT_MENTOR_REASONING_EFFORT: 'agent.mentorReasoningEffort',
+    AGENT_USE_FLEX_SERVICE_TIER: 'agent.useFlexServiceTier',
     SHELL_TIMEOUT: 'shell.timeout',
     SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
     SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
@@ -283,6 +290,7 @@ const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
     SETTING_KEYS.AGENT_PROVIDER,
     SETTING_KEYS.AGENT_MENTOR_MODEL,
     SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
+    SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
     SETTING_KEYS.SHELL_TIMEOUT,
     SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
     SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
@@ -316,6 +324,7 @@ const DEFAULT_SETTINGS: SettingsData = {
         } as any,
         mentorModel: undefined,
         mentorReasoningEffort: 'default',
+        useFlexServiceTier: false,
     },
     shell: {
         timeout: 120000,
@@ -831,6 +840,10 @@ export class SettingsService {
                 mentorReasoningEffort: {
                     value: this.settings.agent.mentorReasoningEffort,
                     source: this.getSource('agent.mentorReasoningEffort'),
+                },
+                useFlexServiceTier: {
+                    value: this.settings.agent.useFlexServiceTier,
+                    source: this.getSource('agent.useFlexServiceTier'),
                 },
             },
             shell: {

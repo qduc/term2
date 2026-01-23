@@ -858,6 +858,17 @@ export class OpenAIAgentClient {
             modelSettings.temperature = resolvedTemperature;
         }
 
+        // OpenAI Flex Service Tier: only pass when enabled and using OpenAI provider
+        // This reduces costs by using the flex service tier for lower priority requests
+        // See: https://platform.openai.com/docs/guides/service-tier
+        const useFlexServiceTier = this.#settings.get<boolean>('agent.useFlexServiceTier');
+        if (useFlexServiceTier && this.#provider === 'openai') {
+            modelSettings.providerData = {
+                ...(modelSettings.providerData || {}),
+                service_tier: 'flex',
+            };
+        }
+
         const agent = new Agent({
             name,
             model: resolvedModel,

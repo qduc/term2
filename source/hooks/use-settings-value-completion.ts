@@ -37,6 +37,10 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
         {value: 'error'},
     ],
     'logging.suppressConsoleOutput': [{value: 'true'}, {value: 'false'}],
+    'agent.useFlexServiceTier': [
+        {value: 'true', description: 'Enable Flex Service Tier (lower cost)'},
+        {value: 'false', description: 'Use standard service tier'},
+    ],
     'agent.temperature': [
         {value: '0', description: 'Deterministic'},
         {value: '0.2'},

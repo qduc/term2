@@ -12,6 +12,7 @@ const baseSettings = {
         temperature: {value: undefined, source: 'default'},
         mentorModel: {value: undefined, source: 'default'},
         mentorReasoningEffort: {value: 'default', source: 'default'},
+        useFlexServiceTier: {value: false, source: 'default'},
         provider: {value: 'openai', source: 'default'},
         maxTurns: {value: 20, source: 'default'},
         retryAttempts: {value: 2, source: 'default'},

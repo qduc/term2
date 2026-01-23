@@ -532,6 +532,7 @@ const InputBox: FC<Props> = ({
                     items: settingsValue.filteredEntries,
                     selectedIndex: settingsValue.selectedIndex,
                     query: settingsValue.query,
+                    isNumericSettings: settingsValue.isNumericSettings,
                 }}
                 settingsService={settingsService}
             />

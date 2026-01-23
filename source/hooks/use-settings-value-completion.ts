@@ -10,6 +10,17 @@ export type SettingValueSuggestion = {
 
 const MAX_RESULTS = 10;
 
+const NUMBER_SETTING_KEYS = new Set([
+    'agent.temperature',
+    'agent.maxTurns',
+    'agent.retryAttempts',
+    'shell.timeout',
+    'shell.maxOutputLines',
+    'shell.maxOutputChars',
+    'ui.historySize',
+    'ssh.port',
+]);
+
 // A small, curated set of value suggestions for common settings.
 // This is intentionally conservative: it's better to suggest a few helpful values
 // than to pretend we can enumerate every possible value.
@@ -79,6 +90,9 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
         {value: '2'},
         {value: '3'},
     ],
+    'ssh.port': [
+        {value: '22', description: 'Default SSH port'},
+    ],
 };
 
 // Pure functions exported for testing
@@ -94,15 +108,34 @@ export function filterSettingValueSuggestionsByQuery(
     query: string,
     fuse: Fuse<SettingValueSuggestion>,
     maxResults: number = MAX_RESULTS,
+    key?: string,
 ): SettingValueSuggestion[] {
     if (!query.trim()) {
         return suggestions.slice(0, maxResults);
     }
 
-    return fuse
-        .search(query.trim())
-        .map(r => r.item)
-        .slice(0, maxResults);
+    const results = fuse.search(query.trim()).map(r => r.item);
+
+    // For number settings, if the query itself is a valid number and not already
+    // in the results as an exact match, add it as a "Custom value" option.
+    if (
+        key &&
+        NUMBER_SETTING_KEYS.has(key) &&
+        query.trim() &&
+        !results.some(r => r.value === query.trim())
+    ) {
+        const numValue = Number(query.trim());
+        if (!isNaN(numValue)) {
+            // Add to the START of results so it's the default choice
+            // when typing a custom value.
+            results.unshift({
+                value: query.trim(),
+                description: 'Custom value',
+            });
+        }
+    }
+
+    return results.slice(0, maxResults);
 }
 
 export const useSettingsValueCompletion = (settingsService: SettingsService) => {
@@ -150,8 +183,9 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
             query,
             fuse,
             MAX_RESULTS,
+            settingKey ?? undefined,
         );
-    }, [allSuggestions, query, fuse]);
+    }, [allSuggestions, query, fuse, settingKey]);
 
     useEffect(() => {
         setSelectedIndex(prev => {
@@ -202,6 +236,10 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
         return filteredEntries[safeIndex];
     }, [filteredEntries, selectedIndex]);
 
+    const isNumericSettings = useMemo(() => {
+        return settingKey ? NUMBER_SETTING_KEYS.has(settingKey) : false;
+    }, [settingKey]);
+
     return {
         isOpen,
         triggerIndex,
@@ -214,5 +252,6 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
         moveUp,
         moveDown,
         getSelectedItem,
+        isNumericSettings,
     };
 };

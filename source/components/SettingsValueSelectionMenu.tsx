@@ -7,6 +7,7 @@ type Props = {
     items: SettingValueSuggestion[];
     selectedIndex: number;
     query: string;
+    isNumericSettings?: boolean;
 };
 
 const VISIBLE_COUNT = 10;
@@ -16,6 +17,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
     items,
     selectedIndex,
     query,
+    isNumericSettings,
 }) => {
     if (items.length === 0) {
         return (
@@ -24,6 +26,9 @@ const SettingsValueSelectionMenu: FC<Props> = ({
                 <Text color="gray">
                     {settingKey} · No values match "{query || '*'}"
                 </Text>
+                {isNumericSettings && (
+                     <Text color="yellow">Note: This setting accepts numeric values.</Text>
+                )}
                 <Box marginTop={1}>
                      <Text color="gray">
                         Enter → apply typed value · Esc → cancel
@@ -57,7 +62,9 @@ const SettingsValueSelectionMenu: FC<Props> = ({
                 {query ? (
                      <Text>Filter: "<Text color="white" bold>{query}</Text>"</Text>
                 ) : (
-                    <Text color="gray">Select a value</Text>
+                    <Text color="gray">
+                        {isNumericSettings ? 'Select or type custom value' : 'Select a value'}
+                    </Text>
                 )}
             </Box>
 

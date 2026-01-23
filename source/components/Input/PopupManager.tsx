@@ -48,6 +48,7 @@ interface PopupManagerProps {
         items: SettingValueSuggestion[];
         selectedIndex: number;
         query: string;
+        isNumericSettings?: boolean;
     };
     settingsService: SettingsService;
 }
@@ -104,6 +105,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
                     items={settingsValue.items}
                     selectedIndex={settingsValue.selectedIndex}
                     query={settingsValue.query}
+                    isNumericSettings={settingsValue.isNumericSettings}
                 />
             )}
         </>

@@ -51,3 +51,31 @@ test('SettingsValueSelectionMenu marks the selected value', t => {
     t.true(output.includes('▶'));
     t.true(output.includes('high'));
 });
+
+test('SettingsValueSelectionMenu shows numeric hint when applicable (empty state)', t => {
+    const {lastFrame} = render(
+        <SettingsValueSelectionMenu
+            settingKey="agent.temperature"
+            items={[]}
+            selectedIndex={0}
+            query="invalid"
+            isNumericSettings={true}
+        />,
+    );
+    const output = lastFrame() ?? '';
+    t.true(output.includes('This setting accepts numeric values'));
+});
+
+test('SettingsValueSelectionMenu shows numeric hint in header', t => {
+    const {lastFrame} = render(
+        <SettingsValueSelectionMenu
+            settingKey="agent.temperature"
+            items={[{value: '0', description: 'Zero'}]}
+            selectedIndex={0}
+            query=""
+            isNumericSettings={true}
+        />,
+    );
+    const output = lastFrame() ?? '';
+    t.true(output.includes('Select or type custom value'));
+});

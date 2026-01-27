@@ -79,8 +79,8 @@ export const createReadFileToolDefinition = (deps: {
     return {
     name: 'read_file',
     description: allowOutsideWorkspace
-        ? 'Read file content from the filesystem. Returns content with line numbers prefixed (like cat -n). Supports reading specific line ranges.'
-        : 'Read file content from the workspace. Returns content with line numbers prefixed (like cat -n). Supports reading specific line ranges.',
+        ? 'Read file content from the filesystem (like cat command). Supports reading specific line ranges.'
+        : 'Read file content from the workspace (like cat command). Supports reading specific line ranges.',
     parameters: readFileParametersSchema,
     needsApproval: () => false, // Read-only operation, safe
     execute: async params => {
@@ -109,6 +109,11 @@ export const createReadFileToolDefinition = (deps: {
 
             // Split into lines
             const lines = content.split('\n');
+            const totalLines = lines.length;
+
+            // Parse line range (auto-fill if omitted)
+            const fromLine = start_line || 1;
+            const toLine = end_line || totalLines;
 
             // Filter lines based on start_line and end_line
             let filteredLines = lines;
@@ -118,15 +123,12 @@ export const createReadFileToolDefinition = (deps: {
                 filteredLines = lines.slice(startIdx, endIdx);
             }
 
-            // Add line numbers (1-indexed)
-            const startLineNum = start_line || 1;
-            const numberedLines = filteredLines.map((line, idx) => {
-                const lineNum = startLineNum + idx;
-                return `${lineNum}\t${line}`;
-            });
+            // Create header with file path, line count, and line range
+            const header = `File: ${filePath} (${totalLines} lines) [lines ${fromLine}-${toLine}]\n${'='.repeat(60)}\n`;
 
             // Join and trim output
-            const result = numberedLines.join('\n');
+            const fileContent = filteredLines.join('\n');
+            const result = header + fileContent;
             return trimOutput(result);
         } catch (error: any) {
             // Handle errors gracefully

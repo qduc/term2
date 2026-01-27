@@ -50,11 +50,13 @@ test.serial('execute: successfully reads a file', async t => {
             end_line: null,
         });
 
-        // Result should include line numbers
-        t.true(result.includes('1\tHello'));
-        t.true(result.includes('2\tWorld'));
-        t.true(result.includes('3\tFrom'));
-        t.true(result.includes('4\tFile'));
+        // Result should include header and content
+        t.true(result.includes('File: test.txt'));
+        t.true(result.includes('4 lines'));
+        t.true(result.includes('Hello'));
+        t.true(result.includes('World'));
+        t.true(result.includes('From'));
+        t.true(result.includes('File'));
     });
 });
 
@@ -71,11 +73,12 @@ test.serial('execute: reads file with line range', async t => {
         });
 
         // Should only include lines 2-4
-        t.false(result.includes('1\tLine 1'));
-        t.true(result.includes('2\tLine 2'));
-        t.true(result.includes('3\tLine 3'));
-        t.true(result.includes('4\tLine 4'));
-        t.false(result.includes('5\tLine 5'));
+        t.true(result.includes('[lines 2-4]'));
+        t.false(result.includes('Line 1'));
+        t.true(result.includes('Line 2'));
+        t.true(result.includes('Line 3'));
+        t.true(result.includes('Line 4'));
+        t.false(result.includes('Line 5'));
     });
 });
 
@@ -92,11 +95,12 @@ test.serial('execute: reads file from start_line to end', async t => {
         });
 
         // Should include lines 3-5
-        t.false(result.includes('1\tLine 1'));
-        t.false(result.includes('2\tLine 2'));
-        t.true(result.includes('3\tLine 3'));
-        t.true(result.includes('4\tLine 4'));
-        t.true(result.includes('5\tLine 5'));
+        t.true(result.includes('[lines 3-5]'));
+        t.false(result.includes('Line 1'));
+        t.false(result.includes('Line 2'));
+        t.true(result.includes('Line 3'));
+        t.true(result.includes('Line 4'));
+        t.true(result.includes('Line 5'));
     });
 });
 
@@ -124,8 +128,8 @@ test.serial('execute: in allowOutsideWorkspace mode, can read outside workspace'
             end_line: null,
         });
 
-        t.true(result.includes('1\toutside'));
-        t.true(result.includes('2\tcontent'));
+        t.true(result.includes('outside'));
+        t.true(result.includes('content'));
         t.false(result.includes('outside workspace'));
     });
 });
@@ -171,7 +175,8 @@ test.serial('execute: handles line range beyond file length', async t => {
         });
 
         // Should only include available lines
-        t.true(result.includes('1\tLine 1'));
-        t.true(result.includes('2\tLine 2'));
+        t.true(result.includes('Line 1'));
+        t.true(result.includes('Line 2'));
+        t.true(result.includes('2 lines'));
     });
 });

@@ -386,6 +386,34 @@ test.serial(
     },
 );
 
+test.serial(
+    'execute performs normalized whitespace match across line breaks',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'normalized.txt';
+            const absPath = path.join(dir, filePath);
+            await fs.writeFile(
+                absPath,
+                'const foo = 1;\nconst bar = 2;\nconst baz = 3;\n',
+            );
+
+            const result = await tool.execute({
+                path: filePath,
+                search_content: 'const foo = 1; const bar = 2;',
+                replace_content: 'const foo = 1;\nconst bar = 42;',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.true(parsed.output[0].success);
+
+            const updated = await fs.readFile(absPath, 'utf8');
+            t.is(updated, 'const foo = 1;\nconst bar = 42;\nconst baz = 3;\n');
+        });
+    },
+);
+
 test.serial('execute does not match substrings in relaxed mode', async t => {
     await withTempDir(async dir => {
         const tool = createTool();

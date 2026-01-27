@@ -49,13 +49,26 @@ interface RelaxedMatchInfo {
 }
 
 /**
+ * Information about whitespace-normalized matches found in content
+ */
+interface NormalizedMatchInfo {
+    type: 'normalized';
+    count: number;
+    matches: {startIndex: number; endIndex: number}[];
+}
+
+/**
  * Information indicating no matches were found
  */
 interface NoMatchInfo {
     type: 'none';
 }
 
-type MatchInfo = ExactMatchInfo | RelaxedMatchInfo | NoMatchInfo;
+type MatchInfo =
+    | ExactMatchInfo
+    | RelaxedMatchInfo
+    | NormalizedMatchInfo
+    | NoMatchInfo;
 
 /**
  * Parse file content into lines with position information
@@ -89,6 +102,45 @@ function parseFileLines(
         if (match.index + fullMatch.length === content.length) break;
     }
     return lineInfos;
+}
+
+/**
+ * Normalize whitespace by collapsing any whitespace run to a single space.
+ * Returns the normalized text and a map from normalized indices to original indices.
+ */
+function normalizeWhitespaceWithMap(content: string): {
+    normalized: string;
+    indexMap: number[];
+} {
+    let normalized = '';
+    const indexMap: number[] = [];
+    let inWhitespace = false;
+
+    for (let i = 0; i < content.length; i++) {
+        const char = content[i];
+        if (/\s/.test(char)) {
+            if (!inWhitespace && normalized.length > 0) {
+                normalized += ' ';
+                indexMap.push(i);
+            }
+            inWhitespace = true;
+            continue;
+        }
+        inWhitespace = false;
+        normalized += char;
+        indexMap.push(i);
+    }
+
+    if (normalized.endsWith(' ')) {
+        normalized = normalized.slice(0, -1);
+        indexMap.pop();
+    }
+
+    return {normalized, indexMap};
+}
+
+function normalizeWhitespace(content: string): string {
+    return normalizeWhitespaceWithMap(content).normalized;
 }
 
 /**
@@ -134,6 +186,54 @@ function findMatchesInContent(
 
     if (matches.length > 0) {
         return {type: 'relaxed', count: matches.length, matches};
+    }
+
+    // 3. Try normalized whitespace match (collapse whitespace differences)
+    const normalizedSearch = normalizeWhitespace(searchContent);
+    if (normalizedSearch.length > 0) {
+        const {normalized: normalizedContent, indexMap} =
+            normalizeWhitespaceWithMap(content);
+        const normalizedMatches: {startIndex: number; endIndex: number}[] = [];
+        let normalizedIndex = normalizedContent.indexOf(normalizedSearch);
+        while (normalizedIndex !== -1) {
+            const beforeIndex = normalizedIndex - 1;
+            const afterIndex = normalizedIndex + normalizedSearch.length;
+            const beforeChar =
+                beforeIndex >= 0 ? normalizedContent[beforeIndex] : '';
+            const afterChar =
+                afterIndex < normalizedContent.length
+                    ? normalizedContent[afterIndex]
+                    : '';
+            const hasLeadingBoundary =
+                beforeIndex < 0 || beforeChar === ' ';
+            const hasTrailingBoundary =
+                afterIndex >= normalizedContent.length || afterChar === ' ';
+
+            if (!hasLeadingBoundary || !hasTrailingBoundary) {
+                normalizedIndex = normalizedContent.indexOf(
+                    normalizedSearch,
+                    normalizedIndex + 1,
+                );
+                continue;
+            }
+
+            const startIndex = indexMap[normalizedIndex];
+            const endIndex =
+                indexMap[normalizedIndex + normalizedSearch.length - 1] + 1;
+            normalizedMatches.push({startIndex, endIndex});
+            normalizedIndex = normalizedContent.indexOf(
+                normalizedSearch,
+                normalizedIndex + 1,
+            );
+        }
+
+        if (normalizedMatches.length > 0) {
+            return {
+                type: 'normalized',
+                count: normalizedMatches.length,
+                matches: normalizedMatches,
+            };
+        }
     }
 
     return {type: 'none'};
@@ -321,6 +421,28 @@ export function createSearchReplaceToolDefinition(deps: {
                     }
                     loggingService.info(
                         'search_replace validation: relaxed match(es) found',
+                        {
+                            path: filePath,
+                            count: matchInfo.count,
+                            replace_all,
+                        },
+                    );
+                    return true;
+                }
+
+                if (matchInfo.type === 'normalized') {
+                    if (!replace_all && matchInfo.count > 1) {
+                        loggingService.warn(
+                            'search_replace validation: multiple normalized matches, replace_all=false - will fail in execute',
+                            {
+                                path: filePath,
+                                count: matchInfo.count,
+                            },
+                        );
+                        return false;
+                    }
+                    loggingService.info(
+                        'search_replace validation: normalized match(es) found',
                         {
                             path: filePath,
                             count: matchInfo.count,
@@ -529,12 +651,73 @@ export function createSearchReplaceToolDefinition(deps: {
                     });
                 }
 
+                if (matchInfo.type === 'normalized') {
+                    if (!replace_all && matchInfo.count > 1) {
+                        return JSON.stringify({
+                            output: [
+                                {
+                                    success: false,
+                                    error: `Found ${matchInfo.count} normalized matches. Please provide more context or set replace_all to true.`,
+                                },
+                            ],
+                        });
+                    }
+
+                    let newContent = content;
+                    if (replace_all) {
+                        matchInfo.matches.sort(
+                            (a, b) => b.startIndex - a.startIndex,
+                        );
+                        for (const m of matchInfo.matches) {
+                            newContent =
+                                newContent.substring(0, m.startIndex) +
+                                replace_content +
+                                newContent.substring(m.endIndex);
+                        }
+                    } else {
+                        const m = matchInfo.matches[0];
+                        newContent =
+                            content.substring(0, m.startIndex) +
+                            replace_content +
+                            content.substring(m.endIndex);
+                    }
+                    await writeFileFn(targetPath, newContent);
+
+                    if (enableFileLogging) {
+                        loggingService.info(
+                            'File updated (normalized match)',
+                            {
+                                path: filePath,
+                                replace_all,
+                                count: replace_all ? matchInfo.count : 1,
+                            },
+                        );
+                    }
+
+                    return JSON.stringify({
+                        output: [
+                            {
+                                success: true,
+                                operation: 'search_replace',
+                                path: filePath,
+                                message: `Updated ${filePath} (${
+                                    replace_all ? matchInfo.count : 1
+                                } normalized match${
+                                    replace_all && matchInfo.count > 1
+                                        ? 'es'
+                                        : ''
+                                })`,
+                            },
+                        ],
+                    });
+                }
+
                 // matchInfo.type === 'none'
                 return JSON.stringify({
                     output: [
                         {
                             success: false,
-                            error: `Search content not found (even with relaxed matching). Please check the file content.`,
+                            error: `Search content not found. Try splitting the changes into smaller search pattern.`,
                         },
                     ],
                 });

@@ -37,7 +37,8 @@ export const useModelSelection = (
     const isInitialLoadRef = useRef(true);
 
     const isOpen = mode === 'model_selection';
-    const canSwitchProvider = !hasConversationHistory;
+    const isMentorTrigger = input.startsWith(MENTOR_TRIGGER);
+    const canSwitchProvider = isMentorTrigger || !hasConversationHistory;
 
     const query = useMemo(() => {
         if (!isOpen || triggerIndex === null) return '';
@@ -47,13 +48,15 @@ export const useModelSelection = (
 
     useEffect(() => {
         if (isOpen) {
-            const providerSetting =
-                settingsService.get<string>('agent.provider');
+            const providerSetting = isMentorTrigger
+                ? settingsService.get<string>('agent.mentorProvider') ??
+                  settingsService.get<string>('agent.provider')
+                : settingsService.get<string>('agent.provider');
             setProvider(providerSetting);
             failedProvidersRef.current.clear();
             isInitialLoadRef.current = true;
         }
-    }, [isOpen]);
+    }, [isOpen, isMentorTrigger]);
 
     useEffect(() => {
         if (!isOpen || !provider) return;

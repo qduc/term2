@@ -39,6 +39,8 @@ export class OpenAIAgentClient {
     #reasoningEffort?: ModelSettingsReasoningEffort | 'default';
     #temperature?: number;
     #provider: string;
+    #mentorProvider: string | null = null;
+    #mentorRunner: Runner | null = null;
     #maxTurns: number;
     #retryAttempts: number;
     #currentAbortController: AbortController | null = null;
@@ -92,7 +94,7 @@ export class OpenAIAgentClient {
         this.#maxTurns = maxTurns ?? 20;
         this.#retryAttempts = retryAttempts ?? 2;
         this.#agent = this.#createAgent({model, reasoningEffort});
-        this.#runner = this.#createRunner();
+        this.#runner = this.#createRunner(this.#provider);
         this.#logger.info('OpenAI Agent Client initialized', {
             model: model || this.#settings.get<string>('agent.model'),
             reasoningEffort: reasoningEffort ?? 'default',
@@ -135,7 +137,7 @@ export class OpenAIAgentClient {
             model: this.#model,
             reasoningEffort: this.#reasoningEffort,
         });
-        this.#runner = this.#createRunner();
+        this.#runner = this.#createRunner(this.#provider);
     }
 
     getProvider(): string {
@@ -184,8 +186,8 @@ export class OpenAIAgentClient {
         return null;
     }
 
-    #createRunner(): Runner | null {
-        const providerDef = getProvider(this.#provider);
+    #createRunner(providerId: string): Runner | null {
+        const providerDef = getProvider(providerId);
         if (!providerDef?.createRunner) {
             return null;
         }
@@ -239,6 +241,9 @@ export class OpenAIAgentClient {
         }
         this.#mentorPreviousResponseId = null;
         this.#mentorStore = null;
+        this.#mentorRunner = null;
+        this.#mentorProvider = null;
+        this.#mentorAgent = null;
 
         this.#logger.info('Conversation and agent refreshed');
     }
@@ -356,19 +361,25 @@ export class OpenAIAgentClient {
         );
     }
 
-    #runAgent(agent: Agent, input: any, options: any): Promise<any> {
+    #runAgentWithProvider(
+        providerId: string,
+        runner: Runner | null,
+        agent: Agent,
+        input: any,
+        options: any,
+    ): Promise<any> {
         // The Agents SDK enables tracing by default and exports spans to OpenAI.
         // When using non-OpenAI providers (e.g., OpenRouter), this export can fail noisily
         // (e.g., 503 errors). Disable tracing per-run for any non-OpenAI provider.
         const effectiveOptions: any = options ? {...options} : {};
-        if (this.#provider !== 'openai') {
+        if (providerId !== 'openai') {
             effectiveOptions.tracingDisabled = true;
         }
 
         // Check if provider is configured but runner failed to initialize
-        if (!this.#runner && this.#provider !== 'openai') {
-            const providerDef = getProvider(this.#provider);
-            const providerLabel = providerDef?.label || this.#provider;
+        if (!runner && providerId !== 'openai') {
+            const providerDef = getProvider(providerId);
+            const providerLabel = providerDef?.label || providerId;
             throw new Error(
                 `${providerLabel} is configured but could not be initialized. ` +
                     `Please check that all required credentials are set. ` +
@@ -378,10 +389,20 @@ export class OpenAIAgentClient {
         }
 
         // Use runner if available (custom provider), otherwise use run() directly (OpenAI)
-        if (this.#runner) {
-            return this.#runner.run(agent, input, effectiveOptions);
+        if (runner) {
+            return runner.run(agent, input, effectiveOptions);
         }
         return run(agent, input, effectiveOptions);
+    }
+
+    #runAgent(agent: Agent, input: any, options: any): Promise<any> {
+        return this.#runAgentWithProvider(
+            this.#provider,
+            this.#runner,
+            agent,
+            input,
+            options,
+        );
     }
 
     async #executeWithRetry<T>(
@@ -563,6 +584,9 @@ export class OpenAIAgentClient {
             throw new Error('Mentor model is not configured');
         }
 
+        const mentorProvider =
+            this.#settings.get<string>('agent.mentorProvider') ?? this.#provider;
+
         const mentorMode = this.#settings.get<boolean>('app.mentorMode');
 
         // Different instructions based on mode
@@ -585,7 +609,20 @@ export class OpenAIAgentClient {
             : getAgentsInstructions(cwd);
         const instructions = `${baseInstructions}\n\nEnvironment: ${envInfo}${agentsInstructions}`;
 
-        // Initialize mentor agent and conversation store if needed
+        // If mentor provider changed, reset mentor state to avoid mixing stores/prev ids across providers
+        if (this.#mentorProvider !== mentorProvider) {
+            this.#mentorAgent = null;
+            this.#mentorStore = null;
+            this.#mentorPreviousResponseId = null;
+            this.#mentorRunner = null;
+            this.#mentorProvider = mentorProvider;
+        }
+
+        // Initialize mentor runner/agent and conversation store if needed
+        if (!this.#mentorRunner && mentorProvider !== 'openai') {
+            this.#mentorRunner = this.#createRunner(mentorProvider);
+        }
+
         if (!this.#mentorAgent) {
             const reasoningEffort = this.#settings.get<string>('agent.mentorReasoningEffort');
             const modelSettings: any = {};
@@ -615,20 +652,22 @@ export class OpenAIAgentClient {
             // Determine input based on provider
             // OpenAI uses previousResponseId for server-side history
             // Others need full conversation history from store
-            const input = this.#provider !== 'openai'
+            const input = mentorProvider !== 'openai'
                 ? this.#mentorStore!.getHistory()
                 : question;
 
-            const result = await this.#runAgent(
+            const result = await this.#runAgentWithProvider(
+                mentorProvider,
+                this.#mentorRunner,
                 this.#mentorAgent,
                 input,
                 {
                     stream: false,
                     maxTurns: 1,
-                    ...(this.#provider === 'openai' && this.#mentorPreviousResponseId
+                    ...(mentorProvider === 'openai' && this.#mentorPreviousResponseId
                         ? {previousResponseId: this.#mentorPreviousResponseId}
                         : {}),
-                }
+                },
             );
 
             // Update conversation store with result

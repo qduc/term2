@@ -46,6 +46,11 @@ const AgentSettingsSchema = z.object({
         })
         .optional(),
     mentorModel: z.string().optional().describe('Model to use as a mentor'),
+    mentorProvider: z
+        .string()
+        .min(1)
+        .optional()
+        .describe('Provider to use for the mentor model (defaults to agent.provider when unset)'),
     mentorReasoningEffort: z
         .enum(['default', 'none', 'minimal', 'low', 'medium', 'high'])
         .default('default')
@@ -195,6 +200,7 @@ export interface SettingsWithSources {
         provider: SettingWithSource<string>;
         openrouter: SettingWithSource<any>;
         mentorModel: SettingWithSource<string | undefined>;
+        mentorProvider: SettingWithSource<string | undefined>;
         mentorReasoningEffort: SettingWithSource<string>;
         useFlexServiceTier: SettingWithSource<boolean>;
     };
@@ -256,6 +262,7 @@ export const SETTING_KEYS = {
     AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer', // Sensitive - env only
     AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only
     AGENT_MENTOR_MODEL: 'agent.mentorModel',
+    AGENT_MENTOR_PROVIDER: 'agent.mentorProvider',
     AGENT_MENTOR_REASONING_EFFORT: 'agent.mentorReasoningEffort',
     AGENT_USE_FLEX_SERVICE_TIER: 'agent.useFlexServiceTier',
     SHELL_TIMEOUT: 'shell.timeout',
@@ -289,6 +296,7 @@ const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
     SETTING_KEYS.AGENT_TEMPERATURE,
     SETTING_KEYS.AGENT_PROVIDER,
     SETTING_KEYS.AGENT_MENTOR_MODEL,
+    SETTING_KEYS.AGENT_MENTOR_PROVIDER,
     SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
     SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
     SETTING_KEYS.SHELL_TIMEOUT,
@@ -323,6 +331,7 @@ const DEFAULT_SETTINGS: SettingsData = {
             // defaults empty; can be provided via env or config
         } as any,
         mentorModel: undefined,
+        mentorProvider: undefined,
         mentorReasoningEffort: 'default',
         useFlexServiceTier: false,
     },
@@ -836,6 +845,10 @@ export class SettingsService {
                 mentorModel: {
                     value: this.settings.agent.mentorModel,
                     source: this.getSource('agent.mentorModel'),
+                },
+                mentorProvider: {
+                    value: this.settings.agent.mentorProvider,
+                    source: this.getSource('agent.mentorProvider'),
                 },
                 mentorReasoningEffort: {
                     value: this.settings.agent.mentorReasoningEffort,

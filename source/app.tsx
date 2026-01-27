@@ -186,8 +186,12 @@ const App: FC<AppProps> = ({
                 return;
             }
 
-            if (key === 'agent.mentorModel' || key === 'agent.mentorReasoningEffort') {
-            // Re-initialize the current model to refresh tools (in case mentor availability or config changes)
+            if (
+                key === 'agent.mentorModel' ||
+                key === 'agent.mentorProvider' ||
+                key === 'agent.mentorReasoningEffort'
+            ) {
+                // Re-initialize the current model to refresh tools (in case mentor availability or config changes)
                 const currentModel = settingsService.get<string>('agent.model');
                 setModel(currentModel);
                 return;

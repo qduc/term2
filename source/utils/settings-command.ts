@@ -44,6 +44,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
             source: settings.agent.mentorModel.source,
         },
         {
+            key: SETTING_KEYS.AGENT_MENTOR_PROVIDER,
+            value: settings.agent.mentorProvider.value,
+            source: settings.agent.mentorProvider.source,
+        },
+        {
             key: SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
             value: settings.agent.mentorReasoningEffort.value,
             source: settings.agent.mentorReasoningEffort.source,
@@ -153,9 +158,10 @@ export function createSettingsCommand({
             const rawValue = parts.slice(1).join(' ');
             let parsedValue = parseSettingValue(rawValue);
 
-            // Special handling for agent.model: handle --provider flag
+            // Special handling for agent.model / agent.mentorModel: handle --provider flag
             if (
-                key === SETTING_KEYS.AGENT_MODEL &&
+                (key === SETTING_KEYS.AGENT_MODEL ||
+                    key === SETTING_KEYS.AGENT_MENTOR_MODEL) &&
                 typeof parsedValue === 'string'
             ) {
                 const providerMatch = parsedValue.match(/--provider=(\w+)/);
@@ -169,13 +175,14 @@ export function createSettingsCommand({
                         return false;
                     }
                     // Update provider setting
-                    settingsService.set(SETTING_KEYS.AGENT_PROVIDER, provider);
+                    const providerKey =
+                        key === SETTING_KEYS.AGENT_MENTOR_MODEL
+                            ? SETTING_KEYS.AGENT_MENTOR_PROVIDER
+                            : SETTING_KEYS.AGENT_PROVIDER;
+                    settingsService.set(providerKey, provider);
                     // Apply runtime provider change
                     if (applyRuntimeSetting) {
-                        applyRuntimeSetting(
-                            SETTING_KEYS.AGENT_PROVIDER,
-                            provider,
-                        );
+                        applyRuntimeSetting(providerKey, provider);
                     }
                 }
                 parsedValue = parsedValue

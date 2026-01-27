@@ -433,19 +433,14 @@ const InputBox: FC<Props> = ({
 
             const before = value.slice(0, triggerIdx);
 
-            // For mentor model, we DO NOT append the provider flag because settings-command
-            // treats it as a generic string setting and doesn't support --provider parsing for it yet.
-            // Also, we implicitly enforce 'same provider' for now.
-            const isMentor = value.startsWith(MENTOR_TRIGGER);
+            // For mentor model, we DO append the provider flag so the mentor can use a different provider.
 
             // Use the current provider state instead of selection.provider to avoid stale data
             // when user presses Enter immediately after toggling providers
             const currentProvider = models.provider || 'openai';
 
             let insertion = selection.id;
-            if (!isMentor) {
-                insertion += ` --provider=${currentProvider}`;
-            }
+            insertion += ` --provider=${currentProvider}`;
 
             const nextValue = `${before}${insertion}${
                 submitAfterInsert ? '' : ' '

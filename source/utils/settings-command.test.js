@@ -11,6 +11,7 @@ const baseSettings = {
         reasoningEffort: {value: 'default', source: 'default'},
         temperature: {value: undefined, source: 'default'},
         mentorModel: {value: undefined, source: 'default'},
+        mentorProvider: {value: undefined, source: 'default'},
         mentorReasoningEffort: {value: 'default', source: 'default'},
         useFlexServiceTier: {value: false, source: 'default'},
         provider: {value: 'openai', source: 'default'},
@@ -184,4 +185,19 @@ test('setting agent.model without provider flag works normally', t => {
     t.deepEqual(deps.setCalls, [{key: 'agent.model', value: 'gpt-5.1'}]);
     t.deepEqual(deps.applied, [{key: 'agent.model', value: 'gpt-5.1'}]);
     t.true(deps.messages[0].includes('Set agent.model to gpt-5.1'));
+});
+
+test('setting agent.mentorModel strips --provider flag and saves mentor provider', t => {
+    const deps = createDeps();
+    const command = createSettingsCommand(deps);
+    command.action('agent.mentorModel some/mentor-model --provider=openrouter');
+
+    t.deepEqual(deps.setCalls, [
+        {key: 'agent.mentorProvider', value: 'openrouter'},
+        {key: 'agent.mentorModel', value: 'some/mentor-model'},
+    ]);
+    t.deepEqual(deps.applied, [
+        {key: 'agent.mentorProvider', value: 'openrouter'},
+        {key: 'agent.mentorModel', value: 'some/mentor-model'},
+    ]);
 });

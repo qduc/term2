@@ -22,7 +22,8 @@ test('getHistory() returns a copy (external mutation does not affect store)', t 
     history1.push({
         role: 'assistant',
         type: 'message',
-        content: 'Injected',
+        status: 'completed',
+        content: [{type: 'output_text', text: 'Injected'}],
     } as AgentInputItem);
 
     const history2 = store.getHistory();
@@ -46,7 +47,7 @@ test('updateFromResult() merges run history without duplicating overlap', t => {
     store.updateFromResult({
         history: [
             {role: 'user', type: 'message', content: 'Hi'},
-            {role: 'assistant', type: 'message', content: 'Hello!'},
+            {role: 'assistant', type: 'message', status: 'completed', content: [{type: 'output_text', text: 'Hello!'}]},
         ] satisfies AgentInputItem[],
     });
 
@@ -54,14 +55,14 @@ test('updateFromResult() merges run history without duplicating overlap', t => {
     t.is(history.length, 2);
     let last: any = history[history.length - 1];
     t.is(last.role, 'assistant');
-    t.is(last.content, 'Hello!');
+    t.is(last.content[0].text, 'Hello!');
 
     // Next turn: user message is already in store; incoming history contains it too.
     store.addUserMessage('How are you?');
     store.updateFromResult({
         history: [
             {role: 'user', type: 'message', content: 'How are you?'},
-            {role: 'assistant', type: 'message', content: 'Doing great.'},
+            {role: 'assistant', type: 'message', status: 'completed', content: [{type: 'output_text', text: 'Doing great.'}]},
         ] satisfies AgentInputItem[],
     });
 
@@ -69,7 +70,7 @@ test('updateFromResult() merges run history without duplicating overlap', t => {
     t.is(history.length, 4);
     last = history[history.length - 1];
     t.is(last.role, 'assistant');
-    t.is(last.content, 'Doing great.');
+    t.is(last.content[0].text, 'Doing great.');
 });
 
 test('updateFromResult() replaces history when incoming history is a superset', t => {
@@ -78,7 +79,7 @@ test('updateFromResult() replaces history when incoming history is a superset', 
     store.updateFromResult({
         history: [
             {role: 'user', type: 'message', content: 'One'},
-            {role: 'assistant', type: 'message', content: 'Ack'},
+            {role: 'assistant', type: 'message', status: 'completed', content: [{type: 'output_text', text: 'Ack'}]},
         ] satisfies AgentInputItem[],
     });
 
@@ -86,16 +87,16 @@ test('updateFromResult() replaces history when incoming history is a superset', 
     store.updateFromResult({
         history: [
             {role: 'user', type: 'message', content: 'One'},
-            {role: 'assistant', type: 'message', content: 'Ack'},
+            {role: 'assistant', type: 'message', status: 'completed', content: [{type: 'output_text', text: 'Ack'}]},
             {role: 'user', type: 'message', content: 'Two'},
-            {role: 'assistant', type: 'message', content: 'Ack2'},
+            {role: 'assistant', type: 'message', status: 'completed', content: [{type: 'output_text', text: 'Ack2'}]},
         ] satisfies AgentInputItem[],
     });
 
     const history = store.getHistory();
     t.is(history.length, 4);
     const last: any = history[3];
-    t.is(last.content, 'Ack2');
+    t.is(last.content[0].text, 'Ack2');
 });
 
 test('updateFromResult() preserves reasoning_details across overlap merges', t => {
@@ -105,7 +106,7 @@ test('updateFromResult() preserves reasoning_details across overlap merges', t =
     store.updateFromResult({
         history: [
             {role: 'user', type: 'message', content: 'First'},
-            {role: 'assistant', type: 'message', content: 'Hello'},
+            {role: 'assistant', type: 'message', status: 'completed', content: [{type: 'output_text', text: 'Hello'}]},
         ] satisfies AgentInputItem[],
     });
 
@@ -150,7 +151,7 @@ test('updateFromResult() preserves reasoning (reasoning tokens) across overlap m
     store.updateFromResult({
         history: [
             {role: 'user', type: 'message', content: 'First'},
-            {role: 'assistant', type: 'message', content: 'Hello'},
+            {role: 'assistant', type: 'message', status: 'completed', content: [{type: 'output_text', text: 'Hello'}]},
         ] satisfies AgentInputItem[],
     });
 

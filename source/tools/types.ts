@@ -1,4 +1,4 @@
-import type {ZodTypeAny} from 'zod';
+import type {ZodObject} from 'zod';
 
 export interface CommandMessage {
     id: string;
@@ -17,7 +17,7 @@ export interface CommandMessage {
 export interface ToolDefinition<Params = any> {
     name: string;
     description: string;
-    parameters: ZodTypeAny;
+    parameters: ZodObject<any, any>;
     needsApproval: (
         params: Params,
         context?: unknown,

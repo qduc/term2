@@ -1,8 +1,7 @@
 import test from 'ava';
-import {tool as createTool} from '@openai/agents';
+import {tool as createTool, RunContext} from '@openai/agents';
 import {z} from 'zod';
 import {wrapToolInvoke} from './tool-invoke.js';
-import type {FunctionTool} from '@openai/agents';
 
 test('wrapToolInvoke stringifies object inputs for tool invocations', async t => {
     const rawTool = createTool({
@@ -15,8 +14,8 @@ test('wrapToolInvoke stringifies object inputs for tool invocations', async t =>
         execute: async params => `ok:${params.value}`,
     });
 
-    const wrappedTool = wrapToolInvoke(rawTool) as FunctionTool;
-    const result = await wrappedTool.invoke({} as any, '{"value":"hi"}', {} as any);
+    const wrappedTool = wrapToolInvoke(rawTool);
+    const result = await wrappedTool.invoke({} as RunContext, '{"value":"hi"}');
 
     t.is(result, 'ok:hi');
 });

@@ -1,8 +1,21 @@
 import test from 'ava';
 import {ReadableStream} from 'node:stream/web';
+import type {AssistantMessageItem, ReasoningItem} from '@openai/agents';
 import {OpenRouterModel, OpenRouterError} from './openrouter.js';
 import {createMockSettingsService} from '../services/settings-service.mock.js';
 import {LoggingService} from '../services/logging-service.js';
+
+// Extended message type with provider-specific reasoning properties
+type ExtendedMessageItem = AssistantMessageItem & {
+    reasoning?: string;
+    reasoning_details?: Array<{type: string; text: string; format: string | null; index: number}>;
+};
+
+// Helper to extract text from message content (handles discriminated union)
+const getContentText = (msg: AssistantMessageItem | undefined, index = 0): string | undefined => {
+    const content = msg?.content?.[index];
+    return content?.type === 'output_text' ? content.text : undefined;
+};
 
 const originalFetch = globalThis.fetch;
 
@@ -468,11 +481,13 @@ test.serial(
             input: 'hi',
         } as any);
 
-        const msg = resp.output.find((o: any) => o.type === 'message');
+        const msg = resp.output.find(
+            (o): o is ExtendedMessageItem => o.type === 'message',
+        );
         t.truthy(msg);
-        t.is(msg.content?.[0]?.text, 'Hello back');
-        t.is(msg.reasoning, 'Some thinking');
-        t.deepEqual(msg.reasoning_details, [
+        t.is(getContentText(msg), 'Hello back');
+        t.is(msg?.reasoning, 'Some thinking');
+        t.deepEqual(msg?.reasoning_details, [
             {type: 'reasoning.text', text: 'step1', format: null, index: 0},
         ]);
     },
@@ -664,7 +679,7 @@ test.serial('handles summary reasoning details', async t => {
     t.is(response.output.length, 2);
 
     // First item should be summary reasoning
-    const reasoningOutput = response.output[0];
+    const reasoningOutput = response.output[0] as ReasoningItem;
     t.is(reasoningOutput.type, 'reasoning');
     t.is(reasoningOutput.content.length, 1);
     t.is(reasoningOutput.content[0].type, 'input_text');
@@ -672,16 +687,17 @@ test.serial('handles summary reasoning details', async t => {
         reasoningOutput.content[0].text,
         'First, the user asked "What is 1 + 1", which is a simple math question.\n',
     );
-    t.is(reasoningOutput.providerData.type, 'reasoning.summary');
-    t.is(reasoningOutput.providerData.format, 'xai-responses-v1');
+    t.is(reasoningOutput.providerData?.type, 'reasoning.summary');
+    t.is(reasoningOutput.providerData?.format, 'xai-responses-v1');
     t.is(
-        reasoningOutput.providerData.summary,
+        reasoningOutput.providerData?.summary,
         'First, the user asked "What is 1 + 1", which is a simple math question.\n',
     );
 
     // Second item should be the message
-    t.is(response.output[1].type, 'message');
-    t.truthy(response.output[1].content[0].text.includes('1 + 1 equals 2'));
+    const messageOutput = response.output[1] as AssistantMessageItem;
+    t.is(messageOutput.type, 'message');
+    t.truthy(getContentText(messageOutput)?.includes('1 + 1 equals 2'));
 });
 
 test.serial('handles encrypted reasoning details', async t => {
@@ -726,23 +742,21 @@ test.serial('handles encrypted reasoning details', async t => {
     t.is(response.output.length, 2);
 
     // First item should be encrypted reasoning
-    const reasoningOutput = response.output[0];
+    const reasoningOutput = response.output[0] as ReasoningItem;
     t.is(reasoningOutput.type, 'reasoning');
     t.deepEqual(reasoningOutput.content, []); // No displayable content for encrypted
-    t.is(reasoningOutput.providerData.type, 'reasoning.encrypted');
+    t.is(reasoningOutput.providerData?.type, 'reasoning.encrypted');
     t.is(
-        reasoningOutput.providerData.id,
+        reasoningOutput.providerData?.id,
         'rs_05c9be144fb3fa3b016936cb941e48819183e63b141a094cac',
     );
-    t.is(reasoningOutput.providerData.format, 'openai-responses-v1');
-    t.is(reasoningOutput.providerData.data, 'gAAAAABpNsuVfXBOvLwub1...');
+    t.is(reasoningOutput.providerData?.format, 'openai-responses-v1');
+    t.is(reasoningOutput.providerData?.data, 'gAAAAABpNsuVfXBOvLwub1...');
 
     // Second item should be the message
-    t.is(response.output[1].type, 'message');
-    t.is(
-        response.output[1].content[0].text,
-        'Response with encrypted reasoning',
-    );
+    const messageOutput = response.output[1] as AssistantMessageItem;
+    t.is(messageOutput.type, 'message');
+    t.is(getContentText(messageOutput), 'Response with encrypted reasoning');
 });
 
 test.serial(
@@ -780,8 +794,9 @@ test.serial(
         } as any);
 
         t.is(response.output.length, 1);
-        t.is(response.output[0].type, 'message');
-        t.is(response.output[0].content[0].text, 'No response from model.');
+        const messageOutput = response.output[0] as AssistantMessageItem;
+        t.is(messageOutput.type, 'message');
+        t.is(getContentText(messageOutput), 'No response from model.');
     },
 );
 
@@ -911,24 +926,25 @@ test.serial('handles mixed reasoning types (summary + encrypted)', async t => {
     t.is(response.output.length, 3);
 
     // First item should be summary reasoning
-    const summaryOutput = response.output[0];
+    const summaryOutput = response.output[0] as ReasoningItem;
     t.is(summaryOutput.type, 'reasoning');
     t.is(
         summaryOutput.content[0].text,
         'First, the user asked "What is 1 + 1", which is a simple math question.\n',
     );
-    t.is(summaryOutput.providerData.type, 'reasoning.summary');
+    t.is(summaryOutput.providerData?.type, 'reasoning.summary');
 
     // Second item should be encrypted reasoning
-    const encryptedOutput = response.output[1];
+    const encryptedOutput = response.output[1] as ReasoningItem;
     t.is(encryptedOutput.type, 'reasoning');
     t.deepEqual(encryptedOutput.content, []); // No displayable content
-    t.is(encryptedOutput.providerData.type, 'reasoning.encrypted');
-    t.is(encryptedOutput.providerData.data, 'zDzBlL2u7sDbq1l6rOpNL');
+    t.is(encryptedOutput.providerData?.type, 'reasoning.encrypted');
+    t.is(encryptedOutput.providerData?.data, 'zDzBlL2u7sDbq1l6rOpNL');
 
     // Third item should be the message
-    t.is(response.output[2].type, 'message');
-    t.truthy(response.output[2].content[0].text.includes('1 + 1 equals 2'));
+    const messageOutput = response.output[2] as AssistantMessageItem;
+    t.is(messageOutput.type, 'message');
+    t.truthy(getContentText(messageOutput)?.includes('1 + 1 equals 2'));
 });
 
 test.serial(

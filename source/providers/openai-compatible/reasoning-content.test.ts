@@ -1,8 +1,14 @@
 import test from 'ava';
 import {ReadableStream} from 'node:stream/web';
+import type {AssistantMessageItem} from '@openai/agents';
 import {OpenAICompatibleModel} from './model.js';
 import {createMockSettingsService} from '../../services/settings-service.mock.js';
 import {LoggingService} from '../../services/logging-service.js';
+
+// Extended message type with provider-specific reasoning property
+type ExtendedMessageItem = AssistantMessageItem & {
+    reasoning?: string;
+};
 
 const logger = new LoggingService({disableLogging: true});
 
@@ -53,9 +59,11 @@ test('OpenAICompatibleModel.getResponse support reasoning_content', async t => {
         input: 'hi',
     } as any);
 
-    const assistantMessage = response.output.find(o => o.type === 'message');
+    const assistantMessage = response.output.find(
+        (o): o is ExtendedMessageItem => o.type === 'message',
+    );
     t.truthy(assistantMessage);
-    t.is(assistantMessage.reasoning, 'thinking about user greeting');
+    t.is(assistantMessage?.reasoning, 'thinking about user greeting');
 });
 
 test('OpenAICompatibleModel.getStreamedResponse support reasoning_content', async t => {

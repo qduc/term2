@@ -21,6 +21,7 @@ const searchReplaceParametersSchema = z.object({
     replace_content: z.string().describe('The content to replace it with'),
     replace_all: z
         .boolean()
+        .default(false)
         .describe(
             'Whether to replace all occurrences of the search content. If false, requires exactly one match.',
         ),

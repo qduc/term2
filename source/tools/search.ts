@@ -28,16 +28,19 @@ const searchParametersSchema = z.object({
         ),
     case_sensitive: z
         .boolean()
+        .default(true)
         .describe('Whether the search should be case sensitive.'),
     file_pattern: z
         .string()
         .nullable()
+        .default(null)
         .describe(
             'Glob pattern for files to include (e.g., "*.ts"). Pass null to include all files.',
         ),
     exclude_pattern: z
         .string()
         .nullable()
+        .default(null)
         .describe(
             'Glob pattern for files to exclude. Pass null to exclude nothing.',
         ),
@@ -45,6 +48,7 @@ const searchParametersSchema = z.object({
         .int()
         .positive()
         .nullable()
+        .default(null)
         .describe(
             'Maximum number of results to return. Pass null for default (100).',
         ),

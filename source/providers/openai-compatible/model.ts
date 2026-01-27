@@ -83,6 +83,15 @@ export class OpenAICompatibleModel implements Model {
         const reasoningDetails = choice?.message?.reasoning_details;
         const toolCalls = choice?.message?.tool_calls;
 
+        // Log raw tool calls from API response
+        if (toolCalls && toolCalls.length > 0) {
+            this.#loggingService.debug('OpenAI-compatible raw tool calls (non-streaming)', {
+                provider: this.#providerId,
+                toolCallsCount: toolCalls.length,
+                toolCalls: JSON.stringify(toolCalls),
+            });
+        }
+
         const output: any[] = [];
 
         // Preserve reasoning blocks when present (OpenRouter-compatible shape).
@@ -151,13 +160,14 @@ export class OpenAICompatibleModel implements Model {
         if (toolCalls && toolCalls.length > 0) {
             for (const toolCall of toolCalls) {
                 if (toolCall.type === 'function') {
+                    const decodedArgs = decodeHtmlEntities(
+                        toolCall.function.arguments,
+                    );
                     output.push({
                         type: 'function_call',
                         callId: toolCall.id,
                         name: toolCall.function.name,
-                        arguments: decodeHtmlEntities(
-                            toolCall.function.arguments,
-                        ),
+                        arguments: decodedArgs,
                         status: 'completed',
                         ...(typeof reasoning === 'string' ? {reasoning} : {}),
                         ...(reasoningDetails != null
@@ -333,11 +343,13 @@ export class OpenAICompatibleModel implements Model {
         if (toolCalls && toolCalls.length > 0) {
             for (const toolCall of toolCalls) {
                 if (toolCall.type === 'function_call') {
+                    // Note: arguments already decoded in #mergeToolCalls, don't double-decode
+                    const args = toolCall.arguments;
                     output.push({
                         type: 'function_call',
                         callId: toolCall.callId,
                         name: toolCall.name,
-                        arguments: decodeHtmlEntities(toolCall.arguments),
+                        arguments: args,
                         status: 'completed',
                         ...(typeof reasoningText === 'string' &&
                         reasoningText.length > 0

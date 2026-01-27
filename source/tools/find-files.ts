@@ -21,6 +21,7 @@ const findFilesParametersSchema = z.object({
 	path: z
 		.string()
 		.nullable()
+		.default(null)
 		.describe(
 			'Directory to search in. Use "." for current directory. Defaults to current directory.',
 		),
@@ -28,6 +29,7 @@ const findFilesParametersSchema = z.object({
 		.int()
 		.positive()
 		.nullable()
+		.default(null)
 		.describe('Maximum number of results to return. Defaults to 50.'),
 });
 

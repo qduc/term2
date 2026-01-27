@@ -12,6 +12,7 @@ const askMentorSchema = z.object({
     context: z
         .string()
         .nullable()
+        .default(null)
         .describe('Additional context for the question.'),
 });
 

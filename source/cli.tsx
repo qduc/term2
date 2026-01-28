@@ -4,6 +4,7 @@ import type {ReactNode} from 'react';
 import {render} from 'ink';
 import meow from 'meow';
 import App, {SSHInfo} from './app.js';
+import {getInkRenderOptions} from './utils/ink-render-options.js';
 import {OpenAIAgentClient} from './lib/openai-agent-client.js';
 import {ConversationService} from './services/conversation-service.js';
 import {
@@ -287,6 +288,7 @@ const { waitUntilExit } = render(
             />
         </InputProvider>
     ) as ReactNode,
+    getInkRenderOptions(),
 );
 
 await waitUntilExit();

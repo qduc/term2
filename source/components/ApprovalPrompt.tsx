@@ -25,6 +25,11 @@ type SearchReplaceArgs = {
     replace_all?: boolean;
 };
 
+type CreateFileArgs = {
+    path: string;
+    content: string;
+};
+
 const operationLabels: Record<string, {label: string; color: string}> = {
     create_file: {label: 'CREATE', color: 'green'},
     update_file: {label: 'UPDATE', color: 'yellow'},
@@ -134,6 +139,23 @@ const SearchReplacePrompt: FC<{args: SearchReplaceArgs}> = ({args}) => {
     );
 };
 
+const CreateFilePrompt: FC<{args: CreateFileArgs}> = ({args}) => {
+    // Show content as a diff with all lines added
+    const diffLines = args.content.split('\n').map(line => `+${line}`).join('\n');
+
+    return (
+        <Box flexDirection="column">
+            <Box>
+                <Text color="green" bold>
+                    [CREATE]
+                </Text>
+                <Text> {args.path}</Text>
+            </Box>
+            <DiffView diff={diffLines} />
+        </Box>
+    );
+};
+
 const ApprovalPrompt: FC<
     Props & {onApprove: () => void; onReject: () => void}
 > = ({approval, onApprove, onReject}) => {
@@ -206,6 +228,13 @@ const ApprovalPrompt: FC<
         try {
             const args: SearchReplaceArgs = JSON.parse(approval.argumentsText);
             content = <SearchReplacePrompt args={args} />;
+        } catch {
+            // Fall back to raw JSON if parsing fails
+        }
+    } else if (approval.toolName === 'create_file') {
+        try {
+            const args: CreateFileArgs = JSON.parse(approval.argumentsText);
+            content = <CreateFilePrompt args={args} />;
         } catch {
             // Fall back to raw JSON if parsing fails
         }

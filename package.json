@@ -27,7 +27,7 @@
     },
     "type": "module",
     "engines": {
-        "node": ">=16"
+        "node": ">=20"
     },
     "scripts": {
         "start": "node dist/cli.js",
@@ -53,7 +53,7 @@
         "fast-glob": "^3.3.2",
         "fuse.js": "^7.0.0",
         "ignore": "^5.3.2",
-        "ink": "^6.5.1",
+        "ink": "^6.6.0",
         "ink-prompt": "^0.1.7",
         "marked": "^17.0.1",
         "meow": "^11.0.0",

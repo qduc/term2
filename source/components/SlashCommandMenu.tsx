@@ -33,13 +33,13 @@ const SlashCommandMenu: FC<Props> = ({commands, selectedIndex, filter}) => {
         <Box
             flexDirection="column"
             borderStyle="round"
-            borderColor="blue"
+            borderColor="#22d3ee"
             paddingX={1}
         >
             {filteredCommands.map((cmd, index) => (
                 <Box key={cmd.name}>
                     <Text
-                        color={index === selectedIndex ? 'blue' : undefined}
+                        color={index === selectedIndex ? '#22d3ee' : undefined}
                         bold={index === selectedIndex}
                         inverse={index === selectedIndex}
                     >

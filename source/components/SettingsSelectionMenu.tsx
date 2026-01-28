@@ -124,7 +124,7 @@ const SettingsSelectionMenu: FC<Props> = ({items, selectedIndex, query}) => {
                     <Box key={item.key} flexDirection="column">
                         {showHeader && (
                             <Box marginTop={index === 0 ? 0 : 1} marginBottom={0}>
-                                <Text color="blue" bold underline>{titleCaseCategory(category)}</Text>
+                                <Text color="#22d3ee" bold underline>{titleCaseCategory(category)}</Text>
                             </Box>
                         )}
 

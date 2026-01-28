@@ -284,7 +284,7 @@ const InlineContent = ({tokens}: {tokens: any[]}) => {
 
                     case 'link':
                         return (
-                            <Text key={key} color="blue" underline>
+                            <Text key={key} color="#3b82f6" underline>
                                 {token.text}
                             </Text>
                         );

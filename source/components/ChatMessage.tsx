@@ -10,7 +10,7 @@ const ChatMessage: FC<Props> = ({msg}) => {
     return (
         <Box flexDirection="column">
             {msg.sender === 'user' ? (
-                <Text color="blue">❯ {msg.text}</Text>
+                <Text color="#22d3ee">❯ {msg.text}</Text>
             ) : msg.sender === 'system' ? (
                 <Text color="#64748b">
                     {msg.text}

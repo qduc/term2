@@ -552,7 +552,7 @@ const InputBox: FC<Props> = ({
                 ) : isShellMode ? (
                     <Text color="green">$ </Text>
                 ) : (
-                    <Text color="blue">❯ </Text>
+                    <Text color="#22d3ee">❯ </Text>
                 )}
                 <MultilineInput
                     value={value}

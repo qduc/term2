@@ -134,8 +134,23 @@ git tag "v$NEW_VERSION"
 read -p "Do you want to publish to npm now? (y/N) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo -e "${BLUE}Publishing to npm...${NC}"
-    npm publish
+    # Check if npm session is valid
+    echo -e "${BLUE}Checking npm authentication...${NC}"
+    if ! npm whoami &>/dev/null; then
+        echo -e "${YELLOW}Not logged in to npm. Please log in:${NC}"
+        npm login
+        if ! npm whoami &>/dev/null; then
+            echo -e "${RED}npm login failed. Skipping publish.${NC}"
+        else
+            echo -e "${BLUE}Publishing to npm...${NC}"
+            npm publish
+        fi
+    else
+        NPM_USER=$(npm whoami)
+        echo -e "${GREEN}Logged in as: $NPM_USER${NC}"
+        echo -e "${BLUE}Publishing to npm...${NC}"
+        npm publish
+    fi
 fi
 
 # 7. Push

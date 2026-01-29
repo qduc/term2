@@ -439,3 +439,266 @@ test.serial('execute does not match substrings in relaxed mode', async t => {
         t.is(unchanged, originalContent);
     });
 });
+
+// ============================================================================
+// EOL Normalization Tests
+// ============================================================================
+
+test.serial(
+    'execute normalizes CRLF search content to match LF file',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'lf-file.txt';
+            const absPath = path.join(dir, filePath);
+            // File has LF line endings
+            await fs.writeFile(absPath, 'line one\nline two\nline three');
+
+            // Search content has CRLF line endings
+            const result = await tool.execute({
+                path: filePath,
+                search_content: 'line one\r\nline two',
+                replace_content: 'replaced',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.true(parsed.output[0].success);
+
+            const updated = await fs.readFile(absPath, 'utf8');
+            t.is(updated, 'replaced\nline three');
+        });
+    },
+);
+
+test.serial(
+    'execute normalizes LF search content to match CRLF file',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'crlf-file.txt';
+            const absPath = path.join(dir, filePath);
+            // File has CRLF line endings
+            await fs.writeFile(absPath, 'line one\r\nline two\r\nline three');
+
+            // Search content has LF line endings
+            const result = await tool.execute({
+                path: filePath,
+                search_content: 'line one\nline two',
+                replace_content: 'replaced',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.true(parsed.output[0].success);
+
+            const updated = await fs.readFile(absPath, 'utf8');
+            // Result should preserve the file's CRLF style
+            t.is(updated, 'replaced\r\nline three');
+        });
+    },
+);
+
+test.serial(
+    'execute preserves CRLF in replacement content when file uses CRLF',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'crlf-file.txt';
+            const absPath = path.join(dir, filePath);
+            // File has CRLF line endings
+            await fs.writeFile(absPath, 'hello\r\nworld');
+
+            const result = await tool.execute({
+                path: filePath,
+                search_content: 'hello',
+                replace_content: 'new\nline',  // LF in replacement
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.true(parsed.output[0].success);
+
+            const updated = await fs.readFile(absPath, 'utf8');
+            // Replacement should use file's CRLF style
+            t.is(updated, 'new\r\nline\r\nworld');
+        });
+    },
+);
+
+// ============================================================================
+// Leading Filepath Comment Stripping Tests
+// ============================================================================
+
+test.serial(
+    'execute strips leading filepath comment from search content',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'sample.ts';
+            const absPath = path.join(dir, filePath);
+            await fs.writeFile(absPath, 'const x = 1;\nconst y = 2;');
+
+            // Search content has a leading filepath comment (common model behavior)
+            const result = await tool.execute({
+                path: filePath,
+                search_content: '// sample.ts\nconst x = 1;',
+                replace_content: 'const x = 42;',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.true(parsed.output[0].success);
+
+            const updated = await fs.readFile(absPath, 'utf8');
+            t.is(updated, 'const x = 42;\nconst y = 2;');
+        });
+    },
+);
+
+test.serial(
+    'execute strips leading hash filepath comment from search content',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'script.py';
+            const absPath = path.join(dir, filePath);
+            await fs.writeFile(absPath, 'x = 1\ny = 2');
+
+            const result = await tool.execute({
+                path: filePath,
+                search_content: '# script.py\nx = 1',
+                replace_content: 'x = 42',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.true(parsed.output[0].success);
+
+            const updated = await fs.readFile(absPath, 'utf8');
+            t.is(updated, 'x = 42\ny = 2');
+        });
+    },
+);
+
+test.serial(
+    'execute does not strip non-filepath leading comments',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'code.ts';
+            const absPath = path.join(dir, filePath);
+            await fs.writeFile(absPath, '// TODO: fix this\nconst x = 1;');
+
+            // This comment is not a filepath, so it should NOT be stripped
+            const result = await tool.execute({
+                path: filePath,
+                search_content: '// TODO: fix this\nconst x = 1;',
+                replace_content: 'const x = 42;',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.true(parsed.output[0].success);
+
+            const updated = await fs.readFile(absPath, 'utf8');
+            t.is(updated, 'const x = 42;');
+        });
+    },
+);
+
+// ============================================================================
+// Summarization Marker Detection Tests
+// ============================================================================
+
+test.serial(
+    'execute rejects search content with "Lines X-Y omitted" marker',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'content.txt';
+            const absPath = path.join(dir, filePath);
+            await fs.writeFile(absPath, 'line 1\nline 2\nline 3');
+
+            const result = await tool.execute({
+                path: filePath,
+                search_content: 'line 1\nLines 2-50 omitted\nline 3',
+                replace_content: 'replaced',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.false(parsed.output[0].success);
+            t.true(parsed.output[0].error.includes('omitted'));
+        });
+    },
+);
+
+test.serial(
+    'execute rejects search content with ellipsis marker {…}',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'content.txt';
+            const absPath = path.join(dir, filePath);
+            await fs.writeFile(absPath, 'function foo() { /* code */ }');
+
+            const result = await tool.execute({
+                path: filePath,
+                search_content: 'function foo() {…}',
+                replace_content: 'replaced',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.false(parsed.output[0].success);
+            t.true(parsed.output[0].error.includes('ellipsis'));
+        });
+    },
+);
+
+test.serial(
+    'execute rejects search content with /*...*/ marker',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'content.txt';
+            const absPath = path.join(dir, filePath);
+            await fs.writeFile(absPath, 'function foo() { return 1; }');
+
+            const result = await tool.execute({
+                path: filePath,
+                search_content: 'function foo() { /*...*/ }',
+                replace_content: 'replaced',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.false(parsed.output[0].success);
+            t.true(parsed.output[0].error.includes('/*...*/'));
+        });
+    },
+);
+
+test.serial(
+    'execute rejects search content with // ... marker',
+    async t => {
+        await withTempDir(async dir => {
+            const tool = createTool();
+            const filePath = 'content.txt';
+            const absPath = path.join(dir, filePath);
+            await fs.writeFile(absPath, 'const a = 1;\nconst b = 2;\nconst c = 3;');
+
+            const result = await tool.execute({
+                path: filePath,
+                search_content: 'const a = 1;\n// ...\nconst c = 3;',
+                replace_content: 'replaced',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.false(parsed.output[0].success);
+            t.true(parsed.output[0].error.includes('// ...'));
+        });
+    },
+);

@@ -15,6 +15,76 @@ import {
 } from './format-helpers.js';
 import { ExecutionContext } from '../services/execution-context.js';
 
+/**
+ * Detect the predominant EOL style in file content.
+ * Returns '\r\n' if CRLF is dominant, otherwise '\n'.
+ */
+function detectEOL(content: string): string {
+    const crlfCount = (content.match(/\r\n/g) || []).length;
+    const lfCount = (content.match(/(?<!\r)\n/g) || []).length;
+    return crlfCount > lfCount ? '\r\n' : '\n';
+}
+
+/**
+ * Normalize line endings in search/replace content to match the target file's EOL style.
+ */
+function normalizeToEOL(content: string, eol: string): string {
+    // First normalize to LF, then convert to target EOL
+    return content.replace(/\r\n/g, '\n').replace(/\n/g, eol);
+}
+
+/**
+ * Remove leading filepath comments that models often add to code blocks.
+ * E.g., "// src/file.ts" or "# path/to/file.py" at the start.
+ */
+function removeLeadingFilepathComment(content: string, filePath: string): string {
+    const lines = content.split(/\r?\n/);
+    if (lines.length === 0) return content;
+
+    const firstLine = lines[0].trim();
+    const basename = path.basename(filePath);
+
+    // Check for common comment patterns with filepath
+    const patterns = [
+        /^\/\/\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*$/,  // // path/to/file.ext
+        /^#\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*$/,     // # path/to/file.ext
+        /^\/\*\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*\*\/\s*$/,  // /* path/to/file.ext */
+        /^<!--\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*-->\s*$/,   // <!-- path/to/file.ext -->
+    ];
+
+    // Check if first line matches a filepath comment pattern and contains the basename
+    const isFilepathComment = patterns.some(p => p.test(firstLine)) &&
+                              firstLine.includes(basename);
+
+    if (isFilepathComment) {
+        return lines.slice(1).join('\n');
+    }
+
+    return content;
+}
+
+/**
+ * Detect summarization markers in content that indicate truncated/omitted code.
+ */
+function detectSummarizationMarkers(content: string): string | null {
+    if (/Lines \d+-\d+ omitted/i.test(content)) {
+        return 'oldString contains "Lines X-Y omitted" marker - provide the actual content';
+    }
+    if (content.includes('{…}') || content.includes('{...}')) {
+        return 'oldString contains ellipsis marker {…} - provide the actual content';
+    }
+    if (content.includes('/*...*/') || content.includes('/* ... */')) {
+        return 'oldString contains /*...*/ marker - provide the actual content';
+    }
+    if (content.includes('// ...') || content.includes('//...')) {
+        return 'oldString contains // ... marker - provide the actual content';
+    }
+    if (content.includes('# ...') || content.includes('#...')) {
+        return 'oldString contains # ... marker - provide the actual content';
+    }
+    return null;
+}
+
 const searchReplaceParametersSchema = z.object({
     path: z.string().describe('The absolute or relative path to the file'),
     search_content: z.string().describe('The exact content to search for'),
@@ -69,6 +139,27 @@ type MatchInfo =
     | RelaxedMatchInfo
     | NormalizedMatchInfo
     | NoMatchInfo;
+
+/**
+ * Cache for edit preparation to avoid redundant work.
+ */
+interface EditCache {
+    key: string;
+    matchInfo: MatchInfo;
+    content: string;
+    eol: string;
+}
+
+let lastEditCache: EditCache | null = null;
+
+function getEditCacheKey(params: SearchReplaceToolParams): string {
+    return JSON.stringify({
+        path: params.path,
+        search_content: params.search_content,
+        replace_content: params.replace_content,
+        replace_all: params.replace_all,
+    });
+}
 
 /**
  * Parse file content into lines with position information
@@ -379,8 +470,37 @@ export function createSearchReplaceToolDefinition(deps: {
                     return true;
                 }
 
-                // Find matches using shared logic
-                const matchInfo = findMatchesInContent(content, search_content);
+                // Check for summarization markers
+                const markerError = detectSummarizationMarkers(search_content);
+                if (markerError) {
+                    loggingService.warn(
+                        'search_replace validation: summarization marker detected',
+                        {
+                            path: filePath,
+                            error: markerError,
+                        },
+                    );
+                    // Auto-approve - execute will handle the error gracefully
+                    return false;
+                }
+
+                // Detect EOL and normalize search content
+                const eol = detectEOL(content);
+                const normalizedSearchContent = normalizeToEOL(
+                    removeLeadingFilepathComment(search_content, filePath),
+                    eol,
+                );
+
+                // Find matches using shared logic with normalized content
+                const matchInfo = findMatchesInContent(content, normalizedSearchContent);
+
+                // Cache the result for execute phase
+                lastEditCache = {
+                    key: getEditCacheKey(params),
+                    matchInfo,
+                    content,
+                    eol,
+                };
 
                 if (matchInfo.type === 'exact') {
                     if (!replace_all && matchInfo.count > 1) {
@@ -545,23 +665,62 @@ export function createSearchReplaceToolDefinition(deps: {
                     });
                 }
 
-                // Find matches using shared logic
-                const matchInfo = findMatchesInContent(content, search_content);
+                // Check for summarization markers
+                const markerError = detectSummarizationMarkers(search_content);
+                if (markerError) {
+                    return JSON.stringify({
+                        output: [
+                            {
+                                success: false,
+                                error: markerError,
+                            },
+                        ],
+                    });
+                }
+
+                // Check cache first
+                const cacheKey = getEditCacheKey(params);
+                let matchInfo: MatchInfo;
+                let eol: string;
+                let normalizedSearchContent: string;
+                let normalizedReplaceContent: string;
+
+                if (lastEditCache && lastEditCache.key === cacheKey && lastEditCache.content === content) {
+                    // Use cached results
+                    matchInfo = lastEditCache.matchInfo;
+                    eol = lastEditCache.eol;
+                    normalizedSearchContent = normalizeToEOL(
+                        removeLeadingFilepathComment(search_content, filePath),
+                        eol,
+                    );
+                    normalizedReplaceContent = normalizeToEOL(replace_content, eol);
+                } else {
+                    // Detect EOL and normalize content
+                    eol = detectEOL(content);
+                    normalizedSearchContent = normalizeToEOL(
+                        removeLeadingFilepathComment(search_content, filePath),
+                        eol,
+                    );
+                    normalizedReplaceContent = normalizeToEOL(replace_content, eol);
+
+                    // Find matches using shared logic
+                    matchInfo = findMatchesInContent(content, normalizedSearchContent);
+                }
 
                 if (matchInfo.type === 'exact') {
                     let newContent: string;
                     if (replace_all) {
                         newContent = content.replaceAll(
-                            search_content,
-                            replace_content,
+                            normalizedSearchContent,
+                            normalizedReplaceContent,
                         );
                     } else {
-                        const firstIndex = content.indexOf(search_content);
+                        const firstIndex = content.indexOf(normalizedSearchContent);
                         newContent =
                             content.substring(0, firstIndex) +
-                            replace_content +
+                            normalizedReplaceContent +
                             content.substring(
-                                firstIndex + search_content.length,
+                                firstIndex + normalizedSearchContent.length,
                             );
                     }
                     await writeFileFn(targetPath, newContent);
@@ -613,14 +772,14 @@ export function createSearchReplaceToolDefinition(deps: {
                         for (const m of matchInfo.matches) {
                             newContent =
                                 newContent.substring(0, m.startIndex) +
-                                replace_content +
+                                normalizedReplaceContent +
                                 newContent.substring(m.endIndex);
                         }
                     } else {
                         const m = matchInfo.matches[0];
                         newContent =
                             content.substring(0, m.startIndex) +
-                            replace_content +
+                            normalizedReplaceContent +
                             content.substring(m.endIndex);
                     }
                     await writeFileFn(targetPath, newContent);
@@ -671,14 +830,14 @@ export function createSearchReplaceToolDefinition(deps: {
                         for (const m of matchInfo.matches) {
                             newContent =
                                 newContent.substring(0, m.startIndex) +
-                                replace_content +
+                                normalizedReplaceContent +
                                 newContent.substring(m.endIndex);
                         }
                     } else {
                         const m = matchInfo.matches[0];
                         newContent =
                             content.substring(0, m.startIndex) +
-                            replace_content +
+                            normalizedReplaceContent +
                             content.substring(m.endIndex);
                     }
                     await writeFileFn(targetPath, newContent);

@@ -98,6 +98,8 @@ const AppSettingsSchema = z.object({
 
 const ToolsSettingsSchema = z.object({
     logFileOperations: z.boolean().optional().default(true),
+    enableEditHealing: z.boolean().optional().default(true),
+    editHealingModel: z.string().optional().default('gpt-4o-mini'),
 });
 
 const DebugSettingsSchema = z.object({
@@ -229,6 +231,8 @@ export interface SettingsWithSources {
     };
     tools: {
         logFileOperations: SettingWithSource<boolean>;
+        enableEditHealing: SettingWithSource<boolean>;
+        editHealingModel: SettingWithSource<string>;
     };
     debug: {
         debugBashTool: SettingWithSource<boolean>;
@@ -279,6 +283,8 @@ export const SETTING_KEYS = {
     APP_EDIT_MODE: 'app.editMode',
     APP_LITE_MODE: 'app.liteMode',
     TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
+    TOOLS_ENABLE_EDIT_HEALING: 'tools.enableEditHealing',
+    TOOLS_EDIT_HEALING_MODEL: 'tools.editHealingModel',
     DEBUG_BASH_TOOL: 'debug.debugBashTool',
     SSH_ENABLED: 'ssh.enabled',
     SSH_HOST: 'ssh.host',
@@ -360,6 +366,8 @@ const DEFAULT_SETTINGS: SettingsData = {
     },
     tools: {
         logFileOperations: true,
+        enableEditHealing: true,
+        editHealingModel: 'gpt-4o-mini',
     },
     debug: {
         debugBashTool: false,
@@ -925,6 +933,14 @@ export class SettingsService {
                 logFileOperations: {
                     value: this.settings.tools.logFileOperations,
                     source: this.getSource('tools.logFileOperations'),
+                },
+                enableEditHealing: {
+                    value: this.settings.tools.enableEditHealing,
+                    source: this.getSource('tools.enableEditHealing'),
+                },
+                editHealingModel: {
+                    value: this.settings.tools.editHealingModel,
+                    source: this.getSource('tools.editHealingModel'),
                 },
             },
             debug: {

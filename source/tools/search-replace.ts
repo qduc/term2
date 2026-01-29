@@ -13,6 +13,7 @@ import {
     normalizeToolArguments,
     createBaseMessage,
 } from './format-helpers.js';
+import {healSearchReplaceParams} from './edit-healing.js';
 import { ExecutionContext } from '../services/execution-context.js';
 
 /**
@@ -375,8 +376,12 @@ export const formatSearchReplaceCommandMessage = (
         const replaceContent = args?.replace_content ?? '';
 
         const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
-        const output =
+        const isHealed = replaceResult?.healed === true;
+        let output =
             replaceResult?.message ?? replaceResult?.error ?? 'No output';
+        if (isHealed && !String(output).includes('healed')) {
+            output = `${output} (healed)`;
+        }
         const success = replaceResult?.success ?? false;
 
         messages.push(
@@ -401,8 +406,14 @@ export function createSearchReplaceToolDefinition(deps: {
     loggingService: ILoggingService;
     settingsService: ISettingsService;
     executionContext?: ExecutionContext;
+    editHealing?: typeof healSearchReplaceParams;
 }): ToolDefinition<SearchReplaceToolParams> {
-    const { loggingService, settingsService, executionContext } = deps;
+    const {
+        loggingService,
+        settingsService,
+        executionContext,
+        editHealing = healSearchReplaceParams,
+    } = deps;
 
     return {
         name: 'search_replace',
@@ -684,6 +695,11 @@ export function createSearchReplaceToolDefinition(deps: {
                 let eol: string;
                 let normalizedSearchContent: string;
                 let normalizedReplaceContent: string;
+                let usedHealing = false;
+                let healingAttempted = false;
+                let healingSucceeded = false;
+                let healedSearchLength = 0;
+                let matchTypeAfterHealing: MatchInfo['type'] = 'none';
 
                 if (lastEditCache && lastEditCache.key === cacheKey && lastEditCache.content === content) {
                     // Use cached results
@@ -705,6 +721,78 @@ export function createSearchReplaceToolDefinition(deps: {
 
                     // Find matches using shared logic
                     matchInfo = findMatchesInContent(content, normalizedSearchContent);
+                }
+
+                if (matchInfo.type === 'none') {
+                    const enableEditHealing =
+                        settingsService.get<boolean>('tools.enableEditHealing') ??
+                        true;
+                    if (enableEditHealing) {
+                        healingAttempted = true;
+                        const healingModel =
+                            settingsService.get<string>(
+                                'tools.editHealingModel',
+                            ) ?? 'gpt-4o-mini';
+                        const healingResult = await editHealing(
+                            params,
+                            content,
+                            healingModel,
+                            process.env.OPENAI_API_KEY ?? '',
+                            {
+                                settingsService,
+                                loggingService,
+                            },
+                        );
+
+                        healedSearchLength =
+                            healingResult.params.search_content.length;
+
+                        if (healingResult.wasModified) {
+                            normalizedSearchContent = normalizeToEOL(
+                                removeLeadingFilepathComment(
+                                    healingResult.params.search_content,
+                                    filePath,
+                                ),
+                                eol,
+                            );
+                            matchInfo = findMatchesInContent(
+                                content,
+                                normalizedSearchContent,
+                            );
+                            matchTypeAfterHealing = matchInfo.type;
+                            if (matchInfo.type !== 'none') {
+                                usedHealing = true;
+                                healingSucceeded = true;
+                            }
+                        }
+
+                        if (enableFileLogging) {
+                            loggingService.info(
+                                'search_replace healing attempt',
+                                {
+                                    path: filePath,
+                                    healing_attempted: healingAttempted,
+                                    healing_succeeded: healingSucceeded,
+                                    original_search_length:
+                                        search_content.length,
+                                    healed_search_length: healedSearchLength,
+                                    match_type_after_healing:
+                                        matchTypeAfterHealing,
+                                },
+                            );
+                        }
+
+                        if (!usedHealing) {
+                            return JSON.stringify({
+                                output: [
+                                    {
+                                        success: false,
+                                        error: 'Search content not found. Auto-healing attempted but no match found. Try splitting changes into smaller patterns.',
+                                    },
+                                ],
+                            });
+                        }
+                    }
                 }
 
                 if (matchInfo.type === 'exact') {
@@ -730,22 +818,23 @@ export function createSearchReplaceToolDefinition(deps: {
                             path: filePath,
                             replace_all,
                             count: replace_all ? matchInfo.count : 1,
+                            healed: usedHealing,
                         });
                     }
 
+                    const successMessage = usedHealing
+                        ? `Updated ${filePath} (healed match - original search had minor differences)`
+                        : `Updated ${filePath} (${replace_all ? matchInfo.count : 1} exact match${
+                              replace_all && matchInfo.count > 1 ? 'es' : ''
+                          })`;
                     return JSON.stringify({
                         output: [
                             {
                                 success: true,
                                 operation: 'search_replace',
                                 path: filePath,
-                                message: `Updated ${filePath} (${
-                                    replace_all ? matchInfo.count : 1
-                                } exact match${
-                                    replace_all && matchInfo.count > 1
-                                        ? 'es'
-                                        : ''
-                                })`,
+                                message: successMessage,
+                                healed: usedHealing,
                             },
                         ],
                     });
@@ -789,22 +878,23 @@ export function createSearchReplaceToolDefinition(deps: {
                             path: filePath,
                             replace_all,
                             count: replace_all ? matchInfo.count : 1,
+                            healed: usedHealing,
                         });
                     }
 
+                    const successMessage = usedHealing
+                        ? `Updated ${filePath} (healed match - original search had minor differences)`
+                        : `Updated ${filePath} (${replace_all ? matchInfo.count : 1} relaxed match${
+                              replace_all && matchInfo.count > 1 ? 'es' : ''
+                          })`;
                     return JSON.stringify({
                         output: [
                             {
                                 success: true,
                                 operation: 'search_replace',
                                 path: filePath,
-                                message: `Updated ${filePath} (${
-                                    replace_all ? matchInfo.count : 1
-                                } relaxed match${
-                                    replace_all && matchInfo.count > 1
-                                        ? 'es'
-                                        : ''
-                                })`,
+                                message: successMessage,
+                                healed: usedHealing,
                             },
                         ],
                     });
@@ -849,23 +939,24 @@ export function createSearchReplaceToolDefinition(deps: {
                                 path: filePath,
                                 replace_all,
                                 count: replace_all ? matchInfo.count : 1,
+                                healed: usedHealing,
                             },
                         );
                     }
 
+                    const successMessage = usedHealing
+                        ? `Updated ${filePath} (healed match - original search had minor differences)`
+                        : `Updated ${filePath} (${replace_all ? matchInfo.count : 1} normalized match${
+                              replace_all && matchInfo.count > 1 ? 'es' : ''
+                          })`;
                     return JSON.stringify({
                         output: [
                             {
                                 success: true,
                                 operation: 'search_replace',
                                 path: filePath,
-                                message: `Updated ${filePath} (${
-                                    replace_all ? matchInfo.count : 1
-                                } normalized match${
-                                    replace_all && matchInfo.count > 1
-                                        ? 'es'
-                                        : ''
-                                })`,
+                                message: successMessage,
+                                healed: usedHealing,
                             },
                         ],
                     });

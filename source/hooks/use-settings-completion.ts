@@ -42,6 +42,10 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
         'Logging level (debug, info, warn, error)',
     [SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE]:
         'Suppress console output (true|false) to avoid interfering with Ink UI',
+    [SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING]:
+        'Use AI to automatically correct failed search_replace operations',
+    [SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL]:
+        'Model to use for edit healing (fast/cheap)',
 };
 
 /**

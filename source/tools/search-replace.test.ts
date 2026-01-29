@@ -35,10 +35,14 @@ const mockLoggingService: ILoggingService = {
     clearCorrelationId: () => {},
 };
 
-function createTool(settingsService = createMockSettingsService()) {
+function createTool(
+    settingsService = createMockSettingsService(),
+    editHealing?: typeof import('./edit-healing.js').healSearchReplaceParams,
+) {
     return createSearchReplaceToolDefinition({
         loggingService: mockLoggingService,
         settingsService,
+        ...(editHealing ? {editHealing} : {}),
     });
 }
 
@@ -266,7 +270,9 @@ test.serial(
     'execute reports failure when search string is not found',
     async t => {
         await withTempDir(async dir => {
-            const tool = createTool();
+            const tool = createTool(
+                createMockSettingsService({'tools.enableEditHealing': false}),
+            );
             const filePath = 'content.txt';
             const absPath = path.join(dir, filePath);
             const originalContent = 'hello world';
@@ -284,6 +290,43 @@ test.serial(
 
             const unchanged = await fs.readFile(absPath, 'utf8');
             t.is(unchanged, originalContent);
+        });
+    },
+);
+
+test.serial(
+    'execute heals search content when no match is found',
+    async t => {
+        await withTempDir(async dir => {
+            const filePath = 'content.txt';
+            const absPath = path.join(dir, filePath);
+            await fs.writeFile(absPath, 'const foo = 1;\n');
+
+            const tool = createTool(
+                createMockSettingsService({'tools.enableEditHealing': true}),
+                async params => ({
+                    params: {
+                        ...params,
+                        search_content: 'const foo = 1;\n',
+                    },
+                    wasModified: true,
+                    confidence: 0.9,
+                }),
+            );
+
+            const result = await tool.execute({
+                path: filePath,
+                search_content: 'const foo = 2;\n',
+                replace_content: 'const foo = 3;\n',
+                replace_all: false,
+            });
+
+            const parsed = JSON.parse(result);
+            t.true(parsed.output[0].success);
+            t.true(parsed.output[0].message.includes('healed match'));
+
+            const updated = await fs.readFile(absPath, 'utf8');
+            t.is(updated, 'const foo = 3;\n');
         });
     },
 );

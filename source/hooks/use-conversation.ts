@@ -1,10 +1,15 @@
 import {useCallback, useRef, useState} from 'react';
 import type {ConversationService} from '../services/conversation-service.js';
 import {isAbortLikeError} from '../utils/error-helpers.js';
-import type {ConversationEvent} from '../services/conversation-events.js';
 import type {ILoggingService} from '../services/service-interfaces.js';
 import {createStreamingUpdateCoordinator} from '../utils/streaming-updater.js';
 import {appendMessagesCapped} from '../utils/message-buffer.js';
+import {
+    createStreamingState,
+    enhanceApiKeyError,
+    isMaxTurnsError,
+} from '../utils/conversation-utils.js';
+import {createConversationEventHandler} from '../utils/conversation-event-handler.js';
 
 interface UserMessage {
     id: number;
@@ -328,18 +333,15 @@ export const useConversation = ({
             const liveResponseUpdater =
                 createLiveResponseUpdater(liveMessageId);
 
-            // Track accumulated text so we can flush it before command messages
-            let accumulatedText = '';
-            let accumulatedReasoningText = '';
-            let flushedReasoningLength = 0; // Track how much reasoning has been flushed
-            let textWasFlushed = false;
-            let currentReasoningMessageId: number | null = null; // Track current reasoning message ID
+            // Create streaming state object for this message send
+            const streamingState = createStreamingState();
+
             const reasoningUpdater = createStreamingUpdateCoordinator(
                 (newReasoningText: string) => {
                     setMessages(prev => {
-                        if (currentReasoningMessageId !== null) {
+                        if (streamingState.currentReasoningMessageId !== null) {
                             const index = prev.findIndex(
-                                msg => msg.id === currentReasoningMessageId,
+                                msg => msg.id === streamingState.currentReasoningMessageId,
                             );
                             if (index === -1) return prev;
                             const current = prev[index];
@@ -352,7 +354,7 @@ export const useConversation = ({
                         }
 
                         const newId = Date.now();
-                        currentReasoningMessageId = newId;
+                        streamingState.currentReasoningMessageId = newId;
                         return trimMessages([
                             ...prev,
                             {
@@ -366,194 +368,19 @@ export const useConversation = ({
                 REASONING_RESPONSE_THROTTLE_MS,
             );
 
-            // Create event logger with deduplication for this message send
-            // const {logDeduplicated, flush: flushLog} = createEventLogger();
-
-            const applyConversationEvent = (event: ConversationEvent) => {
-                switch (event.type) {
-                    case 'text_delta': {
-                        // logDeduplicated('text_delta');
-                        accumulatedText += event.delta;
-                        liveResponseUpdater.push(accumulatedText);
-                        return;
-                    }
-                    case 'reasoning_delta': {
-                        // logDeduplicated('reasoning_delta');
-                        const fullReasoningText = event.fullText ?? '';
-                        // Only show reasoning text after what was already flushed
-                        const newReasoningText = fullReasoningText.slice(
-                            flushedReasoningLength,
-                        );
-                        accumulatedReasoningText = newReasoningText;
-
-                        if (!newReasoningText.trim()) return;
-                        reasoningUpdater.push(newReasoningText);
-                        return;
-                    }
-                    case 'tool_started': {
-                        // Flush reasoning state
-                        if (accumulatedReasoningText.trim()) {
-                            reasoningUpdater.flush();
-                            flushedReasoningLength += accumulatedReasoningText.length;
-                            accumulatedReasoningText = '';
-                            currentReasoningMessageId = null;
-                        }
-
-                        // Flush any accumulated text before showing the tool call
-                        if (accumulatedText.trim()) {
-                            const textMessage: BotMessage = {
-                                id: Date.now() + 1,
-                                sender: 'bot',
-                                text: accumulatedText,
-                            };
-                            appendMessages([textMessage]);
-                            accumulatedText = '';
-                            textWasFlushed = true;
-                            liveResponseUpdater.cancel();
-                            setLiveResponse(null);
-                        }
-
-                        // Emit a "pending" command message when tool starts running
-                        // This provides immediate UI feedback before output is available
-                        const {toolCallId, toolName, arguments: rawArgs} = event as any;
-
-                        // tool_started.arguments may be either an object or a JSON string
-                        // depending on provider. Normalize so we can render params.
-                        const args = (() => {
-                            if (typeof rawArgs !== 'string') {
-                                return rawArgs;
-                            }
-                            const trimmed = rawArgs.trim();
-                            if (!trimmed) {
-                                return rawArgs;
-                            }
-                            try {
-                                return JSON.parse(trimmed);
-                            } catch {
-                                return rawArgs;
-                            }
-                        })();
-
-                        // Create a command string from the tool info
-                        const command = (() => {
-                            if (toolName === 'shell') {
-                                const cmd = args?.command ?? args?.commands;
-                                if (typeof cmd === 'string' && cmd.trim()) {
-                                    return cmd;
-                                }
-                                if (Array.isArray(cmd) && cmd.length > 0) {
-                                    return cmd.join('\n');
-                                }
-                            }
-                            if (toolName === 'grep' && args?.pattern) {
-                                return `grep "${args.pattern}" ${args.path ?? '.'}`;
-                            }
-                            if (toolName === 'search_replace') {
-                                return `search_replace "${args.search_content ?? ''}" → "${args.replace_content ?? ''}" ${args.path ?? ''}`;
-                            }
-                            if (toolName === 'apply_patch') {
-                                return `apply_patch ${args?.type ?? 'unknown'} ${args?.path ?? ''}`;
-                            }
-                            if (toolName === 'ask_mentor') {
-                                return `ask_mentor: ${args?.question ?? ''}`;
-                            }
-                            return `${toolName ?? 'unknown_tool'}`;
-                        })();
-
-                        const pendingMessage: CommandMessage = {
-                            id: toolCallId ?? String(Date.now()),
-                            sender: 'command',
-                            status: 'running',
-                            command,
-                            output: '',
-                            callId: toolCallId,
-                            toolName,
-                            toolArgs: args,
-                        };
-
-                        appendMessages([pendingMessage as any]);
-                        return;
-                    }
-                    case 'command_message': {
-                        // logDeduplicated('command_message');
-                        const cmdMsg = event.message as any;
-                        const annotated = annotateCommandMessage(
-                            cmdMsg as CommandMessage,
-                        );
-
-                        // Before adding command message, flush reasoning and text separately
-                        // This preserves the order: reasoning -> command -> response text
-                        const messagesToAdd: Message[] = [];
-
-                        if (accumulatedReasoningText.trim()) {
-                            reasoningUpdater.flush();
-                            // Reasoning is already in messages via stream updates.
-                            // We just need to track what we've "flushed" (sealed) so next reasoning chunks start fresh.
-                            flushedReasoningLength +=
-                                accumulatedReasoningText.length;
-                            accumulatedReasoningText = '';
-                            currentReasoningMessageId = null; // Reset for potential post-command reasoning
-                        }
-
-                        if (accumulatedText.trim()) {
-                            const textMessage: BotMessage = {
-                                id: Date.now() + 1,
-                                sender: 'bot',
-                                text: accumulatedText,
-                            };
-                            messagesToAdd.push(textMessage);
-                            accumulatedText = '';
-                            textWasFlushed = true;
-                        }
-
-                        if (messagesToAdd.length > 0) {
-                            appendMessages(messagesToAdd);
-                            // Clear live response since we've committed the text
-                            liveResponseUpdater.cancel();
-                            setLiveResponse(null);
-                        }
-
-                        // Replace pending message with completed one, or add new if not found
-                        setMessages(prev => {
-                            // Try to find the pending message by callId
-                            const pendingIndex = annotated.callId
-                                ? prev.findIndex(
-                                      msg =>
-                                          msg.sender === 'command' &&
-                                          msg.callId === annotated.callId &&
-                                          msg.status === 'running',
-                                  )
-                                : -1;
-
-                            if (pendingIndex !== -1) {
-                                // Replace the pending message with the completed one
-                                const next = [...prev];
-                                next[pendingIndex] = annotated;
-                                return trimMessages(next);
-                            }
-
-                            // If no pending message found, append the completed one
-                            return trimMessages([...prev, annotated]);
-                        });
-                        return;
-                    }
-                    case 'retry': {
-                        const systemMessage: SystemMessage = {
-                            id: Date.now(),
-                            sender: 'system',
-                            text: `Tool hallucination detected (${
-                                (event as any).toolName
-                            }). Retrying... (Attempt ${
-                                (event as any).attempt
-                            }/${(event as any).maxRetries})`,
-                        };
-                        setMessages(prev => [...prev, systemMessage]);
-                        return;
-                    }
-                    default:
-                        return;
-                }
-            };
+            // Create event handler using extracted factory
+            const applyConversationEvent = createConversationEventHandler(
+                {
+                    liveResponseUpdater,
+                    reasoningUpdater,
+                    appendMessages,
+                    setMessages,
+                    setLiveResponse,
+                    trimMessages,
+                    annotateCommandMessage,
+                },
+                streamingState,
+            );
 
             try {
                 const result = await conversationService.sendMessage(value, {
@@ -562,9 +389,9 @@ export const useConversation = ({
 
                 applyServiceResult(
                     result,
-                    accumulatedText,
-                    accumulatedReasoningText,
-                    textWasFlushed,
+                    streamingState.accumulatedText,
+                    streamingState.accumulatedReasoningText,
+                    streamingState.textWasFlushed,
                 );
             } catch (error) {
                 loggingService.error('Error in sendUserMessage', {
@@ -582,26 +409,11 @@ export const useConversation = ({
                     return;
                 }
 
-                let errorMessage =
+                const rawErrorMessage =
                     error instanceof Error ? error.message : String(error);
+                const errorMessage = enhanceApiKeyError(rawErrorMessage);
 
-                // Enhance error messages for common issues
-                if (
-                    errorMessage.includes('OPENAI_API_KEY') ||
-                    (errorMessage.includes('401') &&
-                        errorMessage.toLowerCase().includes('unauthorized'))
-                ) {
-                    errorMessage =
-                        'OpenAI API key is not configured or invalid. Please set the OPENAI_API_KEY environment variable. ' +
-                        'Get your API key from: https://platform.openai.com/api-keys';
-                }
-
-                // Check if this is a max turns exceeded error
-                const isMaxTurnsError =
-                    errorMessage.includes('Max turns') &&
-                    errorMessage.includes('exceeded');
-
-                if (isMaxTurnsError) {
+                if (isMaxTurnsError(errorMessage)) {
                     // Create an approval prompt for max turns continuation
                     setPendingApproval({
                         agentName: 'System',
@@ -680,18 +492,15 @@ export const useConversation = ({
                 const liveResponseUpdater =
                     createLiveResponseUpdater(liveMessageId);
 
-                // Track accumulated text so we can flush it before command messages
-                let accumulatedText = '';
-                let accumulatedReasoningText = '';
-                let flushedReasoningLength = 0;
-                let textWasFlushed = false;
-                let currentReasoningMessageId: number | null = null;
+                // Create streaming state object for max turns continuation
+                const streamingState = createStreamingState();
+
                 const reasoningUpdater = createStreamingUpdateCoordinator(
                     (newReasoningText: string) => {
                         setMessages(prev => {
-                            if (currentReasoningMessageId !== null) {
+                            if (streamingState.currentReasoningMessageId !== null) {
                                 const index = prev.findIndex(
-                                    msg => msg.id === currentReasoningMessageId,
+                                    msg => msg.id === streamingState.currentReasoningMessageId,
                                 );
                                 if (index === -1) return prev;
                                 const current = prev[index];
@@ -707,7 +516,7 @@ export const useConversation = ({
                             }
 
                             const newId = Date.now();
-                            currentReasoningMessageId = newId;
+                            streamingState.currentReasoningMessageId = newId;
                             return trimMessages([
                                 ...prev,
                                 {
@@ -721,179 +530,19 @@ export const useConversation = ({
                     REASONING_RESPONSE_THROTTLE_MS,
                 );
 
-                // const {logDeduplicated, flush: flushLog} = createEventLogger();
-
-                const applyConversationEvent = (event: ConversationEvent) => {
-                    switch (event.type) {
-                        case 'text_delta': {
-                            // logDeduplicated('text_delta');
-                            accumulatedText += event.delta;
-                            liveResponseUpdater.push(accumulatedText);
-                            return;
-                        }
-                        case 'reasoning_delta': {
-                            // logDeduplicated('reasoning_delta');
-                            const fullReasoningText = event.fullText ?? '';
-                            const newReasoningText = fullReasoningText.slice(
-                                flushedReasoningLength,
-                            );
-                            accumulatedReasoningText = newReasoningText;
-
-                            if (!newReasoningText.trim()) return;
-                            reasoningUpdater.push(newReasoningText);
-                            return;
-                        }
-                        case 'tool_started': {
-                            // Flush reasoning state
-                            if (accumulatedReasoningText.trim()) {
-                                reasoningUpdater.flush();
-                                flushedReasoningLength += accumulatedReasoningText.length;
-                                accumulatedReasoningText = '';
-                                currentReasoningMessageId = null;
-                            }
-
-                            // Flush any accumulated text before showing the tool call
-                            if (accumulatedText.trim()) {
-                                const textMessage: BotMessage = {
-                                    id: Date.now() + 1,
-                                    sender: 'bot',
-                                    text: accumulatedText,
-                                };
-                                appendMessages([textMessage]);
-                                accumulatedText = '';
-                                textWasFlushed = true;
-                                liveResponseUpdater.cancel();
-                                setLiveResponse(null);
-                            }
-
-                            const {toolCallId, toolName, arguments: rawArgs} = event as any;
-
-                            const args = (() => {
-                                if (typeof rawArgs !== 'string') {
-                                    return rawArgs;
-                                }
-                                const trimmed = rawArgs.trim();
-                                if (!trimmed) {
-                                    return rawArgs;
-                                }
-                                try {
-                                    return JSON.parse(trimmed);
-                                } catch {
-                                    return rawArgs;
-                                }
-                            })();
-
-                            const command = (() => {
-                                if (toolName === 'shell') {
-                                    const cmd = args?.command ?? args?.commands;
-                                    if (typeof cmd === 'string' && cmd.trim()) {
-                                        return cmd;
-                                    }
-                                    if (Array.isArray(cmd) && cmd.length > 0) {
-                                        return cmd.join('\n');
-                                    }
-                                }
-                                if (toolName === 'grep' && args?.pattern) {
-                                    return `grep "${args.pattern}" ${args.path ?? '.'}`;
-                                }
-                                if (toolName === 'search_replace') {
-                                    return `search_replace "${args.search_content ?? ''}" → "${args.replace_content ?? ''}" ${args.path ?? ''}`;
-                                }
-                                if (toolName === 'apply_patch') {
-                                    return `apply_patch ${args?.type ?? 'unknown'} ${args?.path ?? ''}`;
-                                }
-                                if (toolName === 'ask_mentor') {
-                                    return `ask_mentor: ${args?.question ?? ''}`;
-                                }
-                                return `${toolName ?? 'unknown_tool'}`;
-                            })();
-
-                            const pendingMessage: CommandMessage = {
-                                id: toolCallId ?? String(Date.now()),
-                                sender: 'command',
-                                status: 'running',
-                                command,
-                                output: '',
-                                callId: toolCallId,
-                                toolName,
-                                toolArgs: args,
-                            };
-
-                            appendMessages([pendingMessage as any]);
-                            return;
-                        }
-                        case 'command_message': {
-                            // logDeduplicated('command_message');
-                            const cmdMsg = event.message as any;
-                            const annotated = annotateCommandMessage(
-                                cmdMsg as CommandMessage,
-                            );
-
-                            const messagesToAdd: Message[] = [];
-
-                            if (accumulatedReasoningText.trim()) {
-                                reasoningUpdater.flush();
-                                flushedReasoningLength +=
-                                    accumulatedReasoningText.length;
-                                accumulatedReasoningText = '';
-                                currentReasoningMessageId = null;
-                            }
-
-                            if (accumulatedText.trim()) {
-                                const textMessage: BotMessage = {
-                                    id: Date.now() + 1,
-                                    sender: 'bot',
-                                    text: accumulatedText,
-                                };
-                                messagesToAdd.push(textMessage);
-                                accumulatedText = '';
-                                textWasFlushed = true;
-                            }
-
-                            if (messagesToAdd.length > 0) {
-                                appendMessages(messagesToAdd);
-                                liveResponseUpdater.cancel();
-                                setLiveResponse(null);
-                            }
-
-                            // Replace pending message with completed one, or add new if not found
-                            setMessages(prev => {
-                                const pendingIndex = annotated.callId
-                                    ? prev.findIndex(
-                                          msg =>
-                                              msg.sender === 'command' &&
-                                              msg.callId === annotated.callId &&
-                                              msg.status === 'running',
-                                      )
-                                    : -1;
-
-                                if (pendingIndex !== -1) {
-                                    const next = [...prev];
-                                    next[pendingIndex] = annotated;
-                                    return trimMessages(next);
-                                }
-
-                                return trimMessages([...prev, annotated]);
-                            });
-                            return;
-                        }
-                        case 'retry': {
-                            const systemMessage: SystemMessage = {
-                                id: Date.now(),
-                                sender: 'system',
-                                text: `Tool hallucination detected (${
-                                    (event as any).toolName
-                                }). Retrying... (Attempt ${
-                                    (event as any).attempt
-                                }/${(event as any).maxRetries})`,
-                            };
-                            setMessages(prev => [...prev, systemMessage]);
-                            return;
-                        }
-                        default:
-                            return;
-                    }
-                };
+                // Create event handler using extracted factory
+                const applyConversationEvent = createConversationEventHandler(
+                    {
+                        liveResponseUpdater,
+                        reasoningUpdater,
+                        appendMessages,
+                        setMessages,
+                        setLiveResponse,
+                        trimMessages,
+                        annotateCommandMessage,
+                    },
+                    streamingState,
+                );
 
                 try {
                     // Send a continuation message to resume work
@@ -908,9 +557,9 @@ export const useConversation = ({
 
                     applyServiceResult(
                         result,
-                        accumulatedText,
-                        accumulatedReasoningText,
-                        textWasFlushed,
+                        streamingState.accumulatedText,
+                        streamingState.accumulatedReasoningText,
+                        streamingState.textWasFlushed,
                     );
                 } catch (error) {
                     loggingService.error(
@@ -966,18 +615,15 @@ export const useConversation = ({
             const liveResponseUpdater =
                 createLiveResponseUpdater(liveMessageId);
 
-            // Track accumulated text so we can flush it before command messages
-            let accumulatedText = '';
-            let accumulatedReasoningText = '';
-            let flushedReasoningLength = 0; // Track how much reasoning has been flushed
-            let textWasFlushed = false;
-            let currentReasoningMessageId: number | null = null; // Track current reasoning message ID
+            // Create streaming state object for this approval decision
+            const streamingState = createStreamingState();
+
             const reasoningUpdater = createStreamingUpdateCoordinator(
                 (newReasoningText: string) => {
                     setMessages(prev => {
-                        if (currentReasoningMessageId !== null) {
+                        if (streamingState.currentReasoningMessageId !== null) {
                             const index = prev.findIndex(
-                                msg => msg.id === currentReasoningMessageId,
+                                msg => msg.id === streamingState.currentReasoningMessageId,
                             );
                             if (index === -1) return prev;
                             const current = prev[index];
@@ -990,7 +636,7 @@ export const useConversation = ({
                         }
 
                         const newId = Date.now();
-                        currentReasoningMessageId = newId;
+                        streamingState.currentReasoningMessageId = newId;
                         return trimMessages([
                             ...prev,
                             {
@@ -1004,182 +650,19 @@ export const useConversation = ({
                 REASONING_RESPONSE_THROTTLE_MS,
             );
 
-            // Create event logger with deduplication for this approval decision
-            // const {logDeduplicated, flush: flushLog} = createEventLogger();
-
-            const applyConversationEvent = (event: ConversationEvent) => {
-                switch (event.type) {
-                    case 'text_delta': {
-                        // logDeduplicated('text_delta');
-                        accumulatedText += event.delta;
-                        liveResponseUpdater.push(accumulatedText);
-                        return;
-                    }
-                    case 'reasoning_delta': {
-                        // logDeduplicated('reasoning_delta');
-                        const fullReasoningText = event.fullText ?? '';
-                        const newReasoningText = fullReasoningText.slice(
-                            flushedReasoningLength,
-                        );
-                        accumulatedReasoningText = newReasoningText;
-
-                        if (!newReasoningText.trim()) return;
-                        reasoningUpdater.push(newReasoningText);
-                        return;
-                    }
-                    case 'tool_started': {
-                        // Flush reasoning state
-                        if (accumulatedReasoningText.trim()) {
-                            reasoningUpdater.flush();
-                            flushedReasoningLength += accumulatedReasoningText.length;
-                            accumulatedReasoningText = '';
-                            currentReasoningMessageId = null;
-                        }
-
-                        // Flush any accumulated text before showing the tool call
-                        if (accumulatedText.trim()) {
-                            const textMessage: BotMessage = {
-                                id: Date.now() + 1,
-                                sender: 'bot',
-                                text: accumulatedText,
-                            };
-                            appendMessages([textMessage]);
-                            accumulatedText = '';
-                            textWasFlushed = true;
-                            liveResponseUpdater.cancel();
-                            setLiveResponse(null);
-                        }
-
-                        const {toolCallId, toolName, arguments: rawArgs} = event as any;
-
-                        // tool_started.arguments may be either an object or a JSON string
-                        // depending on provider. Normalize so we can render params.
-                        const args = (() => {
-                            if (typeof rawArgs !== 'string') {
-                                return rawArgs;
-                            }
-                            const trimmed = rawArgs.trim();
-                            if (!trimmed) {
-                                return rawArgs;
-                            }
-                            try {
-                                return JSON.parse(trimmed);
-                            } catch {
-                                return rawArgs;
-                            }
-                        })();
-
-                        const command = (() => {
-                            if (toolName === 'shell') {
-                                const cmd = args?.command ?? args?.commands;
-                                if (typeof cmd === 'string' && cmd.trim()) {
-                                    return cmd;
-                                }
-                                if (Array.isArray(cmd) && cmd.length > 0) {
-                                    return cmd.join('\n');
-                                }
-                            }
-                            if (toolName === 'grep' && args?.pattern) {
-                                return `grep "${args.pattern}" ${args.path ?? '.'}`;
-                            }
-                            if (toolName === 'search_replace') {
-                                return `search_replace "${args.search_content ?? ''}" → "${args.replace_content ?? ''}" ${args.path ?? ''}`;
-                            }
-                            if (toolName === 'apply_patch') {
-                                return `apply_patch ${args?.type ?? 'unknown'} ${args?.path ?? ''}`;
-                            }
-                            if (toolName === 'ask_mentor') {
-                                return `ask_mentor: ${args?.question ?? ''}`;
-                            }
-                            return `${toolName ?? 'unknown_tool'}`;
-                        })();
-
-                        const pendingMessage: CommandMessage = {
-                            id: toolCallId ?? String(Date.now()),
-                            sender: 'command',
-                            status: 'running',
-                            command,
-                            output: '',
-                            callId: toolCallId,
-                            toolName,
-                            toolArgs: args,
-                        };
-
-                        appendMessages([pendingMessage as any]);
-                        return;
-                    }
-                    case 'command_message': {
-                        // logDeduplicated('command_message');
-                        const cmdMsg = event.message as any;
-                        const annotated = annotateCommandMessage(
-                            cmdMsg as CommandMessage,
-                        );
-
-                        const messagesToAdd: Message[] = [];
-
-                        if (accumulatedReasoningText.trim()) {
-                            reasoningUpdater.flush();
-                            flushedReasoningLength +=
-                                accumulatedReasoningText.length;
-                            accumulatedReasoningText = '';
-                            currentReasoningMessageId = null;
-                        }
-
-                        if (accumulatedText.trim()) {
-                            const textMessage: BotMessage = {
-                                id: Date.now() + 1,
-                                sender: 'bot',
-                                text: accumulatedText,
-                            };
-                            messagesToAdd.push(textMessage);
-                            accumulatedText = '';
-                            textWasFlushed = true;
-                        }
-
-                        if (messagesToAdd.length > 0) {
-                            appendMessages(messagesToAdd);
-                            liveResponseUpdater.cancel();
-                            setLiveResponse(null);
-                        }
-
-                        // Replace pending message with completed one, or add new if not found
-                        setMessages(prev => {
-                            const pendingIndex = annotated.callId
-                                ? prev.findIndex(
-                                      msg =>
-                                          msg.sender === 'command' &&
-                                          msg.callId === annotated.callId &&
-                                          msg.status === 'running',
-                                  )
-                                : -1;
-
-                            if (pendingIndex !== -1) {
-                                const next = [...prev];
-                                next[pendingIndex] = annotated;
-                                return trimMessages(next);
-                            }
-
-                            return trimMessages([...prev, annotated]);
-                        });
-                        return;
-                    }
-                    case 'retry': {
-                        const systemMessage: SystemMessage = {
-                            id: Date.now(),
-                            sender: 'system',
-                            text: `Tool hallucination detected (${
-                                (event as any).toolName
-                            }). Retrying... (Attempt ${
-                                (event as any).attempt
-                            }/${(event as any).maxRetries})`,
-                        };
-                        setMessages(prev => [...prev, systemMessage]);
-                        return;
-                    }
-                    default:
-                        return;
-                }
-            };
+            // Create event handler using extracted factory
+            const applyConversationEvent = createConversationEventHandler(
+                {
+                    liveResponseUpdater,
+                    reasoningUpdater,
+                    appendMessages,
+                    setMessages,
+                    setLiveResponse,
+                    trimMessages,
+                    annotateCommandMessage,
+                },
+                streamingState,
+            );
 
             try {
                 const result = await conversationService.handleApprovalDecision(
@@ -1191,9 +674,9 @@ export const useConversation = ({
                 );
                 applyServiceResult(
                     result,
-                    accumulatedText,
-                    accumulatedReasoningText,
-                    textWasFlushed,
+                    streamingState.accumulatedText,
+                    streamingState.accumulatedReasoningText,
+                    streamingState.textWasFlushed,
                 );
             } catch (error) {
                 loggingService.error('Error in handleApprovalDecision', {

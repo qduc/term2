@@ -112,7 +112,7 @@ test('does not merge if intervening message', t => {
     t.is(messages[2].role, 'assistant');
 });
 
-test('does not merge if the first assistant tool_calls message has content', t => {
+test('merges if the first assistant tool_calls message has content', t => {
     const input = [
         {
             type: 'message',
@@ -143,18 +143,17 @@ test('does not merge if the first assistant tool_calls message has content', t =
         logger,
     );
 
-    // Preserve the text-bearing assistant message; don't merge tool calls into it.
-    t.is(messages.length, 2);
+    // Should merge tool calls into the text-bearing assistant message.
+    t.is(messages.length, 1);
     t.is(messages[0].role, 'assistant');
     t.is(messages[0].content, 'Some text');
     t.true(Array.isArray(messages[0].tool_calls));
-    t.is(messages[0].tool_calls.length, 1);
-    t.is(messages[1].role, 'assistant');
-    t.true(Array.isArray(messages[1].tool_calls));
-    t.is(messages[1].tool_calls.length, 1);
+    t.is(messages[0].tool_calls.length, 2);
+    t.is(messages[0].tool_calls[0].id, 'call-1');
+    t.is(messages[0].tool_calls[1].id, 'call-2');
 });
 
-test('does not merge if the second assistant tool_calls message has content', t => {
+test('merges if the second assistant tool_calls message has content', t => {
     const input = [
         {
             type: 'function_call',
@@ -185,9 +184,11 @@ test('does not merge if the second assistant tool_calls message has content', t 
         logger,
     );
 
-    // Second message has content, so don't merge.
-    t.is(messages.length, 2);
+    // Should merge.
+    t.is(messages.length, 1);
     t.is(messages[0].role, 'assistant');
-    t.is(messages[1].role, 'assistant');
-    t.is(messages[1].content, 'More text');
+    t.is(messages[0].content, 'More text');
+    t.is(messages[0].tool_calls.length, 2);
+    t.is(messages[0].tool_calls[0].id, 'call-1');
+    t.is(messages[0].tool_calls[1].id, 'call-2');
 });

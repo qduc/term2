@@ -250,16 +250,6 @@ export function buildMessagesFromRequest(
             : 'non-string, non-array',
     });
 
-    const isToolCallOnlyAssistant = (m: any): boolean => {
-        return (
-            m != null &&
-            m.role === 'assistant' &&
-            m.content == null &&
-            Array.isArray(m.tool_calls) &&
-            m.tool_calls.length > 0
-        );
-    };
-
     if (req.systemInstructions && req.systemInstructions.trim().length > 0) {
         // For Anthropic models, use array format with cache_control for prompt caching.
         // This enables caching of the system message (agent instructions) which is large and rarely changes.
@@ -317,65 +307,77 @@ export function buildMessagesFromRequest(
                     pendingReasoningDetails = [];
                 }
 
-                // Merge consecutive assistant messages with tool_calls to fix incorrect conversation flow
-                // when parallel tool calls are stored as separate history items.
                 const lastMessage = messages[messages.length - 1];
 
-                // Case 1: Both are tool-call-only assistant messages - merge tool_calls
-                if (
-                    isToolCallOnlyAssistant(lastMessage) &&
-                    isToolCallOnlyAssistant(converted)
-                ) {
-                    lastMessage.tool_calls.push(...converted.tool_calls);
+                // Merge consecutive messages with the same role
+                if (lastMessage && lastMessage.role === converted.role) {
+                    if (converted.role === 'assistant') {
+                        // Merge content
+                        if (converted.content != null) {
+                            if (lastMessage.content == null) {
+                                lastMessage.content = converted.content;
+                            } else {
+                                lastMessage.content =
+                                    String(lastMessage.content) +
+                                    '\n' +
+                                    String(converted.content);
+                            }
+                        }
 
-                    // Preserve reasoning if the merged message didn't have it but the new one does
-                    if (
-                        lastMessage.reasoning_details == null &&
-                        converted.reasoning_details != null
-                    ) {
-                        lastMessage.reasoning_details =
-                            converted.reasoning_details;
-                    }
-                    if (
-                        lastMessage.reasoning == null &&
-                        converted.reasoning != null
-                    ) {
-                        lastMessage.reasoning = converted.reasoning;
-                    }
-                    continue;
-                }
+                        // Merge tool calls
+                        if (converted.tool_calls) {
+                            if (!lastMessage.tool_calls) {
+                                lastMessage.tool_calls = [];
+                            }
+                            lastMessage.tool_calls.push(...converted.tool_calls);
+                        }
 
-                // Case 2: Last message is assistant (with or without content), current is tool-call-only assistant
-                // This happens when SDK history has assistant message followed by function_call items
-                if (
-                    lastMessage?.role === 'assistant' &&
-                    isToolCallOnlyAssistant(converted)
-                ) {
-                    if (lastMessage.content != null) {
-                        messages.push(converted);
+                        // Merge reasoning tokens
+                        if (converted.reasoning != null) {
+                            if (!lastMessage.reasoning) {
+                                lastMessage.reasoning = converted.reasoning;
+                            } else {
+                                lastMessage.reasoning += converted.reasoning;
+                            }
+                        }
+                        if (converted.reasoning_content != null) {
+                            if (!lastMessage.reasoning_content) {
+                                lastMessage.reasoning_content =
+                                    converted.reasoning_content;
+                            } else {
+                                lastMessage.reasoning_content +=
+                                    converted.reasoning_content;
+                            }
+                        }
+
+                        // Merge reasoning details
+                        if (converted.reasoning_details) {
+                            if (!lastMessage.reasoning_details) {
+                                lastMessage.reasoning_details = [];
+                            }
+                            lastMessage.reasoning_details.push(
+                                ...(Array.isArray(converted.reasoning_details)
+                                    ? converted.reasoning_details
+                                    : [converted.reasoning_details]),
+                            );
+                        }
                         continue;
                     }
-                    // Merge the tool_calls into the previous assistant message
-                    if (!lastMessage.tool_calls) {
-                        lastMessage.tool_calls = [];
-                    }
-                    lastMessage.tool_calls.push(...converted.tool_calls);
 
-                    // Preserve reasoning
-                    if (
-                        lastMessage.reasoning_details == null &&
-                        converted.reasoning_details != null
-                    ) {
-                        lastMessage.reasoning_details =
-                            converted.reasoning_details;
+                    if (converted.role === 'user') {
+                        // Merge content
+                        if (converted.content != null) {
+                            if (lastMessage.content == null) {
+                                lastMessage.content = converted.content;
+                            } else {
+                                lastMessage.content =
+                                    String(lastMessage.content) +
+                                    '\n' +
+                                    String(converted.content);
+                            }
+                        }
+                        continue;
                     }
-                    if (
-                        lastMessage.reasoning == null &&
-                        converted.reasoning != null
-                    ) {
-                        lastMessage.reasoning = converted.reasoning;
-                    }
-                    continue;
                 }
 
                 messages.push(converted);

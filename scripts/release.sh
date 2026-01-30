@@ -92,7 +92,7 @@ else
     "
 
     # Call Claude
-    CHANGELOG_ENTRY=$(echo "$PROMPT" | claude)
+    CHANGELOG_ENTRY=$(echo "$PROMPT" | claude --model haiku)
 
     echo -e "${BLUE}Generated Changelog:${NC}"
     echo "$CHANGELOG_ENTRY"

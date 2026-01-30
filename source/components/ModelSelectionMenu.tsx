@@ -52,21 +52,17 @@ const ProviderTabs: FC<{
                                 >
                                     {' '}
                                     {provider.label}
-                                    {isDisabled ? ' (no key)' : ''}{' '}
+                                    {isDisabled ? ' (not ready)' : ''}{' '}
                                 </Text>
                                 {index < providers.length - 1 && (
-                                    <Text color="#64748b">
-                                        {' │ '}
-                                    </Text>
+                                    <Text color="#64748b">{' │ '}</Text>
                                 )}
                             </Box>
                         );
                     })}
                 </Box>
                 {canSwitch && (
-                    <Text color="#64748b">
-                        Tab → switch provider
-                    </Text>
+                    <Text color="#64748b">Tab → switch provider</Text>
                 )}
             </Box>
             {!canSwitch && (
@@ -105,8 +101,15 @@ const ModelSelectionMenu: FC<Props> = ({
 
     if (error) {
         return (
-            <Box borderStyle="round" borderColor="red" paddingX={1}>
-                <Text color="red">Unable to load models: {error}</Text>
+            <Box flexDirection="column">
+                <ProviderTabs
+                    activeProvider={provider}
+                    canSwitch={canSwitchProvider}
+                    settingsService={settingsService}
+                />
+                <Box borderStyle="round" borderColor="red" paddingX={1}>
+                    <Text color="red">Unable to load models: {error}</Text>
+                </Box>
             </Box>
         );
     }
@@ -114,9 +117,7 @@ const ModelSelectionMenu: FC<Props> = ({
     if (items.length === 0) {
         return (
             <Box borderStyle="round" borderColor="magenta" paddingX={1}>
-                <Text color="#64748b">
-                    No models match "{query || '*'}"
-                </Text>
+                <Text color="#64748b">No models match "{query || '*'}"</Text>
             </Box>
         );
     }
@@ -151,9 +152,7 @@ const ModelSelectionMenu: FC<Props> = ({
                     )}
                 </Box>
                 {hasScrollUp && (
-                    <Text color="#64748b">
-                        ↑ {scrollOffset} more
-                    </Text>
+                    <Text color="#64748b">↑ {scrollOffset} more</Text>
                 )}
                 {visibleItems.map((item, visibleIndex) => {
                     const actualIndex = scrollOffset + visibleIndex;
@@ -168,9 +167,7 @@ const ModelSelectionMenu: FC<Props> = ({
                                 {item.id}
                             </Text>
                             {item.name && (
-                                <Text
-                                    color={isSelected ? 'white' : '#64748b'}
-                                >
+                                <Text color={isSelected ? 'white' : '#64748b'}>
                                     {' '}
                                     — {item.name}
                                 </Text>

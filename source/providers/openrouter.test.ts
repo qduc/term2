@@ -553,7 +553,7 @@ test.serial(
         });
 
         const responses = [
-            new Response(stream, {
+            new Response(stream as any, {
                 status: 200,
                 headers: {'Content-Type': 'text/event-stream'},
             }),
@@ -1361,7 +1361,7 @@ test.serial(
                 },
             });
 
-            return new Response(stream, {
+            return new Response(stream as any, {
                 status: 200,
                 headers: {'Content-Type': 'text/event-stream'},
             });
@@ -1686,7 +1686,7 @@ test.serial(
                 },
             });
 
-            return new Response(stream, {
+            return new Response(stream as any, {
                 status: 200,
                 headers: {'Content-Type': 'text/event-stream'},
             });

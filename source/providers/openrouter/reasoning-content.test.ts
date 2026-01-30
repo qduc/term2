@@ -83,7 +83,7 @@ test('OpenRouterModel.getStreamedResponse support reasoning_content', async t =>
     });
 
     globalThis.fetch = async () =>
-        new Response(stream, {
+        new Response(stream as any, {
             status: 200,
             headers: {'Content-Type': 'text/event-stream'},
         });

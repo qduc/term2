@@ -91,7 +91,7 @@ test('OpenAICompatibleModel.getStreamedResponse support reasoning_content', asyn
     });
 
     globalThis.fetch = async () =>
-        new Response(stream, {
+        new Response(stream as any, {
             status: 200,
             headers: {'Content-Type': 'text/event-stream'},
         });

@@ -6,6 +6,7 @@ import {createApplyPatchToolDefinition} from './tools/apply-patch.js';
 import {createShellToolDefinition} from './tools/shell.js';
 import {createAskMentorToolDefinition} from './tools/ask-mentor.js';
 import {createWebSearchToolDefinition} from './tools/web-search.js';
+import {createWebFetchToolDefinition} from './tools/web-fetch.js';
 import { createCreateFileToolDefinition } from './tools/create-file.js';
 import type {ToolDefinition} from './tools/types.js';
 import os from 'os';
@@ -154,6 +155,10 @@ export const getAgentDefinition = (
     const tools: ToolDefinition[] = [
         createShellToolDefinition({ settingsService, loggingService, executionContext }),
         createWebSearchToolDefinition({
+            settingsService,
+            loggingService,
+        }),
+        createWebFetchToolDefinition({
             settingsService,
             loggingService,
         }),

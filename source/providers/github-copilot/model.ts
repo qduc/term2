@@ -12,8 +12,14 @@ import type {
 } from '../../services/service-interfaces.js';
 import {
     buildMessagesFromRequest,
+    extractFunctionToolsFromRequest,
     normalizeUsage,
 } from './converters.js';
+
+// Global map to store pending tool resolutions: SessionID -> CallID -> ResolveFunction
+// This allows us to "detach" the tool execution from the SDK's internal loop
+// and hand it over to the Agent Runner, then resume it later.
+const pendingResolutions = new Map<string, Map<string, (result: any) => void>>();
 
 // Singleton client - SDK manages CLI process lifecycle
 let sharedClient: CopilotClient | null = null;
@@ -45,15 +51,18 @@ export class GitHubCopilotModel implements Model {
     #modelId: string;
     #settingsService: ISettingsService;
     #loggingService: ILoggingService;
+    #sessionMap: Map<string, string>;
 
     constructor(deps: {
         settingsService: ISettingsService;
         loggingService: ILoggingService;
         modelId?: string;
+        sessionMap?: Map<string, string>;
     }) {
         this.name = 'GitHubCopilot';
         this.#settingsService = deps.settingsService;
         this.#loggingService = deps.loggingService;
+        this.#sessionMap = deps.sessionMap || new Map();
         this.#modelId =
             deps.modelId ||
             this.#settingsService.get('agent.github-copilot.model') ||
@@ -112,25 +121,60 @@ export class GitHubCopilotModel implements Model {
         this.#loggingService.debug('GitHubCopilot stream start', {
             messageCount: messages.length,
             modelId: resolvedModelId,
+            previousResponseId: request.previousResponseId,
         });
+
+        const tools = extractFunctionToolsFromRequest(request);
+        // Wrap tools with the "Trap" handler that suspends execution
+        const copilotTools = tools.map((t: any) => ({
+            name: t.function.name,
+            description: t.function.description,
+            parameters: t.function.parameters,
+            handler: async (args: any, invocation: any) => {
+                this.#loggingService.debug('Copilot tool trap activated', {
+                    tool: invocation.toolName,
+                    callId: invocation.toolCallId,
+                });
+                return new Promise((resolve) => {
+                    if (!pendingResolutions.has(invocation.sessionId)) {
+                        pendingResolutions.set(invocation.sessionId, new Map());
+                    }
+                    pendingResolutions.get(invocation.sessionId)!.set(invocation.toolCallId, resolve);
+                });
+            },
+        }));
 
         let session;
         try {
-            // Create a session with the Copilot SDK
-            // Note: Tools are defined on the session, not passed in the request.
-            // The SDK manages tool registration separately.
-            session = await client.createSession({
-                model: resolvedModelId,
-                streaming: true,
-            });
+            // Check if we can resume a previous session
+            const prevSessionId = request.previousResponseId
+                ? this.#sessionMap.get(request.previousResponseId)
+                : undefined;
+
+            if (prevSessionId) {
+                this.#loggingService.debug('Resuming GitHubCopilot session', {
+                    sessionId: prevSessionId,
+                });
+                session = await client.resumeSession(prevSessionId, {
+                    streaming: true,
+                    tools: copilotTools, // Update tools on resume
+                });
+            } else {
+                // Create a new session with the Copilot SDK
+                session = await client.createSession({
+                    model: resolvedModelId,
+                    streaming: true,
+                    tools: copilotTools,
+                });
+            }
         } catch (err: any) {
-            this.#loggingService.error('GitHubCopilot session creation failed', {
+            this.#loggingService.error('GitHubCopilot session creation/resumption failed', {
                 error: err.message,
             });
             // Emit error as a model event since ResponseStreamEvent doesn't have error type
             yield {
                 type: 'model',
-                event: { type: 'error', message: `Failed to create Copilot session: ${err.message}` },
+                event: { type: 'error', message: `Failed to create/resume Copilot session: ${err.message}` },
             } as ResponseStreamEvent;
             return;
         }
@@ -142,6 +186,9 @@ export class GitHubCopilotModel implements Model {
             responseId: randomUUID(),
             usageData: null as any,
         };
+
+        // Track new sessionId for future resumption
+        this.#sessionMap.set(state.responseId, session.sessionId);
 
         // Set up event handlers and collect events via async iteration
         const eventQueue: ResponseStreamEvent[] = [];
@@ -214,8 +261,49 @@ export class GitHubCopilotModel implements Model {
                             };
                             state.accumulatedToolCalls.push(toolCall);
 
-                            // We don't emit tool calls during streaming - they're handled
-                            // in the response_done event
+
+                            // Check if this is a user tool that requires external handling
+                            // We look it up in our 'copilotTools' list
+                            const isUserTool = copilotTools.some((t: any) => t.name === event.data.toolName);
+
+                            if (isUserTool) {
+                                this.#loggingService.debug('Detaching stream for user tool execution', {
+                                    tool: event.data.toolName,
+                                    callId: toolCall.callId,
+                                });
+
+                                // Yield the function call event to the Runner (streaming)
+                                pushEvent({
+                                    type: 'model',
+                                    event: {
+                                        type: 'function_call',
+                                        callId: toolCall.callId,
+                                        name: toolCall.name,
+                                        arguments: toolCall.arguments,
+                                    }
+                                } as ResponseStreamEvent);
+
+                                // IMPORTANT: Emit response_done so the Runner captures the responseId.
+                                // This allows the next turn to pass 'previousResponseId' correctly,
+                                // which we need to look up the session and resume the suspended tool.
+                                const output = this.#buildStreamOutput(state);
+                                pushEvent({
+                                    type: 'response_done',
+                                    response: {
+                                        id: state.responseId,
+                                        usage: normalizeUsage(state.usageData),
+                                        output,
+                                    },
+                                } as ResponseStreamEvent);
+
+                                // SIGNAL COMPLETION OF THIS STREAM SEGMENT
+                                finish();
+                                return; // Stop processing further events in this loop
+                            }
+
+                            // If it's an internal tool (like report_intent), we just let it run
+                            // The SDK will call the internal handler, get the result, and continue streaming
+                            // We don't emit anything to the Runner yet.
                         }
                         break;
 
@@ -268,35 +356,73 @@ export class GitHubCopilotModel implements Model {
         });
 
         // Send the messages to start the conversation
-        try {
-            // Build the prompt from the last user message
-            const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-            const prompt = lastUserMessage?.content || '';
+        // Check if we are in "Resume/Tool Output" mode
+        const sessionResolutions = pendingResolutions.get(session.sessionId);
+        let isResumingTool = false;
 
-            // Send with conversation history
-            await session.send({
-                prompt,
-                // Pass conversation history if the SDK supports it
-                messages: messages.slice(0, -1), // Exclude the prompt message
-            });
-        } catch (err: any) {
-            this.#loggingService.error('GitHubCopilot send failed', {
-                error: err.message,
-            });
-            // Emit error as a model event since ResponseStreamEvent doesn't have error type
-            yield {
-                type: 'model',
-                event: { type: 'error', message: `Failed to send message: ${err.message}` },
-            } as ResponseStreamEvent;
+        if (sessionResolutions && sessionResolutions.size > 0) {
+            // Look for tool outputs in the request input that match pending traps
+            // The Runner appends the output to the history
+            if (request.input && Array.isArray(request.input)) {
+                for (const item of request.input) {
+                    // Check for function_call_output type (mapped from SDK)
+                    if (
+                        (item as any).type === 'function_call_output' &&
+                        (item as any).callId &&
+                        sessionResolutions.has((item as any).callId)
+                    ) {
+                        const callId = (item as any).callId;
+                        const output = (item as any).output;
 
-            // Try to abort the session
-            try {
-                await session.abort();
-            } catch {
-                // Ignore abort errors
+                        this.#loggingService.debug('Resolving suspended tool call', {
+                            callId,
+                            outputLength: output?.length,
+                        });
+
+                        const resolve = sessionResolutions.get(callId)!;
+                        resolve(output); // UNBLOCK the SDK handler!
+                        sessionResolutions.delete(callId);
+                        isResumingTool = true;
+                    }
+                }
             }
-            return;
         }
+
+        // Only send a new prompt if we are NOT resuming a tool call
+        if (!isResumingTool) {
+            try {
+                // Build the prompt from the last user message
+                const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+                const prompt = lastUserMessage?.content || '';
+
+                if (prompt) {
+                    await session.send({
+                        prompt,
+                    });
+                } else {
+                    // If no prompt and no tool resume, we might assume it's just a continue?
+                    // Or maybe we should send an empty space to trigger generation?
+                    // For now, assume if prompt is empty it might be an issue, but let's try sending it.
+                    // Actually Copilot SDK might error on empty prompt.
+                }
+            } catch (err: any) {
+                this.#loggingService.error('GitHubCopilot send failed', {
+                    error: err.message,
+                });
+                yield {
+                    type: 'model',
+                    event: { type: 'error', message: `Failed to send message: ${err.message}` },
+                } as ResponseStreamEvent;
+
+                try {
+                    await session.abort();
+                } catch {
+                    // Ignore abort errors
+                }
+                return;
+            }
+        }
+        // If isResumingTool is true, we simply let the event loop below capture the continuation events!
 
         // Yield events as they come in
         while (!done || eventQueue.length > 0) {

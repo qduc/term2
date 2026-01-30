@@ -8,6 +8,7 @@ import { GitHubCopilotModel } from './model.js';
 export class GitHubCopilotProvider implements ModelProvider {
     #settingsService: ISettingsService;
     #loggingService: ILoggingService;
+    #sessionMap = new Map<string, string>(); // Mapping of responseId -> sessionId
 
     constructor(deps: {
         settingsService: ISettingsService;
@@ -22,6 +23,7 @@ export class GitHubCopilotProvider implements ModelProvider {
             settingsService: this.#settingsService,
             loggingService: this.#loggingService,
             modelId: modelName,
+            sessionMap: this.#sessionMap,
         });
     }
 }

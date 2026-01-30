@@ -288,8 +288,8 @@ export class OpenAIAgentClient {
                 signal,
             };
 
-            // Only pass previousResponseId for OpenAI provider (server-managed conversation chaining)
-            if (this.#provider === 'openai' && previousResponseId) {
+            // Pass previousResponseId for providers that support server-side context
+            if ((this.#provider === 'openai' || this.#provider === 'github-copilot') && previousResponseId) {
                 options.previousResponseId = previousResponseId;
             }
 
@@ -327,8 +327,8 @@ export class OpenAIAgentClient {
             signal,
         };
 
-        // Only pass previousResponseId for OpenAI provider (server-managed conversation chaining)
-        if (this.#provider === 'openai' && previousResponseId) {
+        // Pass previousResponseId for providers that support server-side context
+        if ((this.#provider === 'openai' || this.#provider === 'github-copilot') && previousResponseId) {
             options.previousResponseId = previousResponseId;
         }
 
@@ -351,8 +351,8 @@ export class OpenAIAgentClient {
             signal,
         };
 
-        // Only pass previousResponseId for OpenAI provider (server-managed conversation chaining)
-        if (this.#provider === 'openai' && previousResponseId) {
+        // Pass previousResponseId for providers that support server-side context
+        if ((this.#provider === 'openai' || this.#provider === 'github-copilot') && previousResponseId) {
             options.previousResponseId = previousResponseId;
         }
 

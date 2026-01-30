@@ -22,14 +22,24 @@ import {
 const pendingResolutions = new Map<string, Map<string, (result: any) => void>>();
 
 // Singleton client - SDK manages CLI process lifecycle
-let sharedClient: CopilotClient | null = null;
+export let sharedClient: CopilotClient | null = null;
 
-async function getClient(): Promise<CopilotClient> {
+export async function getClient(): Promise<CopilotClient> {
     if (!sharedClient) {
         sharedClient = new CopilotClient();
         await sharedClient.start();
     }
     return sharedClient;
+}
+
+export function extractCopilotTextDelta(accumulated: string, incoming: string): string {
+    if (!incoming) return '';
+    if (!accumulated) return incoming;
+    if (incoming === accumulated) return '';
+    if (incoming.startsWith(accumulated)) {
+        return incoming.slice(accumulated.length);
+    }
+    return incoming;
 }
 
 /**
@@ -130,7 +140,7 @@ export class GitHubCopilotModel implements Model {
             name: t.function.name,
             description: t.function.description,
             parameters: t.function.parameters,
-            handler: async (args: any, invocation: any) => {
+            handler: async (_args: any, invocation: any) => {
                 this.#loggingService.debug('Copilot tool trap activated', {
                     tool: invocation.toolName,
                     callId: invocation.toolCallId,
@@ -225,11 +235,17 @@ export class GitHubCopilotModel implements Model {
                     case 'assistant.message_delta':
                         // Streaming text chunk
                         if (event.data?.deltaContent) {
-                            state.accumulated += event.data.deltaContent;
-                            pushEvent({
-                                type: 'output_text_delta',
-                                delta: event.data.deltaContent,
-                            } as ResponseStreamEvent);
+                            const delta = extractCopilotTextDelta(
+                                state.accumulated,
+                                event.data.deltaContent,
+                            );
+                            if (delta) {
+                                state.accumulated += delta;
+                                pushEvent({
+                                    type: 'output_text_delta',
+                                    delta,
+                                } as ResponseStreamEvent);
+                            }
                         }
                         break;
 

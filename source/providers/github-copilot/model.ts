@@ -5,7 +5,13 @@ import {
     type ResponseStreamEvent,
 } from '@openai/agents-core';
 import { randomUUID } from 'node:crypto';
-import { CopilotClient } from '@github/copilot-sdk';
+import fs from 'node:fs';
+import path from 'node:path';
+import { CopilotClient, type CopilotSession } from '@github/copilot-sdk';
+
+// Load simple.md system prompt (same as other providers)
+const SIMPLE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts/simple.md');
+const SIMPLE_PROMPT = fs.readFileSync(SIMPLE_PROMPT_PATH, 'utf-8').trim();
 import type {
     ILoggingService,
     ISettingsService,
@@ -35,10 +41,25 @@ export async function getClient(): Promise<CopilotClient> {
 export function extractCopilotTextDelta(accumulated: string, incoming: string): string {
     if (!incoming) return '';
     if (!accumulated) return incoming;
-    if (incoming === accumulated) return '';
+
+    // 1. If incoming starts with accumulated, it's definitely an accumulation
     if (incoming.startsWith(accumulated)) {
         return incoming.slice(accumulated.length);
     }
+
+    // 2. Check for overlap: find the longest suffix of 'accumulated' that is a prefix of 'incoming'
+    // We only check up to a reasonable length to avoid O(N^2) on very long outputs,
+    // though usually deltas are small.
+    const maxOverlap = Math.min(accumulated.length, incoming.length);
+    for (let len = maxOverlap; len > 0; len--) {
+        const suffix = accumulated.slice(-len);
+        const prefix = incoming.slice(0, len);
+        if (suffix === prefix) {
+            return incoming.slice(len);
+        }
+    }
+
+    // 3. No overlap found, treat as a pure delta
     return incoming;
 }
 
@@ -62,17 +83,20 @@ export class GitHubCopilotModel implements Model {
     #settingsService: ISettingsService;
     #loggingService: ILoggingService;
     #sessionMap: Map<string, string>;
+    #activeSessions: Map<string, CopilotSession>;
 
     constructor(deps: {
         settingsService: ISettingsService;
         loggingService: ILoggingService;
         modelId?: string;
         sessionMap?: Map<string, string>;
+        activeSessions?: Map<string, CopilotSession>;
     }) {
         this.name = 'GitHubCopilot';
         this.#settingsService = deps.settingsService;
         this.#loggingService = deps.loggingService;
         this.#sessionMap = deps.sessionMap || new Map();
+        this.#activeSessions = deps.activeSessions || new Map();
         this.#modelId =
             deps.modelId ||
             this.#settingsService.get('agent.github-copilot.model') ||
@@ -154,28 +178,52 @@ export class GitHubCopilotModel implements Model {
             },
         }));
 
-        let session;
+        let session: CopilotSession;
         try {
             // Check if we can resume a previous session
             const prevSessionId = request.previousResponseId
                 ? this.#sessionMap.get(request.previousResponseId)
                 : undefined;
 
-            if (prevSessionId) {
-                this.#loggingService.debug('Resuming GitHubCopilot session', {
+            // First, try to get a cached session object
+            const cachedSession = prevSessionId
+                ? this.#activeSessions.get(prevSessionId)
+                : undefined;
+
+            if (cachedSession) {
+                // Reuse the cached session - just update tool handlers with fresh callbacks
+                this.#loggingService.debug('Reusing cached GitHubCopilot session', {
+                    sessionId: prevSessionId,
+                });
+                session = cachedSession;
+                // Re-register tools to get fresh Promise callbacks for this turn
+                (session as any).registerTools(copilotTools);
+            } else if (prevSessionId) {
+                // Session ID exists but no cached object - need to resume from server
+                this.#loggingService.debug('Resuming GitHubCopilot session from server', {
                     sessionId: prevSessionId,
                 });
                 session = await client.resumeSession(prevSessionId, {
                     streaming: true,
-                    tools: copilotTools, // Update tools on resume
+                    tools: copilotTools,
                 });
+                // Cache the resumed session for future turns
+                this.#activeSessions.set(session.sessionId, session);
             } else {
-                // Create a new session with the Copilot SDK
+                // No previous session - create a new one
+                this.#loggingService.debug('Creating new GitHubCopilot session');
                 session = await client.createSession({
                     model: resolvedModelId,
                     streaming: true,
                     tools: copilotTools,
+                    availableTools: copilotTools.map((t: any) => t.name),
+                    systemMessage: {
+                        mode: 'replace',
+                        content: SIMPLE_PROMPT,
+                    },
                 });
+                // Cache the new session for future turns
+                this.#activeSessions.set(session.sessionId, session);
             }
         } catch (err: any) {
             this.#loggingService.error('GitHubCopilot session creation/resumption failed', {
@@ -215,9 +263,21 @@ export class GitHubCopilotModel implements Model {
             }
         };
 
+        // Track unsubscribe function for cleanup
+        let unsubscribeEvents: (() => void) | null = null;
+
         const finish = (err?: Error) => {
             done = true;
             error = err || null;
+            // Unsubscribe from events to prevent handler accumulation
+            if (unsubscribeEvents) {
+                unsubscribeEvents();
+                unsubscribeEvents = null;
+            }
+            // If there was an error, remove session from cache so a fresh one is created next time
+            if (err && session) {
+                this.#activeSessions.delete(session.sessionId);
+            }
             if (resolveNext) {
                 if (err) {
                     resolveNext = null;
@@ -228,8 +288,8 @@ export class GitHubCopilotModel implements Model {
             }
         };
 
-        // Register event handlers on the session
-        session.on((event: any) => {
+        // Register event handlers on the session (returns unsubscribe function)
+        unsubscribeEvents = session.on((event: any) => {
             try {
                 switch (event.type) {
                     case 'assistant.message_delta':
@@ -239,6 +299,7 @@ export class GitHubCopilotModel implements Model {
                                 state.accumulated,
                                 event.data.deltaContent,
                             );
+
                             if (delta) {
                                 state.accumulated += delta;
                                 pushEvent({
@@ -435,6 +496,13 @@ export class GitHubCopilotModel implements Model {
                 } catch {
                     // Ignore abort errors
                 }
+                // Clean up event handler before returning
+                if (unsubscribeEvents) {
+                    unsubscribeEvents();
+                    unsubscribeEvents = null;
+                }
+                // Remove session from cache on error
+                this.#activeSessions.delete(session.sessionId);
                 return;
             }
         }

@@ -947,7 +947,7 @@ export class ConversationSession {
             }
             if (event?.data) {
                 const delta2 = this.#extractTextDelta(event.data);
-                if (delta2) {
+                if (delta2 && delta2 !== delta1) {
                     const e = emitText(delta2);
                     if (e) yield e;
                 }

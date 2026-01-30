@@ -1,4 +1,5 @@
 import { type ModelProvider, type Model } from '@openai/agents-core';
+import type { CopilotSession } from '@github/copilot-sdk';
 import type {
     ILoggingService,
     ISettingsService,
@@ -9,6 +10,7 @@ export class GitHubCopilotProvider implements ModelProvider {
     #settingsService: ISettingsService;
     #loggingService: ILoggingService;
     #sessionMap = new Map<string, string>(); // Mapping of responseId -> sessionId
+    #activeSessions = new Map<string, CopilotSession>(); // Cache of sessionId -> actual session object
 
     constructor(deps: {
         settingsService: ISettingsService;
@@ -24,6 +26,7 @@ export class GitHubCopilotProvider implements ModelProvider {
             loggingService: this.#loggingService,
             modelId: modelName,
             sessionMap: this.#sessionMap,
+            activeSessions: this.#activeSessions,
         });
     }
 }

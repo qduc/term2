@@ -9,7 +9,7 @@ This document outlines the plan to integrate the official **GitHub Copilot SDK**
 The GitHub Copilot SDK allows programmatic access to the GitHub Copilot Agent core. It communicates with the `copilot` CLI via JSON-RPC. The SDK manages CLI process lifecycle automatically.
 
 ## Prerequisites
-- **GitHub Copilot CLI** installed and authenticated (`gh auth login`)
+- **GitHub Copilot CLI** installed and authenticated via standalone `copilot` command OR `gh extension install github/gh-copilot`
 - A valid **GitHub Copilot subscription**
 
 > [!NOTE]
@@ -143,7 +143,7 @@ Add to `SettingsService`:
 - [ ] Install `@github/copilot-sdk` and `zod`
 - [ ] Create file structure in `source/providers/github-copilot/`
 - [ ] Implement `registerProvider` boilerplate
-- [ ] Add environment validation (verify local `gh copilot` availability)
+- [ ] Add environment validation (verify local `copilot` or `gh copilot` availability)
 
 ### Phase 2: Streaming
 - [ ] Implement `GitHubCopilotModel.getStreamedResponse`

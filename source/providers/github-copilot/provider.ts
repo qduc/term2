@@ -4,8 +4,13 @@ import type {
     ILoggingService,
     ISettingsService,
 } from '../../services/service-interfaces.js';
-import { GitHubCopilotModel } from './model.js';
+import { GitHubCopilotDirectModel } from './model-direct.js';
 
+/**
+ * GitHubCopilotProvider - Uses the Direct model that lets Copilot SDK
+ * control tool execution flow without trying to integrate with
+ * OpenAI Agents SDK's approval pattern.
+ */
 export class GitHubCopilotProvider implements ModelProvider {
     #settingsService: ISettingsService;
     #loggingService: ILoggingService;
@@ -21,7 +26,7 @@ export class GitHubCopilotProvider implements ModelProvider {
     }
 
     getModel(modelName?: string): Promise<Model> | Model {
-        return new GitHubCopilotModel({
+        return new GitHubCopilotDirectModel({
             settingsService: this.#settingsService,
             loggingService: this.#loggingService,
             modelId: modelName,

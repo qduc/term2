@@ -155,7 +155,7 @@ export class GitHubCopilotModel implements Model {
         this.#loggingService.debug('GitHubCopilot stream start', {
             messageCount: messages.length,
             modelId: resolvedModelId,
-            previousResponseId: request.previousResponseId,
+            previousResponseId: request.previousResponseId || (request as any).providerData?.previousResponseId,
         });
 
         const tools = extractFunctionToolsFromRequest(request);
@@ -179,11 +179,27 @@ export class GitHubCopilotModel implements Model {
         }));
 
         let session: CopilotSession;
+        let hasPendingToolResolutions = false;
+
         try {
-            // Check if we can resume a previous session
-            const prevSessionId = request.previousResponseId
-                ? this.#sessionMap.get(request.previousResponseId)
+            // Check both the standard request field and our custom providerData fallback
+            const prevResponseId = request.previousResponseId || (request as any).providerData?.previousResponseId;
+            const prevSessionId = prevResponseId
+                ? this.#sessionMap.get(prevResponseId)
                 : undefined;
+
+            // Check if there are pending tool resolutions for this session BEFORE we decide on re-registration
+            // This is critical: if we're resuming a suspended tool, we MUST NOT re-register handlers
+            // because the SDK is waiting on the original handler's promise
+            if (prevSessionId) {
+                const existingResolutions = pendingResolutions.get(prevSessionId);
+                hasPendingToolResolutions = existingResolutions ? existingResolutions.size > 0 : false;
+                this.#loggingService.debug('Checking pending tool resolutions before session setup', {
+                    prevSessionId,
+                    hasPendingToolResolutions,
+                    pendingCallIds: existingResolutions ? Array.from(existingResolutions.keys()) : [],
+                });
+            }
 
             // First, try to get a cached session object
             const cachedSession = prevSessionId
@@ -191,15 +207,36 @@ export class GitHubCopilotModel implements Model {
                 : undefined;
 
             if (cachedSession) {
-                // Reuse the cached session - just update tool handlers with fresh callbacks
+                // Reuse the cached session
                 this.#loggingService.debug('Reusing cached GitHubCopilot session', {
                     sessionId: prevSessionId,
+                    hasPendingToolResolutions,
                 });
                 session = cachedSession;
-                // Re-register tools to get fresh Promise callbacks for this turn
-                (session as any).registerTools(copilotTools);
+
+                // CRITICAL: Only re-register tools if there are NO pending resolutions
+                // If there ARE pending resolutions, the SDK is waiting on the original handlers' promises
+                // Re-registering would create new handlers and break the promise chain
+                if (!hasPendingToolResolutions) {
+                    this.#loggingService.debug('Re-registering tools for new turn (no pending resolutions)');
+                    (session as any).registerTools(copilotTools);
+                } else {
+                    this.#loggingService.debug('Skipping tool re-registration (pending resolutions exist)');
+                }
             } else if (prevSessionId) {
                 // Session ID exists but no cached object - need to resume from server
+                // IMPORTANT: If there are pending resolutions but no cached session,
+                // those promises are orphaned (the original session object is gone).
+                // We must clear them and proceed fresh.
+                if (hasPendingToolResolutions) {
+                    this.#loggingService.warn('Orphaned pending resolutions detected (cached session gone)', {
+                        sessionId: prevSessionId,
+                        pendingCallIds: Array.from(pendingResolutions.get(prevSessionId)?.keys() || []),
+                    });
+                    pendingResolutions.delete(prevSessionId);
+                    hasPendingToolResolutions = false;
+                }
+
                 this.#loggingService.debug('Resuming GitHubCopilot session from server', {
                     sessionId: prevSessionId,
                 });
@@ -289,7 +326,7 @@ export class GitHubCopilotModel implements Model {
         };
 
         // Register event handlers on the session (returns unsubscribe function)
-        unsubscribeEvents = session.on((event: any) => {
+        unsubscribeEvents = session.on(async (event: any) => {
             try {
                 switch (event.type) {
                     case 'assistant.message_delta':
@@ -328,24 +365,37 @@ export class GitHubCopilotModel implements Model {
                     case 'tool.execution_start':
                         // Tool call requested
                         if (event.data) {
+                            this.#loggingService.debug('GitHubCopilot tool.execution_start', {
+                                data: event.data,
+                            });
+
+                            const toolName = event.data.toolName;
+                            if (!toolName) {
+                                this.#loggingService.error('GitHubCopilot tool execution missing name', { data: event.data });
+                                break;
+                            }
+
+                            const rawArgs = event.data.arguments || event.data.args || {};
+                            const argsString = typeof rawArgs === 'string'
+                                ? rawArgs
+                                : JSON.stringify(rawArgs);
+
                             const toolCall = {
                                 type: 'function_call',
-                                callId: event.data.callId || randomUUID(),
-                                name: event.data.toolName,
-                                arguments: typeof event.data.args === 'string'
-                                    ? event.data.args
-                                    : JSON.stringify(event.data.args || {}),
+                                callId: event.data.toolCallId || event.data.callId || randomUUID(),
+                                name: toolName,
+                                arguments: argsString,
                             };
                             state.accumulatedToolCalls.push(toolCall);
 
 
                             // Check if this is a user tool that requires external handling
                             // We look it up in our 'copilotTools' list
-                            const isUserTool = copilotTools.some((t: any) => t.name === event.data.toolName);
+                            const isUserTool = copilotTools.some((t: any) => t.name === toolName);
 
                             if (isUserTool) {
                                 this.#loggingService.debug('Detaching stream for user tool execution', {
-                                    tool: event.data.toolName,
+                                    tool: toolName,
                                     callId: toolCall.callId,
                                 });
 
@@ -359,6 +409,30 @@ export class GitHubCopilotModel implements Model {
                                         arguments: toolCall.arguments,
                                     }
                                 } as ResponseStreamEvent);
+
+                                // WAIT FOR TRAP: Ensure the SDK handler has actually run and registered the promise
+                                // This prevents a race condition where the next turn starts before the trap is set.
+                                // We poll for up to 1 second.
+                                let attempts = 0;
+                                const maxAttempts = 20;
+                                while (attempts < maxAttempts) {
+                                    const sessionPending = pendingResolutions.get(session.sessionId);
+                                    if (sessionPending && sessionPending.has(toolCall.callId)) {
+                                        this.#loggingService.debug('Trap confirmed: pending resolution registered', {
+                                            callId: toolCall.callId,
+                                            attempts
+                                        });
+                                        break;
+                                    }
+                                    await new Promise(r => setTimeout(r, 50));
+                                    attempts++;
+                                }
+
+                                if (attempts >= maxAttempts) {
+                                    this.#loggingService.error('Trap timeout: Handler did not register promise in time', {
+                                        callId: toolCall.callId
+                                    });
+                                }
 
                                 // IMPORTANT: Emit response_done so the Runner captures the responseId.
                                 // This allows the next turn to pass 'previousResponseId' correctly,
@@ -438,31 +512,48 @@ export class GitHubCopilotModel implements Model {
         let isResumingTool = false;
 
         if (sessionResolutions && sessionResolutions.size > 0) {
+            this.#loggingService.debug('Attempting to resolve suspended tool calls', {
+                sessionId: session.sessionId,
+                pendingCallIds: Array.from(sessionResolutions.keys()),
+                inputItemCount: Array.isArray(request.input) ? request.input.length : 0,
+            });
+
             // Look for tool outputs in the request input that match pending traps
             // The Runner appends the output to the history
             if (request.input && Array.isArray(request.input)) {
                 for (const item of request.input) {
                     // Check for function_call_output type (mapped from SDK)
-                    if (
-                        (item as any).type === 'function_call_output' &&
-                        (item as any).callId &&
-                        sessionResolutions.has((item as any).callId)
-                    ) {
+                    if ((item as any).type === 'function_call_output') {
                         const callId = (item as any).callId;
-                        const output = (item as any).output;
+                        const hasPending = callId && sessionResolutions.has(callId);
 
-                        this.#loggingService.debug('Resolving suspended tool call', {
+                        this.#loggingService.debug('Checking input item for tool resolution', {
+                            type: (item as any).type,
                             callId,
-                            outputLength: output?.length,
+                            hasPending,
                         });
 
-                        const resolve = sessionResolutions.get(callId)!;
-                        resolve(output); // UNBLOCK the SDK handler!
-                        sessionResolutions.delete(callId);
-                        isResumingTool = true;
+                        if (hasPending) {
+                            const output = (item as any).output;
+
+                            this.#loggingService.debug('Resolving suspended tool call', {
+                                callId,
+                                outputLength: output?.length,
+                                outputPreview: typeof output === 'string' ? output.slice(0, 50) : 'obj',
+                            });
+
+                            const resolve = sessionResolutions.get(callId)!;
+                            resolve(output); // UNBLOCK the SDK handler!
+                            sessionResolutions.delete(callId);
+                            isResumingTool = true;
+                        }
                     }
                 }
             }
+        } else {
+            this.#loggingService.debug('No pending tool resolutions for this session', {
+                sessionId: session.sessionId,
+            });
         }
 
         // Only send a new prompt if we are NOT resuming a tool call

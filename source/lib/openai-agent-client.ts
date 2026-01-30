@@ -291,6 +291,10 @@ export class OpenAIAgentClient {
             // Pass previousResponseId for providers that support server-side context
             if ((this.#provider === 'openai' || this.#provider === 'github-copilot') && previousResponseId) {
                 options.previousResponseId = previousResponseId;
+                // Also pass via providerData for custom providers where the Runner might not pass it down
+                if (this.#provider === 'github-copilot') {
+                    options.providerData = { ...options.providerData, previousResponseId };
+                }
             }
 
             const result = await this.#executeWithRetry(() =>
@@ -320,6 +324,8 @@ export class OpenAIAgentClient {
         {previousResponseId}: {previousResponseId?: string | null} = {},
     ): Promise<any> {
         this.abort();
+        this.#currentCorrelationId = randomUUID();
+        this.#logger.setCorrelationId(this.#currentCorrelationId);
         this.#currentAbortController = new AbortController();
         const signal = this.#currentAbortController.signal;
 
@@ -330,6 +336,10 @@ export class OpenAIAgentClient {
         // Pass previousResponseId for providers that support server-side context
         if ((this.#provider === 'openai' || this.#provider === 'github-copilot') && previousResponseId) {
             options.previousResponseId = previousResponseId;
+            // Also pass via providerData for custom providers where the Runner might not pass it down
+            if (this.#provider === 'github-copilot') {
+                options.providerData = { ...options.providerData, previousResponseId };
+            }
         }
 
         return this.#executeWithRetry(() =>
@@ -342,6 +352,8 @@ export class OpenAIAgentClient {
         {previousResponseId}: {previousResponseId?: string | null} = {},
     ): Promise<any> {
         this.abort();
+        this.#currentCorrelationId = randomUUID();
+        this.#logger.setCorrelationId(this.#currentCorrelationId);
         this.#currentAbortController = new AbortController();
         const signal = this.#currentAbortController.signal;
 
@@ -354,6 +366,10 @@ export class OpenAIAgentClient {
         // Pass previousResponseId for providers that support server-side context
         if ((this.#provider === 'openai' || this.#provider === 'github-copilot') && previousResponseId) {
             options.previousResponseId = previousResponseId;
+            // Also pass via providerData for custom providers where the Runner might not pass it down
+            if (this.#provider === 'github-copilot') {
+                options.providerData = { ...options.providerData, previousResponseId };
+            }
         }
 
         return this.#executeWithRetry(() =>

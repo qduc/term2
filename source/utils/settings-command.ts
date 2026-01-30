@@ -164,7 +164,7 @@ export function createSettingsCommand({
                     key === SETTING_KEYS.AGENT_MENTOR_MODEL) &&
                 typeof parsedValue === 'string'
             ) {
-                const providerMatch = parsedValue.match(/--provider=(\w+)/);
+                const providerMatch = parsedValue.match(/--provider=([\w.-]+)/);
                 if (providerMatch) {
                     const provider = providerMatch[1];
                     // Validate provider
@@ -186,7 +186,7 @@ export function createSettingsCommand({
                     }
                 }
                 parsedValue = parsedValue
-                    .replace(/\s*--provider=\w+\s*/, '')
+                    .replace(/\s*--provider=[\w.-]+\s*/, '')
                     .trim();
             }
 

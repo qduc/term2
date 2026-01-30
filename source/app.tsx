@@ -268,9 +268,9 @@ const App: FC<AppProps> = ({
 
                     // Parse model and provider from args
                     // Format: "model-id --provider=providerid" or just "model-id"
-                    const providerMatch = args.match(/--provider=(\w+)/);
+                    const providerMatch = args.match(/--provider=([\w.-]+)/);
                     const modelId = args
-                        .replace(/\s*--provider=\w+\s*/, '')
+                        .replace(/\s*--provider=[\w.-]+\s*/, '')
                         .trim();
 
                     // Validate provider if specified

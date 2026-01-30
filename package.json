@@ -46,6 +46,7 @@
         "dist"
     ],
     "dependencies": {
+        "@github/copilot-sdk": "^0.1.19",
         "@openai/agents": "^0.4.3",
         "@types/ssh2": "^1.15.5",
         "bash-parser": "^0.5.0",

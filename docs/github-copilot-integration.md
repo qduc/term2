@@ -12,8 +12,8 @@ The GitHub Copilot SDK allows programmatic access to the GitHub Copilot Agent co
 - **GitHub Copilot CLI** installed and authenticated (`gh auth login`)
 - A valid **GitHub Copilot subscription**
 
-> [!WARNING]
-> **SSH Mode Incompatibility**: This provider will be disabled in SSH mode. The Copilot CLI must be installed and authenticated on the execution host. Remote hosts typically won't have this available.
+> [!NOTE]
+> **SSH/Remote Compatibility**: This provider is fully compatible with SSH/Remote sessions. The **GitHub Copilot SDK and CLI run locally** on the host machine. The application's existing command execution layer handles routing shell commands to the appropriate remote environment (SSH). No installation is required on the remote server.
 
 ## Proposed Architecture
 
@@ -143,7 +143,7 @@ Add to `SettingsService`:
 - [ ] Install `@github/copilot-sdk` and `zod`
 - [ ] Create file structure in `source/providers/github-copilot/`
 - [ ] Implement `registerProvider` boilerplate
-- [ ] Add SSH mode detection (disable provider if remote)
+- [ ] Add environment validation (verify local `gh copilot` availability)
 
 ### Phase 2: Streaming
 - [ ] Implement `GitHubCopilotModel.getStreamedResponse`

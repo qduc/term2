@@ -5,9 +5,9 @@ import test from 'ava';
 
 test('applyRuntimeSetting - parses model without provider', t => {
     const value = 'gpt-4o';
-    const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
+    const providerMatch = String(value).match(/--provider=([\w.-]+)/);
     const modelId = String(value)
-        .replace(/\s*--provider=(openai|openrouter)\s*/, '')
+        .replace(/\s*--provider=[\w.-]+\s*/, '')
         .trim();
 
     t.is(providerMatch, null);
@@ -16,9 +16,9 @@ test('applyRuntimeSetting - parses model without provider', t => {
 
 test('applyRuntimeSetting - parses model with openai provider', t => {
     const value = 'gpt-4o --provider=openai';
-    const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
+    const providerMatch = String(value).match(/--provider=([\w.-]+)/);
     const modelId = String(value)
-        .replace(/\s*--provider=(openai|openrouter)\s*/, '')
+        .replace(/\s*--provider=[\w.-]+\s*/, '')
         .trim();
 
     t.truthy(providerMatch);
@@ -28,9 +28,9 @@ test('applyRuntimeSetting - parses model with openai provider', t => {
 
 test('applyRuntimeSetting - parses model with openrouter provider', t => {
     const value = 'anthropic/claude-3.5-sonnet --provider=openrouter';
-    const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
+    const providerMatch = String(value).match(/--provider=([\w.-]+)/);
     const modelId = String(value)
-        .replace(/\s*--provider=(openai|openrouter)\s*/, '')
+        .replace(/\s*--provider=[\w.-]+\s*/, '')
         .trim();
 
     t.truthy(providerMatch);
@@ -40,9 +40,9 @@ test('applyRuntimeSetting - parses model with openrouter provider', t => {
 
 test('applyRuntimeSetting - handles model with provider and extra whitespace', t => {
     const value = 'gpt-4o    --provider=openai   ';
-    const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
+    const providerMatch = String(value).match(/--provider=([\w.-]+)/);
     const modelId = String(value)
-        .replace(/\s*--provider=(openai|openrouter)\s*/, '')
+        .replace(/\s*--provider=[\w.-]+\s*/, '')
         .trim();
 
     t.truthy(providerMatch);

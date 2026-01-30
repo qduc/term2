@@ -45,6 +45,11 @@ const AgentSettingsSchema = z.object({
             title: z.string().optional(),
         })
         .optional(),
+    'github-copilot': z
+        .object({
+            model: z.string().optional().describe('Model to use with GitHub Copilot (default: gpt-4o)'),
+        })
+        .optional(),
     mentorModel: z.string().optional().describe('Model to use as a mentor'),
     mentorProvider: z
         .string()

@@ -48,6 +48,7 @@
     "dependencies": {
         "@mozilla/readability": "^0.6.0",
         "@openai/agents": "^0.4.3",
+        "@qduc/web-fetch": "^0.1.0",
         "@types/ssh2": "^1.15.5",
         "bash-parser": "^0.5.0",
         "env-paths": "^3.0.0",

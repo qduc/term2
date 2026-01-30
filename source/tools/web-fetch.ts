@@ -54,6 +54,31 @@ function generateCacheKey(url: string, type: string, value: any): string {
 }
 
 /**
+ * Converts a GitHub file URL to a raw.githubusercontent.com URL.
+ * Handles patterns like:
+ * https://github.com/user/repo/blob/branch/path/to/file
+ */
+function convertGithubToRaw(url: string): string {
+    try {
+        const parsed = new URL(url);
+        if (parsed.hostname === 'github.com') {
+            const parts = parsed.pathname.split('/').filter(Boolean);
+            // Expected parts: [user, repo, blob, branch, ...path]
+            if (parts.length >= 4 && parts[2] === 'blob') {
+                const user = parts[0];
+                const repo = parts[1];
+                const branch = parts[3];
+                const filePath = parts.slice(4).join('/');
+                return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${filePath}`;
+            }
+        }
+    } catch {
+        // Not a valid URL or not a GitHub URL we can convert
+    }
+    return url;
+}
+
+/**
  * Format command message for display in the terminal
  */
 export const formatWebFetchCommandMessage = (
@@ -111,7 +136,9 @@ export const createWebFetchToolDefinition = (deps: {
                     return 'Error: URL is required for initial fetch.';
                 }
 
-                const response = await fetch(url, {
+                const effectiveUrl = convertGithubToRaw(url);
+
+                const response = await fetch(effectiveUrl, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (compatible; Term2/1.0; +https://github.com/qduc/term2)',
                     },

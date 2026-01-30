@@ -76,3 +76,25 @@ test('execute: handles fetch errors', async t => {
         global.fetch = originalFetch;
     }
 });
+
+test('execute: converts github blob links to raw links', async t => {
+    const originalFetch = global.fetch;
+    let fetchedUrl = '';
+    global.fetch = async (url: string | URL | Request) => {
+        fetchedUrl = url.toString();
+        return {
+            ok: true,
+            status: 200,
+            headers: new Map([['content-type', 'text/plain']]),
+            text: async () => 'raw github content',
+        } as any;
+    };
+
+    try {
+        const githubUrl = 'https://github.com/qduc/term2/blob/main/package.json';
+        await webFetchTool.execute({ url: githubUrl });
+        t.is(fetchedUrl, 'https://raw.githubusercontent.com/qduc/term2/main/package.json');
+    } finally {
+        global.fetch = originalFetch;
+    }
+});

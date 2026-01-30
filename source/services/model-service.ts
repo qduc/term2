@@ -59,16 +59,22 @@ export function clearModelCache(): void {
     cache.clear();
 }
 
+const fuseCache = new WeakMap<ModelInfo[], Fuse<ModelInfo>>();
+
 export function filterModels(models: ModelInfo[], query: string): ModelInfo[] {
     if (!query.trim()) {
         return models;
     }
 
-    const fuse = new Fuse(models, {
-        keys: ['id', 'name'],
-        threshold: 0.4,
-        ignoreLocation: true,
-    });
+    let fuse = fuseCache.get(models);
+    if (!fuse) {
+        fuse = new Fuse(models, {
+            keys: ['id', 'name'],
+            threshold: 0.4,
+            ignoreLocation: true,
+        });
+        fuseCache.set(models, fuse);
+    }
 
     return fuse.search(query.trim()).map(match => match.item);
 }

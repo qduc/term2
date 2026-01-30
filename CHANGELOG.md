@@ -1,3 +1,28 @@
+I'll generate a concise CHANGELOG.md entry for version 0.1.4 based on the commits provided.
+
+## [0.1.4] - 2026-01-30
+
+### Features
+- Add web_fetch tool for fetching and processing web content
+- Implement AI-powered healing for malformed edit patches
+- Add conversion of GitHub file URLs to raw links for improved accessibility
+- Implement EOL normalization and comment stripping for search/replace tool
+- Use incremental rendering to reduce flickering and improve performance
+
+### Bug Fixes
+- Fix issue where RED level commands were hard-blocked even after user approval
+- Merge consecutive messages with the same role before sending to API
+- Update text colors for better visibility and consistency across components
+- Ensure npm authentication before publishing in release script
+
+### Improvements
+- Update changelog generation to use Haiku model for improved output quality
+- Refactor use-conversation hook and improve test coverage
+
+### Internal/Chores
+- Bump Ink version to 6.6.0
+- Add planning for GitHub Copilot SDK as provider
+
 ## [0.1.3] - 2026-01-28
 
 ### Features

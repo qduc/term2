@@ -8,15 +8,11 @@ test('throws on empty command', t => {
 });
 
 test('flags dangerous direct command', t => {
-    t.throws(() => validateCommandSafety('rm -rf /'), {
-        message: /RED|forbidden/i,
-    });
+    t.true(validateCommandSafety('rm -rf /'));
 });
 
 test('flags nested dangerous command in substitution', t => {
-    t.throws(() => validateCommandSafety('echo $(rm -rf /)'), {
-        message: /RED|forbidden/i,
-    });
+    t.true(validateCommandSafety('echo $(rm -rf /)'));
 });
 
 test('does not flag namespaced filenames', t => {
@@ -27,57 +23,41 @@ test('flags hidden sensitive files as yellow (approval required)', t => {
     t.true(validateCommandSafety('cat .env'));
 });
 
-test('absolute system paths are red (blocked)', t => {
-    t.throws(() => validateCommandSafety('cat /etc/passwd'), {
-        message: /RED|forbidden/i,
-    });
+test('absolute system paths are red (now yellow-ish, needs approval)', t => {
+    t.true(validateCommandSafety('cat /etc/passwd'));
 });
 
 test('unknown commands are yellow (audit)', t => {
     t.true(validateCommandSafety('python script.py'));
 });
 
-test('tilde ssh key is red (blocked)', t => {
-    t.throws(() => validateCommandSafety('cat ~/.ssh/id_rsa'), {
-        message: /RED|forbidden/i,
-    });
+test('tilde ssh key is red (needs approval)', t => {
+    t.true(validateCommandSafety('cat ~/.ssh/id_rsa'));
 });
 
-test('home env file via $HOME is red (blocked)', t => {
-    t.throws(() => validateCommandSafety('cat $HOME/.env'), {
-        message: /RED|forbidden/i,
-    });
+test('home env file via $HOME is red (needs approval)', t => {
+    t.true(validateCommandSafety('cat $HOME/.env'));
 });
 
-test('absolute home dotfile is red (blocked)', t => {
-    t.throws(() => validateCommandSafety('cat /home/test/.gitconfig'), {
-        message: /RED|forbidden/i,
-    });
+test('absolute home dotfile is red (needs approval)', t => {
+    t.true(validateCommandSafety('cat /home/test/.gitconfig'));
 });
 
-test('redirect reading system file is red (blocked)', t => {
-    t.throws(() => validateCommandSafety('cat < /etc/passwd'), {
-        message: /RED|forbidden/i,
-    });
+test('redirect reading system file is red (needs approval)', t => {
+    t.true(validateCommandSafety('cat < /etc/passwd'));
 });
 
-test('redirect writing system file is red (blocked)', t => {
-    t.throws(() => validateCommandSafety('echo hi > /etc/hosts'), {
-        message: /RED|forbidden/i,
-    });
+test('redirect writing system file is red (needs approval)', t => {
+    t.true(validateCommandSafety('echo hi > /etc/hosts'));
 });
 
 // Sed command tests
-test('sed in-place edit is red (blocked)', t => {
-    t.throws(() => validateCommandSafety('sed -i "s/foo/bar/" file.txt'), {
-        message: /RED|forbidden/i,
-    });
+test('sed in-place edit is red (needs approval)', t => {
+    t.true(validateCommandSafety('sed -i "s/foo/bar/" file.txt'));
 });
 
-test('sed in-place edit with backup is red (blocked)', t => {
-    t.throws(() => validateCommandSafety('sed -i.bak "s/foo/bar/" file.txt'), {
-        message: /RED|forbidden/i,
-    });
+test('sed in-place edit with backup is red (needs approval)', t => {
+    t.true(validateCommandSafety('sed -i.bak "s/foo/bar/" file.txt'));
 });
 
 test('sed with output redirect is yellow (requires approval)', t => {

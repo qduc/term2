@@ -189,8 +189,8 @@ export function classifyCommand(
 
 /**
  * Validate command safety using an AST parser.
- * Returns true when a command requires user approval.
- * Throws for invalid/empty inputs OR hard-blocked RED classifications.
+ * Returns true when a command requires user approval (YELLOW or RED).
+ * Throws for invalid/empty inputs.
  */
 export function validateCommandSafety(
     command: string,
@@ -209,18 +209,19 @@ export function validateCommandSafety(
     });
     const status = classifyCommand(command, logger);
 
-    if (status === SafetyStatus.RED) {
-        logger.security('Command validation failed: RED (forbidden)', {
+    if (status === SafetyStatus.RED || status === SafetyStatus.YELLOW) {
+        logger.security('Command validation: needs approval', {
             command: command.substring(0, 200),
+            status,
         });
-        throw new Error('Command classified as RED (forbidden)');
+        return true;
     }
 
     logger.security('Validation result', {
         command: command.substring(0, 200),
         status,
     });
-    return status === SafetyStatus.YELLOW;
+    return false;
 }
 
 // Re-export types and constants for convenience

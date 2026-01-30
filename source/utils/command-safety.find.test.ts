@@ -163,10 +163,9 @@ test('find - delete flag (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -182,10 +181,9 @@ test('find - exec with destructive commands (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -199,10 +197,9 @@ test('find - exec with shell commands (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -216,10 +213,9 @@ test('find - exec with shell metacharacters (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -228,10 +224,9 @@ test('find - malformed exec (no terminator) (RED)', t => {
     const commands = ['find . -exec rm {}', 'find . -exec cat'];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error for malformed exec`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED error for malformed exec`,
         );
     }
 });
@@ -245,10 +240,9 @@ test('find - execdir variants (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -259,10 +253,9 @@ test('find - execdir variants (RED)', t => {
 
 test('find - multiple exec flags (RED if any dangerous)', t => {
     // First safe, second dangerous
-    t.throws(
-        () => validateCommandSafety('find . -exec echo {} \\; -exec rm {} \\;'),
-        {message: /RED \(forbidden\)/},
-        'Should be RED if any exec is dangerous',
+    t.true(
+        validateCommandSafety('find . -exec echo {} \\; -exec rm {} \\;'),
+        'Should return true if any exec is dangerous',
     );
 });
 
@@ -270,10 +263,9 @@ test('find - exec with plus terminator (RED if dangerous)', t => {
     const commands = ['find . -exec rm {} +', 'find . -exec rm {} \\+'];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -314,10 +306,9 @@ test('find - escaped semicolons (RED if dangerous)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -329,10 +320,9 @@ test('find - directory traversal in paths (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -345,19 +335,17 @@ test('find - home directory searches (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
 
 test('find - empty exec command (RED)', t => {
-    t.throws(
-        () => validateCommandSafety('find . -exec \\;'),
-        {message: /RED \(forbidden\)/},
-        'Empty exec command should be RED',
+    t.true(
+        validateCommandSafety('find . -exec \\;'),
+        'Empty exec command should return true',
     );
 });
 
@@ -367,9 +355,7 @@ test('find - boolean operators maintain safety classification', t => {
     t.is(safe, SafetyStatus.GREEN);
 
     // Safe AND dangerous = RED
-    t.throws(() => validateCommandSafety('find . -name "*.txt" -delete'), {
-        message: /RED \(forbidden\)/,
-    });
+    t.true(validateCommandSafety('find . -name "*.txt" -delete'));
 
     // NOT operation doesn't change classification
     const notSafe = classifyCommand('find . ! -name "*.txt"');
@@ -389,10 +375,9 @@ test('find - interpreter bypasses (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -406,10 +391,9 @@ test('find - meta-executor bypasses (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -424,19 +408,17 @@ test('find - more destructive commands (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
 
 test('find - executing found files directly (RED)', t => {
-    t.throws(
-        () => validateCommandSafety('find / -perm -4000 -exec {} \\;'),
-        {message: /RED \(forbidden\)/},
-        'Executing found SUID binaries should be RED',
+    t.true(
+        validateCommandSafety('find / -perm -4000 -exec {} \\;'),
+        'Executing found SUID binaries should return true for RED command',
     );
 });
 
@@ -467,10 +449,9 @@ test('find - expanded home directory patterns (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });
@@ -484,10 +465,9 @@ test('find - sensitive dotfiles expanded list (RED)', t => {
     ];
 
     for (const cmd of commands) {
-        t.throws(
-            () => validateCommandSafety(cmd),
-            {message: /RED \(forbidden\)/},
-            `"${cmd}" should throw RED error`,
+        t.true(
+            validateCommandSafety(cmd),
+            `"${cmd}" should return true for RED command`,
         );
     }
 });

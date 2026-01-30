@@ -1,4 +1,8 @@
 import type {ISettingsService} from '../services/service-interfaces.js';
+import {
+    isCopilotCliAvailable,
+    isGhAuthenticated,
+} from '../providers/github-copilot/utils.js';
 
 /**
  * Check if a provider has the required credentials configured
@@ -15,6 +19,10 @@ export const hasProviderCredentials = (
 
     if (providerId === 'openrouter') {
         return !!settingsService.get('agent.openrouter.apiKey');
+    }
+
+    if (providerId === 'github-copilot') {
+        return isCopilotCliAvailable() && isGhAuthenticated();
     }
 
     // For unknown providers, assume they're available

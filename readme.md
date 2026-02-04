@@ -5,13 +5,16 @@
 
 A powerful terminal-based AI assistant that helps you get things done on your computer through natural conversation.
 
+**Why term2?** Unlike proprietary alternatives, term2 is **open-source (MIT)**, works with **any AI provider** (OpenAI, OpenRouter, local self-hosted, etc.), requires **no subscription**, and uniquely supports **remote server management via SSH** — all while giving you full control over what commands execute on your system.
+
 ## Demo
 
 https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 
 ## Features
 
--   🎭 **Three Operating Modes** - Default (full-power), Lite (fast & safe), and Mentor (collaborative problem-solving)
+-   🎭 **Three Operating Modes** - Default (full-power), Lite (fast & safe), and Mentor (get help from a smarter model on complex problems)
+-   🌍 **Open Source** - MIT licensed, hackable, auditable, community-driven
 -   🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, and OpenAI-compatible APIs
 -   🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
 -   🛠️ **Advanced Tools** - Shell execution, file patching, search/replace, grep, find files, file reading, web search, and mentor consultation
@@ -23,6 +26,24 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 -   🎨 **Markdown Rendering** - Formatted code blocks and text in the terminal
 -   🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
 -   🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
+
+## Why term2 vs Alternatives?
+
+| | **term2** | Claude Code | Warp |
+|---|:---:|:---:|:---:|
+| **Open Source** | ✅ MIT | ❌ Proprietary | ❌ Proprietary |
+| **Cost** | Pay-per-use | $20-200/mo | Freemium |
+| **AI Providers** | Any (OpenAI, OpenRouter, local, etc.) | Anthropic only | selected models only |
+| **SSH Remote** | ✅ Native | ❌ No | ✅ Yes |
+| **Mentor Mode** | ✅ Built-in | ❌ No | ❌ No |
+| **Self-Hostable** | ✅ | ❌ | ❌ |
+
+**term2 gives you:**
+- **Freedom** — No vendor lock-in. Use any AI provider or model you prefer.
+- **Transparency** — Open source means you can audit every line of code.
+- **Cost Control** — Pay only for API usage, no monthly subscriptions.
+- **Remote Work** — Troubleshoot and manage remote servers without installing anything on remote hosts.
+- **Safety** — Every command requires explicit approval with diff previews before execution.
 
 ## Installation
 

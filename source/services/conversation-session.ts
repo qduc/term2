@@ -257,8 +257,11 @@ export class ConversationSession {
     ): AsyncIterable<ConversationEvent> {
         let stream: any = null;
         try {
+            const shouldAddUserMessage =
+                !skipUserMessage && !this.abortedApprovalContext;
+
             // Maintain canonical local history regardless of provider.
-            if (!skipUserMessage) {
+            if (shouldAddUserMessage) {
                 this.conversationStore.addUserMessage(text);
             }
 
@@ -597,14 +600,15 @@ export class ConversationSession {
         if (answer === 'y') {
             state.approve(interruption);
         } else {
-            // If rejection reason provided, inject it as a tool interceptor result
-            if (rejectionReason) {
-                const toolName = interruption.name ?? 'unknown';
-                const expectedCallId =
-                    (interruption as any).rawItem?.callId ??
-                    (interruption as any).callId;
-                const rejectionMessage = `Tool execution was not approved. User's reason: ${rejectionReason}`;
+            const toolName = interruption.name ?? 'unknown';
+            const expectedCallId =
+                (interruption as any).rawItem?.callId ??
+                (interruption as any).callId;
+            const rejectionMessage = rejectionReason
+                ? `Tool execution was not approved. User's reason: ${rejectionReason}`
+                : 'Tool execution was not approved.';
 
+            if (typeof this.agentClient.addToolInterceptor === 'function') {
                 const removeInterceptor = this.agentClient.addToolInterceptor(
                     async (name: string, _params: any, toolCallId?: string) => {
                         if (
@@ -629,6 +633,7 @@ export class ConversationSession {
                     removeInterceptor,
                 };
             } else {
+                // Fallback for clients without tool interceptors
                 state.reject(interruption);
             }
         }
@@ -711,10 +716,7 @@ export class ConversationSession {
             throw error;
         } finally {
             // Clean up interceptor if one was added for rejection reason
-            if (
-                rejectionReason &&
-                this.pendingApprovalContext?.removeInterceptor
-            ) {
+            if (this.pendingApprovalContext?.removeInterceptor) {
                 this.pendingApprovalContext.removeInterceptor();
             }
         }

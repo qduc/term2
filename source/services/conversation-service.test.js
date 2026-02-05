@@ -253,6 +253,107 @@ test('emits events when resolving aborted approval on next message', async t => 
     t.deepEqual(initialStream.state.approveCalls, [interruption]);
 });
 
+test('reject with reason and abort+new input yield the same history', async t => {
+    const baseHistory = [
+        {
+            role: 'user',
+            type: 'message',
+            content: 'run command',
+        },
+        {
+            type: 'function_call',
+            name: 'shell',
+            arguments: JSON.stringify({command: 'echo hi'}),
+            callId: 'call-1',
+        },
+    ];
+    const rejectionHistory = [
+        ...baseHistory,
+        {
+            type: 'tool_call_output_item',
+            name: 'shell',
+            output: 'Tool execution was not approved.',
+            callId: 'call-1',
+        },
+    ];
+
+    const runFlow = async mode => {
+        const interruption = {
+            name: 'shell',
+            agent: {name: 'CLI Agent'},
+            arguments: JSON.stringify({command: 'echo hi'}),
+            callId: 'call-1',
+        };
+
+        const initialStream = new MockStream([]);
+        initialStream.interruptions = [interruption];
+        initialStream.state = {
+            approveCalls: [],
+            rejectCalls: [],
+            approve(arg) {
+                this.approveCalls.push(arg);
+            },
+            reject(arg) {
+                this.rejectCalls.push(arg);
+            },
+        };
+        initialStream.history = baseHistory;
+
+        const continuationStream = new MockStream([
+            {type: 'response.output_text.delta', delta: 'Rejected'},
+        ]);
+        continuationStream.finalOutput = 'Rejected';
+        continuationStream.history = rejectionHistory;
+
+        const nextStream = new MockStream([]);
+        nextStream.finalOutput = 'Next';
+
+        const startCalls = [];
+        const mockClient = {
+            getProvider() {
+                return 'openrouter';
+            },
+            addToolInterceptor() {
+                return () => {};
+            },
+            abort() {},
+            async startStream(input, options) {
+                startCalls.push({input, options});
+                if (startCalls.length === 1) return initialStream;
+                return nextStream;
+            },
+            async continueRunStream() {
+                return continuationStream;
+            },
+        };
+
+        const service = new ConversationService({
+            agentClient: mockClient,
+            deps: {logger: mockLogger},
+        });
+
+        const approvalResult = await service.sendMessage('run command');
+        t.is(approvalResult.type, 'approval_required');
+
+        if (mode === 'reject') {
+            await service.handleApprovalDecision('n', 'no thanks');
+        } else {
+            service.abort();
+            await service.sendMessage('new input');
+        }
+
+        await service.sendMessage('next');
+
+        t.is(startCalls.length, 2);
+        return startCalls[1].input;
+    };
+
+    const rejectionHistoryAfter = await runFlow('reject');
+    const abortHistoryAfter = await runFlow('abort');
+
+    t.deepEqual(abortHistoryAfter, rejectionHistoryAfter);
+});
+
 test('passes previous response ids into subsequent runs', async t => {
     const streams = [new MockStream([]), new MockStream([])];
     streams[0].lastResponseId = 'resp-1';
@@ -745,6 +846,8 @@ test('handleApprovalDecision() rejects interruption when answer is n', async t =
     ]);
     continuationStream.finalOutput = 'Rejected run';
 
+    let interceptorFn = null;
+    let interceptorRemoved = false;
     const mockClient = {
         async startStream() {
             return initialStream;
@@ -752,6 +855,12 @@ test('handleApprovalDecision() rejects interruption when answer is n', async t =
         async continueRunStream(state, options) {
             t.deepEqual(options, {previousResponseId: 'resp_test'});
             return continuationStream;
+        },
+        addToolInterceptor(fn) {
+            interceptorFn = fn;
+            return () => {
+                interceptorRemoved = true;
+            };
         },
     };
 
@@ -764,8 +873,12 @@ test('handleApprovalDecision() rejects interruption when answer is n', async t =
     const finalResult = await service.handleApprovalDecision('n');
 
     t.is(finalResult.type, 'response');
-    t.deepEqual(initialStream.state.approveCalls, []);
-    t.deepEqual(initialStream.state.rejectCalls, [interruption]);
+    t.deepEqual(initialStream.state.approveCalls, [interruption]);
+    t.deepEqual(initialStream.state.rejectCalls, []);
+    t.truthy(interceptorFn);
+    t.true(interceptorRemoved);
+    const rejection = await interceptorFn('bash', {}, undefined);
+    t.is(rejection, 'Tool execution was not approved.');
 });
 
 test('handleApprovalDecision() returns null when no pending approval', async t => {

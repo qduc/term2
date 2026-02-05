@@ -80,6 +80,7 @@ For implementation details, chronological change logs, and rationale, consult th
 ## Testing & Quality
 
 This project follows TDD approach. You MUST write tests first and then write the minimum code to pass them.
+After making code changes, you MUST run the tests and report the results.
 
 ```bash
 npm test              # Run all tests

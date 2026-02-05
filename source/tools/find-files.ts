@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {exec} from 'child_process';
 import util from 'util';
+import path from 'path';
 import { resolveWorkspacePath, relaxedNumber } from './utils.js';
 import type {ToolDefinition, CommandMessage} from './types.js';
 import {
@@ -114,8 +115,9 @@ export const formatFindFilesCommandMessage = (
 export const createFindFilesToolDefinition = (deps: {
 	executionContext?: ExecutionContext;
 	allowOutsideWorkspace?: boolean;
+	forceFindFallback?: boolean;
 } = {}): ToolDefinition<FindFilesToolParams> => {
-	const { executionContext, allowOutsideWorkspace = false } = deps;
+	const { executionContext, allowOutsideWorkspace = false, forceFindFallback = false } = deps;
 	return {
 		name: 'find_files',
 		description: allowOutsideWorkspace
@@ -141,7 +143,14 @@ export const createFindFilesToolDefinition = (deps: {
 					allowOutsideWorkspace,
 				});
 
-				const useFd = await checkFdAvailability(executionContext);
+				const useFd = forceFindFallback
+					? false
+					: await checkFdAvailability(executionContext);
+				const isRemote = executionContext?.isRemote() ?? false;
+
+				if (isRemote && !useFd && patternHasPathSegments(pattern)) {
+					return 'Error: SSH search without fd does not support path segments in the pattern. Use the path parameter with a basename glob like "*.ts" or "*" instead.';
+				}
 				let command = '';
 
 				if (useFd) {
@@ -160,18 +169,13 @@ export const createFindFilesToolDefinition = (deps: {
 
 					command = args.join(' ');
 				} else {
-					// Fallback to find
+					// Fallback to find (list all files; filter in JS to match fd glob semantics)
 					const args = [
 						'find',
 						`'${absolutePath.replace(/'/g, "'\\''")}'`,
 						'-type',
 						'f',
-						'-name',
 					];
-
-					// Escape pattern for shell
-					args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
-
 					command = args.join(' ');
 				}
 
@@ -198,11 +202,13 @@ export const createFindFilesToolDefinition = (deps: {
 				}
 
 				const lines = trimmed.split('\n');
+				const cleanedLines = useFd
+					? lines.map(line => (line.startsWith('./') ? line.substring(2) : line))
+					: filterFindResults(lines, absolutePath, pattern);
 
-				// Remove './' prefix from paths for cleaner output
-				const cleanedLines = lines.map(line =>
-					line.startsWith('./') ? line.substring(2) : line,
-				);
+				if (cleanedLines.length === 0) {
+					return `No files found matching pattern: ${pattern}`;
+				}
 
 				// Apply limit
 				let resultText = cleanedLines.slice(0, limit).join('\n');
@@ -231,3 +237,84 @@ export const createFindFilesToolDefinition = (deps: {
 		formatCommandMessage: formatFindFilesCommandMessage,
 	};
 };
+
+function filterFindResults(
+	lines: string[],
+	absolutePath: string,
+	pattern: string,
+): string[] {
+	const normalizedPattern = pattern.replace(/\\/g, '/').replace(/^\.\//, '');
+	const patternHasSlash = normalizedPattern.includes('/');
+	const matcher = globToRegex(normalizedPattern);
+	const root = absolutePath.replace(/\\/g, '/').replace(/\/+$/, '');
+
+	const results: string[] = [];
+
+	for (const line of lines) {
+		if (!line) continue;
+		const normalizedLine = line.replace(/\\/g, '/');
+		const relative = path.posix.relative(root, normalizedLine);
+		if (relative.startsWith('..')) continue;
+		const target = patternHasSlash
+			? relative
+			: path.posix.basename(relative);
+		if (matcher.test(target)) {
+			results.push(relative);
+		}
+	}
+
+	return results;
+}
+
+function patternHasPathSegments(pattern: string): boolean {
+	const normalized = pattern.replace(/\\/g, '/');
+	return normalized.includes('/');
+}
+
+function globToRegex(pattern: string): RegExp {
+	let regex = '^';
+	let index = 0;
+
+	while (index < pattern.length) {
+		const char = pattern[index];
+		if (char === '*') {
+			const isDoubleStar = pattern[index + 1] === '*';
+			if (isDoubleStar) {
+				const nextChar = pattern[index + 2];
+				if (nextChar === '/') {
+					regex += '(?:.*/)?';
+					index += 2;
+				} else {
+					while (pattern[index + 1] === '*') {
+						index += 1;
+					}
+					regex += '.*';
+				}
+			} else {
+				regex += '[^/]*';
+			}
+		} else if (char === '?') {
+			regex += '[^/]';
+		} else if (char === '[') {
+			const endIndex = pattern.indexOf(']', index + 1);
+			if (endIndex === -1) {
+				regex += '\\[';
+			} else {
+				const content = pattern.slice(index + 1, endIndex);
+				const escaped = content.replace(/\\/g, '\\\\');
+				regex += `[${escaped}]`;
+				index = endIndex;
+			}
+		} else {
+			regex += escapeRegexChar(char);
+		}
+		index += 1;
+	}
+
+	regex += '$';
+	return new RegExp(regex);
+}
+
+function escapeRegexChar(char: string): string {
+	return /[.+^${}()|\\]/.test(char) ? `\\${char}` : char;
+}

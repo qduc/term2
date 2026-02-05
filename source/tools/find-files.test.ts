@@ -3,10 +3,14 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { createFindFilesToolDefinition } from './find-files.js';
+import { ExecutionContext } from '../services/execution-context.js';
 
 const findFilesToolDefinition = createFindFilesToolDefinition();
 const findFilesToolDefinitionAllowOutside = createFindFilesToolDefinition({
 	allowOutsideWorkspace: true,
+});
+const findFilesToolDefinitionFindFallback = createFindFilesToolDefinition({
+	forceFindFallback: true,
 });
 
 // Helper to create a temp dir and change cwd to it
@@ -97,6 +101,59 @@ test.serial(
 					result.includes('utils/helper.ts'),
 			);
 			t.false(result.includes('readme.md'));
+		});
+	},
+);
+
+test.serial(
+	'execute: supports glob patterns with path segments in find fallback',
+	async t => {
+		await withTempDir(async dir => {
+			await fs.mkdir(path.join(dir, 'src'));
+			await fs.mkdir(path.join(dir, 'src/utils'));
+			await fs.writeFile(path.join(dir, 'src/index.ts'), '');
+			await fs.writeFile(path.join(dir, 'src/utils/helper.ts'), '');
+			await fs.writeFile(path.join(dir, 'readme.md'), '');
+
+			const result = await findFilesToolDefinitionFindFallback.execute({
+				pattern: 'src/**/*',
+				path: null,
+				max_results: null,
+			});
+
+			t.true(result.includes('src/index.ts'));
+			t.true(result.includes('src/utils/helper.ts'));
+			t.false(result.includes('readme.md'));
+		});
+	},
+);
+
+test.serial(
+	'execute: on SSH without fd, rejects patterns with path segments',
+	async t => {
+		await withTempDir(async () => {
+			const sshService = {
+				connect: async () => {},
+				disconnect: async () => {},
+				isConnected: () => true,
+				executeCommand: async () => {
+					throw new Error('fd not found');
+				},
+				readFile: async () => '',
+				writeFile: async () => {},
+				mkdir: async () => {},
+			};
+			const executionContext = new ExecutionContext(sshService);
+			const tool = createFindFilesToolDefinition({ executionContext });
+
+			const result = await tool.execute({
+				pattern: 'src/**/*',
+				path: null,
+				max_results: null,
+			});
+
+			t.true(result.includes('Error'));
+			t.true(result.includes('path'));
 		});
 	},
 );

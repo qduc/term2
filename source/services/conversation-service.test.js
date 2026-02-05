@@ -139,6 +139,44 @@ test('emits approval_required ConversationEvent for interruptions', async t => {
     t.is(emitted[0].approval.callId, 'call-xyz');
 });
 
+test('compacts whitespace-heavy JSON arguments for approvals', async t => {
+    const interruption = {
+        name: 'apply_patch',
+        agent: {name: 'CLI Agent'},
+        arguments:
+            '{"path":"a.txt","timeout_ms":   \n\t\t    null,"max_output_length":\n\t null}',
+        callId: 'call-trim',
+    };
+
+    const initialStream = new MockStream([]);
+    initialStream.interruptions = [interruption];
+
+    const mockClient = {
+        async startStream() {
+            return initialStream;
+        },
+    };
+
+    const emitted = [];
+    const service = new ConversationService({
+        agentClient: mockClient,
+        deps: {logger: mockLogger},
+    });
+    const result = await service.sendMessage('run tool', {
+        onEvent(event) {
+            emitted.push(event);
+        },
+    });
+
+    t.is(result.type, 'approval_required');
+    t.is(emitted.length, 1);
+    t.is(emitted[0].type, 'approval_required');
+    t.is(
+        emitted[0].approval.argumentsText,
+        '{"path":"a.txt","timeout_ms":null,"max_output_length":null}',
+    );
+});
+
 test('emits events when resolving aborted approval on next message', async t => {
     const interruption = {
         name: 'bash',

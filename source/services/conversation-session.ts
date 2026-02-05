@@ -58,7 +58,7 @@ const getCommandFromArgs = (args: unknown): string => {
             if (Array.isArray(parsed?.commands)) {
                 return parsed.commands.join('\n');
             }
-            return args;
+            return JSON.stringify(parsed);
         } catch {
             return args;
         }
@@ -72,8 +72,19 @@ const getCommandFromArgs = (args: unknown): string => {
         if ('commands' in args && Array.isArray(args.commands)) {
             return (args.commands as string[]).join('\n');
         }
-        const argsFromObject =
-            'arguments' in args ? String(args.arguments) : undefined;
+        let argsFromObject: string | undefined;
+        if ('arguments' in args) {
+            const rawArguments = (args as any).arguments;
+            if (typeof rawArguments === 'string') {
+                try {
+                    argsFromObject = JSON.stringify(JSON.parse(rawArguments));
+                } catch {
+                    argsFromObject = String(rawArguments);
+                }
+            } else if (rawArguments !== undefined) {
+                argsFromObject = String(rawArguments);
+            }
+        }
         return cmdFromObject ?? argsFromObject ?? JSON.stringify(args);
     }
 

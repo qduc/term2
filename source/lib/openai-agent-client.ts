@@ -27,6 +27,7 @@ import type {
 import { ExecutionContext } from '../services/execution-context.js';
 import {createEditorImpl} from './editor-impl.js';
 import {ConversationStore} from '../services/conversation-store.js';
+import {trimToolOutput} from '../utils/trim-tool-output.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -758,6 +759,10 @@ export class OpenAIAgentClient {
                         needsApproval: async (context, params) =>
                             definition.needsApproval(params, context),
                         execute: async (params, _context, details) => {
+                            const maxOutputLengthValue =
+                                this.#settings.get<number | undefined>(
+                                    'shell.maxOutputChars',
+                                );
                             // Extract tool call ID from details if available
                             const toolCallId = details?.toolCall?.callId;
                             // Check if this execution should be intercepted
@@ -779,7 +784,7 @@ export class OpenAIAgentClient {
                                     },
                                 );
                                 // Return a failure response that all tools should understand
-                                return JSON.stringify({
+                                const rejected = JSON.stringify({
                                     output: [
                                         {
                                             success: false,
@@ -787,9 +792,22 @@ export class OpenAIAgentClient {
                                         },
                                     ],
                                 });
+                                return trimToolOutput(
+                                    rejected,
+                                    undefined,
+                                    maxOutputLengthValue ?? undefined,
+                                );
                             }
                             // Normal execution
-                            return definition.execute(params, _context);
+                            const result = await definition.execute(
+                                params,
+                                _context,
+                            );
+                            return trimToolOutput(
+                                result,
+                                undefined,
+                                maxOutputLengthValue ?? undefined,
+                            );
                         },
                     }),
                 ),
@@ -834,7 +852,7 @@ export class OpenAIAgentClient {
                             toolCallId,
                             params: JSON.stringify(params).substring(0, 100),
                         });
-                        return JSON.stringify({
+                        const rejected = JSON.stringify({
                             output: [
                                 {
                                     success: false,
@@ -842,12 +860,30 @@ export class OpenAIAgentClient {
                                 },
                             ],
                         });
+                        const maxOutputLengthValue =
+                            this.#settings.get<number | undefined>(
+                                'shell.maxOutputChars',
+                            );
+                        return trimToolOutput(
+                            rejected,
+                            undefined,
+                            maxOutputLengthValue ?? undefined,
+                        );
                     }
-                    return originalInvoke.call(
+                    const result = await originalInvoke.call(
                         nativePatchTool,
                         runContext,
                         normalizedInput,
                         details,
+                    );
+                    const maxOutputLengthValue =
+                        this.#settings.get<number | undefined>(
+                            'shell.maxOutputChars',
+                        );
+                    return trimToolOutput(
+                        result,
+                        undefined,
+                        maxOutputLengthValue ?? undefined,
                     );
                 };
             }

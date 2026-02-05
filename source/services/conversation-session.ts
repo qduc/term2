@@ -597,6 +597,8 @@ export class ConversationSession {
             toolCallArgumentsById,
         } = this.pendingApprovalContext;
 
+        let removeInterceptor: (() => void) | null = null;
+
         if (answer === 'y') {
             state.approve(interruption);
         } else {
@@ -637,6 +639,9 @@ export class ConversationSession {
                 state.reject(interruption);
             }
         }
+
+        removeInterceptor =
+            this.pendingApprovalContext?.removeInterceptor ?? null;
 
         // Restore cached tool-call arguments so continuation outputs can attach them
         this.toolCallArgumentsById.clear();
@@ -716,9 +721,7 @@ export class ConversationSession {
             throw error;
         } finally {
             // Clean up interceptor if one was added for rejection reason
-            if (this.pendingApprovalContext?.removeInterceptor) {
-                this.pendingApprovalContext.removeInterceptor();
-            }
+            removeInterceptor?.();
         }
     }
 

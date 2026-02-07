@@ -90,37 +90,7 @@ export const useModelSelection = (
                 );
 
                 failedProvidersRef.current.add(provider);
-
-                const providerIds = getProviderIds();
-                const available = getAvailableProviderIds(
-                    settingsService,
-                    providerIds,
-                );
-
-                // Find next available provider that hasn't failed yet
-                const currentIndex = available.indexOf(provider);
-                if (currentIndex !== -1 && available.length > 1) {
-                    let nextIndex = (currentIndex + 1) % available.length;
-                    let foundNext = false;
-
-                    while (nextIndex !== currentIndex) {
-                        const candidate = available[nextIndex]!;
-                        if (!failedProvidersRef.current.has(candidate)) {
-                            setProvider(candidate);
-                            foundNext = true;
-                            break;
-                        }
-                        nextIndex = (nextIndex + 1) % available.length;
-                    }
-
-                    if (!foundNext) {
-                        // All available providers have been tried and failed
-                        setError(message);
-                    }
-                } else {
-                    // No other providers to try
-                    setError(message);
-                }
+                setError(message);
             } finally {
                 setLoading(false);
             }

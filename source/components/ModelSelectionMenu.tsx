@@ -93,29 +93,52 @@ const ModelSelectionMenu: FC<Props> = ({
     canSwitchProvider = true,
     settingsService,
 }) => {
+    const header = (
+        <ProviderTabs
+            activeProvider={provider}
+            canSwitch={canSwitchProvider}
+            settingsService={settingsService}
+        />
+    );
+
     if (loading) {
         return (
-            <Box borderStyle="round" borderColor="magenta" paddingX={1}>
-                <Text color="magenta">
-                    Loading models{provider ? ` from ${provider}` : ''}…
-                </Text>
+            <Box flexDirection="column">
+                {header}
+                <Box borderStyle="round" borderColor="magenta" paddingX={1}>
+                    <Text color="magenta">
+                        Loading models{provider ? ` from ${provider}` : ''}…
+                    </Text>
+                </Box>
             </Box>
         );
     }
 
     if (error) {
         return (
-            <Box borderStyle="round" borderColor="red" paddingX={1}>
-                <Text color="red">Unable to load models: {error}</Text>
+            <Box flexDirection="column">
+                {header}
+                <Box borderStyle="round" borderColor="red" paddingX={1}>
+                    <Text color="red">Unable to load models: {error}</Text>
+                </Box>
+                <Text color="#64748b">
+                    Tab → switch provider · Esc → cancel
+                </Text>
             </Box>
         );
     }
 
     if (items.length === 0) {
         return (
-            <Box borderStyle="round" borderColor="magenta" paddingX={1}>
+            <Box flexDirection="column">
+                {header}
+                <Box borderStyle="round" borderColor="magenta" paddingX={1}>
+                    <Text color="#64748b">
+                        No models match "{query || '*'}"
+                    </Text>
+                </Box>
                 <Text color="#64748b">
-                    No models match "{query || '*'}"
+                    Tab → switch provider · Esc → cancel
                 </Text>
             </Box>
         );
@@ -127,11 +150,7 @@ const ModelSelectionMenu: FC<Props> = ({
 
     return (
         <Box flexDirection="column">
-            <ProviderTabs
-                activeProvider={provider}
-                canSwitch={canSwitchProvider}
-                settingsService={settingsService}
-            />
+            {header}
             <Box
                 borderStyle="round"
                 borderColor="magenta"

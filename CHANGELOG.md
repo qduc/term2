@@ -1,3 +1,24 @@
+```markdown
+## [0.1.5] - 2026-02-07
+
+### Features
+- Display token usage in conversations
+- Add a global tool-output character cap to limit output verbosity
+
+### Bug Fixes
+- Show error when fetching model fails instead of silently skipping it
+- Fix reject flow with Esc key producing incorrect message history
+- Fix schema validation issues
+- Trim whitespaces in command arguments
+- Handle SSH find_files patterns without fd utility
+
+### Improvements
+- Refactor: Extract web-fetch to standalone package for reusability
+
+### Internal/Chores
+- Update README documentation
+```
+
 I'll generate a concise CHANGELOG.md entry for version 0.1.4 based on the commits provided.
 
 ## [0.1.4] - 2026-01-30

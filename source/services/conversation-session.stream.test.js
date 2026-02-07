@@ -345,3 +345,109 @@ test('handleApprovalDecision() returns usage from final event', async t => {
         total_tokens: 30,
     });
 });
+
+test('sendMessage() logs usage handoff at DEBUG level', async t => {
+    const stream = new MockStream([
+        {type: 'response.output_text.delta', delta: 'Response'},
+    ]);
+    stream.finalOutput = 'Response';
+    stream.completed = Promise.resolve({
+        usage: {inputTokens: 4, outputTokens: 6, totalTokens: 10},
+    });
+
+    const debugLogs = [];
+    const logger = {
+        ...mockLogger,
+        debug: (message, meta) => {
+            debugLogs.push({message, meta});
+        },
+    };
+
+    const mockClient = {
+        async startStream() {
+            return stream;
+        },
+    };
+
+    const session = new ConversationSession('s1', {
+        agentClient: mockClient,
+        deps: {logger},
+    });
+
+    await session.sendMessage('Hello');
+
+    const hasUsageReturnLog = debugLogs.some(
+        log =>
+            log.message === 'sendMessage returning response' &&
+            log.meta?.hasUsage === true,
+    );
+    t.true(hasUsageReturnLog);
+});
+
+test('logs diagnostics when usage is missing in stream completion', async t => {
+    const stream = new MockStream([
+        {type: 'response.output_text.delta', delta: 'Response'},
+    ]);
+    stream.finalOutput = 'Response';
+    stream.completed = Promise.resolve({foo: 'bar'});
+
+    const debugLogs = [];
+    const logger = {
+        ...mockLogger,
+        debug: (message, meta) => {
+            debugLogs.push({message, meta});
+        },
+    };
+
+    const mockClient = {
+        async startStream() {
+            return stream;
+        },
+    };
+
+    const session = new ConversationSession('s1', {
+        agentClient: mockClient,
+        deps: {logger},
+    });
+
+    await session.sendMessage('Hello');
+
+    const missingUsageLog = debugLogs.find(
+        log => log.message === 'No usage found in stream completion',
+    );
+    t.truthy(missingUsageLog);
+    t.true(
+        Array.isArray(missingUsageLog.meta?.completedResultKeys),
+        'completedResultKeys should be present',
+    );
+});
+
+test('sendMessage() extracts usage from stream.rawResponses when completed is void', async t => {
+    const stream = new MockStream([
+        {type: 'response.output_text.delta', delta: 'Response'},
+    ]);
+    stream.finalOutput = 'Response';
+    stream.completed = Promise.resolve(undefined);
+    stream.rawResponses = [
+        {usage: {inputTokens: 13, outputTokens: 8, totalTokens: 21}},
+    ];
+
+    const mockClient = {
+        async startStream() {
+            return stream;
+        },
+    };
+
+    const session = new ConversationSession('s1', {
+        agentClient: mockClient,
+        deps: {logger: mockLogger},
+    });
+
+    const result = await session.sendMessage('Hello');
+    t.is(result.type, 'response');
+    t.deepEqual(result.usage, {
+        prompt_tokens: 13,
+        completion_tokens: 8,
+        total_tokens: 21,
+    });
+});

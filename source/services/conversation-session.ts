@@ -798,6 +798,11 @@ export class ConversationSession {
                     finalText = event.finalText;
                     reasoningText = event.reasoningText ?? '';
                     usage = event.usage;
+                    this.logger.debug('sendMessage received final event', {
+                        sessionId: this.id,
+                        hasUsage: Boolean(event.usage),
+                        usage: event.usage,
+                    });
                     if (event.commandMessages?.length) {
                         for (const msg of event.commandMessages) {
                             commandMessages.push(msg as any);
@@ -819,13 +824,19 @@ export class ConversationSession {
             finalText = finalText || 'Done.';
         }
 
-        return {
+        const response: ConversationResult = {
             type: 'response',
             commandMessages,
             finalText: finalText || 'Done.',
             ...(reasoningText ? {reasoningText} : {}),
             ...(usage ? {usage} : {}),
         };
+        this.logger.debug('sendMessage returning response', {
+            sessionId: this.id,
+            hasUsage: Boolean(usage),
+            usage,
+        });
+        return response;
     }
 
     async handleApprovalDecision(
@@ -890,6 +901,14 @@ export class ConversationSession {
                     finalText = event.finalText;
                     reasoningText = event.reasoningText ?? '';
                     usage = event.usage;
+                    this.logger.debug(
+                        'handleApprovalDecision received final event',
+                        {
+                            sessionId: this.id,
+                            hasUsage: Boolean(event.usage),
+                            usage: event.usage,
+                        },
+                    );
                     if (event.commandMessages?.length) {
                         for (const msg of event.commandMessages) {
                             commandMessages.push(msg as any);
@@ -906,22 +925,34 @@ export class ConversationSession {
         }
 
         if (!sawTerminalEvent) {
-            return {
+            const response: ConversationResult = {
                 type: 'response',
                 commandMessages,
                 finalText: finalText || 'Done.',
                 ...(reasoningText ? {reasoningText} : {}),
                 ...(usage ? {usage} : {}),
             };
+            this.logger.debug('handleApprovalDecision returning response', {
+                sessionId: this.id,
+                hasUsage: Boolean(usage),
+                usage,
+            });
+            return response;
         }
 
-        return {
+        const response: ConversationResult = {
             type: 'response',
             commandMessages,
             finalText: finalText || 'Done.',
             ...(reasoningText ? {reasoningText} : {}),
             ...(usage ? {usage} : {}),
         };
+        this.logger.debug('handleApprovalDecision returning response', {
+            sessionId: this.id,
+            hasUsage: Boolean(usage),
+            usage,
+        });
+        return response;
     }
 
     async *#streamEvents(
@@ -973,6 +1004,12 @@ export class ConversationSession {
             const usage = extractUsage(event);
             if (usage) {
                 acc.latestUsage = usage;
+                this.logger.debug('Usage extracted from stream event', {
+                    sessionId: this.id,
+                    source: 'stream_event',
+                    eventType: event?.type ?? event?.data?.type ?? 'unknown',
+                    usage,
+                });
             }
 
             // Log event type with deduplication for ordering understanding
@@ -1114,9 +1151,72 @@ export class ConversationSession {
         }
 
         const completedResult = await stream.completed;
-        const finalUsage = extractUsage(completedResult) || extractUsage(stream);
+        const rawResponses = Array.isArray(stream?.rawResponses)
+            ? stream.rawResponses
+            : [];
+        let usageFromRawResponses: NormalizedUsage | undefined;
+        for (let i = rawResponses.length - 1; i >= 0; i--) {
+            const candidate = extractUsage(rawResponses[i]);
+            if (candidate) {
+                usageFromRawResponses = candidate;
+                break;
+            }
+        }
+        const finalUsage =
+            extractUsage(completedResult) ||
+            extractUsage(stream) ||
+            usageFromRawResponses;
         if (finalUsage) {
             acc.latestUsage = finalUsage;
+            const usageSource = extractUsage(completedResult)
+                ? 'completed_result'
+                : extractUsage(stream)
+                ? 'stream_object'
+                : 'stream_raw_responses';
+            this.logger.debug('Usage extracted from stream completion', {
+                sessionId: this.id,
+                source: 'stream_completed',
+                usageSource,
+                usage: finalUsage,
+            });
+        } else {
+            const completedResultRecord =
+                completedResult &&
+                typeof completedResult === 'object' &&
+                !Array.isArray(completedResult)
+                    ? (completedResult as Record<string, unknown>)
+                    : undefined;
+
+            const streamRecord =
+                stream && typeof stream === 'object' && !Array.isArray(stream)
+                    ? (stream as Record<string, unknown>)
+                    : undefined;
+
+            this.logger.debug('No usage found in stream completion', {
+                sessionId: this.id,
+                source: 'stream_completed',
+                completedResultType: completedResult === null
+                    ? 'null'
+                    : Array.isArray(completedResult)
+                    ? 'array'
+                    : typeof completedResult,
+                completedResultKeys: completedResultRecord
+                    ? Object.keys(completedResultRecord)
+                    : [],
+                streamKeys: streamRecord ? Object.keys(streamRecord) : [],
+                completedResultHasUsagePath: {
+                    usage: Boolean(completedResultRecord?.usage),
+                    usageMetadata: Boolean(
+                        completedResultRecord?.usageMetadata,
+                    ),
+                    usage_metadata: Boolean(
+                        completedResultRecord?.usage_metadata,
+                    ),
+                    responseUsage: Boolean(
+                        (completedResultRecord?.response as any)?.usage,
+                    ),
+                },
+            });
         }
 
         this.flushStreamEventLog();

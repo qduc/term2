@@ -390,7 +390,15 @@ export const useConversation = ({
             const applyConversationEvent = (event: any) => {
                 if (event.type === 'final') {
                     if (event.usage) {
+                        loggingService.debug(
+                            'UI received final usage (sendUserMessage)',
+                            {usage: event.usage},
+                        );
                         setLastUsage(event.usage);
+                    } else {
+                        loggingService.debug(
+                            'UI final event has no usage (sendUserMessage)',
+                        );
                     }
                 }
                 baseEventHandler(event);
@@ -561,7 +569,15 @@ export const useConversation = ({
                 const applyConversationEvent = (event: any) => {
                     if (event.type === 'final') {
                         if (event.usage) {
+                            loggingService.debug(
+                                'UI received final usage (maxTurnsContinuation)',
+                                {usage: event.usage},
+                            );
                             setLastUsage(event.usage);
+                        } else {
+                            loggingService.debug(
+                                'UI final event has no usage (maxTurnsContinuation)',
+                            );
                         }
                     }
                     baseEventHandler(event);
@@ -690,7 +706,15 @@ export const useConversation = ({
             const applyConversationEvent = (event: any) => {
                 if (event.type === 'final') {
                     if (event.usage) {
+                        loggingService.debug(
+                            'UI received final usage (approvalDecision)',
+                            {usage: event.usage},
+                        );
                         setLastUsage(event.usage);
+                    } else {
+                        loggingService.debug(
+                            'UI final event has no usage (approvalDecision)',
+                        );
                     }
                 }
                 baseEventHandler(event);

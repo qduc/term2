@@ -16,10 +16,28 @@ const DEFAULT_MAX_CHARS = 10000;
 const MAX_CHARS_LIMIT = 200000;
 
 const webFetchSchema = z.object({
-    url: z.string().url().describe('The URL of the web page to fetch.'),
-    max_chars: z.number().min(200).max(MAX_CHARS_LIMIT).optional().describe(`Maximum number of characters to return (default: ${DEFAULT_MAX_CHARS}).`),
-    heading: z.array(z.union([z.string(), z.number()])).optional().describe('Optional: Array of headings (h1-h3) to retrieve content from.'),
-    continuation_token: z.string().optional().describe('Optional: Token from previous response to fetch the next chunk of content.'),
+    url: z.string().describe('The URL of the web page to fetch.'),
+    max_chars: z
+        .number()
+        .min(200)
+        .max(MAX_CHARS_LIMIT)
+        .default(DEFAULT_MAX_CHARS)
+        .describe(
+            `Maximum number of characters to return (default: ${DEFAULT_MAX_CHARS}).`,
+        ),
+    heading: z
+        .array(z.union([z.string(), z.number()]))
+        .default([])
+        .describe(
+            'Optional: Array of headings (h1-h3) to retrieve content from.',
+        ),
+    continuation_token: z
+        .string()
+        .nullable()
+        .default(null)
+        .describe(
+            'Optional: Token from previous response to fetch the next chunk of content.',
+        ),
 });
 
 export type WebFetchParams = z.infer<typeof webFetchSchema>;
@@ -62,7 +80,7 @@ export const formatWebFetchCommandMessage = (
 export const createWebFetchToolDefinition = (deps: {
     settingsService: ISettingsService;
     loggingService: ILoggingService;
-}): ToolDefinition<WebFetchParams> => {
+}): ToolDefinition<Partial<WebFetchParams>> => {
     const { loggingService } = deps;
 
     return {
@@ -83,7 +101,7 @@ export const createWebFetchToolDefinition = (deps: {
                     url,
                     maxChars: max_chars,
                     headings: targetHeadings,
-                    continuationToken: continuation_token,
+                    continuationToken: continuation_token ?? undefined,
                 });
 
                 let output = `Title: ${result.title}\nURL: ${result.url}\n\n`;

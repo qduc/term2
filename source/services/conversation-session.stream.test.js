@@ -266,3 +266,82 @@ test('run() sends full history for openai-compatible providers', async t => {
         'Second call should include conversation history',
     );
 });
+
+test('sendMessage() returns usage from final event', async t => {
+    const stream = new MockStream([
+        {type: 'response.output_text.delta', delta: 'Response'},
+    ]);
+    stream.finalOutput = 'Response';
+    stream.completed = Promise.resolve({
+        usage: {inputTokens: 11, outputTokens: 7, totalTokens: 18},
+    });
+
+    const mockClient = {
+        async startStream() {
+            return stream;
+        },
+    };
+
+    const session = new ConversationSession('s1', {
+        agentClient: mockClient,
+        deps: {logger: mockLogger},
+    });
+
+    const result = await session.sendMessage('Hello');
+
+    t.is(result.type, 'response');
+    t.deepEqual(result.usage, {
+        prompt_tokens: 11,
+        completion_tokens: 7,
+        total_tokens: 18,
+    });
+});
+
+test('handleApprovalDecision() returns usage from final event', async t => {
+    const interruption = {
+        name: 'bash',
+        agent: {name: 'CLI Agent'},
+        arguments: JSON.stringify({command: 'echo hi'}),
+        callId: 'call-xyz',
+    };
+
+    const initialStream = new MockStream([]);
+    initialStream.interruptions = [interruption];
+    initialStream.state = {
+        approve() {},
+        reject() {},
+    };
+
+    const continuationStream = new MockStream([
+        {type: 'response.output_text.delta', delta: 'Approved run'},
+    ]);
+    continuationStream.finalOutput = 'Approved run';
+    continuationStream.completed = Promise.resolve({
+        usage: {inputTokens: 21, outputTokens: 9, totalTokens: 30},
+    });
+
+    const mockClient = {
+        async startStream() {
+            return initialStream;
+        },
+        async continueRunStream() {
+            return continuationStream;
+        },
+    };
+
+    const session = new ConversationSession('s1', {
+        agentClient: mockClient,
+        deps: {logger: mockLogger},
+    });
+
+    const approvalResult = await session.sendMessage('run command');
+    t.is(approvalResult.type, 'approval_required');
+
+    const finalResult = await session.handleApprovalDecision('y');
+    t.is(finalResult.type, 'response');
+    t.deepEqual(finalResult.usage, {
+        prompt_tokens: 21,
+        completion_tokens: 9,
+        total_tokens: 30,
+    });
+});

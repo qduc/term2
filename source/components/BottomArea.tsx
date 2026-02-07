@@ -8,6 +8,7 @@ import type {SettingsService} from '../services/settings-service.js';
 import type {LoggingService} from '../services/logging-service.js';
 import type {HistoryService} from '../services/history-service.js';
 import type {SSHInfo} from '../app.js';
+import type {NormalizedUsage} from '../utils/token-usage.js';
 
 export type PendingApproval = {
     agentName: string;
@@ -24,6 +25,7 @@ export type BottomAreaProps = {
     waitingForRejectionReason: boolean;
     isProcessing: boolean;
     isShellMode?: boolean;
+    lastUsage?: NormalizedUsage | null;
     onSubmit: (value: string) => Promise<void>;
     slashCommands: SlashCommand[];
     hasConversationHistory: boolean;
@@ -50,6 +52,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     onApprove,
     onReject,
     sshInfo,
+    lastUsage,
 }) => {
     const [dotCount, setDotCount] = useState(1);
 
@@ -105,6 +108,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                 settingsService={settingsService}
                 isShellMode={isShellMode}
                 sshInfo={sshInfo}
+                lastUsage={lastUsage}
             />
         </Box>
     );

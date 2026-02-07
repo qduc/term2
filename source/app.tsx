@@ -77,6 +77,7 @@ const App: FC<AppProps> = ({
     const {
         messages,
         liveResponse,
+        lastUsage,
         pendingApproval,
         waitingForApproval,
         waitingForRejectionReason,
@@ -582,6 +583,7 @@ const App: FC<AppProps> = ({
                     waitingForRejectionReason={waitingForRejectionReason}
                     isProcessing={isProcessing}
                     isShellMode={isShellMode}
+                    lastUsage={lastUsage}
                     onSubmit={handleSubmit}
                     slashCommands={slashCommands}
                     hasConversationHistory={

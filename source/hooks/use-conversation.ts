@@ -10,6 +10,7 @@ import {
     isMaxTurnsError,
 } from '../utils/conversation-utils.js';
 import {createConversationEventHandler} from '../utils/conversation-event-handler.js';
+import type {NormalizedUsage} from '../utils/token-usage.js';
 
 interface UserMessage {
     id: number;
@@ -126,6 +127,7 @@ export const useConversation = ({
         useState<PendingApproval | null>(null);
     const [isProcessing, setIsProcessing] = useState<boolean>(false);
     const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
+    const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(null);
     const approvedContextRef = useRef<{
         callId?: string;
         toolName?: string;
@@ -306,6 +308,9 @@ export const useConversation = ({
             });
             setWaitingForApproval(false);
             setPendingApproval(null);
+            if (result.usage) {
+                setLastUsage(result.usage);
+            }
         },
         [annotateCommandMessage, appendMessages, trimMessages],
     );
@@ -369,7 +374,7 @@ export const useConversation = ({
             );
 
             // Create event handler using extracted factory
-            const applyConversationEvent = createConversationEventHandler(
+            const baseEventHandler = createConversationEventHandler(
                 {
                     liveResponseUpdater,
                     reasoningUpdater,
@@ -381,6 +386,15 @@ export const useConversation = ({
                 },
                 streamingState,
             );
+
+            const applyConversationEvent = (event: any) => {
+                if (event.type === 'final') {
+                    if (event.usage) {
+                        setLastUsage(event.usage);
+                    }
+                }
+                baseEventHandler(event);
+            };
 
             try {
                 const result = await conversationService.sendMessage(value, {
@@ -531,7 +545,7 @@ export const useConversation = ({
                 );
 
                 // Create event handler using extracted factory
-                const applyConversationEvent = createConversationEventHandler(
+                const baseEventHandler = createConversationEventHandler(
                     {
                         liveResponseUpdater,
                         reasoningUpdater,
@@ -543,6 +557,15 @@ export const useConversation = ({
                     },
                     streamingState,
                 );
+
+                const applyConversationEvent = (event: any) => {
+                    if (event.type === 'final') {
+                        if (event.usage) {
+                            setLastUsage(event.usage);
+                        }
+                    }
+                    baseEventHandler(event);
+                };
 
                 try {
                     // Send a continuation message to resume work
@@ -651,7 +674,7 @@ export const useConversation = ({
             );
 
             // Create event handler using extracted factory
-            const applyConversationEvent = createConversationEventHandler(
+            const baseEventHandler = createConversationEventHandler(
                 {
                     liveResponseUpdater,
                     reasoningUpdater,
@@ -663,6 +686,15 @@ export const useConversation = ({
                 },
                 streamingState,
             );
+
+            const applyConversationEvent = (event: any) => {
+                if (event.type === 'final') {
+                    if (event.usage) {
+                        setLastUsage(event.usage);
+                    }
+                }
+                baseEventHandler(event);
+            };
 
             try {
                 const result = await conversationService.handleApprovalDecision(
@@ -820,6 +852,7 @@ export const useConversation = ({
     return {
         messages,
         liveResponse,
+        lastUsage,
         pendingApproval,
         waitingForApproval,
         waitingForRejectionReason,

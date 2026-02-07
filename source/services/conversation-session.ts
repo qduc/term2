@@ -7,6 +7,7 @@ import type {ILoggingService} from './service-interfaces.js';
 import {ConversationStore} from './conversation-store.js';
 import {ModelBehaviorError} from '@openai/agents';
 import type {ConversationEvent} from './conversation-events.js';
+import {extractUsage, type NormalizedUsage} from '../utils/token-usage.js';
 
 interface ApprovalResult {
     type: 'approval_required';
@@ -38,6 +39,7 @@ interface ResponseResult {
     commandMessages: CommandMessage[];
     finalText: string;
     reasoningText?: string;
+    usage?: NormalizedUsage;
 }
 
 export type ConversationResult = ApprovalResult | ResponseResult;
@@ -331,6 +333,7 @@ export class ConversationSession {
                         finalOutput: '',
                         reasoningOutput: '',
                         emittedCommandIds: new Set<string>(emittedCommandIds),
+                        latestUsage: undefined as NormalizedUsage | undefined,
                     };
                     yield* this.#streamEvents(stream, acc, {
                         preserveExistingToolArgs: true,
@@ -353,6 +356,7 @@ export class ConversationSession {
                             acc.finalOutput,
                             acc.reasoningOutput,
                             acc.emittedCommandIds,
+                            acc.latestUsage,
                         );
                         // Re-emit the terminal event explicitly.
                         if (result.type === 'approval_required') {
@@ -385,6 +389,7 @@ export class ConversationSession {
                                 ...(result.commandMessages?.length
                                     ? {commandMessages: result.commandMessages}
                                     : {}),
+                                ...(result.usage ? {usage: result.usage} : {}),
                             };
                         }
                         return;
@@ -400,6 +405,7 @@ export class ConversationSession {
                         acc.finalOutput,
                         acc.reasoningOutput,
                         acc.emittedCommandIds,
+                        acc.latestUsage,
                     );
                     if (result.type === 'approval_required') {
                         const interruption = result.approval.rawInterruption;
@@ -429,6 +435,7 @@ export class ConversationSession {
                             ...(result.commandMessages?.length
                                 ? {commandMessages: result.commandMessages}
                                 : {}),
+                            ...(result.usage ? {usage: result.usage} : {}),
                         };
                     }
                     return;
@@ -471,6 +478,7 @@ export class ConversationSession {
                 finalOutput: '',
                 reasoningOutput: '',
                 emittedCommandIds: new Set<string>(),
+                latestUsage: undefined as NormalizedUsage | undefined,
             };
             yield* this.#streamEvents(stream, acc, {
                 preserveExistingToolArgs: false,
@@ -485,6 +493,7 @@ export class ConversationSession {
                 acc.finalOutput || undefined,
                 acc.reasoningOutput || undefined,
                 acc.emittedCommandIds,
+                acc.latestUsage,
             );
 
             if (result.type === 'approval_required') {
@@ -517,6 +526,7 @@ export class ConversationSession {
                 ...(result.commandMessages?.length
                     ? {commandMessages: result.commandMessages}
                     : {}),
+                ...(result.usage ? {usage: result.usage} : {}),
             };
         } catch (error) {
             // Handle tool hallucination: model called a non-existent tool
@@ -660,6 +670,7 @@ export class ConversationSession {
                 finalOutput: '',
                 reasoningOutput: '',
                 emittedCommandIds: new Set<string>(),
+                latestUsage: undefined as NormalizedUsage | undefined,
             };
             yield* this.#streamEvents(stream, acc, {
                 preserveExistingToolArgs: true,
@@ -680,6 +691,7 @@ export class ConversationSession {
                 acc.finalOutput || undefined,
                 acc.reasoningOutput || undefined,
                 allEmittedIds,
+                acc.latestUsage,
             );
 
             if (result.type === 'approval_required') {
@@ -712,6 +724,7 @@ export class ConversationSession {
                 ...(result.commandMessages?.length
                     ? {commandMessages: result.commandMessages}
                     : {}),
+                ...(result.usage ? {usage: result.usage} : {}),
             };
         } catch (error) {
             yield {
@@ -744,6 +757,7 @@ export class ConversationSession {
         let finalText = '';
         let reasoningText = '';
         const commandMessages: CommandMessage[] = [];
+        let usage: NormalizedUsage | undefined;
         let sawTerminalEvent: ConversationEvent | null = null;
 
         for await (const event of this.run(text, {hallucinationRetryCount})) {
@@ -783,6 +797,7 @@ export class ConversationSession {
                     sawTerminalEvent = event;
                     finalText = event.finalText;
                     reasoningText = event.reasoningText ?? '';
+                    usage = event.usage;
                     if (event.commandMessages?.length) {
                         for (const msg of event.commandMessages) {
                             commandMessages.push(msg as any);
@@ -809,6 +824,7 @@ export class ConversationSession {
             commandMessages,
             finalText: finalText || 'Done.',
             ...(reasoningText ? {reasoningText} : {}),
+            ...(usage ? {usage} : {}),
         };
     }
 
@@ -834,6 +850,7 @@ export class ConversationSession {
         let finalText = '';
         let reasoningText = '';
         const commandMessages: CommandMessage[] = [];
+        let usage: NormalizedUsage | undefined;
         let sawTerminalEvent: ConversationEvent | null = null;
 
         for await (const event of this['continue']({answer, rejectionReason})) {
@@ -872,6 +889,7 @@ export class ConversationSession {
                     sawTerminalEvent = event;
                     finalText = event.finalText;
                     reasoningText = event.reasoningText ?? '';
+                    usage = event.usage;
                     if (event.commandMessages?.length) {
                         for (const msg of event.commandMessages) {
                             commandMessages.push(msg as any);
@@ -893,6 +911,7 @@ export class ConversationSession {
                 commandMessages,
                 finalText: finalText || 'Done.',
                 ...(reasoningText ? {reasoningText} : {}),
+                ...(usage ? {usage} : {}),
             };
         }
 
@@ -901,6 +920,7 @@ export class ConversationSession {
             commandMessages,
             finalText: finalText || 'Done.',
             ...(reasoningText ? {reasoningText} : {}),
+            ...(usage ? {usage} : {}),
         };
     }
 
@@ -910,6 +930,7 @@ export class ConversationSession {
             finalOutput: string;
             reasoningOutput: string;
             emittedCommandIds: Set<string>;
+            latestUsage?: NormalizedUsage;
         },
         {preserveExistingToolArgs}: {preserveExistingToolArgs: boolean},
     ): AsyncIterable<ConversationEvent> {
@@ -948,13 +969,13 @@ export class ConversationSession {
         };
 
         for await (const event of stream) {
+            // Extract usage if present in any of the common locations
+            const usage = extractUsage(event);
+            if (usage) {
+                acc.latestUsage = usage;
+            }
+
             // Log event type with deduplication for ordering understanding
-            // const eventType = event?.type || 'unknown';
-            // this.logStreamEvent(eventType, {
-            //     eventName: event?.name,
-            //     hasData: !!event?.data,
-            //     item: event?.item,
-            // });
 
             const delta1 = this.#extractTextDelta(event);
             if (delta1) {
@@ -1092,7 +1113,12 @@ export class ConversationSession {
             }
         }
 
-        await stream.completed;
+        const completedResult = await stream.completed;
+        const finalUsage = extractUsage(completedResult) || extractUsage(stream);
+        if (finalUsage) {
+            acc.latestUsage = finalUsage;
+        }
+
         this.flushStreamEventLog();
     }
 
@@ -1253,6 +1279,7 @@ export class ConversationSession {
         finalOutputOverride?: string,
         reasoningOutputOverride?: string,
         emittedCommandIds?: Set<string>,
+        usage?: NormalizedUsage,
     ): ConversationResult {
         if (result.interruptions && result.interruptions.length > 0) {
             const interruption = result.interruptions[0];
@@ -1318,6 +1345,7 @@ export class ConversationSession {
             commandMessages: visibleCommandMessages,
             finalText: finalOutputOverride ?? result.finalOutput ?? 'Done.',
             reasoningText: reasoningOutputOverride,
+            usage: usage ?? extractUsage(result),
         };
 
         return response;

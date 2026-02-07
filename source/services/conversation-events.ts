@@ -1,3 +1,5 @@
+import type {NormalizedUsage} from '../utils/token-usage.js';
+
 export type ConversationEvent =
     | TextDeltaEvent
     | ReasoningDeltaEvent
@@ -82,6 +84,8 @@ export interface FinalResponseEvent {
     reasoningText?: string;
     /** Command messages that were not already streamed live. */
     commandMessages?: CommandMessageEvent['message'][];
+    /** Token usage for this turn. */
+    usage?: NormalizedUsage;
 }
 
 export interface ErrorEvent {

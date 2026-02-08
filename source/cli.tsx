@@ -31,10 +31,13 @@ const cli = meow(
         Usage
           $ term2
 
+                    $ term2 "prompt here"
+
         Options
           -m, --model       Override the default OpenAI model (e.g. gpt-4o)
           -r, --reasoning   Set the reasoning effort for reasoning models (e.g. medium, high)
           -l, --lite        Start in lite mode (minimal context, session-only)
+                    --auto-approve    Allow tool execution in non-interactive mode
           --ssh             Enable SSH mode (user@host)
           --remote-dir      Required remote working directory for SSH mode
           --ssh-port        Optional SSH port (default: 22)
@@ -42,6 +45,8 @@ const cli = meow(
         Examples
           $ term2 -m gpt-4o
           $ term2 --lite
+                    $ term2 "explain this function"
+                    $ term2 --auto-approve "list files in current dir"
     `,
     {
         importMeta: import.meta,
@@ -59,6 +64,10 @@ const cli = meow(
                 alias: 'l',
                 default: false,
             },
+            autoApprove: {
+                type: 'boolean',
+                default: false,
+            },
             ssh: {
                 type: 'string',
             },
@@ -72,6 +81,14 @@ const cli = meow(
         },
     },
 );
+
+const positionalPrompt = cli.input.join(' ').trim();
+const hasPositionalPrompt = positionalPrompt.length > 0;
+
+// If the user passed an explicit empty prompt (e.g. `term2 ""`), show help.
+if (cli.input.length > 0 && !hasPositionalPrompt) {
+    cli.showHelp(0);
+}
 
 const rawModelFlag = cli.flags.model;
 const rawReasoningFlag = cli.flags.reasoning;
@@ -117,7 +134,8 @@ if (validatedReasoningEffort) {
 // This ensures users can always get back to codebase mode by running without --lite
 cliOverrides.app = {
     ...cliOverrides.app,
-    liteMode: cli.flags.lite,
+    // Non-interactive mode defaults to lite mode unless explicitly auto-approved.
+    liteMode: Boolean(cli.flags.lite || (hasPositionalPrompt && !cli.flags.autoApprove)),
 };
 
 // Create LoggingService instance
@@ -256,18 +274,31 @@ const history = new HistoryService({
 const usedModel = settings.get('agent.model');
 const usedReasoningEffort = settings.get('agent.reasoningEffort');
 
+const agentClient = new OpenAIAgentClient({
+    model: usedModel,
+    reasoningEffort: usedReasoningEffort as ModelSettingsReasoningEffort,
+    maxTurns: settings.get('agent.maxTurns'),
+    retryAttempts: settings.get('agent.retryAttempts'),
+    deps: {
+        logger: logger,
+        settings: settings,
+        executionContext: executionContext,
+    },
+});
+
+if (hasPositionalPrompt) {
+    const {runNonInteractive} = await import('./non-interactive.js');
+    const exitCode = await runNonInteractive({
+        prompt: positionalPrompt,
+        autoApprove: cli.flags.autoApprove,
+        agentClient,
+        logger,
+    });
+    process.exit(exitCode);
+}
+
 const conversationService = new ConversationService({
-    agentClient: new OpenAIAgentClient({
-        model: usedModel,
-        reasoningEffort: usedReasoningEffort as ModelSettingsReasoningEffort,
-        maxTurns: settings.get('agent.maxTurns'),
-        retryAttempts: settings.get('agent.retryAttempts'),
-        deps: {
-            logger: logger,
-            settings: settings,
-            executionContext: executionContext,
-        },
-    }),
+    agentClient,
     deps: {
         logger: logger,
     },

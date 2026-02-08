@@ -6,7 +6,7 @@ This is a terminal-based AI assistant built with React (Ink), OpenAI Agents SDK,
 
 A CLI app that lets users chat with an AI agent in real-time. The agent can execute shell commands and modify files, with interactive approval prompts for safety.
 
-**Key features**: streaming responses, command approval flow, slash commands (`/clear`, `/quit`, `/model`, `/setting`), input history, markdown rendering in the terminal, tool hallucination retry logic, multi-provider support, and SSH mode for remote execution.
+**Key features**: streaming responses, command approval flow, slash commands (`/clear`, `/quit`, `/model`, `/setting`), input history, markdown rendering in the terminal, tool hallucination retry logic, multi-provider support, SSH mode for remote execution, and non-interactive mode for CLI usage.
 
 ## Quick Start
 
@@ -74,6 +74,7 @@ High-level architecture and design decisions (concise):
 -   **Decentralized tool message formatting**: Tool command message formatting is co-located with tool implementations to ensure self-contained tool definitions and prevent extraction logic drift.
 -   **Web search provider registry**: Pluggable web search architecture allows swapping between providers (Tavily, Serper, Brave, etc.) via settings without code changes. Providers implement `IWebSearchProvider` interface and register via registry.
 -   **SSH mode for remote execution**: Optional `--ssh user@host` flag enables remote command execution and file operations over SSH. Uses `ssh2` library with SSH agent authentication. An `ExecutionContext` abstraction allows tools to transparently execute locally or remotely.
+-   **Non-interactive mode**: Passing a positional argument to the CLI triggers non-interactive mode (implemented in `source/non-interactive.ts`). It redirects AI responses to stdout and events to stderr. By default, it rejects tools requiring approval unless `--auto-approve` is provided. It defaults to lite mode when not auto-approving. Returns exit code 0 on success and 1 on error.
 
 For implementation details, chronological change logs, and rationale, consult the source files under `source/` and the Git history — this document intentionally stays at a high level.
 

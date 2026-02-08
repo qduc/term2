@@ -26,6 +26,7 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 -   🎨 **Markdown Rendering** - Formatted code blocks and text in the terminal
 -   🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
 -   🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
+-   🤖 **Non-Interactive Mode** - Run commands from the CLI without starting the full UI
 
 ## Why term2 vs Alternatives?
 
@@ -122,6 +123,10 @@ term2 --ssh deploy@server.com --remote-dir /var/www/app --ssh-port 2222
 
 # Combine SSH with lite mode for lightweight remote assistance
 term2 --ssh user@host --remote-dir /path --lite
+
+# Non-interactive mode
+term2 "how to use grep"
+term2 --auto-approve "list files in current directory"
 ```
 
 ### Slash Commands
@@ -305,6 +310,51 @@ This combination provides:
 -   Authentication is via SSH agent only (no password prompts)
 -   Binary file operations are not supported (text files only)
 -   Large file transfers may be slower than local operations
+
+## Non-Interactive Mode
+
+term2 can be used for one-off tasks without entering the interactive chat UI. To use non-interactive mode, simply pass your prompt as a positional argument.
+
+### Usage
+
+```bash
+term2 "list files in current directory"
+```
+
+### Tool Execution & Approval
+
+By default, non-interactive mode will **reject** any tool execution that requires approval (like destructive shell commands or file edits) to prevent accidents.
+
+-   If a tool is rejected, the AI will respond acknowledging the rejection and may suggest how to run the command manually.
+-   To allow tools to run automatically, use the `--auto-approve` flag.
+
+```bash
+# This will fail to delete files (rejection default)
+term2 "delete /tmp/test-file"
+
+# This will proceed with execution
+term2 --auto-approve "delete /tmp/test-file"
+```
+
+### Output Redirection
+
+-   **AI text response** is written to `stdout`.
+-   **Events** (tool starts, completions, errors, approval requests) are written to `stderr`.
+
+This makes it easy to use term2 in shell scripts:
+
+```bash
+# Capture the response but see events in console
+ANSWER=$(term2 "is there any TODO in source/cli.tsx?")
+echo "The answer is: $ANSWER"
+```
+
+### Default Mode vs Lite Mode
+
+-   When running **with** `--auto-approve`, term2 defaults to **Default Mode** (full codebase context).
+-   When running **without** `--auto-approve`, term2 defaults to **Lite Mode** (no codebase context, safe/fast).
+
+You can always override this by passing `--lite` or running in a directory without a codebase.
 
 ## Configuration
 

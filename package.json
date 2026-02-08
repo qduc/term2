@@ -40,7 +40,8 @@
     "post-build": "cp -r source/prompts dist/",
     "prepublishOnly": "npm run build && npm test",
     "release": "./scripts/release.sh",
-    "logs": "node tools/log_viewer/src/server.js"
+    "logs": "node tools/log_viewer/src/server.js",
+    "prepare": "husky"
   },
   "files": [
     "dist"
@@ -84,11 +85,16 @@
     "eslint-config-xo-react": "^0.27.0",
     "eslint-plugin-react": "^7.32.2",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "husky": "^9.1.7",
     "import-jsx": "^5.0.0",
     "ink-testing-library": "^4.0.0",
+    "lint-staged": "^16.2.7",
     "prettier": "^2.8.7",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,md,json}": "prettier --write"
   },
   "ava": {
     "environmentVariables": {

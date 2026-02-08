@@ -61,6 +61,17 @@ export class OpenAIAgentClient {
     #mentorStore: ConversationStore | null = null;
     #mentorPreviousResponseId: string | null = null;
 
+    #resetMentorState(): void {
+        if (this.#mentorStore) {
+            this.#mentorStore.clear();
+        }
+        this.#mentorPreviousResponseId = null;
+        this.#mentorStore = null;
+        this.#mentorRunner = null;
+        this.#mentorProvider = null;
+        this.#mentorAgent = null;
+    }
+
     constructor({
         model,
         reasoningEffort,
@@ -110,6 +121,7 @@ export class OpenAIAgentClient {
             model,
             reasoningEffort: this.#reasoningEffort,
         });
+        this.#resetMentorState();
     }
 
     setReasoningEffort(
@@ -139,6 +151,7 @@ export class OpenAIAgentClient {
             reasoningEffort: this.#reasoningEffort,
         });
         this.#runner = this.#createRunner(this.#provider);
+        this.#resetMentorState();
     }
 
     getProvider(): string {
@@ -209,8 +222,8 @@ export class OpenAIAgentClient {
             reasoningEffort: this.#reasoningEffort as any,
             temperature: this.#temperature,
         });
-        // Null out mentor agent so it also gets fresh instructions on next use
-        this.#mentorAgent = null;
+        // Refreshing core agent should not keep stale mentor state/instructions.
+        this.#resetMentorState();
     }
 
     /**
@@ -235,16 +248,6 @@ export class OpenAIAgentClient {
         }
 
         this.#refreshAgent();
-
-        // Also clear mentor conversation
-        if (this.#mentorStore) {
-            this.#mentorStore.clear();
-        }
-        this.#mentorPreviousResponseId = null;
-        this.#mentorStore = null;
-        this.#mentorRunner = null;
-        this.#mentorProvider = null;
-        this.#mentorAgent = null;
 
         this.#logger.info('Conversation and agent refreshed');
     }

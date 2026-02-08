@@ -1,21 +1,16 @@
-import React, {FC, useEffect, useState, useRef, useCallback} from 'react';
-import {Box, Text, useInput} from 'ink';
-import {MultilineInput} from 'ink-prompt';
-import {useInputContext} from '../context/InputContext.js';
-import {useSlashCommands} from '../hooks/use-slash-commands.js';
-import {usePathCompletion} from '../hooks/use-path-completion.js';
-import {useSettingsCompletion} from '../hooks/use-settings-completion.js';
-import {useSettingsValueCompletion} from '../hooks/use-settings-value-completion.js';
-import {
-    useModelSelection,
-    MODEL_TRIGGER,
-    MODEL_CMD_TRIGGER,
-    MENTOR_TRIGGER,
-} from '../hooks/use-model-selection.js';
-import {PopupManager} from './Input/PopupManager.js';
-import type {SlashCommand} from './SlashCommandMenu.js';
-import type {SettingsService} from '../services/settings-service.js';
-import type {LoggingService} from '../services/logging-service.js';
+import React, { FC, useEffect, useState, useRef, useCallback } from 'react';
+import { Box, Text, useInput } from 'ink';
+import { MultilineInput } from 'ink-prompt';
+import { useInputContext } from '../context/InputContext.js';
+import { useSlashCommands } from '../hooks/use-slash-commands.js';
+import { usePathCompletion } from '../hooks/use-path-completion.js';
+import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
+import { useSettingsValueCompletion } from '../hooks/use-settings-value-completion.js';
+import { useModelSelection, MODEL_TRIGGER, MODEL_CMD_TRIGGER, MENTOR_TRIGGER } from '../hooks/use-model-selection.js';
+import { PopupManager } from './Input/PopupManager.js';
+import type { SlashCommand } from './SlashCommandMenu.js';
+import type { SettingsService } from '../services/settings-service.js';
+import type { LoggingService } from '../services/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';
 import { useInputHistory } from '../hooks/use-input-history.js';
 
@@ -26,584 +21,527 @@ const SETTINGS_TRIGGER = '/settings ';
 const SETTINGS_RESET_TRIGGER = '/settings reset ';
 
 type Props = {
-    onSubmit: (v: string) => void;
-    slashCommands: SlashCommand[];
-    hasConversationHistory?: boolean;
-    waitingForRejectionReason?: boolean;
-    isShellMode?: boolean;
-    settingsService: SettingsService;
-    loggingService: LoggingService;
-    historyService: HistoryService;
+  onSubmit: (v: string) => void;
+  slashCommands: SlashCommand[];
+  hasConversationHistory?: boolean;
+  waitingForRejectionReason?: boolean;
+  isShellMode?: boolean;
+  settingsService: SettingsService;
+  loggingService: LoggingService;
+  historyService: HistoryService;
 };
 
 const InputBox: FC<Props> = ({
-    onSubmit,
-    slashCommands,
-    settingsService,
-    loggingService,
-    hasConversationHistory = false,
-    waitingForRejectionReason = false,
-    isShellMode = false,
-    historyService,
+  onSubmit,
+  slashCommands,
+  settingsService,
+  loggingService,
+  hasConversationHistory = false,
+  waitingForRejectionReason = false,
+  isShellMode = false,
+  historyService,
 }) => {
-    const {
-        input: value,
-        setInput: onChange,
-        mode,
-        setMode,
-        cursorOffset,
-        setCursorOffset,
-    } = useInputContext();
+  const { input: value, setInput: onChange, mode, setMode, cursorOffset, setCursorOffset } = useInputContext();
 
-    const [escHintVisible, setEscHintVisible] = useState(false);
-    const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const escPressedRef = useRef(false);
-    const [cursorOverride, setCursorOverride] = useState<number | null>(null);
-    const [terminalWidth, setTerminalWidth] = useState(0);
+  const [escHintVisible, setEscHintVisible] = useState(false);
+  const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const escPressedRef = useRef(false);
+  const [cursorOverride, setCursorOverride] = useState<number | null>(null);
+  const [terminalWidth, setTerminalWidth] = useState(0);
 
-    // Hooks
-    const slash = useSlashCommands({
-        commands: slashCommands,
-        onClose: () => {
-            // Focus returns to text mode automatically via hook
-        },
-    });
+  // Hooks
+  const slash = useSlashCommands({
+    commands: slashCommands,
+    onClose: () => {
+      // Focus returns to text mode automatically via hook
+    },
+  });
 
-    const path = usePathCompletion({loggingService});
-    const settings = useSettingsCompletion(settingsService);
-    const settingsValue = useSettingsValueCompletion(settingsService);
-    const models = useModelSelection(
-        {
-            loggingService,
-            settingsService,
-        },
-        hasConversationHistory,
-    );
+  const path = usePathCompletion({ loggingService });
+  const settings = useSettingsCompletion(settingsService);
+  const settingsValue = useSettingsValueCompletion(settingsService);
+  const models = useModelSelection(
+    {
+      loggingService,
+      settingsService,
+    },
+    hasConversationHistory,
+  );
 
-    const {navigateUp, navigateDown} = useInputHistory(historyService);
+  const { navigateUp, navigateDown } = useInputHistory(historyService);
 
-    // Set terminal width
-    useEffect(() => {
-        const calculateTerminalWidth = () =>
-            Math.max(0, (process.stdout.columns ?? 0) - TERMINAL_PADDING);
+  // Set terminal width
+  useEffect(() => {
+    const calculateTerminalWidth = () => Math.max(0, (process.stdout.columns ?? 0) - TERMINAL_PADDING);
+    setTerminalWidth(calculateTerminalWidth());
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+    const handleResize = () => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeTimeout = setTimeout(() => {
+        resizeTimeout = null;
         setTerminalWidth(calculateTerminalWidth());
-        let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
-        const handleResize = () => {
-            if (resizeTimeout) {
-                clearTimeout(resizeTimeout);
-            }
-            resizeTimeout = setTimeout(() => {
-                resizeTimeout = null;
-                setTerminalWidth(calculateTerminalWidth());
-            }, 120);
-        };
-        process.stdout.on('resize', handleResize);
-        return () => {
-            process.stdout.off('resize', handleResize);
-            if (resizeTimeout) {
-                clearTimeout(resizeTimeout);
-            }
-        };
-    }, []);
+      }, 120);
+    };
+    process.stdout.on('resize', handleResize);
+    return () => {
+      process.stdout.off('resize', handleResize);
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+    };
+  }, []);
 
-    // Cleanup timeout
-    useEffect(() => {
-        return () => {
-            if (escTimeoutRef.current) clearTimeout(escTimeoutRef.current);
-        };
-    }, []);
+  // Cleanup timeout
+  useEffect(() => {
+    return () => {
+      if (escTimeoutRef.current) clearTimeout(escTimeoutRef.current);
+    };
+  }, []);
 
-    useEffect(() => {
-        if (cursorOverride !== null && cursorOverride === cursorOffset) {
-            setCursorOverride(null);
-        }
-    }, [cursorOverride, cursorOffset]);
+  useEffect(() => {
+    if (cursorOverride !== null && cursorOverride === cursorOffset) {
+      setCursorOverride(null);
+    }
+  }, [cursorOverride, cursorOffset]);
 
-    // Trigger Detection
-    useEffect(() => {
-        if (escPressedRef.current) {
-            escPressedRef.current = false;
-            return;
-        }
+  // Trigger Detection
+  useEffect(() => {
+    if (escPressedRef.current) {
+      escPressedRef.current = false;
+      return;
+    }
 
-        // Allow trigger detection in all modes to enable menu transitions
+    // Allow trigger detection in all modes to enable menu transitions
 
-        // Priority 0: Model selection for agent.model
-        if (
-            value.startsWith(MODEL_TRIGGER) &&
-            cursorOffset >= MODEL_TRIGGER.length
-        ) {
-            models.open(MODEL_TRIGGER.length);
-            return;
-        }
+    // Priority 0: Model selection for agent.model
+    if (value.startsWith(MODEL_TRIGGER) && cursorOffset >= MODEL_TRIGGER.length) {
+      models.open(MODEL_TRIGGER.length);
+      return;
+    }
 
-        if (
-            value.startsWith(MODEL_CMD_TRIGGER) &&
-            cursorOffset >= MODEL_CMD_TRIGGER.length
-        ) {
-            models.open(MODEL_CMD_TRIGGER.length);
-            return;
-        }
+    if (value.startsWith(MODEL_CMD_TRIGGER) && cursorOffset >= MODEL_CMD_TRIGGER.length) {
+      models.open(MODEL_CMD_TRIGGER.length);
+      return;
+    }
 
-        if (
-            value.startsWith(MENTOR_TRIGGER) &&
-            cursorOffset >= MENTOR_TRIGGER.length
-        ) {
-            models.open(MENTOR_TRIGGER.length);
-            return;
-        }
+    if (value.startsWith(MENTOR_TRIGGER) && cursorOffset >= MENTOR_TRIGGER.length) {
+      models.open(MENTOR_TRIGGER.length);
+      return;
+    }
 
-        if (mode === 'model_selection') {
-            models.close();
-        }
+    if (mode === 'model_selection') {
+      models.close();
+    }
 
-        // Priority 1: Settings
-        if (value.startsWith(SETTINGS_RESET_TRIGGER)) {
-            if (cursorOffset >= SETTINGS_RESET_TRIGGER.length) {
-                settings.open(SETTINGS_RESET_TRIGGER.length);
-                return;
-            }
-        } else if (value.startsWith(SETTINGS_TRIGGER)) {
-            const end = Math.min(cursorOffset, value.length);
-            const afterPrefix = value.slice(SETTINGS_TRIGGER.length, end);
+    // Priority 1: Settings
+    if (value.startsWith(SETTINGS_RESET_TRIGGER)) {
+      if (cursorOffset >= SETTINGS_RESET_TRIGGER.length) {
+        settings.open(SETTINGS_RESET_TRIGGER.length);
+        return;
+      }
+    } else if (value.startsWith(SETTINGS_TRIGGER)) {
+      const end = Math.min(cursorOffset, value.length);
+      const afterPrefix = value.slice(SETTINGS_TRIGGER.length, end);
 
-            // If the user has typed a full key followed by whitespace, switch to value completion.
-            // Example: "/settings logging.logLevel "
-            const keyAndSpaceMatch = afterPrefix.match(/^(\S+)\s+/);
-            if (keyAndSpaceMatch) {
-                const key = keyAndSpaceMatch[1] ?? '';
-                const valueStartIndex =
-                    SETTINGS_TRIGGER.length + (keyAndSpaceMatch[0]?.length ?? 0);
-                // Model selection handles agent.model / mentorModel earlier with higher priority.
-                settingsValue.open(key, valueStartIndex);
-                return;
-            }
+      // If the user has typed a full key followed by whitespace, switch to value completion.
+      // Example: "/settings logging.logLevel "
+      const keyAndSpaceMatch = afterPrefix.match(/^(\S+)\s+/);
+      if (keyAndSpaceMatch) {
+        const key = keyAndSpaceMatch[1] ?? '';
+        const valueStartIndex = SETTINGS_TRIGGER.length + (keyAndSpaceMatch[0]?.length ?? 0);
+        // Model selection handles agent.model / mentorModel earlier with higher priority.
+        settingsValue.open(key, valueStartIndex);
+        return;
+      }
 
-            // Otherwise, still selecting / filtering setting keys.
-            if (cursorOffset >= SETTINGS_TRIGGER.length) {
-                settings.open(SETTINGS_TRIGGER.length);
-                return;
-            }
-        }
+      // Otherwise, still selecting / filtering setting keys.
+      if (cursorOffset >= SETTINGS_TRIGGER.length) {
+        settings.open(SETTINGS_TRIGGER.length);
+        return;
+      }
+    }
 
-        // Close settings popups if triggers no longer apply
-        if (mode === 'settings_completion') settings.close();
-        if (mode === 'settings_value_completion') settingsValue.close();
+    // Close settings popups if triggers no longer apply
+    if (mode === 'settings_completion') settings.close();
+    if (mode === 'settings_value_completion') settingsValue.close();
 
-        // Priority 2: Slash (only if at start)
-        if (
-            value.startsWith('/') &&
-            !value.slice(1).includes(' ') &&
-            cursorOffset > 0
-        ) {
-            // Only trigger if we haven't typed a space yet (simple command)
-            // Or if we are just starting.
-            // Existing logic: "value.startsWith('/')" -> open slash menu.
-            // But if we have "/cmd arg", usually slash menu closes.
-            // rely on SlashCommandMenu logic?
-            // "Case 2: Command with arguments" in useSlashCommands handles "model gpt-4" matching "model".
-            // So we should keep it open.
-            slash.open();
-            return;
-        }
+    // Priority 2: Slash (only if at start)
+    if (value.startsWith('/') && !value.slice(1).includes(' ') && cursorOffset > 0) {
+      // Only trigger if we haven't typed a space yet (simple command)
+      // Or if we are just starting.
+      // Existing logic: "value.startsWith('/')" -> open slash menu.
+      // But if we have "/cmd arg", usually slash menu closes.
+      // rely on SlashCommandMenu logic?
+      // "Case 2: Command with arguments" in useSlashCommands handles "model gpt-4" matching "model".
+      // So we should keep it open.
+      slash.open();
+      return;
+    }
 
-        // If no slash match, close slash menu if it was open
-        if (mode === 'slash_commands') {
-            slash.close();
-        }
+    // If no slash match, close slash menu if it was open
+    if (mode === 'slash_commands') {
+      slash.close();
+    }
 
-        // Priority 3: Path
-        // We need to find the trigger '@' or similar backward from cursor
-        const pathTrigger = findPathTrigger(
-            value,
-            cursorOffset,
-            STOP_CHAR_REGEX,
-        );
-        if (pathTrigger) {
-            path.open(pathTrigger.start);
-            return;
-        }
+    // Priority 3: Path
+    // We need to find the trigger '@' or similar backward from cursor
+    const pathTrigger = findPathTrigger(value, cursorOffset, STOP_CHAR_REGEX);
+    if (pathTrigger) {
+      path.open(pathTrigger.start);
+      return;
+    }
 
-        // If no path match, close path menu if it was open
-        if (mode === 'path_completion') {
-            path.close();
-        }
-    }, [value, cursorOffset, mode, slash, path, settings, models]);
+    // If no path match, close path menu if it was open
+    if (mode === 'path_completion') {
+      path.close();
+    }
+  }, [value, cursorOffset, mode, slash, path, settings, models]);
 
-    // Handle inputs based on mode
-    // ESC handling
-    useInput((_input, key) => {
-        if (key.escape) {
-            // Prevent trigger detection right after ESC
-            escPressedRef.current = true;
+  // Handle inputs based on mode
+  // ESC handling
+  useInput((_input, key) => {
+    if (key.escape) {
+      // Prevent trigger detection right after ESC
+      escPressedRef.current = true;
 
-            if (mode !== 'text') {
-                if (
-                    mode === 'settings_value_completion' &&
-                    settingsValue.settingKey
-                ) {
-                    const prefix = SETTINGS_TRIGGER;
-                    // Reset input to just the trigger (showing full menu)
-                    onChange(prefix);
-                    setCursorOverride(prefix.length);
+      if (mode !== 'text') {
+        if (mode === 'settings_value_completion' && settingsValue.settingKey) {
+          const prefix = SETTINGS_TRIGGER;
+          // Reset input to just the trigger (showing full menu)
+          onChange(prefix);
+          setCursorOverride(prefix.length);
 
-                    settingsValue.close();
-                    // Open settings menu, requesting highlighting of the current key
-                    settings.open(prefix.length, settingsValue.settingKey);
-                    return;
-                }
-
-                // Close menu
-                setMode('text');
-                return;
-            }
-
-            // In text mode: double ESC to clear
-            if (escHintVisible) {
-                if (escTimeoutRef.current) {
-                    clearTimeout(escTimeoutRef.current);
-                    escTimeoutRef.current = null;
-                }
-                setEscHintVisible(false);
-                onChange('');
-            } else {
-                setEscHintVisible(true);
-                escTimeoutRef.current = setTimeout(() => {
-                    setEscHintVisible(false);
-                    escTimeoutRef.current = null;
-                }, 2000);
-            }
-        }
-    });
-
-    // Mode specific Input handling (Enter, Tab)
-    // We can use a single useInput for navigation/selection if we verify mode
-    useInput((_input, key) => {
-        if (mode === 'text') return; // Handled by standard input or history
-
-        if (mode === 'slash_commands') {
-            // Enter is handled by handleSubmit -> executeSlashCommand usually?
-            // But existing code: "onSlashMenuSelect" called by "handleSubmit".
-            // We can handle Tab here?
+          settingsValue.close();
+          // Open settings menu, requesting highlighting of the current key
+          settings.open(prefix.length, settingsValue.settingKey);
+          return;
         }
 
-        if (mode === 'path_completion') {
-            if (key.tab && !key.shift) {
-                insertSelectedPath(false);
-            }
+        // Close menu
+        setMode('text');
+        return;
+      }
+
+      // In text mode: double ESC to clear
+      if (escHintVisible) {
+        if (escTimeoutRef.current) {
+          clearTimeout(escTimeoutRef.current);
+          escTimeoutRef.current = null;
         }
+        setEscHintVisible(false);
+        onChange('');
+      } else {
+        setEscHintVisible(true);
+        escTimeoutRef.current = setTimeout(() => {
+          setEscHintVisible(false);
+          escTimeoutRef.current = null;
+        }, 2000);
+      }
+    }
+  });
 
-        if (mode === 'settings_completion') {
-            if (key.tab && !key.shift) {
-                insertSelectedSetting();
-            }
+  // Mode specific Input handling (Enter, Tab)
+  // We can use a single useInput for navigation/selection if we verify mode
+  useInput((_input, key) => {
+    if (mode === 'text') return; // Handled by standard input or history
+
+    if (mode === 'slash_commands') {
+      // Enter is handled by handleSubmit -> executeSlashCommand usually?
+      // But existing code: "onSlashMenuSelect" called by "handleSubmit".
+      // We can handle Tab here?
+    }
+
+    if (mode === 'path_completion') {
+      if (key.tab && !key.shift) {
+        insertSelectedPath(false);
+      }
+    }
+
+    if (mode === 'settings_completion') {
+      if (key.tab && !key.shift) {
+        insertSelectedSetting();
+      }
+    }
+
+    if (mode === 'settings_value_completion') {
+      if (key.tab && !key.shift) {
+        insertSelectedSettingValue(false);
+      }
+    }
+
+    if (mode === 'model_selection') {
+      if (key.tab && !key.shift && models.canSwitchProvider) {
+        models.toggleProvider();
+      }
+    }
+  });
+
+  const [, setInputKey] = useState(0);
+
+  const handleBoundaryArrow = useCallback(
+    (direction: 'up' | 'down' | 'left' | 'right') => {
+      if (mode === 'slash_commands') {
+        if (direction === 'up') slash.moveUp();
+        if (direction === 'down') slash.moveDown();
+      } else if (mode === 'settings_completion') {
+        if (direction === 'up') settings.moveUp();
+        if (direction === 'down') settings.moveDown();
+      } else if (mode === 'settings_value_completion') {
+        if (direction === 'up') settingsValue.moveUp();
+        if (direction === 'down') settingsValue.moveDown();
+      } else if (mode === 'path_completion') {
+        if (direction === 'up') path.moveUp();
+        if (direction === 'down') path.moveDown();
+      } else if (mode === 'model_selection') {
+        if (direction === 'up') models.moveUp();
+        if (direction === 'down') models.moveDown();
+      } else {
+        // History
+        if (direction === 'up') {
+          const historyValue = navigateUp(value);
+          if (historyValue !== null) {
+            onChange(historyValue);
+            setInputKey((prev) => prev + 1);
+          }
+        } else if (direction === 'down') {
+          const historyValue = navigateDown();
+          if (historyValue !== null) {
+            onChange(historyValue);
+            setInputKey((prev) => prev + 1);
+          }
         }
+      }
+    },
+    [mode, slash, settings, path, models, navigateUp, navigateDown, value, onChange],
+  );
 
-        if (mode === 'settings_value_completion') {
-            if (key.tab && !key.shift) {
-                insertSelectedSettingValue(false);
-            }
+  const insertSelectedPath = useCallback(
+    (appendTrailingSpace: boolean): boolean => {
+      const selection = path.getSelectedItem();
+      // triggerIndex from context
+      const triggerIdx = path.triggerIndex;
+
+      if (!selection || triggerIdx === null) return false;
+
+      const safeCursor = Math.min(cursorOffset, value.length);
+      const before = value.slice(0, triggerIdx);
+      const after = value.slice(safeCursor);
+      const displayPath = selection.type === 'directory' ? `${selection.path}/` : selection.path;
+      const suffix = appendTrailingSpace ? ' ' : '';
+      const nextValue = `${before}${displayPath}${suffix}${after}`;
+      onChange(nextValue);
+      const nextCursor = before.length + displayPath.length + suffix.length;
+      setCursorOverride(nextCursor);
+      path.close();
+      return true;
+    },
+    [path, cursorOffset, value, onChange],
+  );
+
+  const insertSelectedSetting = useCallback((): boolean => {
+    const selection = settings.getSelectedItem();
+    if (!selection) return false;
+
+    const isReset = value.startsWith(SETTINGS_RESET_TRIGGER);
+    const prefix = isReset ? SETTINGS_RESET_TRIGGER : SETTINGS_TRIGGER;
+    if (!value.startsWith(prefix)) return false;
+
+    const newValue = prefix + selection.key + ' ';
+    onChange(newValue);
+    setCursorOverride(newValue.length);
+    settings.close();
+    return true;
+  }, [settings, value, onChange]);
+
+  const insertSelectedSettingValue = useCallback(
+    (submitAfterInsert: boolean): boolean => {
+      const suggestion = settingsValue.getSelectedItem();
+      if (!suggestion) {
+        // No suggestion selected: allow normal submit flow.
+        return false;
+      }
+
+      if (!value.startsWith(SETTINGS_TRIGGER)) return false;
+      if (!settingsValue.settingKey) return false;
+
+      // Replace the value portion (from triggerIndex to cursor) with the suggestion.
+      const triggerIdx = settingsValue.triggerIndex;
+      if (triggerIdx === null) return false;
+
+      const safeCursor = Math.min(cursorOffset, value.length);
+      const before = value.slice(0, triggerIdx);
+      const after = value.slice(safeCursor);
+      const nextValue = `${before}${suggestion.value}${after}`;
+      onChange(nextValue);
+      setCursorOverride(before.length + suggestion.value.length);
+      settingsValue.close();
+
+      if (submitAfterInsert) {
+        onSubmit(nextValue);
+      }
+      return true;
+    },
+    [settingsValue, value, onChange, cursorOffset, onSubmit],
+  );
+
+  const insertSelectedModel = useCallback(
+    (submitAfterInsert: boolean): boolean => {
+      const selection = models.getSelectedItem();
+      const triggerIdx = models.triggerIndex;
+
+      if (!selection || triggerIdx === null) return false;
+
+      const before = value.slice(0, triggerIdx);
+
+      // For mentor model, we DO append the provider flag so the mentor can use a different provider.
+
+      // Use the current provider state instead of selection.provider to avoid stale data
+      // when user presses Enter immediately after toggling providers
+      const currentProvider = models.provider || 'openai';
+
+      let insertion = selection.id;
+      insertion += ` --provider=${currentProvider}`;
+
+      const nextValue = `${before}${insertion}${submitAfterInsert ? '' : ' '}`;
+      onChange(nextValue);
+      setCursorOverride(nextValue.length);
+      models.close();
+
+      if (submitAfterInsert) {
+        onSubmit(nextValue);
+      }
+
+      return true;
+    },
+    [models, value, onChange, onSubmit],
+  );
+
+  const handleWrapperSubmit = useCallback(
+    (submittedValue: string) => {
+      if (mode === 'path_completion') {
+        if (insertSelectedPath(true)) return;
+      }
+      if (mode === 'settings_completion') {
+        // Check if complete
+        const parts = submittedValue.slice(SETTINGS_TRIGGER.length).trim().split(/\s+/);
+        if (parts.length >= 2) {
+          onSubmit(submittedValue);
+          return;
         }
+        if (insertSelectedSetting()) return;
+      }
+      if (mode === 'settings_value_completion') {
+        if (insertSelectedSettingValue(true)) return;
+        // Fall back to submitting whatever the user typed
+        onSubmit(submittedValue);
+        return;
+      }
+      if (mode === 'model_selection') {
+        if (insertSelectedModel(true)) return;
+      }
+      if (mode === 'slash_commands') {
+        slash.executeSelected();
+        setInputKey((prev) => prev + 1);
+        return;
+      }
 
-        if (mode === 'model_selection') {
-            if (key.tab && !key.shift && models.canSwitchProvider) {
-                models.toggleProvider();
-            }
-        }
-    });
+      onSubmit(submittedValue);
+    },
+    [mode, onSubmit, insertSelectedPath, insertSelectedSetting, insertSelectedModel, slash],
+  );
 
-    const [, setInputKey] = useState(0);
-
-    const handleBoundaryArrow = useCallback(
-        (direction: 'up' | 'down' | 'left' | 'right') => {
-            if (mode === 'slash_commands') {
-                if (direction === 'up') slash.moveUp();
-                if (direction === 'down') slash.moveDown();
-            } else if (mode === 'settings_completion') {
-                if (direction === 'up') settings.moveUp();
-                if (direction === 'down') settings.moveDown();
-            } else if (mode === 'settings_value_completion') {
-                if (direction === 'up') settingsValue.moveUp();
-                if (direction === 'down') settingsValue.moveDown();
-            } else if (mode === 'path_completion') {
-                if (direction === 'up') path.moveUp();
-                if (direction === 'down') path.moveDown();
-            } else if (mode === 'model_selection') {
-                if (direction === 'up') models.moveUp();
-                if (direction === 'down') models.moveDown();
-            } else {
-                // History
-                if (direction === 'up') {
-                    const historyValue = navigateUp(value);
-                    if (historyValue !== null) {
-                        onChange(historyValue);
-                        setInputKey(prev => prev + 1);
-                    }
-                } else if (direction === 'down') {
-                    const historyValue = navigateDown();
-                    if (historyValue !== null) {
-                        onChange(historyValue);
-                        setInputKey(prev => prev + 1);
-                    }
-                }
-            }
-        },
-        [mode, slash, settings, path, models, navigateUp, navigateDown, value, onChange],
-    );
-
-    const insertSelectedPath = useCallback(
-        (appendTrailingSpace: boolean): boolean => {
-            const selection = path.getSelectedItem();
-            // triggerIndex from context
-            const triggerIdx = path.triggerIndex;
-
-            if (!selection || triggerIdx === null) return false;
-
-            const safeCursor = Math.min(cursorOffset, value.length);
-            const before = value.slice(0, triggerIdx);
-            const after = value.slice(safeCursor);
-            const displayPath =
-                selection.type === 'directory'
-                    ? `${selection.path}/`
-                    : selection.path;
-            const suffix = appendTrailingSpace ? ' ' : '';
-            const nextValue = `${before}${displayPath}${suffix}${after}`;
-            onChange(nextValue);
-            const nextCursor =
-                before.length + displayPath.length + suffix.length;
-            setCursorOverride(nextCursor);
-            path.close();
-            return true;
-        },
-        [path, cursorOffset, value, onChange],
-    );
-
-    const insertSelectedSetting = useCallback((): boolean => {
-        const selection = settings.getSelectedItem();
-        if (!selection) return false;
-
-        const isReset = value.startsWith(SETTINGS_RESET_TRIGGER);
-        const prefix = isReset ? SETTINGS_RESET_TRIGGER : SETTINGS_TRIGGER;
-        if (!value.startsWith(prefix)) return false;
-
-        const newValue = prefix + selection.key + ' ';
-        onChange(newValue);
-        setCursorOverride(newValue.length);
-        settings.close();
-        return true;
-    }, [settings, value, onChange]);
-
-    const insertSelectedSettingValue = useCallback(
-        (submitAfterInsert: boolean): boolean => {
-            const suggestion = settingsValue.getSelectedItem();
-            if (!suggestion) {
-                // No suggestion selected: allow normal submit flow.
-                return false;
-            }
-
-            if (!value.startsWith(SETTINGS_TRIGGER)) return false;
-            if (!settingsValue.settingKey) return false;
-
-            // Replace the value portion (from triggerIndex to cursor) with the suggestion.
-            const triggerIdx = settingsValue.triggerIndex;
-            if (triggerIdx === null) return false;
-
-            const safeCursor = Math.min(cursorOffset, value.length);
-            const before = value.slice(0, triggerIdx);
-            const after = value.slice(safeCursor);
-            const nextValue = `${before}${suggestion.value}${after}`;
-            onChange(nextValue);
-            setCursorOverride(before.length + suggestion.value.length);
-            settingsValue.close();
-
-            if (submitAfterInsert) {
-                onSubmit(nextValue);
-            }
-            return true;
-        },
-        [settingsValue, value, onChange, cursorOffset, onSubmit],
-    );
-
-    const insertSelectedModel = useCallback(
-        (submitAfterInsert: boolean): boolean => {
-            const selection = models.getSelectedItem();
-            const triggerIdx = models.triggerIndex;
-
-            if (!selection || triggerIdx === null) return false;
-
-            const before = value.slice(0, triggerIdx);
-
-            // For mentor model, we DO append the provider flag so the mentor can use a different provider.
-
-            // Use the current provider state instead of selection.provider to avoid stale data
-            // when user presses Enter immediately after toggling providers
-            const currentProvider = models.provider || 'openai';
-
-            let insertion = selection.id;
-            insertion += ` --provider=${currentProvider}`;
-
-            const nextValue = `${before}${insertion}${
-                submitAfterInsert ? '' : ' '
-            }`;
-            onChange(nextValue);
-            setCursorOverride(nextValue.length);
-            models.close();
-
-            if (submitAfterInsert) {
-                onSubmit(nextValue);
-            }
-
-            return true;
-        },
-        [models, value, onChange, onSubmit],
-    );
-
-    const handleWrapperSubmit = useCallback(
-        (submittedValue: string) => {
-            if (mode === 'path_completion') {
-                if (insertSelectedPath(true)) return;
-            }
-            if (mode === 'settings_completion') {
-                // Check if complete
-                const parts = submittedValue
-                    .slice(SETTINGS_TRIGGER.length)
-                    .trim()
-                    .split(/\s+/);
-                if (parts.length >= 2) {
-                    onSubmit(submittedValue);
-                    return;
-                }
-                if (insertSelectedSetting()) return;
-            }
-            if (mode === 'settings_value_completion') {
-                if (insertSelectedSettingValue(true)) return;
-                // Fall back to submitting whatever the user typed
-                onSubmit(submittedValue);
-                return;
-            }
-            if (mode === 'model_selection') {
-                if (insertSelectedModel(true)) return;
-            }
-            if (mode === 'slash_commands') {
-                slash.executeSelected();
-                setInputKey(prev => prev + 1);
-                return;
-            }
-
-            onSubmit(submittedValue);
-        },
-        [
-            mode,
-            onSubmit,
-            insertSelectedPath,
-            insertSelectedSetting,
-            insertSelectedModel,
-            slash,
-        ],
-    );
-
-    return (
-        <Box flexDirection="column">
-            <PopupManager
-                slash={{
-                    isOpen: slash.isOpen,
-                    commands: slash.filteredCommands,
-                    selectedIndex: slash.selectedIndex,
-                    filter: slash.filter,
-                }}
-                path={{
-                    isOpen: path.isOpen,
-                    items: path.filteredEntries,
-                    selectedIndex: path.selectedIndex,
-                    query: path.query,
-                    loading: path.loading,
-                    error: path.error,
-                }}
-                models={{
-                    isOpen: models.isOpen,
-                    items: models.filteredModels,
-                    selectedIndex: models.selectedIndex,
-                    query: models.query,
-                    loading: models.loading,
-                    error: models.error,
-                    provider: models.provider,
-                    scrollOffset: models.scrollOffset,
-                    canSwitchProvider: models.canSwitchProvider,
-                }}
-                settings={{
-                    isOpen: settings.isOpen,
-                    items: settings.filteredEntries,
-                    selectedIndex: settings.selectedIndex,
-                    query: settings.query,
-                }}
-                settingsValue={{
-                    isOpen: settingsValue.isOpen,
-                    settingKey: settingsValue.settingKey,
-                    items: settingsValue.filteredEntries,
-                    selectedIndex: settingsValue.selectedIndex,
-                    query: settingsValue.query,
-                    isNumericSettings: settingsValue.isNumericSettings,
-                }}
-                settingsService={settingsService}
-            />
-            <Box>
-                {waitingForRejectionReason ? (
-                    <Text color="yellow">Why? </Text>
-                ) : isShellMode ? (
-                    <Text color="green">$ </Text>
-                ) : (
-                    <Text color="#22d3ee">❯ </Text>
-                )}
-                <MultilineInput
-                    value={value}
-                    width={terminalWidth}
-                    onChange={onChange}
-                    onSubmit={handleWrapperSubmit}
-                    onCursorChange={setCursorOffset}
-                    cursorOverride={cursorOverride ?? undefined}
-                    onBoundaryArrow={handleBoundaryArrow}
-                />
-            </Box>
-            {escHintVisible && (
-                <Text color="#64748b">
-                    Press ESC again to clear input
-                </Text>
-            )}
-            {waitingForRejectionReason && (
-                <Text color="#64748b">
-                    (or ESC to cancel)
-                </Text>
-            )}
-        </Box>
-    );
+  return (
+    <Box flexDirection="column">
+      <PopupManager
+        slash={{
+          isOpen: slash.isOpen,
+          commands: slash.filteredCommands,
+          selectedIndex: slash.selectedIndex,
+          filter: slash.filter,
+        }}
+        path={{
+          isOpen: path.isOpen,
+          items: path.filteredEntries,
+          selectedIndex: path.selectedIndex,
+          query: path.query,
+          loading: path.loading,
+          error: path.error,
+        }}
+        models={{
+          isOpen: models.isOpen,
+          items: models.filteredModels,
+          selectedIndex: models.selectedIndex,
+          query: models.query,
+          loading: models.loading,
+          error: models.error,
+          provider: models.provider,
+          scrollOffset: models.scrollOffset,
+          canSwitchProvider: models.canSwitchProvider,
+        }}
+        settings={{
+          isOpen: settings.isOpen,
+          items: settings.filteredEntries,
+          selectedIndex: settings.selectedIndex,
+          query: settings.query,
+        }}
+        settingsValue={{
+          isOpen: settingsValue.isOpen,
+          settingKey: settingsValue.settingKey,
+          items: settingsValue.filteredEntries,
+          selectedIndex: settingsValue.selectedIndex,
+          query: settingsValue.query,
+          isNumericSettings: settingsValue.isNumericSettings,
+        }}
+        settingsService={settingsService}
+      />
+      <Box>
+        {waitingForRejectionReason ? (
+          <Text color="yellow">Why? </Text>
+        ) : isShellMode ? (
+          <Text color="green">$ </Text>
+        ) : (
+          <Text color="#22d3ee">❯ </Text>
+        )}
+        <MultilineInput
+          value={value}
+          width={terminalWidth}
+          onChange={onChange}
+          onSubmit={handleWrapperSubmit}
+          onCursorChange={setCursorOffset}
+          cursorOverride={cursorOverride ?? undefined}
+          onBoundaryArrow={handleBoundaryArrow}
+        />
+      </Box>
+      {escHintVisible && <Text color="#64748b">Press ESC again to clear input</Text>}
+      {waitingForRejectionReason && <Text color="#64748b">(or ESC to cancel)</Text>}
+    </Box>
+  );
 };
 
 export default React.memo(InputBox);
 
 const whitespaceRegex = /\s/;
 
-const findPathTrigger = (
-    text: string,
-    cursor: number,
-    stopChars: RegExp,
-): {start: number; query: string} | null => {
-    if (cursor <= 0 || cursor > text.length) {
-        return null;
-    }
-
-    for (let index = cursor - 1; index >= 0; index -= 1) {
-        const char = text[index];
-        if (char === '@') {
-            const query = text.slice(index + 1, cursor);
-            if (whitespaceRegex.test(query)) {
-                return null;
-            }
-            return {start: index, query};
-        }
-        if (stopChars.test(char)) {
-            break;
-        }
-    }
-
+const findPathTrigger = (text: string, cursor: number, stopChars: RegExp): { start: number; query: string } | null => {
+  if (cursor <= 0 || cursor > text.length) {
     return null;
+  }
+
+  for (let index = cursor - 1; index >= 0; index -= 1) {
+    const char = text[index];
+    if (char === '@') {
+      const query = text.slice(index + 1, cursor);
+      if (whitespaceRegex.test(query)) {
+        return null;
+      }
+      return { start: index, query };
+    }
+    if (stopChars.test(char)) {
+      break;
+    }
+  }
+
+  return null;
 };

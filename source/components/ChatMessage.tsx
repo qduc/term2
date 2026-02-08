@@ -1,29 +1,25 @@
-import React, {FC} from 'react';
-import {Box, Text} from 'ink';
+import React, { FC } from 'react';
+import { Box, Text } from 'ink';
 import MarkdownRenderer from './MarkdownRenderer.js';
 
 type Props = {
-    msg: any;
+  msg: any;
 };
 
-const ChatMessage: FC<Props> = ({msg}) => {
-    return (
-        <Box flexDirection="column">
-            {msg.sender === 'user' ? (
-                <Text color="#22d3ee">❯ {msg.text}</Text>
-            ) : msg.sender === 'system' ? (
-                <Text color="#64748b">
-                    {msg.text}
-                </Text>
-            ) : msg.sender === 'reasoning' ? (
-                <Text color="#64748b">
-                    {msg.text}
-                </Text>
-            ) : (
-                <MarkdownRenderer>{msg.text}</MarkdownRenderer>
-            )}
-        </Box>
-    );
+const ChatMessage: FC<Props> = ({ msg }) => {
+  return (
+    <Box flexDirection="column">
+      {msg.sender === 'user' ? (
+        <Text color="#22d3ee">❯ {msg.text}</Text>
+      ) : msg.sender === 'system' ? (
+        <Text color="#64748b">{msg.text}</Text>
+      ) : msg.sender === 'reasoning' ? (
+        <Text color="#64748b">{msg.text}</Text>
+      ) : (
+        <MarkdownRenderer>{msg.text}</MarkdownRenderer>
+      )}
+    </Box>
+  );
 };
 
 export default React.memo(ChatMessage);

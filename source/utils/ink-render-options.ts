@@ -1,5 +1,5 @@
 export type InkRenderOptions = {
-    incrementalRendering: true;
+  incrementalRendering: true;
 };
 
 /**
@@ -7,5 +7,5 @@ export type InkRenderOptions = {
  * the behavior is unit-testable.
  */
 export function getInkRenderOptions(): InkRenderOptions {
-    return {incrementalRendering: true};
+  return { incrementalRendering: true };
 }

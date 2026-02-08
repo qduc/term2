@@ -1,78 +1,75 @@
 import test from 'ava';
-import {OpenAIAgentClient} from './openai-agent-client.js';
-import {registerProvider} from '../providers/registry.js';
-import type {
-    ILoggingService,
-    ISettingsService,
-} from '../services/service-interfaces.js';
+import { OpenAIAgentClient } from './openai-agent-client.js';
+import { registerProvider } from '../providers/registry.js';
+import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 
 // Mock Logger
 const mockLogger: ILoggingService = {
-    debug: () => {},
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-    setCorrelationId: () => {},
-    clearCorrelationId: () => {},
-    log: () => {},
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  setCorrelationId: () => {},
+  clearCorrelationId: () => {},
+  log: () => {},
 } as any;
 
 // Mock Settings
 const mockSettings: ISettingsService = {
-    get: (key: string) => {
-        if (key === 'agent.provider') return 'mock-provider-chat';
-        if (key === 'agent.model') return 'mock-model';
-        return undefined;
-    },
-    set: () => {},
-    onChange: () => {},
+  get: (key: string) => {
+    if (key === 'agent.provider') return 'mock-provider-chat';
+    if (key === 'agent.model') return 'mock-model';
+    return undefined;
+  },
+  set: () => {},
+  onChange: () => {},
 } as any;
 
 // Mock Runner
 let lastRunOptions: any = null;
 class MockRunner {
-    async run(_agent: any, _input: any, _options: any) {
-        lastRunOptions = _options;
-        return {
-            status: 'completed',
-            messages: [{role: 'assistant', content: 'Fallback content'}],
-            // finalOutput is missing
-        };
-    }
+  async run(_agent: any, _input: any, _options: any) {
+    lastRunOptions = _options;
+    return {
+      status: 'completed',
+      messages: [{ role: 'assistant', content: 'Fallback content' }],
+      // finalOutput is missing
+    };
+  }
 }
 
 test.before(() => {
-    registerProvider({
-        id: 'mock-provider-chat',
-        label: 'Mock Provider Chat',
-        createRunner: () => new MockRunner() as any,
-        fetchModels: async () => [{id: 'mock-model'}],
-    });
+  registerProvider({
+    id: 'mock-provider-chat',
+    label: 'Mock Provider Chat',
+    createRunner: () => new MockRunner() as any,
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
 });
 
-test('OpenAIAgentClient.chat falls back to messages if finalOutput is missing', async t => {
-    const client = new OpenAIAgentClient({
-        deps: {
-            logger: mockLogger,
-            settings: mockSettings,
-        },
-    });
+test('OpenAIAgentClient.chat falls back to messages if finalOutput is missing', async (t) => {
+  const client = new OpenAIAgentClient({
+    deps: {
+      logger: mockLogger,
+      settings: mockSettings,
+    },
+  });
 
-    const response = await client.chat('Hello');
-    t.is(response, 'Fallback content');
+  const response = await client.chat('Hello');
+  t.is(response, 'Fallback content');
 });
 
-test('disables Agents SDK tracing for non-OpenAI providers', async t => {
-    lastRunOptions = null;
+test('disables Agents SDK tracing for non-OpenAI providers', async (t) => {
+  lastRunOptions = null;
 
-    const client = new OpenAIAgentClient({
-        deps: {
-            logger: mockLogger,
-            settings: mockSettings,
-        },
-    });
+  const client = new OpenAIAgentClient({
+    deps: {
+      logger: mockLogger,
+      settings: mockSettings,
+    },
+  });
 
-    await client.chat('Hello again');
-    t.truthy(lastRunOptions);
-    t.is(lastRunOptions.tracingDisabled, true);
+  await client.chat('Hello again');
+  t.truthy(lastRunOptions);
+  t.is(lastRunOptions.tracingDisabled, true);
 });

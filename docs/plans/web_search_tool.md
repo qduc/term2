@@ -63,11 +63,11 @@ source/
 
 ### Files to Modify
 
-| File | Changes |
-|------|---------|
-| `source/agent.ts` | Add `createWebSearchToolDefinition` to tools list |
+| File                                  | Changes                                                                          |
+| ------------------------------------- | -------------------------------------------------------------------------------- |
+| `source/agent.ts`                     | Add `createWebSearchToolDefinition` to tools list                                |
 | `source/services/settings-service.ts` | Add web search settings schema (`webSearch.provider`, `webSearch.tavily.apiKey`) |
-| `source/providers/index.ts` | Import web search providers for auto-registration |
+| `source/providers/index.ts`           | Import web search providers for auto-registration                                |
 
 ---
 
@@ -80,50 +80,47 @@ source/
  * Result from a single web search result item
  */
 export interface WebSearchResult {
-    title: string;
-    url: string;
-    content: string;       // Snippet or extracted content
-    score?: number;        // Relevance score if available
-    publishedDate?: string;
+  title: string;
+  url: string;
+  content: string; // Snippet or extracted content
+  score?: number; // Relevance score if available
+  publishedDate?: string;
 }
 
 /**
  * Response from a web search query
  */
 export interface WebSearchResponse {
-    query: string;
-    results: WebSearchResult[];
-    answerBox?: string;    // Direct answer if available (Tavily returns this)
+  query: string;
+  results: WebSearchResult[];
+  answerBox?: string; // Direct answer if available (Tavily returns this)
 }
 
 /**
  * Interface that all web search providers must implement
  */
 export interface WebSearchProvider {
-    /** Unique identifier for the provider (e.g., 'tavily', 'serper') */
-    id: string;
+  /** Unique identifier for the provider (e.g., 'tavily', 'serper') */
+  id: string;
 
-    /** Human-readable label for display */
-    label: string;
+  /** Human-readable label for display */
+  label: string;
 
-    /**
-     * Execute a web search query
-     * @param query - The search query string
-     * @param deps - Dependencies (settings service, logging service)
-     * @returns Promise resolving to search results
-     */
-    search: (
-        query: string,
-        deps: { settingsService: any; loggingService: any }
-    ) => Promise<WebSearchResponse>;
+  /**
+   * Execute a web search query
+   * @param query - The search query string
+   * @param deps - Dependencies (settings service, logging service)
+   * @returns Promise resolving to search results
+   */
+  search: (query: string, deps: { settingsService: any; loggingService: any }) => Promise<WebSearchResponse>;
 
-    /**
-     * Check if the provider is properly configured (has API key, etc.)
-     */
-    isConfigured: (deps: { settingsService: any }) => boolean;
+  /**
+   * Check if the provider is properly configured (has API key, etc.)
+   */
+  isConfigured: (deps: { settingsService: any }) => boolean;
 
-    /** Settings keys that are sensitive (API keys) */
-    sensitiveSettingKeys?: string[];
+  /** Settings keys that are sensitive (API keys) */
+  sensitiveSettingKeys?: string[];
 }
 ```
 
@@ -138,53 +135,48 @@ let defaultProviderId: string | null = null;
 /**
  * Register a web search provider
  */
-export function registerWebSearchProvider(
-    provider: WebSearchProvider,
-    options?: { isDefault?: boolean }
-): void {
-    if (providers.has(provider.id)) {
-        throw new Error(`Web search provider '${provider.id}' is already registered`);
-    }
-    providers.set(provider.id, provider);
+export function registerWebSearchProvider(provider: WebSearchProvider, options?: { isDefault?: boolean }): void {
+  if (providers.has(provider.id)) {
+    throw new Error(`Web search provider '${provider.id}' is already registered`);
+  }
+  providers.set(provider.id, provider);
 
-    if (options?.isDefault || !defaultProviderId) {
-        defaultProviderId = provider.id;
-    }
+  if (options?.isDefault || !defaultProviderId) {
+    defaultProviderId = provider.id;
+  }
 }
 
 /**
  * Get a specific web search provider by ID
  */
 export function getWebSearchProvider(id: string): WebSearchProvider | undefined {
-    return providers.get(id);
+  return providers.get(id);
 }
 
 /**
  * Get the default web search provider
  */
 export function getDefaultWebSearchProvider(): WebSearchProvider | undefined {
-    return defaultProviderId ? providers.get(defaultProviderId) : undefined;
+  return defaultProviderId ? providers.get(defaultProviderId) : undefined;
 }
 
 /**
  * Get all registered web search providers
  */
 export function getAllWebSearchProviders(): WebSearchProvider[] {
-    return Array.from(providers.values());
+  return Array.from(providers.values());
 }
 
 /**
  * Get the configured provider based on settings, falling back to default
  */
-export function getConfiguredWebSearchProvider(
-    deps: { settingsService: any }
-): WebSearchProvider | undefined {
-    const providerId = deps.settingsService.get('webSearch.provider');
-    if (providerId) {
-        const provider = getWebSearchProvider(providerId);
-        if (provider) return provider;
-    }
-    return getDefaultWebSearchProvider();
+export function getConfiguredWebSearchProvider(deps: { settingsService: any }): WebSearchProvider | undefined {
+  const providerId = deps.settingsService.get('webSearch.provider');
+  if (providerId) {
+    const provider = getWebSearchProvider(providerId);
+    if (provider) return provider;
+  }
+  return getDefaultWebSearchProvider();
 }
 ```
 
@@ -198,89 +190,92 @@ import type { WebSearchProvider, WebSearchResponse, WebSearchResult } from './ty
  * Tavily API response structure (relevant fields only)
  */
 interface TavilyAPIResponse {
-    query: string;
-    answer?: string;
-    results: Array<{
-        title: string;
-        url: string;
-        content: string;
-        score?: number;
-        published_date?: string;
-    }>;
+  query: string;
+  answer?: string;
+  results: Array<{
+    title: string;
+    url: string;
+    content: string;
+    score?: number;
+    published_date?: string;
+  }>;
 }
 
 const TAVILY_API_URL = 'https://api.tavily.com/search';
 
 async function searchTavily(
-    query: string,
-    deps: { settingsService: any; loggingService: any }
+  query: string,
+  deps: { settingsService: any; loggingService: any },
 ): Promise<WebSearchResponse> {
-    const { settingsService, loggingService } = deps;
+  const { settingsService, loggingService } = deps;
 
-    const apiKey = settingsService.get('webSearch.tavily.apiKey');
-    if (!apiKey) {
-        throw new Error(
-            'Tavily API key is not configured. ' +
-            'Set TAVILY_API_KEY environment variable or configure webSearch.tavily.apiKey.'
-        );
-    }
+  const apiKey = settingsService.get('webSearch.tavily.apiKey');
+  if (!apiKey) {
+    throw new Error(
+      'Tavily API key is not configured. ' +
+        'Set TAVILY_API_KEY environment variable or configure webSearch.tavily.apiKey.',
+    );
+  }
 
-    loggingService.debug('Executing Tavily web search', { query });
+  loggingService.debug('Executing Tavily web search', { query });
 
-    const response = await fetch(TAVILY_API_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            api_key: apiKey,
-            query: query,
-            // Leave all other parameters at default values per requirements
-        }),
+  const response = await fetch(TAVILY_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      api_key: apiKey,
+      query: query,
+      // Leave all other parameters at default values per requirements
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    loggingService.error('Tavily API error', {
+      status: response.status,
+      error: errorText,
     });
+    throw new Error(`Tavily API error (${response.status}): ${errorText}`);
+  }
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        loggingService.error('Tavily API error', {
-            status: response.status,
-            error: errorText
-        });
-        throw new Error(`Tavily API error (${response.status}): ${errorText}`);
-    }
+  const data: TavilyAPIResponse = await response.json();
 
-    const data: TavilyAPIResponse = await response.json();
+  loggingService.debug('Tavily search completed', {
+    resultCount: data.results?.length || 0,
+    hasAnswer: !!data.answer,
+  });
 
-    loggingService.debug('Tavily search completed', {
-        resultCount: data.results?.length || 0,
-        hasAnswer: !!data.answer
-    });
-
-    return {
-        query: data.query,
-        results: (data.results || []).map(r => ({
-            title: r.title,
-            url: r.url,
-            content: r.content,
-            score: r.score,
-            publishedDate: r.published_date,
-        })),
-        answerBox: data.answer,
-    };
+  return {
+    query: data.query,
+    results: (data.results || []).map((r) => ({
+      title: r.title,
+      url: r.url,
+      content: r.content,
+      score: r.score,
+      publishedDate: r.published_date,
+    })),
+    answerBox: data.answer,
+  };
 }
 
 function isConfigured(deps: { settingsService: any }): boolean {
-    const apiKey = deps.settingsService.get('webSearch.tavily.apiKey');
-    return !!apiKey;
+  const apiKey = deps.settingsService.get('webSearch.tavily.apiKey');
+  return !!apiKey;
 }
 
 // Register the Tavily provider
-registerWebSearchProvider({
+registerWebSearchProvider(
+  {
     id: 'tavily',
     label: 'Tavily',
     search: searchTavily,
     isConfigured,
     sensitiveSettingKeys: ['webSearch.tavily.apiKey'],
-}, { isDefault: true });
+  },
+  { isDefault: true },
+);
 ```
 
 ### 4. Web Search Provider Index (`source/providers/web-search/index.ts`)
@@ -291,18 +286,14 @@ import './tavily.provider.js';
 
 // Re-export registry API and types
 export {
-    registerWebSearchProvider,
-    getWebSearchProvider,
-    getDefaultWebSearchProvider,
-    getAllWebSearchProviders,
-    getConfiguredWebSearchProvider,
+  registerWebSearchProvider,
+  getWebSearchProvider,
+  getDefaultWebSearchProvider,
+  getAllWebSearchProviders,
+  getConfiguredWebSearchProvider,
 } from './registry.js';
 
-export type {
-    WebSearchProvider,
-    WebSearchResponse,
-    WebSearchResult,
-} from './types.js';
+export type { WebSearchProvider, WebSearchResponse, WebSearchResult } from './types.js';
 ```
 
 ### 5. Web Search Tool (`source/tools/web-search.ts`)
@@ -310,24 +301,16 @@ export type {
 ```typescript
 import { z } from 'zod';
 import type { ToolDefinition, CommandMessage } from './types.js';
+import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from './format-helpers.js';
 import {
-    getOutputText,
-    normalizeToolArguments,
-    createBaseMessage,
-    getCallIdFromItem,
-} from './format-helpers.js';
-import {
-    getConfiguredWebSearchProvider,
-    type WebSearchResponse,
-    type WebSearchResult,
+  getConfiguredWebSearchProvider,
+  type WebSearchResponse,
+  type WebSearchResult,
 } from '../providers/web-search/index.js';
-import type {
-    ISettingsService,
-    ILoggingService,
-} from '../services/service-interfaces.js';
+import type { ISettingsService, ILoggingService } from '../services/service-interfaces.js';
 
 const webSearchSchema = z.object({
-    query: z.string().min(1).describe('The search query to look up on the web.'),
+  query: z.string().min(1).describe('The search query to look up on the web.'),
 });
 
 export type WebSearchParams = z.infer<typeof webSearchSchema>;
@@ -336,118 +319,114 @@ export type WebSearchParams = z.infer<typeof webSearchSchema>;
  * Convert Tavily/web search results to a markdown-formatted string
  */
 function formatResultsAsMarkdown(response: WebSearchResponse): string {
-    const parts: string[] = [];
+  const parts: string[] = [];
 
-    // Add answer box if available (Tavily's synthesized answer)
-    if (response.answerBox) {
-        parts.push('## Answer\n');
-        parts.push(response.answerBox);
-        parts.push('\n');
-    }
+  // Add answer box if available (Tavily's synthesized answer)
+  if (response.answerBox) {
+    parts.push('## Answer\n');
+    parts.push(response.answerBox);
+    parts.push('\n');
+  }
 
-    // Add search results
-    if (response.results.length > 0) {
-        parts.push('## Search Results\n');
+  // Add search results
+  if (response.results.length > 0) {
+    parts.push('## Search Results\n');
 
-        response.results.forEach((result, index) => {
-            parts.push(`### ${index + 1}. ${result.title}\n`);
-            parts.push(`**URL:** ${result.url}\n`);
-            if (result.publishedDate) {
-                parts.push(`**Published:** ${result.publishedDate}\n`);
-            }
-            parts.push(`\n${result.content}\n`);
-            parts.push('\n---\n');
-        });
-    } else {
-        parts.push('No results found for this query.\n');
-    }
+    response.results.forEach((result, index) => {
+      parts.push(`### ${index + 1}. ${result.title}\n`);
+      parts.push(`**URL:** ${result.url}\n`);
+      if (result.publishedDate) {
+        parts.push(`**Published:** ${result.publishedDate}\n`);
+      }
+      parts.push(`\n${result.content}\n`);
+      parts.push('\n---\n');
+    });
+  } else {
+    parts.push('No results found for this query.\n');
+  }
 
-    return parts.join('\n');
+  return parts.join('\n');
 }
 
 /**
  * Format command message for display in the terminal
  */
 export const formatWebSearchCommandMessage = (
-    item: any,
-    index: number,
-    toolCallArgumentsById: Map<string, unknown>,
+  item: any,
+  index: number,
+  toolCallArgumentsById: Map<string, unknown>,
 ): CommandMessage[] => {
-    const callId = getCallIdFromItem(item);
-    const fallbackArgs =
-        callId && toolCallArgumentsById.has(callId)
-            ? toolCallArgumentsById.get(callId)
-            : null;
-    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
-    const args =
-        normalizeToolArguments(normalizedArgs) ??
-        normalizeToolArguments(fallbackArgs) ??
-        {};
+  const callId = getCallIdFromItem(item);
+  const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+  const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+  const args = normalizeToolArguments(normalizedArgs) ?? normalizeToolArguments(fallbackArgs) ?? {};
 
-    const query = args?.query ?? 'unknown query';
-    const command = `web_search: "${query}"`;
-    const output = getOutputText(item) || 'No results';
-    const success = !output.startsWith('Error:');
+  const query = args?.query ?? 'unknown query';
+  const command = `web_search: "${query}"`;
+  const output = getOutputText(item) || 'No results';
+  const success = !output.startsWith('Error:');
 
-    return [
-        createBaseMessage(item, index, 0, false, {
-            command,
-            output,
-            success,
-            toolName: 'web_search',
-            toolArgs: args,
-        }),
-    ];
+  return [
+    createBaseMessage(item, index, 0, false, {
+      command,
+      output,
+      success,
+      toolName: 'web_search',
+      toolArgs: args,
+    }),
+  ];
 };
 
 /**
  * Factory function to create the web_search tool definition
  */
 export const createWebSearchToolDefinition = (deps: {
-    settingsService: ISettingsService;
-    loggingService: ILoggingService;
+  settingsService: ISettingsService;
+  loggingService: ILoggingService;
 }): ToolDefinition<WebSearchParams> => {
-    const { settingsService, loggingService } = deps;
+  const { settingsService, loggingService } = deps;
 
-    return {
-        name: 'web_search',
-        description:
-            'Search the web for current information. Use this when you need up-to-date information ' +
-            'that may not be in your training data, such as recent news, current events, ' +
-            'documentation updates, or any time-sensitive information.',
-        parameters: webSearchSchema,
-        needsApproval: () => false, // Web search is read-only, safe operation
-        execute: async (params) => {
-            const { query } = params;
+  return {
+    name: 'web_search',
+    description:
+      'Search the web for current information. Use this when you need up-to-date information ' +
+      'that may not be in your training data, such as recent news, current events, ' +
+      'documentation updates, or any time-sensitive information.',
+    parameters: webSearchSchema,
+    needsApproval: () => false, // Web search is read-only, safe operation
+    execute: async (params) => {
+      const { query } = params;
 
-            try {
-                const provider = getConfiguredWebSearchProvider({ settingsService });
+      try {
+        const provider = getConfiguredWebSearchProvider({ settingsService });
 
-                if (!provider) {
-                    return 'Error: No web search provider is configured.';
-                }
+        if (!provider) {
+          return 'Error: No web search provider is configured.';
+        }
 
-                if (!provider.isConfigured({ settingsService })) {
-                    return `Error: Web search provider '${provider.id}' is not properly configured. ` +
-                           `Please set the required API key.`;
-                }
+        if (!provider.isConfigured({ settingsService })) {
+          return (
+            `Error: Web search provider '${provider.id}' is not properly configured. ` +
+            `Please set the required API key.`
+          );
+        }
 
-                const response = await provider.search(query, {
-                    settingsService,
-                    loggingService,
-                });
+        const response = await provider.search(query, {
+          settingsService,
+          loggingService,
+        });
 
-                return formatResultsAsMarkdown(response);
-            } catch (error: any) {
-                loggingService.error('Web search failed', {
-                    query,
-                    error: error.message || String(error),
-                });
-                return `Error: ${error.message || String(error)}`;
-            }
-        },
-        formatCommandMessage: formatWebSearchCommandMessage,
-    };
+        return formatResultsAsMarkdown(response);
+      } catch (error: any) {
+        loggingService.error('Web search failed', {
+          query,
+          error: error.message || String(error),
+        });
+        return `Error: ${error.message || String(error)}`;
+      }
+    },
+    formatCommandMessage: formatWebSearchCommandMessage,
+  };
 };
 ```
 
@@ -458,6 +437,7 @@ export const createWebSearchToolDefinition = (deps: {
 ### 6. Update Agent Definition (`source/agent.ts`)
 
 Add import at the top:
+
 ```typescript
 import { createWebSearchToolDefinition } from './tools/web-search.js';
 ```
@@ -467,16 +447,17 @@ Add to the tools array in `getAgentDefinition()` (around line 140-180):
 ```typescript
 // Add web search tool (available in all modes except lite)
 if (!liteMode) {
-    tools.push(
-        createWebSearchToolDefinition({
-            settingsService,
-            loggingService,
-        })
-    );
+  tools.push(
+    createWebSearchToolDefinition({
+      settingsService,
+      loggingService,
+    }),
+  );
 }
 ```
 
 **Note:** This is our custom implementation. The SDK's `webSearchTool()` (currently used in `openai-agent-client.ts`) is a hosted tool that runs on OpenAI's servers. Our custom tool runs locally and uses Tavily, giving us:
+
 - Control over the search provider
 - Proper display formatting via `formatCommandMessage`
 - Ability to work with any LLM provider, not just OpenAI
@@ -489,10 +470,12 @@ Add to the settings schema (around line 100-150, with other schema definitions):
 
 ```typescript
 const webSearchSettingsSchema = z.object({
-    provider: z.string().optional(),
-    tavily: z.object({
-        apiKey: z.string().optional(),
-    }).optional(),
+  provider: z.string().optional(),
+  tavily: z
+    .object({
+      apiKey: z.string().optional(),
+    })
+    .optional(),
 });
 ```
 
@@ -515,25 +498,27 @@ webSearch: {
 ```
 
 Add to `SETTING_KEYS`:
+
 ```typescript
 WEB_SEARCH_PROVIDER: 'webSearch.provider',
 WEB_SEARCH_TAVILY_API_KEY: 'webSearch.tavily.apiKey',
 ```
 
 Add to `buildEnvOverrides()` function:
+
 ```typescript
 const webSearch: any = {};
 if (env.TAVILY_API_KEY) {
-    webSearch.tavily = { apiKey: env.TAVILY_API_KEY };
+  webSearch.tavily = { apiKey: env.TAVILY_API_KEY };
 }
 if (env.WEB_SEARCH_PROVIDER) {
-    webSearch.provider = env.WEB_SEARCH_PROVIDER;
+  webSearch.provider = env.WEB_SEARCH_PROVIDER;
 }
 
 // Include in return object
 return {
-    // ...existing fields
-    webSearch,
+  // ...existing fields
+  webSearch,
 };
 ```
 
@@ -551,15 +536,18 @@ import './web-search/index.js';
 ## Implementation Steps (In Order)
 
 ### Phase 1: Infrastructure (Core Types & Registry)
+
 1. Create `source/providers/web-search/types.ts` - Define interfaces
 2. Create `source/providers/web-search/registry.ts` - Registry implementation
 3. Create `source/providers/web-search/index.ts` - Export aggregation
 
 ### Phase 2: Tavily Provider
+
 4. Create `source/providers/web-search/tavily.provider.ts` - Tavily implementation
 5. Update `source/providers/index.ts` - Import web search module
 
 ### Phase 3: Settings Integration
+
 6. Update `source/services/settings-service.ts`:
    - Add schema for webSearch settings
    - Add to DEFAULT_SETTINGS
@@ -567,16 +555,19 @@ import './web-search/index.js';
    - Update `buildEnvOverrides()` for TAVILY_API_KEY
 
 ### Phase 4: Tool Implementation
+
 7. Create `source/tools/web-search.ts` - Tool definition with markdown formatting
 8. Update `source/agent.ts` - Add tool to agent's tool list
 
 ### Phase 5: SDK Tool Integration Decision
+
 9. Decide on SDK `webSearchTool()` usage in `source/lib/openai-agent-client.ts`:
    - Option A: Remove SDK tool, use only custom tool (recommended for consistency)
    - Option B: Keep SDK tool for OpenAI provider, use custom for others
    - Option C: Keep both and let model choose
 
 ### Phase 6: Testing
+
 10. Create `source/tools/web-search.test.ts`
 11. Create `source/providers/web-search/registry.test.ts`
 12. Create `source/providers/web-search/tavily.provider.test.ts`
@@ -588,6 +579,7 @@ import './web-search/index.js';
 ### Unit Tests
 
 **Registry Tests (`source/providers/web-search/registry.test.ts`):**
+
 ```typescript
 - registerWebSearchProvider registers a provider
 - registerWebSearchProvider throws on duplicate ID
@@ -599,6 +591,7 @@ import './web-search/index.js';
 ```
 
 **Tavily Provider Tests (`source/providers/web-search/tavily.provider.test.ts`):**
+
 ```typescript
 - isConfigured returns true when API key is set
 - isConfigured returns false when API key is missing
@@ -609,6 +602,7 @@ import './web-search/index.js';
 ```
 
 **Tool Tests (`source/tools/web-search.test.ts`):**
+
 ```typescript
 - createWebSearchToolDefinition defines tool correctly
 - needsApproval returns false (read-only operation)
@@ -641,10 +635,10 @@ import './web-search/index.js';
 
 ### Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `TAVILY_API_KEY` | API key from Tavily | Yes (for Tavily provider) |
-| `WEB_SEARCH_PROVIDER` | Override default provider (e.g., 'tavily') | No |
+| Variable              | Description                                | Required                  |
+| --------------------- | ------------------------------------------ | ------------------------- |
+| `TAVILY_API_KEY`      | API key from Tavily                        | Yes (for Tavily provider) |
+| `WEB_SEARCH_PROVIDER` | Override default provider (e.g., 'tavily') | No                        |
 
 ### Getting a Tavily API Key
 
@@ -660,12 +654,12 @@ Users can also configure via `~/.config/term2/settings.json`:
 
 ```json
 {
-    "webSearch": {
-        "provider": "tavily",
-        "tavily": {
-            "apiKey": "tvly-xxxxx"
-        }
+  "webSearch": {
+    "provider": "tavily",
+    "tavily": {
+      "apiKey": "tvly-xxxxx"
     }
+  }
 }
 ```
 
@@ -684,22 +678,23 @@ import { registerWebSearchProvider } from './registry.js';
 import type { WebSearchProvider, WebSearchResponse } from './types.js';
 
 async function searchSerper(
-    query: string,
-    deps: { settingsService: any; loggingService: any }
+  query: string,
+  deps: { settingsService: any; loggingService: any },
 ): Promise<WebSearchResponse> {
-    // Implementation...
+  // Implementation...
 }
 
 registerWebSearchProvider({
-    id: 'serper',
-    label: 'Serper',
-    search: searchSerper,
-    isConfigured: (deps) => !!deps.settingsService.get('webSearch.serper.apiKey'),
-    sensitiveSettingKeys: ['webSearch.serper.apiKey'],
+  id: 'serper',
+  label: 'Serper',
+  search: searchSerper,
+  isConfigured: (deps) => !!deps.settingsService.get('webSearch.serper.apiKey'),
+  sensitiveSettingKeys: ['webSearch.serper.apiKey'],
 });
 ```
 
 2. Add import to `source/providers/web-search/index.ts`:
+
 ```typescript
 import './serper.provider.js';
 ```
@@ -713,18 +708,22 @@ import './serper.provider.js';
 ## Potential Challenges & Mitigations
 
 ### 1. API Rate Limits
+
 - **Challenge:** Tavily may rate limit requests
 - **Mitigation:** Return clear error messages; consider implementing retry with backoff
 
 ### 2. Response Size
+
 - **Challenge:** Large search results may overwhelm context
 - **Mitigation:** Limit result count or truncate content per result
 
 ### 3. Network Failures
+
 - **Challenge:** Tavily API may be unreachable
 - **Mitigation:** Proper error handling with informative messages
 
 ### 4. SDK webSearchTool Conflict
+
 - **Challenge:** Two web search tools may confuse the model
 - **Mitigation:** Remove SDK tool or use conditional logic based on provider
 

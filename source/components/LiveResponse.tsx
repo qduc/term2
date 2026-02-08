@@ -1,8 +1,8 @@
-import React, {FC} from 'react';
-import {Box, Text} from 'ink';
+import React, { FC } from 'react';
+import { Box, Text } from 'ink';
 
 type Props = {
-    text: string;
+  text: string;
 };
 
 /**
@@ -11,15 +11,15 @@ type Props = {
  * The final response will be rendered with full Markdown formatting.
  * Reasoning text is displayed in slate (#64748b) before the main response.
  */
-const LiveResponse: FC<Props> = ({text}) => {
-    // Trim trailing empty lines
-    const trimmedText = text.replace(/\n\s*$/, '');
+const LiveResponse: FC<Props> = ({ text }) => {
+  // Trim trailing empty lines
+  const trimmedText = text.replace(/\n\s*$/, '');
 
-    return (
-        <Box marginBottom={1} flexDirection="column">
-            <Text>{trimmedText}</Text>
-        </Box>
-    );
+  return (
+    <Box marginBottom={1} flexDirection="column">
+      <Text>{trimmedText}</Text>
+    </Box>
+  );
 };
 
 export default LiveResponse;

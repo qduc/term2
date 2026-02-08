@@ -13,33 +13,34 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 
 ## Features
 
--   🎭 **Three Operating Modes** - Default (full-power), Lite (fast & safe), and Mentor (get help from a smarter model on complex problems)
--   🌍 **Open Source** - MIT licensed, hackable, auditable, community-driven
--   🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, and OpenAI-compatible APIs
--   🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
--   🛠️ **Advanced Tools** - Shell execution, file patching, search/replace, grep, find files, file reading, web search, and mentor consultation
--   💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite` for easy control
--   📝 **Smart Context** - The assistant understands your environment and provides relevant help
--   🎯 **Streaming Responses** - See the AI's thoughts and reasoning in real-time
--   🧠 **Reasoning Effort Control** - Configurable reasoning levels (minimal to high) for O1/O3 models
--   ⚡ **Command History** - Navigate previous inputs with arrow keys
--   🎨 **Markdown Rendering** - Formatted code blocks and text in the terminal
--   🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
--   🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
--   🤖 **Non-Interactive Mode** - Run commands from the CLI without starting the full UI
+- 🎭 **Three Operating Modes** - Default (full-power), Lite (fast & safe), and Mentor (get help from a smarter model on complex problems)
+- 🌍 **Open Source** - MIT licensed, hackable, auditable, community-driven
+- 🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, and OpenAI-compatible APIs
+- 🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
+- 🛠️ **Advanced Tools** - Shell execution, file patching, search/replace, grep, find files, file reading, web search, and mentor consultation
+- 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite` for easy control
+- 📝 **Smart Context** - The assistant understands your environment and provides relevant help
+- 🎯 **Streaming Responses** - See the AI's thoughts and reasoning in real-time
+- 🧠 **Reasoning Effort Control** - Configurable reasoning levels (minimal to high) for O1/O3 models
+- ⚡ **Command History** - Navigate previous inputs with arrow keys
+- 🎨 **Markdown Rendering** - Formatted code blocks and text in the terminal
+- 🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
+- 🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
+- 🤖 **Non-Interactive Mode** - Run commands from the CLI without starting the full UI
 
 ## Why term2 vs Alternatives?
 
-| | **term2** | Claude Code | Warp |
-|---|:---:|:---:|:---:|
-| **Open Source** | ✅ MIT | ❌ Proprietary | ❌ Proprietary |
-| **Cost** | Pay-per-use | $20-200/mo | Freemium |
-| **AI Providers** | Any (OpenAI, OpenRouter, local, etc.) | Anthropic only | selected models only |
-| **SSH Remote** | ✅ Native | ❌ No | ✅ Yes |
-| **Mentor Mode** | ✅ Built-in | ❌ No | ❌ No |
-| **Self-Hostable** | ✅ | ❌ | ❌ |
+|                   |               **term2**               |  Claude Code   |         Warp         |
+| ----------------- | :-----------------------------------: | :------------: | :------------------: |
+| **Open Source**   |                ✅ MIT                 | ❌ Proprietary |    ❌ Proprietary    |
+| **Cost**          |              Pay-per-use              |   $20-200/mo   |       Freemium       |
+| **AI Providers**  | Any (OpenAI, OpenRouter, local, etc.) | Anthropic only | selected models only |
+| **SSH Remote**    |               ✅ Native               |     ❌ No      |        ✅ Yes        |
+| **Mentor Mode**   |              ✅ Built-in              |     ❌ No      |        ❌ No         |
+| **Self-Hostable** |                  ✅                   |       ❌       |          ❌          |
 
 **term2 gives you:**
+
 - **Freedom** — No vendor lock-in. Use any AI provider or model you prefer.
 - **Transparency** — Open source means you can audit every line of code.
 - **Cost Control** — Pay only for API usage, no monthly subscriptions.
@@ -50,8 +51,8 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 
 **Requirements:**
 
--   Node.js 16 or higher
--   An API key from OpenAI, OpenRouter, or any OpenAI-compatible provider
+- Node.js 16 or higher
+- An API key from OpenAI, OpenRouter, or any OpenAI-compatible provider
 
 Install globally via npm:
 
@@ -78,9 +79,9 @@ Then simply chat with the AI! Type your question or request, press Enter, and th
 
 **New to term2?**
 
--   Working on a codebase/project? Use default mode: `term2`
--   Just need general terminal help? Use lite mode: `term2 --lite`
--   Tackling a complex problem? Enable mentor mode with `/mentor` command
+- Working on a codebase/project? Use default mode: `term2`
+- Just need general terminal help? Use lite mode: `term2 --lite`
+- Tackling a complex problem? Enable mentor mode with `/mentor` command
 
 See the "Operating Modes" section below for full details.
 
@@ -133,12 +134,12 @@ term2 --auto-approve "list files in current directory"
 
 While in the chat, you can use these commands:
 
--   `/clear` - Clear the conversation history
--   `/quit` - Exit the application
--   `/model [model-name]` - Switch to a different model
--   `/mentor` - Toggle mentor mode (see "Operating Modes" section for details)
--   `/lite` - Toggle lite mode (see "Operating Modes" section for details)
--   `/settings [key] [value]` - Modify runtime settings (e.g., `/settings agent.temperature 0.7`)
+- `/clear` - Clear the conversation history
+- `/quit` - Exit the application
+- `/model [model-name]` - Switch to a different model
+- `/mentor` - Toggle mentor mode (see "Operating Modes" section for details)
+- `/lite` - Toggle lite mode (see "Operating Modes" section for details)
+- `/settings [key] [value]` - Modify runtime settings (e.g., `/settings agent.temperature 0.7`)
 
 ## Operating Modes
 
@@ -160,20 +161,20 @@ Lite mode is designed for general terminal work: system administration, file man
 
 **Key benefits:**
 
--   🚀 **Fast and lightweight** - No codebase context, no project file loading, quick startup
--   🔧 **General terminal tools** - Shell commands, grep, read files, find files (no code editing)
--   🌐 **Perfect for SSH** - Ideal for remote server management and investigation
--   🔄 **Toggleable** - Switch on/off mid-session with `/lite` command
--   🐚 **Shell mode** - Press Shift+Tab to toggle direct shell command execution
+- 🚀 **Fast and lightweight** - No codebase context, no project file loading, quick startup
+- 🔧 **General terminal tools** - Shell commands, grep, read files, find files (no code editing)
+- 🌐 **Perfect for SSH** - Ideal for remote server management and investigation
+- 🔄 **Toggleable** - Switch on/off mid-session with `/lite` command
+- 🐚 **Shell mode** - Press Shift+Tab to toggle direct shell command execution
 
 **When to use Lite mode:**
 
--   System administration and server management tasks
--   Investigating logs, config files, and system issues
--   File system navigation and organization
--   SSH into servers for maintenance or debugging
--   General terminal help when not working on a codebase
--   Quick command help and syntax lookups
+- System administration and server management tasks
+- Investigating logs, config files, and system issues
+- File system navigation and organization
+- SSH into servers for maintenance or debugging
+- General terminal help when not working on a codebase
+- Quick command help and syntax lookups
 
 **Example:**
 
@@ -196,10 +197,10 @@ Mentor mode gives you two AI minds working together on your codebase. Your prima
 
 **Key benefits:**
 
--   🧠 **Two minds, better solutions** - Primary AI gathers context, mentor provides strategic guidance
--   🔍 **Structured problem-solving** - Forces clear articulation of findings before jumping to solutions
--   ❓ **Challenges assumptions** - Mentor actively probes for gaps and alternative approaches
--   🎯 **You stay in control** - Mentor advises, primary AI implements your decisions
+- 🧠 **Two minds, better solutions** - Primary AI gathers context, mentor provides strategic guidance
+- 🔍 **Structured problem-solving** - Forces clear articulation of findings before jumping to solutions
+- ❓ **Challenges assumptions** - Mentor actively probes for gaps and alternative approaches
+- 🎯 **You stay in control** - Mentor advises, primary AI implements your decisions
 
 **How it works:**
 
@@ -213,17 +214,17 @@ Mentor mode gives you two AI minds working together on your codebase. Your prima
 
 **When to use Mentor mode:**
 
--   Architectural decisions with multiple valid approaches
--   "Am I missing something?" sanity checks before major refactoring
--   Stuck on a problem after trying multiple solutions
--   Designing new features that must fit existing patterns
--   Getting a pre-commit review of your approach
+- Architectural decisions with multiple valid approaches
+- "Am I missing something?" sanity checks before major refactoring
+- Stuck on a problem after trying multiple solutions
+- Designing new features that must fit existing patterns
+- Getting a pre-commit review of your approach
 
 **Requirements:**
 
--   Configure `agent.mentorModel` in settings (e.g., `gpt-5.2`, `claude-opus-4.5` or `gemini-3-pro-preview`)
--   Mentor model should be more capable than primary model for best results
--   Toggle with `/mentor` command mid-session
+- Configure `agent.mentorModel` in settings (e.g., `gpt-5.2`, `claude-opus-4.5` or `gemini-3-pro-preview`)
+- Mentor model should be more capable than primary model for best results
+- Toggle with `/mentor` command mid-session
 
 **Example workflow:**
 
@@ -252,10 +253,10 @@ AI: [Does additional checks based on mentor's questions]
 
 Modes are mutually exclusive—each represents a different working style matched to your task. You can switch modes mid-session:
 
--   `/lite` - Toggle lite mode (clears history when switching)
--   `/mentor` - Toggle mentor mode
--   Switching to lite mode automatically disables edit/mentor modes
--   Enabling edit or mentor mode automatically disables lite mode
+- `/lite` - Toggle lite mode (clears history when switching)
+- `/mentor` - Toggle mentor mode
+- Switching to lite mode automatically disables edit/mentor modes
+- Enabling edit or mentor mode automatically disables lite mode
 
 ## SSH Mode
 
@@ -263,9 +264,9 @@ SSH mode enables term2 to execute commands and modify files on remote servers ov
 
 ### Requirements
 
--   SSH agent running with your keys loaded (`ssh-add`)
--   SSH access to the target server
--   `--remote-dir` is required to specify the working directory (optional in lite mode - will auto-detect)
+- SSH agent running with your keys loaded (`ssh-add`)
+- SSH access to the target server
+- `--remote-dir` is required to specify the working directory (optional in lite mode - will auto-detect)
 
 ### Usage
 
@@ -300,16 +301,16 @@ term2 --ssh user@host --remote-dir /path/to/project --lite
 
 This combination provides:
 
--   Remote command execution over SSH
--   Read-only tools (grep, find_files, read_file) for exploration
--   Minimal context and faster responses
--   No file editing tools (safer for production servers)
+- Remote command execution over SSH
+- Read-only tools (grep, find_files, read_file) for exploration
+- Minimal context and faster responses
+- No file editing tools (safer for production servers)
 
 ### Limitations
 
--   Authentication is via SSH agent only (no password prompts)
--   Binary file operations are not supported (text files only)
--   Large file transfers may be slower than local operations
+- Authentication is via SSH agent only (no password prompts)
+- Binary file operations are not supported (text files only)
+- Large file transfers may be slower than local operations
 
 ## Non-Interactive Mode
 
@@ -325,8 +326,8 @@ term2 "list files in current directory"
 
 By default, non-interactive mode will **reject** any tool execution that requires approval (like destructive shell commands or file edits) to prevent accidents.
 
--   If a tool is rejected, the AI will respond acknowledging the rejection and may suggest how to run the command manually.
--   To allow tools to run automatically, use the `--auto-approve` flag.
+- If a tool is rejected, the AI will respond acknowledging the rejection and may suggest how to run the command manually.
+- To allow tools to run automatically, use the `--auto-approve` flag.
 
 ```bash
 # This will fail to delete files (rejection default)
@@ -338,8 +339,8 @@ term2 --auto-approve "delete /tmp/test-file"
 
 ### Output Redirection
 
--   **AI text response** is written to `stdout`.
--   **Events** (tool starts, completions, errors, approval requests) are written to `stderr`.
+- **AI text response** is written to `stdout`.
+- **Events** (tool starts, completions, errors, approval requests) are written to `stderr`.
 
 This makes it easy to use term2 in shell scripts:
 
@@ -351,8 +352,8 @@ echo "The answer is: $ANSWER"
 
 ### Default Mode vs Lite Mode
 
--   When running **with** `--auto-approve`, term2 defaults to **Default Mode** (full codebase context).
--   When running **without** `--auto-approve`, term2 defaults to **Lite Mode** (no codebase context, safe/fast).
+- When running **with** `--auto-approve`, term2 defaults to **Default Mode** (full codebase context).
+- When running **without** `--auto-approve`, term2 defaults to **Lite Mode** (no codebase context, safe/fast).
 
 You can always override this by passing `--lite` or running in a directory without a codebase.
 
@@ -360,8 +361,8 @@ You can always override this by passing `--lite` or running in a directory witho
 
 term2 stores its configuration in:
 
--   **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
--   **Linux**: `~/.local/state/term2-nodejs/settings.json`
+- **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
+- **Linux**: `~/.local/state/term2-nodejs/settings.json`
 
 ### Environment Variables (API Keys Only)
 
@@ -386,8 +387,8 @@ Settings (model, provider, temperature, etc.) can be configured via:
 
 1. **App menu** - Use `/settings` command during a session (e.g., `/settings agent.model gpt-5.2`)
 2. **Settings file** - Manually edit the JSON file:
-    - **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
-    - **Linux**: `~/.local/state/term2-nodejs/settings.json`
+   - **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
+   - **Linux**: `~/.local/state/term2-nodejs/settings.json`
 3. **CLI flags** - Override for a single session (e.g., `-m gpt-5.2`)
 
 ### Provider Configuration Examples
@@ -398,11 +399,11 @@ You can easily switch between providers by editing `settings.json`.
 
 ```json
 {
-    "agent": {
-        "provider": "openai",
-        "model": "gpt-5.1",
-        "temperature": 0.7
-    }
+  "agent": {
+    "provider": "openai",
+    "model": "gpt-5.1",
+    "temperature": 0.7
+  }
 }
 ```
 
@@ -411,10 +412,10 @@ Access a wide range of models.
 
 ```json
 {
-    "agent": {
-        "provider": "openrouter",
-        "model": "anthropic/claude-4.5-sonnet"
-    }
+  "agent": {
+    "provider": "openrouter",
+    "model": "anthropic/claude-4.5-sonnet"
+  }
 }
 ```
 
@@ -425,16 +426,16 @@ _Llama.cpp Example:_
 
 ```json
 {
-    "providers": [
-        {
-            "name": "llama.cpp",
-            "baseUrl": "http://127.0.0.1:8080/v1"
-        }
-    ],
-    "agent": {
-        "provider": "llama.cpp",
-        "model": "qwen3-coder"
+  "providers": [
+    {
+      "name": "llama.cpp",
+      "baseUrl": "http://127.0.0.1:8080/v1"
     }
+  ],
+  "agent": {
+    "provider": "llama.cpp",
+    "model": "qwen3-coder"
+  }
 }
 ```
 
@@ -442,16 +443,16 @@ _LM Studio Example:_
 
 ```json
 {
-    "providers": [
-        {
-            "name": "lm-studio",
-            "baseUrl": "http://localhost:1234/v1"
-        }
-    ],
-    "agent": {
-        "provider": "lm-studio",
-        "model": "local-model"
+  "providers": [
+    {
+      "name": "lm-studio",
+      "baseUrl": "http://localhost:1234/v1"
     }
+  ],
+  "agent": {
+    "provider": "lm-studio",
+    "model": "local-model"
+  }
 }
 ```
 
@@ -459,14 +460,14 @@ _LM Studio Example:_
 
 ```json
 {
-    "shell": {
-        "timeout": 120000,
-        "maxOutputLines": 1000
-    },
-    "agent": {
-        "reasoningEffort": "medium",
-        "mentorModel": "gpt-5.2"
-    }
+  "shell": {
+    "timeout": 120000,
+    "maxOutputLines": 1000
+  },
+  "agent": {
+    "reasoningEffort": "medium",
+    "mentorModel": "gpt-5.2"
+  }
 }
 ```
 
@@ -476,25 +477,25 @@ term2 works with multiple AI providers:
 
 ### OpenAI (default)
 
--   `gpt-5.2` (latest)
--   `gpt-5.1` (default)
--   `gpt-5`
--   `gpt-5-mini`
--   `gpt-4.1`
--   `gpt-4.1-mini`
--   `gpt-5.1`
--   `gpt-5.1-mini`
--   `o3` (supports reasoning effort)
--   `o3-mini` (supports reasoning effort)
--   `o1` (supports reasoning effort)
+- `gpt-5.2` (latest)
+- `gpt-5.1` (default)
+- `gpt-5`
+- `gpt-5-mini`
+- `gpt-4.1`
+- `gpt-4.1-mini`
+- `gpt-5.1`
+- `gpt-5.1-mini`
+- `o3` (supports reasoning effort)
+- `o3-mini` (supports reasoning effort)
+- `o1` (supports reasoning effort)
 
 ### OpenRouter
 
 Access hundreds of models through OpenRouter including:
 
--   Claude models (Anthropic)
--   Gemini models (Google)
--   Open-source models (Deepseek, GLM, Minimax, Devstral, etc.)
+- Claude models (Anthropic)
+- Gemini models (Google)
+- Open-source models (Deepseek, GLM, Minimax, Devstral, etc.)
 
 Use CLI flags (`-m model-name`) or settings file to select OpenRouter models.
 
@@ -502,19 +503,19 @@ Use CLI flags (`-m model-name`) or settings file to select OpenRouter models.
 
 term2 can connect to any OpenAI-compatible API. This allows you to use:
 
--   **Local Models**: Run private models locally via Ollama, LM Studio, vLLM, or LocalAI.
--   **Self-Hosted**: Connect to private deployments of models.
--   **Other Providers**: Any service offering an OpenAI-compatible endpoint (e.g., Groq, Together AI).
+- **Local Models**: Run private models locally via Ollama, LM Studio, vLLM, or LocalAI.
+- **Self-Hosted**: Connect to private deployments of models.
+- **Other Providers**: Any service offering an OpenAI-compatible endpoint (e.g., Groq, Together AI).
 
 ## Safety Features
 
--   **Command Approval** - Every destructive operation requires your explicit confirmation
--   **Diff Preview** - See exact file changes before approving patches or edits
--   **Risk Analysis** - Dangerous operations (like `rm -rf`, `git push --force`) are flagged
--   **Path Safety** - Operations on sensitive directories require extra caution
--   **Dry-Run Validation** - Patches are validated before approval to prevent errors
--   **No Hidden Actions** - All tool usage is transparent and visible
--   **Retry Limits** - Automatic abort after consecutive tool failures (default: 3)
+- **Command Approval** - Every destructive operation requires your explicit confirmation
+- **Diff Preview** - See exact file changes before approving patches or edits
+- **Risk Analysis** - Dangerous operations (like `rm -rf`, `git push --force`) are flagged
+- **Path Safety** - Operations on sensitive directories require extra caution
+- **Dry-Run Validation** - Patches are validated before approval to prevent errors
+- **No Hidden Actions** - All tool usage is transparent and visible
+- **Retry Limits** - Automatic abort after consecutive tool failures (default: 3)
 
 ## How It Works
 
@@ -608,14 +609,14 @@ term2 --ssh user@host --lite
 
 ## Tips
 
--   **Choose the right mode** - Use lite mode for general terminal work (not codebase), default mode for codebase work, mentor mode for complex codebase problems (see "Operating Modes" section)
--   The assistant won't run dangerous commands without your approval
--   You can reject any command by choosing 'No' when prompted
--   Press Ctrl+C to exit the chat at any time
--   Use arrow keys to navigate through your command history
--   Be specific in your requests for better results
--   Use `/mentor` to get expert consultation on difficult architectural decisions
--   Use `--lite` flag when SSH'ing to servers for general system work without codebase context
+- **Choose the right mode** - Use lite mode for general terminal work (not codebase), default mode for codebase work, mentor mode for complex codebase problems (see "Operating Modes" section)
+- The assistant won't run dangerous commands without your approval
+- You can reject any command by choosing 'No' when prompted
+- Press Ctrl+C to exit the chat at any time
+- Use arrow keys to navigate through your command history
+- Be specific in your requests for better results
+- Use `/mentor` to get expert consultation on difficult architectural decisions
+- Use `--lite` flag when SSH'ing to servers for general system work without codebase context
 
 ## Contributing
 
@@ -629,10 +630,10 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 Built with:
 
--   [OpenAI Agents SDK](https://github.com/openai/openai-agents-js)
--   [Ink](https://github.com/vadimdemedes/ink) - React for CLI
--   [TypeScript](https://www.typescriptlang.org/)
--   [ssh2](https://github.com/mscdex/ssh2) - SSH client for Node.js
+- [OpenAI Agents SDK](https://github.com/openai/openai-agents-js)
+- [Ink](https://github.com/vadimdemedes/ink) - React for CLI
+- [TypeScript](https://www.typescriptlang.org/)
+- [ssh2](https://github.com/mscdex/ssh2) - SSH client for Node.js
 
 ---
 

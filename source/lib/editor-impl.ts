@@ -1,29 +1,24 @@
-import {readFile, writeFile, mkdir, rm} from 'fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'fs/promises';
 import path from 'path';
-import {applyDiff} from '@openai/agents';
-import type {ApplyPatchOperation, ApplyPatchResult} from '@openai/agents';
-import type {
-    ILoggingService,
-    ISettingsService,
-} from '../services/service-interfaces.js';
+import { applyDiff } from '@openai/agents';
+import type { ApplyPatchOperation, ApplyPatchResult } from '@openai/agents';
+import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 
 /**
  * Resolves a relative path and ensures it's within the workspace
  */
 function resolveWorkspacePath(relativePath: string, baseDir: string = process.cwd()): string {
-    const workspaceRoot = path.resolve(baseDir);
-    const resolved = path.resolve(workspaceRoot, relativePath);
-    const rootPrefix = workspaceRoot.endsWith(path.sep)
-        ? workspaceRoot
-        : workspaceRoot + path.sep;
-    const isInside = resolved === workspaceRoot || resolved.startsWith(rootPrefix);
+  const workspaceRoot = path.resolve(baseDir);
+  const resolved = path.resolve(workspaceRoot, relativePath);
+  const rootPrefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : workspaceRoot + path.sep;
+  const isInside = resolved === workspaceRoot || resolved.startsWith(rootPrefix);
 
-    if (!isInside) {
-        throw new Error(`Operation outside workspace: ${relativePath}`);
-    }
+  if (!isInside) {
+    throw new Error(`Operation outside workspace: ${relativePath}`);
+  }
 
-    return resolved;
+  return resolved;
 }
 
 /**
@@ -31,261 +26,230 @@ function resolveWorkspacePath(relativePath: string, baseDir: string = process.cw
  * Used by the native applyPatchTool from the SDK.
  */
 export function createEditorImpl(deps: {
-    loggingService: ILoggingService;
-    settingsService: ISettingsService;
-    executionContext?: ExecutionContext;
+  loggingService: ILoggingService;
+  settingsService: ISettingsService;
+  executionContext?: ExecutionContext;
 }) {
-    const { loggingService, settingsService, executionContext } = deps;
+  const { loggingService, settingsService, executionContext } = deps;
 
-    return {
-        async createFile(
-            operation: Extract<ApplyPatchOperation, {type: 'create_file'}>,
-        ): Promise<ApplyPatchResult> {
-            const enableFileLogging = settingsService.get<boolean>(
-                'tools.logFileOperations',
-            );
-            const {path: filePath, diff} = operation;
-            const cwd = executionContext?.getCwd() || process.cwd();
-            const sshService = executionContext?.getSSHService();
-            const isRemote = executionContext?.isRemote() && !!sshService;
+  return {
+    async createFile(operation: Extract<ApplyPatchOperation, { type: 'create_file' }>): Promise<ApplyPatchResult> {
+      const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
+      const { path: filePath, diff } = operation;
+      const cwd = executionContext?.getCwd() || process.cwd();
+      const sshService = executionContext?.getSSHService();
+      const isRemote = executionContext?.isRemote() && !!sshService;
 
-            try {
-                const targetPath = resolveWorkspacePath(filePath, cwd);
+      try {
+        const targetPath = resolveWorkspacePath(filePath, cwd);
 
-                if (enableFileLogging) {
-                    loggingService.info('File operation started: create_file', {
-                        path: filePath,
-                        targetPath,
-                    });
-                }
+        if (enableFileLogging) {
+          loggingService.info('File operation started: create_file', {
+            path: filePath,
+            targetPath,
+          });
+        }
 
-                // Validate patch before executing
-                try {
-                    applyDiff('', diff);
-                } catch (validationError: any) {
-                    loggingService.error(
-                        'Patch validation failed in createFile',
-                        {
-                            path: filePath,
-                            error:
-                                validationError?.message ||
-                                String(validationError),
-                        },
-                    );
-                    return {
-                        status: 'failed',
-                        output: `Invalid patch: ${
-                            validationError?.message || String(validationError)
-                        }. Please check the file path and diff format.`,
-                    };
-                }
+        // Validate patch before executing
+        try {
+          applyDiff('', diff);
+        } catch (validationError: any) {
+          loggingService.error('Patch validation failed in createFile', {
+            path: filePath,
+            error: validationError?.message || String(validationError),
+          });
+          return {
+            status: 'failed',
+            output: `Invalid patch: ${
+              validationError?.message || String(validationError)
+            }. Please check the file path and diff format.`,
+          };
+        }
 
-                // Ensure parent directory exists
-                if (isRemote && sshService) {
-                    await sshService.mkdir(path.dirname(targetPath));
-                } else {
-                    await mkdir(path.dirname(targetPath), { recursive: true });
-                }
+        // Ensure parent directory exists
+        if (isRemote && sshService) {
+          await sshService.mkdir(path.dirname(targetPath));
+        } else {
+          await mkdir(path.dirname(targetPath), { recursive: true });
+        }
 
-                // Apply diff to empty content for new file
-                const content = applyDiff('', diff);
+        // Apply diff to empty content for new file
+        const content = applyDiff('', diff);
 
-                if (isRemote && sshService) {
-                    await sshService.writeFile(targetPath, content);
-                } else {
-                    await writeFile(targetPath, content, 'utf8');
-                }
+        if (isRemote && sshService) {
+          await sshService.writeFile(targetPath, content);
+        } else {
+          await writeFile(targetPath, content, 'utf8');
+        }
 
-                if (enableFileLogging) {
-                    loggingService.info('File created', {
-                        path: filePath,
-                        contentLength: content.length,
-                    });
-                }
+        if (enableFileLogging) {
+          loggingService.info('File created', {
+            path: filePath,
+            contentLength: content.length,
+          });
+        }
 
-                return {
-                    status: 'completed',
-                    output: `Created ${filePath}`,
-                };
-            } catch (error: any) {
-                if (enableFileLogging) {
-                    loggingService.error('File operation failed', {
-                        type: 'create_file',
-                        path: filePath,
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                    });
-                }
-                return {
-                    status: 'failed',
-                    output: error.message || String(error),
-                };
+        return {
+          status: 'completed',
+          output: `Created ${filePath}`,
+        };
+      } catch (error: any) {
+        if (enableFileLogging) {
+          loggingService.error('File operation failed', {
+            type: 'create_file',
+            path: filePath,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return {
+          status: 'failed',
+          output: error.message || String(error),
+        };
+      }
+    },
+
+    async updateFile(operation: Extract<ApplyPatchOperation, { type: 'update_file' }>): Promise<ApplyPatchResult> {
+      const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
+      const { path: filePath, diff } = operation;
+      const cwd = executionContext?.getCwd() || process.cwd();
+      const sshService = executionContext?.getSSHService();
+      const isRemote = executionContext?.isRemote() && !!sshService;
+
+      try {
+        const targetPath = resolveWorkspacePath(filePath, cwd);
+
+        if (enableFileLogging) {
+          loggingService.info('File operation started: update_file', {
+            path: filePath,
+            targetPath,
+          });
+        }
+
+        // Read existing file
+        let original: string;
+        try {
+          if (isRemote && sshService) {
+            original = await sshService.readFile(targetPath);
+          } else {
+            original = await readFile(targetPath, 'utf8');
+          }
+        } catch (error: any) {
+          if (error?.code === 'ENOENT') {
+            if (enableFileLogging) {
+              loggingService.error('Cannot update missing file', {
+                path: filePath,
+                targetPath,
+              });
             }
-        },
+            return {
+              status: 'failed',
+              output: `Cannot update missing file: ${filePath}`,
+            };
+          }
+          throw error;
+        }
 
-        async updateFile(
-            operation: Extract<ApplyPatchOperation, {type: 'update_file'}>,
-        ): Promise<ApplyPatchResult> {
-            const enableFileLogging = settingsService.get<boolean>(
-                'tools.logFileOperations',
-            );
-            const {path: filePath, diff} = operation;
-            const cwd = executionContext?.getCwd() || process.cwd();
-            const sshService = executionContext?.getSSHService();
-            const isRemote = executionContext?.isRemote() && !!sshService;
+        // Validate patch before executing
+        try {
+          applyDiff(original, diff);
+        } catch (validationError: any) {
+          loggingService.error('Patch validation failed in updateFile', {
+            path: filePath,
+            error: validationError?.message || String(validationError),
+          });
+          return {
+            status: 'failed',
+            output: `Invalid patch: ${
+              validationError?.message || String(validationError)
+            }. Please check the file path and diff format.`,
+          };
+        }
 
-            try {
-                const targetPath = resolveWorkspacePath(filePath, cwd);
+        // Apply diff to existing content
+        const patched = applyDiff(original, diff);
+        if (isRemote && sshService) {
+          await sshService.writeFile(targetPath, patched);
+        } else {
+          await writeFile(targetPath, patched, 'utf8');
+        }
 
-                if (enableFileLogging) {
-                    loggingService.info('File operation started: update_file', {
-                        path: filePath,
-                        targetPath,
-                    });
-                }
+        if (enableFileLogging) {
+          loggingService.info('File updated', {
+            path: filePath,
+            originalLength: original.length,
+            patchedLength: patched.length,
+          });
+        }
 
-                // Read existing file
-                let original: string;
-                try {
-                    if (isRemote && sshService) {
-                        original = await sshService.readFile(targetPath);
-                    } else {
-                        original = await readFile(targetPath, 'utf8');
-                    }
-                } catch (error: any) {
-                    if (error?.code === 'ENOENT') {
-                        if (enableFileLogging) {
-                            loggingService.error('Cannot update missing file', {
-                                path: filePath,
-                                targetPath,
-                            });
-                        }
-                        return {
-                            status: 'failed',
-                            output: `Cannot update missing file: ${filePath}`,
-                        };
-                    }
-                    throw error;
-                }
+        return {
+          status: 'completed',
+          output: `Updated ${filePath}`,
+        };
+      } catch (error: any) {
+        if (enableFileLogging) {
+          loggingService.error('File operation failed', {
+            type: 'update_file',
+            path: filePath,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return {
+          status: 'failed',
+          output: error.message || String(error),
+        };
+      }
+    },
 
-                // Validate patch before executing
-                try {
-                    applyDiff(original, diff);
-                } catch (validationError: any) {
-                    loggingService.error(
-                        'Patch validation failed in updateFile',
-                        {
-                            path: filePath,
-                            error:
-                                validationError?.message ||
-                                String(validationError),
-                        },
-                    );
-                    return {
-                        status: 'failed',
-                        output: `Invalid patch: ${
-                            validationError?.message || String(validationError)
-                        }. Please check the file path and diff format.`,
-                    };
-                }
+    async deleteFile(operation: Extract<ApplyPatchOperation, { type: 'delete_file' }>): Promise<ApplyPatchResult> {
+      const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
+      const { path: filePath } = operation;
+      const cwd = executionContext?.getCwd() || process.cwd();
+      const sshService = executionContext?.getSSHService();
+      const isRemote = executionContext?.isRemote() && !!sshService;
 
-                // Apply diff to existing content
-                const patched = applyDiff(original, diff);
-                if (isRemote && sshService) {
-                    await sshService.writeFile(targetPath, patched);
-                } else {
-                    await writeFile(targetPath, patched, 'utf8');
-                }
+      try {
+        const targetPath = resolveWorkspacePath(filePath, cwd);
 
-                if (enableFileLogging) {
-                    loggingService.info('File updated', {
-                        path: filePath,
-                        originalLength: original.length,
-                        patchedLength: patched.length,
-                    });
-                }
+        if (enableFileLogging) {
+          loggingService.info('File operation started: delete_file', {
+            path: filePath,
+            targetPath,
+          });
+        }
 
-                return {
-                    status: 'completed',
-                    output: `Updated ${filePath}`,
-                };
-            } catch (error: any) {
-                if (enableFileLogging) {
-                    loggingService.error('File operation failed', {
-                        type: 'update_file',
-                        path: filePath,
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                    });
-                }
-                return {
-                    status: 'failed',
-                    output: error.message || String(error),
-                };
-            }
-        },
+        if (isRemote && sshService) {
+          // SSHService doesn't have rm yet? It has executeCommand.
+          // But wait, I didn't see rm in ISSHService definition I read in summary?
+          // I will use executeCommand('rm -f ...')
+          await sshService.executeCommand(`rm -f "${targetPath}"`);
+        } else {
+          await rm(targetPath, { force: true });
+        }
 
-        async deleteFile(
-            operation: Extract<ApplyPatchOperation, {type: 'delete_file'}>,
-        ): Promise<ApplyPatchResult> {
-            const enableFileLogging = settingsService.get<boolean>(
-                'tools.logFileOperations',
-            );
-            const {path: filePath} = operation;
-            const cwd = executionContext?.getCwd() || process.cwd();
-            const sshService = executionContext?.getSSHService();
-            const isRemote = executionContext?.isRemote() && !!sshService;
+        if (enableFileLogging) {
+          loggingService.info('File deleted', {
+            path: filePath,
+            targetPath,
+          });
+        }
 
-            try {
-                const targetPath = resolveWorkspacePath(filePath, cwd);
-
-                if (enableFileLogging) {
-                    loggingService.info('File operation started: delete_file', {
-                        path: filePath,
-                        targetPath,
-                    });
-                }
-
-                if (isRemote && sshService) {
-                    // SSHService doesn't have rm yet? It has executeCommand.
-                    // But wait, I didn't see rm in ISSHService definition I read in summary?
-                    // I will use executeCommand('rm -f ...')
-                    await sshService.executeCommand(`rm -f "${targetPath}"`);
-                } else {
-                    await rm(targetPath, { force: true });
-                }
-
-                if (enableFileLogging) {
-                    loggingService.info('File deleted', {
-                        path: filePath,
-                        targetPath,
-                    });
-                }
-
-                return {
-                    status: 'completed',
-                    output: `Deleted ${filePath}`,
-                };
-            } catch (error: any) {
-                if (enableFileLogging) {
-                    loggingService.error('File operation failed', {
-                        type: 'delete_file',
-                        path: filePath,
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                    });
-                }
-                return {
-                    status: 'failed',
-                    output: error.message || String(error),
-                };
-            }
-        },
-    };
+        return {
+          status: 'completed',
+          output: `Deleted ${filePath}`,
+        };
+      } catch (error: any) {
+        if (enableFileLogging) {
+          loggingService.error('File operation failed', {
+            type: 'delete_file',
+            path: filePath,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return {
+          status: 'failed',
+          output: error.message || String(error),
+        };
+      }
+    },
+  };
 }

@@ -1,146 +1,150 @@
-import {Client} from 'ssh2';
-import {readFileSync} from 'fs';
-import {homedir} from 'os';
-import {ISSHService} from './service-interfaces.js';
+import { Client } from 'ssh2';
+import { readFileSync } from 'fs';
+import { homedir } from 'os';
+import { ISSHService } from './service-interfaces.js';
 
 export interface SSHConfig {
-    host: string;
-    port: number;
-    username: string;
-    agent?: string;
-    identityFile?: string;
+  host: string;
+  port: number;
+  username: string;
+  agent?: string;
+  identityFile?: string;
 }
 
 export class SSHService implements ISSHService {
-    private client: Client;
-    private connected: boolean = false;
+  private client: Client;
+  private connected: boolean = false;
 
-    constructor(private config: SSHConfig, client?: Client) {
-        this.client = client ?? new Client();
-    }
+  constructor(private config: SSHConfig, client?: Client) {
+    this.client = client ?? new Client();
+  }
 
-    async connect(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            // Build connection config, including private key if identity file specified
-            const connectConfig: any = {
-                host: this.config.host,
-                port: this.config.port,
-                username: this.config.username,
-                agent: this.config.agent,
-            };
+  async connect(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // Build connection config, including private key if identity file specified
+      const connectConfig: any = {
+        host: this.config.host,
+        port: this.config.port,
+        username: this.config.username,
+        agent: this.config.agent,
+      };
 
-            if (this.config.identityFile) {
-                try {
-                    // Expand ~ to home directory
-                    const keyPath = this.config.identityFile.replace(/^~/, homedir());
-                    connectConfig.privateKey = readFileSync(keyPath);
-                } catch (err: any) {
-                    reject(new Error(`Failed to read identity file: ${err.message}`));
-                    return;
-                }
-            }
-
-            this.client
-                .on('ready', () => {
-                    this.connected = true;
-                    resolve();
-                })
-                .on('error', (err) => {
-                    this.connected = false;
-                    reject(err);
-                })
-                .on('end', () => {
-                    this.connected = false;
-                })
-                .connect(connectConfig);
-        });
-    }
-
-    async disconnect(): Promise<void> {
-        if (this.connected) {
-            this.client.end();
-            this.connected = false;
+      if (this.config.identityFile) {
+        try {
+          // Expand ~ to home directory
+          const keyPath = this.config.identityFile.replace(/^~/, homedir());
+          connectConfig.privateKey = readFileSync(keyPath);
+        } catch (err: any) {
+          reject(new Error(`Failed to read identity file: ${err.message}`));
+          return;
         }
+      }
+
+      this.client
+        .on('ready', () => {
+          this.connected = true;
+          resolve();
+        })
+        .on('error', (err) => {
+          this.connected = false;
+          reject(err);
+        })
+        .on('end', () => {
+          this.connected = false;
+        })
+        .connect(connectConfig);
+    });
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.connected) {
+      this.client.end();
+      this.connected = false;
+    }
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  async executeCommand(
+    cmd: string,
+    opts?: { cwd?: string },
+  ): Promise<{
+    stdout: string;
+    stderr: string;
+    exitCode: number | null;
+    timedOut: boolean;
+  }> {
+    if (!this.connected) {
+      throw new Error('SSH client not connected');
     }
 
-    isConnected(): boolean {
-        return this.connected;
-    }
+    return new Promise((resolve, reject) => {
+      // If cwd is provided, wrap command to change directory first
+      // We use simple string concatenation. In a more robust system we might want to escape the cwd path.
+      const commandToExec = opts?.cwd ? `cd "${opts.cwd}" && ${cmd}` : cmd;
 
-    async executeCommand(cmd: string, opts?: { cwd?: string }): Promise<{
-        stdout: string;
-        stderr: string;
-        exitCode: number | null;
-        timedOut: boolean;
-    }> {
-        if (!this.connected) {
-            throw new Error('SSH client not connected');
-        }
+      this.client.exec(commandToExec, (err, stream) => {
+        if (err) return reject(err);
 
-        return new Promise((resolve, reject) => {
-            // If cwd is provided, wrap command to change directory first
-            // We use simple string concatenation. In a more robust system we might want to escape the cwd path.
-            const commandToExec = opts?.cwd
-                ? `cd "${opts.cwd}" && ${cmd}`
-                : cmd;
+        let stdout = '';
+        let stderr = '';
 
-            this.client.exec(commandToExec, (err, stream) => {
-                if (err) return reject(err);
-
-                let stdout = '';
-                let stderr = '';
-
-                stream.on('close', (code: number) => {
-                    resolve({
-                        stdout,
-                        stderr,
-                        exitCode: code, // code is null if terminated by signal
-                        timedOut: false
-                    });
-                }).on('data', (data: Buffer) => {
-                    stdout += data.toString();
-                }).stderr.on('data', (data: Buffer) => {
-                    stderr += data.toString();
-                });
+        stream
+          .on('close', (code: number) => {
+            resolve({
+              stdout,
+              stderr,
+              exitCode: code, // code is null if terminated by signal
+              timedOut: false,
             });
-        });
+          })
+          .on('data', (data: Buffer) => {
+            stdout += data.toString();
+          })
+          .stderr.on('data', (data: Buffer) => {
+            stderr += data.toString();
+          });
+      });
+    });
+  }
+
+  async readFile(path: string): Promise<string> {
+    const result = await this.executeCommand(`cat "${path}"`);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to read file ${path}: ${result.stderr}`);
+    }
+    return result.stdout;
+  }
+
+  async writeFile(path: string, content: string): Promise<void> {
+    // We use a heredoc with a delimiter that is unlikely to be in the content.
+    // A unique delimiter helps avoid conflicts.
+    const delimiter = 'TERM2_EOF_' + Date.now();
+
+    // We need to be careful about newlines and shell escaping.
+    // The safest way to write arbitrary content via shell without scp/sftp is complex.
+    // However, for text files, heredoc is usually fine.
+    // We must ensure the delimiter doesn't appear in the content.
+    if (content.includes(delimiter)) {
+      throw new Error('Content contains internal delimiter');
     }
 
-    async readFile(path: string): Promise<string> {
-        const result = await this.executeCommand(`cat "${path}"`);
-        if (result.exitCode !== 0) {
-            throw new Error(`Failed to read file ${path}: ${result.stderr}`);
-        }
-        return result.stdout;
+    // We use cat with a quoted heredoc 'EOF' to prevent variable expansion in the content
+    const cmd = `cat > "${path}" << '${delimiter}'\n${content}\n${delimiter}`;
+
+    const result = await this.executeCommand(cmd);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to write file ${path}: ${result.stderr}`);
     }
+  }
 
-    async writeFile(path: string, content: string): Promise<void> {
-        // We use a heredoc with a delimiter that is unlikely to be in the content.
-        // A unique delimiter helps avoid conflicts.
-        const delimiter = 'TERM2_EOF_' + Date.now();
-
-        // We need to be careful about newlines and shell escaping.
-        // The safest way to write arbitrary content via shell without scp/sftp is complex.
-        // However, for text files, heredoc is usually fine.
-        // We must ensure the delimiter doesn't appear in the content.
-        if (content.includes(delimiter)) {
-             throw new Error('Content contains internal delimiter');
-        }
-
-        // We use cat with a quoted heredoc 'EOF' to prevent variable expansion in the content
-        const cmd = `cat > "${path}" << '${delimiter}'\n${content}\n${delimiter}`;
-
-        const result = await this.executeCommand(cmd);
-        if (result.exitCode !== 0) {
-            throw new Error(`Failed to write file ${path}: ${result.stderr}`);
-        }
+  async mkdir(path: string, opts?: { recursive?: boolean }): Promise<void> {
+    const flags = opts?.recursive ? '-p' : '';
+    const result = await this.executeCommand(`mkdir ${flags} "${path}"`);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to mkdir ${path}: ${result.stderr}`);
     }
-
-    async mkdir(path: string, opts?: {recursive?: boolean}): Promise<void> {
-        const flags = opts?.recursive ? '-p' : '';
-        const result = await this.executeCommand(`mkdir ${flags} "${path}"`);
-        if (result.exitCode !== 0) {
-             throw new Error(`Failed to mkdir ${path}: ${result.stderr}`);
-        }
-    }
+  }
 }

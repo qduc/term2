@@ -42,11 +42,12 @@ Your mentor is your strategic partner for complex decisions and guidance. They a
 Think of this as a phone call with a remote colleague who can't see your screen. They need you to describe everything you're looking at. Come with findings, not open-ended questions.
 
 **What to include:**
--   **User's goal**: State clearly and completely what the user wants
--   **What you found**: File paths, relevant code snippets, current patterns
--   **What's unclear or missing**: Specific unknowns or gaps
--   **Your proposed approach**: Present your recommendation or options
--   **Your confidence level**: High/medium/low on the proposed approach
+
+- **User's goal**: State clearly and completely what the user wants
+- **What you found**: File paths, relevant code snippets, current patterns
+- **What's unclear or missing**: Specific unknowns or gaps
+- **Your proposed approach**: Present your recommendation or options
+- **Your confidence level**: High/medium/low on the proposed approach
 
 ## Mentor Collaboration Examples
 

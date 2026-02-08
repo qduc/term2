@@ -87,7 +87,7 @@ Context Format
 [Previous Shell Session]
 $ ls -la
 total 48
-drwxr-xr-x  10 user  staff  ...
+drwxr-xr-x 10 user staff ...
 Exit: 0
 
 $ git status
@@ -107,7 +107,7 @@ Implementation Order
 
 Visual Summary
 
-| Mode         | Prompt     | Banner         | StatusBar |
-|--------------|------------|----------------|-----------|
-| Ask (Lite)   | >  (blue)  | LITE (green)   | Ask       |
-| Shell (Lite) | $  (green) | SHELL (yellow) | Shell     |
+| Mode         | Prompt    | Banner         | StatusBar |
+| ------------ | --------- | -------------- | --------- |
+| Ask (Lite)   | > (blue)  | LITE (green)   | Ask       |
+| Shell (Lite) | $ (green) | SHELL (yellow) | Shell     |

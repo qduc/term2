@@ -1,398 +1,386 @@
 import test from 'ava';
-import {
-    clearApprovalRejectionMarkers,
-    extractCommandMessages,
-} from '../../dist/utils/extract-command-messages.js';
+import { clearApprovalRejectionMarkers, extractCommandMessages } from '../../dist/utils/extract-command-messages.js';
 
-const withStubbedNow = value => {
-    const realNow = Date.now;
-    Date.now = () => value;
-    return () => {
-        Date.now = realNow;
-    };
+const withStubbedNow = (value) => {
+  const realNow = Date.now;
+  Date.now = () => value;
+  return () => {
+    Date.now = realNow;
+  };
 };
 
 test.beforeEach(() => {
-    clearApprovalRejectionMarkers();
+  clearApprovalRejectionMarkers();
 });
 
-test('extracts failure reason from shell command outcome', t => {
-    const restore = withStubbedNow(1700000000200);
+test('extracts failure reason from shell command outcome', (t) => {
+  const restore = withStubbedNow(1700000000200);
 
-    try {
-        const items = [
-            {
-                type: 'tool_call_output_item',
-                output: 'timeout\n',
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'shell',
-                    arguments: JSON.stringify({
-                        command: 'rg -n "DEFAULT_TRIM_CONFIG"',
-                    }),
-                },
-            },
-        ];
-        const messages = extractCommandMessages(items);
-
-        t.is(messages.length, 1);
-        t.deepEqual(messages[0], {
-            id: '1700000000200-0-0',
-            sender: 'command',
-            status: 'completed',
+  try {
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: 'timeout\n',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'shell',
+          arguments: JSON.stringify({
             command: 'rg -n "DEFAULT_TRIM_CONFIG"',
-            output: 'No output',
-            success: false,
-            failureReason: 'timeout',
-            isApprovalRejection: false,
-        });
-    } finally {
-        restore();
-    }
+          }),
+        },
+      },
+    ];
+    const messages = extractCommandMessages(items);
+
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: '1700000000200-0-0',
+      sender: 'command',
+      status: 'completed',
+      command: 'rg -n "DEFAULT_TRIM_CONFIG"',
+      output: 'No output',
+      success: false,
+      failureReason: 'timeout',
+      isApprovalRejection: false,
+    });
+  } finally {
+    restore();
+  }
 });
 
-test('extracts shell command from matching function_call item', t => {
-    const restore = withStubbedNow(1700000000250);
+test('extracts shell command from matching function_call item', (t) => {
+  const restore = withStubbedNow(1700000000250);
 
-    try {
-        const items = [
-            {
-                type: 'function_call',
-                id: 'call-abc',
-                name: 'shell',
-                arguments: JSON.stringify({command: 'echo hi'}),
-            },
-            {
-                type: 'tool_call_output_item',
-                output: 'exit 0\nhi',
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'shell',
-                    callId: 'call-abc',
-                },
-            },
-        ];
+  try {
+    const items = [
+      {
+        type: 'function_call',
+        id: 'call-abc',
+        name: 'shell',
+        arguments: JSON.stringify({ command: 'echo hi' }),
+      },
+      {
+        type: 'tool_call_output_item',
+        output: 'exit 0\nhi',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'shell',
+          callId: 'call-abc',
+        },
+      },
+    ];
 
-        const messages = extractCommandMessages(items);
-        t.is(messages.length, 1);
-        t.deepEqual(messages[0], {
-            id: 'call-abc-0',
-            callId: 'call-abc',
-            sender: 'command',
-            status: 'completed',
-            command: 'echo hi',
-            output: 'hi',
-            success: true,
-            failureReason: undefined,
-            isApprovalRejection: false,
-        });
-    } finally {
-        restore();
-    }
+    const messages = extractCommandMessages(items);
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: 'call-abc-0',
+      callId: 'call-abc',
+      sender: 'command',
+      status: 'completed',
+      command: 'echo hi',
+      output: 'hi',
+      success: true,
+      failureReason: undefined,
+      isApprovalRejection: false,
+    });
+  } finally {
+    restore();
+  }
 });
 
-test('extracts shell command from output items using call_id', t => {
-    const restore = withStubbedNow(1700000000261);
+test('extracts shell command from output items using call_id', (t) => {
+  const restore = withStubbedNow(1700000000261);
 
-    try {
-        const items = [
-            {
-                type: 'function_call',
-                id: 'call-abc',
-                name: 'shell',
-                arguments: JSON.stringify({command: 'npm run lint'}),
-            },
-            {
-                type: 'tool_call_output_item',
-                output: 'exit 0\n> md-preview@0.0.0 lint\n> eslint .',
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'shell',
-                    id: 'result-1',
-                    call_id: 'call-abc',
-                },
-            },
-        ];
+  try {
+    const items = [
+      {
+        type: 'function_call',
+        id: 'call-abc',
+        name: 'shell',
+        arguments: JSON.stringify({ command: 'npm run lint' }),
+      },
+      {
+        type: 'tool_call_output_item',
+        output: 'exit 0\n> md-preview@0.0.0 lint\n> eslint .',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'shell',
+          id: 'result-1',
+          call_id: 'call-abc',
+        },
+      },
+    ];
 
-        const messages = extractCommandMessages(items);
-        t.is(messages.length, 1);
-        t.deepEqual(messages[0], {
-            id: 'result-1-0',
-            callId: 'call-abc',
-            sender: 'command',
-            status: 'completed',
-            command: 'npm run lint',
-            output: '> md-preview@0.0.0 lint\n> eslint .',
-            success: true,
-            failureReason: undefined,
-            isApprovalRejection: false,
-        });
-    } finally {
-        restore();
-    }
+    const messages = extractCommandMessages(items);
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: 'result-1-0',
+      callId: 'call-abc',
+      sender: 'command',
+      status: 'completed',
+      command: 'npm run lint',
+      output: '> md-preview@0.0.0 lint\n> eslint .',
+      success: true,
+      failureReason: undefined,
+      isApprovalRejection: false,
+    });
+  } finally {
+    restore();
+  }
 });
 
-test('extracts grep output from plain text tool result', t => {
-    const restore = withStubbedNow(1700000000260);
+test('extracts grep output from plain text tool result', (t) => {
+  const restore = withStubbedNow(1700000000260);
 
-    try {
-        const items = [
-            {
-                type: 'tool_call_output_item',
-                output: 'source/app.tsx:1:hello',
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'grep',
-                    id: 'call-grep-1',
-                    arguments: JSON.stringify({
-                        pattern: 'hello',
-                        path: 'source',
-                        case_sensitive: false,
-                        file_pattern: null,
-                        exclude_pattern: null,
-                        max_results: 100,
-                    }),
-                },
-            },
-        ];
+  try {
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: 'source/app.tsx:1:hello',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'grep',
+          id: 'call-grep-1',
+          arguments: JSON.stringify({
+            pattern: 'hello',
+            path: 'source',
+            case_sensitive: false,
+            file_pattern: null,
+            exclude_pattern: null,
+            max_results: 100,
+          }),
+        },
+      },
+    ];
 
-        const messages = extractCommandMessages(items);
-        t.is(messages.length, 1);
-        t.deepEqual(messages[0], {
-            id: 'call-grep-1-0',
-            callId: 'call-grep-1',
-            sender: 'command',
-            status: 'completed',
-            command: 'grep "hello" "source"',
-            output: 'source/app.tsx:1:hello',
-            success: true,
-            isApprovalRejection: false,
-        });
-    } finally {
-        restore();
-    }
+    const messages = extractCommandMessages(items);
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: 'call-grep-1-0',
+      callId: 'call-grep-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'grep "hello" "source"',
+      output: 'source/app.tsx:1:hello',
+      success: true,
+      isApprovalRejection: false,
+    });
+  } finally {
+    restore();
+  }
 });
 
-test('extracts grep command from matching function_call item', t => {
-    const restore = withStubbedNow(1700000000265);
+test('extracts grep command from matching function_call item', (t) => {
+  const restore = withStubbedNow(1700000000265);
 
-    try {
-        const items = [
-            {
-                type: 'function_call',
-                id: 'call-grep-abc',
-                name: 'grep',
-                arguments: JSON.stringify({
-                    pattern: 'DEFAULT_TRIM_CONFIG',
-                    path: 'source',
-                    case_sensitive: true,
-                    file_pattern: '*.ts',
-                    exclude_pattern: null,
-                    max_results: 100,
-                }),
-            },
-            {
-                type: 'tool_call_output_item',
-                output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'grep',
-                    callId: 'call-grep-abc',
-                },
-            },
-        ];
+  try {
+    const items = [
+      {
+        type: 'function_call',
+        id: 'call-grep-abc',
+        name: 'grep',
+        arguments: JSON.stringify({
+          pattern: 'DEFAULT_TRIM_CONFIG',
+          path: 'source',
+          case_sensitive: true,
+          file_pattern: '*.ts',
+          exclude_pattern: null,
+          max_results: 100,
+        }),
+      },
+      {
+        type: 'tool_call_output_item',
+        output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'grep',
+          callId: 'call-grep-abc',
+        },
+      },
+    ];
 
-        const messages = extractCommandMessages(items);
-        t.is(messages.length, 1);
-        t.deepEqual(messages[0], {
-            id: 'call-grep-abc-0',
-            callId: 'call-grep-abc',
-            sender: 'command',
-            status: 'completed',
-            command:
-                'grep "DEFAULT_TRIM_CONFIG" "source" --case-sensitive --include "*.ts"',
-            output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',
-            success: true,
-            isApprovalRejection: false,
-        });
-    } finally {
-        restore();
-    }
+    const messages = extractCommandMessages(items);
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: 'call-grep-abc-0',
+      callId: 'call-grep-abc',
+      sender: 'command',
+      status: 'completed',
+      command: 'grep "DEFAULT_TRIM_CONFIG" "source" --case-sensitive --include "*.ts"',
+      output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',
+      success: true,
+      isApprovalRejection: false,
+    });
+  } finally {
+    restore();
+  }
 });
 
-test('grep output containing "error" or "failed" should still be success', t => {
-    const restore = withStubbedNow(1700000000270);
+test('grep output containing "error" or "failed" should still be success', (t) => {
+  const restore = withStubbedNow(1700000000270);
 
-    try {
-        // Test case where grep results contain the word "error" in the matched content
-        const items = [
-            {
-                type: 'tool_call_output_item',
-                output: 'source/utils/error-handler.ts:5:  if (error) {',
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'grep',
-                    id: 'call-grep-error-1',
-                    arguments: JSON.stringify({
-                        pattern: 'error',
-                        path: 'source',
-                    }),
-                },
-            },
-        ];
+  try {
+    // Test case where grep results contain the word "error" in the matched content
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: 'source/utils/error-handler.ts:5:  if (error) {',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'grep',
+          id: 'call-grep-error-1',
+          arguments: JSON.stringify({
+            pattern: 'error',
+            path: 'source',
+          }),
+        },
+      },
+    ];
 
-        const messages = extractCommandMessages(items);
-        t.is(messages.length, 1);
-        t.is(messages[0].success, true, 'grep result with "error" in content should be success');
+    const messages = extractCommandMessages(items);
+    t.is(messages.length, 1);
+    t.is(messages[0].success, true, 'grep result with "error" in content should be success');
 
-        // Test case where grep results contain the word "failed"
-        const items2 = [
-            {
-                type: 'tool_call_output_item',
-                output: 'source/test/test.ts:10:it("should handle failed state", () => {})',
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'grep',
-                    id: 'call-grep-failed-1',
-                    arguments: JSON.stringify({
-                        pattern: 'failed',
-                        path: 'source',
-                    }),
-                },
-            },
-        ];
+    // Test case where grep results contain the word "failed"
+    const items2 = [
+      {
+        type: 'tool_call_output_item',
+        output: 'source/test/test.ts:10:it("should handle failed state", () => {})',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'grep',
+          id: 'call-grep-failed-1',
+          arguments: JSON.stringify({
+            pattern: 'failed',
+            path: 'source',
+          }),
+        },
+      },
+    ];
 
-        const messages2 = extractCommandMessages(items2);
-        t.is(messages2.length, 1);
-        t.is(
-            messages2[0].success,
-            true,
-            'grep result with "failed" in content should be success',
-        );
-    } finally {
-        restore();
-    }
+    const messages2 = extractCommandMessages(items2);
+    t.is(messages2.length, 1);
+    t.is(messages2[0].success, true, 'grep result with "failed" in content should be success');
+  } finally {
+    restore();
+  }
 });
 
-test('grep with no matches is still a success', t => {
-    const restore = withStubbedNow(1700000000275);
+test('grep with no matches is still a success', (t) => {
+  const restore = withStubbedNow(1700000000275);
 
-    try {
-        const items = [
-            {
-                type: 'tool_call_output_item',
-                output: 'No matches found.',
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'grep',
-                    id: 'call-grep-nomatch-1',
-                    arguments: JSON.stringify({
-                        pattern: 'nonexistent_pattern_12345',
-                        path: 'source',
-                    }),
-                },
-            },
-        ];
+  try {
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: 'No matches found.',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'grep',
+          id: 'call-grep-nomatch-1',
+          arguments: JSON.stringify({
+            pattern: 'nonexistent_pattern_12345',
+            path: 'source',
+          }),
+        },
+      },
+    ];
 
-        const messages = extractCommandMessages(items);
-        t.is(messages.length, 1);
-        t.is(
-            messages[0].success,
-            true,
-            'grep with no matches should be success, not error',
-        );
-        t.is(messages[0].output, 'No matches found.');
-    } finally {
-        restore();
-    }
+    const messages = extractCommandMessages(items);
+    t.is(messages.length, 1);
+    t.is(messages[0].success, true, 'grep with no matches should be success, not error');
+    t.is(messages[0].output, 'No matches found.');
+  } finally {
+    restore();
+  }
 });
 
-test('extracts successful apply_patch create_file operation', t => {
-    const restore = withStubbedNow(1700000000300);
+test('extracts successful apply_patch create_file operation', (t) => {
+  const restore = withStubbedNow(1700000000300);
 
-    try {
-        const items = [
+  try {
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: JSON.stringify({
+          output: [
             {
-                type: 'tool_call_output_item',
-                output: JSON.stringify({
-                    output: [
-                        {
-                            success: true,
-                            operation: 'create_file',
-                            path: 'test.txt',
-                            message: 'Created test.txt',
-                        },
-                    ],
-                }),
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'apply_patch',
-                    arguments: {
-                        type: 'create_file',
-                        path: 'test.txt',
-                    },
-                },
+              success: true,
+              operation: 'create_file',
+              path: 'test.txt',
+              message: 'Created test.txt',
             },
-        ];
-        const messages = extractCommandMessages(items);
+          ],
+        }),
+        rawItem: {
+          type: 'function_call_result',
+          name: 'apply_patch',
+          arguments: {
+            type: 'create_file',
+            path: 'test.txt',
+          },
+        },
+      },
+    ];
+    const messages = extractCommandMessages(items);
 
-        t.is(messages.length, 1);
-        t.deepEqual(messages[0], {
-            id: '1700000000300-0-0',
-            sender: 'command',
-            status: 'completed',
-            command: 'apply_patch create_file test.txt',
-            output: 'Created test.txt',
-            success: true,
-            isApprovalRejection: false,
-        });
-    } finally {
-        restore();
-    }
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: '1700000000300-0-0',
+      sender: 'command',
+      status: 'completed',
+      command: 'apply_patch create_file test.txt',
+      output: 'Created test.txt',
+      success: true,
+      isApprovalRejection: false,
+    });
+  } finally {
+    restore();
+  }
 });
 
-test('extracts successful apply_patch update_file operation', t => {
-    const restore = withStubbedNow(1700000000400);
+test('extracts successful apply_patch update_file operation', (t) => {
+  const restore = withStubbedNow(1700000000400);
 
-    try {
-        const items = [
+  try {
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: JSON.stringify({
+          output: [
             {
-                type: 'tool_call_output_item',
-                output: JSON.stringify({
-                    output: [
-                        {
-                            success: true,
-                            operation: 'update_file',
-                            path: 'existing.txt',
-                            message: 'Updated existing.txt',
-                        },
-                    ],
-                }),
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'apply_patch',
-                    arguments: {
-                        type: 'update_file',
-                        path: 'existing.txt',
-                    },
-                },
+              success: true,
+              operation: 'update_file',
+              path: 'existing.txt',
+              message: 'Updated existing.txt',
             },
-        ];
-        const messages = extractCommandMessages(items);
+          ],
+        }),
+        rawItem: {
+          type: 'function_call_result',
+          name: 'apply_patch',
+          arguments: {
+            type: 'update_file',
+            path: 'existing.txt',
+          },
+        },
+      },
+    ];
+    const messages = extractCommandMessages(items);
 
-        t.is(messages.length, 1);
-        t.deepEqual(messages[0], {
-            id: '1700000000400-0-0',
-            sender: 'command',
-            status: 'completed',
-            command: 'apply_patch update_file existing.txt',
-            output: 'Updated existing.txt',
-            success: true,
-            isApprovalRejection: false,
-        });
-    } finally {
-        restore();
-    }
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: '1700000000400-0-0',
+      sender: 'command',
+      status: 'completed',
+      command: 'apply_patch update_file existing.txt',
+      output: 'Updated existing.txt',
+      success: true,
+      isApprovalRejection: false,
+    });
+  } finally {
+    restore();
+  }
 });
 
 // test('extracts successful apply_patch delete_file operation', t => {
@@ -437,124 +425,124 @@ test('extracts successful apply_patch update_file operation', t => {
 //     }
 // });
 
-test('extracts failed apply_patch operation', t => {
-    const restore = withStubbedNow(1700000000600);
+test('extracts failed apply_patch operation', (t) => {
+  const restore = withStubbedNow(1700000000600);
 
-    try {
-        const items = [
+  try {
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: JSON.stringify({
+          output: [
             {
-                type: 'tool_call_output_item',
-                output: JSON.stringify({
-                    output: [
-                        {
-                            success: false,
-                            error: 'Invalid diff format',
-                        },
-                    ],
-                }),
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'apply_patch',
-                    arguments: {
-                        type: 'update_file',
-                        path: 'bad.txt',
-                    },
-                },
+              success: false,
+              error: 'Invalid diff format',
             },
-        ];
-        const messages = extractCommandMessages(items);
+          ],
+        }),
+        rawItem: {
+          type: 'function_call_result',
+          name: 'apply_patch',
+          arguments: {
+            type: 'update_file',
+            path: 'bad.txt',
+          },
+        },
+      },
+    ];
+    const messages = extractCommandMessages(items);
 
-        t.is(messages.length, 1);
-        t.deepEqual(messages[0], {
-            id: '1700000000600-0-0',
-            sender: 'command',
-            status: 'completed',
-            command: 'apply_patch update_file bad.txt',
-            output: 'Invalid diff format',
-            success: false,
-            isApprovalRejection: false,
-        });
-    } finally {
-        restore();
-    }
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: '1700000000600-0-0',
+      sender: 'command',
+      status: 'completed',
+      command: 'apply_patch update_file bad.txt',
+      output: 'Invalid diff format',
+      success: false,
+      isApprovalRejection: false,
+    });
+  } finally {
+    restore();
+  }
 });
 
-test('extracts ask_mentor output', t => {
-    const restore = withStubbedNow(1700000000700);
+test('extracts ask_mentor output', (t) => {
+  const restore = withStubbedNow(1700000000700);
 
-    try {
-        const items = [
-            {
-                type: 'tool_call_output_item',
-                output: 'The answer is 42.',
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'ask_mentor',
-                    arguments: JSON.stringify({
-                        question: 'What is the meaning of life?',
-                    }),
-                },
-            },
-        ];
-        const messages = extractCommandMessages(items);
+  try {
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: 'The answer is 42.',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'ask_mentor',
+          arguments: JSON.stringify({
+            question: 'What is the meaning of life?',
+          }),
+        },
+      },
+    ];
+    const messages = extractCommandMessages(items);
 
-        t.is(messages.length, 1);
-        t.deepEqual(messages[0], {
-            id: '1700000000700-0-0',
-            sender: 'command',
-            status: 'completed',
-            command: 'ask_mentor: What is the meaning of life?',
-            output: 'The answer is 42.',
-            success: true,
-            isApprovalRejection: false,
-            toolName: 'ask_mentor',
-            toolArgs: {
-                question: 'What is the meaning of life?',
-            },
-        });
-    } finally {
-        restore();
-    }
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: '1700000000700-0-0',
+      sender: 'command',
+      status: 'completed',
+      command: 'ask_mentor: What is the meaning of life?',
+      output: 'The answer is 42.',
+      success: true,
+      isApprovalRejection: false,
+      toolName: 'ask_mentor',
+      toolArgs: {
+        question: 'What is the meaning of life?',
+      },
+    });
+  } finally {
+    restore();
+  }
 });
 
-test('extracts read_file output', t => {
-    const restore = withStubbedNow(1700000000800);
+test('extracts read_file output', (t) => {
+  const restore = withStubbedNow(1700000000800);
 
-    try {
-        const items = [
-            {
-                type: 'tool_call_output_item',
-                output: '1\tline one\n2\tline two',
-                rawItem: {
-                    type: 'function_call_result',
-                    name: 'read_file',
-                    arguments: JSON.stringify({
-                        path: 'test.txt',
-                        start_line: 1,
-                        end_line: 2,
-                    }),
-                },
-            },
-        ];
-        const messages = extractCommandMessages(items);
+  try {
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: '1\tline one\n2\tline two',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'read_file',
+          arguments: JSON.stringify({
+            path: 'test.txt',
+            start_line: 1,
+            end_line: 2,
+          }),
+        },
+      },
+    ];
+    const messages = extractCommandMessages(items);
 
-        t.is(messages.length, 1);
-        t.deepEqual(messages[0], {
-            id: '1700000000800-0-0',
-            sender: 'command',
-            status: 'completed',
-            command: 'read_file "test.txt" --lines 1-2',
-            output: '1\tline one\n2\tline two',
-            success: true,
-            isApprovalRejection: false,
-            toolName: 'read_file',
-            toolArgs: {
-                path: 'test.txt',
-                start_line: 1,
-                end_line: 2,
-            },
-        });
-    } finally {
-        restore();
-    }
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: '1700000000800-0-0',
+      sender: 'command',
+      status: 'completed',
+      command: 'read_file "test.txt" --lines 1-2',
+      output: '1\tline one\n2\tline two',
+      success: true,
+      isApprovalRejection: false,
+      toolName: 'read_file',
+      toolArgs: {
+        path: 'test.txt',
+        start_line: 1,
+        end_line: 2,
+      },
+    });
+  } finally {
+    restore();
+  }
 });

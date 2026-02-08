@@ -1,19 +1,19 @@
 {
-"tabWidth": 2,
-"useTabs": false,
-"semi": true,
-"singleQuote": true,
-"quoteProps": "as-needed",
-"bracketSpacing": true,
-"arrowParens": "always",
-"trailingComma": "all",
-"printWidth": 120,
-"overrides": [
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": true,
+  "quoteProps": "as-needed",
+  "bracketSpacing": true,
+  "arrowParens": "always",
+  "trailingComma": "all",
+  "printWidth": 120,
+  "overrides": [
     {
-        "files": "*.md",
-        "options": {
-            "proseWrap": "preserve"
-        }
+      "files": "*.md",
+      "options": {
+        "proseWrap": "preserve"
+      }
     }
-]
+  ]
 }

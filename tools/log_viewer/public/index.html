@@ -1,78 +1,67 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>Term2 Logs — Viewer</title>
-        <link rel="stylesheet" href="/styles.css" />
-    </head>
-    <body>
-        <div class="app">
-            <header>
-                <h1>Term2 Log Viewer</h1>
-                <small
-                    >Browsing logs/ — configured for lightweight JSON-line
-                    logs</small
-                >
-            </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Term2 Logs — Viewer</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>Term2 Log Viewer</h1>
+        <small>Browsing logs/ — configured for lightweight JSON-line logs</small>
+      </header>
 
-            <section class="side">
-                <div class="panel">
-                    <h3>Files</h3>
-                    <ul id="files"></ul>
-                </div>
-            </section>
+      <section class="side">
+        <div class="panel">
+          <h3>Files</h3>
+          <ul id="files"></ul>
+        </div>
+      </section>
 
-            <section class="main">
-                <div class="toolbar">
-                    <label
-                        >Filter level:
-                        <select id="levelFilter">
-                            <option value="">(all)</option>
-                            <option>debug</option>
-                            <option>info</option>
-                            <option>warn</option>
-                            <option>error</option>
-                        </select>
-                    </label>
-                    <label
-                        >Search:
-                        <input id="search" placeholder="search text" />
-                    </label>
-                    <button id="refresh">Refresh</button>
-                    <label
-                        >Lines:
-                        <input
-                            id="lines"
-                            type="number"
-                            value="200"
-                            min="1"
-                            max="5000"
-                        />
-                    </label>
-                </div>
-
-                <div id="viewer" class="viewer">
-                    <div id="info" class="info">
-                        Select a file on the left to view it
-                    </div>
-                    <table id="logsTable" class="logs" hidden>
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Level</th>
-                                <th>Event Type</th>
-                                <th>Message</th>
-                                <th>more</th>
-                            </tr>
-                        </thead>
-                        <tbody id="logsBody"></tbody>
-                    </table>
-                </div>
-            </section>
+      <section class="main">
+        <div class="toolbar">
+          <label
+            >Filter level:
+            <select id="levelFilter">
+              <option value="">(all)</option>
+              <option>debug</option>
+              <option>info</option>
+              <option>warn</option>
+              <option>error</option>
+            </select>
+          </label>
+          <label
+            >Search:
+            <input id="search" placeholder="search text" />
+          </label>
+          <button id="refresh">Refresh</button>
+          <label
+            >Lines:
+            <input id="lines" type="number" value="200" min="1" max="5000" />
+          </label>
         </div>
 
-        <script src="/json-lexer.js"></script>
-        <script src="/app.js"></script>
-    </body>
+        <div id="viewer" class="viewer">
+          <div id="info" class="info">Select a file on the left to view it</div>
+          <table id="logsTable" class="logs" hidden>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Level</th>
+                <th>Event Type</th>
+                <th>Message</th>
+                <th>more</th>
+              </tr>
+            </thead>
+            <tbody id="logsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script src="/json-lexer.js"></script>
+    <script src="/app.js"></script>
+  </body>
 </html>

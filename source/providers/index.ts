@@ -7,10 +7,10 @@ import './web-search/index.js';
 
 // Re-export registry API and types
 export {
-    registerProvider,
-    upsertProvider,
-    getProvider,
-    getAllProviders,
-    getProviderIds,
-    type ProviderDefinition,
+  registerProvider,
+  upsertProvider,
+  getProvider,
+  getAllProviders,
+  getProviderIds,
+  type ProviderDefinition,
 } from './registry.js';

@@ -1,9 +1,19 @@
 {
-    "useTabs": false,
-    "semi": true,
-    "singleQuote": true,
-    "quoteProps": "as-needed",
-    "bracketSpacing": false,
-    "arrowParens": "avoid",
-    "trailingComma": "all"
+"tabWidth": 2,
+"useTabs": false,
+"semi": true,
+"singleQuote": true,
+"quoteProps": "as-needed",
+"bracketSpacing": true,
+"arrowParens": "always",
+"trailingComma": "all",
+"printWidth": 120,
+"overrides": [
+    {
+        "files": "*.md",
+        "options": {
+            "proseWrap": "preserve"
+        }
+    }
+]
 }

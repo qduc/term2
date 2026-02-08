@@ -146,6 +146,28 @@ export function createApplyPatchToolDefinition(deps: {
             try {
                 const editMode = settingsService.get<boolean>('app.editMode');
                 const {type, path: filePath, diff} = params;
+                const workspaceRoot = executionContext?.getCwd() || process.cwd();
+                const sshService = executionContext?.getSSHService();
+                const isRemote = executionContext?.isRemote() && !!sshService;
+
+                // Resolve and ensure target within workspace before any validation.
+                // This prevents validation from running against a mismatched cwd.
+                let targetPath: string;
+                try {
+                    targetPath = resolveWorkspacePath(filePath, workspaceRoot);
+                } catch (e: any) {
+                    // Outside workspace => require approval
+                    loggingService.security(
+                        'apply_patch needsApproval: outside workspace',
+                        {
+                            editMode,
+                            type,
+                            path: filePath,
+                            error: e?.message || String(e),
+                        },
+                    );
+                    return true;
+                }
 
                 // Validate diff syntax by attempting a dry-run (before approval)
                 if (type === 'create_file' || type === 'update_file') {
@@ -154,9 +176,12 @@ export function createApplyPatchToolDefinition(deps: {
                             // Dry-run: apply diff to empty content for new file
                             applyDiff('', diff);
                         } else {
-                            // Dry-run: read existing file and test diff application
-                            const targetPath = resolveWorkspacePath(filePath);
-                            const original = await readFile(targetPath, 'utf8');
+                            // Dry-run: read existing file and test diff application.
+                            // Read failures are environment/file-state issues, not
+                            // deterministic patch syntax failures.
+                            const original = isRemote && sshService
+                                ? await sshService.readFile(targetPath)
+                                : await readFile(targetPath, 'utf8');
                             applyDiff(original, diff);
                         }
                         loggingService.info('apply_patch validation passed', {
@@ -164,8 +189,40 @@ export function createApplyPatchToolDefinition(deps: {
                             path: filePath,
                         });
                     } catch (diffError: any) {
-                        // Diff validation failed - auto-approve (skip user prompt) and fail in execute
-                        // This prevents breaking the stream while still rejecting the invalid patch
+                        // Keep fast UX for deterministic patch-format errors, but
+                        // require approval for environment/file-state failures.
+                        const fileAccessFailure =
+                            typeof diffError?.code === 'string' ||
+                            [
+                                'enoent',
+                                'not found',
+                                'no such file',
+                                'permission denied',
+                                'eacces',
+                                'eperm',
+                                'is a directory',
+                            ].some(token =>
+                                String(diffError?.message || '')
+                                    .toLowerCase()
+                                    .includes(token),
+                            );
+
+                        if (fileAccessFailure) {
+                            loggingService.warn(
+                                'apply_patch prevalidation could not confirm patch due to file/context issue',
+                                {
+                                    type,
+                                    path: filePath,
+                                    error:
+                                        diffError?.message ||
+                                        String(diffError),
+                                },
+                            );
+                            return true;
+                        }
+
+                        // Diff-format validation failed - auto-approve and let execute
+                        // return a structured error without bothering the user.
                         loggingService.error(
                             'apply_patch validation failed - will fail in execute',
                             {
@@ -188,25 +245,6 @@ export function createApplyPatchToolDefinition(deps: {
                 //     });
                 //     return true;
                 // }
-
-                // Resolve and ensure target within workspace
-                const workspaceRoot = executionContext?.getCwd() || process.cwd();
-                let targetPath: string;
-                try {
-                    targetPath = resolveWorkspacePath(filePath, workspaceRoot);
-                } catch (e: any) {
-                    // Outside workspace => require approval
-                    loggingService.security(
-                        'apply_patch needsApproval: outside workspace',
-                        {
-                            editMode,
-                            type,
-                            path: filePath,
-                            error: e?.message || String(e),
-                        },
-                    );
-                    return true;
-                }
 
                 const insideCwd = targetPath.startsWith(
                     workspaceRoot + path.sep,

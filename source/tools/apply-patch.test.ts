@@ -178,6 +178,37 @@ test.serial(
     },
 );
 
+test.serial(
+    'needsApproval: update_file missing target requires approval',
+    async t => {
+        await withTempDir(async () => {
+            const tool = createTool();
+            const result = await tool.needsApproval({
+                type: 'update_file',
+                path: 'missing.txt',
+                diff: '@@ anything\n-old\n+new',
+            });
+            t.true(result);
+        });
+    },
+);
+
+test.serial(
+    'needsApproval: update_file malformed diff auto-approves when file exists',
+    async t => {
+        await withTempDir(async dir => {
+            await fs.writeFile(path.join(dir, 'existing.txt'), 'line 1\nline 2');
+            const tool = createTool();
+            const result = await tool.needsApproval({
+                type: 'update_file',
+                path: 'existing.txt',
+                diff: 'garbage',
+            });
+            t.false(result);
+        });
+    },
+);
+
 test.serial('execute: rejects invalid diffs with proper error', async t => {
     await withTempDir(async () => {
         const tool = createTool();

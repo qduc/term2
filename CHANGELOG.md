@@ -1,4 +1,3 @@
-```markdown
 ## [0.1.6] - 2026-02-09
 
 ### Features
@@ -30,9 +29,7 @@
 - Add conversation integration test coverage for stream, approval, and retry scenarios
 - Set up Husky and lint-staged for pre-commit code formatting with Prettier
 - Update coding style to follow industry standards
-```
 
-```markdown
 ## [0.1.5] - 2026-02-07
 
 ### Features
@@ -55,9 +52,6 @@
 ### Internal/Chores
 
 - Update README documentation
-```
-
-I'll generate a concise CHANGELOG.md entry for version 0.1.4 based on the commits provided.
 
 ## [0.1.4] - 2026-01-30
 

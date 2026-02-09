@@ -10,6 +10,10 @@ export function decodeHtmlEntities(text: string): string {
     .replace(/&apos;/g, "'");
 }
 
+export function normalizeToolCallName(name: unknown): string {
+  return typeof name === 'string' ? name.trim() : '';
+}
+
 export function getOpenRouterBaseUrl(settingsService: ISettingsService): string {
   return settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1';
 }

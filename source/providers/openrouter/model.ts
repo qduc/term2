@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import { callOpenRouter } from './api.js';
 import { buildMessagesFromRequest, extractFunctionToolsFromRequest } from './converters.js';
-import { normalizeUsage, decodeHtmlEntities } from './utils.js';
+import { normalizeUsage, decodeHtmlEntities, normalizeToolCallName } from './utils.js';
 
 export class OpenRouterModel implements Model {
   name: string;
@@ -135,7 +135,7 @@ export class OpenRouterModel implements Model {
           output.push({
             type: 'function_call',
             callId: toolCall.id,
-            name: toolCall.function.name,
+            name: normalizeToolCallName(toolCall.function.name),
             arguments: decodeHtmlEntities(toolCall.function.arguments),
             status: 'completed',
             // Preserve reasoning blocks/tokens on tool calls so that when the
@@ -309,7 +309,7 @@ export class OpenRouterModel implements Model {
           output.push({
             type: 'function_call',
             callId: toolCall.callId,
-            name: toolCall.name,
+            name: normalizeToolCallName(toolCall.name),
             arguments: decodeHtmlEntities(toolCall.arguments),
             status: 'completed',
             ...(typeof reasoningText === 'string' && reasoningText.length > 0 ? { reasoning: reasoningText } : {}),

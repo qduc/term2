@@ -1028,6 +1028,85 @@ test.serial('preserves assistant message content when tool calls are present', a
   t.is(assistantMsg.tool_calls[0].function.name, 'search');
 });
 
+test.serial('trims tool call names in non-streaming responses', async (t) => {
+  globalThis.fetch = async () =>
+    createJsonResponse({
+      id: 'resp-tools-trim',
+      choices: [
+        {
+          message: {
+            content: '',
+            tool_calls: [
+              {
+                id: 'call-trim-1',
+                type: 'function',
+                function: {
+                  name: ' shell ',
+                  arguments: '{"command":"ls"}',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      usage: {},
+    });
+
+  const model = new OpenRouterModel({
+    settingsService: mockSettingsService,
+    loggingService: logger,
+    modelId: 'mock-model',
+  });
+
+  const response = await model.getResponse({
+    input: 'list files',
+  } as any);
+
+  const toolCall = response.output.find((item: any) => item.type === 'function_call') as any;
+  t.truthy(toolCall);
+  t.is(toolCall.name, 'shell');
+});
+
+test.serial('trims tool call names in streamed responses', async (t) => {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          'data: {"id":"resp-tools-stream","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-stream-1","type":"function","function":{"name":" shell ","arguments":"{\\"command\\":\\"ls\\"}"}}]}}]}\n',
+        ),
+      );
+      controller.enqueue(encoder.encode('data: [DONE]\n'));
+      controller.close();
+    },
+  });
+
+  globalThis.fetch = async () =>
+    new Response(stream as any, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    });
+
+  const model = new OpenRouterModel({
+    settingsService: mockSettingsService,
+    loggingService: logger,
+    modelId: 'mock-model',
+  });
+
+  const events: any[] = [];
+  for await (const event of model.getStreamedResponse({
+    input: 'list files',
+  } as any)) {
+    events.push(event);
+  }
+
+  const doneEvent = events.find((event) => event.type === 'response_done');
+  t.truthy(doneEvent);
+  const toolCall = doneEvent.response.output.find((item: any) => item.type === 'function_call') as any;
+  t.truthy(toolCall);
+  t.is(toolCall.name, 'shell');
+});
+
 // ========== Error Recovery Tests: OpenRouterError and Retry Classification ==========
 
 test('OpenRouterError includes status and headers', (t) => {

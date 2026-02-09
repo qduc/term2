@@ -105,3 +105,88 @@ test('OpenAICompatibleModel.getStreamedResponse support reasoning_content', asyn
   t.is(assistantMessage.reasoning, 'thinking');
   t.is(assistantMessage.content[0].text, 'Hi');
 });
+
+test('OpenAICompatibleModel.getResponse trims tool call names', async (t) => {
+  globalThis.fetch = async () =>
+    createJsonResponse({
+      id: 'resp-tools-trim',
+      choices: [
+        {
+          message: {
+            content: '',
+            tool_calls: [
+              {
+                id: 'call-trim-1',
+                type: 'function',
+                function: {
+                  name: ' shell ',
+                  arguments: '{"command":"ls"}',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      usage: {},
+    });
+
+  const model = new OpenAICompatibleModel({
+    settingsService: mockSettingsService,
+    loggingService: logger,
+    providerId: 'custom',
+    baseUrl: 'https://api.example.com',
+    apiKey: 'mock-api-key',
+    modelId: 'test-model',
+  });
+
+  const response = await model.getResponse({
+    input: 'hi',
+  } as any);
+
+  const toolCall = response.output.find((item: any) => item.type === 'function_call') as any;
+  t.truthy(toolCall);
+  t.is(toolCall.name, 'shell');
+});
+
+test('OpenAICompatibleModel.getStreamedResponse trims tool call names', async (t) => {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          'data: {"id":"resp-tools-stream","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-stream-1","type":"function","function":{"name":" shell ","arguments":"{\\"command\\":\\"ls\\"}"}}]}}]}\n',
+        ),
+      );
+      controller.enqueue(encoder.encode('data: [DONE]\n'));
+      controller.close();
+    },
+  });
+
+  globalThis.fetch = async () =>
+    new Response(stream as any, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    });
+
+  const model = new OpenAICompatibleModel({
+    settingsService: mockSettingsService,
+    loggingService: logger,
+    providerId: 'custom',
+    baseUrl: 'https://api.example.com',
+    apiKey: 'mock-api-key',
+    modelId: 'test-model',
+  });
+
+  const events: any[] = [];
+  for await (const event of model.getStreamedResponse({
+    input: 'hi',
+  } as any)) {
+    events.push(event);
+  }
+
+  const doneEvent = events.find((event) => event.type === 'response_done');
+  t.truthy(doneEvent);
+  const toolCall = doneEvent.response.output.find((item: any) => item.type === 'function_call') as any;
+  t.truthy(toolCall);
+  t.is(toolCall.name, 'shell');
+});

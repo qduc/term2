@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import { callOpenAICompatibleChatCompletions } from './api.js';
 import { buildMessagesFromRequest, extractFunctionToolsFromRequest } from '../openrouter/converters.js';
-import { normalizeUsage, decodeHtmlEntities } from '../openrouter/utils.js';
+import { normalizeUsage, decodeHtmlEntities, normalizeToolCallName } from '../openrouter/utils.js';
 
 export class OpenAICompatibleModel implements Model {
   name: string;
@@ -132,7 +132,7 @@ export class OpenAICompatibleModel implements Model {
           output.push({
             type: 'function_call',
             callId: toolCall.id,
-            name: toolCall.function.name,
+            name: normalizeToolCallName(toolCall.function.name),
             arguments: decodedArgs,
             status: 'completed',
             ...(typeof reasoning === 'string' ? { reasoning } : {}),
@@ -290,7 +290,7 @@ export class OpenAICompatibleModel implements Model {
           output.push({
             type: 'function_call',
             callId: toolCall.callId,
-            name: toolCall.name,
+            name: normalizeToolCallName(toolCall.name),
             arguments: args,
             status: 'completed',
             ...(typeof reasoningText === 'string' && reasoningText.length > 0 ? { reasoning: reasoningText } : {}),

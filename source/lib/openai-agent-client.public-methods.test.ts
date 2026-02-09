@@ -211,7 +211,7 @@ test('setProvider updates provider and persists to settings', (t) => {
   t.is(settings.get('agent.provider'), 'openai');
 });
 
-test('startStream only passes previousResponseId when provider supports chaining', async (t) => {
+test.serial('startStream only passes previousResponseId when provider supports chaining', async (t) => {
   const settings = createMockSettings({
     'agent.provider': 'mock-chaining-false',
   });
@@ -227,6 +227,46 @@ test('startStream only passes previousResponseId when provider supports chaining
   await client.startStream('Hello', { previousResponseId: 'prev-2' });
   t.is(chainingRunnerCalls.length, 2);
   t.is(chainingRunnerCalls[1].options.previousResponseId, 'prev-2');
+});
+
+test.serial('abort logs with active trace id before clearing correlation', async (t) => {
+  const debugLogs: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+  let correlationId: string | undefined;
+  const logger: ILoggingService = {
+    debug: (message: string, meta?: Record<string, unknown>) => {
+      debugLogs.push({ message, meta });
+    },
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    security: () => {},
+    setCorrelationId: (id: string | undefined) => {
+      correlationId = id;
+    },
+    clearCorrelationId: () => {
+      correlationId = undefined;
+    },
+    getCorrelationId: () => correlationId,
+    log: () => {},
+  } as any;
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-false',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger, settings },
+  });
+
+  await client.startStream('Hello');
+  const activeCorrelationId = correlationId;
+  t.truthy(activeCorrelationId);
+
+  client.abort();
+
+  const abortLogs = debugLogs.filter((entry) => entry.message === 'Agent operation aborted');
+  t.true(abortLogs.length > 0);
+  const latestAbortLog = abortLogs[abortLogs.length - 1];
+  t.is(latestAbortLog.meta?.traceId, activeCorrelationId);
+  t.is(correlationId, undefined);
 });
 
 // ========== addToolInterceptor tests ==========

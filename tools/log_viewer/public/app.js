@@ -230,12 +230,18 @@ function renderRows(data) {
     const eventCell = document.createElement('td');
     if (parsed && parsed.eventType) {
       eventCell.textContent = parsed.eventType;
+    } else if (parsed && parsed.direction) {
+      eventCell.textContent = String(parsed.direction).toUpperCase();
     }
 
     // Message Column
     const msgCell = document.createElement('td');
     // Truncate message for the table view
-    const msgText = parsed && parsed.message ? parsed.message : item.raw;
+    const msgText =
+      (parsed && parsed.message) ||
+      (parsed && parsed.sourceMessage) ||
+      (parsed && parsed.file) ||
+      item.raw;
     msgCell.textContent = msgText.length > 120 ? msgText.substring(0, 120) + '...' : msgText;
     msgCell.title = msgText;
 
@@ -541,6 +547,46 @@ advancedFiltersBtn.addEventListener('click', () => {
 linesInput.addEventListener('change', () => {
     // Reload when lines count changes
     if (selectedFile) loadPreview();
+});
+
+// --- Resizer Logic ---
+const resizer = document.getElementById('resizer');
+const sidebar = document.getElementById('sidebar');
+
+let isResizing = false;
+
+// Load persisted width
+const savedWidth = localStorage.getItem('sidebarWidth');
+if (savedWidth) {
+    sidebar.style.width = savedWidth + 'px';
+}
+
+resizer.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    document.body.style.cursor = 'col-resize';
+    resizer.classList.add('dragging');
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+
+    let newWidth = e.clientX;
+    const minWidth = 150;
+    const maxWidth = 600;
+
+    if (newWidth < minWidth) newWidth = minWidth;
+    if (newWidth > maxWidth) newWidth = maxWidth;
+
+    sidebar.style.width = newWidth + 'px';
+});
+
+document.addEventListener('mouseup', () => {
+    if (isResizing) {
+        isResizing = false;
+        document.body.style.cursor = 'default';
+        resizer.classList.remove('dragging');
+        localStorage.setItem('sidebarWidth', parseInt(sidebar.style.width));
+    }
 });
 
 // Initial

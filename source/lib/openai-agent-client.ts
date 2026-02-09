@@ -203,6 +203,7 @@ export class OpenAIAgentClient {
    * Abort the current running stream/operation
    */
   abort(): void {
+    const traceIdBeforeClear = this.#currentCorrelationId ?? this.#logger.getCorrelationId?.();
     if (this.#currentAbortController) {
       this.#currentAbortController.abort();
       this.#currentAbortController = null;
@@ -215,7 +216,7 @@ export class OpenAIAgentClient {
       eventType: 'stream.aborted',
       category: 'stream',
       phase: 'abort',
-      traceId: this.#logger.getCorrelationId?.(),
+      traceId: traceIdBeforeClear,
     });
   }
 

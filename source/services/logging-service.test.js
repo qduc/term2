@@ -152,6 +152,67 @@ test.serial('supports custom log levels including security', async (t) => {
   t.pass();
 });
 
+test.serial('automatically writes provider traffic artifacts for sent and received payloads', async (t) => {
+  const logDir = getTestLogDir();
+  const logger = new LoggingService({
+    logDir,
+    disableLogging: false,
+    logLevel: 'info',
+  });
+
+  const traceId = 'trace-provider-auto-1';
+  logger.debug('OpenRouter stream start', {
+    traceId,
+    provider: 'openrouter',
+    model: 'moonshotai/kimi-k2.5',
+    messages: [{ role: 'system' }, { role: 'user', content: 'hello' }],
+    tools: [{ type: 'function' }],
+    modelRequest: { input: [{ role: 'user', type: 'message' }] },
+  });
+
+  logger.debug('OpenRouter stream done', {
+    traceId,
+    provider: 'openrouter',
+    model: 'moonshotai/kimi-k2.5',
+    text: 'hi',
+    reasoningDetails: [{ type: 'reasoning.text' }],
+    toolCalls: [],
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  const providerRoot = path.join(logDir, 'provider-traffic');
+  t.true(fs.existsSync(providerRoot));
+
+  const dateDirs = fs
+    .readdirSync(providerRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  t.true(dateDirs.length > 0);
+
+  const traceDir = path.join(providerRoot, dateDirs[0], traceId);
+  t.true(fs.existsSync(traceDir));
+
+  const files = fs.readdirSync(traceDir);
+  const sentFile = files.find((name) => name.endsWith('-sent.json'));
+  const receivedFile = files.find((name) => name.endsWith('-received.json'));
+
+  t.truthy(sentFile);
+  t.truthy(receivedFile);
+  if (!sentFile || !receivedFile) {
+    t.fail('expected sent and received provider artifact files');
+    return;
+  }
+
+  const sent = JSON.parse(fs.readFileSync(path.join(traceDir, sentFile), 'utf8'));
+  const received = JSON.parse(fs.readFileSync(path.join(traceDir, receivedFile), 'utf8'));
+
+  t.is(sent.direction, 'sent');
+  t.deepEqual(sent.payload.messages, [{ role: 'system' }, { role: 'user', content: 'hello' }]);
+  t.is(received.direction, 'received');
+  t.is(received.payload.text, 'hi');
+});
+
 test.serial('suppresses console output when configured', async (t) => {
   const logDir = getTestLogDir();
   const originalConsoleError = console.error;

@@ -223,6 +223,7 @@ export function createShellToolDefinition(deps: {
     execute: async ({ command, timeout_ms, max_output_length }) => {
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();
+      const previousCorrelationId = loggingService.getCorrelationId();
       const correlationId = randomUUID();
 
       // Set correlation ID for tracking related operations
@@ -309,8 +310,11 @@ export function createShellToolDefinition(deps: {
 
         return [statusLine, combinedOutput, noteLine, emptyOutputNote].filter(Boolean).join('\n');
       } finally {
-        // Always clear correlation ID
-        loggingService.clearCorrelationId();
+        if (previousCorrelationId) {
+          loggingService.setCorrelationId(previousCorrelationId);
+        } else {
+          loggingService.clearCorrelationId();
+        }
       }
     },
     formatCommandMessage: formatShellCommandMessage,

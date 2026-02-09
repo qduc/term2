@@ -12,33 +12,64 @@ app.use(express.json());
 const LOG_DIR = process.env.LOG_DIR || path.join(envPaths('term2').log, 'logs');
 const MAX_READ_BYTES = 1024 * 1024; // 1MB
 
-function safeBasename(name) {
-  // prevent traversal and only allow filenames without path segments
-  return path.basename(name || '');
+function normalizeRelativePath(name) {
+  const normalized = path.posix.normalize(String(name || '').replaceAll('\\', '/'));
+  if (!normalized || normalized === '.' || normalized.startsWith('../') || path.posix.isAbsolute(normalized)) {
+    return '';
+  }
+  return normalized;
+}
+
+function resolveFilePath(logDir, relativePath) {
+  const safeRelative = normalizeRelativePath(relativePath);
+  if (!safeRelative) {
+    throw new Error('forbidden');
+  }
+
+  const resolvedLogDir = path.resolve(logDir);
+  const resolvedFilePath = path.resolve(path.join(resolvedLogDir, safeRelative));
+  if (!(resolvedFilePath === resolvedLogDir || resolvedFilePath.startsWith(resolvedLogDir + path.sep))) {
+    throw new Error('forbidden');
+  }
+  return resolvedFilePath;
+}
+
+async function listLogFilesRecursive(logDir, baseDir = logDir, rel = '') {
+  const dirPath = path.join(baseDir, rel);
+  const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+  const results = [];
+
+  for (const entry of entries) {
+    const childRel = rel ? path.posix.join(rel, entry.name) : entry.name;
+    const childPath = path.join(baseDir, childRel);
+    try {
+      const st = await fs.promises.stat(childPath);
+      if (st.isDirectory()) {
+        const nested = await listLogFilesRecursive(logDir, baseDir, childRel);
+        results.push(...nested);
+      } else if (st.isFile()) {
+        results.push({
+          name: childRel.replaceAll('\\', '/'),
+          size: st.size,
+          mtime: st.mtime,
+          isFile: true,
+        });
+      }
+    } catch (_) {
+      // Ignore files that disappear between readdir/stat
+    }
+  }
+
+  return results;
 }
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/api/files', async (req, res) => {
   try {
-    const files = await fs.promises.readdir(LOG_DIR);
-    const results = await Promise.all(
-      files.map(async (f) => {
-        try {
-          const filePath = path.join(LOG_DIR, f);
-          const st = await fs.promises.stat(filePath);
-          return {
-            name: f,
-            size: st.size,
-            mtime: st.mtime,
-            isFile: st.isFile(),
-          };
-        } catch (err) {
-          return null;
-        }
-      }),
-    );
-    res.json(results.filter(Boolean));
+    const files = await listLogFilesRecursive(LOG_DIR);
+    files.sort((a, b) => new Date(b.mtime).getTime() - new Date(a.mtime).getTime() || a.name.localeCompare(b.name));
+    res.json(files);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: String(err) });
@@ -107,38 +138,44 @@ function parseLine(line) {
   }
 }
 
+async function parsePreviewFile(filePath, lines) {
+  if (filePath.endsWith('.json') && !filePath.endsWith('.ndjson')) {
+    const text = await fs.promises.readFile(filePath, 'utf8');
+    const single = parseLine(text.trim());
+    return [single];
+  }
+
+  const rawLines = await tailFile(filePath, MAX_READ_BYTES, lines);
+  return rawLines.reverse().map(parseLine);
+}
+
 app.get('/api/preview', async (req, res) => {
-  const file = safeBasename(req.query.file || '');
+  const file = normalizeRelativePath(req.query.file || '');
   if (!file) return res.status(400).json({ error: 'file query required' });
   const lines = Number(req.query.lines) || 200;
   try {
-    const filePath = path.join(LOG_DIR, file);
-    if (!filePath.startsWith(path.resolve(LOG_DIR))) return res.status(403).json({ error: 'forbidden' });
+    const filePath = resolveFilePath(LOG_DIR, file);
     const exists = await fs.promises.stat(filePath);
     if (!exists.isFile()) return res.status(404).json({ error: 'not found' });
-    const rawLines = await tailFile(filePath, MAX_READ_BYTES, lines);
+    const parsed = await parsePreviewFile(filePath, lines);
     const st = await fs.promises.stat(filePath);
-    // reverse so newest lines appear first in the response
-    const parsed = rawLines.reverse().map(parseLine);
     res.json({ file, lines: parsed.length, data: parsed, offset: st.size });
   } catch (err) {
+    if (String(err?.message || '').includes('forbidden')) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
     console.error(err);
     res.status(500).json({ error: String(err) });
   }
 });
 
 app.get('/api/append', async (req, res) => {
-  const file = safeBasename(req.query.file || '');
+  const file = normalizeRelativePath(req.query.file || '');
   if (!file) return res.status(400).json({ error: 'file query required' });
   const offset = Number(req.query.offset || 0);
 
   try {
-    const filePath = path.join(LOG_DIR, file);
-    const resolvedLogDir = path.resolve(LOG_DIR);
-    const resolvedFilePath = path.resolve(filePath);
-    if (!resolvedFilePath.startsWith(resolvedLogDir + path.sep)) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
+    const resolvedFilePath = resolveFilePath(LOG_DIR, file);
 
     const st = await fs.promises.stat(resolvedFilePath);
     if (!st.isFile()) return res.status(404).json({ error: 'not found' });
@@ -153,6 +190,9 @@ app.get('/api/append', async (req, res) => {
       data: result.data,
     });
   } catch (err) {
+    if (String(err?.message || '').includes('forbidden')) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
     console.error(err);
     res.status(500).json({ error: String(err) });
   }
@@ -160,28 +200,26 @@ app.get('/api/append', async (req, res) => {
 
 // simple endpoint to get last-modified and size and an incremental token for polling
 app.get('/api/meta', async (req, res) => {
-  const file = safeBasename(req.query.file || '');
+  const file = normalizeRelativePath(req.query.file || '');
   if (!file) return res.status(400).json({ error: 'file query required' });
   try {
-    const filePath = path.join(LOG_DIR, file);
+    const filePath = resolveFilePath(LOG_DIR, file);
     const st = await fs.promises.stat(filePath);
     res.json({ size: st.size, mtime: st.mtime });
   } catch (err) {
+    if (String(err?.message || '').includes('forbidden')) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
     res.status(404).json({ error: String(err) });
   }
 });
 
 // Server-Sent Events endpoint to watch a file for changes and notify clients
 app.get('/api/watch', async (req, res) => {
-  const file = safeBasename(req.query.file || '');
+  const file = normalizeRelativePath(req.query.file || '');
   if (!file) return res.status(400).json({ error: 'file query required' });
   try {
-    const filePath = path.join(LOG_DIR, file);
-    const resolvedLogDir = path.resolve(LOG_DIR);
-    const resolvedFilePath = path.resolve(filePath);
-    if (!resolvedFilePath.startsWith(resolvedLogDir + path.sep)) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
+    const resolvedFilePath = resolveFilePath(LOG_DIR, file);
 
     const st = await fs.promises.stat(resolvedFilePath);
     if (!st.isFile()) return res.status(404).json({ error: 'not found' });
@@ -247,6 +285,18 @@ app.get('/api/watch', async (req, res) => {
 });
 
 const port = process.env.PORT || 9100;
-app.listen(port, () => {
-  console.log(`Term2 log viewer listening on http://localhost:${port} -- logs at ${LOG_DIR}`);
-});
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Term2 log viewer listening on http://localhost:${port} -- logs at ${LOG_DIR}`);
+  });
+}
+
+module.exports = {
+  app,
+  LOG_DIR,
+  parseLine,
+  normalizeRelativePath,
+  resolveFilePath,
+  listLogFilesRecursive,
+  parsePreviewFile,
+};

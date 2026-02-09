@@ -85,14 +85,15 @@ else
     $COMMITS
 
     Format as Markdown. Do not include a main title like 'Changelog', just the version header and sections.
+    CRITICAL: Output ONLY the raw markdown content. Do NOT wrap in markdown code blocks (e.g., no \`\`\`markdown). Do not include any introductory or concluding remarks.
     Example format:
     ## [1.2.3] - 2023-01-01
     ### Features
     - ...
     "
 
-    # Call Claude
-    CHANGELOG_ENTRY=$(echo "$PROMPT" | claude --model haiku)
+    # Call Claude and filter out markdown code blocks or stray comments
+    CHANGELOG_ENTRY=$(echo "$PROMPT" | claude --model haiku | sed -E '/^ *```/d' | sed -E 's/<!--.*-->//g')
 
     echo -e "${BLUE}Generated Changelog:${NC}"
     echo "$CHANGELOG_ENTRY"

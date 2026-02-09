@@ -17,23 +17,14 @@ const execPromise = util.promisify(exec);
 const searchParametersSchema = z.object({
   pattern: z.string().describe('The text or regex pattern to search for'),
   path: z.string().describe('The directory or file to search in. Use "." for current directory.'),
-  case_sensitive: z.boolean().default(true).describe('Whether the search should be case sensitive.'),
-  file_pattern: z
-    .string()
-    .nullable()
-    .default(null)
-    .describe('Glob pattern for files to include (e.g., "*.ts"). Pass null to include all files.'),
-  exclude_pattern: z
-    .string()
-    .nullable()
-    .default(null)
-    .describe('Glob pattern for files to exclude. Pass null to exclude nothing.'),
+  case_sensitive: z.boolean().optional().default(true).describe('Whether the search should be case sensitive.'),
+  file_pattern: z.string().optional().describe('Glob pattern for files to include (e.g., "*.ts").'),
+  exclude_pattern: z.string().optional().describe('Glob pattern for files to exclude.'),
   max_results: relaxedNumber
     .int()
     .positive()
-    .nullable()
-    .default(null)
-    .describe('Maximum number of results to return. Pass null for default (100).'),
+    .optional()
+    .describe('Maximum number of results to return. Defaults to 100.'),
 });
 
 export type SearchToolParams = z.infer<typeof searchParametersSchema>;

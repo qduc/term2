@@ -22,11 +22,7 @@ const execPromise = util.promisify(exec);
 const searchParametersSchema = z.object({
   pattern: z.string().describe('The text or regex pattern to search for'),
   path: z.string().describe('The directory or file to search in. Use "." for current directory.'),
-  file_pattern: z
-    .string()
-    .nullable()
-    .default(null)
-    .describe('Glob pattern for files to include (e.g., "*.ts"). Pass null to include all files.'),
+  file_pattern: z.string().optional().describe('Glob pattern for files to include (e.g., "*.ts").'),
 });
 
 export type SearchToolParams = z.infer<typeof searchParametersSchema>;

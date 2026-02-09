@@ -4,7 +4,7 @@ import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFrom
 
 const askMentorSchema = z.object({
   question: z.string().describe('The question to ask the mentor.'),
-  context: z.string().nullable().default(null).describe('Additional context for the question.'),
+  context: z.string().optional().describe('Additional context for the question.'),
 });
 
 export type AskMentorParams = z.infer<typeof askMentorSchema>;

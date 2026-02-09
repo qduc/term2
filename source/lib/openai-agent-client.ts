@@ -12,6 +12,7 @@ import { ExecutionContext } from '../services/execution-context.js';
 import { createEditorImpl } from './editor-impl.js';
 import { ConversationStore } from '../services/conversation-store.js';
 import { trimToolOutput } from '../utils/trim-tool-output.js';
+import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -691,7 +692,8 @@ export class OpenAIAgentClient {
           createTool({
             name: definition.name,
             description: definition.description,
-            parameters: definition.parameters,
+            parameters:
+              this.#provider === 'openai' ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
             needsApproval: async (context, params) => definition.needsApproval(params, context),
             execute: async (params, _context, details) => {
               const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');

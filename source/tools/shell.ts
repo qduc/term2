@@ -29,14 +29,12 @@ const shellParametersSchema = z.object({
   timeout_ms: relaxedNumber
     .int()
     .positive()
-    .nullable()
-    .default(null)
+    .optional()
     .describe('Optional timeout in milliseconds for each command. Defaults to 120000 ms (2 minutes) if not specified.'),
   max_output_length: relaxedNumber
     .int()
     .positive()
-    .nullable()
-    .default(null)
+    .optional()
     .describe(
       'Optional maximum output length in characters for each command. Outputs exceeding this length will be trimmed. Defaults to 10000 characters if not specified.',
     ),

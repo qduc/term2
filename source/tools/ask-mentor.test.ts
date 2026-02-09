@@ -20,14 +20,22 @@ test('createAskMentorToolDefinition defines the tool correctly', (t) => {
 
   t.is(tool.name, 'ask_mentor');
   t.true(tool.description.includes('mentor'));
-  t.is(tool.needsApproval({ question: 'test', context: null }, undefined), false);
+  t.is(tool.needsApproval({ question: 'test' }, undefined), false);
+});
+
+test('createAskMentorToolDefinition schema allows omitted context and rejects null', (t) => {
+  const mockAskMentor = fn();
+  const tool = createAskMentorToolDefinition(mockAskMentor);
+
+  t.true(tool.parameters.safeParse({ question: 'test' }).success);
+  t.false(tool.parameters.safeParse({ question: 'test', context: null }).success);
 });
 
 test('createAskMentorToolDefinition executes correctly', async (t) => {
   const mockAskMentor = fn(async () => 'Expert advice');
   const tool = createAskMentorToolDefinition(mockAskMentor);
 
-  const result = await tool.execute({ question: 'How do I center a div?', context: null }, undefined);
+  const result = await tool.execute({ question: 'How do I center a div?' }, undefined);
 
   t.is(mockAskMentor.calls[0][0], 'How do I center a div?');
   t.is(result, 'Expert advice');
@@ -55,7 +63,7 @@ test('createAskMentorToolDefinition handles errors', async (t) => {
   });
   const tool = createAskMentorToolDefinition(mockAskMentor);
 
-  const result = await tool.execute({ question: 'fail', context: null }, undefined);
+  const result = await tool.execute({ question: 'fail' }, undefined);
 
   t.true((result as string).includes('Failed to ask mentor: API Error'));
 });

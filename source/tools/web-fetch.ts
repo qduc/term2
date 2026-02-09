@@ -13,16 +13,17 @@ const webFetchSchema = z.object({
     .number()
     .min(200)
     .max(MAX_CHARS_LIMIT)
+    .optional()
     .default(DEFAULT_MAX_CHARS)
     .describe(`Maximum number of characters to return (default: ${DEFAULT_MAX_CHARS}).`),
   heading: z
     .array(z.union([z.string(), z.number()]))
+    .optional()
     .default([])
     .describe('Optional: Array of headings (h1-h3) to retrieve content from.'),
   continuation_token: z
     .string()
-    .nullable()
-    .default(null)
+    .optional()
     .describe('Optional: Token from previous response to fetch the next chunk of content.'),
 });
 

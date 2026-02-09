@@ -12,14 +12,12 @@ const findFilesParametersSchema = z.object({
   pattern: z.string().describe('Glob pattern or filename to search for (e.g., "*.ts", "**/*.test.ts", "README.md")'),
   path: z
     .string()
-    .nullable()
-    .default(null)
+    .optional()
     .describe('Directory to search in. Use "." for current directory. Defaults to current directory.'),
   max_results: relaxedNumber
     .int()
     .positive()
-    .nullable()
-    .default(null)
+    .optional()
     .describe('Maximum number of results to return. Defaults to 50.'),
 });
 

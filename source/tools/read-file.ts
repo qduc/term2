@@ -10,14 +10,12 @@ const readFileParametersSchema = z.object({
   start_line: relaxedNumber
     .int()
     .positive()
-    .nullable()
-    .default(null)
+    .optional()
     .describe('Starting line number (1-indexed). If not provided, reads from the beginning.'),
   end_line: relaxedNumber
     .int()
     .positive()
-    .nullable()
-    .default(null)
+    .optional()
     .describe('Ending line number (1-indexed, inclusive). If not provided, reads to the end.'),
 });
 

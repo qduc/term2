@@ -7,58 +7,131 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="app">
-      <header>
-        <h1>Term2 Log Viewer</h1>
-        <small>Browsing logs/ — configured for lightweight JSON-line logs</small>
-      </header>
-
-      <section class="side">
-        <div class="panel">
-          <h3>Files</h3>
-          <ul id="files"></ul>
+    <div class="app-layout">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <div class="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
+              <line x1="7" y1="8" x2="17" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="7" y1="12" x2="17" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="7" y1="16" x2="13" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>Logs</span>
+          </div>
         </div>
-      </section>
 
-      <section class="main">
-        <div class="toolbar">
-          <label
-            >Filter level:
-            <select id="levelFilter">
-              <option value="">(all)</option>
-              <option>debug</option>
-              <option>info</option>
-              <option>warn</option>
-              <option>error</option>
+        <div class="sidebar-content">
+          <div class="section-title">LOG FILES</div>
+          <ul id="files" class="file-list"></ul>
+        </div>
+      </aside>
+
+      <div class="resizer" id="resizer"></div>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <header class="top-bar">
+          <div class="top-bar-left">
+             <h2 id="currentFileName">Select a log file</h2>
+             <span id="fileMeta" class="file-meta"></span>
+          </div>
+          <div class="top-bar-right">
+             <button id="refresh" class="btn btn-primary">
+               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+               Refresh
+             </button>
+          </div>
+        </header>
+
+        <div class="filter-bar">
+          <div class="search-group">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input id="search" placeholder="Search logs..." />
+          </div>
+
+          <div class="filters-group">
+            <select id="levelFilter" class="select-filter">
+              <option value="">All Levels</option>
+              <option value="debug">Debug</option>
+              <option value="info">Info</option>
+              <option value="warn">Warn</option>
+              <option value="error">Error</option>
             </select>
-          </label>
-          <label
-            >Search:
-            <input id="search" placeholder="search text" />
-          </label>
-          <button id="refresh">Refresh</button>
-          <label
-            >Lines:
-            <input id="lines" type="number" value="200" min="1" max="5000" />
-          </label>
+
+            <select id="presetFilter" class="select-filter">
+              <option value="">No Preset</option>
+              <option value="errors">Errors Only</option>
+              <option value="tool_calls">Tool Calls</option>
+              <option value="invalid_tool_format">Invalid Tools</option>
+              <option value="retries">Retries</option>
+            </select>
+
+            <button id="advancedFiltersBtn" class="btn btn-ghost">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+              Filters
+            </button>
+
+            <div class="lines-control">
+                <span>View</span>
+                <input id="lines" type="number" value="200" min="1" max="5000" />
+                <span>lines</span>
+            </div>
+          </div>
         </div>
 
-        <div id="viewer" class="viewer">
-          <div id="info" class="info">Select a file on the left to view it</div>
-          <table id="logsTable" class="logs" hidden>
+        <div id="advancedFiltersPanel" class="advanced-filters hidden">
+          <div class="filter-grid">
+            <div class="filter-item">
+              <label>Trace ID</label>
+              <input id="traceIdFilter" placeholder="Filter by traceId" />
+            </div>
+            <div class="filter-item">
+              <label>Session ID</label>
+              <input id="sessionIdFilter" placeholder="Filter by sessionId" />
+            </div>
+            <div class="filter-item">
+              <label>Event Type</label>
+              <input id="eventTypeFilter" placeholder="Filter by eventType" />
+            </div>
+            <div class="filter-item">
+              <label>Tool Name</label>
+              <input id="toolNameFilter" placeholder="Filter by toolName" />
+            </div>
+            <div class="filter-item">
+              <label>Provider</label>
+              <input id="providerFilter" placeholder="Filter by provider" />
+            </div>
+            <div class="filter-item">
+              <label>Model</label>
+              <input id="modelFilter" placeholder="Filter by model" />
+            </div>
+          </div>
+        </div>
+
+        <div id="viewer" class="viewer-container">
+          <div id="info" class="empty-state">
+             <div class="empty-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+             </div>
+             <p>Select a log file from the sidebar to view details</p>
+          </div>
+
+          <table id="logsTable" class="logs-table" hidden>
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Level</th>
-                <th>Event Type</th>
+                <th width="140">Time</th>
+                <th width="80">Level</th>
+                <th width="150">Event</th>
                 <th>Message</th>
-                <th>more</th>
+                <th width="60"></th> <!-- Actions column -->
               </tr>
             </thead>
             <tbody id="logsBody"></tbody>
           </table>
         </div>
-      </section>
+      </main>
     </div>
 
     <script src="/json-lexer.js"></script>

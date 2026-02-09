@@ -1,19 +1,45 @@
 const fileListEl = document.getElementById('files');
 const logsTable = document.getElementById('logsTable');
 const logsBody = document.getElementById('logsBody');
-const info = document.getElementById('info');
+const info = document.getElementById('info'); // Empty state container
+const headerTitle = document.getElementById('currentFileName');
+const headerMeta = document.getElementById('fileMeta');
+
 const refreshBtn = document.getElementById('refresh');
+const advancedFiltersBtn = document.getElementById('advancedFiltersBtn');
+const advancedFiltersPanel = document.getElementById('advancedFiltersPanel');
+
 const levelFilter = document.getElementById('levelFilter');
 const searchInput = document.getElementById('search');
 const linesInput = document.getElementById('lines');
+const presetFilter = document.getElementById('presetFilter');
+
+// Advanced filters
+const traceIdFilter = document.getElementById('traceIdFilter');
+const sessionIdFilter = document.getElementById('sessionIdFilter');
+const eventTypeFilter = document.getElementById('eventTypeFilter');
+const toolNameFilter = document.getElementById('toolNameFilter');
+const providerFilter = document.getElementById('providerFilter');
+const modelFilter = document.getElementById('modelFilter');
 
 let selectedFile = null;
 let fileWatcher = null; // SSE watcher
 let refreshTimer = null; // debounce timer for auto-refresh
+let filterTimer = null; // debounce timer for search/filter redraw
+let rowCache = [];
+let fileOffset = 0;
+
+const PRESET_MAP = {
+  errors: { level: 'error' },
+  tool_calls: { eventType: 'tool_call.' },
+  invalid_tool_format: { eventType: 'tool_call.parse_failed' },
+  retries: { eventType: 'retry.' },
+};
+
+// --- Utilities ---
 
 function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
   const seen = new WeakSet();
-
   const truncateStr = (s, limit = maxLen) => (typeof s === 'string' && s.length > limit ? s.slice(0, limit) + '…' : s);
 
   const sanitizeToolsArray = (toolsVal) => {
@@ -22,33 +48,24 @@ function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
     const sanitizeNameDesc = (obj) => {
       const name = typeof obj.name === 'string' ? obj.name : undefined;
       const description = truncateStr(typeof obj.description === 'string' ? obj.description : undefined, maxLen);
-
       // Remove all fields except name/description
       for (const key in obj) {
-        if (key !== 'name' && key !== 'description') {
-          delete obj[key];
-        }
+        if (key !== 'name' && key !== 'description') delete obj[key];
       }
       obj.name = name;
       obj.description = description;
-
-      // Keep output tidy (avoid emitting undefined fields)
       if (obj.name === undefined) delete obj.name;
       if (obj.description === undefined) delete obj.description;
     };
 
     for (const item of toolsVal) {
       if (!item || typeof item !== 'object') continue;
-
-      // Find `function` object inside each tools[] item
       if (item.function && typeof item.function === 'object' && !Array.isArray(item.function)) {
         sanitizeNameDesc(item.function);
       } else if (typeof item.name === 'string' || typeof item.description === 'string') {
-        // Handle cases where fields are at the root level
         sanitizeNameDesc(item);
       }
     }
-
     return toolsVal;
   };
 
@@ -56,7 +73,6 @@ function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
     if (node === null || node === undefined) return node;
     if (typeof node !== 'object') return node;
     if (depth > maxDepth) return node;
-
     if (seen.has(node)) return node;
     seen.add(node);
 
@@ -74,14 +90,11 @@ function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
         node[key] = truncateStr(val, maxLen);
         continue;
       }
-
       if (key === 'tools') {
         node[key] = sanitizeToolsArray(val);
-        // still traverse into it (but depth-limited) in case there are nested content fields, etc.
         node[key] = walk(node[key], depth + 1);
         continue;
       }
-
       node[key] = walk(val, depth + 1);
     }
     return node;
@@ -144,34 +157,26 @@ function isKeyToken(index, tokens) {
 
 function formatCellWithMeta(v) {
   if (v === null || v === undefined) return { text: '', isJson: false };
-
-  // If it's already an object/array, truncate content fields in-place and pretty-print as JSON
   if (typeof v === 'object') {
     const sanitized = truncateContentDeep(v, 3, 200);
     return { text: JSON.stringify(sanitized, null, 2), isJson: true };
   }
-
-  // If it's a string, try to parse JSON; if JSON, truncate then pretty-print
   if (typeof v === 'string') {
     const s = v.trim();
     if (!s) return { text: '', isJson: false };
-
-    // keep your heuristic (fast) or parse-always; this keeps the heuristic:
     if (s[0] === '{' || s[0] === '[') {
       try {
         const parsed = JSON.parse(s);
         const sanitized = truncateContentDeep(parsed, 3, 200);
         return { text: JSON.stringify(sanitized, null, 2), isJson: true };
-      } catch (_) {
-        // not JSON
-      }
+      } catch (_) {}
     }
-
     return { text: s, isJson: false };
   }
-
   return { text: String(v), isJson: false };
 }
+
+// --- App Logic ---
 
 function stopWatch() {
   try {
@@ -184,156 +189,178 @@ function debounceRefresh(delay = 300) {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     refreshTimer = null;
-    loadPreview();
+    appendLatest();
   }, delay);
 }
 
-// ... existing code ...
-
 function renderRows(data) {
   logsBody.innerHTML = '';
+
+  if (data.length === 0) {
+    const emptyRow = document.createElement('tr');
+    emptyRow.innerHTML = `<td colspan="5" style="text-align:center; padding: 20px; color: var(--text-dim);">No logs match the current filters</td>`;
+    logsBody.appendChild(emptyRow);
+    return;
+  }
+
   data.forEach((item) => {
     const tr = document.createElement('tr');
-    // make the row visually and interactively clickable
     tr.classList.add('clickable-row');
-    tr.tabIndex = 0; // make focusable for keyboard users
+    tr.tabIndex = 0;
+
     const parsed = item.parsed;
+    const isMalformed = !parsed;
+
+    // Time Column
     const timeCell = document.createElement('td');
-    timeCell.textContent = parsed && parsed.timestamp ? new Date(parsed.timestamp).toLocaleString() : '';
+    timeCell.textContent =
+      parsed && parsed.timestamp
+        ? new Date(parsed.timestamp).toLocaleTimeString() +
+          `.${new Date(parsed.timestamp).getMilliseconds().toString().padStart(3, '0')}`
+        : '-';
+    timeCell.title = parsed && parsed.timestamp ? new Date(parsed.timestamp).toLocaleString() : '';
+
+    // Level Column
     const levelCell = document.createElement('td');
-    levelCell.textContent = parsed && parsed.level ? parsed.level : '';
-    levelCell.className = parsed && parsed.level ? 'level-' + parsed.level : '';
+    if (parsed && parsed.level) {
+      levelCell.textContent = parsed.level.toUpperCase();
+      levelCell.className = 'level-' + parsed.level;
+    } else if (isMalformed) {
+      const badge = document.createElement('span');
+      badge.textContent = 'PARSE';
+      badge.className = 'badge-parse-error';
+      levelCell.appendChild(badge);
+    }
+
+    // Event Type Column
     const eventCell = document.createElement('td');
-    eventCell.textContent = parsed && parsed.eventType ? parsed.eventType : '';
+    if (parsed && parsed.eventType) {
+      eventCell.textContent = parsed.eventType;
+    } else if (parsed && parsed.direction) {
+      eventCell.textContent = String(parsed.direction).toUpperCase();
+    }
+
+    // Message Column
     const msgCell = document.createElement('td');
-    msgCell.textContent = parsed && parsed.message ? parsed.message : item.raw;
+    // Truncate message for the table view
+    const msgText =
+      (parsed && parsed.message) || (parsed && parsed.sourceMessage) || (parsed && parsed.file) || item.raw;
+    msgCell.textContent = msgText.length > 120 ? msgText.substring(0, 120) + '...' : msgText;
+    msgCell.title = msgText;
+
+    // Actions Column (Expand)
     const moreCell = document.createElement('td');
-    // Create a <details> element in the last column but render the expanded
-    // content as a separate table row that spans all columns so it appears
-    // below the current row instead of nested inside the cell.
     const details = document.createElement('details');
     const summary = document.createElement('summary');
-    summary.textContent = 'fields';
+    summary.textContent = 'Details';
     details.appendChild(summary);
 
-    // Source value for the expanded row:
-    // Prefer showing parsed.fields (this is the "fields" column), then fall back.
     const expandValue =
       parsed && Object.prototype.hasOwnProperty.call(parsed, 'fields') ? parsed.fields : parsed || item.raw;
 
-    const copyToClipboard = async (text) => {
-      // Best effort: Clipboard API, with execCommand fallback.
-      try {
-        if (navigator.clipboard && window.isSecureContext) {
-          await navigator.clipboard.writeText(text);
-          return true;
-        }
-      } catch (_) {}
-
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.setAttribute('readonly', '');
-        ta.style.position = 'fixed';
-        ta.style.top = '-1000px';
-        ta.style.left = '-1000px';
-        document.body.appendChild(ta);
-        ta.select();
-        const ok = document.execCommand('copy');
-        document.body.removeChild(ta);
-        return ok;
-      } catch (_) {
-        return false;
-      }
-    };
-
+    // Expand Logic
     details.addEventListener('toggle', () => {
-      // When opened, insert a new <tr> with a single <td colspan=5>
       if (details.open) {
         const expandTr = document.createElement('tr');
         expandTr.className = 'expanded-row';
         const td = document.createElement('td');
-        // set colspan dynamically to match current number of columns
-        td.colSpan = tr.children.length || 1;
+        td.colSpan = 5;
 
-        // Add a copy button above the formatted <pre>
+        // Toolbar inside expanded row
         const toolbar = document.createElement('div');
-        toolbar.style.display = 'flex';
-        toolbar.style.justifyContent = 'flex-end';
-        toolbar.style.gap = '8px';
-        toolbar.style.margin = '6px 0';
+        toolbar.className = 'expanded-toolbar';
+
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'expanded-actions';
 
         const copyBtn = document.createElement('button');
-        copyBtn.type = 'button';
-        copyBtn.textContent = 'Copy';
-        copyBtn.title = 'Copy formatted content';
+        copyBtn.className = 'btn btn-ghost';
+        copyBtn.innerHTML = `Copy JSON`; // Simplified for brevity
+
+        const traceBtn = document.createElement('button');
+        traceBtn.className = 'btn btn-ghost';
+        traceBtn.textContent = 'Ref Trace';
+        traceBtn.title = 'Filter by this traceId';
 
         const pre = document.createElement('pre');
-        pre.style.fontFamily =
-          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
-
         const { text, isJson } = formatCellWithMeta(expandValue);
+
         if (isJson) {
           pre.classList.add('code-json');
           pre.innerHTML = highlightJson(text);
         } else {
-          pre.classList.remove('code-json');
           pre.textContent = text;
         }
 
-        copyBtn.addEventListener('click', async (e) => {
-          e.preventDefault();
-          e.stopPropagation(); // avoid toggling details/row
-          const ok = await copyToClipboard(text);
-          const prev = copyBtn.textContent;
-          copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
-          copyBtn.disabled = true;
-          setTimeout(() => {
-            copyBtn.textContent = prev;
-            copyBtn.disabled = false;
-          }, 900);
-        });
+        // Action Handlers
+        const copyToClipboard = async (text) => {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+          }
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.left = '-999px';
+          document.body.appendChild(ta);
+          ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          return ok;
+        };
 
-        toolbar.appendChild(copyBtn);
+        copyBtn.onclick = async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const ok = await copyToClipboard(text);
+          const originalText = copyBtn.innerText;
+          copyBtn.innerText = ok ? 'Copied!' : 'Failed';
+          setTimeout(() => (copyBtn.innerText = originalText), 1000);
+        };
+
+        traceBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const traceId = parsed && parsed.traceId ? String(parsed.traceId) : '';
+          if (traceId) {
+            traceIdFilter.value = traceId;
+            advancedFiltersPanel.classList.remove('hidden'); // Show styling
+            debouncedFilterRender();
+          }
+        };
+
+        if (parsed && parsed.traceId) actionsDiv.appendChild(traceBtn);
+        actionsDiv.appendChild(copyBtn);
+        toolbar.appendChild(actionsDiv);
 
         td.appendChild(toolbar);
         td.appendChild(pre);
-
         expandTr.appendChild(td);
 
-        // store a reference so we can remove it when closed
         details._expandRow = expandTr;
-        // insert after the current row
         if (tr.parentNode) tr.parentNode.insertBefore(expandTr, tr.nextSibling);
       } else {
-        // remove the expanded row
         if (details._expandRow && details._expandRow.parentNode) {
           details._expandRow.parentNode.removeChild(details._expandRow);
-          details._expandRow = null;
         }
       }
     });
 
     moreCell.appendChild(details);
 
-    // Clicking anywhere on the row (except inside the details area)
-    // should toggle the details open/closed. We ignore clicks that
-    // originate from inside the details so we don't double-toggle.
-    tr.addEventListener('click', (e) => {
-      // If the click target is inside this details element, do nothing
+    // Row Click Logic
+    const toggleDetails = (e) => {
       if (e.target.closest && e.target.closest('details') === details) return;
       details.open = !details.open;
-    });
-
-    // Keyboard support: Enter or Space toggles the details when focused
+    };
+    tr.addEventListener('click', toggleDetails);
     tr.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
-        // Prevent scrolling for Space
         e.preventDefault();
-        if (e.target.closest && e.target.closest('details') === details) return;
-        details.open = !details.open;
+        toggleDetails(e);
       }
     });
+
     tr.appendChild(timeCell);
     tr.appendChild(levelCell);
     tr.appendChild(eventCell);
@@ -351,29 +378,29 @@ function startWatch(file) {
     es.onmessage = (e) => {
       try {
         const evt = JSON.parse(e.data);
-        if (evt && evt.type === 'change') {
-          debounceRefresh(250);
-        }
+        if (evt && evt.type === 'change') debounceRefresh(250);
       } catch (_) {}
     };
     es.onerror = () => {
-      // close and retry soon on error
       stopWatch();
       setTimeout(() => startWatch(file), 2000);
     };
     fileWatcher = es;
-  } catch (_) {
-    // ignore; manual refresh still works
-  }
+  } catch (_) {}
 }
 
 function renderFiles(files) {
   fileListEl.innerHTML = '';
   files.forEach((f) => {
     const li = document.createElement('li');
-    li.textContent = `${f.name} — ${f.size} bytes`;
-    li.title = `mtime: ${new Date(f.mtime).toLocaleString()}`;
+    li.textContent = f.name;
+    li.title = `Size: ${f.size} bytes\nModified: ${new Date(f.mtime).toLocaleString()}`;
+    if (selectedFile === f.name) li.classList.add('active');
+
     li.addEventListener('click', () => {
+      // Update UI selection immediately
+      document.querySelectorAll('.file-list li').forEach((el) => el.classList.remove('active'));
+      li.classList.add('active');
       selectFile(f.name);
     });
     fileListEl.appendChild(li);
@@ -381,29 +408,65 @@ function renderFiles(files) {
 }
 
 async function loadFiles() {
-  const res = await fetch('/api/files');
-  const list = await res.json();
-  renderFiles(list.filter((f) => f.isFile));
+  try {
+    const res = await fetch('/api/files');
+    const list = await res.json();
+    renderFiles(list.filter((f) => f.isFile));
+  } catch (err) {
+    console.error('Failed to load files', err);
+  }
 }
 
 async function selectFile(name) {
   selectedFile = name;
-  info.textContent = `Loading ${name}...`;
+  headerTitle.textContent = name;
+  headerMeta.textContent = 'Loading...';
+
+  info.parentElement.hidden = false; // Hide empty state
+  info.hidden = true; // Use the viewer now
   logsTable.hidden = true;
-  // set up auto-refresh watcher for this file
+
   stopWatch();
   startWatch(name);
   await loadPreview();
 }
 
 function applyFilters(rows) {
+  const selectedPreset = presetFilter.value || '';
+  const preset = PRESET_MAP[selectedPreset] || {};
   const level = levelFilter.value.trim();
   const search = searchInput.value.trim().toLowerCase();
+
+  // Advanced
+  const traceId = traceIdFilter.value.trim();
+  const sessionId = sessionIdFilter.value.trim();
+  const eventType = eventTypeFilter.value.trim();
+  const toolName = toolNameFilter.value.trim();
+  const provider = providerFilter.value.trim();
+  const model = modelFilter.value.trim();
+
+  const effective = {
+    level: level || preset.level || '',
+    eventType: eventType || preset.eventType || '',
+  };
+
+  const matchesField = (value, expected) => {
+    if (!expected) return true;
+    if (!value) return false;
+    if (expected.endsWith('.')) return String(value).startsWith(expected);
+    return String(value) === expected;
+  };
+
   return rows.filter((r) => {
     const p = r.parsed;
-    if (level) {
-      if (!p || !p.level || p.level !== level) return false;
-    }
+    if (!matchesField(p?.level, effective.level)) return false;
+    if (!matchesField(p?.traceId, traceId)) return false;
+    if (!matchesField(p?.sessionId, sessionId)) return false;
+    if (!matchesField(p?.eventType, effective.eventType)) return false;
+    if (!matchesField(p?.toolName, toolName)) return false;
+    if (!matchesField(p?.provider, provider)) return false;
+    if (!matchesField(p?.model, model)) return false;
+
     if (search) {
       const hay = (r.raw + ' ' + JSON.stringify(p || {})).toLowerCase();
       if (!hay.includes(search)) return false;
@@ -412,37 +475,134 @@ function applyFilters(rows) {
   });
 }
 
+function renderFromCache() {
+  const rows = applyFilters(rowCache);
+  renderRows(rows);
+  headerMeta.textContent = `${rows.length} / ${rowCache.length} lines shown`;
+  logsTable.hidden = false;
+
+  // Show/Hide empty state based on selection
+  if (selectedFile) {
+    info.style.display = 'none'; // Hide "Select a file..."
+    logsTable.style.display = 'table';
+  } else {
+    info.style.display = 'flex';
+    logsTable.style.display = 'none';
+  }
+}
+
+function debouncedFilterRender(delay = 200) {
+  if (filterTimer) clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => {
+    filterTimer = null;
+    renderFromCache();
+  }, delay);
+}
+
 async function loadPreview() {
   if (!selectedFile) return;
   const lines = Number(linesInput.value) || 200;
   const res = await fetch(`/api/preview?file=${encodeURIComponent(selectedFile)}&lines=${lines}`);
   if (!res.ok) {
-    info.textContent = `Error loading ${selectedFile}: ${res.statusText}`;
+    headerMeta.textContent = `Error: ${res.statusText}`;
     return;
   }
   const body = await res.json();
-  const rows = applyFilters(body.data);
-  renderRows(rows);
-  info.textContent = `Showing ${rows.length} / ${body.lines} lines from ${selectedFile}`;
-  logsTable.hidden = false;
+  rowCache = Array.isArray(body.data) ? body.data : [];
+  fileOffset = Number(body.offset) || 0;
+  renderFromCache();
 }
+
+async function appendLatest() {
+  if (!selectedFile) return;
+  const res = await fetch(`/api/append?file=${encodeURIComponent(selectedFile)}&offset=${fileOffset}`);
+  if (!res.ok) return;
+
+  const body = await res.json();
+  const appended = Array.isArray(body.data) ? body.data : [];
+  if (body.reset) {
+    await loadPreview();
+    return;
+  }
+
+  if (appended.length > 0) {
+    rowCache = [...appended.reverse(), ...rowCache]; // Prepend new items (if we show newest top) - logic seems to be newest top
+  }
+  fileOffset = Number(body.nextOffset) || fileOffset;
+  renderFromCache();
+}
+
+// --- Event Listeners ---
 
 refreshBtn.addEventListener('click', () => {
   if (selectedFile) loadPreview();
   else loadFiles();
 });
 
-levelFilter.addEventListener('change', () => {
-  loadPreview();
-});
-searchInput.addEventListener('keyup', () => {
-  loadPreview();
+advancedFiltersBtn.addEventListener('click', () => {
+  advancedFiltersPanel.classList.toggle('hidden');
 });
 
-// initial
+// Input listeners for real-time filtering
+[
+  levelFilter,
+  searchInput,
+  traceIdFilter,
+  sessionIdFilter,
+  eventTypeFilter,
+  toolNameFilter,
+  providerFilter,
+  modelFilter,
+  presetFilter,
+].forEach((el) => {
+  el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'keyup', () => debouncedFilterRender());
+});
+
+linesInput.addEventListener('change', () => {
+  // Reload when lines count changes
+  if (selectedFile) loadPreview();
+});
+
+// --- Resizer Logic ---
+const resizer = document.getElementById('resizer');
+const sidebar = document.getElementById('sidebar');
+
+let isResizing = false;
+
+// Load persisted width
+const savedWidth = localStorage.getItem('sidebarWidth');
+if (savedWidth) {
+  sidebar.style.width = savedWidth + 'px';
+}
+
+resizer.addEventListener('mousedown', (e) => {
+  isResizing = true;
+  document.body.style.cursor = 'col-resize';
+  resizer.classList.add('dragging');
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isResizing) return;
+
+  let newWidth = e.clientX;
+  const minWidth = 150;
+  const maxWidth = 600;
+
+  if (newWidth < minWidth) newWidth = minWidth;
+  if (newWidth > maxWidth) newWidth = maxWidth;
+
+  sidebar.style.width = newWidth + 'px';
+});
+
+document.addEventListener('mouseup', () => {
+  if (isResizing) {
+    isResizing = false;
+    document.body.style.cursor = 'default';
+    resizer.classList.remove('dragging');
+    localStorage.setItem('sidebarWidth', parseInt(sidebar.style.width));
+  }
+});
+
+// Initial
 loadFiles();
-
-// cleanup on unload
-window.addEventListener('beforeunload', () => {
-  stopWatch();
-});
+window.addEventListener('beforeunload', () => stopWatch());

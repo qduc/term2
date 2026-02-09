@@ -41,4 +41,8 @@ registerProvider({
   fetchModels: fetchOpenAIModels,
   clearConversations: undefined, // No conversation state to clear
   sensitiveSettingKeys: [],
+  capabilities: {
+    supportsConversationChaining: true,
+    supportsTracingControl: true,
+  },
 });

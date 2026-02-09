@@ -3,6 +3,16 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import envPaths from 'env-paths';
 import DailyRotateFile from 'winston-daily-rotate-file';
+import {
+  RuntimeLogSchema,
+  buildRuntimeLogRecord,
+  parseCategoryFilter,
+  shouldIncludeVerbosePayload,
+  shouldLogForCategory,
+  shouldSampleLog,
+  type LogCategory,
+} from './logging-contract.js';
+import { extractProviderTrafficRecordFromRuntimeLog } from '../utils/provider-traffic-extractor.js';
 
 const LOG_LEVELS = {
   error: 0,
@@ -47,11 +57,15 @@ export class LoggingService {
   private debugLogging: boolean;
   private suppressConsoleOutput: boolean;
   private openrouterLogger!: winston.Logger;
+  private providerTrafficDir: string;
+  private enabledCategories: Set<LogCategory> | null;
+  private verbosePayloads: boolean;
+  private sampleRate: number;
 
   constructor(config: LoggingServiceConfig = {}) {
     const {
       logDir,
-      logLevel = 'info',
+      logLevel = process.env.LOG_LEVEL || 'info',
       disableLogging,
       console: enableConsole = false,
       debugLogging = false,
@@ -63,9 +77,16 @@ export class LoggingService {
 
     this.debugLogging = debugLogging;
     this.suppressConsoleOutput = suppressConsoleOutput;
+    this.enabledCategories = parseCategoryFilter(process.env.LOG_CATEGORIES);
+    this.verbosePayloads = parseBooleanEnv(process.env.LOG_VERBOSE_PAYLOADS);
+    this.sampleRate = Number.parseFloat(process.env.LOG_SAMPLE_RATE ?? '1');
+    if (!Number.isFinite(this.sampleRate)) {
+      this.sampleRate = 1;
+    }
 
     // Determine log directory
     const finalLogDir = logDir || path.join(envPaths('term2').log, 'logs');
+    this.providerTrafficDir = path.join(finalLogDir, 'provider-traffic');
 
     // Create log directory if needed and logging is enabled
     if (!resolvedDisableLogging) {
@@ -309,14 +330,42 @@ export class LoggingService {
   private log(level: string, message: string, meta?: Record<string, any>): void {
     try {
       const metadata = {
-        ...meta,
+        ...(meta ?? {}),
         ...(this.correlationId && { correlationId: this.correlationId }),
-      };
+      } as Record<string, unknown>;
+
+      const runtimeRecord = buildRuntimeLogRecord({
+        level,
+        correlationId: this.correlationId,
+        meta: metadata,
+      });
+
+      this.writeProviderTrafficArtifact(runtimeRecord, message);
+
+      const category = (runtimeRecord.category as LogCategory) ?? 'general';
+      if (!shouldLogForCategory({ level, category, enabledCategories: this.enabledCategories })) {
+        return;
+      }
+
+      if (!shouldSampleLog({ level, sampleRate: this.sampleRate, randomValue: Math.random() })) {
+        return;
+      }
+
+      if (!shouldIncludeVerbosePayload({ level, verbosePayloads: this.verbosePayloads })) {
+        delete runtimeRecord.payload;
+      }
+
+      const parsed = RuntimeLogSchema.safeParse(runtimeRecord);
+      if (!parsed.success) {
+        runtimeRecord.eventType = 'log.contract_validation_failed';
+        runtimeRecord.errorCode = 'LOG_SCHEMA_VALIDATION_FAILED';
+        runtimeRecord.errorMessage = parsed.error.issues.map((issue) => issue.message).join('; ');
+      }
 
       if (this.logger && typeof (this.logger as any)[level] === 'function') {
-        (this.logger as any)[level](message, metadata);
+        (this.logger as any)[level](message, runtimeRecord);
       } else if (this.logger) {
-        this.logger.log(level, message, metadata);
+        this.logger.log(level, message, runtimeRecord);
       }
     } catch (error: any) {
       // Gracefully handle logging errors
@@ -326,6 +375,63 @@ export class LoggingService {
 
   #log(level: string, message: string, meta?: Record<string, any>): void {
     this.log(level, message, meta);
+  }
+
+  private writeProviderTrafficArtifact(runtimeRecord: Record<string, unknown>, message: string): void {
+    const trafficRecord = extractProviderTrafficRecordFromRuntimeLog({
+      ...runtimeRecord,
+      message,
+    });
+    if (!trafficRecord) {
+      return;
+    }
+
+    const sanitizeFilePart = (value: string): string => value.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const dateKey = (() => {
+      const timestamp = String(trafficRecord.timestamp ?? '');
+      const matched = timestamp.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (matched?.[1]) {
+        return matched[1];
+      }
+      return new Date().toISOString().slice(0, 10);
+    })();
+
+    const timestampKey = sanitizeFilePart(
+      String(trafficRecord.timestamp || new Date().toISOString()).replace(/\s+/g, 'T'),
+    );
+    const traceKey = sanitizeFilePart(trafficRecord.traceId);
+    const messageId = sanitizeFilePart(String(runtimeRecord.messageId ?? `msg-${Date.now()}`));
+    const traceDir = path.join(this.providerTrafficDir, dateKey, traceKey);
+    const fileName = `${timestampKey}-${messageId}-${trafficRecord.direction}.json`;
+    const filePath = path.join(traceDir, fileName);
+
+    const artifact = {
+      ...trafficRecord,
+      eventType: runtimeRecord.eventType,
+      messageId: runtimeRecord.messageId,
+      file: path.join(traceKey, fileName),
+    };
+
+    try {
+      fs.mkdirSync(traceDir, { recursive: true });
+      fs.writeFileSync(filePath, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
+
+      const indexPath = path.join(this.providerTrafficDir, dateKey, 'index.ndjson');
+      fs.appendFileSync(
+        indexPath,
+        `${JSON.stringify({
+          traceId: trafficRecord.traceId,
+          timestamp: trafficRecord.timestamp,
+          direction: trafficRecord.direction,
+          eventType: runtimeRecord.eventType,
+          messageId: runtimeRecord.messageId,
+          file: path.join(traceKey, fileName),
+        })}\n`,
+        'utf8',
+      );
+    } catch (error: any) {
+      this.emitConsoleError(`[LoggingService] Failed to write provider traffic artifact: ${error.message}`);
+    }
   }
 
   private emitConsoleError(message: string): void {

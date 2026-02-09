@@ -1,376 +1,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
-import { z } from 'zod';
-import deepEqual from 'fast-deep-equal';
 import { LoggingService } from './logging-service.js';
-// Import providers to ensure they're registered before schema construction
-import '../providers/index.js';
-import { getAllProviders, getProvider, upsertProvider } from '../providers/index.js';
-import { getAllWebSearchProviders } from '../providers/web-search/index.js';
+import { getProvider, upsertProvider } from '../providers/index.js';
 import { createOpenAICompatibleProviderDefinition } from '../providers/openai-compatible.provider.js';
+import {
+  DEFAULT_SETTINGS,
+  OPTIONAL_DEFAULT_KEYS,
+  RUNTIME_MODIFIABLE_SETTINGS,
+  SENSITIVE_SETTING_KEYS,
+  SettingsSchema,
+  type SettingSource,
+  type SettingsData,
+  type SettingsWithSources,
+} from './settings-schema.js';
+import { buildEnvOverrides, isTestEnvironment, parseBooleanEnv } from './settings-env.js';
+import { flattenSettings, mergeSettings, trackSettingSources } from './settings-merger.js';
+import {
+  hasMissingKeys,
+  loadSettingsFromFile,
+  saveSettingsToFile,
+  stripSensitiveSettings,
+} from './settings-persistence.js';
 
 const paths = envPaths('term2');
-
-// Define schemas for validation
-const AgentSettingsSchema = z.object({
-  model: z.string().min(1).default('gpt-5.1'),
-  // 'default' signals we should *not* explicitly pass a reasoningEffort
-  // to the API, allowing it to decide what to use.
-  reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high']).default('default'),
-  // Temperature controls randomness. We keep it optional so providers/models
-  // can use their own defaults when unset.
-  temperature: z.number().min(0).max(2).optional(),
-  maxTurns: z.number().int().positive().default(100),
-  retryAttempts: z.number().int().nonnegative().default(2),
-  // NOTE: We do NOT validate provider existence here because the provider
-  // registry can be extended at runtime from settings.json (custom providers).
-  // We validate/fallback after SettingsService loads and registers runtime providers.
-  provider: z.string().min(1).default('openai').describe('Provider to use for the agent'),
-  openrouter: z
-    .object({
-      apiKey: z.string().optional(),
-      baseUrl: z.string().url().optional(),
-      referrer: z.string().optional(),
-      title: z.string().optional(),
-    })
-    .optional(),
-  mentorModel: z.string().optional().describe('Model to use as a mentor'),
-  mentorProvider: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Provider to use for the mentor model (defaults to agent.provider when unset)'),
-  mentorReasoningEffort: z
-    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high'])
-    .default('default')
-    .describe('Reasoning effort for the mentor model'),
-  useFlexServiceTier: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe('Use OpenAI Flex Service Tier to reduce costs (OpenAI only)'),
-});
-
-const ShellSettingsSchema = z.object({
-  timeout: z.number().int().positive().default(120000),
-  maxOutputLines: z.number().int().positive().default(1000),
-  maxOutputChars: z.number().int().positive().default(10000),
-});
-
-const UISettingsSchema = z.object({
-  historySize: z.number().int().positive().default(1000),
-});
-
-const LoggingSettingsSchema = z.object({
-  logLevel: z.enum(['error', 'warn', 'info', 'security', 'debug']).default('info'),
-  disableLogging: z.boolean().optional().default(false),
-  debugLogging: z.boolean().optional().default(false),
-  suppressConsoleOutput: z.boolean().optional().default(true),
-});
-
-const EnvironmentSettingsSchema = z.object({
-  nodeEnv: z.string().optional(),
-});
-
-const AppSettingsSchema = z.object({
-  shellPath: z.string().optional(),
-  // Independent mode flags that can be enabled together and persist across sessions
-  // mentorMode: uses simplified mentor prompt and enables ask_mentor tool (if mentorModel configured)
-  // editMode: auto-approves apply_patch operations within cwd for faster file editing
-  // liteMode: minimal context for general terminal assistance (no codebase tools/prompts)
-  mentorMode: z.boolean().optional().default(false),
-  editMode: z.boolean().optional().default(false),
-  liteMode: z.boolean().optional().default(false),
-});
-
-const ToolsSettingsSchema = z.object({
-  logFileOperations: z.boolean().optional().default(true),
-  enableEditHealing: z.boolean().optional().default(true),
-  editHealingModel: z.string().optional().default('gpt-4o-mini'),
-});
-
-const DebugSettingsSchema = z.object({
-  debugBashTool: z.boolean().optional().default(false),
-});
-
-const SSHSettingsSchema = z.object({
-  enabled: z.boolean().default(false),
-  host: z.string().optional(),
-  port: z.number().int().positive().default(22),
-  username: z.string().optional(),
-  remoteDir: z.string().optional(),
-});
-
-const WebSearchSettingsSchema = z.object({
-  provider: z.string().optional(),
-  tavily: z
-    .object({
-      apiKey: z.string().optional(),
-    })
-    .optional(),
-});
-
-const CustomProviderSchema = z.object({
-  name: z.string().min(1),
-  baseUrl: z.string().url(),
-  apiKey: z.string().optional(),
-});
-
-/**
- * Settings that are sensitive and should NEVER be saved to disk.
- * These are only loaded from environment variables.
- */
-function getSensitiveSettingKeys(): Set<string> {
-  const keys = new Set<string>(['app.shellPath']);
-
-  // Add provider-specific sensitive keys
-  for (const provider of getAllProviders()) {
-    if (provider.sensitiveSettingKeys) {
-      for (const key of provider.sensitiveSettingKeys) {
-        keys.add(key);
-      }
-    }
-  }
-
-  // Add web search provider-specific sensitive keys
-  for (const provider of getAllWebSearchProviders()) {
-    if (provider.sensitiveSettingKeys) {
-      for (const key of provider.sensitiveSettingKeys) {
-        keys.add(key);
-      }
-    }
-  }
-
-  return keys;
-}
-
-const SENSITIVE_SETTING_KEYS = getSensitiveSettingKeys();
-
-const SettingsSchema = z.object({
-  providers: z.array(CustomProviderSchema).optional().default([]),
-  agent: AgentSettingsSchema.optional(),
-  shell: ShellSettingsSchema.optional(),
-  ui: UISettingsSchema.optional(),
-  logging: LoggingSettingsSchema.optional(),
-  environment: EnvironmentSettingsSchema.optional(),
-  app: AppSettingsSchema.optional(),
-  tools: ToolsSettingsSchema.optional(),
-  debug: DebugSettingsSchema.optional(),
-  ssh: SSHSettingsSchema.optional(),
-  webSearch: WebSearchSettingsSchema.optional(),
-});
-
-// Type definitions
-export interface SettingsData {
-  providers: Array<z.infer<typeof CustomProviderSchema>>;
-  agent: z.infer<typeof AgentSettingsSchema>;
-  shell: z.infer<typeof ShellSettingsSchema>;
-  ui: z.infer<typeof UISettingsSchema>;
-  logging: z.infer<typeof LoggingSettingsSchema>;
-  environment: z.infer<typeof EnvironmentSettingsSchema>;
-  app: z.infer<typeof AppSettingsSchema>;
-  tools: z.infer<typeof ToolsSettingsSchema>;
-  debug: z.infer<typeof DebugSettingsSchema>;
-  ssh: z.infer<typeof SSHSettingsSchema>;
-  webSearch: z.infer<typeof WebSearchSettingsSchema>;
-}
-
-type SettingSource = 'cli' | 'env' | 'config' | 'default';
-export interface SettingWithSource<T = any> {
-  value: T;
-  source: SettingSource;
-}
-
-export interface SettingsWithSources {
-  agent: {
-    model: SettingWithSource<string>;
-    reasoningEffort: SettingWithSource<string>;
-    temperature: SettingWithSource<number | undefined>;
-    maxTurns: SettingWithSource<number>;
-    retryAttempts: SettingWithSource<number>;
-    provider: SettingWithSource<string>;
-    openrouter: SettingWithSource<any>;
-    mentorModel: SettingWithSource<string | undefined>;
-    mentorProvider: SettingWithSource<string | undefined>;
-    mentorReasoningEffort: SettingWithSource<string>;
-    useFlexServiceTier: SettingWithSource<boolean>;
-  };
-  shell: {
-    timeout: SettingWithSource<number>;
-    maxOutputLines: SettingWithSource<number>;
-    maxOutputChars: SettingWithSource<number>;
-  };
-  ui: {
-    historySize: SettingWithSource<number>;
-  };
-  logging: {
-    logLevel: SettingWithSource<string>;
-    disableLogging: SettingWithSource<boolean>;
-    debugLogging: SettingWithSource<boolean>;
-    suppressConsoleOutput: SettingWithSource<boolean>;
-  };
-  environment: {
-    nodeEnv: SettingWithSource<string | undefined>;
-  };
-  app: {
-    shellPath: SettingWithSource<string | undefined>;
-    mentorMode: SettingWithSource<boolean>;
-    editMode: SettingWithSource<boolean>;
-    liteMode: SettingWithSource<boolean>;
-  };
-  tools: {
-    logFileOperations: SettingWithSource<boolean>;
-    enableEditHealing: SettingWithSource<boolean>;
-    editHealingModel: SettingWithSource<string>;
-  };
-  debug: {
-    debugBashTool: SettingWithSource<boolean>;
-  };
-  ssh: {
-    enabled: SettingWithSource<boolean>;
-    host: SettingWithSource<string | undefined>;
-    port: SettingWithSource<number>;
-    username: SettingWithSource<string | undefined>;
-    remoteDir: SettingWithSource<string | undefined>;
-  };
-  webSearch: {
-    provider: SettingWithSource<string | undefined>;
-    tavily: SettingWithSource<{ apiKey?: string } | undefined>;
-  };
-}
-
-/**
- * Centralized list of all setting keys for consistency across the app.
- * Used by settings command UI and other components to avoid duplication.
- */
-export const SETTING_KEYS = {
-  AGENT_MODEL: 'agent.model',
-  AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
-  AGENT_TEMPERATURE: 'agent.temperature',
-  AGENT_PROVIDER: 'agent.provider',
-  AGENT_MAX_TURNS: 'agent.maxTurns',
-  AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
-  AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey', // Sensitive - env only
-  AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
-  AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer', // Sensitive - env only
-  AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only
-  AGENT_MENTOR_MODEL: 'agent.mentorModel',
-  AGENT_MENTOR_PROVIDER: 'agent.mentorProvider',
-  AGENT_MENTOR_REASONING_EFFORT: 'agent.mentorReasoningEffort',
-  AGENT_USE_FLEX_SERVICE_TIER: 'agent.useFlexServiceTier',
-  SHELL_TIMEOUT: 'shell.timeout',
-  SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
-  SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
-  UI_HISTORY_SIZE: 'ui.historySize',
-  LOGGING_LOG_LEVEL: 'logging.logLevel',
-  LOGGING_DISABLE: 'logging.disableLogging',
-  LOGGING_DEBUG: 'logging.debugLogging',
-  LOGGING_SUPPRESS_CONSOLE: 'logging.suppressConsoleOutput',
-  ENV_NODE_ENV: 'environment.nodeEnv',
-  APP_SHELL_PATH: 'app.shellPath', // Sensitive - env only
-  APP_MENTOR_MODE: 'app.mentorMode',
-  APP_EDIT_MODE: 'app.editMode',
-  APP_LITE_MODE: 'app.liteMode',
-  TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
-  TOOLS_ENABLE_EDIT_HEALING: 'tools.enableEditHealing',
-  TOOLS_EDIT_HEALING_MODEL: 'tools.editHealingModel',
-  DEBUG_BASH_TOOL: 'debug.debugBashTool',
-  SSH_ENABLED: 'ssh.enabled',
-  SSH_HOST: 'ssh.host',
-  SSH_PORT: 'ssh.port',
-  SSH_USERNAME: 'ssh.username',
-  SSH_REMOTE_DIR: 'ssh.remoteDir',
-  WEB_SEARCH_PROVIDER: 'webSearch.provider',
-  WEB_SEARCH_TAVILY_API_KEY: 'webSearch.tavily.apiKey', // Sensitive - env only
-} as const;
-
-// Define which settings are modifiable at runtime
-const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
-  SETTING_KEYS.AGENT_MODEL,
-  SETTING_KEYS.AGENT_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_TEMPERATURE,
-  SETTING_KEYS.AGENT_PROVIDER,
-  SETTING_KEYS.AGENT_MENTOR_MODEL,
-  SETTING_KEYS.AGENT_MENTOR_PROVIDER,
-  SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
-  SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
-  SETTING_KEYS.SHELL_TIMEOUT,
-  SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
-  SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
-  SETTING_KEYS.LOGGING_LOG_LEVEL,
-  SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE,
-  SETTING_KEYS.APP_MENTOR_MODE,
-  SETTING_KEYS.APP_EDIT_MODE,
-  SETTING_KEYS.APP_LITE_MODE,
-]);
-
-// Note: Sensitive settings are NOT in RUNTIME_MODIFIABLE_SETTINGS because they
-// cannot be modified at all - they can only be set via environment variables at startup.
-
-// app.mentorMode and app.editMode are runtime-modifiable AND persisted to disk so they
-// survive across sessions (user's mode preference is preserved).
-// Some settings with default values are optional to persist
-const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
-
-// Default settings
-const DEFAULT_SETTINGS: SettingsData = {
-  providers: [],
-  agent: {
-    model: 'gpt-5.1',
-    reasoningEffort: 'default',
-    maxTurns: 100,
-    retryAttempts: 2,
-    provider: 'openai',
-    openrouter: {
-      // defaults empty; can be provided via env or config
-      // defaults empty; can be provided via env or config
-    } as any,
-    mentorModel: undefined,
-    mentorProvider: undefined,
-    mentorReasoningEffort: 'default',
-    useFlexServiceTier: false,
-  },
-  shell: {
-    timeout: 120000,
-    maxOutputLines: 1000,
-    maxOutputChars: 10000,
-  },
-  ui: {
-    historySize: 1000,
-  },
-  logging: {
-    logLevel: 'info',
-    disableLogging: false,
-    debugLogging: false,
-    suppressConsoleOutput: true,
-  },
-  environment: {
-    nodeEnv: undefined,
-  },
-  app: {
-    shellPath: undefined,
-    mentorMode: false,
-    editMode: false,
-    liteMode: false,
-  },
-  tools: {
-    logFileOperations: true,
-    enableEditHealing: true,
-    editHealingModel: 'gpt-4o-mini',
-  },
-  debug: {
-    debugBashTool: false,
-  },
-  ssh: {
-    enabled: false,
-    port: 22,
-  },
-  webSearch: {
-    provider: 'tavily',
-    tavily: {},
-  },
-};
 
 /**
  * Service for managing application settings.
@@ -389,22 +42,6 @@ export class SettingsService {
   private disableFilePersistence: boolean;
   private listeners: Set<(key?: string) => void> = new Set();
   private loggingService: LoggingService;
-
-  // Detect if running in test environment
-  //
-  // We intentionally use a broad set of signals because different test runners
-  // set different environment variables. This prevents unit/integration tests
-  // from writing to disk by default (which can cause flaky tests and polluted
-  // developer machines/CI workspaces).
-  private isTestEnvironment(): boolean {
-    return (
-      process.env.NODE_ENV === 'test' ||
-      process.env.VITEST !== undefined ||
-      process.env.AVA_PATH !== undefined ||
-      process.env.JEST_WORKER_ID !== undefined ||
-      process.env.TERM2_TEST_MODE === 'true'
-    );
-  }
 
   constructor(options?: {
     settingsDir?: string;
@@ -438,7 +75,7 @@ export class SettingsService {
 
     // Disk persistence can be explicitly disabled (e.g., for tests), and is
     // also automatically disabled when running under a known test runner.
-    this.disableFilePersistence = disableFilePersistence ?? this.isTestEnvironment();
+    this.disableFilePersistence = disableFilePersistence ?? isTestEnvironment();
 
     // Ensure settings directory exists
     if (!fs.existsSync(this.settingsDir)) {
@@ -458,8 +95,11 @@ export class SettingsService {
     const settingsFilePath = path.join(this.settingsDir, 'settings.json');
     const configFileExisted = fs.existsSync(settingsFilePath);
     const { validated: fileConfig, raw: rawFileConfig } = this.loadFromFile();
-    this.settings = this.merge(DEFAULT_SETTINGS, fileConfig, env, cli);
-    this.trackSources(DEFAULT_SETTINGS, fileConfig, env, cli);
+    this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, env, cli, {
+      disableLogging: this.disableLogging,
+      loggingService: this.loggingService,
+    });
+    this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, env, cli);
 
     // Register any runtime-defined providers from settings.json so they appear
     // in the model selection menu and can be selected as agent.provider.
@@ -484,9 +124,9 @@ export class SettingsService {
 
     if (!this.disableLogging) {
       this.loggingService.info('SettingsService initialized', {
-        cliOverrides: Object.keys(this.flattenSettings(cli)).length > 0,
-        envOverrides: Object.keys(this.flattenSettings(env)).length > 0,
-        configOverrides: Object.keys(this.flattenSettings(fileConfig)).length > 0,
+        cliOverrides: Object.keys(flattenSettings(cli)).length > 0,
+        envOverrides: Object.keys(flattenSettings(env)).length > 0,
+        configOverrides: Object.keys(flattenSettings(fileConfig)).length > 0,
       });
     }
 
@@ -930,44 +570,12 @@ export class SettingsService {
     validated: Partial<SettingsData>;
     raw: any;
   } {
-    try {
-      const settingsFile = path.join(this.settingsDir, 'settings.json');
-
-      if (!fs.existsSync(settingsFile)) {
-        return { validated: {}, raw: {} };
-      }
-
-      const content = fs.readFileSync(settingsFile, 'utf-8');
-      const parsed = JSON.parse(content);
-
-      // Validate and parse with Zod
-      const validated = SettingsSchema.safeParse(parsed);
-
-      if (!validated.success) {
-        if (!this.disableLogging) {
-          this.loggingService.warn('Settings file contains invalid values', {
-            errors: validated.error.issues.map((issue) => ({
-              path: issue.path.join('.'),
-              message: issue.message,
-            })),
-          });
-        }
-
-        // Return empty object to trigger defaults
-        return { validated: {}, raw: parsed };
-      }
-
-      return { validated: validated.data, raw: parsed };
-    } catch (error: any) {
-      if (!this.disableLogging) {
-        this.loggingService.error('Failed to load settings file', {
-          error: error instanceof Error ? error.message : String(error),
-          settingsFile: path.join(this.settingsDir, 'settings.json'),
-        });
-      }
-
-      return { validated: {}, raw: {} };
-    }
+    return loadSettingsFromFile({
+      settingsDir: this.settingsDir,
+      schema: SettingsSchema,
+      disableLogging: this.disableLogging,
+      loggingService: this.loggingService,
+    });
   }
 
   /**
@@ -977,330 +585,24 @@ export class SettingsService {
     if (this.disableFilePersistence) {
       return;
     }
-
-    try {
-      const settingsFile = path.join(this.settingsDir, 'settings.json');
-
-      // Ensure directory exists
-      if (!fs.existsSync(this.settingsDir)) {
-        fs.mkdirSync(this.settingsDir, { recursive: true });
-      }
-
-      // Filter out sensitive settings before saving to disk
-      const settingsToSave = this.stripSensitiveSettings(this.settings);
-      const newContent = JSON.stringify(settingsToSave, null, 2);
-
-      // Only write if file doesn't exist or content has changed
-      // Compare parsed objects rather than string content to avoid false positives
-      // from formatting differences
-      if (fs.existsSync(settingsFile)) {
-        try {
-          const existingContent = fs.readFileSync(settingsFile, 'utf-8');
-          const existingParsed = JSON.parse(existingContent);
-
-          // Deep equality check that ignores formatting and key order
-          // Uses fast-deep-equal library for robust comparison
-          if (deepEqual(existingParsed, settingsToSave)) {
-            return; // No changes, don't write
-          }
-        } catch (parseError) {
-          // If we can't parse the existing file, write the new content anyway
-          // This handles corrupted files gracefully
-        }
-      }
-
-      fs.writeFileSync(settingsFile, newContent, 'utf-8');
-    } catch (error: any) {
-      if (!this.disableLogging) {
-        this.loggingService.error('Failed to save settings file', {
-          error: error instanceof Error ? error.message : String(error),
-          settingsFile: path.join(this.settingsDir, 'settings.json'),
-        });
-      }
-    }
-  }
-
-  /**
-   * Remove sensitive settings that should never be persisted to disk
-   */
-  private stripSensitiveSettings(settings: SettingsData): Partial<SettingsData> {
-    const cleaned = JSON.parse(JSON.stringify(settings));
-
-    // Remove sensitive openrouter fields (keep non-secret config)
-    if (cleaned.agent?.openrouter) {
-      delete cleaned.agent.openrouter.apiKey;
-      delete cleaned.agent.openrouter.baseUrl;
-      delete cleaned.agent.openrouter.referrer;
-      delete cleaned.agent.openrouter.title;
-      // Only keep model if it's set (it's not sensitive)
-      if (Object.keys(cleaned.agent.openrouter).length === 0) {
-        delete cleaned.agent.openrouter;
-      }
-    }
-
-    // Remove sensitive app settings
-    if (cleaned.app) {
-      delete cleaned.app.shellPath;
-      // mentorMode and editMode are persisted so they survive across sessions
-    }
-
-    return cleaned;
+    saveSettingsToFile({
+      settingsDir: this.settingsDir,
+      settings: this.settings,
+      stripSensitiveSettings,
+      disableLogging: this.disableLogging,
+      loggingService: this.loggingService,
+    });
   }
 
   /**
    * Check if target object is missing any keys that exist in source
    */
   private hasMissingKeys(target: any, source: any, prefix: string = ''): boolean {
-    for (const key in source) {
-      if (!source.hasOwnProperty(key)) continue;
-
-      const pathKey = prefix ? `${prefix}.${key}` : key;
-
-      const sourceValue = source[key];
-
-      if (!(key in target)) {
-        // Skip optional default keys when deciding whether to rewrite file
-        if (OPTIONAL_DEFAULT_KEYS.has(pathKey)) {
-          continue;
-        }
-        // If the default value is undefined, treat it as optional for persistence
-        if (typeof sourceValue === 'undefined') {
-          continue;
-        }
-        return true;
-      }
-      const targetValue = target[key];
-
-      // Recursively check nested objects
-      if (
-        sourceValue &&
-        typeof sourceValue === 'object' &&
-        !Array.isArray(sourceValue) &&
-        targetValue &&
-        typeof targetValue === 'object' &&
-        !Array.isArray(targetValue)
-      ) {
-        if (this.hasMissingKeys(targetValue, sourceValue, pathKey)) {
-          return true;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Flatten nested object to dot notation
-   */
-  private flattenSettings(obj: any, prefix = ''): Record<string, any> {
-    const result: Record<string, any> = {};
-
-    for (const key in obj) {
-      if (!obj.hasOwnProperty(key)) continue;
-
-      const value = obj[key];
-      const newKey = prefix ? `${prefix}.${key}` : key;
-
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
-        Object.assign(result, this.flattenSettings(value, newKey));
-      } else {
-        result[newKey] = value;
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Merge multiple settings sources with proper precedence
-   */
-  private merge(
-    defaults: SettingsData,
-    fileConfig: Partial<SettingsData>,
-    env: Partial<SettingsData>,
-    cli: Partial<SettingsData>,
-  ): SettingsData {
-    // Deep merge starting with defaults
-    const result = JSON.parse(JSON.stringify(defaults));
-
-    // Merge file config
-    this.deepMerge(result, fileConfig);
-
-    // Merge env
-    this.deepMerge(result, env);
-
-    // Merge cli (highest priority)
-    this.deepMerge(result, cli);
-
-    // Ensure all required fields are present
-    const merged: SettingsData = {
-      providers: result.providers || JSON.parse(JSON.stringify(defaults.providers)),
-      agent: result.agent || JSON.parse(JSON.stringify(defaults.agent)),
-      shell: result.shell || JSON.parse(JSON.stringify(defaults.shell)),
-      ui: result.ui || JSON.parse(JSON.stringify(defaults.ui)),
-      logging: result.logging || JSON.parse(JSON.stringify(defaults.logging)),
-      environment: result.environment || JSON.parse(JSON.stringify(defaults.environment)),
-      app: result.app || JSON.parse(JSON.stringify(defaults.app)),
-      tools: result.tools || JSON.parse(JSON.stringify(defaults.tools)),
-      debug: result.debug || JSON.parse(JSON.stringify(defaults.debug)),
-      ssh: result.ssh || JSON.parse(JSON.stringify(defaults.ssh)),
-      webSearch: result.webSearch || JSON.parse(JSON.stringify(defaults.webSearch)),
-    };
-
-    // Validate final result
-    const validated = SettingsSchema.safeParse(merged);
-
-    if (validated.success) {
-      // Ensure we return a complete SettingsData object
-      return {
-        providers: merged.providers,
-        agent: merged.agent,
-        shell: merged.shell,
-        ui: merged.ui,
-        logging: merged.logging,
-        environment: merged.environment,
-        app: merged.app,
-        tools: merged.tools,
-        debug: merged.debug,
-        ssh: merged.ssh,
-        webSearch: merged.webSearch,
-      };
-    }
-
-    // If validation fails, return defaults
-    if (!this.disableLogging) {
-      this.loggingService.warn('Final merged settings failed validation, using defaults', {
-        errors: validated.error.issues.map((issue) => ({
-          path: issue.path.join('.'),
-          message: issue.message,
-        })),
-      });
-    }
-
-    return defaults;
-  }
-
-  /**
-   * Deep merge source into target
-   */
-  private deepMerge(target: any, source: any): void {
-    for (const key in source) {
-      if (!source.hasOwnProperty(key)) continue;
-
-      const sourceValue = source[key];
-
-      if (sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)) {
-        if (!target[key] || typeof target[key] !== 'object') {
-          target[key] = {};
-        }
-
-        this.deepMerge(target[key], sourceValue);
-      } else {
-        target[key] = sourceValue;
-      }
-    }
-  }
-
-  /**
-   * Track the source of each setting
-   */
-  private trackSources(
-    defaults: SettingsData,
-    fileConfig: Partial<SettingsData>,
-    env: Partial<SettingsData>,
-    cli: Partial<SettingsData>,
-  ): void {
-    const flatDefaults = this.flattenSettings(defaults);
-    const flatFileConfig = this.flattenSettings(fileConfig);
-    const flatEnv = this.flattenSettings(env);
-    const flatCli = this.flattenSettings(cli);
-
-    // For each possible setting key, determine its source
-    for (const key in flatDefaults) {
-      if (flatCli.hasOwnProperty(key)) {
-        this.sources.set(key, 'cli');
-      } else if (flatEnv.hasOwnProperty(key)) {
-        this.sources.set(key, 'env');
-      } else if (flatFileConfig.hasOwnProperty(key)) {
-        this.sources.set(key, 'config');
-      } else {
-        this.sources.set(key, 'default');
-      }
-    }
+    return hasMissingKeys(target, source, OPTIONAL_DEFAULT_KEYS, prefix);
   }
 }
 
-/**
- * Build environment-derived overrides from process.env
- * Exported for use in CLI initialization
- */
-export function buildEnvOverrides(): Partial<SettingsData> {
-  const env = (typeof process !== 'undefined' ? process.env : {}) as any;
-  const openrouter: any = {};
-  if (env.OPENROUTER_API_KEY) openrouter.apiKey = env.OPENROUTER_API_KEY;
-  if (env.OPENROUTER_MODEL) openrouter.model = env.OPENROUTER_MODEL;
-  if (env.OPENROUTER_BASE_URL) openrouter.baseUrl = env.OPENROUTER_BASE_URL;
-  if (env.OPENROUTER_REFERRER) openrouter.referrer = env.OPENROUTER_REFERRER;
-  if (env.OPENROUTER_TITLE) openrouter.title = env.OPENROUTER_TITLE;
-
-  const logging: any = {};
-  if (env.LOG_LEVEL) logging.logLevel = env.LOG_LEVEL;
-  if (env.DISABLE_LOGGING !== undefined) logging.disableLogging = String(env.DISABLE_LOGGING) === 'true';
-  if (env.DEBUG_LOGGING !== undefined) logging.debugLogging = true;
-
-  const environment: any = {
-    nodeEnv: env.NODE_ENV,
-  };
-
-  const app: any = {
-    shellPath: env.SHELL || env.COMSPEC,
-  };
-
-  const tools: any = {};
-  if (env.LOG_FILE_OPERATIONS !== undefined) tools.logFileOperations = String(env.LOG_FILE_OPERATIONS) !== 'false';
-
-  const debug: any = {};
-  if (env.DEBUG_BASH_TOOL !== undefined) debug.debugBashTool = true;
-
-  const webSearch: any = {};
-  if (env.TAVILY_API_KEY) {
-    webSearch.tavily = { apiKey: env.TAVILY_API_KEY };
-  }
-  if (env.WEB_SEARCH_PROVIDER) {
-    webSearch.provider = env.WEB_SEARCH_PROVIDER;
-  }
-
-  const agent: any = { openrouter };
-
-  return {
-    agent,
-    logging,
-    environment,
-    app,
-    tools,
-    debug,
-    webSearch,
-  } as Partial<SettingsData>;
-}
-
-const parseBooleanEnv = (value: unknown): boolean => {
-  if (typeof value !== 'string') {
-    return false;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  return normalized === '1' || normalized === 'true' || normalized === 'yes';
-};
-
-const isTestEnvironment = () => {
-  return (
-    process.env.NODE_ENV === 'test' ||
-    process.env.VITEST !== undefined ||
-    process.env.AVA_PATH !== undefined ||
-    process.env.JEST_WORKER_ID !== undefined ||
-    process.env.TERM2_TEST_MODE === 'true'
-  );
-};
+export { buildEnvOverrides } from './settings-env.js';
 
 /**
  * @deprecated DO NOT USE - Singleton pattern is deprecated
@@ -1351,14 +653,5 @@ export const settingsService = new Proxy(_settingsServiceInstance, {
   },
 });
 
-/**
- * Publicly exported list of sensitive settings for UI/CLI components to use.
- * These settings should only be configured via environment variables.
- */
-export const SENSITIVE_SETTINGS = {
-  AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
-  AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl',
-  AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer',
-  AGENT_OPENROUTER_TITLE: 'agent.openrouter.title',
-  APP_SHELL_PATH: 'app.shellPath',
-} as const;
+export { SETTING_KEYS, SENSITIVE_SETTINGS } from './settings-schema.js';
+export type { SettingsData, SettingSource, SettingWithSource, SettingsWithSources } from './settings-schema.js';

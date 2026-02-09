@@ -7,6 +7,7 @@ import { formatSearchReplaceCommandMessage } from '../tools/search-replace.js';
 import { formatAskMentorCommandMessage } from '../tools/ask-mentor.js';
 import { formatReadFileCommandMessage } from '../tools/read-file.js';
 import { formatFindFilesCommandMessage } from '../tools/find-files.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
 
 const approvalRejectionCallIds = new Set<string>();
 
@@ -64,10 +65,10 @@ const normalizeToolItem = (item: any): { toolName: string; arguments: any; outpu
 const toolFormatters: Record<string, Function> = {
   shell: formatShellCommandMessage,
   grep: formatGrepCommandMessage,
-  apply_patch: formatApplyPatchCommandMessage,
+  [TOOL_NAME_APPLY_PATCH]: formatApplyPatchCommandMessage,
   read_file: formatReadFileCommandMessage,
   find_files: formatFindFilesCommandMessage,
-  search_replace: formatSearchReplaceCommandMessage,
+  [TOOL_NAME_SEARCH_REPLACE]: formatSearchReplaceCommandMessage,
   ask_mentor: formatAskMentorCommandMessage,
 };
 

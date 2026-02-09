@@ -7,6 +7,7 @@ import {
   isMaxTurnsError,
   createShellMessageOutput,
 } from './conversation-utils.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
 
 // =============================================================================
 // parseToolArguments tests
@@ -91,7 +92,7 @@ test('formatToolCommand: grep without pattern returns tool name', (t) => {
 });
 
 test('formatToolCommand: search_replace with all args', (t) => {
-  const result = formatToolCommand('search_replace', {
+  const result = formatToolCommand(TOOL_NAME_SEARCH_REPLACE, {
     search_content: 'old',
     replace_content: 'new',
     path: 'file.ts',
@@ -100,12 +101,12 @@ test('formatToolCommand: search_replace with all args', (t) => {
 });
 
 test('formatToolCommand: search_replace with missing args', (t) => {
-  const result = formatToolCommand('search_replace', {});
+  const result = formatToolCommand(TOOL_NAME_SEARCH_REPLACE, {});
   t.is(result, 'search_replace "" → "" ');
 });
 
 test('formatToolCommand: apply_patch with type and path', (t) => {
-  const result = formatToolCommand('apply_patch', {
+  const result = formatToolCommand(TOOL_NAME_APPLY_PATCH, {
     type: 'create',
     path: 'newfile.ts',
   });
@@ -113,7 +114,7 @@ test('formatToolCommand: apply_patch with type and path', (t) => {
 });
 
 test('formatToolCommand: apply_patch with missing args', (t) => {
-  const result = formatToolCommand('apply_patch', {});
+  const result = formatToolCommand(TOOL_NAME_APPLY_PATCH, {});
   t.is(result, 'apply_patch unknown ');
 });
 

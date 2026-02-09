@@ -1,3 +1,4 @@
+import type { CommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 
 export type ConversationEvent =
@@ -63,19 +64,7 @@ export interface ApprovalRequiredEvent {
 
 export interface CommandMessageEvent {
   type: 'command_message';
-  message: {
-    id: string;
-    sender: 'command';
-    status: 'pending' | 'running' | 'completed' | 'failed';
-    command: string;
-    output: string;
-    success?: boolean;
-    failureReason?: string;
-    isApprovalRejection?: boolean;
-    callId?: string;
-    toolName?: string;
-    toolArgs?: any;
-  };
+  message: CommandMessage;
 }
 
 export interface FinalResponseEvent {

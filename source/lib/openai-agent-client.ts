@@ -211,7 +211,12 @@ export class OpenAIAgentClient {
       this.#logger.clearCorrelationId();
       this.#currentCorrelationId = null;
     }
-    this.#logger.debug('Agent operation aborted');
+    this.#logger.debug('Agent operation aborted', {
+      eventType: 'stream.aborted',
+      category: 'stream',
+      phase: 'abort',
+      traceId: this.#logger.getCorrelationId?.(),
+    });
   }
 
   clearConversations(): void {
@@ -249,6 +254,12 @@ export class OpenAIAgentClient {
     const signal = this.#currentAbortController.signal;
 
     this.#logger.info('Agent stream started', {
+      eventType: 'provider.request.started',
+      category: 'provider',
+      phase: 'request_start',
+      traceId: this.#currentCorrelationId,
+      provider: this.#provider,
+      model: this.#model,
       inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
       inputLength: typeof userInput === 'string' ? userInput.length : undefined,
       inputItems: Array.isArray(userInput) ? userInput.length : undefined,
@@ -271,6 +282,12 @@ export class OpenAIAgentClient {
       return result;
     } catch (error: any) {
       this.#logger.error('Agent stream failed', {
+        eventType: 'provider.response.failed',
+        category: 'provider',
+        phase: 'provider_response',
+        traceId: this.#currentCorrelationId,
+        provider: this.#provider,
+        model: this.#model,
         error: error instanceof Error ? error.message : String(error),
         inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
         inputLength: typeof userInput === 'string' ? userInput.length : undefined,
@@ -407,6 +424,14 @@ export class OpenAIAgentClient {
         await new Promise((resolve) => setTimeout(resolve, delay));
 
         this.#logger.warn('Agent operation retry', {
+          eventType: 'retry.upstream',
+          category: 'retry',
+          phase: 'retry',
+          traceId: this.#currentCorrelationId,
+          provider: this.#provider,
+          model: this.#model,
+          retryType: 'upstream',
+          retryAttempt: attemptIndex + 1,
           errorType: error.constructor.name,
           retriesRemaining: retries - 1,
           delayMs: Math.round(delay),

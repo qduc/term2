@@ -71,6 +71,7 @@ header small {
 }
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
@@ -150,6 +151,15 @@ button {
 }
 button {
   cursor: pointer;
+}
+
+.badge-parse-error {
+  display: inline-block;
+  font-size: 12px;
+  color: #ffd57a;
+  border: 1px solid rgba(255, 213, 122, 0.5);
+  border-radius: 999px;
+  padding: 2px 6px;
 }
 
 /* JSON syntax highlighting (only applied when content is valid JSON) */

@@ -25,6 +25,11 @@ const cleanupLogs = () => {
   }
 };
 
+const findMainLogFile = (logDir) => {
+  const files = fs.readdirSync(logDir);
+  return files.find((f) => f.endsWith('.log') && f.startsWith('term2-') && !f.includes('openrouter'));
+};
+
 test.before(() => {
   cleanupLogs();
 });
@@ -33,7 +38,7 @@ test.after.always(() => {
   cleanupLogs();
 });
 
-test('LoggingService initializes without error', async (t) => {
+test.serial('LoggingService initializes without error', async (t) => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -42,7 +47,7 @@ test('LoggingService initializes without error', async (t) => {
   t.truthy(logger);
 });
 
-test('creates log directory if it does not exist', async (t) => {
+test.serial('creates log directory if it does not exist', async (t) => {
   const logDir = getTestLogDir();
   new LoggingService({ logDir, disableLogging: false });
 
@@ -52,7 +57,7 @@ test('creates log directory if it does not exist', async (t) => {
   t.true(fs.existsSync(logDir));
 });
 
-test('respects DISABLE_LOGGING flag', async (t) => {
+test.serial('respects DISABLE_LOGGING flag', async (t) => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -68,7 +73,7 @@ test('respects DISABLE_LOGGING flag', async (t) => {
   t.pass();
 });
 
-test('uses DISABLE_LOGGING env when disableLogging is omitted', async (t) => {
+test.serial('uses DISABLE_LOGGING env when disableLogging is omitted', async (t) => {
   const logDir = getTestLogDir();
   const originalDisableLogging = process.env.DISABLE_LOGGING;
   process.env.DISABLE_LOGGING = '1';
@@ -89,7 +94,7 @@ test('uses DISABLE_LOGGING env when disableLogging is omitted', async (t) => {
   }
 });
 
-test('logs messages with correct format', async (t) => {
+test.serial('logs messages with correct format', async (t) => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -102,9 +107,10 @@ test('logs messages with correct format', async (t) => {
   // Give async write time - increase to 500ms
   await new Promise((resolve) => setTimeout(resolve, 500));
 
+  fs.mkdirSync(logDir, { recursive: true });
   // Check that a log file exists
   const files = fs.readdirSync(logDir);
-  const logFiles = files.filter((f) => f.endsWith('.log'));
+  const logFiles = files.filter((f) => f.endsWith('.log') && f.startsWith('term2-') && !f.includes('openrouter'));
 
   t.true(logFiles.length > 0, 'log file should exist');
 
@@ -126,7 +132,7 @@ test('logs messages with correct format', async (t) => {
   t.is(firstLog.context, 'test');
 });
 
-test('supports custom log levels including security', async (t) => {
+test.serial('supports custom log levels including security', async (t) => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -146,7 +152,7 @@ test('supports custom log levels including security', async (t) => {
   t.pass();
 });
 
-test('suppresses console output when configured', async (t) => {
+test.serial('suppresses console output when configured', async (t) => {
   const logDir = getTestLogDir();
   const originalConsoleError = console.error;
   const calls = [];
@@ -171,7 +177,7 @@ test('suppresses console output when configured', async (t) => {
   }
 });
 
-test('tracks correlation IDs', async (t) => {
+test.serial('tracks correlation IDs', async (t) => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -186,8 +192,9 @@ test('tracks correlation IDs', async (t) => {
   // Give async write time
   await new Promise((resolve) => setTimeout(resolve, 500));
 
+  fs.mkdirSync(logDir, { recursive: true });
   const files = fs.readdirSync(logDir);
-  const logFiles = files.filter((f) => f.endsWith('.log'));
+  const logFiles = files.filter((f) => f.endsWith('.log') && f.startsWith('term2-') && !f.includes('openrouter'));
 
   if (logFiles.length === 0) {
     t.fail('No log files created');
@@ -213,7 +220,7 @@ test('tracks correlation IDs', async (t) => {
   t.is(log2.correlationId, undefined);
 });
 
-test('gracefully degrades on write errors', async (t) => {
+test.serial('gracefully degrades on write errors', async (t) => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -225,4 +232,88 @@ test('gracefully degrades on write errors', async (t) => {
   logger.error('error', {});
 
   t.pass();
+});
+
+test.serial('emits canonical contract fields on logs', async (t) => {
+  const logDir = getTestLogDir();
+  const logger = new LoggingService({
+    logDir,
+    disableLogging: false,
+    logLevel: 'debug',
+  });
+
+  logger.info('contract test', {
+    eventType: 'stream.started',
+    phase: 'request_start',
+    sessionId: 'session-contract',
+    provider: 'openai',
+    model: 'gpt-5',
+    messageId: 'msg-contract',
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  fs.mkdirSync(logDir, { recursive: true });
+  const mainLogFile = findMainLogFile(logDir);
+  t.truthy(mainLogFile);
+  if (!mainLogFile) {
+    t.fail('No main log file created');
+    return;
+  }
+  const logFile = path.join(logDir, mainLogFile);
+  const content = fs.readFileSync(logFile, 'utf8');
+  const lines = content.split('\n').filter(Boolean);
+  const entry = JSON.parse(lines[lines.length - 1]);
+
+  t.truthy(entry.timestamp);
+  t.is(entry.eventType, 'stream.started');
+  t.truthy(entry.traceId);
+  t.is(entry.sessionId, 'session-contract');
+  t.is(entry.provider, 'openai');
+  t.is(entry.model, 'gpt-5');
+  t.is(entry.phase, 'request_start');
+});
+
+test.serial('respects LOG_CATEGORIES filter while preserving errors', async (t) => {
+  const originalCategories = process.env.LOG_CATEGORIES;
+  process.env.LOG_CATEGORIES = 'retry';
+
+  try {
+    const logDir = getTestLogDir();
+    const logger = new LoggingService({
+      logDir,
+      disableLogging: false,
+      logLevel: 'debug',
+    });
+
+    logger.info('tool log should drop', { eventType: 'tool_call.execution_started', category: 'tool' });
+    logger.info('retry log should keep', { eventType: 'retry.upstream', category: 'retry' });
+    logger.error('error should keep', { eventType: 'stream.failed', category: 'stream' });
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    fs.mkdirSync(logDir, { recursive: true });
+    const mainLogFile = findMainLogFile(logDir);
+    t.truthy(mainLogFile);
+    if (!mainLogFile) {
+      t.fail('No main log file created');
+      return;
+    }
+    const logFile = path.join(logDir, mainLogFile);
+    const content = fs.readFileSync(logFile, 'utf8');
+    const entries = content
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+
+    t.true(entries.some((entry) => entry.eventType === 'retry.upstream'));
+    t.true(entries.some((entry) => entry.eventType === 'stream.failed'));
+    t.false(entries.some((entry) => entry.eventType === 'tool_call.execution_started'));
+  } finally {
+    if (originalCategories === undefined) {
+      delete process.env.LOG_CATEGORIES;
+    } else {
+      process.env.LOG_CATEGORIES = originalCategories;
+    }
+  }
 });

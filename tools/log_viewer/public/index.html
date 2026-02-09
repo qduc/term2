@@ -36,6 +36,40 @@
             >Search:
             <input id="search" placeholder="search text" />
           </label>
+          <label
+            >Preset:
+            <select id="presetFilter">
+              <option value="">(none)</option>
+              <option value="errors">Errors only</option>
+              <option value="tool_calls">Tool calls</option>
+              <option value="invalid_tool_format">Invalid tool format</option>
+              <option value="retries">Retries</option>
+            </select>
+          </label>
+          <label
+            >traceId:
+            <input id="traceIdFilter" placeholder="trace id" />
+          </label>
+          <label
+            >sessionId:
+            <input id="sessionIdFilter" placeholder="session id" />
+          </label>
+          <label
+            >eventType:
+            <input id="eventTypeFilter" placeholder="event type" />
+          </label>
+          <label
+            >toolName:
+            <input id="toolNameFilter" placeholder="tool name" />
+          </label>
+          <label
+            >provider:
+            <input id="providerFilter" placeholder="provider" />
+          </label>
+          <label
+            >model:
+            <input id="modelFilter" placeholder="model" />
+          </label>
           <button id="refresh">Refresh</button>
           <label
             >Lines:

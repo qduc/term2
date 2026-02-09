@@ -6,10 +6,27 @@ const refreshBtn = document.getElementById('refresh');
 const levelFilter = document.getElementById('levelFilter');
 const searchInput = document.getElementById('search');
 const linesInput = document.getElementById('lines');
+const traceIdFilter = document.getElementById('traceIdFilter');
+const sessionIdFilter = document.getElementById('sessionIdFilter');
+const eventTypeFilter = document.getElementById('eventTypeFilter');
+const toolNameFilter = document.getElementById('toolNameFilter');
+const providerFilter = document.getElementById('providerFilter');
+const modelFilter = document.getElementById('modelFilter');
+const presetFilter = document.getElementById('presetFilter');
 
 let selectedFile = null;
 let fileWatcher = null; // SSE watcher
 let refreshTimer = null; // debounce timer for auto-refresh
+let filterTimer = null; // debounce timer for search/filter redraw
+let rowCache = [];
+let fileOffset = 0;
+
+const PRESET_MAP = {
+  errors: { level: 'error' },
+  tool_calls: { eventType: 'tool_call.' },
+  invalid_tool_format: { eventType: 'tool_call.parse_failed' },
+  retries: { eventType: 'retry.' },
+};
 
 function truncateContentDeep(value, maxDepth = 3, maxLen = 200) {
   const seen = new WeakSet();
@@ -184,7 +201,7 @@ function debounceRefresh(delay = 300) {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     refreshTimer = null;
-    loadPreview();
+    appendLatest();
   }, delay);
 }
 
@@ -198,13 +215,21 @@ function renderRows(data) {
     tr.classList.add('clickable-row');
     tr.tabIndex = 0; // make focusable for keyboard users
     const parsed = item.parsed;
+    const isMalformed = !parsed;
     const timeCell = document.createElement('td');
     timeCell.textContent = parsed && parsed.timestamp ? new Date(parsed.timestamp).toLocaleString() : '';
     const levelCell = document.createElement('td');
-    levelCell.textContent = parsed && parsed.level ? parsed.level : '';
+    levelCell.textContent = parsed && parsed.level ? parsed.level : isMalformed ? 'parse_error' : '';
     levelCell.className = parsed && parsed.level ? 'level-' + parsed.level : '';
     const eventCell = document.createElement('td');
-    eventCell.textContent = parsed && parsed.eventType ? parsed.eventType : '';
+    if (parsed && parsed.eventType) {
+      eventCell.textContent = parsed.eventType;
+    } else if (isMalformed) {
+      const badge = document.createElement('span');
+      badge.textContent = 'Malformed JSON';
+      badge.className = 'badge-parse-error';
+      eventCell.appendChild(badge);
+    }
     const msgCell = document.createElement('td');
     msgCell.textContent = parsed && parsed.message ? parsed.message : item.raw;
     const moreCell = document.createElement('td');
@@ -268,6 +293,11 @@ function renderRows(data) {
         copyBtn.textContent = 'Copy';
         copyBtn.title = 'Copy formatted content';
 
+        const traceBtn = document.createElement('button');
+        traceBtn.type = 'button';
+        traceBtn.textContent = 'Filter by traceId';
+        traceBtn.title = 'Set traceId filter from this row';
+
         const pre = document.createElement('pre');
         pre.style.fontFamily =
           'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
@@ -294,7 +324,17 @@ function renderRows(data) {
           }, 900);
         });
 
+        traceBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const traceId = parsed && parsed.traceId ? String(parsed.traceId) : '';
+          if (!traceId) return;
+          traceIdFilter.value = traceId;
+          debouncedFilterRender();
+        });
+
         toolbar.appendChild(copyBtn);
+        toolbar.appendChild(traceBtn);
 
         td.appendChild(toolbar);
         td.appendChild(pre);
@@ -397,19 +437,62 @@ async function selectFile(name) {
 }
 
 function applyFilters(rows) {
+  const selectedPreset = presetFilter.value || '';
+  const preset = PRESET_MAP[selectedPreset] || {};
   const level = levelFilter.value.trim();
   const search = searchInput.value.trim().toLowerCase();
+  const traceId = traceIdFilter.value.trim();
+  const sessionId = sessionIdFilter.value.trim();
+  const eventType = eventTypeFilter.value.trim();
+  const toolName = toolNameFilter.value.trim();
+  const provider = providerFilter.value.trim();
+  const model = modelFilter.value.trim();
+
+  const effective = {
+    level: level || preset.level || '',
+    eventType: eventType || preset.eventType || '',
+  };
+
+  const matchesField = (value, expected) => {
+    if (!expected) return true;
+    if (!value) return false;
+    if (expected.endsWith('.')) {
+      return String(value).startsWith(expected);
+    }
+    return String(value) === expected;
+  };
+
   return rows.filter((r) => {
     const p = r.parsed;
-    if (level) {
-      if (!p || !p.level || p.level !== level) return false;
-    }
+    if (!matchesField(p?.level, effective.level)) return false;
+    if (!matchesField(p?.traceId, traceId)) return false;
+    if (!matchesField(p?.sessionId, sessionId)) return false;
+    if (!matchesField(p?.eventType, effective.eventType)) return false;
+    if (!matchesField(p?.toolName, toolName)) return false;
+    if (!matchesField(p?.provider, provider)) return false;
+    if (!matchesField(p?.model, model)) return false;
+
     if (search) {
       const hay = (r.raw + ' ' + JSON.stringify(p || {})).toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
   });
+}
+
+function renderFromCache() {
+  const rows = applyFilters(rowCache);
+  renderRows(rows);
+  info.textContent = `Showing ${rows.length} / ${rowCache.length} lines from ${selectedFile}`;
+  logsTable.hidden = false;
+}
+
+function debouncedFilterRender(delay = 200) {
+  if (filterTimer) clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => {
+    filterTimer = null;
+    renderFromCache();
+  }, delay);
 }
 
 async function loadPreview() {
@@ -421,10 +504,30 @@ async function loadPreview() {
     return;
   }
   const body = await res.json();
-  const rows = applyFilters(body.data);
-  renderRows(rows);
-  info.textContent = `Showing ${rows.length} / ${body.lines} lines from ${selectedFile}`;
-  logsTable.hidden = false;
+  rowCache = Array.isArray(body.data) ? body.data : [];
+  fileOffset = Number(body.offset) || 0;
+  renderFromCache();
+}
+
+async function appendLatest() {
+  if (!selectedFile) return;
+  const res = await fetch(`/api/append?file=${encodeURIComponent(selectedFile)}&offset=${fileOffset}`);
+  if (!res.ok) {
+    return;
+  }
+
+  const body = await res.json();
+  const appended = Array.isArray(body.data) ? body.data : [];
+  if (body.reset) {
+    await loadPreview();
+    return;
+  }
+
+  if (appended.length > 0) {
+    rowCache = [...appended.reverse(), ...rowCache];
+  }
+  fileOffset = Number(body.nextOffset) || fileOffset;
+  renderFromCache();
 }
 
 refreshBtn.addEventListener('click', () => {
@@ -433,10 +536,31 @@ refreshBtn.addEventListener('click', () => {
 });
 
 levelFilter.addEventListener('change', () => {
-  loadPreview();
+  debouncedFilterRender();
 });
 searchInput.addEventListener('keyup', () => {
-  loadPreview();
+  debouncedFilterRender();
+});
+traceIdFilter.addEventListener('keyup', () => {
+  debouncedFilterRender();
+});
+sessionIdFilter.addEventListener('keyup', () => {
+  debouncedFilterRender();
+});
+eventTypeFilter.addEventListener('keyup', () => {
+  debouncedFilterRender();
+});
+toolNameFilter.addEventListener('keyup', () => {
+  debouncedFilterRender();
+});
+providerFilter.addEventListener('keyup', () => {
+  debouncedFilterRender();
+});
+modelFilter.addEventListener('keyup', () => {
+  debouncedFilterRender();
+});
+presetFilter.addEventListener('change', () => {
+  debouncedFilterRender();
 });
 
 // initial

@@ -63,6 +63,38 @@ async function tailFile(filePath, maxBytes = MAX_READ_BYTES, lines = 200) {
   return parts.slice(-lines);
 }
 
+async function readFromOffset(filePath, offset) {
+  const st = await fs.promises.stat(filePath);
+  const size = st.size;
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  if (safeOffset >= size) {
+    return {
+      data: [],
+      nextOffset: size,
+      reset: safeOffset > size,
+      size,
+    };
+  }
+
+  const fh = await fs.promises.open(filePath, 'r');
+  const length = size - safeOffset;
+  const buff = Buffer.alloc(length);
+  try {
+    await fh.read(buff, 0, length, safeOffset);
+  } finally {
+    await fh.close();
+  }
+
+  const text = buff.toString('utf8');
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  return {
+    data: lines.map(parseLine),
+    nextOffset: size,
+    reset: false,
+    size,
+  };
+}
+
 function parseLine(line) {
   // try JSON parse, otherwise return raw
   try {
@@ -85,9 +117,41 @@ app.get('/api/preview', async (req, res) => {
     const exists = await fs.promises.stat(filePath);
     if (!exists.isFile()) return res.status(404).json({ error: 'not found' });
     const rawLines = await tailFile(filePath, MAX_READ_BYTES, lines);
+    const st = await fs.promises.stat(filePath);
     // reverse so newest lines appear first in the response
     const parsed = rawLines.reverse().map(parseLine);
-    res.json({ file, lines: parsed.length, data: parsed });
+    res.json({ file, lines: parsed.length, data: parsed, offset: st.size });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/append', async (req, res) => {
+  const file = safeBasename(req.query.file || '');
+  if (!file) return res.status(400).json({ error: 'file query required' });
+  const offset = Number(req.query.offset || 0);
+
+  try {
+    const filePath = path.join(LOG_DIR, file);
+    const resolvedLogDir = path.resolve(LOG_DIR);
+    const resolvedFilePath = path.resolve(filePath);
+    if (!resolvedFilePath.startsWith(resolvedLogDir + path.sep)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
+    const st = await fs.promises.stat(resolvedFilePath);
+    if (!st.isFile()) return res.status(404).json({ error: 'not found' });
+
+    const result = await readFromOffset(resolvedFilePath, offset);
+    res.json({
+      file,
+      offset: Number(offset) || 0,
+      nextOffset: result.nextOffset,
+      reset: result.reset,
+      size: result.size,
+      data: result.data,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: String(err) });

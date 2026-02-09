@@ -3,6 +3,15 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import envPaths from 'env-paths';
 import DailyRotateFile from 'winston-daily-rotate-file';
+import {
+  RuntimeLogSchema,
+  buildRuntimeLogRecord,
+  parseCategoryFilter,
+  shouldIncludeVerbosePayload,
+  shouldLogForCategory,
+  shouldSampleLog,
+  type LogCategory,
+} from './logging-contract.js';
 
 const LOG_LEVELS = {
   error: 0,
@@ -47,11 +56,14 @@ export class LoggingService {
   private debugLogging: boolean;
   private suppressConsoleOutput: boolean;
   private openrouterLogger!: winston.Logger;
+  private enabledCategories: Set<LogCategory> | null;
+  private verbosePayloads: boolean;
+  private sampleRate: number;
 
   constructor(config: LoggingServiceConfig = {}) {
     const {
       logDir,
-      logLevel = 'info',
+      logLevel = process.env.LOG_LEVEL || 'info',
       disableLogging,
       console: enableConsole = false,
       debugLogging = false,
@@ -63,6 +75,12 @@ export class LoggingService {
 
     this.debugLogging = debugLogging;
     this.suppressConsoleOutput = suppressConsoleOutput;
+    this.enabledCategories = parseCategoryFilter(process.env.LOG_CATEGORIES);
+    this.verbosePayloads = parseBooleanEnv(process.env.LOG_VERBOSE_PAYLOADS);
+    this.sampleRate = Number.parseFloat(process.env.LOG_SAMPLE_RATE ?? '1');
+    if (!Number.isFinite(this.sampleRate)) {
+      this.sampleRate = 1;
+    }
 
     // Determine log directory
     const finalLogDir = logDir || path.join(envPaths('term2').log, 'logs');
@@ -309,14 +327,40 @@ export class LoggingService {
   private log(level: string, message: string, meta?: Record<string, any>): void {
     try {
       const metadata = {
-        ...meta,
+        ...(meta ?? {}),
         ...(this.correlationId && { correlationId: this.correlationId }),
-      };
+      } as Record<string, unknown>;
+
+      const runtimeRecord = buildRuntimeLogRecord({
+        level,
+        correlationId: this.correlationId,
+        meta: metadata,
+      });
+
+      const category = (runtimeRecord.category as LogCategory) ?? 'general';
+      if (!shouldLogForCategory({ level, category, enabledCategories: this.enabledCategories })) {
+        return;
+      }
+
+      if (!shouldSampleLog({ level, sampleRate: this.sampleRate, randomValue: Math.random() })) {
+        return;
+      }
+
+      if (!shouldIncludeVerbosePayload({ level, verbosePayloads: this.verbosePayloads })) {
+        delete runtimeRecord.payload;
+      }
+
+      const parsed = RuntimeLogSchema.safeParse(runtimeRecord);
+      if (!parsed.success) {
+        runtimeRecord.eventType = 'log.contract_validation_failed';
+        runtimeRecord.errorCode = 'LOG_SCHEMA_VALIDATION_FAILED';
+        runtimeRecord.errorMessage = parsed.error.issues.map((issue) => issue.message).join('; ');
+      }
 
       if (this.logger && typeof (this.logger as any)[level] === 'function') {
-        (this.logger as any)[level](message, metadata);
+        (this.logger as any)[level](message, runtimeRecord);
       } else if (this.logger) {
-        this.logger.log(level, message, metadata);
+        this.logger.log(level, message, runtimeRecord);
       }
     } catch (error: any) {
       // Gracefully handle logging errors

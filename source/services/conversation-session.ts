@@ -10,6 +10,7 @@ import { getProvider } from '../providers/index.js';
 import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.js';
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
 import { ApprovalState } from './approval-state.js';
+import { createInvalidToolCallDiagnostic } from './logging-contract.js';
 
 export type { CommandMessage };
 
@@ -116,6 +117,7 @@ export class ConversationSession {
   private toolCallArgumentsById = new Map<string, unknown>();
   private lastEventType: string | null = null;
   private eventTypeCount = 0;
+  private emittedInvalidToolCallPackets = new Set<string>();
   // private logStreamEvent = (eventType: string, eventData: any) => {
   // 	if (eventData.item) {
   // 		eventType = eventData.item.type;
@@ -211,7 +213,13 @@ export class ConversationSession {
     this.agentClient.abort();
     // Save pending approval context so we can handle it in the next message
     if (this.approvalState.abortPending()) {
-      this.logger.debug('Aborted approval - will handle rejection on next message');
+      this.logger.debug('Aborted approval - will handle rejection on next message', {
+        eventType: 'approval.aborted',
+        category: 'approval',
+        phase: 'abort',
+        sessionId: this.id,
+        traceId: this.logger.getCorrelationId(),
+      });
     }
   }
 
@@ -232,6 +240,13 @@ export class ConversationSession {
   ): AsyncIterable<ConversationEvent> {
     let stream: any = null;
     try {
+      this.logger.info('Conversation stream start', {
+        eventType: 'stream.started',
+        category: 'stream',
+        phase: 'request_start',
+        sessionId: this.id,
+        traceId: this.logger.getCorrelationId(),
+      });
       const abortedContext = this.approvalState.consumeAborted();
       const shouldAddUserMessage = !skipUserMessage && !abortedContext;
 
@@ -422,6 +437,14 @@ export class ConversationSession {
       );
 
       if (result.type === 'approval_required') {
+        this.logger.info('Tool approval required', {
+          eventType: 'approval.required',
+          category: 'approval',
+          phase: 'approval',
+          sessionId: this.id,
+          traceId: this.logger.getCorrelationId(),
+          toolName: result.approval.toolName,
+        });
         const interruption = result.approval.rawInterruption;
         const callId =
           interruption?.rawItem?.callId ??
@@ -456,9 +479,16 @@ export class ConversationSession {
           error instanceof Error ? error.message.match(/Tool (\S+) not found/)?.[1] || 'unknown' : 'unknown';
 
         this.logger.warn('Tool hallucination detected, retrying', {
+          eventType: 'retry.hallucination',
+          category: 'retry',
+          phase: 'retry',
           toolName,
+          retryType: 'hallucination',
+          retryAttempt: hallucinationRetryCount + 1,
           attempt: hallucinationRetryCount + 1,
           maxRetries: MAX_HALLUCINATION_RETRIES,
+          sessionId: this.id,
+          traceId: this.logger.getCorrelationId(),
           errorMessage: error instanceof Error ? error.message : String(error),
         });
 
@@ -493,6 +523,14 @@ export class ConversationSession {
         type: 'error',
         message: error instanceof Error ? error.message : String(error),
       };
+      this.logger.error('Conversation stream error', {
+        eventType: 'stream.failed',
+        category: 'stream',
+        phase: 'abort',
+        sessionId: this.id,
+        traceId: this.logger.getCorrelationId(),
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }
@@ -524,6 +562,13 @@ export class ConversationSession {
     let removeInterceptor: (() => void) | null = null;
 
     if (answer === 'y') {
+      this.logger.info('Tool approval granted', {
+        eventType: 'approval.granted',
+        category: 'approval',
+        phase: 'approval',
+        sessionId: this.id,
+        traceId: this.logger.getCorrelationId(),
+      });
       state.approve(interruption);
     } else {
       const toolName = interruption.name ?? 'unknown';
@@ -552,6 +597,14 @@ export class ConversationSession {
         // Fallback for clients without tool interceptors
         state.reject(interruption);
       }
+
+      this.logger.info('Tool approval rejected', {
+        eventType: 'approval.rejected',
+        category: 'approval',
+        phase: 'approval',
+        sessionId: this.id,
+        traceId: this.logger.getCorrelationId(),
+      });
     }
 
     removeInterceptor = this.approvalState.getPending()?.removeInterceptor ?? null;
@@ -595,6 +648,14 @@ export class ConversationSession {
       );
 
       if (result.type === 'approval_required') {
+        this.logger.info('Tool approval required', {
+          eventType: 'approval.required',
+          category: 'approval',
+          phase: 'approval',
+          sessionId: this.id,
+          traceId: this.logger.getCorrelationId(),
+          toolName: result.approval.toolName,
+        });
         const interruption = result.approval.rawInterruption;
         const callId =
           interruption?.rawItem?.callId ??
@@ -958,6 +1019,33 @@ export class ConversationSession {
               try {
                 return JSON.parse(trimmed);
               } catch {
+                if (
+                  (trimmed.startsWith('{') || trimmed.startsWith('[')) &&
+                  !this.emittedInvalidToolCallPackets.has(String(callId))
+                ) {
+                  this.emittedInvalidToolCallPackets.add(String(callId));
+                  const diagnostic = createInvalidToolCallDiagnostic({
+                    toolName: toolName ?? 'unknown',
+                    toolCallId: String(callId),
+                    rawPayload: trimmed,
+                    normalizedToolCall: {
+                      toolName: toolName ?? 'unknown',
+                      toolCallId: String(callId),
+                      arguments: args,
+                    },
+                    validationErrors: ['arguments must be valid JSON'],
+                    traceId: this.logger.getCorrelationId() ?? 'trace-unknown',
+                    retryContext: {
+                      sessionId: this.id,
+                    },
+                  });
+
+                  this.logger.error('Invalid tool call argument payload', {
+                    ...diagnostic,
+                    sessionId: this.id,
+                    messageId: String(callId),
+                  });
+                }
                 return args;
               }
             })();
@@ -967,6 +1055,16 @@ export class ConversationSession {
               toolName: toolName ?? 'unknown',
               arguments: normalizedArgs,
             };
+            this.logger.info('Tool execution started', {
+              eventType: 'tool_call.execution_started',
+              category: 'tool',
+              phase: 'execution',
+              sessionId: this.id,
+              traceId: this.logger.getCorrelationId(),
+              toolName: toolName ?? 'unknown',
+              toolCallId: String(callId),
+              messageId: String(callId),
+            });
           }
         }
 

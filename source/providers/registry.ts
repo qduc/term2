@@ -31,6 +31,12 @@ export interface ProviderDefinition {
   /** Settings keys that are sensitive and should not be persisted to disk */
   sensitiveSettingKeys?: string[];
 
+  /** Optional provider capabilities */
+  capabilities?: {
+    supportsConversationChaining: boolean;
+    supportsTracingControl: boolean;
+  };
+
   /**
    * True when this provider is defined at runtime (e.g. from settings.json).
    * Used to prevent accidental overrides of built-in providers.

@@ -6,6 +6,7 @@ import { ModelBehaviorError } from '@openai/agents';
 import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../tools/types.js';
 import { extractUsage, type NormalizedUsage } from '../utils/token-usage.js';
+import { getProvider } from '../providers/index.js';
 
 export type { CommandMessage };
 
@@ -93,6 +94,11 @@ const isToolHallucinationError = (error: unknown): boolean => {
 
   const message = error.message.toLowerCase();
   return message.includes('tool') && message.includes('not found');
+};
+
+const supportsConversationChaining = (providerId: string): boolean => {
+  const providerDef = getProvider(providerId);
+  return providerDef?.capabilities?.supportsConversationChaining ?? false;
 };
 
 export class ConversationSession {
@@ -395,11 +401,10 @@ export class ConversationSession {
           ? (this.agentClient as any).getProvider()
           : 'openai';
 
-      // Only OpenAI uses server-side conversation management via previousResponseId.
-      // All other providers (OpenRouter, openai-compatible) need full history.
+      const supportsChaining = supportsConversationChaining(provider);
 
       stream = await this.agentClient.startStream(
-        provider !== 'openai' ? (this.conversationStore.getHistory() as any) : text,
+        supportsChaining ? text : (this.conversationStore.getHistory() as any),
         {
           previousResponseId: this.previousResponseId,
         },

@@ -162,6 +162,17 @@ export class OpenAIAgentClient {
     return null;
   }
 
+  #getProviderCapabilities(providerId: string): {
+    supportsConversationChaining: boolean;
+    supportsTracingControl: boolean;
+  } {
+    const providerDef = getProvider(providerId);
+    return {
+      supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
+      supportsTracingControl: providerDef?.capabilities?.supportsTracingControl ?? false,
+    };
+  }
+
   #createRunner(providerId: string): Runner | null {
     const providerDef = getProvider(providerId);
     if (!providerDef?.createRunner) {
@@ -251,8 +262,8 @@ export class OpenAIAgentClient {
         signal,
       };
 
-      // Only pass previousResponseId for OpenAI provider (server-managed conversation chaining)
-      if (this.#provider === 'openai' && previousResponseId) {
+      const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
+      if (supportsConversationChaining && previousResponseId) {
         options.previousResponseId = previousResponseId;
       }
 
@@ -278,8 +289,8 @@ export class OpenAIAgentClient {
       signal,
     };
 
-    // Only pass previousResponseId for OpenAI provider (server-managed conversation chaining)
-    if (this.#provider === 'openai' && previousResponseId) {
+    const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
+    if (supportsConversationChaining && previousResponseId) {
       options.previousResponseId = previousResponseId;
     }
 
@@ -300,8 +311,8 @@ export class OpenAIAgentClient {
       signal,
     };
 
-    // Only pass previousResponseId for OpenAI provider (server-managed conversation chaining)
-    if (this.#provider === 'openai' && previousResponseId) {
+    const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
+    if (supportsConversationChaining && previousResponseId) {
       options.previousResponseId = previousResponseId;
     }
 
@@ -319,7 +330,8 @@ export class OpenAIAgentClient {
     // When using non-OpenAI providers (e.g., OpenRouter), this export can fail noisily
     // (e.g., 503 errors). Disable tracing per-run for any non-OpenAI provider.
     const effectiveOptions: any = options ? { ...options } : {};
-    if (providerId !== 'openai') {
+    const { supportsTracingControl } = this.#getProviderCapabilities(providerId);
+    if (!supportsTracingControl) {
       effectiveOptions.tracingDisabled = true;
     }
 
@@ -567,12 +579,13 @@ export class OpenAIAgentClient {
       // Determine input based on provider
       // OpenAI uses previousResponseId for server-side history
       // Others need full conversation history from store
-      const input = mentorProvider !== 'openai' ? this.#mentorStore!.getHistory() : question;
+      const { supportsConversationChaining } = this.#getProviderCapabilities(mentorProvider);
+      const input = supportsConversationChaining ? question : this.#mentorStore!.getHistory();
 
       const result = await this.#runAgentWithProvider(mentorProvider, this.#mentorRunner, this.#mentorAgent, input, {
         stream: false,
         maxTurns: 1,
-        ...(mentorProvider === 'openai' && this.#mentorPreviousResponseId
+        ...(supportsConversationChaining && this.#mentorPreviousResponseId
           ? { previousResponseId: this.#mentorPreviousResponseId }
           : {}),
       });
@@ -580,7 +593,7 @@ export class OpenAIAgentClient {
       // Update conversation store with result
       this.#mentorStore!.updateFromResult(result);
 
-      // Track previousResponseId for OpenAI
+      // Track previousResponseId when provided by the provider.
       if (result.responseId) {
         this.#mentorPreviousResponseId = result.responseId;
       }

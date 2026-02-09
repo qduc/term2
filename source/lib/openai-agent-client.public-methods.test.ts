@@ -65,6 +65,8 @@ let mentorProviderRegistered = false;
 let capturedMainAgentForMentorTest: any = null;
 let mentorInputs: any[] = [];
 let mentorResponseCounter = 0;
+let chainingProviderRegistered = false;
+let chainingRunnerCalls: any[] = [];
 function ensureMentorProvidersRegistered() {
   if (!mentorProviderRegistered) {
     registerProvider({
@@ -108,13 +110,63 @@ function ensureMentorProvidersRegistered() {
   }
 }
 
+function ensureChainingProvidersRegistered() {
+  if (!chainingProviderRegistered) {
+    registerProvider({
+      id: 'mock-chaining-false',
+      label: 'Mock Chaining False',
+      createRunner: () =>
+        ({
+          run: async (_agent: any, _input: any, options: any) => {
+            chainingRunnerCalls.push({ options, providerId: 'mock-chaining-false' });
+            return {
+              status: 'completed',
+              finalOutput: 'ok',
+              messages: [],
+            };
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'mock-model' }],
+      capabilities: {
+        supportsConversationChaining: false,
+        supportsTracingControl: false,
+      },
+    });
+
+    registerProvider({
+      id: 'mock-chaining-true',
+      label: 'Mock Chaining True',
+      createRunner: () =>
+        ({
+          run: async (_agent: any, _input: any, options: any) => {
+            chainingRunnerCalls.push({ options, providerId: 'mock-chaining-true' });
+            return {
+              status: 'completed',
+              finalOutput: 'ok',
+              messages: [],
+            };
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'mock-model' }],
+      capabilities: {
+        supportsConversationChaining: true,
+        supportsTracingControl: true,
+      },
+    });
+
+    chainingProviderRegistered = true;
+  }
+}
+
 test.beforeEach(() => {
   runnerCalls = [];
   ensureProviderRegistered();
   ensureMentorProvidersRegistered();
+  ensureChainingProvidersRegistered();
   capturedMainAgentForMentorTest = null;
   mentorInputs = [];
   mentorResponseCounter = 0;
+  chainingRunnerCalls = [];
 });
 
 // ========== setModel tests ==========
@@ -157,6 +209,24 @@ test('setProvider updates provider and persists to settings', (t) => {
   client.setProvider('openai');
   t.is(client.getProvider(), 'openai');
   t.is(settings.get('agent.provider'), 'openai');
+});
+
+test('startStream only passes previousResponseId when provider supports chaining', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-false',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings },
+  });
+
+  await client.startStream('Hello', { previousResponseId: 'prev-1' });
+  t.is(chainingRunnerCalls.length, 1);
+  t.false('previousResponseId' in chainingRunnerCalls[0].options);
+
+  client.setProvider('mock-chaining-true');
+  await client.startStream('Hello', { previousResponseId: 'prev-2' });
+  t.is(chainingRunnerCalls.length, 2);
+  t.is(chainingRunnerCalls[1].options.previousResponseId, 'prev-2');
 });
 
 // ========== addToolInterceptor tests ==========

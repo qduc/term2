@@ -62,4 +62,8 @@ registerProvider({
     'agent.openrouter.referrer',
     'agent.openrouter.title',
   ],
+  capabilities: {
+    supportsConversationChaining: false,
+    supportsTracingControl: false,
+  },
 });

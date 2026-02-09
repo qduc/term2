@@ -80,5 +80,9 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     },
     // apiKey is optional and may be stored in settings.json for local servers.
     sensitiveSettingKeys: [],
+    capabilities: {
+      supportsConversationChaining: false,
+      supportsTracingControl: false,
+    },
   };
 }

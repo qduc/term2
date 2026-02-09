@@ -1,3 +1,13 @@
+## [0.1.7] - 2026-02-09
+
+### Bug Fixes
+- Normalized tool call name before emitting to agent runtime
+- Make defaulted tool params optional and fix OpenAI strict schemas
+- Refine changelog generation to exclude markdown code blocks and comments
+
+### Internal/Chores
+- Cleanup changelog
+
 ## [0.1.6] - 2026-02-09
 
 ### Features

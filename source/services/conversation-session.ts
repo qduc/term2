@@ -9,6 +9,7 @@ import { extractUsage, type NormalizedUsage } from '../utils/token-usage.js';
 import { getProvider } from '../providers/index.js';
 import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.js';
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
+import { ApprovalState } from './approval-state.js';
 
 export type { CommandMessage };
 
@@ -109,19 +110,7 @@ export class ConversationSession {
   private logger: ILoggingService;
   private conversationStore: ConversationStore;
   private previousResponseId: string | null = null;
-  private pendingApprovalContext: {
-    state: any;
-    interruption: any;
-    emittedCommandIds: Set<string>;
-    toolCallArgumentsById: Map<string, unknown>;
-    removeInterceptor?: () => void;
-  } | null = null;
-  private abortedApprovalContext: {
-    state: any;
-    interruption: any;
-    emittedCommandIds: Set<string>;
-    toolCallArgumentsById: Map<string, unknown>;
-  } | null = null;
+  private approvalState = new ApprovalState();
   private textDeltaCount = 0;
   private reasoningDeltaCount = 0;
   private toolCallArgumentsById = new Map<string, unknown>();
@@ -177,8 +166,8 @@ export class ConversationSession {
   reset(): void {
     this.previousResponseId = null;
     this.conversationStore.clear();
-    this.pendingApprovalContext = null;
-    this.abortedApprovalContext = null;
+    this.approvalState.clearPending();
+    this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
     if (typeof (this.agentClient as any).clearConversations === 'function') {
       (this.agentClient as any).clearConversations();
@@ -221,9 +210,7 @@ export class ConversationSession {
   abort(): void {
     this.agentClient.abort();
     // Save pending approval context so we can handle it in the next message
-    if (this.pendingApprovalContext) {
-      this.abortedApprovalContext = this.pendingApprovalContext;
-      this.pendingApprovalContext = null;
+    if (this.approvalState.abortPending()) {
       this.logger.debug('Aborted approval - will handle rejection on next message');
     }
   }
@@ -245,7 +232,8 @@ export class ConversationSession {
   ): AsyncIterable<ConversationEvent> {
     let stream: any = null;
     try {
-      const shouldAddUserMessage = !skipUserMessage && !this.abortedApprovalContext;
+      const abortedContext = this.approvalState.consumeAborted();
+      const shouldAddUserMessage = !skipUserMessage && !abortedContext;
 
       // Maintain canonical local history regardless of provider.
       if (shouldAddUserMessage) {
@@ -254,13 +242,12 @@ export class ConversationSession {
 
       // If there's an aborted approval, we need to resolve it first.
       // The user's message is a new input, but the agent is stuck waiting for tool output.
-      if (this.abortedApprovalContext) {
+      if (abortedContext) {
         this.logger.debug('Resolving aborted approval with fake execution', {
           message: text,
         });
 
-        const { state, interruption, emittedCommandIds, toolCallArgumentsById } = this.abortedApprovalContext;
-        this.abortedApprovalContext = null;
+        const { state, interruption, emittedCommandIds, toolCallArgumentsById } = abortedContext;
 
         // Restore cached tool-call arguments captured before abort so continuation can attach them
         this.toolCallArgumentsById.clear();
@@ -522,7 +509,8 @@ export class ConversationSession {
     answer: string;
     rejectionReason?: string;
   }): AsyncIterable<ConversationEvent> {
-    if (!this.pendingApprovalContext) {
+    const pendingApprovalContext = this.approvalState.getPending();
+    if (!pendingApprovalContext) {
       return;
     }
 
@@ -531,7 +519,7 @@ export class ConversationSession {
       interruption,
       emittedCommandIds: previouslyEmittedIds,
       toolCallArgumentsById,
-    } = this.pendingApprovalContext;
+    } = pendingApprovalContext;
 
     let removeInterceptor: (() => void) | null = null;
 
@@ -559,17 +547,14 @@ export class ConversationSession {
         state.approve(interruption);
 
         // Store interceptor cleanup for after stream
-        this.pendingApprovalContext = {
-          ...this.pendingApprovalContext,
-          removeInterceptor,
-        };
+        this.approvalState.setPendingRemoveInterceptor(removeInterceptor);
       } else {
         // Fallback for clients without tool interceptors
         state.reject(interruption);
       }
     }
 
-    removeInterceptor = this.pendingApprovalContext?.removeInterceptor ?? null;
+    removeInterceptor = this.approvalState.getPending()?.removeInterceptor ?? null;
 
     // Restore cached tool-call arguments so continuation outputs can attach them
     this.toolCallArgumentsById.clear();
@@ -692,7 +677,7 @@ export class ConversationSession {
         case 'approval_required': {
           sawTerminalEvent = event;
           // pendingApprovalContext is set inside #buildResult during run()
-          const rawInterruption = this.pendingApprovalContext?.interruption;
+          const rawInterruption = this.approvalState.getPending()?.interruption;
           return {
             type: 'approval_required',
             approval: {
@@ -764,7 +749,7 @@ export class ConversationSession {
       onEvent?: (event: ConversationEvent) => void;
     } = {},
   ): Promise<ConversationResult | null> {
-    if (!this.pendingApprovalContext) {
+    if (!this.approvalState.getPending()) {
       return null;
     }
 
@@ -794,7 +779,7 @@ export class ConversationSession {
         }
         case 'approval_required': {
           sawTerminalEvent = event;
-          const rawInterruption = this.pendingApprovalContext?.interruption;
+          const rawInterruption = this.approvalState.getPending()?.interruption;
           return {
             type: 'approval_required',
             approval: {
@@ -1059,12 +1044,12 @@ export class ConversationSession {
   ): ConversationResult {
     if (result.interruptions && result.interruptions.length > 0) {
       const interruption = result.interruptions[0];
-      this.pendingApprovalContext = {
+      this.approvalState.setPending({
         state: result.state,
         interruption,
         emittedCommandIds: emittedCommandIds ?? new Set(),
         toolCallArgumentsById: new Map(this.toolCallArgumentsById),
-      };
+      });
 
       let argumentsText = '';
       const toolName = interruption.name;
@@ -1101,7 +1086,7 @@ export class ConversationSession {
       };
     }
 
-    this.pendingApprovalContext = null;
+    this.approvalState.clearPending();
 
     const allCommandMessages = extractCommandMessages(result.newItems || result.history || []);
 

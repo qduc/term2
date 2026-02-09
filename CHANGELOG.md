@@ -1,4 +1,38 @@
 ```markdown
+## [0.1.6] - 2026-02-09
+
+### Features
+
+- Improve message logging with enhanced logging contract and trace taxonomy
+- Improve log viewer UI with debugging upgrades
+- Add non-interactive mode for CLI usage
+
+### Bug Fixes
+
+- Clear token usage when running /clear command
+
+### Improvements
+
+- Use provider capabilities for better provider abstraction
+- Refine apply_patch approval prevalidation behavior
+- Reset mentor state when rebuilding main agent
+
+### Internal/Chores
+
+- Extract prompt selector for cleaner separation of concerns
+- Extract approval state holder for better state management
+- Extract command message streaming helper for reusability
+- Extract stream event parsing helpers for maintainability
+- Unify CommandMessage type across codebase
+- Centralize tool name constants
+- Extract streaming session factory for dependency injection
+- Decompose settings service for better modularity
+- Add conversation integration test coverage for stream, approval, and retry scenarios
+- Set up Husky and lint-staged for pre-commit code formatting with Prettier
+- Update coding style to follow industry standards
+```
+
+```markdown
 ## [0.1.5] - 2026-02-07
 
 ### Features

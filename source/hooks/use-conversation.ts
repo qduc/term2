@@ -4,8 +4,8 @@ import { isAbortLikeError } from '../utils/error-helpers.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { createStreamingUpdateCoordinator } from '../utils/streaming-updater.js';
 import { appendMessagesCapped } from '../utils/message-buffer.js';
-import { createStreamingState, enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils.js';
-import { createConversationEventHandler } from '../utils/conversation-event-handler.js';
+import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils.js';
+import { createStreamingSession } from '../utils/streaming-session-factory.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 
 interface UserMessage {
@@ -291,69 +291,20 @@ export const useConversation = ({
       appendMessages([userMessage]);
       setIsProcessing(true);
 
-      const liveMessageId = Date.now();
-      setLiveResponse({
-        id: liveMessageId,
-        sender: 'bot',
-        text: '',
-      });
-      const liveResponseUpdater = createLiveResponseUpdater(liveMessageId);
-
-      // Create streaming state object for this message send
-      const streamingState = createStreamingState();
-
-      const reasoningUpdater = createStreamingUpdateCoordinator((newReasoningText: string) => {
-        setMessages((prev) => {
-          if (streamingState.currentReasoningMessageId !== null) {
-            const index = prev.findIndex((msg) => msg.id === streamingState.currentReasoningMessageId);
-            if (index === -1) return prev;
-            const current = prev[index];
-            if (current.sender !== 'reasoning') {
-              return prev;
-            }
-            const next = prev.slice();
-            next[index] = { ...current, text: newReasoningText };
-            return trimMessages(next as Message[]);
-          }
-
-          const newId = Date.now();
-          streamingState.currentReasoningMessageId = newId;
-          return trimMessages([
-            ...prev,
-            {
-              id: newId,
-              sender: 'reasoning',
-              text: newReasoningText,
-            },
-          ]);
-        });
-      }, REASONING_RESPONSE_THROTTLE_MS);
-
-      // Create event handler using extracted factory
-      const baseEventHandler = createConversationEventHandler(
+      const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } = createStreamingSession(
         {
-          liveResponseUpdater,
-          reasoningUpdater,
           appendMessages,
           setMessages,
           setLiveResponse,
           trimMessages,
           annotateCommandMessage,
+          loggingService,
+          setLastUsage,
+          createLiveResponseUpdater,
+          reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
         },
-        streamingState,
+        'sendUserMessage',
       );
-
-      const applyConversationEvent = (event: any) => {
-        if (event.type === 'final') {
-          if (event.usage) {
-            loggingService.debug('UI received final usage (sendUserMessage)', { usage: event.usage });
-            setLastUsage(event.usage);
-          } else {
-            loggingService.debug('UI final event has no usage (sendUserMessage)');
-          }
-        }
-        baseEventHandler(event);
-      };
 
       try {
         const result = await conversationService.sendMessage(value, {
@@ -447,72 +398,21 @@ export const useConversation = ({
       if (isMaxTurnsPrompt && answer === 'y') {
         setIsProcessing(true);
 
-        const liveMessageId = Date.now();
-        setLiveResponse({
-          id: liveMessageId,
-          sender: 'bot',
-          text: '',
-        });
-        const liveResponseUpdater = createLiveResponseUpdater(liveMessageId);
-
-        // Create streaming state object for max turns continuation
-        const streamingState = createStreamingState();
-
-        const reasoningUpdater = createStreamingUpdateCoordinator((newReasoningText: string) => {
-          setMessages((prev) => {
-            if (streamingState.currentReasoningMessageId !== null) {
-              const index = prev.findIndex((msg) => msg.id === streamingState.currentReasoningMessageId);
-              if (index === -1) return prev;
-              const current = prev[index];
-              if (current.sender !== 'reasoning') {
-                return prev;
-              }
-              const next = prev.slice();
-              next[index] = {
-                ...current,
-                text: newReasoningText,
-              };
-              return trimMessages(next as Message[]);
-            }
-
-            const newId = Date.now();
-            streamingState.currentReasoningMessageId = newId;
-            return trimMessages([
-              ...prev,
-              {
-                id: newId,
-                sender: 'reasoning',
-                text: newReasoningText,
-              },
-            ]);
-          });
-        }, REASONING_RESPONSE_THROTTLE_MS);
-
-        // Create event handler using extracted factory
-        const baseEventHandler = createConversationEventHandler(
-          {
-            liveResponseUpdater,
-            reasoningUpdater,
-            appendMessages,
-            setMessages,
-            setLiveResponse,
-            trimMessages,
-            annotateCommandMessage,
-          },
-          streamingState,
-        );
-
-        const applyConversationEvent = (event: any) => {
-          if (event.type === 'final') {
-            if (event.usage) {
-              loggingService.debug('UI received final usage (maxTurnsContinuation)', { usage: event.usage });
-              setLastUsage(event.usage);
-            } else {
-              loggingService.debug('UI final event has no usage (maxTurnsContinuation)');
-            }
-          }
-          baseEventHandler(event);
-        };
+        const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } =
+          createStreamingSession(
+            {
+              appendMessages,
+              setMessages,
+              setLiveResponse,
+              trimMessages,
+              annotateCommandMessage,
+              loggingService,
+              setLastUsage,
+              createLiveResponseUpdater,
+              reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
+            },
+            'maxTurnsContinuation',
+          );
 
         try {
           // Send a continuation message to resume work
@@ -560,69 +460,20 @@ export const useConversation = ({
       }
 
       setIsProcessing(true);
-      const liveMessageId = Date.now();
-      setLiveResponse({
-        id: liveMessageId,
-        sender: 'bot',
-        text: '',
-      });
-      const liveResponseUpdater = createLiveResponseUpdater(liveMessageId);
-
-      // Create streaming state object for this approval decision
-      const streamingState = createStreamingState();
-
-      const reasoningUpdater = createStreamingUpdateCoordinator((newReasoningText: string) => {
-        setMessages((prev) => {
-          if (streamingState.currentReasoningMessageId !== null) {
-            const index = prev.findIndex((msg) => msg.id === streamingState.currentReasoningMessageId);
-            if (index === -1) return prev;
-            const current = prev[index];
-            if (current.sender !== 'reasoning') {
-              return prev;
-            }
-            const next = prev.slice();
-            next[index] = { ...current, text: newReasoningText };
-            return trimMessages(next as Message[]);
-          }
-
-          const newId = Date.now();
-          streamingState.currentReasoningMessageId = newId;
-          return trimMessages([
-            ...prev,
-            {
-              id: newId,
-              sender: 'reasoning',
-              text: newReasoningText,
-            },
-          ]);
-        });
-      }, REASONING_RESPONSE_THROTTLE_MS);
-
-      // Create event handler using extracted factory
-      const baseEventHandler = createConversationEventHandler(
+      const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } = createStreamingSession(
         {
-          liveResponseUpdater,
-          reasoningUpdater,
           appendMessages,
           setMessages,
           setLiveResponse,
           trimMessages,
           annotateCommandMessage,
+          loggingService,
+          setLastUsage,
+          createLiveResponseUpdater,
+          reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
         },
-        streamingState,
+        'approvalDecision',
       );
-
-      const applyConversationEvent = (event: any) => {
-        if (event.type === 'final') {
-          if (event.usage) {
-            loggingService.debug('UI received final usage (approvalDecision)', { usage: event.usage });
-            setLastUsage(event.usage);
-          } else {
-            loggingService.debug('UI final event has no usage (approvalDecision)');
-          }
-        }
-        baseEventHandler(event);
-      };
 
       try {
         const result = await conversationService.handleApprovalDecision(answer, rejectionReason, {

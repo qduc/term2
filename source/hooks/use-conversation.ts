@@ -527,10 +527,12 @@ export const useConversation = ({
     conversationService.reset();
     setMessages([]);
     setWaitingForApproval(false);
+    setWaitingForRejectionReason(false);
     setPendingApproval(null);
     approvedContextRef.current = null;
     setIsProcessing(false);
     setLiveResponse(null);
+    setLastUsage(null);
   }, [conversationService]);
 
   const stopProcessing = useCallback(() => {

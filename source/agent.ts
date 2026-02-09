@@ -14,14 +14,9 @@ import fs from 'fs';
 import path from 'path';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
+import { getPromptPath } from './prompts/prompt-selector.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
-
-const DEFAULT_PROMPT = 'simple.md';
-const ANTHROPIC_PROMPT = 'anthropic.md';
-const GPT_PROMPT = 'gpt-5.md';
-const CODEX_PROMPT = 'codex.md';
-const LITE_PROMPT = 'lite.md';
 
 function getTopLevelEntries(cwd: string, limit = 50): string {
   try {
@@ -82,23 +77,6 @@ export interface AgentDefinition {
   model: string;
 }
 
-function getPromptPath(model: string, liteMode: boolean): string {
-  const normalizedModel = model.trim().toLowerCase();
-
-  // Lite mode takes precedence - minimal context for terminal assistance
-  if (liteMode) {
-    return path.join(BASE_PROMPT_PATH, LITE_PROMPT);
-  }
-
-  if (normalizedModel.includes('sonnet') || normalizedModel.includes('haiku'))
-    return path.join(BASE_PROMPT_PATH, ANTHROPIC_PROMPT);
-  if (normalizedModel.includes('gpt-5') && normalizedModel.includes('codex'))
-    return path.join(BASE_PROMPT_PATH, CODEX_PROMPT);
-  if (normalizedModel.includes('gpt-5')) return path.join(BASE_PROMPT_PATH, GPT_PROMPT);
-
-  return path.join(BASE_PROMPT_PATH, DEFAULT_PROMPT);
-}
-
 function resolvePrompt(promptPath: string): string {
   try {
     return fs.readFileSync(promptPath, 'utf-8').trim();
@@ -127,7 +105,7 @@ export const getAgentDefinition = (
 
   const mentorMode = settingsService.get<boolean>('app.mentorMode');
   const liteMode = settingsService.get<boolean>('app.liteMode');
-  const promptPath = getPromptPath(resolvedModel, liteMode);
+  const promptPath = getPromptPath({ basePromptDir: BASE_PROMPT_PATH, model: resolvedModel, liteMode });
   let prompt = resolvePrompt(promptPath);
 
   if (mentorMode && !liteMode) {

@@ -1,6 +1,7 @@
 import React, { FC, useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { generateDiff } from '../utils/diff.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
 
 type Props = {
   command: string;
@@ -103,13 +104,13 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
         return parts.join(' ');
       }
 
-      case 'apply_patch': {
+      case TOOL_NAME_APPLY_PATCH: {
         const type = normalizedArgs.type || 'unknown';
         const path = normalizedArgs.path || 'unknown';
         return `${type} ${path}`;
       }
 
-      case 'search_replace': {
+      case TOOL_NAME_SEARCH_REPLACE: {
         const searchContent = normalizedArgs.search_content || '';
         const replaceContent = normalizedArgs.replace_content || '';
         const path = normalizedArgs.path || 'unknown';
@@ -184,7 +185,7 @@ const CommandMessage: FC<Props> = ({
       : outputText;
 
   // Special handling for search_replace
-  if (toolName === 'search_replace' && toolArgs) {
+  if (toolName === TOOL_NAME_SEARCH_REPLACE && toolArgs) {
     const diff = generateDiff(toolArgs.search_content, toolArgs.replace_content);
 
     // For search_replace that had an approval prompt (user said 'y'), only show output

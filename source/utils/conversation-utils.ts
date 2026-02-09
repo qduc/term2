@@ -1,3 +1,5 @@
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
+
 /**
  * Pure utility functions extracted from use-conversation.ts for testability.
  * These contain no React state or side effects.
@@ -37,6 +39,7 @@ export function parseToolArguments(rawArgs: unknown): unknown {
  * Build a human-readable command string for display in the UI.
  * Each tool has its own formatting logic.
  */
+
 export function formatToolCommand(toolName: string, args: Record<string, unknown> | null | undefined): string {
   if (!args) {
     return toolName;
@@ -60,12 +63,14 @@ export function formatToolCommand(toolName: string, args: Record<string, unknown
     return toolName;
   }
 
-  if (toolName === 'search_replace') {
-    return `search_replace "${args.search_content ?? ''}" → "${args.replace_content ?? ''}" ${args.path ?? ''}`;
+  if (toolName === TOOL_NAME_SEARCH_REPLACE) {
+    return `${TOOL_NAME_SEARCH_REPLACE} "${args.search_content ?? ''}" → "${args.replace_content ?? ''}" ${
+      args.path ?? ''
+    }`;
   }
 
-  if (toolName === 'apply_patch') {
-    return `apply_patch ${args.type ?? 'unknown'} ${args.path ?? ''}`;
+  if (toolName === TOOL_NAME_APPLY_PATCH) {
+    return `${TOOL_NAME_APPLY_PATCH} ${args.type ?? 'unknown'} ${args.path ?? ''}`;
   }
 
   if (toolName === 'ask_mentor') {

@@ -6,6 +6,7 @@ import { createStreamingUpdateCoordinator } from '../utils/streaming-updater.js'
 import { appendMessagesCapped } from '../utils/message-buffer.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils.js';
 import { createStreamingSession } from '../utils/streaming-session-factory.js';
+import { TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 
 interface UserMessage {
@@ -189,7 +190,7 @@ export const useConversation = ({
 
   const annotateCommandMessage = useCallback((cmdMsg: CommandMessage): CommandMessage => {
     const approvalContext = approvedContextRef.current;
-    if (!approvalContext || cmdMsg.toolName !== 'search_replace') {
+    if (!approvalContext || cmdMsg.toolName !== TOOL_NAME_SEARCH_REPLACE) {
       return cmdMsg;
     }
 
@@ -378,7 +379,7 @@ export const useConversation = ({
       // Check if this is a max turns exceeded prompt
       const isMaxTurnsPrompt = pendingApproval.isMaxTurnsPrompt;
 
-      if (answer === 'y' && pendingApproval.toolName === 'search_replace') {
+      if (answer === 'y' && pendingApproval.toolName === TOOL_NAME_SEARCH_REPLACE) {
         approvedContextRef.current = {
           callId: pendingApproval.callId,
           toolName: pendingApproval.toolName,

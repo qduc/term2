@@ -1,6 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { generateDiff } from '../utils/diff.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
 
 type Props = {
   approval: any;
@@ -199,7 +200,7 @@ const ApprovalPrompt: FC<Props & { onApprove: () => void; onReject: () => void }
   // Try to parse and render arguments nicely based on tool type
   let content: React.ReactNode = <Text color="#64748b">{approval.argumentsText}</Text>;
 
-  if (approval.toolName === 'apply_patch') {
+  if (approval.toolName === TOOL_NAME_APPLY_PATCH) {
     try {
       const args: ApplyPatchArgs = JSON.parse(approval.argumentsText);
       content = <ApplyPatchPrompt args={args} />;
@@ -213,7 +214,7 @@ const ApprovalPrompt: FC<Props & { onApprove: () => void; onReject: () => void }
     } catch {
       // Fall back to raw JSON if parsing fails
     }
-  } else if (approval.toolName === 'search_replace') {
+  } else if (approval.toolName === TOOL_NAME_SEARCH_REPLACE) {
     try {
       const args: SearchReplaceArgs = JSON.parse(approval.argumentsText);
       content = <SearchReplacePrompt args={args} />;

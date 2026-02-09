@@ -1,8 +1,10 @@
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import type { ILoggingService } from './service-interfaces.js';
 import { ConversationSession } from './conversation-session.js';
+import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
 
-export type { ConversationResult, CommandMessage } from './conversation-session.js';
+export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../contracts/conversation.js';
+export type { CommandMessage } from './conversation-session.js';
 
 /**
  * Backward-compatible facade for the CLI.
@@ -36,12 +38,12 @@ export class ConversationService {
     this.#session.setModel(model);
   }
 
-  setReasoningEffort(effort: any): void {
+  setReasoningEffort(effort: ReasoningEffortSetting): void {
     this.#session.setReasoningEffort(effort);
   }
 
-  setTemperature(temperature: any): void {
-    (this.#session as any).setTemperature?.(temperature);
+  setTemperature(temperature?: number): void {
+    this.#session.setTemperature(temperature);
   }
 
   setProvider(provider: string): void {
@@ -60,11 +62,13 @@ export class ConversationService {
     this.#session.abort();
   }
 
-  sendMessage(...args: Parameters<ConversationSession['sendMessage']>) {
+  sendMessage(...args: Parameters<ConversationSession['sendMessage']>): Promise<ConversationTerminal> {
     return this.#session.sendMessage(...args);
   }
 
-  handleApprovalDecision(...args: Parameters<ConversationSession['handleApprovalDecision']>) {
+  handleApprovalDecision(
+    ...args: Parameters<ConversationSession['handleApprovalDecision']>
+  ): Promise<ConversationTerminal | null> {
     return this.#session.handleApprovalDecision(...args);
   }
 }

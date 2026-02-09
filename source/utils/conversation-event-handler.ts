@@ -22,11 +22,17 @@ export interface SystemMessage {
   text: string;
 }
 
-/**
- * Dependencies injected into the event handler factory.
- * Uses `any` for React setState compatibility - internal utility.
- */
-export interface ConversationEventHandlerDeps<CommandMessageT extends CommandMessage = CommandMessage> {
+export type UIMessage = {
+  id: string | number;
+  sender: string;
+  callId?: string;
+  status?: string;
+};
+
+export interface ConversationEventHandlerDeps<
+  MessageT extends UIMessage = UIMessage,
+  CommandMessageT extends CommandMessage = CommandMessage,
+> {
   liveResponseUpdater: {
     push: (text: string) => void;
     cancel: () => void;
@@ -37,10 +43,10 @@ export interface ConversationEventHandlerDeps<CommandMessageT extends CommandMes
     cancel: () => void;
     flush: () => void;
   };
-  appendMessages: (messages: any[]) => void;
-  setMessages: (updater: (prev: any[]) => any[]) => void;
-  setLiveResponse: (response: any) => void;
-  trimMessages: (messages: any[]) => any[];
+  appendMessages: (messages: MessageT[]) => void;
+  setMessages: (updater: (prev: MessageT[]) => MessageT[]) => void;
+  setLiveResponse: (response: { id: number; sender: 'bot'; text: string } | null) => void;
+  trimMessages: (messages: MessageT[]) => MessageT[];
   annotateCommandMessage: (msg: CommandMessageT) => CommandMessageT;
 }
 
@@ -52,8 +58,11 @@ export interface ConversationEventHandlerDeps<CommandMessageT extends CommandMes
  * @param state - Mutable streaming state object
  * @returns Event handler function
  */
-export function createConversationEventHandler<CommandMessageT extends CommandMessage = CommandMessage>(
-  deps: ConversationEventHandlerDeps<CommandMessageT>,
+export function createConversationEventHandler<
+  MessageT extends UIMessage = UIMessage,
+  CommandMessageT extends CommandMessage = CommandMessage,
+>(
+  deps: ConversationEventHandlerDeps<MessageT, CommandMessageT>,
   state: StreamingState,
 ): (event: ConversationEvent) => void {
   const {
@@ -101,7 +110,7 @@ export function createConversationEventHandler<CommandMessageT extends CommandMe
             sender: 'bot',
             text: state.accumulatedText,
           };
-          appendMessages([textMessage]);
+          appendMessages([textMessage as unknown as MessageT]);
           state.accumulatedText = '';
           state.textWasFlushed = true;
           liveResponseUpdater.cancel();
@@ -126,7 +135,7 @@ export function createConversationEventHandler<CommandMessageT extends CommandMe
           toolArgs: args,
         };
 
-        appendMessages([pendingMessage]);
+        appendMessages([pendingMessage as unknown as MessageT]);
         return;
       }
 
@@ -157,26 +166,26 @@ export function createConversationEventHandler<CommandMessageT extends CommandMe
         }
 
         if (messagesToAdd.length > 0) {
-          appendMessages(messagesToAdd);
+          appendMessages(messagesToAdd as unknown as MessageT[]);
           liveResponseUpdater.cancel();
           setLiveResponse(null);
         }
 
         // Replace pending message with completed one, or add new if not found
-        setMessages((prev: any[]) => {
+        setMessages((prev) => {
           const pendingIndex = annotated.callId
             ? prev.findIndex(
-                (msg: any) => msg.sender === 'command' && msg.callId === annotated.callId && msg.status === 'running',
+                (msg) => msg.sender === 'command' && msg.callId === annotated.callId && msg.status === 'running',
               )
             : -1;
 
           if (pendingIndex !== -1) {
             const next = [...prev];
-            next[pendingIndex] = annotated;
+            next[pendingIndex] = annotated as unknown as MessageT;
             return trimMessages(next);
           }
 
-          return trimMessages([...prev, annotated]);
+          return trimMessages([...prev, annotated as unknown as MessageT]);
         });
         return;
       }
@@ -187,7 +196,7 @@ export function createConversationEventHandler<CommandMessageT extends CommandMe
           sender: 'system',
           text: `Tool hallucination detected (${event.toolName}). Retrying... (Attempt ${event.attempt}/${event.maxRetries})`,
         };
-        setMessages((prev: any[]) => [...prev, systemMessage]);
+        setMessages((prev) => [...prev, systemMessage as unknown as MessageT]);
         return;
       }
 

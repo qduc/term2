@@ -9,15 +9,7 @@ import type { LoggingService } from '../services/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';
 import type { SSHInfo } from '../app.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
-
-export type PendingApproval = {
-  agentName: string;
-  toolName: string;
-  argumentsText: string;
-  rawInterruption: any;
-  callId?: string;
-  isMaxTurnsPrompt?: boolean;
-};
+import type { PendingApproval } from '../contracts/conversation.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;

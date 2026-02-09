@@ -1,4 +1,5 @@
 import type { ZodObject } from 'zod';
+import type { ApprovalPresentationCapability } from './tool-capabilities.js';
 
 export interface CommandMessage {
   id: string;
@@ -10,7 +11,7 @@ export interface CommandMessage {
   failureReason?: string;
   isApprovalRejection?: boolean;
   toolName?: string;
-  toolArgs?: any;
+  toolArgs?: unknown;
   callId?: string;
 }
 
@@ -18,6 +19,7 @@ export interface ToolDefinition<Params = any> {
   name: string;
   description: string;
   parameters: ZodObject<any, any>;
+  approvalPresentation?: ApprovalPresentationCapability;
   needsApproval: (params: Params, context?: unknown) => Promise<boolean> | boolean;
   execute: (params: Params, context?: unknown) => Promise<any> | any;
   /**
@@ -27,5 +29,5 @@ export interface ToolDefinition<Params = any> {
    * @param toolCallArgumentsById - Map of call IDs to their arguments for fallback lookup
    * @returns Array of CommandMessage objects to display to the user
    */
-  formatCommandMessage: (item: any, index: number, toolCallArgumentsById: Map<string, unknown>) => CommandMessage[];
+  formatCommandMessage: (item: unknown, index: number, toolCallArgumentsById: Map<string, unknown>) => CommandMessage[];
 }

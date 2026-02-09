@@ -128,6 +128,91 @@ test('continue() streams events after approval decision', async (t) => {
   t.is(cont[1].finalText, 'Approved run');
 });
 
+test('sendMessage() preserves callId on approval_required terminal result', async (t) => {
+  const interruption = {
+    name: 'shell',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ command: 'echo hi' }),
+    callId: 'call-preserve-1',
+  };
+
+  const stream = new MockStream([]);
+  stream.interruptions = [interruption];
+  stream.state = {
+    approve() {},
+    reject() {},
+  };
+
+  const mockClient = {
+    async startStream() {
+      return stream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const result = await session.sendMessage('run command');
+  t.is(result.type, 'approval_required');
+  t.is(result.approval.callId, 'call-preserve-1');
+});
+
+test('handleApprovalDecision() preserves callId on subsequent approval_required terminal result', async (t) => {
+  const firstInterruption = {
+    name: 'shell',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ command: 'echo first' }),
+    callId: 'call-first',
+  };
+
+  const secondInterruption = {
+    name: 'apply_patch',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ path: 'a.ts' }),
+    callId: 'call-second',
+  };
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [firstInterruption];
+  initialStream.state = {
+    approveCalls: [],
+    approve(arg) {
+      this.approveCalls.push(arg);
+    },
+    reject() {},
+  };
+
+  const continuationStream = new MockStream([]);
+  continuationStream.interruptions = [secondInterruption];
+
+  const mockClient = {
+    async startStream() {
+      return initialStream;
+    },
+    async continueRunStream() {
+      return continuationStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const first = await session.sendMessage('run command');
+  t.is(first.type, 'approval_required');
+  t.is(first.approval.callId, 'call-first');
+
+  const second = await session.handleApprovalDecision('y');
+  t.truthy(second);
+  t.is(second?.type, 'approval_required');
+  if (second?.type === 'approval_required') {
+    t.is(second.approval.callId, 'call-second');
+  }
+});
+
 test('run() sends text for OpenAI provider (server-side state)', async (t) => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
   stream.finalOutput = 'Response';

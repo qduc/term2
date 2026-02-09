@@ -11,29 +11,62 @@ import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
 import { ApprovalState } from './approval-state.js';
 import { createInvalidToolCallDiagnostic } from './logging-contract.js';
+import type { ConversationTerminal, FinalTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
 
 export type { CommandMessage };
+export type ConversationResult = ConversationTerminal;
 
-interface ApprovalResult {
-  type: 'approval_required';
-  approval: {
-    agentName: string;
-    toolName: string;
-    argumentsText: string;
-    rawInterruption: any;
-    callId?: string;
-  };
-}
+type UnknownRecord = Record<string, unknown>;
+type AgentStream = AsyncIterable<unknown> & {
+  completed: Promise<unknown>;
+  rawResponses?: unknown[];
+  lastResponseId?: string | null;
+  interruptions?: unknown[];
+  state?: unknown;
+  newItems?: unknown[];
+  history?: unknown[];
+  finalOutput?: string;
+};
 
-interface ResponseResult {
-  type: 'response';
-  commandMessages: CommandMessage[];
-  finalText: string;
-  reasoningText?: string;
-  usage?: NormalizedUsage;
-}
+const asRecord = (value: unknown): UnknownRecord | undefined =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as UnknownRecord) : undefined;
 
-export type ConversationResult = ApprovalResult | ResponseResult;
+const getString = (record: UnknownRecord | undefined, key: string): string | undefined => {
+  const value = record?.[key];
+  return typeof value === 'string' ? value : undefined;
+};
+
+const getMethod = <TArgs extends unknown[], TResult>(
+  target: unknown,
+  key: string,
+): ((...args: TArgs) => TResult) | null => {
+  const record = asRecord(target);
+  const candidate = record?.[key];
+  return typeof candidate === 'function' ? (candidate as (...args: TArgs) => TResult) : null;
+};
+
+const getCallIdFromObject = (value: unknown): string | undefined => {
+  const record = asRecord(value);
+  const callId =
+    getString(record, 'callId') ??
+    getString(record, 'call_id') ??
+    getString(record, 'tool_call_id') ??
+    getString(record, 'toolCallId') ??
+    getString(record, 'id');
+
+  if (callId) {
+    return callId;
+  }
+
+  const rawItem = asRecord(record?.rawItem);
+  return (
+    getString(rawItem, 'callId') ??
+    getString(rawItem, 'call_id') ??
+    getString(rawItem, 'tool_call_id') ??
+    getString(rawItem, 'toolCallId') ??
+    getString(rawItem, 'id')
+  );
+};
 
 const getCommandFromArgs = (args: unknown): string => {
   if (!args) {
@@ -58,15 +91,16 @@ const getCommandFromArgs = (args: unknown): string => {
   }
 
   if (typeof args === 'object') {
+    const argsRecord = asRecord(args);
     // Handle shell tool's command parameter
-    const cmdFromObject = 'command' in args ? String(args.command) : undefined;
+    const cmdFromObject = argsRecord?.command !== undefined ? String(argsRecord.command) : undefined;
     // Fallback for old 'commands' array format
-    if ('commands' in args && Array.isArray(args.commands)) {
-      return (args.commands as string[]).join('\n');
+    if (Array.isArray(argsRecord?.commands)) {
+      return (argsRecord.commands as string[]).join('\n');
     }
     let argsFromObject: string | undefined;
-    if ('arguments' in args) {
-      const rawArguments = (args as any).arguments;
+    if (argsRecord?.arguments !== undefined) {
+      const rawArguments = argsRecord.arguments;
       if (typeof rawArguments === 'string') {
         try {
           argsFromObject = JSON.stringify(JSON.parse(rawArguments));
@@ -115,45 +149,7 @@ export class ConversationSession {
   private textDeltaCount = 0;
   private reasoningDeltaCount = 0;
   private toolCallArgumentsById = new Map<string, unknown>();
-  private lastEventType: string | null = null;
-  private eventTypeCount = 0;
   private emittedInvalidToolCallPackets = new Set<string>();
-  // private logStreamEvent = (eventType: string, eventData: any) => {
-  // 	if (eventData.item) {
-  // 		eventType = eventData.item.type;
-  // 		eventData = eventData.item.rawItem;
-  // 		// this.logStreamEvent(eventType, eventData);
-  // 	}
-  //
-  // 	// Deduplicate consecutive identical event types
-  //     if (eventType !== this.lastEventType) {
-  //         if (this.lastEventType !== null && this.eventTypeCount > 0) {
-  //             this.logger.debug('Stream event summary', {
-  //                 eventType: this.lastEventType,
-  //                 count: this.eventTypeCount,
-  //             });
-  //         }
-  //         this.lastEventType = eventType;
-  //         this.eventTypeCount = 1;
-  //         // Log the first occurrence with details
-  //         this.logger.debug('Stream event', {
-  //             eventType,
-  //             ...eventData,
-  //         });
-  //     } else {
-  //         this.eventTypeCount++;
-  //     }
-  // };
-  private flushStreamEventLog = () => {
-    if (this.lastEventType !== null && this.eventTypeCount > 1) {
-      this.logger.debug('Stream event summary', {
-        eventType: this.lastEventType,
-        count: this.eventTypeCount,
-      });
-    }
-    this.lastEventType = null;
-    this.eventTypeCount = 0;
-  };
 
   constructor(
     id: string,
@@ -171,31 +167,27 @@ export class ConversationSession {
     this.approvalState.clearPending();
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
-    if (typeof (this.agentClient as any).clearConversations === 'function') {
-      (this.agentClient as any).clearConversations();
-    }
+    const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
+    clearConversations?.call(this.agentClient);
   }
 
   setModel(model: string): void {
     this.agentClient.setModel(model);
   }
 
-  setReasoningEffort(effort: any): void {
-    if (typeof this.agentClient.setReasoningEffort === 'function') {
-      this.agentClient.setReasoningEffort(effort);
-    }
+  setReasoningEffort(effort: ReasoningEffortSetting): void {
+    const setReasoningEffort = getMethod<[ReasoningEffortSetting], void>(this.agentClient, 'setReasoningEffort');
+    setReasoningEffort?.call(this.agentClient, effort);
   }
 
-  setTemperature(temperature: any): void {
-    if (typeof (this.agentClient as any).setTemperature === 'function') {
-      (this.agentClient as any).setTemperature(temperature);
-    }
+  setTemperature(temperature?: number): void {
+    const setTemperature = getMethod<[number | undefined], void>(this.agentClient, 'setTemperature');
+    setTemperature?.call(this.agentClient, temperature);
   }
 
   setProvider(provider: string): void {
-    if (typeof this.agentClient.setProvider === 'function') {
-      (this.agentClient as any).setProvider(provider);
-    }
+    const setProvider = getMethod<[string], void>(this.agentClient, 'setProvider');
+    setProvider?.call(this.agentClient, provider);
   }
   setRetryCallback(callback: () => void): void {
     if (typeof this.agentClient.setRetryCallback === 'function') {
@@ -238,7 +230,7 @@ export class ConversationSession {
       skipUserMessage?: boolean;
     } = {},
   ): AsyncIterable<ConversationEvent> {
-    let stream: any = null;
+    let stream: AgentStream | null = null;
     try {
       this.logger.info('Conversation stream start', {
         eventType: 'stream.started',
@@ -263,6 +255,7 @@ export class ConversationSession {
         });
 
         const { state, interruption, emittedCommandIds, toolCallArgumentsById } = abortedContext;
+        const interruptionRecord = asRecord(interruption);
 
         // Restore cached tool-call arguments captured before abort so continuation can attach them
         this.toolCallArgumentsById.clear();
@@ -273,12 +266,12 @@ export class ConversationSession {
         }
 
         // Add interceptor for this tool execution
-        const toolName = interruption.name ?? 'unknown';
-        const expectedCallId = (interruption as any).rawItem?.callId ?? (interruption as any).callId;
+        const toolName = getString(interruptionRecord, 'name') ?? 'unknown';
+        const expectedCallId = getCallIdFromObject(interruption);
         const rejectionMessage = `Tool execution was not approved. User provided new input instead: ${text}`;
 
         const removeInterceptor = this.agentClient.addToolInterceptor(
-          async (name: string, _params: any, toolCallId?: string) => {
+          async (name: string, _params: unknown, toolCallId?: string) => {
             // Match both tool name and call ID for stricter matching
             if (name === toolName && (!expectedCallId || toolCallId === expectedCallId)) {
               markToolCallAsApprovalRejection(toolCallId ?? expectedCallId);
@@ -288,12 +281,13 @@ export class ConversationSession {
           },
         );
 
-        state.approve(interruption);
+        const approve = getMethod<[unknown], void>(state, 'approve');
+        approve?.call(state, interruption);
 
         try {
-          const stream = await this.agentClient.continueRunStream(state, {
+          const continuedStream = (await this.agentClient.continueRunStream(state, {
             previousResponseId: this.previousResponseId,
-          });
+          })) as AgentStream;
 
           const acc = {
             finalOutput: '',
@@ -301,52 +295,25 @@ export class ConversationSession {
             emittedCommandIds: new Set<string>(emittedCommandIds),
             latestUsage: undefined as NormalizedUsage | undefined,
           };
-          yield* this.#streamEvents(stream, acc, {
+          yield* this.#streamEvents(continuedStream, acc, {
             preserveExistingToolArgs: true,
           });
 
-          this.previousResponseId = stream.lastResponseId;
-          this.conversationStore.updateFromResult(stream);
+          this.previousResponseId = continuedStream.lastResponseId ?? null;
+          this.conversationStore.updateFromResult(continuedStream);
 
           // Check if another interruption occurred
-          if (stream.interruptions && stream.interruptions.length > 0) {
+          if (continuedStream.interruptions && continuedStream.interruptions.length > 0) {
             this.logger.warn('Another interruption occurred after fake execution - handling as approval');
             // Let the normal flow handle this
             const result = this.#buildResult(
-              stream,
+              continuedStream,
               acc.finalOutput,
               acc.reasoningOutput,
               acc.emittedCommandIds,
               acc.latestUsage,
             );
-            // Re-emit the terminal event explicitly.
-            if (result.type === 'approval_required') {
-              const interruption = result.approval.rawInterruption;
-              const callId =
-                interruption?.rawItem?.callId ??
-                interruption?.callId ??
-                interruption?.call_id ??
-                interruption?.tool_call_id ??
-                interruption?.toolCallId ??
-                interruption?.id;
-              yield {
-                type: 'approval_required',
-                approval: {
-                  agentName: result.approval.agentName,
-                  toolName: result.approval.toolName,
-                  argumentsText: result.approval.argumentsText,
-                  ...(callId ? { callId: String(callId) } : {}),
-                },
-              };
-            } else {
-              yield {
-                type: 'final',
-                finalText: result.finalText,
-                ...(result.reasoningText ? { reasoningText: result.reasoningText } : {}),
-                ...(result.commandMessages?.length ? { commandMessages: result.commandMessages } : {}),
-                ...(result.usage ? { usage: result.usage } : {}),
-              };
-            }
+            yield this.#toTerminalEvent(result);
             return;
           }
 
@@ -354,39 +321,13 @@ export class ConversationSession {
           this.logger.debug('Fake execution completed, agent received rejection message');
 
           const result = this.#buildResult(
-            stream,
+            continuedStream,
             acc.finalOutput,
             acc.reasoningOutput,
             acc.emittedCommandIds,
             acc.latestUsage,
           );
-          if (result.type === 'approval_required') {
-            const interruption = result.approval.rawInterruption;
-            const callId =
-              interruption?.rawItem?.callId ??
-              interruption?.callId ??
-              interruption?.call_id ??
-              interruption?.tool_call_id ??
-              interruption?.toolCallId ??
-              interruption?.id;
-            yield {
-              type: 'approval_required',
-              approval: {
-                agentName: result.approval.agentName,
-                toolName: result.approval.toolName,
-                argumentsText: result.approval.argumentsText,
-                ...(callId ? { callId: String(callId) } : {}),
-              },
-            };
-          } else {
-            yield {
-              type: 'final',
-              finalText: result.finalText,
-              ...(result.reasoningText ? { reasoningText: result.reasoningText } : {}),
-              ...(result.commandMessages?.length ? { commandMessages: result.commandMessages } : {}),
-              ...(result.usage ? { usage: result.usage } : {}),
-            };
-          }
+          yield this.#toTerminalEvent(result);
           return;
         } catch (error) {
           this.logger.warn('Error resolving aborted approval with fake execution', {
@@ -400,19 +341,14 @@ export class ConversationSession {
       }
 
       // Normal message flow
-      const provider =
-        typeof (this.agentClient as any).getProvider === 'function'
-          ? (this.agentClient as any).getProvider()
-          : 'openai';
+      const getProvider = getMethod<[], string>(this.agentClient, 'getProvider');
+      const provider = getProvider ? getProvider.call(this.agentClient) : 'openai';
 
       const supportsChaining = supportsConversationChaining(provider);
 
-      stream = await this.agentClient.startStream(
-        supportsChaining ? text : (this.conversationStore.getHistory() as any),
-        {
-          previousResponseId: this.previousResponseId,
-        },
-      );
+      stream = (await this.agentClient.startStream(supportsChaining ? text : this.conversationStore.getHistory(), {
+        previousResponseId: this.previousResponseId,
+      })) as AgentStream;
 
       const acc = {
         finalOutput: '',
@@ -424,7 +360,7 @@ export class ConversationSession {
         preserveExistingToolArgs: false,
       });
 
-      this.previousResponseId = stream.lastResponseId;
+      this.previousResponseId = stream.lastResponseId ?? null;
       this.conversationStore.updateFromResult(stream);
 
       // Build terminal event (approval_required or final)
@@ -445,33 +381,11 @@ export class ConversationSession {
           traceId: this.logger.getCorrelationId(),
           toolName: result.approval.toolName,
         });
-        const interruption = result.approval.rawInterruption;
-        const callId =
-          interruption?.rawItem?.callId ??
-          interruption?.callId ??
-          interruption?.call_id ??
-          interruption?.tool_call_id ??
-          interruption?.toolCallId ??
-          interruption?.id;
-        yield {
-          type: 'approval_required',
-          approval: {
-            agentName: result.approval.agentName,
-            toolName: result.approval.toolName,
-            argumentsText: result.approval.argumentsText,
-            ...(callId ? { callId: String(callId) } : {}),
-          },
-        };
+        yield this.#toTerminalEvent(result);
         return;
       }
 
-      yield {
-        type: 'final',
-        finalText: result.finalText,
-        ...(result.reasoningText ? { reasoningText: result.reasoningText } : {}),
-        ...(result.commandMessages?.length ? { commandMessages: result.commandMessages } : {}),
-        ...(result.usage ? { usage: result.usage } : {}),
-      };
+      yield this.#toTerminalEvent(result);
     } catch (error) {
       // Handle tool hallucination: model called a non-existent tool
       if (isToolHallucinationError(error) && hallucinationRetryCount < MAX_HALLUCINATION_RETRIES) {
@@ -558,6 +472,7 @@ export class ConversationSession {
       emittedCommandIds: previouslyEmittedIds,
       toolCallArgumentsById,
     } = pendingApprovalContext;
+    const interruptionRecord = asRecord(interruption);
 
     let removeInterceptor: (() => void) | null = null;
 
@@ -569,17 +484,18 @@ export class ConversationSession {
         sessionId: this.id,
         traceId: this.logger.getCorrelationId(),
       });
-      state.approve(interruption);
+      const approve = getMethod<[unknown], void>(state, 'approve');
+      approve?.call(state, interruption);
     } else {
-      const toolName = interruption.name ?? 'unknown';
-      const expectedCallId = (interruption as any).rawItem?.callId ?? (interruption as any).callId;
+      const toolName = getString(interruptionRecord, 'name') ?? 'unknown';
+      const expectedCallId = getCallIdFromObject(interruption);
       const rejectionMessage = rejectionReason
         ? `Tool execution was not approved. User's reason: ${rejectionReason}`
         : 'Tool execution was not approved.';
 
       if (typeof this.agentClient.addToolInterceptor === 'function') {
         const removeInterceptor = this.agentClient.addToolInterceptor(
-          async (name: string, _params: any, toolCallId?: string) => {
+          async (name: string, _params: unknown, toolCallId?: string) => {
             if (name === toolName && (!expectedCallId || toolCallId === expectedCallId)) {
               markToolCallAsApprovalRejection(toolCallId ?? expectedCallId);
               return rejectionMessage;
@@ -589,13 +505,15 @@ export class ConversationSession {
         );
 
         // Approve to continue but interceptor will return rejection message
-        state.approve(interruption);
+        const approve = getMethod<[unknown], void>(state, 'approve');
+        approve?.call(state, interruption);
 
         // Store interceptor cleanup for after stream
         this.approvalState.setPendingRemoveInterceptor(removeInterceptor);
       } else {
         // Fallback for clients without tool interceptors
-        state.reject(interruption);
+        const reject = getMethod<[unknown], void>(state, 'reject');
+        reject?.call(state, interruption);
       }
 
       this.logger.info('Tool approval rejected', {
@@ -618,9 +536,9 @@ export class ConversationSession {
     }
 
     try {
-      const stream = await this.agentClient.continueRunStream(state, {
+      const stream = (await this.agentClient.continueRunStream(state, {
         previousResponseId: this.previousResponseId,
-      });
+      })) as AgentStream;
 
       const acc = {
         finalOutput: '',
@@ -632,7 +550,7 @@ export class ConversationSession {
         preserveExistingToolArgs: true,
       });
 
-      this.previousResponseId = stream.lastResponseId;
+      this.previousResponseId = stream.lastResponseId ?? null;
       this.conversationStore.updateFromResult(stream);
 
       // Merge previously emitted command IDs with newly emitted ones
@@ -656,33 +574,11 @@ export class ConversationSession {
           traceId: this.logger.getCorrelationId(),
           toolName: result.approval.toolName,
         });
-        const interruption = result.approval.rawInterruption;
-        const callId =
-          interruption?.rawItem?.callId ??
-          interruption?.callId ??
-          interruption?.call_id ??
-          interruption?.tool_call_id ??
-          interruption?.toolCallId ??
-          interruption?.id;
-        yield {
-          type: 'approval_required',
-          approval: {
-            agentName: result.approval.agentName,
-            toolName: result.approval.toolName,
-            argumentsText: result.approval.argumentsText,
-            ...(callId ? { callId: String(callId) } : {}),
-          },
-        };
+        yield this.#toTerminalEvent(result);
         return;
       }
 
-      yield {
-        type: 'final',
-        finalText: result.finalText,
-        ...(result.reasoningText ? { reasoningText: result.reasoningText } : {}),
-        ...(result.commandMessages?.length ? { commandMessages: result.commandMessages } : {}),
-        ...(result.usage ? { usage: result.usage } : {}),
-      };
+      yield this.#toTerminalEvent(result);
     } catch (error) {
       yield {
         type: 'error',
@@ -732,7 +628,7 @@ export class ConversationSession {
           break;
         }
         case 'command_message': {
-          onCommandMessage?.(event.message as any);
+          onCommandMessage?.(event.message);
           break;
         }
         case 'approval_required': {
@@ -746,6 +642,7 @@ export class ConversationSession {
               toolName: event.approval.toolName,
               argumentsText: event.approval.argumentsText,
               rawInterruption,
+              callId: event.approval.callId,
             },
           };
         }
@@ -761,7 +658,7 @@ export class ConversationSession {
           });
           if (event.commandMessages?.length) {
             for (const msg of event.commandMessages) {
-              commandMessages.push(msg as any);
+              commandMessages.push(msg);
             }
           }
           break;
@@ -780,7 +677,7 @@ export class ConversationSession {
       finalText = finalText || 'Done.';
     }
 
-    const response: ConversationResult = {
+    const response: FinalTerminal = {
       type: 'response',
       commandMessages,
       finalText: finalText || 'Done.',
@@ -835,7 +732,7 @@ export class ConversationSession {
           break;
         }
         case 'command_message': {
-          onCommandMessage?.(event.message as any);
+          onCommandMessage?.(event.message);
           break;
         }
         case 'approval_required': {
@@ -848,6 +745,7 @@ export class ConversationSession {
               toolName: event.approval.toolName,
               argumentsText: event.approval.argumentsText,
               rawInterruption,
+              callId: event.approval.callId,
             },
           };
         }
@@ -863,7 +761,7 @@ export class ConversationSession {
           });
           if (event.commandMessages?.length) {
             for (const msg of event.commandMessages) {
-              commandMessages.push(msg as any);
+              commandMessages.push(msg);
             }
           }
           break;
@@ -877,7 +775,7 @@ export class ConversationSession {
     }
 
     if (!sawTerminalEvent) {
-      const response: ConversationResult = {
+      const response: FinalTerminal = {
         type: 'response',
         commandMessages,
         finalText: finalText || 'Done.',
@@ -892,7 +790,7 @@ export class ConversationSession {
       return response;
     }
 
-    const response: ConversationResult = {
+    const response: FinalTerminal = {
       type: 'response',
       commandMessages,
       finalText: finalText || 'Done.',
@@ -908,7 +806,7 @@ export class ConversationSession {
   }
 
   async *#streamEvents(
-    stream: any,
+    stream: AgentStream,
     acc: {
       finalOutput: string;
       reasoningOutput: string;
@@ -951,28 +849,31 @@ export class ConversationSession {
       };
     };
 
-    for await (const event of stream) {
+    for await (const rawEvent of stream) {
+      const event = asRecord(rawEvent);
+      const eventData = asRecord(event?.data);
+      const eventType = getString(event, 'type');
       // Extract usage if present in any of the common locations
-      const usage = extractUsage(event);
+      const usage = extractUsage(rawEvent);
       if (usage) {
         acc.latestUsage = usage;
         this.logger.debug('Usage extracted from stream event', {
           sessionId: this.id,
           source: 'stream_event',
-          eventType: event?.type ?? event?.data?.type ?? 'unknown',
+          eventType: eventType ?? getString(eventData, 'type') ?? 'unknown',
           usage,
         });
       }
 
       // Log event type with deduplication for ordering understanding
 
-      const delta1 = extractTextDelta(event);
+      const delta1 = extractTextDelta(rawEvent);
       if (delta1) {
         const e = emitText(delta1);
         if (e) yield e;
       }
-      if (event?.data) {
-        const delta2 = extractTextDelta(event.data);
+      if (eventData) {
+        const delta2 = extractTextDelta(eventData);
         if (delta2) {
           const e = emitText(delta2);
           if (e) yield e;
@@ -980,28 +881,35 @@ export class ConversationSession {
       }
 
       // Handle reasoning items
-      const reasoningDelta = extractReasoningDelta(event);
+      const reasoningDelta = extractReasoningDelta(rawEvent);
       if (reasoningDelta) {
         const e = emitReasoning(reasoningDelta);
         if (e) yield e;
       }
 
-      const maybeEmitCommandMessagesFromItems = (items: any[]) =>
+      const maybeEmitCommandMessagesFromItems = (items: unknown[]) =>
         emitCommandMessagesFromItems(items, {
           toolCallArgumentsById,
           emittedCommandIds: acc.emittedCommandIds,
         });
 
-      if (event?.type === 'run_item_stream_event') {
-        captureToolCallArguments(event.item, toolCallArgumentsById);
+      if (eventType === 'run_item_stream_event') {
+        const eventItem = event?.item;
+        const eventItemRecord = asRecord(eventItem);
+        captureToolCallArguments(eventItem, toolCallArgumentsById);
 
         // Emit tool_started event when a function_call is detected
-        const rawItem = event.item?.rawItem ?? event.item;
-        if (rawItem?.type === 'function_call') {
-          const callId = rawItem.callId ?? rawItem.call_id ?? rawItem.tool_call_id ?? rawItem.toolCallId ?? rawItem.id;
+        const rawItem = asRecord(eventItemRecord?.rawItem) ?? eventItemRecord;
+        if (getString(rawItem, 'type') === 'function_call') {
+          const callId =
+            getString(rawItem, 'callId') ??
+            getString(rawItem, 'call_id') ??
+            getString(rawItem, 'tool_call_id') ??
+            getString(rawItem, 'toolCallId') ??
+            getString(rawItem, 'id');
           if (callId) {
-            const toolName = rawItem.name ?? event.item?.name;
-            const args = rawItem.arguments ?? rawItem.args ?? event.item?.arguments ?? event.item?.args;
+            const toolName = getString(rawItem, 'name') ?? getString(eventItemRecord, 'name');
+            const args = rawItem?.arguments ?? rawItem?.args ?? eventItemRecord?.arguments ?? eventItemRecord?.args;
 
             // Providers sometimes surface arguments as a JSON string.
             // Normalize here so downstream UI (pending/running display)
@@ -1068,12 +976,15 @@ export class ConversationSession {
           }
         }
 
-        for (const e of maybeEmitCommandMessagesFromItems([event.item])) {
+        for (const e of maybeEmitCommandMessagesFromItems([eventItem])) {
           yield e;
         }
-      } else if (event?.type === 'tool_call_output_item' || event?.rawItem?.type === 'function_call_output') {
-        captureToolCallArguments(event, toolCallArgumentsById);
-        for (const e of maybeEmitCommandMessagesFromItems([event])) {
+      } else if (
+        eventType === 'tool_call_output_item' ||
+        getString(asRecord(event?.rawItem), 'type') === 'function_call_output'
+      ) {
+        captureToolCallArguments(rawEvent, toolCallArgumentsById);
+        for (const e of maybeEmitCommandMessagesFromItems([rawEvent])) {
           yield e;
         }
       }
@@ -1111,7 +1022,7 @@ export class ConversationSession {
 
       const streamRecord =
         stream && typeof stream === 'object' && !Array.isArray(stream)
-          ? (stream as Record<string, unknown>)
+          ? (stream as unknown as Record<string, unknown>)
           : undefined;
 
       this.logger.debug('No usage found in stream completion', {
@@ -1125,16 +1036,42 @@ export class ConversationSession {
           usage: Boolean(completedResultRecord?.usage),
           usageMetadata: Boolean(completedResultRecord?.usageMetadata),
           usage_metadata: Boolean(completedResultRecord?.usage_metadata),
-          responseUsage: Boolean((completedResultRecord?.response as any)?.usage),
+          responseUsage: Boolean(asRecord(completedResultRecord?.response)?.usage),
         },
       });
     }
+  }
 
-    this.flushStreamEventLog();
+  #toTerminalEvent(result: ConversationResult): ConversationEvent {
+    if (result.type === 'approval_required') {
+      return {
+        type: 'approval_required',
+        approval: {
+          agentName: result.approval.agentName,
+          toolName: result.approval.toolName,
+          argumentsText: result.approval.argumentsText,
+          ...(result.approval.callId ? { callId: result.approval.callId } : {}),
+        },
+      };
+    }
+
+    return {
+      type: 'final',
+      finalText: result.finalText,
+      ...(result.reasoningText ? { reasoningText: result.reasoningText } : {}),
+      ...(result.commandMessages?.length ? { commandMessages: result.commandMessages } : {}),
+      ...(result.usage ? { usage: result.usage } : {}),
+    };
   }
 
   #buildResult(
-    result: any,
+    result: {
+      interruptions?: unknown[];
+      state?: unknown;
+      newItems?: unknown[];
+      history?: unknown[];
+      finalOutput?: string;
+    },
     finalOutputOverride?: string,
     reasoningOutputOverride?: string,
     emittedCommandIds?: Set<string>,
@@ -1150,32 +1087,28 @@ export class ConversationSession {
       });
 
       let argumentsText = '';
-      const toolName = interruption.name;
+      const interruptionRecord = asRecord(interruption);
+      const toolName = getString(interruptionRecord, 'name');
 
       // For shell_call (built-in shell tool), extract commands from action
       // For function tools (bash, shell), extract from arguments
-      if (interruption.type === 'shell_call') {
-        if (interruption.action?.commands) {
-          argumentsText = Array.isArray(interruption.action.commands)
-            ? interruption.action.commands.join('\n')
-            : String(interruption.action.commands);
+      if (getString(interruptionRecord, 'type') === 'shell_call') {
+        const action = asRecord(interruptionRecord?.action);
+        const actionCommands = action?.commands;
+        if (actionCommands) {
+          argumentsText = Array.isArray(actionCommands) ? actionCommands.join('\n') : String(actionCommands);
         }
       } else {
-        argumentsText = getCommandFromArgs(interruption.arguments);
+        argumentsText = getCommandFromArgs(interruptionRecord?.arguments);
       }
 
-      const callId =
-        interruption?.rawItem?.callId ??
-        interruption?.callId ??
-        interruption?.call_id ??
-        interruption?.tool_call_id ??
-        interruption?.toolCallId ??
-        interruption?.id;
+      const agent = asRecord(interruptionRecord?.agent);
+      const callId = getCallIdFromObject(interruption);
 
       return {
         type: 'approval_required',
         approval: {
-          agentName: interruption.agent?.name ?? 'Agent',
+          agentName: getString(agent, 'name') ?? 'Agent',
           toolName: toolName ?? 'Unknown Tool',
           argumentsText,
           rawInterruption: interruption,

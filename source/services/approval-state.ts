@@ -1,14 +1,14 @@
 export type PendingApprovalContext = {
-  state: any;
-  interruption: any;
+  state: unknown;
+  interruption: unknown;
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
   removeInterceptor?: () => void;
 };
 
 export type AbortedApprovalContext = {
-  state: any;
-  interruption: any;
+  state: unknown;
+  interruption: unknown;
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
 };

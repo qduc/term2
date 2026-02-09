@@ -1,5 +1,6 @@
 import type { CommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
+import type { ApprovalDescriptor } from '../contracts/conversation.js';
 
 export type ConversationEvent =
   | TextDeltaEvent
@@ -48,18 +49,12 @@ export interface ToolStartedEvent {
   type: 'tool_started';
   toolCallId: string;
   toolName: string;
-  arguments: any;
+  arguments: unknown;
 }
 
 export interface ApprovalRequiredEvent {
   type: 'approval_required';
-  approval: {
-    agentName: string;
-    toolName: string;
-    argumentsText: string;
-    /** Optional provider-specific tool call id (when available). */
-    callId?: string;
-  };
+  approval: Omit<ApprovalDescriptor, 'rawInterruption'>;
 }
 
 export interface CommandMessageEvent {

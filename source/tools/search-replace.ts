@@ -7,6 +7,7 @@ import type { ILoggingService, ISettingsService } from '../services/service-inte
 import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
 import { healSearchReplaceParams } from './edit-healing.js';
 import { ExecutionContext } from '../services/execution-context.js';
+import { getApprovalPresentationCapability } from './tool-capabilities.js';
 
 /**
  * Detect the predominant EOL style in file content.
@@ -381,6 +382,7 @@ export function createSearchReplaceToolDefinition(deps: {
       'Set replace_all to true to replace all occurrences instead of requiring a unique match.\n' +
       'Use this tool for precise edits where you know the content to be replaced.',
     parameters: searchReplaceParametersSchema,
+    approvalPresentation: getApprovalPresentationCapability('search_replace'),
     needsApproval: async (params) => {
       try {
         const editMode = settingsService.get<boolean>('app.editMode');

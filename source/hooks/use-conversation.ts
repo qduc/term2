@@ -6,9 +6,14 @@ import { createStreamingUpdateCoordinator } from '../utils/streaming-updater.js'
 import { appendMessagesCapped } from '../utils/message-buffer.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils.js';
 import { createStreamingSession } from '../utils/streaming-session-factory.js';
-import { TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
 import type { CommandMessage as BaseCommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
+import type { ConversationTerminal, PendingApproval, ReasoningEffortSetting } from '../contracts/conversation.js';
+import {
+  annotateApprovedCommandMessage,
+  filterPendingCommandMessagesForApproval,
+  type ApprovedToolContext,
+} from '../services/approval-presentation-policy.js';
 
 interface UserMessage {
   id: number;
@@ -21,15 +26,6 @@ interface BotMessage {
   sender: 'bot';
   text: string;
   reasoningText?: string;
-}
-
-interface PendingApproval {
-  agentName: string;
-  toolName: string;
-  argumentsText: string;
-  rawInterruption: any;
-  callId?: string;
-  isMaxTurnsPrompt?: boolean; // Special flag for max turns continuation
 }
 
 type CommandMessage = BaseCommandMessage & {
@@ -60,37 +56,6 @@ const LIVE_RESPONSE_THROTTLE_MS = 150;
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 const MAX_MESSAGE_COUNT = 300;
 
-export const filterPendingCommandMessagesForApproval = (
-  messages: any[],
-  approval: { callId?: string; toolName?: string } | null | undefined,
-): any[] => {
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return messages ?? [];
-  }
-
-  const callId = approval?.callId ? String(approval.callId) : undefined;
-  const toolName = approval?.toolName;
-
-  if (!callId && !toolName) {
-    return messages;
-  }
-
-  return messages.filter((msg) => {
-    if (!msg || msg.sender !== 'command') {
-      return true;
-    }
-
-    if (msg.status !== 'pending' && msg.status !== 'running') {
-      return true;
-    }
-
-    const matchesCallId = callId && msg.callId && String(msg.callId) === callId;
-    const matchesToolName = !callId && toolName && msg.toolName === toolName;
-
-    return !(matchesCallId || matchesToolName);
-  });
-};
-
 export const useConversation = ({
   conversationService,
   loggingService,
@@ -105,10 +70,7 @@ export const useConversation = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
   const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(null);
-  const approvedContextRef = useRef<{
-    callId?: string;
-    toolName?: string;
-  } | null>(null);
+  const approvedContextRef = useRef<ApprovedToolContext | null>(null);
   const createLiveResponseUpdater = useCallback(
     (liveMessageId: number) =>
       createStreamingUpdateCoordinator((text: string) => {
@@ -135,72 +97,23 @@ export const useConversation = ({
     [trimMessages],
   );
 
-  // Helper to log events with deduplication
-  // const createEventLogger = () => {
-  //     let lastEventType: string | null = null;
-  //     let eventCount = 0;
-  //     let eventSequence: string[] = [];
-  //
-  //     const logDeduplicated = (eventType: string) => {
-  //         if (eventType !== lastEventType) {
-  //             if (lastEventType !== null) {
-  //                 loggingService.debug('Conversation event sequence', {
-  //                     event: lastEventType,
-  //                     count: eventCount,
-  //                     sequenceLength: eventSequence.length,
-  //                     sequence: eventSequence,
-  //                 });
-  //             }
-  //             lastEventType = eventType;
-  //             eventCount = 1;
-  //             if (!eventSequence.includes(eventType)) {
-  //                 eventSequence.push(eventType);
-  //             }
-  //         } else {
-  //             eventCount++;
-  //         }
-  //     };
-  //
-  //     const flush = () => {
-  //         if (lastEventType !== null) {
-  //             loggingService.debug('Conversation event sequence final', {
-  //                 event: lastEventType,
-  //                 count: eventCount,
-  //                 sequenceLength: eventSequence.length,
-  //                 sequence: eventSequence,
-  //             });
-  //             lastEventType = null;
-  //             eventCount = 0;
-  //             eventSequence = [];
-  //         }
-  //     };
-  //
-  //     return {logDeduplicated, flush};
-  // };
-
   const annotateCommandMessage = useCallback((cmdMsg: CommandMessage): CommandMessage => {
-    const approvalContext = approvedContextRef.current;
-    if (!approvalContext || cmdMsg.toolName !== TOOL_NAME_SEARCH_REPLACE) {
-      return cmdMsg;
-    }
+    const approvedMessage = annotateApprovedCommandMessage(cmdMsg, approvedContextRef.current);
+    const matchedByToolName =
+      approvedMessage !== cmdMsg &&
+      !approvedContextRef.current?.callId &&
+      Boolean(approvedContextRef.current?.toolName) &&
+      approvedContextRef.current?.toolName === cmdMsg.toolName;
 
-    const matchesCallId = approvalContext.callId && cmdMsg.callId && approvalContext.callId === cmdMsg.callId;
-    const matchesToolName =
-      !approvalContext.callId && approvalContext.toolName && approvalContext.toolName === cmdMsg.toolName;
-
-    if (!matchesCallId && !matchesToolName) {
-      return cmdMsg;
-    }
-
-    if (matchesToolName && !approvalContext.callId) {
+    if (matchedByToolName) {
       approvedContextRef.current = null;
     }
 
-    return { ...cmdMsg, hadApproval: true };
+    return approvedMessage;
   }, []);
 
   const applyServiceResult = useCallback(
-    (result: any, remainingText?: string, remainingReasoningText?: string, textWasFlushed?: boolean) => {
+    (result: ConversationTerminal | null, remainingText?: string, textWasFlushed?: boolean) => {
       if (!result) {
         return;
       }
@@ -208,12 +121,6 @@ export const useConversation = ({
       if (result.type === 'approval_required') {
         // Flush reasoning and text separately before showing approval prompt
         const messagesToAdd: Message[] = [];
-
-        if (remainingReasoningText?.trim() && !textWasFlushed) {
-          // Ensure reasoning is captured if not already streamed (edge case)
-          // But with new logic, it should be in messages.
-          // We'll leave this empty or remove it as reasoning is handled via stream
-        }
 
         if (remainingText?.trim() && !textWasFlushed) {
           const textMessage: BotMessage = {
@@ -228,9 +135,7 @@ export const useConversation = ({
 
         // If a tool call requires approval, we show it in the approval prompt.
         // Don't also show the transient pending/running command message.
-        setMessages((prev) =>
-          trimMessages(filterPendingCommandMessagesForApproval(prev as any, result.approval) as any),
-        );
+        setMessages((prev) => trimMessages(filterPendingCommandMessagesForApproval(prev, result.approval)));
         setPendingApproval(result.approval);
         // Set waiting state AFTER adding approval message to ensure proper render order
         setWaitingForApproval(true);
@@ -282,32 +187,28 @@ export const useConversation = ({
       appendMessages([userMessage]);
       setIsProcessing(true);
 
-      const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } = createStreamingSession(
-        {
-          appendMessages,
-          setMessages,
-          setLiveResponse,
-          trimMessages,
-          annotateCommandMessage,
-          loggingService,
-          setLastUsage,
-          createLiveResponseUpdater,
-          reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
-        },
-        'sendUserMessage',
-      );
+      const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } =
+        createStreamingSession<Message>(
+          {
+            appendMessages,
+            setMessages,
+            setLiveResponse,
+            trimMessages,
+            annotateCommandMessage,
+            loggingService,
+            setLastUsage,
+            createLiveResponseUpdater,
+            reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
+          },
+          'sendUserMessage',
+        );
 
       try {
         const result = await conversationService.sendMessage(value, {
           onEvent: applyConversationEvent,
         });
 
-        applyServiceResult(
-          result,
-          streamingState.accumulatedText,
-          streamingState.accumulatedReasoningText,
-          streamingState.textWasFlushed,
-        );
+        applyServiceResult(result, streamingState.accumulatedText, streamingState.textWasFlushed);
       } catch (error) {
         loggingService.error('Error in sendUserMessage', {
           error: error instanceof Error ? error.message : String(error),
@@ -369,7 +270,7 @@ export const useConversation = ({
       // Check if this is a max turns exceeded prompt
       const isMaxTurnsPrompt = pendingApproval.isMaxTurnsPrompt;
 
-      if (answer === 'y' && pendingApproval.toolName === TOOL_NAME_SEARCH_REPLACE) {
+      if (answer === 'y') {
         approvedContextRef.current = {
           callId: pendingApproval.callId,
           toolName: pendingApproval.toolName,
@@ -390,7 +291,7 @@ export const useConversation = ({
         setIsProcessing(true);
 
         const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } =
-          createStreamingSession(
+          createStreamingSession<Message>(
             {
               appendMessages,
               setMessages,
@@ -412,12 +313,7 @@ export const useConversation = ({
             onEvent: applyConversationEvent,
           });
 
-          applyServiceResult(
-            result,
-            streamingState.accumulatedText,
-            streamingState.accumulatedReasoningText,
-            streamingState.textWasFlushed,
-          );
+          applyServiceResult(result, streamingState.accumulatedText, streamingState.textWasFlushed);
         } catch (error) {
           loggingService.error('Error in continuation after max turns', {
             error: error instanceof Error ? error.message : String(error),
@@ -451,31 +347,27 @@ export const useConversation = ({
       }
 
       setIsProcessing(true);
-      const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } = createStreamingSession(
-        {
-          appendMessages,
-          setMessages,
-          setLiveResponse,
-          trimMessages,
-          annotateCommandMessage,
-          loggingService,
-          setLastUsage,
-          createLiveResponseUpdater,
-          reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
-        },
-        'approvalDecision',
-      );
+      const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } =
+        createStreamingSession<Message>(
+          {
+            appendMessages,
+            setMessages,
+            setLiveResponse,
+            trimMessages,
+            annotateCommandMessage,
+            loggingService,
+            setLastUsage,
+            createLiveResponseUpdater,
+            reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
+          },
+          'approvalDecision',
+        );
 
       try {
         const result = await conversationService.handleApprovalDecision(answer, rejectionReason, {
           onEvent: applyConversationEvent,
         });
-        applyServiceResult(
-          result,
-          streamingState.accumulatedText,
-          streamingState.accumulatedReasoningText,
-          streamingState.textWasFlushed,
-        );
+        applyServiceResult(result, streamingState.accumulatedText, streamingState.textWasFlushed);
       } catch (error) {
         loggingService.error('Error in handleApprovalDecision', {
           error: error instanceof Error ? error.message : String(error),
@@ -553,15 +445,15 @@ export const useConversation = ({
   );
 
   const setReasoningEffort = useCallback(
-    (effort: any) => {
-      (conversationService as any).setReasoningEffort?.(effort);
+    (effort: ReasoningEffortSetting) => {
+      conversationService.setReasoningEffort(effort);
     },
     [conversationService],
   );
 
   const setTemperature = useCallback(
-    (temperature: any) => {
-      (conversationService as any).setTemperature?.(temperature);
+    (temperature?: number) => {
+      conversationService.setTemperature(temperature);
     },
     [conversationService],
   );

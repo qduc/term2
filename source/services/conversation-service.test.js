@@ -132,6 +132,7 @@ test('emits approval_required ConversationEvent for interruptions', async (t) =>
   });
 
   t.is(result.type, 'approval_required');
+  t.is(result.approval.callId, 'call-xyz');
   t.is(emitted.length, 1);
   t.is(emitted[0].type, 'approval_required');
   t.is(emitted[0].approval.toolName, 'bash');

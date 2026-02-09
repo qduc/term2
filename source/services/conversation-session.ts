@@ -4,7 +4,10 @@ import type { ILoggingService } from './service-interfaces.js';
 import { ConversationStore } from './conversation-store.js';
 import { ModelBehaviorError } from '@openai/agents';
 import type { ConversationEvent } from './conversation-events.js';
+import type { CommandMessage } from '../tools/types.js';
 import { extractUsage, type NormalizedUsage } from '../utils/token-usage.js';
+
+export type { CommandMessage };
 
 interface ApprovalResult {
   type: 'approval_required';
@@ -15,20 +18,6 @@ interface ApprovalResult {
     rawInterruption: any;
     callId?: string;
   };
-}
-
-export interface CommandMessage {
-  id: string;
-  sender: 'command';
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  command: string;
-  output: string;
-  success?: boolean;
-  failureReason?: string;
-  isApprovalRejection?: boolean;
-  callId?: string;
-  toolName?: string;
-  toolArgs?: any;
 }
 
 interface ResponseResult {

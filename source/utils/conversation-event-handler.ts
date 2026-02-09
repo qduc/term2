@@ -4,6 +4,7 @@
  */
 
 import type { ConversationEvent } from '../services/conversation-events.js';
+import type { CommandMessage } from '../tools/types.js';
 import { parseToolArguments, formatToolCommand, type StreamingState } from './conversation-utils.js';
 
 /**
@@ -13,20 +14,6 @@ export interface BotMessage {
   id: number;
   sender: 'bot';
   text: string;
-}
-
-export interface CommandMessage {
-  id: string;
-  sender: 'command';
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  command: string;
-  output: string;
-  success?: boolean;
-  failureReason?: string;
-  isApprovalRejection?: boolean;
-  callId?: string;
-  toolName?: string;
-  toolArgs?: unknown;
 }
 
 export interface SystemMessage {
@@ -39,7 +26,7 @@ export interface SystemMessage {
  * Dependencies injected into the event handler factory.
  * Uses `any` for React setState compatibility - internal utility.
  */
-export interface ConversationEventHandlerDeps {
+export interface ConversationEventHandlerDeps<CommandMessageT extends CommandMessage = CommandMessage> {
   liveResponseUpdater: {
     push: (text: string) => void;
     cancel: () => void;
@@ -54,7 +41,7 @@ export interface ConversationEventHandlerDeps {
   setMessages: (updater: (prev: any[]) => any[]) => void;
   setLiveResponse: (response: any) => void;
   trimMessages: (messages: any[]) => any[];
-  annotateCommandMessage: (msg: CommandMessage) => CommandMessage;
+  annotateCommandMessage: (msg: CommandMessageT) => CommandMessageT;
 }
 
 /**
@@ -65,8 +52,8 @@ export interface ConversationEventHandlerDeps {
  * @param state - Mutable streaming state object
  * @returns Event handler function
  */
-export function createConversationEventHandler(
-  deps: ConversationEventHandlerDeps,
+export function createConversationEventHandler<CommandMessageT extends CommandMessage = CommandMessage>(
+  deps: ConversationEventHandlerDeps<CommandMessageT>,
   state: StreamingState,
 ): (event: ConversationEvent) => void {
   const {
@@ -145,7 +132,7 @@ export function createConversationEventHandler(
 
       case 'command_message': {
         const cmdMsg = event.message;
-        const annotated = annotateCommandMessage(cmdMsg as CommandMessage);
+        const annotated = annotateCommandMessage(cmdMsg as CommandMessageT);
 
         const messagesToAdd: BotMessage[] = [];
 

@@ -7,6 +7,7 @@ import { appendMessagesCapped } from '../utils/message-buffer.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils.js';
 import { createStreamingSession } from '../utils/streaming-session-factory.js';
 import { TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
+import type { CommandMessage as BaseCommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 
 interface UserMessage {
@@ -31,20 +32,9 @@ interface PendingApproval {
   isMaxTurnsPrompt?: boolean; // Special flag for max turns continuation
 }
 
-interface CommandMessage {
-  id: string;
-  sender: 'command';
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  command: string;
-  output: string;
-  success?: boolean;
-  failureReason?: string;
-  isApprovalRejection?: boolean;
-  callId?: string;
-  toolName?: string;
-  toolArgs?: any;
+type CommandMessage = BaseCommandMessage & {
   hadApproval?: boolean;
-}
+};
 
 interface SystemMessage {
   id: number;

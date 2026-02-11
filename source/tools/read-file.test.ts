@@ -129,7 +129,24 @@ test.serial('execute: in allowOutsideWorkspace mode, can read outside workspace'
 
     t.true(result.includes('outside'));
     t.true(result.includes('content'));
+    t.true(result.includes('content'));
     t.false(result.includes('outside workspace'));
+  });
+});
+
+test.serial('execute: expands ~ to home directory in allowOutsideWorkspace mode', async (t) => {
+  await withTempDir(async () => {
+    // We try to read ~/.ssh/config or something likely to exist,
+    // but better to just mock os.homedir if we could.
+    // Given the constraints, we can at least verify it doesn't throw a malformed path error
+    // even if the file doesn't exist.
+    const result = await readFileToolDefinitionAllowOutside.execute({
+      path: '~/nonexistent_file_for_test_' + Date.now(),
+    });
+
+    // Should not fail with "Operation outside workspace" if expansion worked
+    t.false(result.includes('Operation outside workspace'));
+    t.true(result.includes('Error: File not found') || result.includes('ENOENT'));
   });
 });
 

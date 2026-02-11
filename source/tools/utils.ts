@@ -1,4 +1,5 @@
 import path from 'path';
+import { homedir } from 'os';
 import { z } from 'zod';
 
 /**
@@ -16,7 +17,11 @@ export function resolveWorkspacePath(
   },
 ): string {
   const allowOutsideWorkspace = options?.allowOutsideWorkspace ?? false;
-  const resolved = path.isAbsolute(relativePath) ? path.normalize(relativePath) : path.resolve(baseDir, relativePath);
+
+  // Expand ~ if the path starts with it
+  const expandedPath = relativePath.startsWith('~') ? relativePath.replace(/^~/, homedir()) : relativePath;
+
+  const resolved = path.isAbsolute(expandedPath) ? path.normalize(expandedPath) : path.resolve(baseDir, expandedPath);
 
   if (allowOutsideWorkspace) {
     return resolved;

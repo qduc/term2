@@ -288,6 +288,12 @@ const conversationService = new ConversationService({
 });
 
 import { InputProvider } from './context/InputContext.js';
+import { patchStdoutForSynchronizedOutput } from './utils/synchronized-output.js';
+
+// Enable DEC Mode 2026 synchronized output to prevent flickering in iTerm2.
+// This wraps every stdout.write() in begin/end markers so the terminal
+// buffers the entire Ink render frame and paints it atomically.
+patchStdoutForSynchronizedOutput(process.stdout);
 
 const { waitUntilExit } = render(
   (

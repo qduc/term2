@@ -123,15 +123,20 @@ const getCommandFromArgs = (args: unknown): string => {
 const MAX_HALLUCINATION_RETRIES = 2;
 
 /**
- * Check if an error is a tool hallucination error (model called a non-existent tool)
+ * Check if an error is a recoverable model behavior error (hallucination, parsing error, etc.)
  */
-const isToolHallucinationError = (error: unknown): boolean => {
+const isRecoverableModelError = (error: unknown): boolean => {
   if (!(error instanceof ModelBehaviorError)) {
     return false;
   }
 
   const message = error.message.toLowerCase();
-  return message.includes('tool') && message.includes('not found');
+  return (
+    (message.includes('tool') && message.includes('not found')) || // Hallucination
+    message.includes('model did not produce a final response') || // Give up/exhausted
+    message.includes('parsing tool arguments') || // Bad JSON
+    message.includes('valid json')
+  );
 };
 
 const supportsConversationChaining = (providerId: string): boolean => {
@@ -387,36 +392,49 @@ export class ConversationSession {
 
       yield this.#toTerminalEvent(result);
     } catch (error) {
-      // Handle tool hallucination: model called a non-existent tool
-      if (isToolHallucinationError(error) && hallucinationRetryCount < MAX_HALLUCINATION_RETRIES) {
-        const toolName =
-          error instanceof Error ? error.message.match(/Tool (\S+) not found/)?.[1] || 'unknown' : 'unknown';
+      // Handle recoverable model errors (hallucination, parsing error, etc.)
+      if (isRecoverableModelError(error) && hallucinationRetryCount < MAX_HALLUCINATION_RETRIES) {
+        const message = error instanceof Error ? error.message : String(error);
+        const isHallucination = message.toLowerCase().includes('not found');
+        const isParsingError =
+          message.toLowerCase().includes('parsing tool arguments') || message.toLowerCase().includes('valid json');
+        const toolName = isHallucination ? message.match(/Tool (\S+) not found/)?.[1] || 'unknown' : 'unknown';
 
-        this.logger.warn('Tool hallucination detected, retrying', {
-          eventType: 'retry.hallucination',
+        this.logger.warn('Recoverable model error detected, retrying', {
+          eventType: 'retry.model_error',
           category: 'retry',
           phase: 'retry',
           toolName,
-          retryType: 'hallucination',
+          retryType: isHallucination ? 'hallucination' : isParsingError ? 'parsing_error' : 'behavior',
           retryAttempt: hallucinationRetryCount + 1,
           attempt: hallucinationRetryCount + 1,
           maxRetries: MAX_HALLUCINATION_RETRIES,
           sessionId: this.id,
           traceId: this.logger.getCorrelationId(),
-          errorMessage: error instanceof Error ? error.message : String(error),
+          errorMessage: message,
         });
 
         yield {
           type: 'retry',
-          toolName,
+          toolName: isHallucination ? toolName : 'model',
           attempt: hallucinationRetryCount + 1,
           maxRetries: MAX_HALLUCINATION_RETRIES,
-          errorMessage: error instanceof Error ? error.message : String(error),
+          errorMessage: message,
         };
 
         if (stream) {
-          // Update conversation store with partial results (successful tool calls)
+          // Update conversation store with partial results (including the parse error output if it was yielded)
           this.conversationStore.updateFromResult(stream);
+
+          // If stream produced no usable history, inject error context so the
+          // model has explicit feedback about the failure on retry.
+          const streamHistory = Array.isArray((stream as any).history) ? (stream as any).history : [];
+          if (streamHistory.length === 0) {
+            this.conversationStore.addErrorContext(
+              `[System: Previous attempt failed with error: ${message}. Please retry with corrected output.]`,
+            );
+          }
+
           // Retry from current state without re-adding user message
           yield* this.run(text, {
             hallucinationRetryCount: hallucinationRetryCount + 1,

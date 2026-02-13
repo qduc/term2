@@ -123,6 +123,20 @@ export class ConversationStore {
     }
   }
 
+  /**
+   * Inject an error-context message into the history so the model receives
+   * explicit feedback about what went wrong (e.g. a JSON parsing failure).
+   * Uses the 'developer' role which acts as a system-level hint.
+   */
+  addErrorContext(errorMessage: string): void {
+    const item: AgentInputItem = {
+      role: 'system',
+      type: 'message',
+      content: errorMessage,
+    };
+    this.#history.push(item);
+  }
+
   #cloneHistory(items: AgentInputItem[]): AgentInputItem[] {
     // Avoid leaking references to external callers.
     // structuredClone is available in modern Node; fall back to a shallow copy.

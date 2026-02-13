@@ -80,7 +80,11 @@ function detectSummarizationMarkers(content: string): string | null {
 
 const searchReplaceParametersSchema = z.object({
   path: z.string().describe('The absolute or relative path to the file'),
-  search_content: z.string().describe('The exact content to search for'),
+  search_content: z
+    .string()
+    .describe(
+      'The exact content to search for. Use <...> on its own line to skip unchanged middle content (gap matching).',
+    ),
   replace_content: z.string().describe('The content to replace it with'),
   replace_all: z
     .boolean()
@@ -90,6 +94,20 @@ const searchReplaceParametersSchema = z.object({
 });
 
 export type SearchReplaceToolParams = z.infer<typeof searchReplaceParametersSchema>;
+
+/**
+ * Gap marker constant used to indicate omitted middle content in search strings.
+ * When the model uses <...> in search_content, the search is split into segments
+ * that are matched sequentially, skipping any content between them.
+ */
+const GAP_MARKER = '<...>';
+
+/**
+ * Check if search content contains gap markers.
+ */
+function containsGapMarker(content: string): boolean {
+  return content.includes(GAP_MARKER);
+}
 
 /**
  * Information about exact matches found in content
@@ -118,13 +136,22 @@ interface NormalizedMatchInfo {
 }
 
 /**
+ * Information about gap matches found in content (head <...> tail pattern)
+ */
+interface GapMatchInfo {
+  type: 'gap';
+  count: number;
+  matches: { startIndex: number; endIndex: number }[];
+}
+
+/**
  * Information indicating no matches were found
  */
 interface NoMatchInfo {
   type: 'none';
 }
 
-type MatchInfo = ExactMatchInfo | RelaxedMatchInfo | NormalizedMatchInfo | NoMatchInfo;
+type MatchInfo = ExactMatchInfo | RelaxedMatchInfo | NormalizedMatchInfo | GapMatchInfo | NoMatchInfo;
 
 /**
  * Cache for edit preparation to avoid redundant work.
@@ -219,10 +246,100 @@ function normalizeWhitespace(content: string): string {
 }
 
 /**
+ * Find a segment (multi-line string) within file lines using relaxed matching.
+ * Returns the line index range [startLineIdx, endLineIdx) or null if not found.
+ * Searches starting from `fromLineIdx`.
+ */
+function findSegmentInLines(
+  lineInfos: { text: string; trimmed: string; start: number; end: number }[],
+  segmentLines: string[],
+  fromLineIdx: number,
+): { startLineIdx: number; endLineIdx: number } | null {
+  for (let i = fromLineIdx; i <= lineInfos.length - segmentLines.length; i++) {
+    let isMatch = true;
+    for (let j = 0; j < segmentLines.length; j++) {
+      if (lineInfos[i + j].trimmed !== segmentLines[j]) {
+        isMatch = false;
+        break;
+      }
+    }
+    if (isMatch) {
+      return { startLineIdx: i, endLineIdx: i + segmentLines.length };
+    }
+  }
+  return null;
+}
+
+/**
+ * Find gap matches in content. Splits search content on GAP_MARKER,
+ * then matches each segment sequentially in the file content.
+ * The matched region spans from the start of the first segment to the end of the last.
+ */
+function findGapMatches(content: string, searchContent: string): GapMatchInfo | NoMatchInfo {
+  const segments = searchContent.split(GAP_MARKER);
+  // Filter out empty segments and trim each segment's lines
+  const segmentLineSets = segments.map((seg) =>
+    seg
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0),
+  );
+
+  // Validate: all segments must have at least one non-empty line
+  if (segmentLineSets.some((lines) => lines.length === 0)) {
+    return { type: 'none' };
+  }
+
+  const lineInfos = parseFileLines(content);
+  const allMatches: { startIndex: number; endIndex: number }[] = [];
+
+  // Try every possible starting position for the first segment
+  let searchFrom = 0;
+  while (searchFrom <= lineInfos.length - segmentLineSets[0].length) {
+    // Find the first segment
+    const firstMatch = findSegmentInLines(lineInfos, segmentLineSets[0], searchFrom);
+    if (!firstMatch) break;
+
+    // Try to match remaining segments sequentially after the first
+    let valid = true;
+    let lastEndLineIdx = firstMatch.endLineIdx;
+    for (let s = 1; s < segmentLineSets.length; s++) {
+      const nextMatch = findSegmentInLines(lineInfos, segmentLineSets[s], lastEndLineIdx);
+      if (!nextMatch) {
+        valid = false;
+        break;
+      }
+      lastEndLineIdx = nextMatch.endLineIdx;
+    }
+
+    if (valid) {
+      allMatches.push({
+        startIndex: lineInfos[firstMatch.startLineIdx].start,
+        endIndex: lineInfos[lastEndLineIdx - 1].end,
+      });
+    }
+
+    // Continue searching from the next line after this match's start
+    searchFrom = firstMatch.startLineIdx + 1;
+  }
+
+  if (allMatches.length > 0) {
+    return { type: 'gap', count: allMatches.length, matches: allMatches };
+  }
+
+  return { type: 'none' };
+}
+
+/**
  * Find matches in content using exact matching first, then relaxed matching.
  * Returns detailed match information including positions for replacement.
  */
 function findMatchesInContent(content: string, searchContent: string): MatchInfo {
+  // 0. Check for gap markers first — delegate to gap matching
+  if (containsGapMarker(searchContent)) {
+    return findGapMatches(content, searchContent);
+  }
+
   // 1. Try exact match first
   let matchCount = 0;
   let index = content.indexOf(searchContent);
@@ -380,6 +497,7 @@ export function createSearchReplaceToolDefinition(deps: {
     description:
       'Replace text in a file using exact or relaxed matching.\n' +
       'Set replace_all to true to replace all occurrences instead of requiring a unique match.\n' +
+      'Use <...> on its own line in search_content to skip unchanged middle content (gap matching) to save tokens.\n' +
       'Use this tool for precise edits where you know the content to be replaced.',
     parameters: searchReplaceParametersSchema,
     approvalPresentation: getApprovalPresentationCapability('search_replace'),
@@ -508,6 +626,28 @@ export function createSearchReplaceToolDefinition(deps: {
             count: matchInfo.count,
             replace_all,
           });
+          return true;
+        }
+
+        if (matchInfo.type === 'gap') {
+          if (!replace_all && matchInfo.count > 1) {
+            loggingService.warn(
+              'search_replace validation: multiple gap matches, replace_all=false - will fail in execute',
+              {
+                path: filePath,
+                count: matchInfo.count,
+              },
+            );
+            return false;
+          }
+          loggingService.info('search_replace validation: gap match(es) found', {
+            path: filePath,
+            count: matchInfo.count,
+            replace_all,
+          });
+          if (editMode && insideCwd) {
+            return false;
+          }
           return true;
         }
 
@@ -810,6 +950,58 @@ export function createSearchReplaceToolDefinition(deps: {
           const successMessage = usedHealing
             ? `Updated ${filePath} (healed match - original search had minor differences)`
             : `Updated ${filePath} (${replace_all ? matchInfo.count : 1} normalized match${
+                replace_all && matchInfo.count > 1 ? 'es' : ''
+              })`;
+          return JSON.stringify({
+            output: [
+              {
+                success: true,
+                operation: 'search_replace',
+                path: filePath,
+                message: successMessage,
+                healed: usedHealing,
+              },
+            ],
+          });
+        }
+
+        if (matchInfo.type === 'gap') {
+          if (!replace_all && matchInfo.count > 1) {
+            return JSON.stringify({
+              output: [
+                {
+                  success: false,
+                  error: `Found ${matchInfo.count} gap matches. Please provide more context or set replace_all to true.`,
+                },
+              ],
+            });
+          }
+
+          let newContent = content;
+          if (replace_all) {
+            matchInfo.matches.sort((a, b) => b.startIndex - a.startIndex);
+            for (const m of matchInfo.matches) {
+              newContent =
+                newContent.substring(0, m.startIndex) + normalizedReplaceContent + newContent.substring(m.endIndex);
+            }
+          } else {
+            const m = matchInfo.matches[0];
+            newContent = content.substring(0, m.startIndex) + normalizedReplaceContent + content.substring(m.endIndex);
+          }
+          await writeFileFn(targetPath, newContent);
+
+          if (enableFileLogging) {
+            loggingService.info('File updated (gap match)', {
+              path: filePath,
+              replace_all,
+              count: replace_all ? matchInfo.count : 1,
+              healed: usedHealing,
+            });
+          }
+
+          const successMessage = usedHealing
+            ? `Updated ${filePath} (healed match - original search had minor differences)`
+            : `Updated ${filePath} (${replace_all ? matchInfo.count : 1} gap match${
                 replace_all && matchInfo.count > 1 ? 'es' : ''
               })`;
           return JSON.stringify({

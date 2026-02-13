@@ -107,6 +107,10 @@ Modify files with exact text replacement.
 - Include surrounding context (whitespace, indentation) for accuracy
 - `replace_all: true` updates all occurrences; `false` expects single match
 - For large replacements, include 3+ lines of context
+- Use `<...>` on its own line in `search_content` to skip unchanged middle content (gap matching)
+  - Saves tokens: provide only the head and tail anchors, omit the middle
+  - Example: `"function foo() {\n<...>\nreturn result;\n}"` matches from head to tail
+  - `replace_content` is always the full replacement text (no `<...>` marker)
 
 ## grep
 

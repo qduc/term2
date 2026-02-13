@@ -654,3 +654,223 @@ test.serial('execute rejects search content with // ... marker', async (t) => {
     t.true(parsed.output[0].error.includes('// ...'));
   });
 });
+
+// ============================================================================
+// Gap Matching Tests (<...> marker)
+// ============================================================================
+
+test.serial('execute performs gap match: head <...> tail replaces entire region', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(
+      absPath,
+      'function foo() {\n  const x = 1;\n  const y = 2;\n  const z = 3;\n  return x + y + z;\n}\n',
+    );
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'function foo() {\n  const x = 1;\n<...>\n  return x + y + z;\n}',
+      replace_content: 'function foo() {\n  return 6;\n}\n',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+    t.true(parsed.output[0].message.includes('gap'));
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'function foo() {\n  return 6;\n}\n');
+  });
+});
+
+test.serial('execute performs gap match with single-line head and tail', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'start\nmiddle1\nmiddle2\nend\nafter');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'start\n<...>\nend',
+      replace_content: 'replaced\n',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'replaced\nafter');
+  });
+});
+
+test.serial('execute performs gap match with adjacent head and tail (no actual gap content)', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'line1\nline2\nline3');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'line1\n<...>\nline2',
+      replace_content: 'replaced\n',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'replaced\nline3');
+  });
+});
+
+test.serial('execute performs gap match with multiple <...> markers', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(
+      absPath,
+      'function a() {\n  body1;\n}\nfunction b() {\n  body2;\n}\nfunction c() {\n  body3;\n}\n',
+    );
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'function a() {\n<...>\nfunction b() {\n<...>\nfunction c() {\n  body3;\n}',
+      replace_content: 'function abc() {\n  combined;\n}\n',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'function abc() {\n  combined;\n}\n');
+  });
+});
+
+test.serial('execute gap match fails when head is not found', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'line1\nline2\nline3');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'nonexistent\n<...>\nline3',
+      replace_content: 'replaced',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+  });
+});
+
+test.serial('execute gap match fails when tail is not found after head', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'line1\nline2\nline3');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'line1\n<...>\nnonexistent',
+      replace_content: 'replaced',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+  });
+});
+
+test.serial('execute gap match rejects multiple matches when replace_all is false', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'start\nmiddle1\nend\nstart\nmiddle2\nend\n');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'start\n<...>\nend',
+      replace_content: 'replaced',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+    t.true(parsed.output[0].error.includes('gap'));
+  });
+});
+
+test.serial('execute gap match replaces all when replace_all is true', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'start\nmiddle1\nend\nstart\nmiddle2\nend\n');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'start\n<...>\nend',
+      replace_content: 'replaced\n',
+      replace_all: true,
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'replaced\nreplaced\n');
+  });
+});
+
+test.serial('execute gap match works with relaxed whitespace matching in segments', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, '  function foo() {\n  const x = 1;\n  const y = 2;\n  return x;\n  }\n');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'function foo() {\n<...>\nreturn x;\n}',
+      replace_content: 'function foo() {\n  return 42;\n}\n',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'function foo() {\n  return 42;\n}\n');
+  });
+});
+
+test.serial('needsApproval handles gap match in edit mode', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ app: { editMode: true } }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'start\nmiddle\nend\n');
+
+    const result = await tool.needsApproval({
+      path: filePath,
+      search_content: 'start\n<...>\nend',
+      replace_content: 'replaced',
+      replace_all: false,
+    });
+
+    // In edit mode with a unique gap match, should auto-approve
+    t.false(result);
+  });
+});

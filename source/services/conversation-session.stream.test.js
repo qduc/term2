@@ -506,3 +506,83 @@ test('sendMessage() extracts usage from stream.rawResponses when completed is vo
     total_tokens: 21,
   });
 });
+
+test('run() emits usage_update when usage is nested in event.data (raw_model_stream_event)', async (t) => {
+  // Simulates a raw_model_stream_event with type 'response.completed' where
+  // usage lives at event.data.response.usage
+  const events = [
+    { type: 'response.output_text.delta', delta: 'Hello' },
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'response.completed',
+        response: {
+          usage: { input_tokens: 50, output_tokens: 25 },
+        },
+      },
+    },
+  ];
+
+  const stream = new MockStream(events);
+  stream.finalOutput = 'Hello';
+
+  const mockClient = {
+    async startStream() {
+      return stream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('hi')) {
+    emitted.push(ev);
+  }
+
+  const usageEvents = emitted.filter((e) => e.type === 'usage_update');
+  t.true(usageEvents.length >= 1, 'Should emit at least one usage_update event');
+  t.is(usageEvents[0].usage.prompt_tokens, 50);
+  t.is(usageEvents[0].usage.completion_tokens, 25);
+  t.is(usageEvents[0].usage.total_tokens, 75);
+});
+
+test('run() emits usage_update when usage is at top level of event', async (t) => {
+  // Simulates events that have usage directly on the event (e.g. response.done)
+  const events = [
+    { type: 'response.output_text.delta', delta: 'Hello' },
+    {
+      type: 'response.done',
+      response: {
+        usage: { input_tokens: 100, output_tokens: 50 },
+      },
+    },
+  ];
+
+  const stream = new MockStream(events);
+  stream.finalOutput = 'Hello';
+
+  const mockClient = {
+    async startStream() {
+      return stream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('hi')) {
+    emitted.push(ev);
+  }
+
+  const usageEvents = emitted.filter((e) => e.type === 'usage_update');
+  t.true(usageEvents.length >= 1, 'Should emit at least one usage_update event');
+  t.is(usageEvents[0].usage.prompt_tokens, 100);
+  t.is(usageEvents[0].usage.completion_tokens, 50);
+  t.is(usageEvents[0].usage.total_tokens, 150);
+});

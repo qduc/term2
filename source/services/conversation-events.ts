@@ -8,6 +8,7 @@ export type ConversationEvent =
   | ToolStartedEvent
   | CommandMessageEvent
   | ApprovalRequiredEvent
+  | UsageUpdateEvent
   | FinalResponseEvent
   | ErrorEvent
   | RetryEvent;
@@ -55,6 +56,15 @@ export interface ToolStartedEvent {
 export interface ApprovalRequiredEvent {
   type: 'approval_required';
   approval: Omit<ApprovalDescriptor, 'rawInterruption'>;
+}
+
+/**
+ * Emitted when token usage information is received during streaming.
+ * Allows UI to display token usage in real-time rather than waiting for final response.
+ */
+export interface UsageUpdateEvent {
+  type: 'usage_update';
+  usage: NormalizedUsage;
 }
 
 export interface CommandMessageEvent {

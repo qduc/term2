@@ -200,6 +200,11 @@ export function createConversationEventHandler<
         return;
       }
 
+      case 'usage_update':
+        // Usage updates are handled separately in streaming-session-factory.ts
+        // This case exists for exhaustiveness and to document the event flow
+        return;
+
       default:
         // Ignore unknown events (approval_required, final, error handled elsewhere)
         return;

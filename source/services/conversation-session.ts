@@ -871,8 +871,10 @@ export class ConversationSession {
       const event = asRecord(rawEvent);
       const eventData = asRecord(event?.data);
       const eventType = getString(event, 'type');
-      // Extract usage if present in any of the common locations
-      const usage = extractUsage(rawEvent);
+      // Extract usage if present in any of the common locations.
+      // Check both the top-level event and event.data, since raw_model_stream_event
+      // nests response data (including usage) under .data (e.g. data.response.usage).
+      const usage = extractUsage(rawEvent) ?? (eventData ? extractUsage(eventData) : undefined);
       if (usage) {
         acc.latestUsage = usage;
         this.logger.debug('Usage extracted from stream event', {
@@ -881,6 +883,11 @@ export class ConversationSession {
           eventType: eventType ?? getString(eventData, 'type') ?? 'unknown',
           usage,
         });
+        // Emit usage update event for real-time token tracking
+        yield {
+          type: 'usage_update',
+          usage,
+        };
       }
 
       // Log event type with deduplication for ordering understanding

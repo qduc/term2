@@ -16,7 +16,10 @@ import { useInputHistory } from '../hooks/use-input-history.js';
 
 // Constants
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
-const TERMINAL_PADDING = 3;
+const APP_HORIZONTAL_PADDING = 4;
+const DEFAULT_PROMPT_WIDTH = 2;
+const SHELL_PROMPT_WIDTH = 2;
+const REJECTION_PROMPT_WIDTH = 5;
 const SETTINGS_TRIGGER = '/settings ';
 const SETTINGS_RESET_TRIGGER = '/settings reset ';
 
@@ -30,6 +33,42 @@ type Props = {
   loggingService: LoggingService;
   historyService: HistoryService;
 };
+
+type InputWidthOptions = {
+  terminalColumns?: number;
+  waitingForRejectionReason: boolean;
+  isShellMode: boolean;
+};
+
+const getPromptWidth = ({
+  waitingForRejectionReason,
+  isShellMode,
+}: Omit<InputWidthOptions, 'terminalColumns'>): number => {
+  if (waitingForRejectionReason) {
+    return REJECTION_PROMPT_WIDTH;
+  }
+
+  if (isShellMode) {
+    return SHELL_PROMPT_WIDTH;
+  }
+
+  return DEFAULT_PROMPT_WIDTH;
+};
+
+export const calculateInputWidth = ({
+  terminalColumns,
+  waitingForRejectionReason,
+  isShellMode,
+}: InputWidthOptions): number =>
+  Math.max(
+    0,
+    (terminalColumns ?? 0) -
+      APP_HORIZONTAL_PADDING -
+      getPromptWidth({
+        waitingForRejectionReason,
+        isShellMode,
+      }),
+  );
 
 const InputBox: FC<Props> = ({
   onSubmit,
@@ -72,7 +111,12 @@ const InputBox: FC<Props> = ({
 
   // Set terminal width
   useEffect(() => {
-    const calculateTerminalWidth = () => Math.max(0, (process.stdout.columns ?? 0) - TERMINAL_PADDING);
+    const calculateTerminalWidth = () =>
+      calculateInputWidth({
+        terminalColumns: process.stdout.columns,
+        waitingForRejectionReason,
+        isShellMode,
+      });
     setTerminalWidth(calculateTerminalWidth());
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
     const handleResize = () => {
@@ -91,7 +135,7 @@ const InputBox: FC<Props> = ({
         clearTimeout(resizeTimeout);
       }
     };
-  }, []);
+  }, [waitingForRejectionReason, isShellMode]);
 
   // Cleanup timeout
   useEffect(() => {

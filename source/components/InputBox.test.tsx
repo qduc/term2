@@ -1,7 +1,7 @@
 import test from 'ava';
 import React from 'react';
 import { render } from 'ink-testing-library';
-import InputBox from './InputBox.js';
+import InputBox, { calculateInputWidth } from './InputBox.js';
 import { InputProvider } from '../context/InputContext.js';
 import type { SlashCommand } from './SlashCommandMenu.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
@@ -107,4 +107,16 @@ test('InputBox accepts history callbacks', (t) => {
   t.false(historyUpCalled);
   t.false(historyDownCalled);
   t.pass();
+});
+
+test('calculateInputWidth uses default prompt width for normal mode', (t) => {
+  t.is(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: false, isShellMode: false }), 74);
+});
+
+test('calculateInputWidth uses default prompt width for shell mode', (t) => {
+  t.is(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: false, isShellMode: true }), 74);
+});
+
+test('calculateInputWidth uses rejection prompt width for rejection mode', (t) => {
+  t.is(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: true, isShellMode: false }), 71);
 });

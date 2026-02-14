@@ -1,3 +1,20 @@
+## [0.1.8] - 2026-02-14
+
+### Features
+- Dynamically calculate input box width based on current mode and terminal size
+- Introduce `usage_update` event to provide real-time token usage during streaming
+- Implement JSON repair for tool inputs and expand model error recovery with explicit error context
+- Implement gap matching in the search-replace tool, allowing `<...>` in `search_content` to skip intermediate text
+- Enable DEC Mode 2026 synchronized output to prevent terminal flickering during Ink rendering by patching `process.stdout`
+
+### Bug Fixes
+- Fix tilde operator (~) not expanding to home directory in path parameter of tools
+
+### Internal/Chores
+- Implement conversation flow refactor
+- Add resume functionality to the release script
+- Update documentation
+
 ## [0.1.7] - 2026-02-09
 
 ### Bug Fixes

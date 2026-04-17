@@ -122,10 +122,14 @@ test('continue() streams events after approval decision', async (t) => {
 
   t.deepEqual(
     cont.map((e) => e.type),
-    ['text_delta', 'final'],
+    ['tool_started', 'text_delta', 'final'],
   );
-  t.is(cont[0].delta, 'Approved run');
-  t.is(cont[1].finalText, 'Approved run');
+  t.is(cont[0].type, 'tool_started');
+  t.is(cont[0].toolCallId, 'call-xyz');
+  t.is(cont[0].toolName, 'bash');
+
+  t.is(cont[1].delta, 'Approved run');
+  t.is(cont[2].finalText, 'Approved run');
 });
 
 test('sendMessage() preserves callId on approval_required terminal result', async (t) => {

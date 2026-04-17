@@ -502,6 +502,18 @@ export class ConversationSession {
         sessionId: this.id,
         traceId: this.logger.getCorrelationId(),
       });
+
+      // Emit tool_started so UI can show the command as 'running' after approval
+      const { toolName, rawArguments } = this.#getToolInfoFromInterruption(interruption);
+      const callId = getCallIdFromObject(interruption);
+
+      yield {
+        type: 'tool_started',
+        toolCallId: callId ?? String(Date.now()),
+        toolName,
+        arguments: rawArguments,
+      };
+
       const approve = getMethod<[unknown], void>(state, 'approve');
       approve?.call(state, interruption);
     } else {
@@ -1104,6 +1116,7 @@ export class ConversationSession {
   ): ConversationResult {
     if (result.interruptions && result.interruptions.length > 0) {
       const interruption = result.interruptions[0];
+      const interruptionRecord = asRecord(interruption);
       this.approvalState.setPending({
         state: result.state,
         interruption,
@@ -1111,31 +1124,16 @@ export class ConversationSession {
         toolCallArgumentsById: new Map(this.toolCallArgumentsById),
       });
 
-      let argumentsText = '';
-      const interruptionRecord = asRecord(interruption);
-      const toolName = getString(interruptionRecord, 'name');
-
-      // For shell_call (built-in shell tool), extract commands from action
-      // For function tools (bash, shell), extract from arguments
-      if (getString(interruptionRecord, 'type') === 'shell_call') {
-        const action = asRecord(interruptionRecord?.action);
-        const actionCommands = action?.commands;
-        if (actionCommands) {
-          argumentsText = Array.isArray(actionCommands) ? actionCommands.join('\n') : String(actionCommands);
-        }
-      } else {
-        argumentsText = getCommandFromArgs(interruptionRecord?.arguments);
-      }
-
       const agent = asRecord(interruptionRecord?.agent);
       const callId = getCallIdFromObject(interruption);
+      const { toolName, argumentsText } = this.#getToolInfoFromInterruption(interruption);
 
       return {
         type: 'approval_required',
         approval: {
           agentName: getString(agent, 'name') ?? 'Agent',
           toolName: toolName ?? 'Unknown Tool',
-          argumentsText,
+          argumentsText: argumentsText,
           rawInterruption: interruption,
           ...(callId ? { callId: String(callId) } : {}),
         },
@@ -1162,5 +1160,26 @@ export class ConversationSession {
     };
 
     return response;
+  }
+
+  #getToolInfoFromInterruption(interruption: unknown): { toolName: string; argumentsText: string; rawArguments: any } {
+    const interruptionRecord = asRecord(interruption);
+    const toolName = getString(interruptionRecord, 'name') ?? 'unknown';
+    const rawArguments = interruptionRecord?.arguments;
+
+    let argumentsText = '';
+    // For shell_call (built-in shell tool), extract commands from action
+    // For function tools (bash, shell), extract from arguments
+    if (getString(interruptionRecord, 'type') === 'shell_call') {
+      const action = asRecord(interruptionRecord?.action);
+      const actionCommands = action?.commands;
+      if (actionCommands) {
+        argumentsText = Array.isArray(actionCommands) ? actionCommands.join('\n') : String(actionCommands);
+      }
+    } else {
+      argumentsText = getCommandFromArgs(rawArguments);
+    }
+
+    return { toolName, argumentsText, rawArguments };
   }
 }

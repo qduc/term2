@@ -284,6 +284,7 @@ const conversationService = new ConversationService({
   agentClient,
   deps: {
     logger: logger,
+    settingsService: settings,
   },
 });
 

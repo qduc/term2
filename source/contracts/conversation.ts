@@ -10,6 +10,10 @@ export interface ApprovalDescriptor {
   argumentsText: string;
   rawInterruption: unknown;
   callId?: string;
+  llmAdvisory?: {
+    reasoning: string;
+    approved: boolean;
+  };
 }
 
 export interface ApprovalRequiredTerminal {

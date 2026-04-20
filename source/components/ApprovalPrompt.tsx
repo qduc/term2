@@ -150,6 +150,29 @@ const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
   );
 };
 
+const LLMAdvisory: FC<{ advisory: { reasoning: string; approved: boolean } }> = ({ advisory }) => {
+  return (
+    <Box
+      flexDirection="column"
+      marginTop={1}
+      paddingX={1}
+      paddingY={0}
+      borderStyle="round"
+      borderColor={advisory.approved ? 'green' : 'yellow'}
+    >
+      <Box>
+        <Text color={advisory.approved ? 'green' : 'yellow'} bold>
+          AI Advisor: {advisory.approved ? 'SAFE ' : 'CAUTION '}
+        </Text>
+        <Text color="#94a3b8"> (Fast Model) </Text>
+      </Box>
+      <Text italic color="#cbd5e1">
+        "{advisory.reasoning}"
+      </Text>
+    </Box>
+  );
+};
+
 const ApprovalPrompt: FC<Props & { onApprove: () => void; onReject: () => void }> = ({
   approval,
   onApprove,
@@ -236,6 +259,7 @@ const ApprovalPrompt: FC<Props & { onApprove: () => void; onReject: () => void }
         {approval.agentName} wants to run: <Text bold>{approval.toolName}</Text>
       </Text>
       {content}
+      {approval.llmAdvisory && <LLMAdvisory advisory={approval.llmAdvisory} />}
       <Box flexDirection="column" marginTop={1}>
         <Text>Allow this action?</Text>
         <Box flexDirection="column" marginLeft={1}>

@@ -12,6 +12,8 @@ import { captureToolCallArguments, emitCommandMessagesFromItems } from './comman
 import { ApprovalState } from './approval-state.js';
 import { createInvalidToolCallDiagnostic } from './logging-contract.js';
 import type { ConversationTerminal, FinalTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
+import { classifyCommand, SafetyStatus } from '../utils/command-safety/index.js';
+import type { ISettingsService } from './service-interfaces.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -156,13 +158,19 @@ export class ConversationSession {
   private toolCallArgumentsById = new Map<string, unknown>();
   private emittedInvalidToolCallPackets = new Set<string>();
 
+  private settingsService?: ISettingsService;
+
   constructor(
     id: string,
-    { agentClient, deps }: { agentClient: OpenAIAgentClient; deps: { logger: ILoggingService } },
+    {
+      agentClient,
+      deps,
+    }: { agentClient: OpenAIAgentClient; deps: { logger: ILoggingService; settingsService?: ISettingsService } },
   ) {
     this.id = id;
     this.agentClient = agentClient;
     this.logger = deps.logger;
+    this.settingsService = deps.settingsService;
     this.conversationStore = new ConversationStore();
   }
 
@@ -311,28 +319,28 @@ export class ConversationSession {
           if (continuedStream.interruptions && continuedStream.interruptions.length > 0) {
             this.logger.warn('Another interruption occurred after fake execution - handling as approval');
             // Let the normal flow handle this
-            const result = this.#buildResult(
+            const resultPromise = this.#buildResult(
               continuedStream,
               acc.finalOutput,
               acc.reasoningOutput,
               acc.emittedCommandIds,
               acc.latestUsage,
             );
-            yield this.#toTerminalEvent(result);
+            yield this.#toTerminalEvent(await resultPromise);
             return;
           }
 
           // Successfully resolved - agent should now have processed the fake rejection
           this.logger.debug('Fake execution completed, agent received rejection message');
 
-          const result = this.#buildResult(
+          const resultPromise = this.#buildResult(
             continuedStream,
             acc.finalOutput,
             acc.reasoningOutput,
             acc.emittedCommandIds,
             acc.latestUsage,
           );
-          yield this.#toTerminalEvent(result);
+          yield this.#toTerminalEvent(await resultPromise);
           return;
         } catch (error) {
           this.logger.warn('Error resolving aborted approval with fake execution', {
@@ -368,8 +376,7 @@ export class ConversationSession {
       this.previousResponseId = stream.lastResponseId ?? null;
       this.conversationStore.updateFromResult(stream);
 
-      // Build terminal event (approval_required or final)
-      const result = this.#buildResult(
+      const resultPromise = this.#buildResult(
         stream,
         acc.finalOutput || undefined,
         acc.reasoningOutput || undefined,
@@ -377,20 +384,22 @@ export class ConversationSession {
         acc.latestUsage,
       );
 
-      if (result.type === 'approval_required') {
+      const resolvedResult = await resultPromise;
+
+      if (resolvedResult.type === 'approval_required') {
         this.logger.info('Tool approval required', {
           eventType: 'approval.required',
           category: 'approval',
           phase: 'approval',
           sessionId: this.id,
           traceId: this.logger.getCorrelationId(),
-          toolName: result.approval.toolName,
+          toolName: resolvedResult.approval.toolName,
         });
-        yield this.#toTerminalEvent(result);
+        yield this.#toTerminalEvent(resolvedResult);
         return;
       }
 
-      yield this.#toTerminalEvent(result);
+      yield this.#toTerminalEvent(resolvedResult);
     } catch (error) {
       // Handle recoverable model errors (hallucination, parsing error, etc.)
       if (isRecoverableModelError(error) && hallucinationRetryCount < MAX_HALLUCINATION_RETRIES) {
@@ -587,7 +596,7 @@ export class ConversationSession {
       // This prevents duplicates when result.history contains commands from the initial stream
       const allEmittedIds = new Set([...previouslyEmittedIds, ...acc.emittedCommandIds]);
 
-      const result = this.#buildResult(
+      const resultPromise = this.#buildResult(
         stream,
         acc.finalOutput || undefined,
         acc.reasoningOutput || undefined,
@@ -595,20 +604,22 @@ export class ConversationSession {
         acc.latestUsage,
       );
 
-      if (result.type === 'approval_required') {
+      const resolvedResult = await resultPromise;
+
+      if (resolvedResult.type === 'approval_required') {
         this.logger.info('Tool approval required', {
           eventType: 'approval.required',
           category: 'approval',
           phase: 'approval',
           sessionId: this.id,
           traceId: this.logger.getCorrelationId(),
-          toolName: result.approval.toolName,
+          toolName: resolvedResult.approval.toolName,
         });
-        yield this.#toTerminalEvent(result);
+        yield this.#toTerminalEvent(resolvedResult);
         return;
       }
 
-      yield this.#toTerminalEvent(result);
+      yield this.#toTerminalEvent(resolvedResult);
     } catch (error) {
       yield {
         type: 'error',
@@ -673,6 +684,7 @@ export class ConversationSession {
               argumentsText: event.approval.argumentsText,
               rawInterruption,
               callId: event.approval.callId,
+              llmAdvisory: event.approval.llmAdvisory,
             },
           };
         }
@@ -1088,6 +1100,7 @@ export class ConversationSession {
           toolName: result.approval.toolName,
           argumentsText: result.approval.argumentsText,
           ...(result.approval.callId ? { callId: result.approval.callId } : {}),
+          ...(result.approval.llmAdvisory ? { llmAdvisory: result.approval.llmAdvisory } : {}),
         },
       };
     }
@@ -1101,19 +1114,13 @@ export class ConversationSession {
     };
   }
 
-  #buildResult(
-    result: {
-      interruptions?: unknown[];
-      state?: unknown;
-      newItems?: unknown[];
-      history?: unknown[];
-      finalOutput?: string;
-    },
+  async #buildResult(
+    result: AgentStream,
     finalOutputOverride?: string,
     reasoningOutputOverride?: string,
     emittedCommandIds?: Set<string>,
     usage?: NormalizedUsage,
-  ): ConversationResult {
+  ): Promise<ConversationResult> {
     if (result.interruptions && result.interruptions.length > 0) {
       const interruption = result.interruptions[0];
       const interruptionRecord = asRecord(interruption);
@@ -1128,6 +1135,11 @@ export class ConversationSession {
       const callId = getCallIdFromObject(interruption);
       const { toolName, argumentsText } = this.#getToolInfoFromInterruption(interruption);
 
+      let llmAdvisory: { reasoning: string; approved: boolean } | undefined;
+      if (toolName === 'shell' || toolName === 'bash') {
+        llmAdvisory = (await this.#evaluateAutoApproval(argumentsText)) ?? undefined;
+      }
+
       return {
         type: 'approval_required',
         approval: {
@@ -1136,6 +1148,7 @@ export class ConversationSession {
           argumentsText: argumentsText,
           rawInterruption: interruption,
           ...(callId ? { callId: String(callId) } : {}),
+          llmAdvisory,
         },
       };
     }
@@ -1181,5 +1194,81 @@ export class ConversationSession {
     }
 
     return { toolName, argumentsText, rawArguments };
+  }
+
+  async #evaluateAutoApproval(command: string): Promise<{ reasoning: string; approved: boolean } | null> {
+    const settings = this.settingsService;
+    if (!settings) return null;
+
+    const mode = settings.get('shell.autoApproveMode');
+    if (mode === 'off') return null;
+
+    const autoApproveModel = settings.get('agent.autoApproveModel');
+
+    // Check safety status first
+    try {
+      const safetyStatus = classifyCommand(command, this.logger);
+      if (safetyStatus === SafetyStatus.RED) {
+        return {
+          reasoning: 'Command is in the dangerous list (RED). Manual approval is strictly required.',
+          approved: false,
+        };
+      }
+    } catch (e) {
+      // Ignore parsing errors for LLM check fallback
+    }
+
+    const history = this.conversationStore.getHistory();
+    // Take last few messages for context to keep it fast
+    const recentHistory = history.slice(-6);
+    const historyText = JSON.stringify(recentHistory, null, 2);
+
+    const prompt = `You are a proactive safety and intent evaluator for an AI agent. 
+The agent wants to execute a shell command to solve the user's latest task.
+
+Task context (last few messages):
+${historyText}
+
+Command to execute:
+\`${command}\`
+
+Evaluate whether the command meets ALL these criteria:
+1. Aligns specifically with completing the current task context.
+2. Does NOT perform destructive actions (deletion without backup, dangerous formatting).
+3. Does NOT read or exfiltrate sensitive system files (keys, credentials, tokens).
+
+You must respond in valid JSON format ONLY, containing "reasoning" and "approved" keys.
+Think step-by-step in the "reasoning" field about the command's effects. 
+If it is completely safe AND aligned with the task, set "approved" to true. 
+If there is ANY risk, destruction, or ambiguity, set "approved" to false.
+
+Example format:
+{
+  "reasoning": "The command 'ls -la' simply lists directory contents. It is non-destructive, reads no sensitive config, and aligns with the agent trying to find a file.",
+  "approved": true
+}`;
+
+    try {
+      const responseText = await this.agentClient.chat(prompt, {
+        model: autoApproveModel,
+        reasoningEffort: 'none',
+        instructions: 'You are a shell command safety evaluator. Respond ONLY with JSON.',
+      });
+
+      // Try to parse JSON from response
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (typeof parsed.reasoning === 'string' && typeof parsed.approved === 'boolean') {
+          return { reasoning: parsed.reasoning, approved: parsed.approved };
+        }
+      }
+      return { reasoning: 'Failed to parse LLM evaluation response.', approved: false };
+    } catch (error) {
+      this.logger.error('Auto-approval evaluation failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { reasoning: 'LLM evaluation encountered an error.', approved: false };
+    }
   }
 }

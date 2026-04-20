@@ -55,7 +55,12 @@ export interface ToolStartedEvent {
 
 export interface ApprovalRequiredEvent {
   type: 'approval_required';
-  approval: Omit<ApprovalDescriptor, 'rawInterruption'>;
+  approval: Omit<ApprovalDescriptor, 'rawInterruption'> & {
+    llmAdvisory?: {
+      reasoning: string;
+      approved: boolean;
+    };
+  };
 }
 
 /**

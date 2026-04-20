@@ -444,6 +444,10 @@ export class SettingsService {
           value: this.settings.agent.useFlexServiceTier,
           source: this.getSource('agent.useFlexServiceTier'),
         },
+        autoApproveModel: {
+          value: this.settings.agent.autoApproveModel,
+          source: this.getSource('agent.autoApproveModel'),
+        },
       },
       shell: {
         timeout: {
@@ -457,6 +461,10 @@ export class SettingsService {
         maxOutputChars: {
           value: this.settings.shell.maxOutputChars,
           source: this.getSource('shell.maxOutputChars'),
+        },
+        autoApproveMode: {
+          value: this.settings.shell.autoApproveMode,
+          source: this.getSource('shell.autoApproveMode'),
         },
       },
       ui: {

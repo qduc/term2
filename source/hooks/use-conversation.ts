@@ -133,10 +133,12 @@ export const useConversation = ({
 
         appendMessages(messagesToAdd);
 
-        // If a tool call requires approval, we show it in the approval prompt.
         // Don't also show the transient pending/running command message.
         setMessages((prev) => trimMessages(filterPendingCommandMessagesForApproval(prev, result.approval)));
-        setPendingApproval(result.approval);
+        setPendingApproval({
+          ...result.approval,
+          llmAdvisory: (result.approval as any).llmAdvisory,
+        });
         // Set waiting state AFTER adding approval message to ensure proper render order
         setWaitingForApproval(true);
         return;

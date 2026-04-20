@@ -43,12 +43,18 @@ export const AgentSettingsSchema = z.object({
     .optional()
     .default(false)
     .describe('Use OpenAI Flex Service Tier to reduce costs (OpenAI only)'),
+  autoApproveModel: z
+    .string()
+    .optional()
+    .default('gpt-4o-mini')
+    .describe('Faster model to use for auto-approval evaluation'),
 });
 
 export const ShellSettingsSchema = z.object({
   timeout: z.number().int().positive().default(120000),
   maxOutputLines: z.number().int().positive().default(1000),
   maxOutputChars: z.number().int().positive().default(10000),
+  autoApproveMode: z.enum(['off', 'advisory', 'auto']).default('off').describe('Mode for shell command auto-approval'),
 });
 
 export const UISettingsSchema = z.object({
@@ -189,11 +195,13 @@ export interface SettingsWithSources {
     mentorProvider: SettingWithSource<string | undefined>;
     mentorReasoningEffort: SettingWithSource<string>;
     useFlexServiceTier: SettingWithSource<boolean>;
+    autoApproveModel: SettingWithSource<string>;
   };
   shell: {
     timeout: SettingWithSource<number>;
     maxOutputLines: SettingWithSource<number>;
     maxOutputChars: SettingWithSource<number>;
+    autoApproveMode: SettingWithSource<'off' | 'advisory' | 'auto'>;
   };
   ui: {
     historySize: SettingWithSource<number>;
@@ -256,6 +264,8 @@ export const SETTING_KEYS = {
   SHELL_TIMEOUT: 'shell.timeout',
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
   SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
+  SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
+  AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
   UI_HISTORY_SIZE: 'ui.historySize',
   LOGGING_LOG_LEVEL: 'logging.logLevel',
   LOGGING_DISABLE: 'logging.disableLogging',
@@ -297,6 +307,8 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_MENTOR_MODE,
   SETTING_KEYS.APP_EDIT_MODE,
   SETTING_KEYS.APP_LITE_MODE,
+  SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
+  SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
 ]);
 
 // Some settings with default values are optional to persist
@@ -319,11 +331,13 @@ export const DEFAULT_SETTINGS: SettingsData = {
     mentorProvider: undefined,
     mentorReasoningEffort: 'default',
     useFlexServiceTier: false,
+    autoApproveModel: 'gpt-4o-mini',
   },
   shell: {
     timeout: 120000,
     maxOutputLines: 1000,
     maxOutputChars: 10000,
+    autoApproveMode: 'off',
   },
   ui: {
     historySize: 1000,

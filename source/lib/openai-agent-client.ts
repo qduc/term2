@@ -844,4 +844,8 @@ export class OpenAIAgentClient {
 
     return agent;
   }
+
+  getSettings(): ISettingsService {
+    return this.#settings;
+  }
 }

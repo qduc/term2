@@ -1,5 +1,5 @@
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
-import type { ILoggingService } from './service-interfaces.js';
+import type { ILoggingService, ISettingsService } from './service-interfaces.js';
 import { ConversationSession } from './conversation-session.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
 
@@ -20,7 +20,7 @@ export class ConversationService {
     sessionId = 'default',
   }: {
     agentClient: OpenAIAgentClient;
-    deps: { logger: ILoggingService };
+    deps: { logger: ILoggingService; settingsService?: ISettingsService };
     sessionId?: string;
   }) {
     this.#session = new ConversationSession(sessionId, { agentClient, deps });

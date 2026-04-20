@@ -1204,6 +1204,7 @@ export class ConversationSession {
     if (mode === 'off') return null;
 
     const autoApproveModel = settings.get('agent.autoApproveModel');
+    const autoApproveProvider = settings.get('agent.autoApproveProvider');
 
     // Check safety status first
     try {
@@ -1251,6 +1252,7 @@ Example format:
     try {
       const responseText = await this.agentClient.chat(prompt, {
         model: autoApproveModel,
+        provider: autoApproveProvider,
         reasoningEffort: 'none',
         instructions: 'You are a shell command safety evaluator. Respond ONLY with JSON.',
       });

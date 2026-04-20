@@ -15,6 +15,14 @@ test('buildSettingValueSuggestions returns enum suggestions for reasoningEffort'
   t.true(values.includes('default'));
 });
 
+test('buildSettingValueSuggestions returns enum suggestions for shell.autoApproveMode', (t) => {
+  const result = buildSettingValueSuggestions('shell.autoApproveMode');
+  const values = result.map((r) => r.value);
+  t.true(values.includes('off'));
+  t.true(values.includes('advisory'));
+  t.true(values.includes('auto'));
+});
+
 test('buildSettingValueSuggestions returns boolean suggestions for boolean settings', (t) => {
   const result = buildSettingValueSuggestions('logging.suppressConsoleOutput');
   t.deepEqual(result.map((r) => r.value).sort(), ['false', 'true']);

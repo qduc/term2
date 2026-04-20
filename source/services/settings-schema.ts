@@ -48,6 +48,11 @@ export const AgentSettingsSchema = z.object({
     .optional()
     .default('gpt-4o-mini')
     .describe('Faster model to use for auto-approval evaluation'),
+  autoApproveProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Provider to use for the auto-approval model (defaults to agent.provider when unset)'),
 });
 
 export const ShellSettingsSchema = z.object({
@@ -196,6 +201,7 @@ export interface SettingsWithSources {
     mentorReasoningEffort: SettingWithSource<string>;
     useFlexServiceTier: SettingWithSource<boolean>;
     autoApproveModel: SettingWithSource<string>;
+    autoApproveProvider: SettingWithSource<string | undefined>;
   };
   shell: {
     timeout: SettingWithSource<number>;
@@ -266,6 +272,7 @@ export const SETTING_KEYS = {
   SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
   SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
   AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
+  AGENT_AUTO_APPROVE_PROVIDER: 'agent.autoApproveProvider',
   UI_HISTORY_SIZE: 'ui.historySize',
   LOGGING_LOG_LEVEL: 'logging.logLevel',
   LOGGING_DISABLE: 'logging.disableLogging',
@@ -309,6 +316,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_LITE_MODE,
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
+  SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
 ]);
 
 // Some settings with default values are optional to persist
@@ -332,6 +340,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     mentorReasoningEffort: 'default',
     useFlexServiceTier: false,
     autoApproveModel: 'gpt-4o-mini',
+    autoApproveProvider: undefined,
   },
   shell: {
     timeout: 120000,

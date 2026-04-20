@@ -41,12 +41,41 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'high', description: 'Highest reasoning' },
     { value: 'default', description: 'Model default' },
   ],
+  'agent.mentorProvider': [
+    { value: 'openai', description: 'OpenAI official API' },
+    { value: 'openrouter', description: 'OpenRouter.ai' },
+    { value: 'openai-compatible', description: 'Local models/Ollama' },
+    { value: 'anthropic', description: 'Anthropic Claude' },
+    { value: 'google', description: 'Google Gemini' },
+  ],
+  'agent.autoApproveProvider': [
+    { value: 'openai', description: 'OpenAI official API' },
+    { value: 'openrouter', description: 'OpenRouter.ai' },
+    { value: 'openai-compatible', description: 'Local models/Ollama' },
+    { value: 'anthropic', description: 'Anthropic Claude' },
+    { value: 'google', description: 'Google Gemini' },
+  ],
   'logging.logLevel': [{ value: 'debug' }, { value: 'info' }, { value: 'warn' }, { value: 'error' }],
   'logging.suppressConsoleOutput': [{ value: 'true' }, { value: 'false' }],
   'tools.enableEditHealing': [{ value: 'true' }, { value: 'false' }],
   'agent.useFlexServiceTier': [
     { value: 'true', description: 'Enable Flex Service Tier (lower cost)' },
     { value: 'false', description: 'Use standard service tier' },
+  ],
+  'app.mentorMode': [{ value: 'true' }, { value: 'false' }],
+  'app.editMode': [{ value: 'true' }, { value: 'false' }],
+  'app.liteMode': [{ value: 'true' }, { value: 'false' }],
+  'agent.provider': [
+    { value: 'openai', description: 'OpenAI official API' },
+    { value: 'openrouter', description: 'OpenRouter.ai' },
+    { value: 'openai-compatible', description: 'Local models/Ollama' },
+    { value: 'anthropic', description: 'Anthropic Claude' },
+    { value: 'google', description: 'Google Gemini' },
+  ],
+  'agent.autoApproveModel': [
+    { value: 'gpt-4o-mini', description: 'OpenAI fast model' },
+    { value: 'claude-3-haiku-20240307', description: 'Anthropic fast model' },
+    { value: 'gemini-1.5-flash', description: 'Google fast model' },
   ],
   'agent.temperature': [
     { value: '0', description: 'Deterministic' },
@@ -67,6 +96,11 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   'agent.maxTurns': [{ value: '10' }, { value: '20' }, { value: '50' }],
   'agent.retryAttempts': [{ value: '1' }, { value: '2' }, { value: '3' }],
   'ssh.port': [{ value: '22', description: 'Default SSH port' }],
+  'shell.autoApproveMode': [
+    { value: 'off', description: 'Disabled' },
+    { value: 'advisory', description: 'LLM provides safety analysis' },
+    { value: 'auto', description: 'Full auto-approval (CAUTION)' },
+  ],
 };
 
 // Pure functions exported for testing

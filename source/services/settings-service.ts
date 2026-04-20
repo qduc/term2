@@ -448,6 +448,10 @@ export class SettingsService {
           value: this.settings.agent.autoApproveModel,
           source: this.getSource('agent.autoApproveModel'),
         },
+        autoApproveProvider: {
+          value: this.settings.agent.autoApproveProvider,
+          source: this.getSource('agent.autoApproveProvider'),
+        },
       },
       shell: {
         timeout: {

@@ -6,7 +6,13 @@ import { useSlashCommands } from '../hooks/use-slash-commands.js';
 import { usePathCompletion } from '../hooks/use-path-completion.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { useSettingsValueCompletion } from '../hooks/use-settings-value-completion.js';
-import { useModelSelection, MODEL_TRIGGER, MODEL_CMD_TRIGGER, MENTOR_TRIGGER } from '../hooks/use-model-selection.js';
+import {
+  useModelSelection,
+  MODEL_TRIGGER,
+  MODEL_CMD_TRIGGER,
+  MENTOR_TRIGGER,
+  AUTO_APPROVE_MODEL_TRIGGER,
+} from '../hooks/use-model-selection.js';
 import { PopupManager } from './Input/PopupManager.js';
 import type { SlashCommand } from './SlashCommandMenu.js';
 import type { SettingsService } from '../services/settings-service.js';
@@ -172,6 +178,11 @@ const InputBox: FC<Props> = ({
 
     if (value.startsWith(MENTOR_TRIGGER) && cursorOffset >= MENTOR_TRIGGER.length) {
       models.open(MENTOR_TRIGGER.length);
+      return;
+    }
+
+    if (value.startsWith(AUTO_APPROVE_MODEL_TRIGGER) && cursorOffset >= AUTO_APPROVE_MODEL_TRIGGER.length) {
+      models.open(AUTO_APPROVE_MODEL_TRIGGER.length);
       return;
     }
 

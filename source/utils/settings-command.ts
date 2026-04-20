@@ -152,9 +152,11 @@ export function createSettingsCommand({
       const rawValue = parts.slice(1).join(' ');
       let parsedValue = parseSettingValue(rawValue);
 
-      // Special handling for agent.model / agent.mentorModel: handle --provider flag
+      // Special handling for agent.model / agent.mentorModel / agent.autoApproveModel: handle --provider flag
       if (
-        (key === SETTING_KEYS.AGENT_MODEL || key === SETTING_KEYS.AGENT_MENTOR_MODEL) &&
+        (key === SETTING_KEYS.AGENT_MODEL ||
+          key === SETTING_KEYS.AGENT_MENTOR_MODEL ||
+          key === SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL) &&
         typeof parsedValue === 'string'
       ) {
         const providerMatch = parsedValue.match(/--provider=(\w+)/);
@@ -167,7 +169,11 @@ export function createSettingsCommand({
           }
           // Update provider setting
           const providerKey =
-            key === SETTING_KEYS.AGENT_MENTOR_MODEL ? SETTING_KEYS.AGENT_MENTOR_PROVIDER : SETTING_KEYS.AGENT_PROVIDER;
+            key === SETTING_KEYS.AGENT_MENTOR_MODEL
+              ? SETTING_KEYS.AGENT_MENTOR_PROVIDER
+              : key === SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL
+              ? SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER
+              : SETTING_KEYS.AGENT_PROVIDER;
           settingsService.set(providerKey, provider);
           // Apply runtime provider change
           if (applyRuntimeSetting) {

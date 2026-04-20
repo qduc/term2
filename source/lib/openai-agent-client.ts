@@ -457,21 +457,25 @@ export class OpenAIAgentClient {
     message: string,
     options: {
       model?: string;
+      provider?: string;
       reasoningEffort?: ModelSettingsReasoningEffort | 'default';
       instructions?: string;
     } = {},
   ): Promise<string> {
+    const tempProvider = options.provider || this.#provider;
     this.#logger.debug('Agent chat request', {
       messageLength: message.length,
       model: options.model || this.#model,
+      provider: tempProvider,
     });
 
     try {
       // Create a temporary agent for this specific chat request if params differ
       let agentForChat = this.#agent;
-      if (options.model || options.reasoningEffort) {
-        const tempModel = options.model || this.#model;
-        const tempEffort = options.reasoningEffort || this.#reasoningEffort;
+      const tempModel = options.model || this.#model;
+      const tempEffort = options.reasoningEffort || this.#reasoningEffort;
+
+      if (options.model || options.reasoningEffort || options.instructions || options.provider) {
         const modelSettings: any = {};
 
         if (tempEffort && tempEffort !== 'default') {
@@ -482,31 +486,22 @@ export class OpenAIAgentClient {
         }
 
         // For simple chat, we generally don't need tools, but we keep the system instructions
-        // Actually, for mentor mode, we might want a simpler agent without tools
         agentForChat = new Agent({
-          name: 'Mentor',
+          name: 'Chat',
           model: tempModel,
           ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
-          instructions: options.instructions || 'You are a helpful mentor assistant.',
+          instructions: options.instructions || 'You are a helpful assistant.',
         });
+      }
 
-        // Ensure runner is compatible or use run()
-        if (!this.#runner && this.#provider !== 'openai') {
-          // Logic to ensure runner exists... same as #runAgent
-          const providerDef = getProvider(this.#provider);
-          if (!providerDef) throw new Error(`Provider ${this.#provider} not found`);
-          if (providerDef.createRunner) {
-            // We can't easily reuse the main runner if it's bound to the main agent
-            // But creating a new runner for every chat might be expensive?
-            // For now, let's assume we can just use `run` if no tools are needed,
-            // but some providers NEED a runner.
-            // Actually, most providers' runners are stateless or lightweight wrappers.
-          }
-        }
+      // If provider is different from main provider, we need a separate runner
+      let runnerForChat = this.#runner;
+      if (tempProvider !== this.#provider) {
+        runnerForChat = this.#createRunner(tempProvider);
       }
 
       // We use a simplified run flow for chat
-      const result = await this.#runAgent(agentForChat, message, {
+      const result = await this.#runAgentWithProvider(tempProvider, runnerForChat, agentForChat, message, {
         stream: false,
         maxTurns: 1, // Chat is usually single turn
       });

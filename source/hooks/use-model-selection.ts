@@ -8,6 +8,7 @@ import type { ILoggingService, ISettingsService } from '../services/service-inte
 export const MODEL_TRIGGER = '/settings agent.model ';
 export const MODEL_CMD_TRIGGER = '/model ';
 export const MENTOR_TRIGGER = '/settings agent.mentorModel ';
+export const AUTO_APPROVE_MODEL_TRIGGER = '/settings agent.autoApproveModel ';
 
 export const useModelSelection = (
   deps: {
@@ -30,7 +31,8 @@ export const useModelSelection = (
 
   const isOpen = mode === 'model_selection';
   const isMentorTrigger = input.startsWith(MENTOR_TRIGGER);
-  const canSwitchProvider = isMentorTrigger || !hasConversationHistory;
+  const isAutoApproveTrigger = input.startsWith(AUTO_APPROVE_MODEL_TRIGGER);
+  const canSwitchProvider = isMentorTrigger || isAutoApproveTrigger || !hasConversationHistory;
 
   const query = useMemo(() => {
     if (!isOpen || triggerIndex === null) return '';
@@ -42,12 +44,14 @@ export const useModelSelection = (
     if (isOpen) {
       const providerSetting = isMentorTrigger
         ? settingsService.get<string>('agent.mentorProvider') ?? settingsService.get<string>('agent.provider')
+        : isAutoApproveTrigger
+        ? settingsService.get<string>('agent.autoApproveProvider') ?? settingsService.get<string>('agent.provider')
         : settingsService.get<string>('agent.provider');
       setProvider(providerSetting);
       failedProvidersRef.current.clear();
       isInitialLoadRef.current = true;
     }
-  }, [isOpen, isMentorTrigger]);
+  }, [isOpen, isMentorTrigger, isAutoApproveTrigger]);
 
   useEffect(() => {
     if (!isOpen || !provider) return;

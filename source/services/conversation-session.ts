@@ -1,5 +1,5 @@
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
-import { extractCommandMessages, markToolCallAsApprovalRejection } from '../utils/extract-command-messages.js';
+import { extractCommandMessages } from '../utils/extract-command-messages.js';
 import type { ILoggingService } from './service-interfaces.js';
 import { ConversationStore } from './conversation-store.js';
 import { ModelBehaviorError } from '@openai/agents';
@@ -11,9 +11,14 @@ import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
 import { ApprovalState } from './approval-state.js';
 import { createInvalidToolCallDiagnostic } from './logging-contract.js';
-import type { ConversationTerminal, FinalTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
+import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ISettingsService } from './service-interfaces.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
+import {
+  installApprovalRejectionInterceptor,
+  tryInstallApprovalRejectionInterceptor,
+} from './approval-rejection-interceptor.js';
+import { collectTerminalResult } from './terminal-result-collector.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -285,16 +290,11 @@ export class ConversationSession {
         const expectedCallId = getCallIdFromObject(interruption);
         const rejectionMessage = `Tool execution was not approved. User provided new input instead: ${text}`;
 
-        const removeInterceptor = this.agentClient.addToolInterceptor(
-          async (name: string, _params: unknown, toolCallId?: string) => {
-            // Match both tool name and call ID for stricter matching
-            if (name === toolName && (!expectedCallId || toolCallId === expectedCallId)) {
-              markToolCallAsApprovalRejection(toolCallId ?? expectedCallId);
-              return rejectionMessage;
-            }
-            return null;
-          },
-        );
+        const removeInterceptor = installApprovalRejectionInterceptor(this.agentClient, {
+          toolName,
+          expectedCallId,
+          rejectionMessage,
+        });
 
         const approve = getMethod<[unknown], void>(state, 'approve');
         approve?.call(state, interruption);
@@ -534,23 +534,19 @@ export class ConversationSession {
         ? `Tool execution was not approved. User's reason: ${rejectionReason}`
         : 'Tool execution was not approved.';
 
-      if (typeof this.agentClient.addToolInterceptor === 'function') {
-        const removeInterceptor = this.agentClient.addToolInterceptor(
-          async (name: string, _params: unknown, toolCallId?: string) => {
-            if (name === toolName && (!expectedCallId || toolCallId === expectedCallId)) {
-              markToolCallAsApprovalRejection(toolCallId ?? expectedCallId);
-              return rejectionMessage;
-            }
-            return null;
-          },
-        );
+      const installedInterceptor = tryInstallApprovalRejectionInterceptor(this.agentClient, {
+        toolName,
+        expectedCallId,
+        rejectionMessage,
+      });
 
+      if (installedInterceptor) {
         // Approve to continue but interceptor will return rejection message
         const approve = getMethod<[unknown], void>(state, 'approve');
         approve?.call(state, interruption);
 
         // Store interceptor cleanup for after stream
-        this.approvalState.setPendingRemoveInterceptor(removeInterceptor);
+        this.approvalState.setPendingRemoveInterceptor(installedInterceptor);
       } else {
         // Fallback for clients without tool interceptors
         const reject = getMethod<[unknown], void>(state, 'reject');
@@ -650,90 +646,30 @@ export class ConversationSession {
       hallucinationRetryCount?: number;
     } = {},
   ): Promise<ConversationResult> {
-    let finalText = '';
-    let reasoningText = '';
-    const commandMessages: CommandMessage[] = [];
-    let usage: NormalizedUsage | undefined;
-    let sawTerminalEvent: ConversationEvent | null = null;
-
-    for await (const event of this.run(text, { hallucinationRetryCount })) {
-      onEvent?.(event);
-
-      switch (event.type) {
-        case 'text_delta': {
-          const full = event.fullText ?? '';
-          onTextChunk?.(full, event.delta);
-          break;
-        }
-        case 'reasoning_delta': {
-          const full = event.fullText ?? '';
-          onReasoningChunk?.(full, event.delta);
-          break;
-        }
-        case 'command_message': {
-          onCommandMessage?.(event.message);
-          break;
-        }
-        case 'approval_required': {
-          sawTerminalEvent = event;
-          // pendingApprovalContext is set inside #buildResult during run()
-          const rawInterruption = this.approvalState.getPending()?.interruption;
-          return {
-            type: 'approval_required',
-            approval: {
-              agentName: event.approval.agentName,
-              toolName: event.approval.toolName,
-              argumentsText: event.approval.argumentsText,
-              rawInterruption,
-              callId: event.approval.callId,
-              llmAdvisory: event.approval.llmAdvisory,
-            },
-          };
-        }
-        case 'final': {
-          sawTerminalEvent = event;
-          finalText = event.finalText;
-          reasoningText = event.reasoningText ?? '';
-          usage = event.usage;
-          this.logger.debug('sendMessage received final event', {
-            sessionId: this.id,
-            hasUsage: Boolean(event.usage),
-            usage: event.usage,
-          });
-          if (event.commandMessages?.length) {
-            for (const msg of event.commandMessages) {
-              commandMessages.push(msg);
-            }
-          }
-          break;
-        }
-        case 'error': {
-          // Preserve legacy behavior (throwing) by throwing after the stream ends.
-          break;
-        }
-        default:
-          break;
-      }
-    }
-
-    // If we didn't see a terminal event, fall back to the legacy default.
-    if (!sawTerminalEvent) {
-      finalText = finalText || 'Done.';
-    }
-
-    const response: FinalTerminal = {
-      type: 'response',
-      commandMessages,
-      finalText: finalText || 'Done.',
-      ...(reasoningText ? { reasoningText } : {}),
-      ...(usage ? { usage } : {}),
-    };
-    this.logger.debug('sendMessage returning response', {
-      sessionId: this.id,
-      hasUsage: Boolean(usage),
-      usage,
+    const result = await collectTerminalResult(this.run(text, { hallucinationRetryCount }), {
+      onTextChunk,
+      onReasoningChunk,
+      onCommandMessage,
+      onEvent,
+      getRawInterruption: () => this.approvalState.getPending()?.interruption,
+      onFinalEvent: (event) => {
+        this.logger.debug('sendMessage received final event', {
+          sessionId: this.id,
+          hasUsage: Boolean(event.usage),
+          usage: event.usage,
+        });
+      },
     });
-    return response;
+
+    if (result.type === 'response') {
+      this.logger.debug('sendMessage returning response', {
+        sessionId: this.id,
+        hasUsage: Boolean(result.usage),
+        usage: result.usage,
+      });
+    }
+
+    return result;
   }
 
   async handleApprovalDecision(
@@ -755,99 +691,30 @@ export class ConversationSession {
       return null;
     }
 
-    let finalText = '';
-    let reasoningText = '';
-    const commandMessages: CommandMessage[] = [];
-    let usage: NormalizedUsage | undefined;
-    let sawTerminalEvent: ConversationEvent | null = null;
+    const result = await collectTerminalResult(this['continue']({ answer, rejectionReason }), {
+      onTextChunk,
+      onReasoningChunk,
+      onCommandMessage,
+      onEvent,
+      getRawInterruption: () => this.approvalState.getPending()?.interruption,
+      onFinalEvent: (event) => {
+        this.logger.debug('handleApprovalDecision received final event', {
+          sessionId: this.id,
+          hasUsage: Boolean(event.usage),
+          usage: event.usage,
+        });
+      },
+    });
 
-    for await (const event of this['continue']({ answer, rejectionReason })) {
-      onEvent?.(event);
-
-      switch (event.type) {
-        case 'text_delta': {
-          const full = event.fullText ?? '';
-          onTextChunk?.(full, event.delta);
-          break;
-        }
-        case 'reasoning_delta': {
-          const full = event.fullText ?? '';
-          onReasoningChunk?.(full, event.delta);
-          break;
-        }
-        case 'command_message': {
-          onCommandMessage?.(event.message);
-          break;
-        }
-        case 'approval_required': {
-          sawTerminalEvent = event;
-          const rawInterruption = this.approvalState.getPending()?.interruption;
-          return {
-            type: 'approval_required',
-            approval: {
-              agentName: event.approval.agentName,
-              toolName: event.approval.toolName,
-              argumentsText: event.approval.argumentsText,
-              rawInterruption,
-              callId: event.approval.callId,
-              llmAdvisory: event.approval.llmAdvisory,
-            },
-          };
-        }
-        case 'final': {
-          sawTerminalEvent = event;
-          finalText = event.finalText;
-          reasoningText = event.reasoningText ?? '';
-          usage = event.usage;
-          this.logger.debug('handleApprovalDecision received final event', {
-            sessionId: this.id,
-            hasUsage: Boolean(event.usage),
-            usage: event.usage,
-          });
-          if (event.commandMessages?.length) {
-            for (const msg of event.commandMessages) {
-              commandMessages.push(msg);
-            }
-          }
-          break;
-        }
-        case 'error': {
-          break;
-        }
-        default:
-          break;
-      }
-    }
-
-    if (!sawTerminalEvent) {
-      const response: FinalTerminal = {
-        type: 'response',
-        commandMessages,
-        finalText: finalText || 'Done.',
-        ...(reasoningText ? { reasoningText } : {}),
-        ...(usage ? { usage } : {}),
-      };
+    if (result.type === 'response') {
       this.logger.debug('handleApprovalDecision returning response', {
         sessionId: this.id,
-        hasUsage: Boolean(usage),
-        usage,
+        hasUsage: Boolean(result.usage),
+        usage: result.usage,
       });
-      return response;
     }
 
-    const response: FinalTerminal = {
-      type: 'response',
-      commandMessages,
-      finalText: finalText || 'Done.',
-      ...(reasoningText ? { reasoningText } : {}),
-      ...(usage ? { usage } : {}),
-    };
-    this.logger.debug('handleApprovalDecision returning response', {
-      sessionId: this.id,
-      hasUsage: Boolean(usage),
-      usage,
-    });
-    return response;
+    return result;
   }
 
   async *#streamEvents(

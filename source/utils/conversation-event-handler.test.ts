@@ -231,6 +231,30 @@ test('tool_started: formats grep command correctly', (t) => {
   t.is(cmdMsg.command, 'grep "TODO" src/');
 });
 
+test('tool_started: does not append duplicate running message for the same callId', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-dup-1',
+    toolName: 'shell',
+    arguments: { command: 'ls -la' },
+  } as ConversationEvent);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-dup-1',
+    toolName: 'shell',
+    arguments: { command: 'ls -la' },
+  } as ConversationEvent);
+
+  t.is(deps.calls.appendedMessages.length, 1);
+  t.is(deps.calls.appendedMessages[0][0].callId, 'call-dup-1');
+  t.is(deps.calls.appendedMessages[0][0].status, 'running');
+});
+
 // =============================================================================
 // command_message tests
 // =============================================================================

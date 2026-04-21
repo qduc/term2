@@ -37,8 +37,13 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
 /**
  * Settings that should be hidden from the UI (not for security, but for UX/workflow)
  * - agent.provider: Can only be changed at the start of a new conversation via model menu
+ * - agent.autoApproveProvider: Controlled via model/provider selection workflows, hide from the general settings list
  */
-const HIDDEN_SETTINGS = new Set<string>([SETTING_KEYS.AGENT_PROVIDER]);
+const HIDDEN_SETTINGS = new Set<string>([
+  SETTING_KEYS.AGENT_PROVIDER,
+  SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
+  SETTING_KEYS.AGENT_MENTOR_PROVIDER,
+]);
 
 const MAX_RESULTS = 10;
 

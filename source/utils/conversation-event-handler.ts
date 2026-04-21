@@ -75,6 +75,8 @@ export function createConversationEventHandler<
     annotateCommandMessage,
   } = deps;
 
+  const activeRunningToolCallIds = new Set<string>();
+
   return (event: ConversationEvent) => {
     switch (event.type) {
       case 'text_delta': {
@@ -135,12 +137,23 @@ export function createConversationEventHandler<
           toolArgs: args,
         };
 
+        if (toolCallId && activeRunningToolCallIds.has(toolCallId)) {
+          return;
+        }
+
+        if (toolCallId) {
+          activeRunningToolCallIds.add(toolCallId);
+        }
+
         appendMessages([pendingMessage as unknown as MessageT]);
         return;
       }
 
       case 'command_message': {
         const cmdMsg = event.message;
+        if (cmdMsg.callId) {
+          activeRunningToolCallIds.delete(cmdMsg.callId);
+        }
         const annotated = annotateCommandMessage(cmdMsg as CommandMessageT);
 
         const messagesToAdd: BotMessage[] = [];

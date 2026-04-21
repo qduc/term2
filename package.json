@@ -41,6 +41,7 @@
     "prepublishOnly": "npm run build && npm test",
     "release": "./scripts/release.sh",
     "logs": "node tools/log_viewer/src/server.js",
+    "eval:auto-approval": "tsc && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",
     "prepare": "husky"
   },
   "files": [

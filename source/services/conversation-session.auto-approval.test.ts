@@ -200,6 +200,7 @@ const malformedResponseMacro: Macro<
       model: 'test-auto-model',
       reasoning: expectedReasoning,
       approved: false,
+      source: 'llm',
     });
     t.is(chatCalls.length, 1);
   },
@@ -239,11 +240,12 @@ test('RED-classified shell command short-circuits the LLM with a rejection advis
   const result = await session.sendMessage('clean up the machine');
   const approval = getApprovalResult(t, result).approval;
 
-  t.deepEqual(approval.llmAdvisory, {
-    model: 'test-auto-model',
-    reasoning: 'Command is in the dangerous list (RED). Manual approval is strictly required.',
-    approved: false,
-  });
+  const llmAdvisory = approval.llmAdvisory;
+  t.truthy(llmAdvisory);
+  t.is(llmAdvisory?.approved, false);
+  t.is(llmAdvisory?.model, 'test-auto-model');
+  t.is(llmAdvisory?.source, 'system');
+  t.regex(llmAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
   t.is(chatCalls.length, 0);
 });
 
@@ -272,6 +274,7 @@ test('single safe shell command calls the LLM once and attaches its advisory', a
     model: 'test-auto-model',
     reasoning: 'Listing the source folder is read-only and matches the request.',
     approved: true,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
   t.true(chatCalls[0].prompt.includes('call-safe-1'));
@@ -310,6 +313,7 @@ test('batch evaluation calls the LLM once and reuses cached advisories across se
     model: 'test-auto-model',
     reasoning: 'Listing files is safe.',
     approved: true,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
 
@@ -318,6 +322,7 @@ test('batch evaluation calls the LLM once and reuses cached advisories across se
     model: 'test-auto-model',
     reasoning: 'Printing the working directory is safe.',
     approved: true,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
 
@@ -326,6 +331,7 @@ test('batch evaluation calls the LLM once and reuses cached advisories across se
     model: 'test-auto-model',
     reasoning: 'Reading git status is safe.',
     approved: true,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
 
@@ -362,11 +368,12 @@ test('mixed RED and non-RED batch bypasses the LLM for RED commands and evaluate
   });
 
   const firstResult = await session.sendMessage('inspect the repository');
-  t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
-    model: 'test-auto-model',
-    reasoning: 'Command is in the dangerous list (RED). Manual approval is strictly required.',
-    approved: false,
-  });
+  const mixedAdvisory = getApprovalResult(t, firstResult).approval.llmAdvisory;
+  t.truthy(mixedAdvisory);
+  t.is(mixedAdvisory?.approved, false);
+  t.is(mixedAdvisory?.model, 'test-auto-model');
+  t.is(mixedAdvisory?.source, 'system');
+  t.regex(mixedAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
   t.is(chatCalls.length, 1);
 
   const secondResult = await session.handleApprovalDecision('y');
@@ -374,6 +381,7 @@ test('mixed RED and non-RED batch bypasses the LLM for RED commands and evaluate
     model: 'test-auto-model',
     reasoning: 'Listing source files is safe.',
     approved: true,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
 });
@@ -419,6 +427,7 @@ test('LLM evaluation errors return the safe-default advisory for every pending c
     model: 'test-auto-model',
     reasoning: 'LLM evaluation encountered an error.',
     approved: false,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
 
@@ -427,6 +436,7 @@ test('LLM evaluation errors return the safe-default advisory for every pending c
     model: 'test-auto-model',
     reasoning: 'LLM evaluation encountered an error.',
     approved: false,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
 });
@@ -457,6 +467,7 @@ test('interruption without callId uses inline evaluation and does not reuse a ca
     model: 'test-auto-model',
     reasoning: 'Listing files is safe.',
     approved: true,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
 
@@ -465,6 +476,7 @@ test('interruption without callId uses inline evaluation and does not reuse a ca
     model: 'test-auto-model',
     reasoning: 'Printing the working directory is safe.',
     approved: true,
+    source: 'llm',
   });
   t.is(chatCalls.length, 2);
 });
@@ -489,6 +501,7 @@ test('reset clears cached advisories before the next approval turn', async (t) =
     model: 'test-auto-model',
     reasoning: 'First advisory.',
     approved: true,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
 
@@ -499,6 +512,7 @@ test('reset clears cached advisories before the next approval turn', async (t) =
     model: 'test-auto-model',
     reasoning: 'Second advisory after reset.',
     approved: false,
+    source: 'llm',
   });
   t.is(chatCalls.length, 2);
 });
@@ -525,6 +539,7 @@ test('turn completion clears cached advisories so a new turn gets a fresh evalua
     model: 'test-auto-model',
     reasoning: 'First turn advisory.',
     approved: true,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
 
@@ -536,6 +551,7 @@ test('turn completion clears cached advisories so a new turn gets a fresh evalua
     model: 'test-auto-model',
     reasoning: 'Second turn advisory.',
     approved: false,
+    source: 'llm',
   });
   t.is(chatCalls.length, 2);
 });

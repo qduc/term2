@@ -8,6 +8,7 @@ export interface LLMAdvisory {
   reasoning: string;
   approved: boolean;
   model: string;
+  source?: 'llm' | 'system';
 }
 
 export interface ApprovalDescriptor {

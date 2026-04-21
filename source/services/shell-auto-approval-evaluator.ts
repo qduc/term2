@@ -1,7 +1,7 @@
 import type { AgentInputItem } from '@openai/agents';
 import type { LLMAdvisory } from '../contracts/conversation.js';
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
-import { classifyCommand, SafetyStatus } from '../utils/command-safety/index.js';
+import { classifyCommandDetailed, SafetyStatus } from '../utils/command-safety/index.js';
 import type { ILoggingService, ISettingsService } from './service-interfaces.js';
 
 export type ShellAutoApprovalCommand = {
@@ -72,12 +72,14 @@ export async function evaluateShellAutoApprovalAdvisories({
   const toEvaluateByLLM: ShellAutoApprovalCommand[] = [];
   for (const { id, command } of commands) {
     try {
-      const safetyStatus = classifyCommand(command, logger);
+      const { status: safetyStatus, reasons } = classifyCommandDetailed(command, logger);
       if (safetyStatus === SafetyStatus.RED) {
+        const detail = reasons.length > 0 ? reasons.join('; ') : 'matched a dangerous pattern';
         out.set(id, {
           model: autoApproveModel,
-          reasoning: 'Command is in the dangerous list (RED). Manual approval is strictly required.',
+          reasoning: `Blocked by safety heuristics (RED): ${detail}. Manual approval is strictly required.`,
           approved: false,
+          source: 'system',
         });
         continue;
       }
@@ -112,7 +114,12 @@ export async function evaluateShellAutoApprovalAdvisories({
             typeof res.approved === 'boolean' &&
             !out.has(res.id)
           ) {
-            out.set(res.id, { model: autoApproveModel, reasoning: res.reasoning, approved: res.approved });
+            out.set(res.id, {
+              model: autoApproveModel,
+              reasoning: res.reasoning,
+              approved: res.approved,
+              source: 'llm',
+            });
           }
         }
       }
@@ -124,6 +131,7 @@ export async function evaluateShellAutoApprovalAdvisories({
           model: autoApproveModel,
           reasoning: 'LLM did not provide a valid evaluation for this command.',
           approved: false,
+          source: 'llm',
         });
       }
     }
@@ -133,7 +141,12 @@ export async function evaluateShellAutoApprovalAdvisories({
     });
     for (const { id } of toEvaluateByLLM) {
       if (!out.has(id)) {
-        out.set(id, { model: autoApproveModel, reasoning: 'LLM evaluation encountered an error.', approved: false });
+        out.set(id, {
+          model: autoApproveModel,
+          reasoning: 'LLM evaluation encountered an error.',
+          approved: false,
+          source: 'llm',
+        });
       }
     }
   }

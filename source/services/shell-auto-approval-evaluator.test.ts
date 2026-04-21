@@ -57,11 +57,12 @@ test('short-circuits RED commands and does not call chat for all-RED batches', a
     logger: createMockLogger() as any,
   });
 
-  t.deepEqual(advisories.get('call-red'), {
-    model: 'test-auto-model',
-    reasoning: 'Command is in the dangerous list (RED). Manual approval is strictly required.',
-    approved: false,
-  });
+  const redAdvisory = advisories.get('call-red');
+  t.truthy(redAdvisory);
+  t.is(redAdvisory?.approved, false);
+  t.is(redAdvisory?.model, 'test-auto-model');
+  t.is(redAdvisory?.source, 'system');
+  t.regex(redAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
   t.is(chatCalls, 0);
 });
 
@@ -86,6 +87,7 @@ test('evaluates non-RED commands via chat and parses valid JSON results', async 
     model: 'test-auto-model',
     reasoning: 'Read-only listing is safe.',
     approved: true,
+    source: 'llm',
   });
   t.is(chatCalls.length, 1);
   t.true(chatCalls[0].prompt.includes('call-safe'));
@@ -113,10 +115,12 @@ test('falls back to deny advisory for commands missing from malformed chat respo
     model: 'test-auto-model',
     reasoning: 'Looks safe',
     approved: true,
+    source: 'llm',
   });
   t.deepEqual(advisories.get('call-safe-2'), {
     model: 'test-auto-model',
     reasoning: 'LLM did not provide a valid evaluation for this command.',
     approved: false,
+    source: 'llm',
   });
 });

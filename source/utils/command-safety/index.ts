@@ -22,10 +22,26 @@ function getLogger(loggingService?: ILoggingService): ILoggingService {
   return loggingService ?? nullLoggingService;
 }
 
+export interface ClassifyCommandResult {
+  status: SafetyStatus;
+  reasons: string[];
+}
+
 /**
  * Classify command into a SafetyStatus (GREEN/YELLOW/RED)
  */
 export function classifyCommand(commandString: string, loggingService?: ILoggingService): SafetyStatus {
+  return classifyCommandDetailed(commandString, loggingService).status;
+}
+
+/**
+ * Classify command and return both the status and the list of reasons
+ * that contributed to the final status.
+ */
+export function classifyCommandDetailed(
+  commandString: string,
+  loggingService?: ILoggingService,
+): ClassifyCommandResult {
   try {
     const reasons: string[] = [];
     const truncatedCommand = commandString.substring(0, 200);
@@ -147,7 +163,7 @@ export function classifyCommand(commandString: string, loggingService?: ILogging
       reasons,
     });
 
-    return worstStatus;
+    return { status: worstStatus, reasons };
   } catch (e) {
     // Fail-safe: unparsable -> audit
     const logger = getLogger(loggingService);
@@ -155,7 +171,10 @@ export function classifyCommand(commandString: string, loggingService?: ILogging
       command: commandString.substring(0, 200),
       error: e instanceof Error ? e.message : String(e),
     });
-    return SafetyStatus.YELLOW;
+    return {
+      status: SafetyStatus.YELLOW,
+      reasons: [`YELLOW: failed to parse command (${e instanceof Error ? e.message : String(e)})`],
+    };
   }
 }
 

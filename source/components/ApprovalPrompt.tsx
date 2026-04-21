@@ -152,23 +152,21 @@ const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
 };
 
 const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']> }> = ({ advisory }) => {
+  const isSystem = advisory.source === 'system';
+  const borderColor = isSystem ? 'red' : advisory.approved ? 'green' : 'yellow';
+  const headerColor = isSystem ? 'red' : advisory.approved ? 'green' : 'yellow';
+  const label = isSystem ? 'System Safety Check: BLOCKED ' : `AI Advisor: ${advisory.approved ? 'SAFE ' : 'CAUTION '}`;
+
   return (
-    <Box
-      flexDirection="column"
-      marginTop={1}
-      paddingX={1}
-      paddingY={0}
-      borderStyle="round"
-      borderColor={advisory.approved ? 'green' : 'yellow'}
-    >
+    <Box flexDirection="column" marginTop={1} paddingX={1} paddingY={0} borderStyle="round" borderColor={borderColor}>
       <Box>
-        <Text color={advisory.approved ? 'green' : 'yellow'} bold>
-          AI Advisor: {advisory.approved ? 'SAFE ' : 'CAUTION '}
+        <Text color={headerColor} bold>
+          {label}
         </Text>
-        <Text color="#94a3b8"> ({advisory.model}) </Text>
+        <Text color="#94a3b8"> ({isSystem ? 'automated heuristic' : advisory.model}) </Text>
       </Box>
       <Text italic color="#cbd5e1">
-        "{advisory.reasoning}"
+        {isSystem ? advisory.reasoning : `"${advisory.reasoning}"`}
       </Text>
     </Box>
   );

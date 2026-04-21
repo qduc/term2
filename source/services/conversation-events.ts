@@ -1,6 +1,6 @@
 import type { CommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
-import type { ApprovalDescriptor } from '../contracts/conversation.js';
+import type { ApprovalDescriptor, LLMAdvisory } from '../contracts/conversation.js';
 
 export type ConversationEvent =
   | TextDeltaEvent
@@ -56,10 +56,7 @@ export interface ToolStartedEvent {
 export interface ApprovalRequiredEvent {
   type: 'approval_required';
   approval: Omit<ApprovalDescriptor, 'rawInterruption'> & {
-    llmAdvisory?: {
-      reasoning: string;
-      approved: boolean;
-    };
+    llmAdvisory?: LLMAdvisory;
   };
 }
 

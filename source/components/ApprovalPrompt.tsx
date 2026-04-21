@@ -1,10 +1,11 @@
 import React, { FC } from 'react';
 import { Box, Text, useInput } from 'ink';
+import type { ApprovalDescriptor } from '../contracts/conversation.js';
 import { generateDiff } from '../utils/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
 
 type Props = {
-  approval: any;
+  approval: ApprovalDescriptor;
 };
 
 type ApplyPatchArgs = {
@@ -150,7 +151,7 @@ const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
   );
 };
 
-const LLMAdvisory: FC<{ advisory: { reasoning: string; approved: boolean } }> = ({ advisory }) => {
+const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']> }> = ({ advisory }) => {
   return (
     <Box
       flexDirection="column"
@@ -164,7 +165,7 @@ const LLMAdvisory: FC<{ advisory: { reasoning: string; approved: boolean } }> = 
         <Text color={advisory.approved ? 'green' : 'yellow'} bold>
           AI Advisor: {advisory.approved ? 'SAFE ' : 'CAUTION '}
         </Text>
-        <Text color="#94a3b8"> (Fast Model) </Text>
+        <Text color="#94a3b8"> ({advisory.model}) </Text>
       </Box>
       <Text italic color="#cbd5e1">
         "{advisory.reasoning}"

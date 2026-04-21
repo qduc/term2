@@ -58,6 +58,7 @@ test('short-circuits RED commands and does not call chat for all-RED batches', a
   });
 
   t.deepEqual(advisories.get('call-red'), {
+    model: 'test-auto-model',
     reasoning: 'Command is in the dangerous list (RED). Manual approval is strictly required.',
     approved: false,
   });
@@ -82,6 +83,7 @@ test('evaluates non-RED commands via chat and parses valid JSON results', async 
   });
 
   t.deepEqual(advisories.get('call-safe'), {
+    model: 'test-auto-model',
     reasoning: 'Read-only listing is safe.',
     approved: true,
   });
@@ -108,10 +110,12 @@ test('falls back to deny advisory for commands missing from malformed chat respo
   });
 
   t.deepEqual(advisories.get('call-safe-1'), {
+    model: 'test-auto-model',
     reasoning: 'Looks safe',
     approved: true,
   });
   t.deepEqual(advisories.get('call-safe-2'), {
+    model: 'test-auto-model',
     reasoning: 'LLM did not provide a valid evaluation for this command.',
     approved: false,
   });

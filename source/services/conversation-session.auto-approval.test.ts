@@ -197,6 +197,7 @@ const malformedResponseMacro: Macro<
     const approval = getApprovalResult(t, result).approval;
 
     t.deepEqual(approval.llmAdvisory, {
+      model: 'test-auto-model',
       reasoning: expectedReasoning,
       approved: false,
     });
@@ -239,6 +240,7 @@ test('RED-classified shell command short-circuits the LLM with a rejection advis
   const approval = getApprovalResult(t, result).approval;
 
   t.deepEqual(approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Command is in the dangerous list (RED). Manual approval is strictly required.',
     approved: false,
   });
@@ -267,6 +269,7 @@ test('single safe shell command calls the LLM once and attaches its advisory', a
   const approval = getApprovalResult(t, result).approval;
 
   t.deepEqual(approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Listing the source folder is read-only and matches the request.',
     approved: true,
   });
@@ -304,6 +307,7 @@ test('batch evaluation calls the LLM once and reuses cached advisories across se
 
   const firstResult = await session.sendMessage('inspect the repository');
   t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Listing files is safe.',
     approved: true,
   });
@@ -311,6 +315,7 @@ test('batch evaluation calls the LLM once and reuses cached advisories across se
 
   const secondResult = await session.handleApprovalDecision('y');
   t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Printing the working directory is safe.',
     approved: true,
   });
@@ -318,6 +323,7 @@ test('batch evaluation calls the LLM once and reuses cached advisories across se
 
   const thirdResult = await session.handleApprovalDecision('y');
   t.deepEqual(getApprovalResult(t, thirdResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Reading git status is safe.',
     approved: true,
   });
@@ -357,6 +363,7 @@ test('mixed RED and non-RED batch bypasses the LLM for RED commands and evaluate
 
   const firstResult = await session.sendMessage('inspect the repository');
   t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Command is in the dangerous list (RED). Manual approval is strictly required.',
     approved: false,
   });
@@ -364,6 +371,7 @@ test('mixed RED and non-RED batch bypasses the LLM for RED commands and evaluate
 
   const secondResult = await session.handleApprovalDecision('y');
   t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Listing source files is safe.',
     approved: true,
   });
@@ -408,6 +416,7 @@ test('LLM evaluation errors return the safe-default advisory for every pending c
 
   const firstResult = await session.sendMessage('inspect the repository');
   t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'LLM evaluation encountered an error.',
     approved: false,
   });
@@ -415,6 +424,7 @@ test('LLM evaluation errors return the safe-default advisory for every pending c
 
   const secondResult = await session.handleApprovalDecision('y');
   t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'LLM evaluation encountered an error.',
     approved: false,
   });
@@ -444,6 +454,7 @@ test('interruption without callId uses inline evaluation and does not reuse a ca
 
   const firstResult = await session.sendMessage('inspect the repository');
   t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Listing files is safe.',
     approved: true,
   });
@@ -451,6 +462,7 @@ test('interruption without callId uses inline evaluation and does not reuse a ca
 
   const secondResult = await session.handleApprovalDecision('y');
   t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Printing the working directory is safe.',
     approved: true,
   });
@@ -474,6 +486,7 @@ test('reset clears cached advisories before the next approval turn', async (t) =
 
   const firstResult = await session.sendMessage('inspect the repository');
   t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'First advisory.',
     approved: true,
   });
@@ -483,6 +496,7 @@ test('reset clears cached advisories before the next approval turn', async (t) =
 
   const secondResult = await session.sendMessage('inspect the repository again');
   t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Second advisory after reset.',
     approved: false,
   });
@@ -508,6 +522,7 @@ test('turn completion clears cached advisories so a new turn gets a fresh evalua
 
   const firstResult = await session.sendMessage('inspect the repository');
   t.deepEqual(getApprovalResult(t, firstResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'First turn advisory.',
     approved: true,
   });
@@ -518,6 +533,7 @@ test('turn completion clears cached advisories so a new turn gets a fresh evalua
 
   const secondResult = await session.sendMessage('inspect the repository again');
   t.deepEqual(getApprovalResult(t, secondResult).approval.llmAdvisory, {
+    model: 'test-auto-model',
     reasoning: 'Second turn advisory.',
     approved: false,
   });

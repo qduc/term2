@@ -11,7 +11,7 @@ import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
 import { ApprovalState } from './approval-state.js';
 import { createInvalidToolCallDiagnostic } from './logging-contract.js';
-import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
+import type { ConversationTerminal, LLMAdvisory, ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ISettingsService } from './service-interfaces.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
 import {
@@ -161,7 +161,7 @@ export class ConversationSession {
   private textDeltaCount = 0;
   private reasoningDeltaCount = 0;
   private toolCallArgumentsById = new Map<string, unknown>();
-  private toolCallAdvisories = new Map<string, { reasoning: string; approved: boolean }>();
+  private toolCallAdvisories = new Map<string, LLMAdvisory>();
   private emittedInvalidToolCallPackets = new Set<string>();
 
   private settingsService?: ISettingsService;
@@ -1005,7 +1005,7 @@ export class ConversationSession {
       const callId = getCallIdFromObject(interruption);
       const { toolName, argumentsText } = this.#getToolInfoFromInterruption(interruption);
 
-      let llmAdvisory: { reasoning: string; approved: boolean } | undefined;
+      let llmAdvisory: LLMAdvisory | undefined;
       if (toolName === 'shell' || toolName === 'bash') {
         // Collect all shell commands in the current batch of interruptions to evaluate them together.
         // Only batch-cache entries with a real callId; command text alone is not a safe cache key
@@ -1108,7 +1108,7 @@ export class ConversationSession {
 
   async #evaluateBatchAutoApprovalInline(
     commands: { id: string; command: string }[],
-  ): Promise<Map<string, { reasoning: string; approved: boolean }>> {
+  ): Promise<Map<string, LLMAdvisory>> {
     return evaluateShellAutoApprovalAdvisories({
       commands,
       history: this.conversationStore.getHistory(),

@@ -4,16 +4,19 @@ import type { NormalizedUsage } from '../utils/token-usage.js';
 
 export type ReasoningEffortSetting = ModelSettingsReasoningEffort | 'default';
 
+export interface LLMAdvisory {
+  reasoning: string;
+  approved: boolean;
+  model: string;
+}
+
 export interface ApprovalDescriptor {
   agentName: string;
   toolName: string;
   argumentsText: string;
   rawInterruption: unknown;
   callId?: string;
-  llmAdvisory?: {
-    reasoning: string;
-    approved: boolean;
-  };
+  llmAdvisory?: LLMAdvisory;
 }
 
 export interface ApprovalRequiredTerminal {

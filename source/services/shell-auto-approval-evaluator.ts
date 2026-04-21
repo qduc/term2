@@ -1,4 +1,5 @@
 import type { AgentInputItem } from '@openai/agents';
+import type { LLMAdvisory } from '../contracts/conversation.js';
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import { classifyCommand, SafetyStatus } from '../utils/command-safety/index.js';
 import type { ILoggingService, ISettingsService } from './service-interfaces.js';
@@ -8,10 +9,7 @@ export type ShellAutoApprovalCommand = {
   command: string;
 };
 
-export type ShellAutoApprovalAdvisory = {
-  reasoning: string;
-  approved: boolean;
-};
+export type ShellAutoApprovalAdvisory = LLMAdvisory;
 
 const buildPrompt = (commands: ShellAutoApprovalCommand[], history: AgentInputItem[]): string => {
   const recentHistory = history.slice(-6);
@@ -77,6 +75,7 @@ export async function evaluateShellAutoApprovalAdvisories({
       const safetyStatus = classifyCommand(command, logger);
       if (safetyStatus === SafetyStatus.RED) {
         out.set(id, {
+          model: autoApproveModel,
           reasoning: 'Command is in the dangerous list (RED). Manual approval is strictly required.',
           approved: false,
         });
@@ -113,7 +112,7 @@ export async function evaluateShellAutoApprovalAdvisories({
             typeof res.approved === 'boolean' &&
             !out.has(res.id)
           ) {
-            out.set(res.id, { reasoning: res.reasoning, approved: res.approved });
+            out.set(res.id, { model: autoApproveModel, reasoning: res.reasoning, approved: res.approved });
           }
         }
       }
@@ -122,6 +121,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     for (const { id } of toEvaluateByLLM) {
       if (!out.has(id)) {
         out.set(id, {
+          model: autoApproveModel,
           reasoning: 'LLM did not provide a valid evaluation for this command.',
           approved: false,
         });
@@ -133,7 +133,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     });
     for (const { id } of toEvaluateByLLM) {
       if (!out.has(id)) {
-        out.set(id, { reasoning: 'LLM evaluation encountered an error.', approved: false });
+        out.set(id, { model: autoApproveModel, reasoning: 'LLM evaluation encountered an error.', approved: false });
       }
     }
   }

@@ -1034,6 +1034,21 @@ export class ConversationSession {
           const single = await this.#evaluateBatchAutoApprovalInline([{ id: '__single__', command: argumentsText }]);
           llmAdvisory = single.get('__single__');
         }
+
+        const autoApproveMode = this.settingsService?.get<'off' | 'advisory' | 'auto'>('shell.autoApproveMode');
+        if (autoApproveMode === 'auto' && llmAdvisory?.approved === true && llmAdvisory.source === 'llm') {
+          this.logger.info('Shell command auto-approved by LLM', {
+            eventType: 'approval.auto_approved',
+            category: 'approval',
+            phase: 'approval',
+            sessionId: this.id,
+            callId,
+            command: argumentsText,
+            model: llmAdvisory.model,
+            reasoning: llmAdvisory.reasoning,
+          });
+          return await collectTerminalResult(this['continue']({ answer: 'y' }));
+        }
       }
 
       return {

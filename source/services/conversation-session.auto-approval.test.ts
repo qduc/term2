@@ -575,3 +575,149 @@ test('non-shell tools do not trigger advisory evaluation or attach llmAdvisory',
   t.is(approval.llmAdvisory, undefined);
   t.is(chatCalls.length, 0);
 });
+
+// Phase 2: Full Auto-Approval tests
+
+test('auto mode: LLM-approved safe command skips approval_required and returns final response', async (t) => {
+  const initialStream = createInterruptedStream([
+    createShellInterruption({ callId: 'call-auto-1', command: 'ls source' }),
+  ]);
+  const finalStream = createFinalStream('Files listed.');
+
+  const { session, chatCalls } = createSessionHarness({
+    settingsOverrides: { 'shell.autoApproveMode': 'auto' },
+    startStreams: [initialStream],
+    continuationStreams: [finalStream],
+    chatImpl: async () =>
+      JSON.stringify({
+        results: [{ id: 'call-auto-1', reasoning: 'Listing files is read-only and safe.', approved: true }],
+      }),
+  });
+
+  const result = await session.sendMessage('list the source files');
+  t.is(result?.type, 'response');
+  if (result?.type !== 'response') throw new Error('Expected response');
+  t.is(result.finalText, 'Files listed.');
+  t.is(chatCalls.length, 1);
+});
+
+test('auto mode: LLM-rejected command still prompts user with advisory', async (t) => {
+  const initialStream = createInterruptedStream([
+    // Use a YELLOW command (not RED) so heuristics pass and the LLM makes the rejection call
+    createShellInterruption({ callId: 'call-auto-reject', command: 'git log --all --format="%H"' }),
+  ]);
+
+  const { session, chatCalls } = createSessionHarness({
+    settingsOverrides: { 'shell.autoApproveMode': 'auto' },
+    startStreams: [initialStream],
+    chatImpl: async () =>
+      JSON.stringify({
+        results: [
+          {
+            id: 'call-auto-reject',
+            reasoning: 'Dumping all commit hashes is not aligned with the current task.',
+            approved: false,
+          },
+        ],
+      }),
+  });
+
+  const result = await session.sendMessage('run the installer');
+  const approval = getApprovalResult(t, result).approval;
+  t.is(approval.llmAdvisory?.approved, false);
+  t.is(approval.llmAdvisory?.source, 'llm');
+  t.is(chatCalls.length, 1);
+});
+
+test('auto mode: RED command (source=system) is never auto-approved', async (t) => {
+  const initialStream = createInterruptedStream([
+    createShellInterruption({ callId: 'call-auto-red', command: 'rm -rf /' }),
+  ]);
+
+  const { session, chatCalls } = createSessionHarness({
+    settingsOverrides: { 'shell.autoApproveMode': 'auto' },
+    startStreams: [initialStream],
+  });
+
+  const result = await session.sendMessage('clean the system');
+  const approval = getApprovalResult(t, result).approval;
+  t.is(approval.llmAdvisory?.approved, false);
+  t.is(approval.llmAdvisory?.source, 'system');
+  t.is(chatCalls.length, 0);
+});
+
+test('advisory mode: LLM-approved command still prompts the user (Phase 1 behavior preserved)', async (t) => {
+  const initialStream = createInterruptedStream([
+    createShellInterruption({ callId: 'call-advisory', command: 'ls source' }),
+  ]);
+
+  const { session, chatCalls } = createSessionHarness({
+    settingsOverrides: { 'shell.autoApproveMode': 'advisory' },
+    startStreams: [initialStream],
+    chatImpl: async () =>
+      JSON.stringify({
+        results: [{ id: 'call-advisory', reasoning: 'Listing files is safe.', approved: true }],
+      }),
+  });
+
+  const result = await session.sendMessage('list the source files');
+  const approval = getApprovalResult(t, result).approval;
+  t.is(approval.llmAdvisory?.approved, true);
+  t.is(approval.llmAdvisory?.source, 'llm');
+  t.is(chatCalls.length, 1);
+});
+
+test('auto mode: batch of two commands — first auto-approved, second triggers prompt when rejected', async (t) => {
+  const first = createShellInterruption({ callId: 'call-batch-auto-1', command: 'ls source' });
+  // Use a YELLOW (non-RED) command so heuristics pass and LLM makes the rejection call
+  const second = createShellInterruption({ callId: 'call-batch-auto-2', command: 'git log --all --format="%H"' });
+
+  const initialStream = createInterruptedStream([first, second]);
+  // After first is auto-approved, continuation stream surfaces the second interruption
+  const continuationAfterFirst = createInterruptedStream([second]);
+
+  const { session, chatCalls } = createSessionHarness({
+    settingsOverrides: { 'shell.autoApproveMode': 'auto' },
+    startStreams: [initialStream],
+    continuationStreams: [continuationAfterFirst],
+    chatImpl: async () =>
+      JSON.stringify({
+        results: [
+          { id: 'call-batch-auto-1', reasoning: 'Listing files is safe.', approved: true },
+          {
+            id: 'call-batch-auto-2',
+            reasoning: 'Dumping all commit hashes is not aligned with the current task.',
+            approved: false,
+          },
+        ],
+      }),
+  });
+
+  // First command is auto-approved, continuation hits the second which is rejected by LLM
+  const result = await session.sendMessage('inspect repository and dump history');
+  const approval = getApprovalResult(t, result).approval;
+  t.is(approval.toolName, 'shell');
+  t.is(approval.llmAdvisory?.approved, false);
+  t.is(approval.llmAdvisory?.source, 'llm');
+  t.is(chatCalls.length, 1);
+});
+
+test('auto mode: evaluator error falls back to prompt without crashing', async (t) => {
+  const initialStream = createInterruptedStream([
+    createShellInterruption({ callId: 'call-auto-err', command: 'ls source' }),
+  ]);
+
+  const { session, chatCalls } = createSessionHarness({
+    settingsOverrides: { 'shell.autoApproveMode': 'auto' },
+    startStreams: [initialStream],
+    chatImpl: async () => {
+      throw new Error('model unavailable');
+    },
+  });
+
+  const result = await session.sendMessage('list files');
+  const approval = getApprovalResult(t, result).approval;
+  t.is(approval.llmAdvisory?.approved, false);
+  t.is(approval.llmAdvisory?.source, 'llm');
+  t.is(chatCalls.length, 1);
+});

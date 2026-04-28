@@ -97,6 +97,48 @@ test('evaluates non-RED commands via chat and parses valid JSON results', async 
   t.is(chatCalls[0].options.reasoningEffort, 'none');
 });
 
+test('sends compact bounded history context instead of raw conversation items', async (t) => {
+  const largeToolOutput = 'SECRET_OUTPUT '.repeat(2_000);
+  const largeAssistantText = 'assistant detail '.repeat(600);
+  const largeUserText = 'please inspect the repository '.repeat(300);
+  const chatCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+
+  await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-safe', command: 'ls source' }],
+    history: [
+      { role: 'user', type: 'message', content: 'old request that should be omitted' },
+      {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'output_text', text: largeAssistantText }],
+        reasoning_details: [{ text: 'expensive hidden reasoning' }],
+      },
+      { type: 'function_call', name: 'shell', callId: 'call-old', arguments: JSON.stringify({ command: 'pwd' }) },
+      { type: 'function_call_result', callId: 'call-old', output: largeToolOutput },
+      { role: 'user', type: 'message', content: largeUserText },
+    ] as any,
+    settingsService: createMockSettings('advisory') as any,
+    agentClient: {
+      chat: async (prompt: string, options: Record<string, unknown>) => {
+        chatCalls.push({ prompt, options });
+        return JSON.stringify({
+          results: [{ id: 'call-safe', reasoning: 'Read-only listing is safe.', approved: true }],
+        });
+      },
+    } as any,
+    logger: createMockLogger() as any,
+  });
+
+  t.is(chatCalls.length, 1);
+  t.true(chatCalls[0].prompt.includes('[user]'));
+  t.true(chatCalls[0].prompt.includes('[assistant]'));
+  t.true(chatCalls[0].prompt.includes('[tool call] shell'));
+  t.true(chatCalls[0].prompt.includes('[tool result] function_call_result'));
+  t.false(chatCalls[0].prompt.includes('SECRET_OUTPUT'));
+  t.false(chatCalls[0].prompt.includes('reasoning_details'));
+  t.true(chatCalls[0].prompt.length < 6_000);
+});
+
 test('falls back to deny advisory for commands missing from malformed chat response', async (t) => {
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [

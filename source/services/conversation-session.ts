@@ -321,28 +321,28 @@ export class ConversationSession {
           if (continuedStream.interruptions && continuedStream.interruptions.length > 0) {
             this.logger.warn('Another interruption occurred after fake execution - handling as approval');
             // Let the normal flow handle this
-            const resultPromise = this.#buildResult(
+            const resolvedResult = yield* this.#buildResult(
               continuedStream,
               acc.finalOutput,
               acc.reasoningOutput,
               acc.emittedCommandIds,
               acc.latestUsage,
             );
-            yield this.#toTerminalEvent(await resultPromise);
+            yield this.#toTerminalEvent(resolvedResult);
             return;
           }
 
           // Successfully resolved - agent should now have processed the fake rejection
           this.logger.debug('Fake execution completed, agent received rejection message');
 
-          const resultPromise = this.#buildResult(
+          const resolvedResult = yield* this.#buildResult(
             continuedStream,
             acc.finalOutput,
             acc.reasoningOutput,
             acc.emittedCommandIds,
             acc.latestUsage,
           );
-          yield this.#toTerminalEvent(await resultPromise);
+          yield this.#toTerminalEvent(resolvedResult);
           return;
         } catch (error) {
           this.logger.warn('Error resolving aborted approval with fake execution', {
@@ -378,15 +378,13 @@ export class ConversationSession {
       this.previousResponseId = stream.lastResponseId ?? null;
       this.conversationStore.updateFromResult(stream);
 
-      const resultPromise = this.#buildResult(
+      const resolvedResult = yield* this.#buildResult(
         stream,
         acc.finalOutput || undefined,
         acc.reasoningOutput || undefined,
         acc.emittedCommandIds,
         acc.latestUsage,
       );
-
-      const resolvedResult = await resultPromise;
 
       if (resolvedResult.type === 'approval_required') {
         this.logger.info('Tool approval required', {
@@ -594,15 +592,13 @@ export class ConversationSession {
       // This prevents duplicates when result.history contains commands from the initial stream
       const allEmittedIds = new Set([...previouslyEmittedIds, ...acc.emittedCommandIds]);
 
-      const resultPromise = this.#buildResult(
+      const resolvedResult = yield* this.#buildResult(
         stream,
         acc.finalOutput || undefined,
         acc.reasoningOutput || undefined,
         allEmittedIds,
         acc.latestUsage,
       );
-
-      const resolvedResult = await resultPromise;
 
       if (resolvedResult.type === 'approval_required') {
         this.logger.info('Tool approval required', {
@@ -984,13 +980,13 @@ export class ConversationSession {
     };
   }
 
-  async #buildResult(
+  async *#buildResult(
     result: AgentStream,
     finalOutputOverride?: string,
     reasoningOutputOverride?: string,
     emittedCommandIds?: Set<string>,
     usage?: NormalizedUsage,
-  ): Promise<ConversationResult> {
+  ): AsyncGenerator<ConversationEvent, ConversationResult, void> {
     if (result.interruptions && result.interruptions.length > 0) {
       const interruption = result.interruptions[0];
       const interruptionRecord = asRecord(interruption);
@@ -1047,7 +1043,45 @@ export class ConversationSession {
             model: llmAdvisory.model,
             reasoning: llmAdvisory.reasoning,
           });
-          return await collectTerminalResult(this['continue']({ answer: 'y' }));
+
+          let finalText = '';
+          let reasoningText = '';
+          let finalUsage: NormalizedUsage | undefined;
+          const commandMessages: CommandMessage[] = [];
+          let approvalRequiredResult: ConversationResult | undefined;
+
+          for await (const event of this['continue']({ answer: 'y' })) {
+            yield event;
+
+            if (event.type === 'approval_required') {
+              approvalRequiredResult = {
+                type: 'approval_required',
+                approval: {
+                  ...event.approval,
+                  rawInterruption: this.approvalState.getPending()?.interruption,
+                },
+              };
+            } else if (event.type === 'final') {
+              finalText = event.finalText;
+              reasoningText = event.reasoningText ?? '';
+              finalUsage = event.usage;
+              if (event.commandMessages) {
+                commandMessages.push(...event.commandMessages);
+              }
+            }
+          }
+
+          if (approvalRequiredResult) {
+            return approvalRequiredResult;
+          }
+
+          return {
+            type: 'response',
+            commandMessages,
+            finalText: finalText || 'Done.',
+            ...(reasoningText ? { reasoningText } : {}),
+            ...(finalUsage ? { usage: finalUsage } : {}),
+          };
         }
       }
 

@@ -60,10 +60,8 @@ export const sedHandler: CommandHandler = {
       // because it performs in-place edits. Detect -i and variants (e.g. -i, -i.bak, -i'')
       if (argText && argText.startsWith('-')) {
         if (argText.startsWith('-i')) {
-          return {
-            status: SafetyStatus.RED,
-            reasons: [`sed in-place edit detected: ${argText}`],
-          };
+          status = SafetyStatus.YELLOW;
+          reasons.push(`sed in-place edit detected: ${argText}`);
         }
         continue; // other flags ignored
       }

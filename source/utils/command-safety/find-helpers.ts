@@ -31,34 +31,19 @@ export function hasFindDangerousExecution(args: any[]): {
       }
     }
 
-    if (terminatorIndex === -1) {
-      // Malformed -exec (no terminator)
-      return {
-        dangerous: true,
-        reason: `find ${argText} without terminator`,
-      };
-    }
+    if (terminatorIndex === -1) continue;
 
     // Extract the command between exec flag and terminator
     const execArgs = args.slice(i + 1, terminatorIndex);
 
-    // Check for redirects (which indicate shell operations)
+    // Check for redirects (which indicate shell operations). These are suspicious,
+    // but not necessarily destructive without knowing the surrounding task.
     const hasRedirect = execArgs.some((a: any) => a?.type === 'Redirect');
-    if (hasRedirect) {
-      return {
-        dangerous: true,
-        reason: `find ${argText} with shell redirection`,
-      };
-    }
+    if (hasRedirect) continue;
 
     const execCommand = execArgs.map((a) => extractWordText(a)).filter(Boolean);
 
-    if (execCommand.length === 0) {
-      return {
-        dangerous: true,
-        reason: `find ${argText} with empty command`,
-      };
-    }
+    if (execCommand.length === 0) continue;
 
     const cmdName = execCommand[0];
     if (!cmdName) {
@@ -77,21 +62,7 @@ export function hasFindDangerousExecution(args: any[]): {
     }
 
     // Check for destructive commands
-    const destructiveCmds = [
-      'rm',
-      'shred',
-      'chmod',
-      'chown',
-      'mv',
-      'dd',
-      'mkfs',
-      'truncate',
-      'tee',
-      'cp',
-      'ln',
-      'install',
-      'rsync',
-    ];
+    const destructiveCmds = ['rm', 'shred', 'dd', 'mkfs', 'truncate'];
     if (destructiveCmds.includes(cmdName)) {
       return {
         dangerous: true,
@@ -99,72 +70,10 @@ export function hasFindDangerousExecution(args: any[]): {
       };
     }
 
-    // Check for dangerous interpreters and meta-executors
-    // These can all invoke arbitrary commands or scripts
-    const dangerousInterpreters = [
-      // Shells
-      'sh',
-      'bash',
-      'zsh',
-      'ksh',
-      'dash',
-      'fish',
-      'tcsh',
-      'csh',
-      // Script interpreters
-      'perl',
-      'python',
-      'python2',
-      'python3',
-      'ruby',
-      'node',
-      'nodejs',
-      'php',
-      'lua',
-      // Meta-executors that can run commands
-      'env',
-      'xargs',
-      'parallel',
-      'nohup',
-      'nice',
-      'ionice',
-      'timeout',
-      'stdbuf',
-      'script',
-      'expect',
-      // Text processors that can execute
-      'awk',
-      'gawk',
-      'mawk',
-      'nawk',
-      'sed',
-      'ed',
-      // Editors that can run shell commands
-      'vim',
-      'nvim',
-      'emacs',
-    ];
-
-    // Handle both bare names and full paths like /usr/bin/python
-    const isDangerousInterpreter = dangerousInterpreters.some(
-      (interp) => cmdName === interp || cmdName.endsWith(`/${interp}`),
-    );
-
-    if (isDangerousInterpreter) {
-      return {
-        dangerous: true,
-        reason: `find ${argText} ${cmdName} (can execute commands)`,
-      };
-    }
-
-    // Check for shell metacharacters in command
+    // Check for shell metacharacters in command. These make the command harder to
+    // reason about, so they should remain YELLOW through hasFindSuspiciousFlags.
     const fullExecCmd = execCommand.join(' ');
-    if (/[|&;$`<>]/.test(fullExecCmd)) {
-      return {
-        dangerous: true,
-        reason: `find ${argText} with shell metacharacters`,
-      };
-    }
+    if (/[|&;$`<>]/.test(fullExecCmd)) continue;
   }
 
   return { dangerous: false };

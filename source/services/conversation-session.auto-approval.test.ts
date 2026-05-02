@@ -231,10 +231,23 @@ test('shell auto-approval off skips advisory evaluation and omits llmAdvisory', 
   t.is(chatCalls.length, 0);
 });
 
-test('RED-classified shell command short-circuits the LLM with a rejection advisory', async (t) => {
+test('RED-classified shell command includes LLM rationale but remains a system rejection advisory', async (t) => {
   const initialStream = createInterruptedStream([createShellInterruption({ callId: 'call-red', command: 'rm -rf /' })]);
   const { session, chatCalls } = createSessionHarness({
     startStreams: [initialStream],
+    chatImpl: async (prompt) => {
+      t.true(prompt.includes('call-red'));
+      t.true(prompt.includes('rm -rf /'));
+      return JSON.stringify({
+        results: [
+          {
+            id: 'call-red',
+            reasoning: 'This command recursively deletes files from the filesystem root.',
+            approved: false,
+          },
+        ],
+      });
+    },
   });
 
   const result = await session.sendMessage('clean up the machine');
@@ -246,7 +259,8 @@ test('RED-classified shell command short-circuits the LLM with a rejection advis
   t.is(llmAdvisory?.model, 'test-auto-model');
   t.is(llmAdvisory?.source, 'system');
   t.regex(llmAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
-  t.is(chatCalls.length, 0);
+  t.regex(llmAdvisory?.reasoning ?? '', /Model advisory: This command recursively deletes files/);
+  t.is(chatCalls.length, 1);
 });
 
 test('single safe shell command calls the LLM once and attaches its advisory', async (t) => {
@@ -340,7 +354,7 @@ test('batch evaluation calls the LLM once and reuses cached advisories across se
   t.is(chatCalls.length, 1);
 });
 
-test('mixed RED and non-RED batch bypasses the LLM for RED commands and evaluates only the remainder', async (t) => {
+test('mixed RED and non-RED batch evaluates both while RED remains system rejected', async (t) => {
   const red = createShellInterruption({ callId: 'call-mixed-red', command: 'rm -rf /' });
   const safe = createShellInterruption({ callId: 'call-mixed-safe', command: 'ls source' });
 
@@ -351,12 +365,17 @@ test('mixed RED and non-RED batch bypasses the LLM for RED commands and evaluate
     startStreams: [initialStream],
     continuationStreams: [continuationStream],
     chatImpl: async (prompt) => {
-      t.false(prompt.includes('call-mixed-red'));
-      t.false(prompt.includes('rm -rf /'));
+      t.true(prompt.includes('call-mixed-red'));
+      t.true(prompt.includes('rm -rf /'));
       t.true(prompt.includes('call-mixed-safe'));
       t.true(prompt.includes('ls source'));
       return JSON.stringify({
         results: [
+          {
+            id: 'call-mixed-red',
+            reasoning: 'Recursive forced deletion from root is destructive.',
+            approved: false,
+          },
           {
             id: 'call-mixed-safe',
             reasoning: 'Listing source files is safe.',
@@ -374,6 +393,7 @@ test('mixed RED and non-RED batch bypasses the LLM for RED commands and evaluate
   t.is(mixedAdvisory?.model, 'test-auto-model');
   t.is(mixedAdvisory?.source, 'system');
   t.regex(mixedAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
+  t.regex(mixedAdvisory?.reasoning ?? '', /Model advisory: Recursive forced deletion from root/);
   t.is(chatCalls.length, 1);
 
   const secondResult = await session.handleApprovalDecision('y');
@@ -637,13 +657,20 @@ test('auto mode: RED command (source=system) is never auto-approved', async (t) 
   const { session, chatCalls } = createSessionHarness({
     settingsOverrides: { 'shell.autoApproveMode': 'auto' },
     startStreams: [initialStream],
+    chatImpl: async () =>
+      JSON.stringify({
+        results: [
+          { id: 'call-auto-red', reasoning: 'The model explanation should not auto-approve RED.', approved: true },
+        ],
+      }),
   });
 
   const result = await session.sendMessage('clean the system');
   const approval = getApprovalResult(t, result).approval;
   t.is(approval.llmAdvisory?.approved, false);
   t.is(approval.llmAdvisory?.source, 'system');
-  t.is(chatCalls.length, 0);
+  t.regex(approval.llmAdvisory?.reasoning ?? '', /Model advisory: The model explanation should not auto-approve RED\./);
+  t.is(chatCalls.length, 1);
 });
 
 test('advisory mode: LLM-approved command still prompts the user (Phase 1 behavior preserved)', async (t) => {

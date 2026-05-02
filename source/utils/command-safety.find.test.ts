@@ -136,22 +136,30 @@ test('find - delete flag (RED)', (t) => {
   }
 });
 
-test('find - exec with destructive commands (RED)', (t) => {
-  const commands = [
-    'find . -exec rm {} \\;',
-    'find . -exec rm -rf {} \\;',
-    'find . -exec shred {} \\;',
-    'find . -exec chmod 777 {} \\;',
-    'find . -exec chown root {} \\;',
-    'find . -exec mv {} /tmp \\;',
-  ];
+test('find - exec with inherently destructive commands (RED)', (t) => {
+  const commands = ['find . -exec rm {} \\;', 'find . -exec rm -rf {} \\;', 'find . -exec shred {} \\;'];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+    t.is(classifyCommand(cmd), SafetyStatus.RED, `"${cmd}" should be RED`);
   }
 });
 
-test('find - exec with shell commands (RED)', (t) => {
+test('find - exec with ambiguous write commands (YELLOW)', (t) => {
+  const commands = [
+    'find . -exec chmod 777 {} \\;',
+    'find . -exec chown root {} \\;',
+    'find . -exec mv {} /tmp \\;',
+    'find . -exec cp {} /tmp/backup \\;',
+    'find . -exec ln -s {} /tmp/link \\;',
+    'find . -exec rsync -a {} /backup \\;',
+  ];
+
+  for (const cmd of commands) {
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
+  }
+});
+
+test('find - exec with shell commands (YELLOW)', (t) => {
   const commands = [
     'find . -exec sh -c "rm $0" {} \\;',
     'find . -exec bash -c "echo test" {} \\;',
@@ -160,11 +168,11 @@ test('find - exec with shell commands (RED)', (t) => {
   ];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
   }
 });
 
-test('find - exec with shell metacharacters (RED)', (t) => {
+test('find - exec with shell metacharacters (YELLOW)', (t) => {
   const commands = [
     'find . -exec echo {} | cat \\;',
     'find . -exec cat {} > /tmp/out \\;',
@@ -173,28 +181,28 @@ test('find - exec with shell metacharacters (RED)', (t) => {
   ];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
   }
 });
 
-test('find - malformed exec (no terminator) (RED)', (t) => {
+test('find - malformed exec without terminator (YELLOW)', (t) => {
   const commands = ['find . -exec rm {}', 'find . -exec cat'];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED error for malformed exec`);
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
   }
 });
 
-test('find - execdir variants (RED)', (t) => {
-  const commands = [
-    'find . -execdir rm {} \\;',
-    'find . -execdir bash -c "test" {} \\;',
-    'find . -ok rm {} \\;',
-    'find . -okdir chmod 777 {} \\;',
-  ];
+test('find - execdir variants follow command severity', (t) => {
+  const redCommands = ['find . -execdir rm {} \\;', 'find . -ok rm {} \\;'];
+  const yellowCommands = ['find . -execdir bash -c "test" {} \\;', 'find . -okdir chmod 777 {} \\;'];
 
-  for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+  for (const cmd of redCommands) {
+    t.is(classifyCommand(cmd), SafetyStatus.RED, `"${cmd}" should be RED`);
+  }
+
+  for (const cmd of yellowCommands) {
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
   }
 });
 
@@ -242,32 +250,32 @@ test('find - false positives to avoid', (t) => {
   }
 });
 
-test('find - escaped semicolons (RED if dangerous)', (t) => {
+test('find - escaped semicolons (RED if inherently destructive)', (t) => {
   const commands = ['find . -exec rm {} ";"', "find . -exec rm {} ';'", 'find . -exec rm {} \\;'];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+    t.is(classifyCommand(cmd), SafetyStatus.RED, `"${cmd}" should be RED`);
   }
 });
 
-test('find - directory traversal in paths (RED)', (t) => {
+test('find - directory traversal in paths (YELLOW)', (t) => {
   const commands = ['find ../../../etc -name "*.conf"', 'find ../../.ssh -type f'];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
   }
 });
 
-test('find - home directory searches (RED)', (t) => {
-  const commands = ['find ~ -name "*.txt"', 'find ~/.ssh -type f', 'find $HOME/.env'];
+test('find - broad home directory searches (YELLOW)', (t) => {
+  const commands = ['find ~ -name "*.txt"', 'find $HOME -name "*.txt"', 'find /Users/alice -name "*.txt"'];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
   }
 });
 
-test('find - empty exec command (RED)', (t) => {
-  t.true(validateCommandSafety('find . -exec \\;'), 'Empty exec command should return true');
+test('find - empty exec command (YELLOW)', (t) => {
+  t.is(classifyCommand('find . -exec \\;'), SafetyStatus.YELLOW, 'Empty exec command should be YELLOW');
 });
 
 test('find - boolean operators maintain safety classification', (t) => {
@@ -287,7 +295,7 @@ test('find - boolean operators maintain safety classification', (t) => {
 // Security Review Findings - Critical Bypasses
 // ============================================================================
 
-test('find - interpreter bypasses (RED)', (t) => {
+test('find - interpreter bypasses (YELLOW)', (t) => {
   const commands = [
     'find . -exec perl -e "unlink" {} \\;',
     'find . -exec python -c "import os; os.system(\\"rm *\\")" {} \\;',
@@ -296,11 +304,11 @@ test('find - interpreter bypasses (RED)', (t) => {
   ];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
   }
 });
 
-test('find - meta-executor bypasses (RED)', (t) => {
+test('find - meta-executor bypasses (YELLOW)', (t) => {
   const commands = [
     'find . -exec env rm {} \\;',
     'find . -exec xargs rm \\;',
@@ -309,13 +317,20 @@ test('find - meta-executor bypasses (RED)', (t) => {
   ];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
   }
 });
 
-test('find - more destructive commands (RED)', (t) => {
+test('find - more inherently destructive commands (RED)', (t) => {
+  const commands = ['find . -exec truncate -s 0 {} \\;'];
+
+  for (const cmd of commands) {
+    t.is(classifyCommand(cmd), SafetyStatus.RED, `"${cmd}" should be RED`);
+  }
+});
+
+test('find - more ambiguous write commands (YELLOW)', (t) => {
   const commands = [
-    'find . -exec truncate -s 0 {} \\;',
     'find . -exec tee /dev/null {} \\;',
     'find . -exec cp {} /tmp/backup \\;',
     'find . -exec ln -s {} /tmp/link \\;',
@@ -323,7 +338,7 @@ test('find - more destructive commands (RED)', (t) => {
   ];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
   }
 });
 
@@ -348,7 +363,7 @@ test('find - root traversal for DoS (YELLOW)', (t) => {
   }
 });
 
-test('find - expanded home directory patterns (RED)', (t) => {
+test('find - expanded home directory patterns (YELLOW)', (t) => {
   const commands = [
     'find /home/user -name "*"',
     'find /Users/alice -name "*"',
@@ -357,12 +372,19 @@ test('find - expanded home directory patterns (RED)', (t) => {
   ];
 
   for (const cmd of commands) {
-    t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);
+    t.is(classifyCommand(cmd), SafetyStatus.YELLOW, `"${cmd}" should be YELLOW`);
   }
 });
 
 test('find - sensitive dotfiles expanded list (RED)', (t) => {
-  const commands = ['find ~/.aws -type f', 'find ~/.kube/config', 'find ~/.gnupg -name "*"', 'find ~/.bash_history'];
+  const commands = [
+    'find ~/.ssh -type f',
+    'find $HOME/.env',
+    'find ~/.aws -type f',
+    'find ~/.kube/config',
+    'find ~/.gnupg -name "*"',
+    'find ~/.bash_history',
+  ];
 
   for (const cmd of commands) {
     t.true(validateCommandSafety(cmd), `"${cmd}" should return true for RED command`);

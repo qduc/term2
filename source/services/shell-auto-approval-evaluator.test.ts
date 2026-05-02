@@ -42,16 +42,20 @@ test('returns empty advisories and skips chat when auto-approval mode is off', a
   t.is(chatCalls, 0);
 });
 
-test('short-circuits RED commands and does not call chat for all-RED batches', async (t) => {
+test('evaluates RED commands via chat but keeps system rejection advisory', async (t) => {
   let chatCalls = 0;
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [{ id: 'call-red', command: 'rm -rf /' }],
     history: [{ role: 'user', type: 'message', content: 'clean the machine' }],
     settingsService: createMockSettings('advisory') as any,
     agentClient: {
-      chat: async () => {
+      chat: async (prompt: string) => {
         chatCalls++;
-        return '{}';
+        t.true(prompt.includes('call-red'));
+        t.true(prompt.includes('rm -rf /'));
+        return JSON.stringify({
+          results: [{ id: 'call-red', reasoning: 'This recursively deletes files from root.', approved: false }],
+        });
       },
     } as any,
     logger: createMockLogger() as any,
@@ -63,7 +67,8 @@ test('short-circuits RED commands and does not call chat for all-RED batches', a
   t.is(redAdvisory?.model, 'test-auto-model');
   t.is(redAdvisory?.source, 'system');
   t.regex(redAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
-  t.is(chatCalls, 0);
+  t.regex(redAdvisory?.reasoning ?? '', /Model advisory: This recursively deletes files from root\./);
+  t.is(chatCalls, 1);
 });
 
 test('evaluates non-RED commands via chat and parses valid JSON results', async (t) => {

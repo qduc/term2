@@ -91,6 +91,13 @@ npx ava               # Unit tests
 
 **Note**: When running `npx ava` on a single test file, use the compiled version in the `dist/` directory (e.g., `npx ava dist/path/to/test.js`), not the TypeScript source file.
 
+## Shell Safety For Agents
+
+- Never run ad-hoc shell probes that contain command strings with executable payloads such as `rm`, `find -exec`, `sed -i`, redirections, command substitution, backticks, or shell metacharacters. Shell quoting mistakes can turn test fixtures into real commands.
+- When testing command parsing or safety classification, put cases in an AVA test file or another quoted fixture file and run the test harness. Do not pass dangerous command examples through `node -e`, `tsx -e`, `sh -c`, command substitution, or inline shell one-liners.
+- If you need to inspect classifier behavior interactively, use hardcoded string literals inside a committed/temporary test file and execute only the test runner. Keep dangerous strings as data, never as shell syntax.
+- Before running any command that could modify or delete files outside the intended edit set, stop and use a safer read-only inspection path or ask for explicit approval.
+
 ## Key Concepts
 
 - **Tool Interceptors**: Centralized validation and approval flow for all tools

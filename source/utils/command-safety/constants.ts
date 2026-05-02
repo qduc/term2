@@ -17,35 +17,19 @@ export const ALLOWED_COMMANDS = new Set([
   'git',
 ]);
 export const BLOCKED_COMMANDS = new Set([
-  // Filesystem
+  // Inherently destructive filesystem operations
   'rm',
   'rmdir',
   'mkfs',
   'dd',
-  'mv',
-  'cp',
-  // System
+
+  // Privilege escalation and system shutdown
   'sudo',
   'su',
-  'chmod',
-  'chown',
   'shutdown',
   'reboot',
-  // Network/Web
-  'curl',
-  'wget',
-  'ssh',
-  'scp',
-  'netstat',
-  // Package Managers / installers
-  'apt',
-  'yum',
-  'npm',
-  'yarn',
-  'pnpm',
-  'pip',
-  'gem',
-  // Dangerous wrappers / misc
+
+  // Dangerous wrappers / process control
   'eval',
   'exec',
   'kill',

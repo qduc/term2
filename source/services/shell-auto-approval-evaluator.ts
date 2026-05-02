@@ -74,6 +74,11 @@ const buildCompactHistoryContext = (history: AgentInputItem[]): string => {
   return truncate(text, MAX_CONTEXT_CHARS);
 };
 
+const buildRedSystemReasoning = (detail: string, llmReasoning?: string): string => {
+  const base = `Blocked by safety heuristics (RED): ${detail}. Manual approval is strictly required.`;
+  return llmReasoning ? `${base}\n\nModel advisory: ${llmReasoning}` : base;
+};
+
 const buildPrompt = (commands: ShellAutoApprovalCommand[], history: AgentInputItem[]): string => {
   const historyText = buildCompactHistoryContext(history);
 
@@ -132,18 +137,13 @@ export async function evaluateShellAutoApprovalAdvisories({
   const autoApproveProvider = settingsService.get<string>('agent.autoApproveProvider');
 
   const toEvaluateByLLM: ShellAutoApprovalCommand[] = [];
+  const redSafetyDetails = new Map<string, string>();
   for (const { id, command } of commands) {
     try {
       const { status: safetyStatus, reasons } = classifyCommandDetailed(command, logger);
       if (safetyStatus === SafetyStatus.RED) {
         const detail = reasons.length > 0 ? reasons.join('; ') : 'matched a dangerous pattern';
-        out.set(id, {
-          model: autoApproveModel,
-          reasoning: `Blocked by safety heuristics (RED): ${detail}. Manual approval is strictly required.`,
-          approved: false,
-          source: 'system',
-        });
-        continue;
+        redSafetyDetails.set(id, detail);
       }
     } catch {
       // Ignore parsing errors for LLM check fallback
@@ -176,6 +176,17 @@ export async function evaluateShellAutoApprovalAdvisories({
             typeof res.approved === 'boolean' &&
             !out.has(res.id)
           ) {
+            const redDetail = redSafetyDetails.get(res.id);
+            if (redDetail) {
+              out.set(res.id, {
+                model: autoApproveModel,
+                reasoning: buildRedSystemReasoning(redDetail, res.reasoning),
+                approved: false,
+                source: 'system',
+              });
+              continue;
+            }
+
             out.set(res.id, {
               model: autoApproveModel,
               reasoning: res.reasoning,
@@ -189,6 +200,17 @@ export async function evaluateShellAutoApprovalAdvisories({
 
     for (const { id } of toEvaluateByLLM) {
       if (!out.has(id)) {
+        const redDetail = redSafetyDetails.get(id);
+        if (redDetail) {
+          out.set(id, {
+            model: autoApproveModel,
+            reasoning: buildRedSystemReasoning(redDetail),
+            approved: false,
+            source: 'system',
+          });
+          continue;
+        }
+
         out.set(id, {
           model: autoApproveModel,
           reasoning: 'LLM did not provide a valid evaluation for this command.',
@@ -203,6 +225,17 @@ export async function evaluateShellAutoApprovalAdvisories({
     });
     for (const { id } of toEvaluateByLLM) {
       if (!out.has(id)) {
+        const redDetail = redSafetyDetails.get(id);
+        if (redDetail) {
+          out.set(id, {
+            model: autoApproveModel,
+            reasoning: buildRedSystemReasoning(redDetail),
+            approved: false,
+            source: 'system',
+          });
+          continue;
+        }
+
         out.set(id, {
           model: autoApproveModel,
           reasoning: 'LLM evaluation encountered an error.',

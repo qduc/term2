@@ -258,10 +258,10 @@ test('JSON files - files ending with .json extension only (GREEN)', (t) => {
 });
 
 // ============================================================================
-// RED: Directory traversal, home directories, system paths
+// RED: Sensitive home paths
 // ============================================================================
 
-test('Path risk - directory traversal (RED)', (t) => {
+test('Path risk - directory traversal (YELLOW)', (t) => {
   const traversalPaths = [
     '../secrets.json',
     '../../.env',
@@ -271,7 +271,7 @@ test('Path risk - directory traversal (RED)', (t) => {
 
   for (const path of traversalPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.RED, `"${path}" should be RED (directory traversal)`);
+    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (directory traversal)`);
   }
 });
 
@@ -290,12 +290,12 @@ test('Path risk - home directory paths (RED)', (t) => {
   }
 });
 
-test('Path risk - absolute system paths (RED)', (t) => {
+test('Path risk - absolute system paths (YELLOW)', (t) => {
   const systemPaths = ['/etc/passwd', '/var/log/system.log', '/usr/bin/node', '/boot/grub/grub.cfg'];
 
   for (const path of systemPaths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.RED, `"${path}" should be RED (system path)`);
+    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (system path)`);
   }
 });
 
@@ -368,11 +368,11 @@ test('Path risk - absolute paths outside project (YELLOW)', (t) => {
   }
 });
 
-test('Path risk - absolute system paths still RED regardless of project', (t) => {
+test('Path risk - absolute system paths remain YELLOW regardless of project', (t) => {
   const paths = ['/etc/passwd', '/var/log/system.log', '/usr/bin/node'];
 
   for (const path of paths) {
     const result = analyzePathRisk(path);
-    t.is(result, SafetyStatus.RED, `"${path}" should be RED (system path)`);
+    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (system path)`);
   }
 });

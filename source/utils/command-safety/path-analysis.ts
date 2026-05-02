@@ -60,12 +60,13 @@ export function analyzePathRisk(inputPath: string | undefined, loggingService?: 
       .replace(/^\/Users\/[^/]+/, '')
       .replace(/^\/root/, '');
 
-    // Plain home directory access without any suffix is RED
+    // Plain home directory access without any suffix is broad and privacy-sensitive,
+    // but not inherently destructive. Let the model judge the task context.
     if (sliced === '' || sliced === '/') {
       logger.security('Path risk: home directory access', {
         path: candidate,
       });
-      return SafetyStatus.RED;
+      return SafetyStatus.YELLOW;
     }
 
     // Check for sensitive dotfiles and directories
@@ -92,13 +93,13 @@ export function analyzePathRisk(inputPath: string | undefined, loggingService?: 
     }
   }
 
-  // RED: Absolute System Paths
+  // YELLOW: Absolute System Paths
   if (path.isAbsolute(candidate)) {
     if (SYSTEM_PATHS.some((sys) => candidate.startsWith(sys))) {
       logger.security('Path risk: absolute system path', {
         path: candidate,
       });
-      return SafetyStatus.RED;
+      return SafetyStatus.YELLOW;
     }
     // Home dotfiles when absolute
     if (
@@ -125,12 +126,12 @@ export function analyzePathRisk(inputPath: string | undefined, loggingService?: 
     // Fall through to continue checking for sensitive files, hidden files, etc.
   }
 
-  // RED: Directory Traversal
+  // YELLOW: Directory Traversal
   if (candidate.includes('..')) {
     logger.security('Path risk: directory traversal detected', {
       path: candidate,
     });
-    return SafetyStatus.RED;
+    return SafetyStatus.YELLOW;
   }
 
   const filename = path.basename(candidate);

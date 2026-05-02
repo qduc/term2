@@ -21,6 +21,8 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
   const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
   const providerKey = useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
   const reasoningEffort = useSetting<string>(settingsService, 'agent.reasoningEffort') ?? 'default';
+  const autoApproveMode = useSetting<string>(settingsService, 'shell.autoApproveMode') ?? 'off';
+  const autoApproveModel = useSetting<string>(settingsService, 'agent.autoApproveModel');
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
@@ -32,81 +34,97 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
   const usageText = formatFooterUsage(lastUsage);
 
   return (
-    <Box marginTop={1} justifyContent="space-between" width="100%">
-      <Box>
-        {sshInfo && (
-          <>
-            <Box marginRight={1}>
-              <Text color="#f97316" bold>
-                SSH
-              </Text>
-              <Text color={slate}>
-                {' '}
-                {sshInfo.user}@{sshInfo.host}:{sshInfo.remoteDir}
-              </Text>
-            </Box>
-            <Text color={slate}>│</Text>
-          </>
-        )}
-        <Box marginRight={1} marginLeft={sshInfo ? 1 : 0} gap={1}>
-          {liteMode && (
+    <Box marginTop={1} flexDirection="column" width="100%">
+      {/* Row 1: Primary Configuration */}
+      <Box justifyContent="space-between" width="100%">
+        <Box>
+          {sshInfo && (
             <>
-              <Text color="#10b981" bold>
-                Lite
-              </Text>
-              <Text color={isShellMode ? '#ca8a04' : '#3b82f6'} bold>
-                {isShellMode ? 'Shell' : 'Ask'}
-              </Text>
+              <Box marginRight={1}>
+                <Text color="#f97316" bold>
+                  SSH
+                </Text>
+                <Text color={slate}>
+                  {' '}
+                  {sshInfo.user}@{sshInfo.host}:{sshInfo.remoteDir}
+                </Text>
+              </Box>
+              <Text color={slate}>│</Text>
             </>
           )}
-          {editMode && (
-            <Text color={glow} bold>
-              Edit
-            </Text>
+          <Box marginRight={1} marginLeft={sshInfo ? 1 : 0} gap={1}>
+            {liteMode && (
+              <>
+                <Text color="#10b981" bold>
+                  Lite
+                </Text>
+                <Text color={isShellMode ? '#ca8a04' : '#3b82f6'} bold>
+                  {isShellMode ? 'Shell' : 'Ask'}
+                </Text>
+              </>
+            )}
+            {editMode && (
+              <Text color={glow} bold>
+                Edit
+              </Text>
+            )}
+            {mentorMode && (
+              <Text color="#a78bfa" bold>
+                Mentor
+              </Text>
+            )}
+            {!editMode && !mentorMode && !liteMode && <Text color={slate}>Default</Text>}
+          </Box>
+
+          {model && (
+            <>
+              <Text color={slate}>│</Text>
+              <Box marginX={1}>
+                <Text color={accent}>{model}</Text>
+                <Text color={slate}> ({providerLabel})</Text>
+              </Box>
+            </>
           )}
-          {mentorMode && (
-            <Text color="#a78bfa" bold>
-              Mentor
-            </Text>
+
+          {mentorMode && mentorModel && (
+            <>
+              <Text color={slate}>│</Text>
+              <Box marginX={1}>
+                <Text color={slate}>Mentor: </Text>
+                <Text color="#a78bfa">{mentorModel}</Text>
+              </Box>
+            </>
           )}
-          {!editMode && !mentorMode && !liteMode && <Text color={slate}>Default</Text>}
         </Box>
-
-        {model && (
-          <>
-            <Text color={slate}>│</Text>
-            <Box marginX={1}>
-              <Text color={accent}>{model}</Text>
-              <Text color={slate}> ({providerLabel})</Text>
-            </Box>
-          </>
-        )}
-
-        {mentorMode && mentorModel && (
-          <>
-            <Text color={slate}>│</Text>
-            <Box marginX={1}>
-              <Text color={slate}>Mentor: </Text>
-              <Text color="#a78bfa">{mentorModel}</Text>
-            </Box>
-          </>
-        )}
-
-        {reasoningEffort && reasoningEffort !== 'default' && (
-          <>
-            <Text color={slate}>│</Text>
-            <Box marginX={1}>
-              <Text color={glow}>Reasoning: {reasoningEffort}</Text>
-            </Box>
-          </>
-        )}
       </Box>
 
-      {usageText && (
+      {/* Row 2: Status & Metrics */}
+      <Box justifyContent="space-between" width="100%">
         <Box>
-          <Text color={slate}>{usageText}</Text>
+          {autoApproveMode !== 'off' && (
+            <Box marginRight={1}>
+              <Text color={slate}>Auto: </Text>
+              <Text color={autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
+                {autoApproveMode}
+              </Text>
+              {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
+            </Box>
+          )}
+
+          {reasoningEffort && reasoningEffort !== 'default' && (
+            <Box marginX={autoApproveMode !== 'off' ? 1 : 0}>
+              {autoApproveMode !== 'off' && <Text color={slate}>│ </Text>}
+              <Text color={glow}>Reasoning: {reasoningEffort}</Text>
+            </Box>
+          )}
         </Box>
-      )}
+
+        {usageText && (
+          <Box>
+            <Text color={slate}>{usageText}</Text>
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 };

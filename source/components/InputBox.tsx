@@ -28,6 +28,7 @@ const SHELL_PROMPT_WIDTH = 2;
 const REJECTION_PROMPT_WIDTH = 5;
 const SETTINGS_TRIGGER = '/settings ';
 const SETTINGS_RESET_TRIGGER = '/settings reset ';
+const AUTO_APPROVE_TRIGGER = '/auto-approve ';
 
 type Props = {
   onSubmit: (v: string) => void;
@@ -190,7 +191,7 @@ const InputBox: FC<Props> = ({
       models.close();
     }
 
-    // Priority 1: Settings
+    // Priority 1: Settings & Auto-approve
     if (value.startsWith(SETTINGS_RESET_TRIGGER)) {
       if (cursorOffset >= SETTINGS_RESET_TRIGGER.length) {
         settings.open(SETTINGS_RESET_TRIGGER.length);
@@ -214,6 +215,11 @@ const InputBox: FC<Props> = ({
       // Otherwise, still selecting / filtering setting keys.
       if (cursorOffset >= SETTINGS_TRIGGER.length) {
         settings.open(SETTINGS_TRIGGER.length);
+        return;
+      }
+    } else if (value.startsWith(AUTO_APPROVE_TRIGGER)) {
+      if (cursorOffset >= AUTO_APPROVE_TRIGGER.length) {
+        settingsValue.open('shell.autoApproveMode', AUTO_APPROVE_TRIGGER.length);
         return;
       }
     }
@@ -263,15 +269,24 @@ const InputBox: FC<Props> = ({
 
       if (mode !== 'text') {
         if (mode === 'settings_value_completion' && settingsValue.settingKey) {
-          const prefix = SETTINGS_TRIGGER;
-          // Reset input to just the trigger (showing full menu)
-          onChange(prefix);
-          setCursorOverride(prefix.length);
+          if (value.startsWith(SETTINGS_TRIGGER)) {
+            const prefix = SETTINGS_TRIGGER;
+            // Reset input to just the trigger (showing full menu)
+            onChange(prefix);
+            setCursorOverride(prefix.length);
 
-          settingsValue.close();
-          // Open settings menu, requesting highlighting of the current key
-          settings.open(prefix.length, settingsValue.settingKey);
-          return;
+            settingsValue.close();
+            // Open settings menu, requesting highlighting of the current key
+            settings.open(prefix.length, settingsValue.settingKey);
+            return;
+          }
+
+          if (value.startsWith(AUTO_APPROVE_TRIGGER)) {
+            onChange(AUTO_APPROVE_TRIGGER);
+            setCursorOverride(AUTO_APPROVE_TRIGGER.length);
+            settingsValue.close();
+            return;
+          }
         }
 
         // Close menu
@@ -418,7 +433,10 @@ const InputBox: FC<Props> = ({
         return false;
       }
 
-      if (!value.startsWith(SETTINGS_TRIGGER)) return false;
+      const triggers = [SETTINGS_TRIGGER, AUTO_APPROVE_TRIGGER];
+      const activeTrigger = triggers.find((t) => value.startsWith(t));
+
+      if (!activeTrigger) return false;
       if (!settingsValue.settingKey) return false;
 
       // Replace the value portion (from triggerIndex to cursor) with the suggestion.

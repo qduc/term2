@@ -201,6 +201,11 @@ const App: FC<AppProps> = ({
         return;
       }
 
+      if (key === 'shell.autoApproveMode') {
+        // No runtime changes needed, session reads from settingsService
+        return;
+      }
+
       if (key === 'shell.maxOutputLines') {
         setTrimConfig({ maxLines: Number(value) });
         return;
@@ -221,6 +226,36 @@ const App: FC<AppProps> = ({
       applyRuntimeSetting,
       setInput,
     });
+
+    const autoApproveAction = (args?: string) => {
+      const validModes = ['off', 'advisory', 'auto'] as const;
+      let newValue: 'off' | 'advisory' | 'auto';
+
+      if (args && args.trim()) {
+        const requested = args.trim().toLowerCase();
+        if (validModes.includes(requested as any)) {
+          newValue = requested as any;
+        } else {
+          addSystemMessage(`Error: Invalid mode '${args}'. Use: off, advisory, or auto.`);
+          return false;
+        }
+      } else {
+        const currentValue = settingsService.get<'off' | 'advisory' | 'auto'>('shell.autoApproveMode');
+        if (currentValue === 'off') {
+          newValue = 'advisory';
+        } else if (currentValue === 'advisory') {
+          newValue = 'auto';
+        } else {
+          newValue = 'off';
+        }
+      }
+
+      settingsService.set('shell.autoApproveMode', newValue);
+      applyRuntimeSetting('shell.autoApproveMode', newValue);
+
+      addSystemMessage(`Shell auto-approval mode set to: ${newValue.toUpperCase()}`);
+      return true;
+    };
 
     return [
       {
@@ -346,6 +381,12 @@ const App: FC<AppProps> = ({
           );
           return true;
         },
+      },
+      {
+        name: 'auto-approve',
+        description: 'Set or cycle shell auto-approval mode (off, advisory, auto)',
+        expectsArgs: true,
+        action: autoApproveAction,
       },
       settingsCommand,
     ];

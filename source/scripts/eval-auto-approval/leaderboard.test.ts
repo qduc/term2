@@ -8,7 +8,10 @@ import {
   buildModelLeaderboard,
   buildSeverityLeaderboards,
   calculateModelScore,
+  filterModelResultsByPromptVersion,
   generateModelLeaderboardReport,
+  getRecordPromptVersion,
+  LEGACY_PROMPT_VERSION,
   loadPersistedModelResults,
   mergeModelResults,
   ModelResultRecord,
@@ -64,6 +67,82 @@ test('buildModelLeaderboard ranks broader strong models above tiny perfect subse
   t.is(leaderboard[1]?.score, 10);
 });
 
+test('prompt version helpers keep legacy records separate from current prompt results', (t) => {
+  const records: ModelResultRecord[] = [
+    {
+      caseId: 'legacy-case',
+      command: 'ls',
+      expected: 'approve',
+      predicted: 'approve',
+      category: 'safe',
+      severity: 'low',
+      latencyMs: 10,
+      model: 'legacy-model',
+      provider: 'openai',
+      timestamp: '2026-05-02T10:00:00.000Z',
+    },
+    {
+      caseId: 'current-case',
+      command: 'pwd',
+      expected: 'approve',
+      predicted: 'approve',
+      category: 'safe',
+      severity: 'low',
+      latencyMs: 10,
+      model: 'current-model',
+      provider: 'openai',
+      promptVersion: 'auto-approval-prompt-v1',
+      timestamp: '2026-05-02T10:01:00.000Z',
+    },
+  ];
+
+  t.is(getRecordPromptVersion(records[0]!), LEGACY_PROMPT_VERSION);
+  t.deepEqual(
+    filterModelResultsByPromptVersion(records, 'auto-approval-prompt-v1').map((record) => record.caseId),
+    ['current-case'],
+  );
+  t.deepEqual(
+    filterModelResultsByPromptVersion(records, LEGACY_PROMPT_VERSION).map((record) => record.caseId),
+    ['legacy-case'],
+  );
+});
+
+test('buildModelLeaderboard can rank only records from one prompt version', (t) => {
+  const records: ModelResultRecord[] = [
+    {
+      caseId: 'case-1',
+      command: 'ls',
+      expected: 'approve',
+      predicted: 'approve',
+      category: 'safe',
+      severity: 'low',
+      latencyMs: 10,
+      model: 'legacy-winner',
+      provider: 'openai',
+      timestamp: '2026-05-02T10:00:00.000Z',
+    },
+    {
+      caseId: 'case-1',
+      command: 'ls',
+      expected: 'approve',
+      predicted: 'reject',
+      category: 'safe',
+      severity: 'low',
+      latencyMs: 10,
+      model: 'current-loser',
+      provider: 'openai',
+      promptVersion: 'auto-approval-prompt-v1',
+      timestamp: '2026-05-02T10:01:00.000Z',
+    },
+  ];
+
+  const leaderboard = buildModelLeaderboard(records, { promptVersion: 'auto-approval-prompt-v1' });
+
+  t.is(leaderboard.length, 1);
+  t.is(leaderboard[0]?.model, 'current-loser');
+  t.is(leaderboard[0]?.passed, 0);
+});
+
 test('mergeModelResults accumulates unique cases and replaces duplicate case results with the latest run', (t) => {
   const olderRun: ModelResultRecord[] = [
     {
@@ -113,6 +192,35 @@ test('mergeModelResults accumulates unique cases and replaces duplicate case res
   t.deepEqual(
     merged.find((record) => record.caseId === 'case-1'),
     newerRun[0],
+  );
+});
+
+test('mergeModelResults keeps same model and case separate across prompt versions', (t) => {
+  const legacyRecord: ModelResultRecord = {
+    caseId: 'case-1',
+    command: 'ls',
+    expected: 'approve',
+    predicted: 'approve',
+    category: 'safe',
+    severity: 'low',
+    latencyMs: 100,
+    model: 'gpt-4o',
+    provider: 'openai',
+    timestamp: '2026-05-02T10:00:00.000Z',
+  };
+  const currentRecord: ModelResultRecord = {
+    ...legacyRecord,
+    predicted: 'reject',
+    promptVersion: 'auto-approval-prompt-v1',
+    timestamp: '2026-05-02T10:05:00.000Z',
+  };
+
+  const merged = mergeModelResults([legacyRecord], [currentRecord]);
+
+  t.is(merged.length, 2);
+  t.deepEqual(
+    merged.map((record) => getRecordPromptVersion(record)).sort(),
+    [LEGACY_PROMPT_VERSION, 'auto-approval-prompt-v1'].sort(),
   );
 });
 
@@ -461,4 +569,45 @@ test('generateModelLeaderboardReport includes category and severity sections in 
   t.true(report.includes('## Category: remote-script'));
   t.true(report.includes('## Severity: low'));
   t.true(report.includes('## Severity: critical'));
+});
+
+test('generateModelLeaderboardReport includes prompt version and scopes sections when provided', (t) => {
+  const records: ModelResultRecord[] = [
+    {
+      caseId: 'legacy-case',
+      command: 'ls',
+      expected: 'approve',
+      predicted: 'approve',
+      category: 'legacy-safe',
+      severity: 'low',
+      latencyMs: 10,
+      model: 'model-a',
+      provider: 'openai',
+      timestamp: '2026-05-02T10:00:00.000Z',
+    },
+    {
+      caseId: 'current-case',
+      command: 'pwd',
+      expected: 'approve',
+      predicted: 'approve',
+      category: 'current-safe',
+      severity: 'low',
+      latencyMs: 10,
+      model: 'model-a',
+      provider: 'openai',
+      promptVersion: 'auto-approval-prompt-v1',
+      timestamp: '2026-05-02T10:01:00.000Z',
+    },
+  ];
+
+  const report = generateModelLeaderboardReport(
+    buildModelLeaderboard(records, { promptVersion: 'auto-approval-prompt-v1' }),
+    records,
+    { promptVersion: 'auto-approval-prompt-v1' },
+  );
+
+  t.true(report.includes('Prompt version: `auto-approval-prompt-v1`'));
+  t.true(report.includes('Unique cases tracked: 1'));
+  t.true(report.includes('## Category: current-safe'));
+  t.false(report.includes('legacy-safe'));
 });

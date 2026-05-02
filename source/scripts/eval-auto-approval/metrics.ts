@@ -9,6 +9,7 @@ export interface ResultRecord {
   latencyMs: number;
   error?: string;
   cached?: boolean;
+  promptVersion?: string;
 }
 
 export interface CategoryMetrics {

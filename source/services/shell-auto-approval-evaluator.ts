@@ -11,6 +11,8 @@ export type ShellAutoApprovalCommand = {
 
 export type ShellAutoApprovalAdvisory = LLMAdvisory;
 
+export const SHELL_AUTO_APPROVAL_PROMPT_VERSION = 'auto-approval-prompt-v1';
+
 const MAX_HISTORY_ITEMS = 8;
 const MAX_CONTEXT_CHARS = 3_000;
 const MAX_MESSAGE_CHARS = 500;

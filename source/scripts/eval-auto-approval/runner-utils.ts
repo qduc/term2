@@ -222,11 +222,13 @@ export function validateRunnerOptions({ concurrency, repeat }: { concurrency: nu
 export function createCacheKey({
   model,
   provider,
+  promptVersion,
   command,
   history,
 }: {
   model: string;
   provider: string;
+  promptVersion: string;
   command: string;
   history: unknown;
 }): Record<string, unknown> {
@@ -234,6 +236,7 @@ export function createCacheKey({
     version: EVAL_CACHE_VERSION,
     model,
     provider,
+    promptVersion,
     command,
     history,
   };

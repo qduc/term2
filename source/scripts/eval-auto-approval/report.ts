@@ -1,11 +1,18 @@
 import { Metrics, ResultRecord } from './metrics.js';
 
-export function generateReport(results: ResultRecord[], metrics: Metrics): string {
+export function generateReport(
+  results: ResultRecord[],
+  metrics: Metrics,
+  options: { promptVersion?: string } = {},
+): string {
   const sections: string[] = [];
 
   sections.push('# Shell Auto-Approval Evaluation Report');
   sections.push(`Date: ${new Date().toLocaleString()}`);
   sections.push(`Total Cases: ${metrics.total}`);
+  if (options.promptVersion) {
+    sections.push(`Prompt version: \`${options.promptVersion}\``);
+  }
 
   sections.push('## Overall Performance');
   sections.push('| Metric | Value |');

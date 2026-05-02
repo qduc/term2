@@ -3,7 +3,10 @@ import { loadDataset, filterDataset, Case } from './dataset.js';
 import { createMockSettingsService } from '../../services/settings-service.mock.js';
 import { LoggingService } from '../../services/logging-service.js';
 import { OpenAIAgentClient } from '../../lib/openai-agent-client.js';
-import { evaluateShellAutoApprovalAdvisories } from '../../services/shell-auto-approval-evaluator.js';
+import {
+  evaluateShellAutoApprovalAdvisories,
+  SHELL_AUTO_APPROVAL_PROMPT_VERSION,
+} from '../../services/shell-auto-approval-evaluator.js';
 import { ResponseCache } from './cache.js';
 import {
   buildModelLeaderboard,
@@ -181,6 +184,7 @@ async function run() {
     const cacheKey = createCacheKey({
       model,
       provider: flags.provider,
+      promptVersion: SHELL_AUTO_APPROVAL_PROMPT_VERSION,
       command: c.command,
       history: c.history,
     });
@@ -209,7 +213,9 @@ async function run() {
           maxRetries: 2,
           onRetry: ({ attempt, retriesRemaining, delayMs, error: retryError }) => {
             console.warn(
-              `Case ${c.id} hit a rate limit (attempt ${attempt}/2). Retrying in ${Math.round(delayMs)}ms${retriesRemaining > 0 ? `; ${retriesRemaining} retry left after this` : ''}.`,
+              `Case ${c.id} hit a rate limit (attempt ${attempt}/2). Retrying in ${Math.round(delayMs)}ms${
+                retriesRemaining > 0 ? `; ${retriesRemaining} retry left after this` : ''
+              }.`,
             );
             logger.warn('Eval runner rate-limit retry', {
               caseId: c.id,
@@ -256,6 +262,7 @@ async function run() {
       timestamp: new Date().toISOString(),
       model,
       provider: flags.provider,
+      promptVersion: SHELL_AUTO_APPROVAL_PROMPT_VERSION,
       category: c.category,
       severity: c.severity,
       cached: !!cachedAdvisory,
@@ -294,7 +301,7 @@ async function run() {
 
   if (reportFormats.includes('md')) {
     const metrics = computeMetrics(results);
-    const report = generateReport(results, metrics);
+    const report = generateReport(results, metrics, { promptVersion: SHELL_AUTO_APPROVAL_PROMPT_VERSION });
     writeFileSync(baseOutputPath + '.md', report);
     console.log(`Markdown report saved to ${baseOutputPath}.md`);
   }
@@ -302,11 +309,17 @@ async function run() {
   const leaderboardPaths = getModelLeaderboardPaths(reportsRoot);
   const persistedModelResults = loadPersistedModelResults(reportsRoot);
   const mergedModelResults = mergeModelResults(persistedModelResults, results);
-  const modelLeaderboard = buildModelLeaderboard(mergedModelResults);
+  const modelLeaderboard = buildModelLeaderboard(mergedModelResults, {
+    promptVersion: SHELL_AUTO_APPROVAL_PROMPT_VERSION,
+  });
 
   saveModelResults(leaderboardPaths.recordsPath, mergedModelResults);
-  saveModelLeaderboardJson(leaderboardPaths.jsonPath, modelLeaderboard, mergedModelResults);
-  saveModelLeaderboardMarkdown(leaderboardPaths.markdownPath, modelLeaderboard, mergedModelResults);
+  saveModelLeaderboardJson(leaderboardPaths.jsonPath, modelLeaderboard, mergedModelResults, {
+    promptVersion: SHELL_AUTO_APPROVAL_PROMPT_VERSION,
+  });
+  saveModelLeaderboardMarkdown(leaderboardPaths.markdownPath, modelLeaderboard, mergedModelResults, {
+    promptVersion: SHELL_AUTO_APPROVAL_PROMPT_VERSION,
+  });
 
   console.log(`Model leaderboard updated: ${leaderboardPaths.markdownPath}`);
 
@@ -325,7 +338,11 @@ async function run() {
   console.log(`Accuracy: ${(metrics.accuracy * 100).toFixed(1)}%`);
   if (modelLeaderboard[0]) {
     console.log(
-      `Top model: ${modelLeaderboard[0].provider}/${modelLeaderboard[0].model} (score ${modelLeaderboard[0].score.toFixed(2)}, ${modelLeaderboard[0].passed}/${modelLeaderboard[0].casesRun} passed)`,
+      `Top model: ${modelLeaderboard[0].provider}/${
+        modelLeaderboard[0].model
+      } (score ${modelLeaderboard[0].score.toFixed(2)}, ${modelLeaderboard[0].passed}/${
+        modelLeaderboard[0].casesRun
+      } passed)`,
     );
   }
 }

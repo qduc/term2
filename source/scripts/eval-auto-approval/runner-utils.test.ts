@@ -26,11 +26,27 @@ test('createCacheKey includes evaluator version to invalidate stale cached decis
   const key = createCacheKey({
     model: 'gpt-4o-mini',
     provider: 'openai',
+    promptVersion: 'auto-approval-prompt-v1',
     command: 'ls',
     history: [{ role: 'user', content: 'list files' }],
   });
 
   t.is(key.version, EVAL_CACHE_VERSION);
+  t.is(key.promptVersion, 'auto-approval-prompt-v1');
+});
+
+test('createCacheKey changes when prompt version changes', (t) => {
+  const base = {
+    model: 'gpt-4o-mini',
+    provider: 'openai',
+    command: 'ls',
+    history: [{ role: 'user', content: 'list files' }],
+  };
+
+  t.notDeepEqual(
+    createCacheKey({ ...base, promptVersion: 'auto-approval-prompt-v1' }),
+    createCacheKey({ ...base, promptVersion: 'auto-approval-prompt-v2' }),
+  );
 });
 
 test('retryOnRateLimit retries twice and respects x-ratelimit-reset before succeeding', async (t) => {
@@ -68,29 +84,28 @@ test('retryOnRateLimit rethrows after exhausting retries', async (t) => {
   let attempts = 0;
   const sleepCalls: number[] = [];
 
-  const error = await t.throwsAsync(
-    () =>
-      retryOnRateLimit({
-        operation: async () => {
-          attempts++;
-          const err = Object.assign(new Error('Too Many Requests'), {
-            error: {
-              code: 429,
-              metadata: {
-                headers: {
-                  'X-RateLimit-Reset': '1741305600000',
-                },
+  const error = await t.throwsAsync(() =>
+    retryOnRateLimit({
+      operation: async () => {
+        attempts++;
+        const err = Object.assign(new Error('Too Many Requests'), {
+          error: {
+            code: 429,
+            metadata: {
+              headers: {
+                'X-RateLimit-Reset': '1741305600000',
               },
             },
-          });
-          throw err;
-        },
-        maxRetries: 2,
-        sleep: async (ms) => {
-          sleepCalls.push(ms);
-        },
-        now: () => 1_741_305_599_000,
-      }),
+          },
+        });
+        throw err;
+      },
+      maxRetries: 2,
+      sleep: async (ms) => {
+        sleepCalls.push(ms);
+      },
+      now: () => 1_741_305_599_000,
+    }),
   );
 
   t.truthy(error);

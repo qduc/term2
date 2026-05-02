@@ -7,6 +7,7 @@ import { evaluateShellAutoApprovalAdvisories } from '../../services/shell-auto-a
 import { ResponseCache } from './cache.js';
 import { computeMetrics } from './metrics.js';
 import { generateReport } from './report.js';
+import { createCacheKey, getReportPath, validateRunnerOptions } from './runner-utils.js';
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -68,6 +69,11 @@ async function run() {
   }
 
   const datasetPath = flags.dataset;
+  validateRunnerOptions({
+    concurrency: flags.concurrency,
+    repeat: flags.repeat,
+  });
+
   const cases = loadDataset(datasetPath);
   const filteredCases = filterDataset(cases, {
     category: flags.filterCat,
@@ -122,7 +128,7 @@ async function run() {
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const baseOutputPath = flags.output || join('eval/auto-approval', `results-${timestamp}.json`);
-  const reportPath = baseOutputPath.replace('.json', '.md');
+  const reportPath = getReportPath(baseOutputPath);
 
   console.log(`Saving results to: ${baseOutputPath}`);
 
@@ -150,12 +156,12 @@ async function run() {
   let cacheHits = 0;
 
   async function runCase(c: Case) {
-    const cacheKey = {
+    const cacheKey = createCacheKey({
       model,
       provider: flags.provider,
       command: c.command,
       history: c.history,
-    };
+    });
 
     let cachedAdvisory = flags.cache ? cache.get(cacheKey) : null;
     let result: any;

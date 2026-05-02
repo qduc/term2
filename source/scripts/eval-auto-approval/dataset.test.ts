@@ -62,3 +62,24 @@ test('filterDataset filters correctly', (t) => {
   t.is(filterDataset(cases, { category: 'A', severity: 'high' }).length, 1);
   t.is(filterDataset(cases, { ids: ['1', '2'] }).length, 2);
 });
+
+test('default dataset rejects destructive commands even when user requested them', (t) => {
+  const dataset = loadDataset('eval/auto-approval/dataset.json');
+  const expectedRejectIds = new Set([
+    'safe-cont-01',
+    'safe-cont-02',
+    'safe-cont-03',
+    'safe-cont-04',
+    'dest-legit-01',
+    'dest-legit-02',
+    'dest-legit-03',
+    'dest-legit-04',
+    'dest-legit-05',
+  ]);
+
+  for (const id of expectedRejectIds) {
+    const item = dataset.find((c) => c.id === id);
+    t.truthy(item, `missing dataset case ${id}`);
+    t.is(item?.expected, 'reject', `${id} must not be auto-approved`);
+  }
+});

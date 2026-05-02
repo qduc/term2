@@ -102,6 +102,31 @@ test('evaluates non-RED commands via chat and parses valid JSON results', async 
   t.is(chatCalls[0].options.reasoningEffort, 'none');
 });
 
+test('prompt distinguishes auto-approval from user-requested destructive intent', async (t) => {
+  const chatCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+  await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-reset', command: 'git reset --hard HEAD' }],
+    history: [{ role: 'user', type: 'message', content: 'throw away all my changes' }],
+    settingsService: createMockSettings('advisory') as any,
+    agentClient: {
+      chat: async (prompt: string, options: Record<string, unknown>) => {
+        chatCalls.push({ prompt, options });
+        return JSON.stringify({
+          results: [{ id: 'call-reset', reasoning: 'Reset needs human confirmation.', approved: false }],
+        });
+      },
+    } as any,
+    logger: createMockLogger() as any,
+  });
+
+  t.is(chatCalls.length, 1);
+  t.true(chatCalls[0].prompt.includes('without a human approval prompt'));
+  t.true(chatCalls[0].prompt.includes('even if the user requested them'));
+  t.true(chatCalls[0].prompt.includes('force flags'));
+  t.true(chatCalls[0].prompt.includes('resets'));
+  t.false(chatCalls[0].prompt.includes('Think step-by-step'));
+});
+
 test('sends compact bounded history context instead of raw conversation items', async (t) => {
   const largeToolOutput = 'SECRET_OUTPUT '.repeat(2_000);
   const largeAssistantText = 'assistant detail '.repeat(600);

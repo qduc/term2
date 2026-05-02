@@ -1,0 +1,355 @@
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { ResultRecord } from './metrics.js';
+
+export interface ModelResultRecord extends Omit<ResultRecord, 'predicted'> {
+  predicted?: 'approve' | 'reject';
+  model: string;
+  provider: string;
+  source?: string;
+  timestamp?: string;
+}
+
+export interface ModelLeaderboardEntry {
+  model: string;
+  provider: string;
+  casesRun: number;
+  passed: number;
+  failed: number;
+  accuracy: number;
+  score: number;
+  lastUpdated?: string;
+}
+
+export interface ModelLeaderboardFacetSection {
+  facetValue: string;
+  entries: ModelLeaderboardEntry[];
+}
+
+export interface ModelLeaderboardPaths {
+  recordsPath: string;
+  jsonPath: string;
+  markdownPath: string;
+}
+
+function toIsoTimestampValue(timestamp?: string): number {
+  if (!timestamp) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+}
+
+function isMoreRecentRecord(candidate: ModelResultRecord, current: ModelResultRecord): boolean {
+  const candidateTimestamp = toIsoTimestampValue(candidate.timestamp);
+  const currentTimestamp = toIsoTimestampValue(current.timestamp);
+
+  if (candidateTimestamp !== currentTimestamp) {
+    return candidateTimestamp > currentTimestamp;
+  }
+
+  return JSON.stringify(candidate) > JSON.stringify(current);
+}
+
+function getModelCaseKey(record: Pick<ModelResultRecord, 'provider' | 'model' | 'caseId'>): string {
+  return `${record.provider}::${record.model}::${record.caseId}`;
+}
+
+function getRunJsonFiles(rootDir: string): string[] {
+  if (!existsSync(rootDir)) {
+    return [];
+  }
+
+  const files: string[] = [];
+  for (const entry of readdirSync(rootDir)) {
+    const fullPath = join(rootDir, entry);
+    const stats = statSync(fullPath);
+    if (stats.isDirectory()) {
+      files.push(...getRunJsonFiles(fullPath));
+      continue;
+    }
+
+    if (entry.startsWith('results-') && entry.endsWith('.json')) {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
+export function calculateModelScore(passed: number, casesRun: number): number {
+  if (casesRun === 0) {
+    return 0;
+  }
+
+  return (passed * passed) / casesRun;
+}
+
+export function dedupeModelResults(records: ModelResultRecord[]): ModelResultRecord[] {
+  const deduped = new Map<string, ModelResultRecord>();
+
+  for (const record of records) {
+    const key = getModelCaseKey(record);
+    const existing = deduped.get(key);
+    if (!existing || isMoreRecentRecord(record, existing)) {
+      deduped.set(key, record);
+    }
+  }
+
+  return [...deduped.values()].sort((a, b) => {
+    const providerCompare = a.provider.localeCompare(b.provider);
+    if (providerCompare !== 0) {
+      return providerCompare;
+    }
+
+    const modelCompare = a.model.localeCompare(b.model);
+    if (modelCompare !== 0) {
+      return modelCompare;
+    }
+
+    return a.caseId.localeCompare(b.caseId);
+  });
+}
+
+export function mergeModelResults(existing: ModelResultRecord[], incoming: ModelResultRecord[]): ModelResultRecord[] {
+  return dedupeModelResults([...existing, ...incoming]);
+}
+
+export function buildModelLeaderboard(records: ModelResultRecord[]): ModelLeaderboardEntry[] {
+  return buildLeaderboardEntries(records);
+}
+
+function buildLeaderboardEntries(records: ModelResultRecord[]): ModelLeaderboardEntry[] {
+  const deduped = dedupeModelResults(records);
+  const grouped = new Map<string, ModelLeaderboardEntry>();
+
+  for (const record of deduped) {
+    const key = `${record.provider}::${record.model}`;
+    let entry = grouped.get(key);
+    if (!entry) {
+      entry = {
+        provider: record.provider,
+        model: record.model,
+        casesRun: 0,
+        passed: 0,
+        failed: 0,
+        accuracy: 0,
+        score: 0,
+        lastUpdated: record.timestamp,
+      };
+      grouped.set(key, entry);
+    }
+
+    entry.casesRun++;
+    if (!record.error && record.predicted === record.expected) {
+      entry.passed++;
+    } else {
+      entry.failed++;
+    }
+
+    if (toIsoTimestampValue(record.timestamp) > toIsoTimestampValue(entry.lastUpdated)) {
+      entry.lastUpdated = record.timestamp;
+    }
+  }
+
+  const entries = [...grouped.values()].map((entry) => ({
+    ...entry,
+    accuracy: entry.casesRun > 0 ? entry.passed / entry.casesRun : 0,
+    score: calculateModelScore(entry.passed, entry.casesRun),
+  }));
+
+  return entries.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+
+    if (b.passed !== a.passed) {
+      return b.passed - a.passed;
+    }
+
+    if (b.casesRun !== a.casesRun) {
+      return b.casesRun - a.casesRun;
+    }
+
+    if (b.accuracy !== a.accuracy) {
+      return b.accuracy - a.accuracy;
+    }
+
+    const providerCompare = a.provider.localeCompare(b.provider);
+    if (providerCompare !== 0) {
+      return providerCompare;
+    }
+
+    return a.model.localeCompare(b.model);
+  });
+}
+
+function buildFacetLeaderboard(
+  records: ModelResultRecord[],
+  getFacetValue: (record: ModelResultRecord) => string,
+): ModelLeaderboardFacetSection[] {
+  const deduped = dedupeModelResults(records);
+  const grouped = new Map<string, ModelResultRecord[]>();
+
+  for (const record of deduped) {
+    const facetValue = getFacetValue(record);
+    const facetRecords = grouped.get(facetValue) ?? [];
+    facetRecords.push(record);
+    grouped.set(facetValue, facetRecords);
+  }
+
+  return [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([facetValue, facetRecords]) => ({
+      facetValue,
+      entries: buildLeaderboardEntries(facetRecords),
+    }));
+}
+
+export function buildCategoryLeaderboards(records: ModelResultRecord[]): ModelLeaderboardFacetSection[] {
+  return buildFacetLeaderboard(records, (record) => record.category);
+}
+
+export function buildSeverityLeaderboards(records: ModelResultRecord[]): ModelLeaderboardFacetSection[] {
+  return buildFacetLeaderboard(records, (record) => record.severity);
+}
+
+export function getModelLeaderboardPaths(reportsRoot: string): ModelLeaderboardPaths {
+  return {
+    recordsPath: join(reportsRoot, 'model-results.jsonl'),
+    jsonPath: join(reportsRoot, 'model-leaderboard.json'),
+    markdownPath: join(reportsRoot, 'model-leaderboard.md'),
+  };
+}
+
+export function loadHistoricalRunRecords(reportsRoot: string): ModelResultRecord[] {
+  const files = getRunJsonFiles(reportsRoot);
+  const records: ModelResultRecord[] = [];
+
+  for (const filePath of files) {
+    try {
+      const raw = readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        continue;
+      }
+
+      for (const item of parsed) {
+        if (
+          item &&
+          typeof item === 'object' &&
+          typeof item.caseId === 'string' &&
+          typeof item.command === 'string' &&
+          typeof item.expected === 'string' &&
+          typeof item.model === 'string' &&
+          typeof item.provider === 'string' &&
+          typeof item.category === 'string' &&
+          typeof item.severity === 'string' &&
+          typeof item.latencyMs === 'number'
+        ) {
+          records.push(item as ModelResultRecord);
+        }
+      }
+    } catch {
+      // Ignore malformed historical report files so a bad artifact does not break future runs.
+    }
+  }
+
+  return dedupeModelResults(records);
+}
+
+export function loadPersistedModelResults(reportsRoot: string): ModelResultRecord[] {
+  const { recordsPath } = getModelLeaderboardPaths(reportsRoot);
+  if (!existsSync(recordsPath)) {
+    return loadHistoricalRunRecords(reportsRoot);
+  }
+
+  const raw = readFileSync(recordsPath, 'utf-8').trim();
+  if (raw.length === 0) {
+    return [];
+  }
+
+  const records = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as ModelResultRecord);
+
+  return dedupeModelResults(records);
+}
+
+export function saveModelResults(recordsPath: string, records: ModelResultRecord[]): void {
+  mkdirSync(dirname(recordsPath), { recursive: true });
+  const deduped = dedupeModelResults(records);
+  const content = deduped.map((record) => JSON.stringify(record)).join('\n');
+  writeFileSync(recordsPath, content.length > 0 ? `${content}\n` : '');
+}
+
+export function generateModelLeaderboardReport(
+  entries: ModelLeaderboardEntry[],
+  records: ModelResultRecord[],
+): string {
+  const categoryLeaderboards = buildCategoryLeaderboards(records);
+  const severityLeaderboards = buildSeverityLeaderboards(records);
+  const uniqueCaseCount = new Set(records.map((record) => record.caseId)).size;
+  const sections: string[] = [];
+
+  sections.push('# Shell Auto-Approval Model Leaderboard');
+  sections.push(`Updated: ${new Date().toLocaleString()}`);
+  sections.push(`Unique cases tracked: ${uniqueCaseCount}`);
+  sections.push('Scoring formula: `score = passed² / casesRun` (rewards correct coverage and prevents tiny perfect subsets from leapfrogging broad runs).');
+
+  sections.push('## Ranking');
+  sections.push('| Rank | Provider | Model | Score | Passed | Cases Run | Failed | Accuracy | Last Updated |');
+  sections.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+
+  entries.forEach((entry, index) => {
+    sections.push(
+      `| ${index + 1} | ${entry.provider} | ${entry.model} | ${entry.score.toFixed(2)} | ${entry.passed} | ${entry.casesRun} | ${entry.failed} | ${(entry.accuracy * 100).toFixed(1)}% | ${entry.lastUpdated ?? '-'} |`,
+    );
+  });
+
+  for (const section of categoryLeaderboards) {
+    sections.push(`## Category: ${section.facetValue}`);
+    sections.push('| Rank | Provider | Model | Score | Passed | Cases Run | Failed | Accuracy | Last Updated |');
+    sections.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+
+    section.entries.forEach((entry, index) => {
+      sections.push(
+        `| ${index + 1} | ${entry.provider} | ${entry.model} | ${entry.score.toFixed(2)} | ${entry.passed} | ${entry.casesRun} | ${entry.failed} | ${(entry.accuracy * 100).toFixed(1)}% | ${entry.lastUpdated ?? '-'} |`,
+      );
+    });
+  }
+
+  for (const section of severityLeaderboards) {
+    sections.push(`## Severity: ${section.facetValue}`);
+    sections.push('| Rank | Provider | Model | Score | Passed | Cases Run | Failed | Accuracy | Last Updated |');
+    sections.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+
+    section.entries.forEach((entry, index) => {
+      sections.push(
+        `| ${index + 1} | ${entry.provider} | ${entry.model} | ${entry.score.toFixed(2)} | ${entry.passed} | ${entry.casesRun} | ${entry.failed} | ${(entry.accuracy * 100).toFixed(1)}% | ${entry.lastUpdated ?? '-'} |`,
+      );
+    });
+  }
+
+  return sections.join('\n\n');
+}
+
+export function saveModelLeaderboardJson(jsonPath: string, entries: ModelLeaderboardEntry[], records: ModelResultRecord[]): void {
+  mkdirSync(dirname(jsonPath), { recursive: true });
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    uniqueCasesTracked: new Set(records.map((record) => record.caseId)).size,
+    entries,
+    byCategory: buildCategoryLeaderboards(records),
+    bySeverity: buildSeverityLeaderboards(records),
+  };
+  writeFileSync(jsonPath, JSON.stringify(payload, null, 2));
+}
+
+export function saveModelLeaderboardMarkdown(markdownPath: string, entries: ModelLeaderboardEntry[], records: ModelResultRecord[]): void {
+  mkdirSync(dirname(markdownPath), { recursive: true });
+  writeFileSync(markdownPath, generateModelLeaderboardReport(entries, records));
+}

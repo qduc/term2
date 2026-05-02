@@ -2,7 +2,7 @@ export interface ResultRecord {
   caseId: string;
   command: string;
   expected: 'approve' | 'reject';
-  predicted: 'approve' | 'reject';
+  predicted?: 'approve' | 'reject';
   reasoning?: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   category: string;

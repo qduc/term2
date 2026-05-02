@@ -448,6 +448,7 @@ test('LLM evaluation errors return the safe-default advisory for every pending c
     reasoning: 'LLM evaluation encountered an error.',
     approved: false,
     source: 'llm',
+    isError: true,
   });
   t.is(chatCalls.length, 1);
 
@@ -457,6 +458,7 @@ test('LLM evaluation errors return the safe-default advisory for every pending c
     reasoning: 'LLM evaluation encountered an error.',
     approved: false,
     source: 'llm',
+    isError: true,
   });
   t.is(chatCalls.length, 1);
 });

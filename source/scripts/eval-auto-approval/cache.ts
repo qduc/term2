@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -39,6 +39,28 @@ export class ResponseCache {
     for (const file of files) {
       if (file.endsWith('.json')) {
         unlinkSync(join(this.#cacheDir, file));
+      }
+    }
+  }
+
+  prune(maxFiles: number): void {
+    if (!existsSync(this.#cacheDir)) {
+      return;
+    }
+
+    const files = readdirSync(this.#cacheDir)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => ({
+        name: f,
+        path: join(this.#cacheDir, f),
+        mtime: statSync(join(this.#cacheDir, f)).mtimeMs,
+      }))
+      .sort((a, b) => b.mtime - a.mtime);
+
+    if (files.length > maxFiles) {
+      const toDelete = files.slice(maxFiles);
+      for (const file of toDelete) {
+        unlinkSync(file.path);
       }
     }
   }

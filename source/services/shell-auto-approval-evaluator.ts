@@ -241,6 +241,7 @@ export async function evaluateShellAutoApprovalAdvisories({
           reasoning: 'LLM evaluation encountered an error.',
           approved: false,
           source: 'llm',
+          isError: true,
         });
       }
     }

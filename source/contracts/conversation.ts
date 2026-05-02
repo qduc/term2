@@ -9,6 +9,8 @@ export interface LLMAdvisory {
   approved: boolean;
   model: string;
   source?: 'llm' | 'system';
+  /** Set when the LLM call failed; the approved/reasoning values are placeholders. */
+  isError?: boolean;
 }
 
 export interface ApprovalDescriptor {

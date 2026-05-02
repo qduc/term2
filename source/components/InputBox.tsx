@@ -1,34 +1,32 @@
 import React, { FC, useEffect, useState, useRef, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
+import { useEscapeKey } from '../hooks/use-escape-key.js';
+import { useTriggerDetection } from '../hooks/use-trigger-detection.js';
 import { MultilineInput } from 'ink-prompt';
 import { useInputContext } from '../context/InputContext.js';
 import { useSlashCommands } from '../hooks/use-slash-commands.js';
 import { usePathCompletion } from '../hooks/use-path-completion.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { useSettingsValueCompletion } from '../hooks/use-settings-value-completion.js';
-import {
-  useModelSelection,
-  MODEL_TRIGGER,
-  MODEL_CMD_TRIGGER,
-  MENTOR_TRIGGER,
-  AUTO_APPROVE_MODEL_TRIGGER,
-} from '../hooks/use-model-selection.js';
+import { useModelSelection } from '../hooks/use-model-selection.js';
 import { PopupManager } from './Input/PopupManager.js';
 import type { SlashCommand } from './SlashCommandMenu.js';
 import type { SettingsService } from '../services/settings-service.js';
 import type { LoggingService } from '../services/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';
 import { useInputHistory } from '../hooks/use-input-history.js';
+import { useTerminalWidth } from '../hooks/use-terminal-width.js';
+import { calculateInputWidth } from './Input/input-width.js';
+import {
+  computePathInsertion,
+  computeSettingInsertion,
+  computeSettingValueInsertion,
+  computeModelInsertion,
+} from './Input/insertions.js';
+import { useModeHandlers } from '../hooks/use-mode-handlers.js';
+import { toPopupProps } from './Input/popup-props.js';
 
-// Constants
-const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
-const APP_HORIZONTAL_PADDING = 4;
-const DEFAULT_PROMPT_WIDTH = 2;
-const SHELL_PROMPT_WIDTH = 2;
-const REJECTION_PROMPT_WIDTH = 5;
-const SETTINGS_TRIGGER = '/settings ';
-const SETTINGS_RESET_TRIGGER = '/settings reset ';
-const AUTO_APPROVE_TRIGGER = '/auto-approve ';
+export { calculateInputWidth };
 
 type Props = {
   onSubmit: (v: string) => void;
@@ -40,42 +38,6 @@ type Props = {
   loggingService: LoggingService;
   historyService: HistoryService;
 };
-
-type InputWidthOptions = {
-  terminalColumns?: number;
-  waitingForRejectionReason: boolean;
-  isShellMode: boolean;
-};
-
-const getPromptWidth = ({
-  waitingForRejectionReason,
-  isShellMode,
-}: Omit<InputWidthOptions, 'terminalColumns'>): number => {
-  if (waitingForRejectionReason) {
-    return REJECTION_PROMPT_WIDTH;
-  }
-
-  if (isShellMode) {
-    return SHELL_PROMPT_WIDTH;
-  }
-
-  return DEFAULT_PROMPT_WIDTH;
-};
-
-export const calculateInputWidth = ({
-  terminalColumns,
-  waitingForRejectionReason,
-  isShellMode,
-}: InputWidthOptions): number =>
-  Math.max(
-    0,
-    (terminalColumns ?? 0) -
-      APP_HORIZONTAL_PADDING -
-      getPromptWidth({
-        waitingForRejectionReason,
-        isShellMode,
-      }),
-  );
 
 const InputBox: FC<Props> = ({
   onSubmit,
@@ -89,11 +51,9 @@ const InputBox: FC<Props> = ({
 }) => {
   const { input: value, setInput: onChange, mode, setMode, cursorOffset, setCursorOffset } = useInputContext();
 
-  const [escHintVisible, setEscHintVisible] = useState(false);
-  const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const escPressedRef = useRef(false);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
-  const [terminalWidth, setTerminalWidth] = useState(0);
+  const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode });
 
   // Hooks
   const slash = useSlashCommands({
@@ -116,40 +76,16 @@ const InputBox: FC<Props> = ({
 
   const { navigateUp, navigateDown } = useInputHistory(historyService);
 
-  // Set terminal width
-  useEffect(() => {
-    const calculateTerminalWidth = () =>
-      calculateInputWidth({
-        terminalColumns: process.stdout.columns,
-        waitingForRejectionReason,
-        isShellMode,
-      });
-    setTerminalWidth(calculateTerminalWidth());
-    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
-    const handleResize = () => {
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
-      resizeTimeout = setTimeout(() => {
-        resizeTimeout = null;
-        setTerminalWidth(calculateTerminalWidth());
-      }, 120);
-    };
-    process.stdout.on('resize', handleResize);
-    return () => {
-      process.stdout.off('resize', handleResize);
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
-    };
-  }, [waitingForRejectionReason, isShellMode]);
-
-  // Cleanup timeout
-  useEffect(() => {
-    return () => {
-      if (escTimeoutRef.current) clearTimeout(escTimeoutRef.current);
-    };
-  }, []);
+  const { escHintVisible } = useEscapeKey({
+    mode,
+    setMode,
+    value,
+    onChange,
+    settings,
+    settingsValue,
+    setCursorOverride,
+    escPressedRef,
+  });
 
   useEffect(() => {
     if (cursorOverride !== null && cursorOverride === cursorOffset) {
@@ -157,253 +93,33 @@ const InputBox: FC<Props> = ({
     }
   }, [cursorOverride, cursorOffset]);
 
-  // Trigger Detection
-  useEffect(() => {
-    if (escPressedRef.current) {
-      escPressedRef.current = false;
-      return;
-    }
-
-    // Allow trigger detection in all modes to enable menu transitions
-
-    // Priority 0: Model selection for agent.model
-    if (value.startsWith(MODEL_TRIGGER) && cursorOffset >= MODEL_TRIGGER.length) {
-      models.open(MODEL_TRIGGER.length);
-      return;
-    }
-
-    if (value.startsWith(MODEL_CMD_TRIGGER) && cursorOffset >= MODEL_CMD_TRIGGER.length) {
-      models.open(MODEL_CMD_TRIGGER.length);
-      return;
-    }
-
-    if (value.startsWith(MENTOR_TRIGGER) && cursorOffset >= MENTOR_TRIGGER.length) {
-      models.open(MENTOR_TRIGGER.length);
-      return;
-    }
-
-    if (value.startsWith(AUTO_APPROVE_MODEL_TRIGGER) && cursorOffset >= AUTO_APPROVE_MODEL_TRIGGER.length) {
-      models.open(AUTO_APPROVE_MODEL_TRIGGER.length);
-      return;
-    }
-
-    if (mode === 'model_selection') {
-      models.close();
-    }
-
-    // Priority 1: Settings & Auto-approve
-    if (value.startsWith(SETTINGS_RESET_TRIGGER)) {
-      if (cursorOffset >= SETTINGS_RESET_TRIGGER.length) {
-        settings.open(SETTINGS_RESET_TRIGGER.length);
-        return;
-      }
-    } else if (value.startsWith(SETTINGS_TRIGGER)) {
-      const end = Math.min(cursorOffset, value.length);
-      const afterPrefix = value.slice(SETTINGS_TRIGGER.length, end);
-
-      // If the user has typed a full key followed by whitespace, switch to value completion.
-      // Example: "/settings logging.logLevel "
-      const keyAndSpaceMatch = afterPrefix.match(/^(\S+)\s+/);
-      if (keyAndSpaceMatch) {
-        const key = keyAndSpaceMatch[1] ?? '';
-        const valueStartIndex = SETTINGS_TRIGGER.length + (keyAndSpaceMatch[0]?.length ?? 0);
-        // Model selection handles agent.model / mentorModel earlier with higher priority.
-        settingsValue.open(key, valueStartIndex);
-        return;
-      }
-
-      // Otherwise, still selecting / filtering setting keys.
-      if (cursorOffset >= SETTINGS_TRIGGER.length) {
-        settings.open(SETTINGS_TRIGGER.length);
-        return;
-      }
-    } else if (value.startsWith(AUTO_APPROVE_TRIGGER)) {
-      if (cursorOffset >= AUTO_APPROVE_TRIGGER.length) {
-        settingsValue.open('shell.autoApproveMode', AUTO_APPROVE_TRIGGER.length);
-        return;
-      }
-    }
-
-    // Close settings popups if triggers no longer apply
-    if (mode === 'settings_completion') settings.close();
-    if (mode === 'settings_value_completion') settingsValue.close();
-
-    // Priority 2: Slash (only if at start)
-    if (value.startsWith('/') && !value.slice(1).includes(' ') && cursorOffset > 0) {
-      // Only trigger if we haven't typed a space yet (simple command)
-      // Or if we are just starting.
-      // Existing logic: "value.startsWith('/')" -> open slash menu.
-      // But if we have "/cmd arg", usually slash menu closes.
-      // rely on SlashCommandMenu logic?
-      // "Case 2: Command with arguments" in useSlashCommands handles "model gpt-4" matching "model".
-      // So we should keep it open.
-      slash.open();
-      return;
-    }
-
-    // If no slash match, close slash menu if it was open
-    if (mode === 'slash_commands') {
-      slash.close();
-    }
-
-    // Priority 3: Path
-    // We need to find the trigger '@' or similar backward from cursor
-    const pathTrigger = findPathTrigger(value, cursorOffset, STOP_CHAR_REGEX);
-    if (pathTrigger) {
-      path.open(pathTrigger.start);
-      return;
-    }
-
-    // If no path match, close path menu if it was open
-    if (mode === 'path_completion') {
-      path.close();
-    }
-  }, [value, cursorOffset, mode, slash, path, settings, models]);
-
-  // Handle inputs based on mode
-  // ESC handling
-  useInput((_input, key) => {
-    if (key.escape) {
-      // Prevent trigger detection right after ESC
-      escPressedRef.current = true;
-
-      if (mode !== 'text') {
-        if (mode === 'settings_value_completion' && settingsValue.settingKey) {
-          if (value.startsWith(SETTINGS_TRIGGER)) {
-            const prefix = SETTINGS_TRIGGER;
-            // Reset input to just the trigger (showing full menu)
-            onChange(prefix);
-            setCursorOverride(prefix.length);
-
-            settingsValue.close();
-            // Open settings menu, requesting highlighting of the current key
-            settings.open(prefix.length, settingsValue.settingKey);
-            return;
-          }
-
-          if (value.startsWith(AUTO_APPROVE_TRIGGER)) {
-            onChange(AUTO_APPROVE_TRIGGER);
-            setCursorOverride(AUTO_APPROVE_TRIGGER.length);
-            settingsValue.close();
-            return;
-          }
-        }
-
-        // Close menu
-        setMode('text');
-        return;
-      }
-
-      // In text mode: double ESC to clear
-      if (escHintVisible) {
-        if (escTimeoutRef.current) {
-          clearTimeout(escTimeoutRef.current);
-          escTimeoutRef.current = null;
-        }
-        setEscHintVisible(false);
-        onChange('');
-      } else {
-        setEscHintVisible(true);
-        escTimeoutRef.current = setTimeout(() => {
-          setEscHintVisible(false);
-          escTimeoutRef.current = null;
-        }, 2000);
-      }
-    }
-  });
-
-  // Mode specific Input handling (Enter, Tab)
-  // We can use a single useInput for navigation/selection if we verify mode
-  useInput((_input, key) => {
-    if (mode === 'text') return; // Handled by standard input or history
-
-    if (mode === 'slash_commands') {
-      // Enter is handled by handleSubmit -> executeSlashCommand usually?
-      // But existing code: "onSlashMenuSelect" called by "handleSubmit".
-      // We can handle Tab here?
-    }
-
-    if (mode === 'path_completion') {
-      if (key.tab && !key.shift) {
-        insertSelectedPath(false);
-      }
-    }
-
-    if (mode === 'settings_completion') {
-      if (key.tab && !key.shift) {
-        insertSelectedSetting();
-      }
-    }
-
-    if (mode === 'settings_value_completion') {
-      if (key.tab && !key.shift) {
-        insertSelectedSettingValue(false);
-      }
-    }
-
-    if (mode === 'model_selection') {
-      if (key.tab && !key.shift && models.canSwitchProvider) {
-        models.toggleProvider();
-      }
-    }
+  useTriggerDetection({
+    value,
+    cursorOffset,
+    mode,
+    escPressedRef,
+    slash,
+    path,
+    settings,
+    settingsValue,
+    models,
   });
 
   const [, setInputKey] = useState(0);
-
-  const handleBoundaryArrow = useCallback(
-    (direction: 'up' | 'down' | 'left' | 'right') => {
-      if (mode === 'slash_commands') {
-        if (direction === 'up') slash.moveUp();
-        if (direction === 'down') slash.moveDown();
-      } else if (mode === 'settings_completion') {
-        if (direction === 'up') settings.moveUp();
-        if (direction === 'down') settings.moveDown();
-      } else if (mode === 'settings_value_completion') {
-        if (direction === 'up') settingsValue.moveUp();
-        if (direction === 'down') settingsValue.moveDown();
-      } else if (mode === 'path_completion') {
-        if (direction === 'up') path.moveUp();
-        if (direction === 'down') path.moveDown();
-      } else if (mode === 'model_selection') {
-        if (direction === 'up') models.moveUp();
-        if (direction === 'down') models.moveDown();
-      } else {
-        // History
-        if (direction === 'up') {
-          const historyValue = navigateUp(value);
-          if (historyValue !== null) {
-            onChange(historyValue);
-            setInputKey((prev) => prev + 1);
-          }
-        } else if (direction === 'down') {
-          const historyValue = navigateDown();
-          if (historyValue !== null) {
-            onChange(historyValue);
-            setInputKey((prev) => prev + 1);
-          }
-        }
-      }
-    },
-    [mode, slash, settings, path, models, navigateUp, navigateDown, value, onChange],
-  );
+  const remountInput = useCallback(() => setInputKey((prev) => prev + 1), []);
 
   const insertSelectedPath = useCallback(
     (appendTrailingSpace: boolean): boolean => {
-      const selection = path.getSelectedItem();
-      // triggerIndex from context
-      const triggerIdx = path.triggerIndex;
-
-      if (!selection || triggerIdx === null) return false;
-
-      const safeCursor = Math.min(cursorOffset, value.length);
-      const before = value.slice(0, triggerIdx);
-      const after = value.slice(safeCursor);
-      const displayPath = selection.type === 'directory' ? `${selection.path}/` : selection.path;
-      const suffix = appendTrailingSpace ? ' ' : '';
-      const nextValue = `${before}${displayPath}${suffix}${after}`;
-      onChange(nextValue);
-      const nextCursor = before.length + displayPath.length + suffix.length;
-      setCursorOverride(nextCursor);
+      const result = computePathInsertion({
+        selection: path.getSelectedItem(),
+        triggerIndex: path.triggerIndex,
+        value,
+        cursorOffset,
+        appendTrailingSpace,
+      });
+      if (!result) return false;
+      onChange(result.nextValue);
+      setCursorOverride(result.nextCursor);
       path.close();
       return true;
     },
@@ -411,49 +127,28 @@ const InputBox: FC<Props> = ({
   );
 
   const insertSelectedSetting = useCallback((): boolean => {
-    const selection = settings.getSelectedItem();
-    if (!selection) return false;
-
-    const isReset = value.startsWith(SETTINGS_RESET_TRIGGER);
-    const prefix = isReset ? SETTINGS_RESET_TRIGGER : SETTINGS_TRIGGER;
-    if (!value.startsWith(prefix)) return false;
-
-    const newValue = prefix + selection.key + ' ';
-    onChange(newValue);
-    setCursorOverride(newValue.length);
+    const result = computeSettingInsertion({ selection: settings.getSelectedItem(), value });
+    if (!result) return false;
+    onChange(result.nextValue);
+    setCursorOverride(result.nextCursor);
     settings.close();
     return true;
   }, [settings, value, onChange]);
 
   const insertSelectedSettingValue = useCallback(
     (submitAfterInsert: boolean): boolean => {
-      const suggestion = settingsValue.getSelectedItem();
-      if (!suggestion) {
-        // No suggestion selected: allow normal submit flow.
-        return false;
-      }
-
-      const triggers = [SETTINGS_TRIGGER, AUTO_APPROVE_TRIGGER];
-      const activeTrigger = triggers.find((t) => value.startsWith(t));
-
-      if (!activeTrigger) return false;
-      if (!settingsValue.settingKey) return false;
-
-      // Replace the value portion (from triggerIndex to cursor) with the suggestion.
-      const triggerIdx = settingsValue.triggerIndex;
-      if (triggerIdx === null) return false;
-
-      const safeCursor = Math.min(cursorOffset, value.length);
-      const before = value.slice(0, triggerIdx);
-      const after = value.slice(safeCursor);
-      const nextValue = `${before}${suggestion.value}${after}`;
-      onChange(nextValue);
-      setCursorOverride(before.length + suggestion.value.length);
+      const result = computeSettingValueInsertion({
+        suggestion: settingsValue.getSelectedItem(),
+        settingKey: settingsValue.settingKey,
+        triggerIndex: settingsValue.triggerIndex,
+        value,
+        cursorOffset,
+      });
+      if (!result) return false;
+      onChange(result.nextValue);
+      setCursorOverride(result.nextCursor);
       settingsValue.close();
-
-      if (submitAfterInsert) {
-        onSubmit(nextValue);
-      }
+      if (submitAfterInsert) onSubmit(result.nextValue);
       return true;
     },
     [settingsValue, value, onChange, cursorOffset, onSubmit],
@@ -461,112 +156,78 @@ const InputBox: FC<Props> = ({
 
   const insertSelectedModel = useCallback(
     (submitAfterInsert: boolean): boolean => {
-      const selection = models.getSelectedItem();
-      const triggerIdx = models.triggerIndex;
-
-      if (!selection || triggerIdx === null) return false;
-
-      const before = value.slice(0, triggerIdx);
-
-      // For mentor model, we DO append the provider flag so the mentor can use a different provider.
-
-      // Use the current provider state instead of selection.provider to avoid stale data
-      // when user presses Enter immediately after toggling providers
-      const currentProvider = models.provider || 'openai';
-
-      let insertion = selection.id;
-      insertion += ` --provider=${currentProvider}`;
-
-      const nextValue = `${before}${insertion}${submitAfterInsert ? '' : ' '}`;
-      onChange(nextValue);
-      setCursorOverride(nextValue.length);
+      const result = computeModelInsertion({
+        selection: models.getSelectedItem(),
+        triggerIndex: models.triggerIndex,
+        provider: models.provider,
+        value,
+        appendTrailingSpace: !submitAfterInsert,
+      });
+      if (!result) return false;
+      onChange(result.nextValue);
+      setCursorOverride(result.nextCursor);
       models.close();
-
-      if (submitAfterInsert) {
-        onSubmit(nextValue);
-      }
-
+      if (submitAfterInsert) onSubmit(result.nextValue);
       return true;
     },
     [models, value, onChange, onSubmit],
   );
 
-  const handleWrapperSubmit = useCallback(
-    (submittedValue: string) => {
-      if (mode === 'path_completion') {
-        if (insertSelectedPath(true)) return;
-      }
-      if (mode === 'settings_completion') {
-        // Check if complete
-        const parts = submittedValue.slice(SETTINGS_TRIGGER.length).trim().split(/\s+/);
-        if (parts.length >= 2) {
-          onSubmit(submittedValue);
-          return;
-        }
-        if (insertSelectedSetting()) return;
-      }
-      if (mode === 'settings_value_completion') {
-        if (insertSelectedSettingValue(true)) return;
-        // Fall back to submitting whatever the user typed
-        onSubmit(submittedValue);
-        return;
-      }
-      if (mode === 'model_selection') {
-        if (insertSelectedModel(true)) return;
-      }
-      if (mode === 'slash_commands') {
-        slash.executeSelected();
-        setInputKey((prev) => prev + 1);
+  const modeHandlers = useModeHandlers({
+    slash,
+    path,
+    settings,
+    settingsValue,
+    models,
+    insertSelectedPath,
+    insertSelectedSetting,
+    insertSelectedSettingValue,
+    insertSelectedModel,
+    onSubmit,
+    onSlashCommandRemount: remountInput,
+  });
+
+  // Tab handling for active menu (other keys flow to MultilineInput).
+  useInput((_input, key) => {
+    if (mode === 'text') return;
+    if (key.tab && !key.shift) {
+      modeHandlers[mode].onTab?.();
+    }
+  });
+
+  const handleBoundaryArrow = useCallback(
+    (direction: 'up' | 'down' | 'left' | 'right') => {
+      if (direction !== 'up' && direction !== 'down') return;
+
+      if (mode !== 'text') {
+        const handler = modeHandlers[mode];
+        if (direction === 'up') handler.moveUp();
+        else handler.moveDown();
         return;
       }
 
+      // In text mode, arrows traverse input history.
+      const next = direction === 'up' ? navigateUp(value) : navigateDown();
+      if (next !== null) {
+        onChange(next);
+        remountInput();
+      }
+    },
+    [mode, modeHandlers, navigateUp, navigateDown, value, onChange, remountInput],
+  );
+
+  const handleWrapperSubmit = useCallback(
+    (submittedValue: string) => {
+      if (mode !== 'text' && modeHandlers[mode].onSubmit?.(submittedValue) === 'handled') return;
       onSubmit(submittedValue);
     },
-    [mode, onSubmit, insertSelectedPath, insertSelectedSetting, insertSelectedModel, slash],
+    [mode, modeHandlers, onSubmit],
   );
 
   return (
     <Box flexDirection="column">
       <PopupManager
-        slash={{
-          isOpen: slash.isOpen,
-          commands: slash.filteredCommands,
-          selectedIndex: slash.selectedIndex,
-          filter: slash.filter,
-        }}
-        path={{
-          isOpen: path.isOpen,
-          items: path.filteredEntries,
-          selectedIndex: path.selectedIndex,
-          query: path.query,
-          loading: path.loading,
-          error: path.error,
-        }}
-        models={{
-          isOpen: models.isOpen,
-          items: models.filteredModels,
-          selectedIndex: models.selectedIndex,
-          query: models.query,
-          loading: models.loading,
-          error: models.error,
-          provider: models.provider,
-          scrollOffset: models.scrollOffset,
-          canSwitchProvider: models.canSwitchProvider,
-        }}
-        settings={{
-          isOpen: settings.isOpen,
-          items: settings.filteredEntries,
-          selectedIndex: settings.selectedIndex,
-          query: settings.query,
-        }}
-        settingsValue={{
-          isOpen: settingsValue.isOpen,
-          settingKey: settingsValue.settingKey,
-          items: settingsValue.filteredEntries,
-          selectedIndex: settingsValue.selectedIndex,
-          query: settingsValue.query,
-          isNumericSettings: settingsValue.isNumericSettings,
-        }}
+        {...toPopupProps({ slash, path, settings, settingsValue, models })}
         settingsService={settingsService}
       />
       <Box>
@@ -594,27 +255,3 @@ const InputBox: FC<Props> = ({
 };
 
 export default React.memo(InputBox);
-
-const whitespaceRegex = /\s/;
-
-const findPathTrigger = (text: string, cursor: number, stopChars: RegExp): { start: number; query: string } | null => {
-  if (cursor <= 0 || cursor > text.length) {
-    return null;
-  }
-
-  for (let index = cursor - 1; index >= 0; index -= 1) {
-    const char = text[index];
-    if (char === '@') {
-      const query = text.slice(index + 1, cursor);
-      if (whitespaceRegex.test(query)) {
-        return null;
-      }
-      return { start: index, query };
-    }
-    if (stopChars.test(char)) {
-      break;
-    }
-  }
-
-  return null;
-};

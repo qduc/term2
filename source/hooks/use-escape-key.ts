@@ -1,0 +1,96 @@
+import { MutableRefObject, useEffect, useRef, useState } from 'react';
+import { useInput } from 'ink';
+import type { InputMode } from '../context/InputContext.js';
+import { SETTINGS_TRIGGER, AUTO_APPROVE_TRIGGER } from '../components/Input/triggers.js';
+
+const ESC_HINT_TIMEOUT_MS = 2000;
+
+type SettingsHandle = {
+  open: (startIndex: number, initialSelectionKey?: string) => void;
+};
+
+type SettingsValueHandle = {
+  settingKey: string | null;
+  close: () => void;
+};
+
+type Options = {
+  mode: InputMode;
+  setMode: (mode: InputMode) => void;
+  value: string;
+  onChange: (value: string) => void;
+  settings: SettingsHandle;
+  settingsValue: SettingsValueHandle;
+  setCursorOverride: (cursor: number | null) => void;
+  escPressedRef: MutableRefObject<boolean>;
+};
+
+export const useEscapeKey = ({
+  mode,
+  setMode,
+  value,
+  onChange,
+  settings,
+  settingsValue,
+  setCursorOverride,
+  escPressedRef,
+}: Options): { escHintVisible: boolean } => {
+  const [escHintVisible, setEscHintVisible] = useState(false);
+  const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (escTimeoutRef.current) clearTimeout(escTimeoutRef.current);
+    };
+  }, []);
+
+  useInput((_input, key) => {
+    if (!key.escape) return;
+
+    escPressedRef.current = true;
+
+    if (mode !== 'text') {
+      if (mode === 'settings_value_completion' && settingsValue.settingKey) {
+        if (value.startsWith(SETTINGS_TRIGGER)) {
+          const prefix = SETTINGS_TRIGGER;
+          onChange(prefix);
+          setCursorOverride(prefix.length);
+
+          const previousKey = settingsValue.settingKey;
+          settingsValue.close();
+          settings.open(prefix.length, previousKey);
+          return;
+        }
+
+        if (value.startsWith(AUTO_APPROVE_TRIGGER)) {
+          onChange(AUTO_APPROVE_TRIGGER);
+          setCursorOverride(AUTO_APPROVE_TRIGGER.length);
+          settingsValue.close();
+          return;
+        }
+      }
+
+      setMode('text');
+      return;
+    }
+
+    // Text mode: double ESC clears.
+    if (escHintVisible) {
+      if (escTimeoutRef.current) {
+        clearTimeout(escTimeoutRef.current);
+        escTimeoutRef.current = null;
+      }
+      setEscHintVisible(false);
+      onChange('');
+      return;
+    }
+
+    setEscHintVisible(true);
+    escTimeoutRef.current = setTimeout(() => {
+      setEscHintVisible(false);
+      escTimeoutRef.current = null;
+    }, ESC_HINT_TIMEOUT_MS);
+  });
+
+  return { escHintVisible };
+};

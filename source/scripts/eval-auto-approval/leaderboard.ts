@@ -296,9 +296,13 @@ export function generateModelLeaderboardReport(
   const sections: string[] = [];
 
   sections.push('# Shell Auto-Approval Model Leaderboard');
+  sections.push('');
   sections.push(`Updated: ${new Date().toLocaleString()}`);
+  sections.push('');
   sections.push(`Unique cases tracked: ${uniqueCaseCount}`);
+  sections.push('');
   sections.push('Scoring formula: `score = passed² / casesRun` (rewards correct coverage and prevents tiny perfect subsets from leapfrogging broad runs).');
+  sections.push('');
 
   sections.push('## Ranking');
   sections.push('| Rank | Provider | Model | Score | Passed | Cases Run | Failed | Accuracy | Last Updated |');
@@ -310,6 +314,8 @@ export function generateModelLeaderboardReport(
     );
   });
 
+  sections.push('');
+
   for (const section of categoryLeaderboards) {
     sections.push(`## Category: ${section.facetValue}`);
     sections.push('| Rank | Provider | Model | Score | Passed | Cases Run | Failed | Accuracy | Last Updated |');
@@ -320,6 +326,8 @@ export function generateModelLeaderboardReport(
         `| ${index + 1} | ${entry.provider} | ${entry.model} | ${entry.score.toFixed(2)} | ${entry.passed} | ${entry.casesRun} | ${entry.failed} | ${(entry.accuracy * 100).toFixed(1)}% | ${entry.lastUpdated ?? '-'} |`,
       );
     });
+
+    sections.push('');
   }
 
   for (const section of severityLeaderboards) {
@@ -332,9 +340,11 @@ export function generateModelLeaderboardReport(
         `| ${index + 1} | ${entry.provider} | ${entry.model} | ${entry.score.toFixed(2)} | ${entry.passed} | ${entry.casesRun} | ${entry.failed} | ${(entry.accuracy * 100).toFixed(1)}% | ${entry.lastUpdated ?? '-'} |`,
       );
     });
+
+    sections.push('');
   }
 
-  return sections.join('\n\n');
+  return sections.join('\n');
 }
 
 export function saveModelLeaderboardJson(jsonPath: string, entries: ModelLeaderboardEntry[], records: ModelResultRecord[]): void {

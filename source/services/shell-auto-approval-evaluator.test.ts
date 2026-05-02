@@ -171,3 +171,29 @@ test('falls back to deny advisory for commands missing from malformed chat respo
     source: 'llm',
   });
 });
+
+test('rethrows upstream errors when throwOnError is enabled', async (t) => {
+  const upstreamError = Object.assign(new Error('Rate limit exceeded'), {
+    status: 429,
+    headers: {
+      'x-ratelimit-reset': '1741305600000',
+    },
+  });
+
+  const error = await t.throwsAsync(() =>
+    evaluateShellAutoApprovalAdvisories({
+      commands: [{ id: 'call-safe', command: 'ls source' }],
+      history: [{ role: 'user', type: 'message', content: 'inspect repository' }],
+      settingsService: createMockSettings('advisory') as any,
+      agentClient: {
+        chat: async () => {
+          throw upstreamError;
+        },
+      } as any,
+      logger: createMockLogger() as any,
+      throwOnError: true,
+    }),
+  );
+
+  t.is(error, upstreamError);
+});

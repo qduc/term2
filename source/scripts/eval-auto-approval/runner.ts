@@ -17,7 +17,7 @@ import {
 } from './leaderboard.js';
 import { computeMetrics } from './metrics.js';
 import { generateReport } from './report.js';
-import { createCacheKey, validateRunnerOptions } from './runner-utils.js';
+import { createCacheKey, retryOnRateLimit, validateRunnerOptions } from './runner-utils.js';
 import { appendFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -196,12 +196,29 @@ async function run() {
     } else {
       const start = performance.now();
       try {
-        const advisories = await evaluateShellAutoApprovalAdvisories({
-          commands: [{ id: c.id, command: c.command }],
-          history: c.history as any,
-          settingsService,
-          agentClient,
-          logger,
+        const advisories = await retryOnRateLimit({
+          operation: () =>
+            evaluateShellAutoApprovalAdvisories({
+              commands: [{ id: c.id, command: c.command }],
+              history: c.history as any,
+              settingsService,
+              agentClient,
+              logger,
+              throwOnError: true,
+            }),
+          maxRetries: 2,
+          onRetry: ({ attempt, retriesRemaining, delayMs, error: retryError }) => {
+            console.warn(
+              `Case ${c.id} hit a rate limit (attempt ${attempt}/2). Retrying in ${Math.round(delayMs)}ms${retriesRemaining > 0 ? `; ${retriesRemaining} retry left after this` : ''}.`,
+            );
+            logger.warn('Eval runner rate-limit retry', {
+              caseId: c.id,
+              attempt,
+              retriesRemaining,
+              delayMs,
+              error: retryError instanceof Error ? retryError.message : String(retryError),
+            });
+          },
         });
 
         const advisory = advisories.get(c.id);

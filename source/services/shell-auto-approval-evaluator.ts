@@ -120,12 +120,14 @@ export async function evaluateShellAutoApprovalAdvisories({
   settingsService,
   agentClient,
   logger,
+  throwOnError = false,
 }: {
   commands: ShellAutoApprovalCommand[];
   history: AgentInputItem[];
   settingsService?: ISettingsService;
   agentClient: Pick<OpenAIAgentClient, 'chat'>;
   logger: ILoggingService;
+  throwOnError?: boolean;
 }): Promise<Map<string, ShellAutoApprovalAdvisory>> {
   const out = new Map<string, ShellAutoApprovalAdvisory>();
   if (!settingsService) return out;
@@ -223,6 +225,11 @@ export async function evaluateShellAutoApprovalAdvisories({
     logger.error('Batch auto-approval evaluation failed', {
       error: error instanceof Error ? error.message : String(error),
     });
+
+    if (throwOnError) {
+      throw error;
+    }
+
     for (const { id } of toEvaluateByLLM) {
       if (!out.has(id)) {
         const redDetail = redSafetyDetails.get(id);

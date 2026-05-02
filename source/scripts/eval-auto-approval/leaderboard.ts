@@ -26,6 +26,27 @@ export interface ModelLeaderboardFacetSection {
   entries: ModelLeaderboardEntry[];
 }
 
+export interface CaseFailureLeaderboardEntry {
+  caseId: string;
+  command: string;
+  category: string;
+  severity: string;
+  modelsEvaluated: number;
+  wrongCount: number;
+  wrongRatio: number;
+  lastUpdated?: string;
+}
+
+export interface CaseFailureLeaderboardConfig {
+  minModelsEvaluated: number;
+  wrongRatioThreshold: number;
+}
+
+const DEFAULT_CASE_FAILURE_LEADERBOARD_CONFIG: CaseFailureLeaderboardConfig = {
+  minModelsEvaluated: 3,
+  wrongRatioThreshold: 0.6,
+};
+
 export interface ModelLeaderboardPaths {
   recordsPath: string;
   jsonPath: string;
@@ -215,6 +236,90 @@ export function buildSeverityLeaderboards(records: ModelResultRecord[]): ModelLe
   return buildFacetLeaderboard(records, (record) => record.severity);
 }
 
+function mergeCaseMetadata(current: ModelResultRecord, candidate: ModelResultRecord): ModelResultRecord {
+  if (toIsoTimestampValue(candidate.timestamp) > toIsoTimestampValue(current.timestamp)) {
+    return candidate;
+  }
+
+  if (toIsoTimestampValue(candidate.timestamp) < toIsoTimestampValue(current.timestamp)) {
+    return current;
+  }
+
+  return JSON.stringify(candidate) > JSON.stringify(current) ? candidate : current;
+}
+
+export function buildHighWrongRatioCaseLeaderboard(
+  records: ModelResultRecord[],
+  config: CaseFailureLeaderboardConfig = DEFAULT_CASE_FAILURE_LEADERBOARD_CONFIG,
+): CaseFailureLeaderboardEntry[] {
+  const deduped = dedupeModelResults(records);
+  const grouped = new Map<
+    string,
+    {
+      total: number;
+      wrong: number;
+      metadata: ModelResultRecord;
+    }
+  >();
+
+  for (const record of deduped) {
+    const current = grouped.get(record.caseId);
+    const isWrong = Boolean(record.error) || record.predicted !== record.expected;
+
+    if (!current) {
+      grouped.set(record.caseId, {
+        total: 1,
+        wrong: isWrong ? 1 : 0,
+        metadata: record,
+      });
+      continue;
+    }
+
+    current.total += 1;
+    if (isWrong) {
+      current.wrong += 1;
+    }
+    current.metadata = mergeCaseMetadata(current.metadata, record);
+  }
+
+  return [...grouped.values()]
+    .map((entry): CaseFailureLeaderboardEntry => ({
+      caseId: entry.metadata.caseId,
+      command: entry.metadata.command,
+      category: entry.metadata.category,
+      severity: entry.metadata.severity,
+      modelsEvaluated: entry.total,
+      wrongCount: entry.wrong,
+      wrongRatio: entry.total > 0 ? entry.wrong / entry.total : 0,
+      lastUpdated: entry.metadata.timestamp,
+    }))
+    .filter(
+      (entry) =>
+        entry.modelsEvaluated >= config.minModelsEvaluated &&
+        entry.wrongRatio >= config.wrongRatioThreshold,
+    )
+    .sort((a, b) => {
+      if (b.wrongRatio !== a.wrongRatio) {
+        return b.wrongRatio - a.wrongRatio;
+      }
+
+      if (b.wrongCount !== a.wrongCount) {
+        return b.wrongCount - a.wrongCount;
+      }
+
+      if (b.modelsEvaluated !== a.modelsEvaluated) {
+        return b.modelsEvaluated - a.modelsEvaluated;
+      }
+
+      const severityCompare = a.severity.localeCompare(b.severity);
+      if (severityCompare !== 0) {
+        return severityCompare;
+      }
+
+      return a.caseId.localeCompare(b.caseId);
+    });
+}
+
 export function getModelLeaderboardPaths(reportsRoot: string): ModelLeaderboardPaths {
   return {
     recordsPath: join(reportsRoot, 'model-results.jsonl'),
@@ -292,6 +397,7 @@ export function generateModelLeaderboardReport(
 ): string {
   const categoryLeaderboards = buildCategoryLeaderboards(records);
   const severityLeaderboards = buildSeverityLeaderboards(records);
+  const hardCases = buildHighWrongRatioCaseLeaderboard(records);
   const uniqueCaseCount = new Set(records.map((record) => record.caseId)).size;
   const sections: string[] = [];
 
@@ -302,6 +408,9 @@ export function generateModelLeaderboardReport(
   sections.push(`Unique cases tracked: ${uniqueCaseCount}`);
   sections.push('');
   sections.push('Scoring formula: `score = passed² / casesRun` (rewards correct coverage and prevents tiny perfect subsets from leapfrogging broad runs).');
+  sections.push('');
+
+  sections.push('High wrong-ratio case filter: `modelsEvaluated >= 3` and `wrongRatio >= 60%`.');
   sections.push('');
 
   sections.push('## Ranking');
@@ -315,6 +424,23 @@ export function generateModelLeaderboardReport(
   });
 
   sections.push('');
+
+  sections.push('## Hard Cases (High Wrong Ratio)');
+  if (hardCases.length === 0) {
+    sections.push('No cases currently meet the high wrong-ratio threshold.');
+    sections.push('');
+  } else {
+    sections.push('| Rank | Case ID | Category | Severity | Wrong | Models Evaluated | Wrong Ratio | Last Updated | Command |');
+    sections.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+
+    hardCases.forEach((entry, index) => {
+      sections.push(
+        `| ${index + 1} | ${entry.caseId} | ${entry.category} | ${entry.severity} | ${entry.wrongCount} | ${entry.modelsEvaluated} | ${(entry.wrongRatio * 100).toFixed(1)}% | ${entry.lastUpdated ?? '-'} | ${entry.command} |`,
+      );
+    });
+
+    sections.push('');
+  }
 
   for (const section of categoryLeaderboards) {
     sections.push(`## Category: ${section.facetValue}`);
@@ -349,12 +475,20 @@ export function generateModelLeaderboardReport(
 
 export function saveModelLeaderboardJson(jsonPath: string, entries: ModelLeaderboardEntry[], records: ModelResultRecord[]): void {
   mkdirSync(dirname(jsonPath), { recursive: true });
+  const hardCases = buildHighWrongRatioCaseLeaderboard(records);
   const payload = {
     updatedAt: new Date().toISOString(),
     uniqueCasesTracked: new Set(records.map((record) => record.caseId)).size,
     entries,
     byCategory: buildCategoryLeaderboards(records),
     bySeverity: buildSeverityLeaderboards(records),
+    highWrongRatioCases: {
+      filter: {
+        minModelsEvaluated: DEFAULT_CASE_FAILURE_LEADERBOARD_CONFIG.minModelsEvaluated,
+        wrongRatioThreshold: DEFAULT_CASE_FAILURE_LEADERBOARD_CONFIG.wrongRatioThreshold,
+      },
+      entries: hardCases,
+    },
   };
   writeFileSync(jsonPath, JSON.stringify(payload, null, 2));
 }

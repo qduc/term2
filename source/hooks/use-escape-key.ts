@@ -38,6 +38,9 @@ export const useEscapeKey = ({
   const [escHintVisible, setEscHintVisible] = useState(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const stateRef = useRef({ mode, escHintVisible, value, settingsValue });
+  stateRef.current = { mode, escHintVisible, value, settingsValue };
+
   useEffect(() => {
     return () => {
       if (escTimeoutRef.current) clearTimeout(escTimeoutRef.current);
@@ -47,25 +50,32 @@ export const useEscapeKey = ({
   useInput((_input, key) => {
     if (!key.escape) return;
 
+    const {
+      mode: currentMode,
+      escHintVisible: currentEscHintVisible,
+      value: currentValue,
+      settingsValue: currentSettingsValue,
+    } = stateRef.current;
+
     escPressedRef.current = true;
 
-    if (mode !== 'text') {
-      if (mode === 'settings_value_completion' && settingsValue.settingKey) {
-        if (value.startsWith(SETTINGS_TRIGGER)) {
+    if (currentMode !== 'text') {
+      if (currentMode === 'settings_value_completion' && currentSettingsValue.settingKey) {
+        if (currentValue.startsWith(SETTINGS_TRIGGER)) {
           const prefix = SETTINGS_TRIGGER;
           onChange(prefix);
           setCursorOverride(prefix.length);
 
-          const previousKey = settingsValue.settingKey;
-          settingsValue.close();
+          const previousKey = currentSettingsValue.settingKey;
+          currentSettingsValue.close();
           settings.open(prefix.length, previousKey);
           return;
         }
 
-        if (value.startsWith(AUTO_APPROVE_TRIGGER)) {
+        if (currentValue.startsWith(AUTO_APPROVE_TRIGGER)) {
           onChange(AUTO_APPROVE_TRIGGER);
           setCursorOverride(AUTO_APPROVE_TRIGGER.length);
-          settingsValue.close();
+          currentSettingsValue.close();
           return;
         }
       }
@@ -75,7 +85,7 @@ export const useEscapeKey = ({
     }
 
     // Text mode: double ESC clears.
-    if (escHintVisible) {
+    if (currentEscHintVisible) {
       if (escTimeoutRef.current) {
         clearTimeout(escTimeoutRef.current);
         escTimeoutRef.current = null;

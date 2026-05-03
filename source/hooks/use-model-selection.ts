@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import { fetchModels, filterModels, type ModelInfo } from '../services/model-service.js';
 import { getProviderIds } from '../providers/index.js';
-import { getAvailableProviderIds } from '../utils/provider-credentials.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 
 export const MODEL_TRIGGER = '/settings agent.model ';
@@ -155,16 +154,15 @@ export const useModelSelection = (
   }, [filteredModels, selectedIndex]);
 
   const toggleProvider = useCallback(() => {
-    const providerIds = getProviderIds();
-    const availableProviders = getAvailableProviderIds(settingsService, providerIds);
+    const allProviderIds = getProviderIds();
 
     // If no providers available, stay on current
-    if (availableProviders.length === 0) return;
+    if (allProviderIds.length === 0) return;
 
     setProvider((prev) => {
-      const currentIndex = availableProviders.indexOf(prev || availableProviders[0]);
-      const nextIndex = (currentIndex + 1) % availableProviders.length;
-      const nextProvider = availableProviders[nextIndex];
+      const currentIndex = allProviderIds.indexOf(prev || allProviderIds[0]);
+      const nextIndex = (currentIndex + 1) % allProviderIds.length;
+      const nextProvider = allProviderIds[nextIndex];
       // If the user manually selects it, we should allow retrying it
       failedProvidersRef.current.delete(nextProvider);
       return nextProvider;

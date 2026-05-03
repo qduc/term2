@@ -76,35 +76,6 @@ const InputBox: FC<Props> = ({
 
   const { navigateUp, navigateDown } = useInputHistory(historyService);
 
-  const { escHintVisible } = useEscapeKey({
-    mode,
-    setMode,
-    value,
-    onChange,
-    settings,
-    settingsValue,
-    setCursorOverride,
-    escPressedRef,
-  });
-
-  useEffect(() => {
-    if (cursorOverride !== null && cursorOverride === cursorOffset) {
-      setCursorOverride(null);
-    }
-  }, [cursorOverride, cursorOffset]);
-
-  useTriggerDetection({
-    value,
-    cursorOffset,
-    mode,
-    escPressedRef,
-    slash,
-    path,
-    settings,
-    settingsValue,
-    models,
-  });
-
   const [, setInputKey] = useState(0);
   const remountInput = useCallback(() => setInputKey((prev) => prev + 1), []);
 
@@ -187,11 +158,46 @@ const InputBox: FC<Props> = ({
     onSlashCommandRemount: remountInput,
   });
 
+  const stateRef = useRef({ mode, modeHandlers });
+  useEffect(() => {
+    stateRef.current = { mode, modeHandlers };
+  });
+
+  const { escHintVisible } = useEscapeKey({
+    mode,
+    setMode,
+    value,
+    onChange,
+    settings,
+    settingsValue,
+    setCursorOverride,
+    escPressedRef,
+  });
+
+  useEffect(() => {
+    if (cursorOverride !== null && cursorOverride === cursorOffset) {
+      setCursorOverride(null);
+    }
+  }, [cursorOverride, cursorOffset]);
+
+  useTriggerDetection({
+    value,
+    cursorOffset,
+    mode,
+    escPressedRef,
+    slash,
+    path,
+    settings,
+    settingsValue,
+    models,
+  });
+
   // Tab handling for active menu (other keys flow to MultilineInput).
   useInput((_input, key) => {
-    if (mode === 'text') return;
+    const { mode: currentMode, modeHandlers: currentHandlers } = stateRef.current;
+    if (currentMode === 'text') return;
     if (key.tab && !key.shift) {
-      modeHandlers[mode].onTab?.();
+      currentHandlers[currentMode].onTab?.();
     }
   });
 

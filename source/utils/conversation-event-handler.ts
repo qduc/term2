@@ -11,13 +11,13 @@ import { parseToolArguments, formatToolCommand, type StreamingState } from './co
  * Message types used by the event handler.
  */
 export interface BotMessage {
-  id: number;
+  id: string;
   sender: 'bot';
   text: string;
 }
 
 export interface SystemMessage {
-  id: number;
+  id: string;
   sender: 'system';
   text: string;
 }
@@ -45,7 +45,8 @@ export interface ConversationEventHandlerDeps<
   };
   appendMessages: (messages: MessageT[]) => void;
   setMessages: (updater: (prev: MessageT[]) => MessageT[]) => void;
-  setLiveResponse: (response: { id: number; sender: 'bot'; text: string } | null) => void;
+  setLiveResponse: (response: { id: string; sender: 'bot'; text: string } | null) => void;
+  createMessageId: () => string;
   trimMessages: (messages: MessageT[]) => MessageT[];
   annotateCommandMessage: (msg: CommandMessageT) => CommandMessageT;
 }
@@ -71,6 +72,7 @@ export function createConversationEventHandler<
     appendMessages,
     setMessages,
     setLiveResponse,
+    createMessageId,
     trimMessages,
     annotateCommandMessage,
   } = deps;
@@ -108,7 +110,7 @@ export function createConversationEventHandler<
         // Flush any accumulated text before showing the tool call
         if (state.accumulatedText.trim()) {
           const textMessage: BotMessage = {
-            id: Date.now() + 1,
+            id: createMessageId(),
             sender: 'bot',
             text: state.accumulatedText,
           };
@@ -127,7 +129,7 @@ export function createConversationEventHandler<
         const command = formatToolCommand(toolName, args as Record<string, unknown>);
 
         const pendingMessage: CommandMessage = {
-          id: toolCallId ?? String(Date.now()),
+          id: toolCallId ?? createMessageId(),
           sender: 'command',
           status: 'running',
           command,
@@ -169,7 +171,7 @@ export function createConversationEventHandler<
         // Flush any accumulated text before adding command message
         if (state.accumulatedText.trim()) {
           const textMessage: BotMessage = {
-            id: Date.now() + 1,
+            id: createMessageId(),
             sender: 'bot',
             text: state.accumulatedText,
           };
@@ -205,7 +207,7 @@ export function createConversationEventHandler<
 
       case 'retry': {
         const systemMessage: SystemMessage = {
-          id: Date.now(),
+          id: createMessageId(),
           sender: 'system',
           text: `Tool hallucination detected (${event.toolName}). Retrying... (Attempt ${event.attempt}/${event.maxRetries})`,
         };

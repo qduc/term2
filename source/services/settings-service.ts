@@ -25,6 +25,14 @@ import {
 
 const paths = envPaths('term2');
 
+function cloneSettingValue<T>(value: T): T {
+  if (value == null || typeof value !== 'object') {
+    return value;
+  }
+
+  return structuredClone(value);
+}
+
 /**
  * Service for managing application settings.
  * Follows singleton pattern and supports:
@@ -354,7 +362,7 @@ export class SettingsService {
         defaultValue = defaultValue[k];
       }
 
-      obj[lastKey] = defaultValue;
+      obj[lastKey] = cloneSettingValue(defaultValue);
       this.sources.set(key, 'default');
     } else {
       // Reset all settings

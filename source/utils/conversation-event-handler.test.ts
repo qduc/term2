@@ -13,6 +13,7 @@ interface MockDeps extends ConversationEventHandlerDeps {
   appendMessages: (messages: any[]) => void;
   setMessages: (updater: (prev: any[]) => any[]) => void;
   setLiveResponse: (response: any) => void;
+  createMessageId: () => string;
   trimMessages: (messages: any[]) => any[];
   annotateCommandMessage: (msg: any) => any;
 }
@@ -42,6 +43,10 @@ function createMockDeps(): MockDeps & {
 
   return {
     calls,
+    createMessageId: (() => {
+      let seq = 0;
+      return () => `msg-${seq++}`;
+    })(),
     liveResponseUpdater: {
       push: (text: string) => calls.liveResponsePushes.push(text),
       cancel: () => {

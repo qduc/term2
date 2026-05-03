@@ -13,6 +13,7 @@ import {
 import { createStreamingState, type StreamingState } from './conversation-utils.js';
 import { createStreamingUpdateCoordinator } from './streaming-updater.js';
 import type { NormalizedUsage } from './token-usage.js';
+import { createMessageIdFactory } from '../hooks/message-id.js';
 
 export interface StreamingSessionFactoryDeps<MessageT extends UIMessage = UIMessage> {
   appendMessages: ConversationEventHandlerDeps<MessageT>['appendMessages'];
@@ -22,7 +23,7 @@ export interface StreamingSessionFactoryDeps<MessageT extends UIMessage = UIMess
   annotateCommandMessage: ConversationEventHandlerDeps<MessageT>['annotateCommandMessage'];
   loggingService: ILoggingService;
   setLastUsage: (usage: NormalizedUsage) => void;
-  createLiveResponseUpdater: (liveMessageId: number) => ConversationEventHandlerDeps<MessageT>['liveResponseUpdater'];
+  createLiveResponseUpdater: (liveMessageId: string) => ConversationEventHandlerDeps<MessageT>['liveResponseUpdater'];
   reasoningThrottleMs: number;
   now?: () => number;
   createStreamingState?: () => StreamingState;
@@ -45,8 +46,9 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
   const createState = deps.createStreamingState ?? createStreamingState;
   const createCoordinator = deps.createStreamingUpdateCoordinator ?? createStreamingUpdateCoordinator;
   const createEventHandler = deps.createConversationEventHandler ?? createConversationEventHandler;
+  const createMessageId = createMessageIdFactory(now);
 
-  const liveMessageId = now();
+  const liveMessageId = createMessageId();
   deps.setLiveResponse({
     id: liveMessageId,
     sender: 'bot',
@@ -70,7 +72,7 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
         return deps.trimMessages(next);
       }
 
-      const newId = now();
+      const newId = createMessageId();
       streamingState.currentReasoningMessageId = newId;
       return deps.trimMessages([
         ...prev,
@@ -90,6 +92,7 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
       appendMessages: deps.appendMessages,
       setMessages: deps.setMessages,
       setLiveResponse: deps.setLiveResponse,
+      createMessageId,
       trimMessages: deps.trimMessages,
       annotateCommandMessage: deps.annotateCommandMessage,
     },

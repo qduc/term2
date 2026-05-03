@@ -345,6 +345,24 @@ test('isRuntimeModifiable identifies correct settings', async (t) => {
   t.false(service.isRuntimeModifiable('ui.historySize'));
 });
 
+test('reset() clones object defaults instead of reusing shared references', async (t) => {
+  const settingsDir = getTestSettingsDir();
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+  });
+
+  service.reset('agent.openrouter');
+  const firstResetValue = service.get('agent.openrouter');
+  firstResetValue.apiKey = 'mutated-secret';
+
+  service.reset('agent.openrouter');
+  const secondResetValue = service.get('agent.openrouter');
+
+  t.deepEqual(secondResetValue, {});
+  t.not(secondResetValue, firstResetValue);
+});
+
 test('reset() returns setting to default', async (t) => {
   const settingsDir = getTestSettingsDir();
 

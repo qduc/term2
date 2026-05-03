@@ -459,7 +459,7 @@ export class OpenRouterModel implements Model {
       for (const detail of details) {
         const { type, index } = detail;
         const fieldName = TYPE_FIELD_MAP[type];
-        if (!fieldName) return; // ignore unknown types safely
+        if (!fieldName) continue;
 
         const key = `${type}:${index}`;
         const existing = reasoningMap.get(key);

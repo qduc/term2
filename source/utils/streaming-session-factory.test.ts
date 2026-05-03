@@ -4,7 +4,7 @@ import { createStreamingSession } from './streaming-session-factory.js';
 test('createStreamingSession wires state and logs final usage', (t) => {
   const calls: {
     liveResponses: any[];
-    liveResponseIds: number[];
+    liveResponseIds: string[];
     coordinatorInterval?: number;
     eventHandlerEvents: any[];
     debugMessages: Array<{ message: string; meta?: any }>;
@@ -73,8 +73,8 @@ test('createStreamingSession wires state and logs final usage', (t) => {
     'sendUserMessage',
   );
 
-  t.deepEqual(calls.liveResponses, [{ id: 123, sender: 'bot', text: '' }]);
-  t.deepEqual(calls.liveResponseIds, [123]);
+  t.deepEqual(calls.liveResponses, [{ id: '123-0', sender: 'bot', text: '' }]);
+  t.deepEqual(calls.liveResponseIds, ['123-0']);
   t.is(calls.coordinatorInterval, 200);
   t.is(calls.eventHandlerState, calls.streamingState);
   t.is(calls.eventHandlerDeps.liveResponseUpdater, liveResponseUpdater);

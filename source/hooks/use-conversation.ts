@@ -4,6 +4,7 @@ import { isAbortLikeError } from '../utils/error-helpers.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { createStreamingUpdateCoordinator } from '../utils/streaming-updater.js';
 import { appendMessagesCapped } from '../utils/message-buffer.js';
+import { createMessageId } from './message-id.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils.js';
 import { createStreamingSession } from '../utils/streaming-session-factory.js';
 import type { CommandMessage as BaseCommandMessage } from '../tools/types.js';
@@ -16,13 +17,13 @@ import {
 } from '../services/approval-presentation-policy.js';
 
 export interface UserMessage {
-  id: number;
+  id: string;
   sender: 'user';
   text: string;
 }
 
 export interface BotMessage {
-  id: number;
+  id: string;
   sender: 'bot';
   text: string;
   reasoningText?: string;
@@ -33,13 +34,13 @@ export type CommandMessage = BaseCommandMessage & {
 };
 
 export interface SystemMessage {
-  id: number;
+  id: string;
   sender: 'system';
   text: string;
 }
 
 export interface ReasoningMessage {
-  id: number;
+  id: string;
   sender: 'reasoning';
   text: string;
 }
@@ -47,7 +48,7 @@ export interface ReasoningMessage {
 export type Message = UserMessage | BotMessage | CommandMessage | SystemMessage | ReasoningMessage;
 
 interface LiveResponse {
-  id: number;
+  id: string;
   sender: 'bot';
   text: string;
 }
@@ -72,7 +73,7 @@ export const useConversation = ({
   const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(null);
   const approvedContextRef = useRef<ApprovedToolContext | null>(null);
   const createLiveResponseUpdater = useCallback(
-    (liveMessageId: number) =>
+    (liveMessageId: string) =>
       createStreamingUpdateCoordinator((text: string) => {
         setLiveResponse((prev) =>
           prev && prev.id === liveMessageId
@@ -124,7 +125,7 @@ export const useConversation = ({
 
         if (remainingText?.trim() && !textWasFlushed) {
           const textMessage: BotMessage = {
-            id: Date.now() + 1,
+            id: createMessageId(),
             sender: 'bot',
             text: remainingText,
           };
@@ -157,7 +158,7 @@ export const useConversation = ({
 
         if (shouldAddBotMessage && finalText) {
           const botMessage: BotMessage = {
-            id: Date.now() + 1,
+            id: createMessageId(),
             sender: 'bot',
             text: finalText,
           };
@@ -182,7 +183,7 @@ export const useConversation = ({
       }
 
       const userMessage: UserMessage = {
-        id: Date.now(),
+        id: createMessageId(),
         sender: 'user',
         text: value,
       };
@@ -240,7 +241,7 @@ export const useConversation = ({
         } else {
           // For other errors, just show the error message
           const botErrorMessage: BotMessage = {
-            id: Date.now(),
+            id: createMessageId(),
             sender: 'bot',
             text: `Error: ${errorMessage}`,
           };
@@ -331,7 +332,7 @@ export const useConversation = ({
 
           const errorMessage = error instanceof Error ? error.message : String(error);
           const botErrorMessage: BotMessage = {
-            id: Date.now(),
+            id: createMessageId(),
             sender: 'bot',
             text: `Error: ${errorMessage}`,
           };
@@ -385,7 +386,7 @@ export const useConversation = ({
 
         const errorMessage = error instanceof Error ? error.message : String(error);
         const botErrorMessage: BotMessage = {
-          id: Date.now(),
+          id: createMessageId(),
           sender: 'bot',
           text: `Error: ${errorMessage}`,
         };
@@ -464,7 +465,7 @@ export const useConversation = ({
     (text: string) => {
       appendMessages([
         {
-          id: Date.now(),
+          id: createMessageId(),
           sender: 'system',
           text,
         },
@@ -486,7 +487,7 @@ export const useConversation = ({
 
       appendMessages([
         {
-          id: String(Date.now()),
+          id: createMessageId(),
           sender: 'command',
           status: success ? 'completed' : 'failed',
           command,

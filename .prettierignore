@@ -3,3 +3,4 @@ dist
 generated
 log_viewer
 *.md
+eval/*

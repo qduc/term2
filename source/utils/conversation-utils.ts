@@ -13,7 +13,7 @@ export interface StreamingState {
   accumulatedReasoningText: string;
   flushedReasoningLength: number;
   textWasFlushed: boolean;
-  currentReasoningMessageId: number | null;
+  currentReasoningMessageId: string | null;
 }
 
 /**

@@ -15,6 +15,7 @@ import path from 'path';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { getPromptPath } from './prompts/prompt-selector.js';
+import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 
@@ -148,7 +149,7 @@ export const getAgentDefinition = (
     );
   } else {
     // Full mode: all tools based on model
-    const isGpt5 = resolvedModel.toLowerCase().includes('gpt-5');
+    const isGpt5 = shouldPreferPatchEditingModel(resolvedModel);
 
     if (isGpt5) {
       tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext }));

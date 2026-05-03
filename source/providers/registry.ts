@@ -35,6 +35,8 @@ export interface ProviderDefinition {
   capabilities?: {
     supportsConversationChaining: boolean;
     supportsTracingControl: boolean;
+    usesStrictToolSchema?: boolean;
+    nativePatchModelPrefixes?: string[];
   };
 
   /**

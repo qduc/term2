@@ -11,6 +11,7 @@ import { ConversationStore } from '../services/conversation-store.js';
 import { trimToolOutput } from '../utils/trim-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 import { executeWithRetry } from './retry-executor.js';
+import { shouldUseNativePatchTool, shouldUseStrictToolSchema } from './tool-selection-policy.js';
 
 class MentorSession {
   #provider: string | null = null;
@@ -239,11 +240,15 @@ export class OpenAIAgentClient {
   #getProviderCapabilities(providerId: string): {
     supportsConversationChaining: boolean;
     supportsTracingControl: boolean;
+    usesStrictToolSchema?: boolean;
+    nativePatchModelPrefixes?: string[];
   } {
     const providerDef = getProvider(providerId);
     return {
       supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
       supportsTracingControl: providerDef?.capabilities?.supportsTracingControl ?? false,
+      usesStrictToolSchema: providerDef?.capabilities?.usesStrictToolSchema,
+      nativePatchModelPrefixes: providerDef?.capabilities?.nativePatchModelPrefixes,
     };
   }
 
@@ -655,12 +660,17 @@ export class OpenAIAgentClient {
       resolvedModel,
     );
 
-    const shouldUseNativePatchTool = this.#provider === 'openai' && resolvedModel.startsWith('gpt-5.1');
+    const providerCapabilities = this.#getProviderCapabilities(this.#provider);
+    const shouldUseNativePatchToolForModel = shouldUseNativePatchTool({
+      providerId: this.#provider,
+      model: resolvedModel,
+      capabilities: providerCapabilities,
+    });
     const tools = this.#buildAgentTools({
       toolDefinitions,
       resolvedModel,
       reasoningEffort,
-      shouldUseNativePatchTool,
+      shouldUseNativePatchTool: shouldUseNativePatchToolForModel,
     });
 
     const modelSettings = this.#buildModelSettings({
@@ -701,6 +711,11 @@ export class OpenAIAgentClient {
     reasoningEffort?: ModelSettingsReasoningEffort | 'default';
     shouldUseNativePatchTool: boolean;
   }): Tool[] {
+    const providerCapabilities = this.#getProviderCapabilities(this.#provider);
+    const useStrictToolSchema = shouldUseStrictToolSchema({
+      providerId: this.#provider,
+      capabilities: providerCapabilities,
+    });
     const tools: Tool[] = toolDefinitions
       .filter((definition) => {
         // Exclude custom apply_patch if we're using native one
@@ -714,8 +729,7 @@ export class OpenAIAgentClient {
           createTool({
             name: definition.name,
             description: definition.description,
-            parameters:
-              this.#provider === 'openai' ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
+            parameters: useStrictToolSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
             needsApproval: async (context, params) => definition.needsApproval(params, context),
             execute: async (params, _context, details) => {
               const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');

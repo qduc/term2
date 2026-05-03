@@ -44,5 +44,7 @@ registerProvider({
   capabilities: {
     supportsConversationChaining: true,
     supportsTracingControl: true,
+    usesStrictToolSchema: true,
+    nativePatchModelPrefixes: ['gpt-5.1'],
   },
 });

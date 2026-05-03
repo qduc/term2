@@ -1,7 +1,4 @@
 import { Agent, run, tool as createTool, webSearchTool, applyPatchTool, type Tool, Runner } from '@openai/agents';
-import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
-import { OpenRouterError } from '../providers/openrouter.js';
-import { OpenAICompatibleError } from '../providers/openai-compatible/api.js';
 import { getProvider } from '../providers/index.js';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
@@ -13,6 +10,7 @@ import { createEditorImpl } from './editor-impl.js';
 import { ConversationStore } from '../services/conversation-store.js';
 import { trimToolOutput } from '../utils/trim-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
+import { executeWithRetry } from './retry-executor.js';
 
 class MentorSession {
   #provider: string | null = null;
@@ -453,79 +451,15 @@ export class OpenAIAgentClient {
   }
 
   async #executeWithRetry<T>(operation: () => Promise<T>, retries = this.#retryAttempts): Promise<T> {
-    try {
-      return await operation();
-    } catch (error) {
-      // Determine if the error is retryable
-      // UserError and ModelBehaviorError are NOT retried (logic errors, not transient)
-      const isTransientError =
-        error instanceof APIConnectionError ||
-        error instanceof APIConnectionTimeoutError ||
-        error instanceof InternalServerError ||
-        error instanceof RateLimitError;
-
-      // Check if it's an OpenRouter error with retryable status
-      const isOpenRouterRetryable = error instanceof OpenRouterError && (error.status === 429 || error.status >= 500);
-
-      const isOpenAICompatibleRetryable =
-        error instanceof OpenAICompatibleError && (error.status === 429 || error.status >= 500);
-
-      const isRetryable = retries > 0 && (isTransientError || isOpenRouterRetryable || isOpenAICompatibleRetryable);
-
-      if (isRetryable) {
-        const attemptIndex = this.#retryAttempts - retries;
-        let delay: number;
-
-        // Check for Retry-After header (both OpenAI and OpenRouter)
-        const retryAfterHeader =
-          (error instanceof RateLimitError && error.headers?.['retry-after']) ||
-          (error instanceof OpenRouterError && error.headers['retry-after']) ||
-          (error instanceof OpenAICompatibleError && error.headers['retry-after']);
-
-        if (retryAfterHeader) {
-          // Respect the Retry-After header
-          delay = parseInt(retryAfterHeader, 10) * 1000;
-        } else {
-          // Exponential backoff with full jitter
-          // Base delay: 500-1000ms
-          // Multiplier: 2^attemptIndex
-          // Max cap: 30 seconds
-          const baseDelay = 500 + Math.random() * 500; // 500-1000ms
-          const exponentialDelay = baseDelay * Math.pow(2, attemptIndex);
-          const maxDelay = 30000; // 30 seconds
-          const cappedDelay = Math.min(exponentialDelay, maxDelay);
-          // Apply full jitter: random value between 0 and cappedDelay
-          delay = Math.random() * cappedDelay;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, delay));
-
-        this.#logger.warn('Agent operation retry', {
-          eventType: 'retry.upstream',
-          category: 'retry',
-          phase: 'retry',
-          traceId: this.#currentCorrelationId,
-          provider: this.#provider,
-          model: this.#model,
-          retryType: 'upstream',
-          retryAttempt: attemptIndex + 1,
-          errorType: error.constructor.name,
-          retriesRemaining: retries - 1,
-          delayMs: Math.round(delay),
-          attemptIndex,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          ...(error instanceof OpenRouterError && {
-            status: error.status,
-          }),
-          ...(error instanceof OpenAICompatibleError && {
-            status: error.status,
-          }),
-        });
-        this.#retryCallback?.();
-        return this.#executeWithRetry(operation, retries - 1);
-      }
-      throw error;
-    }
+    return executeWithRetry({
+      operation,
+      retryAttempts: retries,
+      provider: this.#provider,
+      model: this.#model,
+      traceId: this.#currentCorrelationId,
+      logger: this.#logger,
+      onRetry: this.#retryCallback ?? undefined,
+    });
   }
 
   async chat(

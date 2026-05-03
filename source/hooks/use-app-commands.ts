@@ -3,6 +3,7 @@ import type { SlashCommand } from '../components/SlashCommandMenu.js';
 import type { SettingsService } from '../services/settings-service.js';
 import { createSettingsCommand } from '../utils/settings-command.js';
 import { getProvider } from '../providers/index.js';
+import { copyToClipboard } from '../utils/clipboard.js';
 import { Message } from './use-conversation.js';
 
 interface UseAppCommandsProps {
@@ -14,6 +15,17 @@ interface UseAppCommandsProps {
   exit: () => void;
   messages: Message[];
   setModel: (model: string) => void;
+}
+
+export function getLastFinalAssistantText(messages: Message[]): string | null {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message?.sender === 'bot' && typeof message.text === 'string' && message.text.length > 0) {
+      return message.text;
+    }
+  }
+
+  return null;
 }
 
 export const useAppCommands = ({
@@ -88,6 +100,27 @@ export const useAppCommands = ({
     };
 
     return [
+      {
+        name: 'copy',
+        description: 'Copy the latest final assistant response',
+        action: () => {
+          const lastAssistantText = getLastFinalAssistantText(messages);
+          if (!lastAssistantText) {
+            addSystemMessage('No assistant response is available to copy yet.');
+            return true;
+          }
+
+          try {
+            copyToClipboard(lastAssistantText);
+            addSystemMessage('Copied the latest assistant response to the clipboard.');
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            addSystemMessage(`Failed to copy to clipboard: ${message}`);
+          }
+
+          return true;
+        },
+      },
       {
         name: 'clear',
         description: 'Start a new conversation',

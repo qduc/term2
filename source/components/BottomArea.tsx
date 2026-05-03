@@ -7,7 +7,7 @@ import type { SlashCommand } from './SlashCommandMenu.js';
 import type { SettingsService } from '../services/settings-service.js';
 import type { LoggingService } from '../services/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';
-import type { SSHInfo } from '../app.js';
+import type { SSHInfo } from '../hooks/use-shell-mode.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 import type { PendingApproval } from '../contracts/conversation.js';
 

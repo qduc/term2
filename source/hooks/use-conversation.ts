@@ -15,36 +15,36 @@ import {
   type ApprovedToolContext,
 } from '../services/approval-presentation-policy.js';
 
-interface UserMessage {
+export interface UserMessage {
   id: number;
   sender: 'user';
   text: string;
 }
 
-interface BotMessage {
+export interface BotMessage {
   id: number;
   sender: 'bot';
   text: string;
   reasoningText?: string;
 }
 
-type CommandMessage = BaseCommandMessage & {
+export type CommandMessage = BaseCommandMessage & {
   hadApproval?: boolean;
 };
 
-interface SystemMessage {
+export interface SystemMessage {
   id: number;
   sender: 'system';
   text: string;
 }
 
-interface ReasoningMessage {
+export interface ReasoningMessage {
   id: number;
   sender: 'reasoning';
   text: string;
 }
 
-type Message = UserMessage | BotMessage | CommandMessage | SystemMessage | ReasoningMessage;
+export type Message = UserMessage | BotMessage | CommandMessage | SystemMessage | ReasoningMessage;
 
 interface LiveResponse {
   id: number;

@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { useSetting } from '../hooks/use-setting.js';
 import { getProvider } from '../providers/index.js';
 import type { SettingsService } from '../services/settings-service.js';
-import type { SSHInfo } from '../app.js';
+import type { SSHInfo } from '../hooks/use-shell-mode.js';
 import { formatFooterUsage, type NormalizedUsage } from '../utils/token-usage.js';
 
 interface StatusBarProps {

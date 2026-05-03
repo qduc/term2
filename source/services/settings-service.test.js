@@ -417,6 +417,26 @@ test('getAll() returns all settings with sources', async (t) => {
   t.is(all.agent.reasoningEffort.source, 'default');
 });
 
+test('getAll() maps optional nested values and sources for agent.temperature and webSearch.tavily', async (t) => {
+  const settingsDir = getTestSettingsDir();
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+    env: {
+      webSearch: {
+        tavily: undefined,
+      },
+    },
+  });
+
+  const all = service.getAll();
+
+  t.is(all.agent.temperature.value, undefined);
+  t.is(all.agent.temperature.source, 'default');
+  t.is(all.webSearch.tavily.value, undefined);
+  t.is(all.webSearch.tavily.source, 'default');
+});
+
 test('SettingsService initialization applies logging.logLevel to loggingService', async (t) => {
   const settingsDir = getTestSettingsDir();
   const mockLoggingService = {

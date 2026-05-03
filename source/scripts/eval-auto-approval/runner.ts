@@ -20,7 +20,7 @@ import {
 } from './leaderboard.js';
 import { computeMetrics } from './metrics.js';
 import { generateReport } from './report.js';
-import { createCacheKey, retryOnRateLimit, validateRunnerOptions } from './runner-utils.js';
+import { createCacheKey, loadModelRunsFromYaml, retryOnRateLimit, validateRunnerOptions } from './runner-utils.js';
 import { appendFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -32,11 +32,12 @@ const cli = meow(
 
 	Options
 	  --model         Model to evaluate (e.g. gpt-4o)
-	  --provider      Provider to use (openai, openrouter, etc.)
-	  --dataset       Path to dataset JSON (default: eval/auto-approval/dataset.json)
-	  --filter-cat    Filter by category
-	  --filter-sev    Filter by severity
-	  --concurrency   Max concurrent requests (default: 5)
+  --provider      Provider to use (openai, openrouter, etc.)
+  --dataset       Path to dataset JSON (default: eval/auto-approval/dataset.json)
+  --models-file   Path to YAML file mapping providers to model lists
+  --filter-cat    Filter by category
+  --filter-sev    Filter by severity
+  --concurrency   Max concurrent requests (default: 5)
 	  --repeat        Number of times to repeat each case (default: 1)
 	  --output        Path to output results (default: eval/auto-approval/reports/<date>/results-<timestamp>)
 	  --report-format Comma-separated list of formats (json,jsonl,md) (default: json)
@@ -54,6 +55,7 @@ const cli = meow(
       model: { type: 'string' },
       provider: { type: 'string', default: 'openai' },
       dataset: { type: 'string', default: 'eval/auto-approval/dataset.json' },
+      modelsFile: { type: 'string' },
       filterCat: { type: 'string' },
       filterSev: { type: 'string' },
       concurrency: { type: 'number', default: 5 },
@@ -100,12 +102,28 @@ async function run() {
     return;
   }
 
-  const totalRuns = filteredCases.length * flags.repeat;
-  const model = flags.model || 'gpt-4o';
+  const modelRuns = flags.modelsFile
+    ? loadModelRunsFromYaml(flags.modelsFile)
+    : [{ provider: flags.provider, model: flags.model || 'gpt-4o' }];
+
+  if (modelRuns.length === 0) {
+    console.log('No model runs configured.');
+    return;
+  }
+
+  const totalRuns = filteredCases.length * flags.repeat * modelRuns.length;
 
   console.log('--- Eval Plan ---');
-  console.log(`Model:       ${model}`);
-  console.log(`Provider:    ${flags.provider}`);
+  if (flags.modelsFile) {
+    console.log(`Models file:  ${flags.modelsFile}`);
+    console.log('Model Runs:');
+    for (const run of modelRuns) {
+      console.log(`  - ${run.provider}/${run.model}`);
+    }
+  } else {
+    console.log(`Model:       ${modelRuns[0].model}`);
+    console.log(`Provider:    ${modelRuns[0].provider}`);
+  }
   console.log(`Dataset:     ${datasetPath}`);
   console.log(`Total Cases: ${filteredCases.length}`);
   console.log(`Repeats:     ${flags.repeat}`);
@@ -156,137 +174,152 @@ async function run() {
   console.log(`Saving results to: ${baseOutputPath}.{${reportFormats.join(',')}}`);
 
   const logger = new LoggingService({ disableLogging: true });
-  const settingsService = createMockSettingsService({
-    'agent.autoApproveModel': model,
-    'agent.autoApproveProvider': flags.provider,
-    'shell.autoApproveMode': 'auto',
-    // Pass provider API keys from environment so runners can be initialized
-    ...(process.env['OPENROUTER_API_KEY'] ? { 'agent.openrouter.apiKey': process.env['OPENROUTER_API_KEY'] } : {}),
-  });
-
-  const agentClient = new OpenAIAgentClient({
-    model,
-    deps: {
-      logger,
-      settings: settingsService,
-    },
-  });
 
   const cache = new ResponseCache('eval/auto-approval/.cache');
   const results: ModelResultRecord[] = [];
-  const queue = [...filteredCases.flatMap((c) => Array.from({ length: flags.repeat }, () => c))];
-  const active: Promise<void>[] = [];
 
   let completed = 0;
   let cacheHits = 0;
 
-  async function runCase(c: Case) {
-    const cacheKey = createCacheKey({
-      model,
-      provider: flags.provider,
-      promptVersion: SHELL_AUTO_APPROVAL_PROMPT_VERSION,
-      command: c.command,
-      history: c.history,
+  async function runModelEvaluation(run: { provider: string; model: string }) {
+    const settingsService = createMockSettingsService({
+      'agent.autoApproveModel': run.model,
+      'agent.autoApproveProvider': run.provider,
+      'shell.autoApproveMode': 'auto',
+      // Pass provider API keys from environment so runners can be initialized
+      ...(process.env['OPENROUTER_API_KEY'] ? { 'agent.openrouter.apiKey': process.env['OPENROUTER_API_KEY'] } : {}),
     });
 
-    let cachedAdvisory = flags.cache ? cache.get(cacheKey) : null;
-    let result: any;
-    let error: string | undefined;
-    let latencyMs = 0;
+    const agentClient = new OpenAIAgentClient({
+      model: run.model,
+      deps: {
+        logger,
+        settings: settingsService,
+      },
+    });
 
-    if (cachedAdvisory) {
-      cacheHits++;
-      result = cachedAdvisory;
-    } else {
-      const start = performance.now();
-      try {
-        const advisories = await retryOnRateLimit({
-          operation: () =>
-            evaluateShellAutoApprovalAdvisories({
-              commands: [{ id: c.id, command: c.command }],
-              history: c.history as any,
-              settingsService,
-              agentClient,
-              logger,
-              throwOnError: true,
-            }),
-          maxRetries: 2,
-          onRetry: ({ attempt, retriesRemaining, delayMs, error: retryError }) => {
-            console.warn(
-              `Case ${c.id} hit a rate limit (attempt ${attempt}/2). Retrying in ${Math.round(delayMs)}ms${
-                retriesRemaining > 0 ? `; ${retriesRemaining} retry left after this` : ''
-              }.`,
-            );
-            logger.warn('Eval runner rate-limit retry', {
-              caseId: c.id,
-              attempt,
-              retriesRemaining,
-              delayMs,
-              error: retryError instanceof Error ? retryError.message : String(retryError),
-            });
-          },
-        });
+    const queue = [...filteredCases.flatMap((c) => Array.from({ length: flags.repeat }, () => c))];
+    const active: Promise<void>[] = [];
 
-        const advisory = advisories.get(c.id);
-        if (advisory) {
-          if (advisory.isError) {
-            error = advisory.reasoning;
-          } else {
-            result = {
-              predicted: advisory.approved ? 'approve' : 'reject',
-              reasoning: advisory.reasoning,
-              source: advisory.source,
-            };
-            if (flags.cache && advisory.source === 'llm') {
-              cache.set(cacheKey, result);
+    async function runCase(c: Case) {
+      const cacheKey = createCacheKey({
+        model: run.model,
+        provider: run.provider,
+        promptVersion: SHELL_AUTO_APPROVAL_PROMPT_VERSION,
+        command: c.command,
+        history: c.history,
+      });
+
+      let cachedAdvisory = flags.cache ? cache.get(cacheKey) : null;
+      let result: any;
+      let error: string | undefined;
+      let latencyMs = 0;
+
+      if (cachedAdvisory) {
+        cacheHits++;
+        result = cachedAdvisory;
+      } else {
+        const start = performance.now();
+        try {
+          const advisories = await retryOnRateLimit({
+            operation: () =>
+              evaluateShellAutoApprovalAdvisories({
+                commands: [{ id: c.id, command: c.command }],
+                history: c.history as any,
+                settingsService,
+                agentClient,
+                logger,
+                throwOnError: true,
+              }),
+            maxRetries: 2,
+            onRetry: ({ attempt, retriesRemaining, delayMs, error: retryError }) => {
+              console.warn(
+                `Case ${c.id} hit a rate limit (attempt ${attempt}/2). Retrying in ${Math.round(delayMs)}ms${
+                  retriesRemaining > 0 ? `; ${retriesRemaining} retry left after this` : ''
+                }.`,
+              );
+              logger.warn('Eval runner rate-limit retry', {
+                caseId: c.id,
+                attempt,
+                retriesRemaining,
+                delayMs,
+                error: retryError instanceof Error ? retryError.message : String(retryError),
+              });
+            },
+          });
+
+          const advisory = advisories.get(c.id);
+          if (advisory) {
+            if (advisory.isError) {
+              error = advisory.reasoning;
+            } else {
+              result = {
+                predicted: advisory.approved ? 'approve' : 'reject',
+                reasoning: advisory.reasoning,
+                source: advisory.source,
+              };
+              if (flags.cache && advisory.source === 'llm') {
+                cache.set(cacheKey, result);
+              }
             }
+          } else {
+            error = 'No advisory returned for command ID';
           }
-        } else {
-          error = 'No advisory returned for command ID';
+        } catch (e: any) {
+          error = e.message;
         }
-      } catch (e: any) {
-        error = e.message;
+        latencyMs = performance.now() - start;
       }
-      latencyMs = performance.now() - start;
+
+      const record: ModelResultRecord = {
+        caseId: c.id,
+        command: c.command,
+        expected: c.expected,
+        predicted: result?.predicted,
+        reasoning: result?.reasoning,
+        source: result?.source,
+        latencyMs,
+        error,
+        timestamp: new Date().toISOString(),
+        model: run.model,
+        provider: run.provider,
+        promptVersion: SHELL_AUTO_APPROVAL_PROMPT_VERSION,
+        category: c.category,
+        severity: c.severity,
+        cached: !!cachedAdvisory,
+      };
+
+      appendFileSync(baseOutputPath + '.jsonl', JSON.stringify(record) + '\n');
+      results.push(record);
+      completed++;
+      const statusIcon = record.error ? '⚠️' : record.predicted === record.expected ? '✅' : '❌';
+      const cacheIcon = record.cached ? ' 🧊' : '';
+      console.log(
+        `[${completed}/${totalRuns}] ${run.provider}/${run.model} Case ${c.id}: ${statusIcon}${cacheIcon} (${Math.round(
+          latencyMs,
+        )}ms)`,
+      );
     }
 
-    const record: ModelResultRecord = {
-      caseId: c.id,
-      command: c.command,
-      expected: c.expected,
-      predicted: result?.predicted,
-      reasoning: result?.reasoning,
-      source: result?.source,
-      latencyMs,
-      error,
-      timestamp: new Date().toISOString(),
-      model,
-      provider: flags.provider,
-      promptVersion: SHELL_AUTO_APPROVAL_PROMPT_VERSION,
-      category: c.category,
-      severity: c.severity,
-      cached: !!cachedAdvisory,
-    };
-
-    appendFileSync(baseOutputPath + '.jsonl', JSON.stringify(record) + '\n');
-    results.push(record);
-    completed++;
-    const statusIcon = record.error ? '⚠️' : record.predicted === record.expected ? '✅' : '❌';
-    const cacheIcon = record.cached ? ' 🧊' : '';
-    console.log(`[${completed}/${totalRuns}] Case ${c.id}: ${statusIcon}${cacheIcon} (${Math.round(latencyMs)}ms)`);
+    while (queue.length > 0 || active.length > 0) {
+      while (active.length < flags.concurrency && queue.length > 0) {
+        const c = queue.shift()!;
+        const p = runCase(c).then(() => {
+          active.splice(active.indexOf(p), 1);
+        });
+        active.push(p);
+      }
+      if (active.length > 0) {
+        await Promise.race(active);
+      }
+    }
   }
 
-  while (queue.length > 0 || active.length > 0) {
-    while (active.length < flags.concurrency && queue.length > 0) {
-      const c = queue.shift()!;
-      const p = runCase(c).then(() => {
-        active.splice(active.indexOf(p), 1);
-      });
-      active.push(p);
+  for (const run of modelRuns) {
+    if (modelRuns.length > 1) {
+      console.log(`\n--- Running ${run.provider}/${run.model} ---`);
     }
-    if (active.length > 0) {
-      await Promise.race(active);
-    }
+    await runModelEvaluation(run);
   }
 
   if (reportFormats.includes('json')) {

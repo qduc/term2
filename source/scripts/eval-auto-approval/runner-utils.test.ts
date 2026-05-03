@@ -1,8 +1,12 @@
 import test from 'ava';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   createCacheKey,
   EVAL_CACHE_VERSION,
   getReportPath,
+  loadModelRunsFromYaml,
   retryOnRateLimit,
   validateRunnerOptions,
 } from './runner-utils.js';
@@ -47,6 +51,44 @@ test('createCacheKey changes when prompt version changes', (t) => {
     createCacheKey({ ...base, promptVersion: 'auto-approval-prompt-v1' }),
     createCacheKey({ ...base, promptVersion: 'auto-approval-prompt-v2' }),
   );
+});
+
+test('loadModelRunsFromYaml expands provider keys into ordered provider/model pairs', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'term2-eval-'));
+  const yamlPath = join(dir, 'models.yaml');
+
+  writeFileSync(
+    yamlPath,
+    `
+openai:
+  - gpt-4o
+  - gpt-4o-mini
+openrouter:
+  - anthropic/claude-3.5-sonnet
+`,
+  );
+
+  t.deepEqual(loadModelRunsFromYaml(yamlPath), [
+    { provider: 'openai', model: 'gpt-4o' },
+    { provider: 'openai', model: 'gpt-4o-mini' },
+    { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
+  ]);
+});
+
+test('loadModelRunsFromYaml rejects providers without a model list', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'term2-eval-'));
+  const yamlPath = join(dir, 'models.yaml');
+
+  writeFileSync(
+    yamlPath,
+    `
+openai: gpt-4o
+`,
+  );
+
+  t.throws(() => loadModelRunsFromYaml(yamlPath), {
+    message: /must map to a list of models/,
+  });
 });
 
 test('retryOnRateLimit retries twice and respects x-ratelimit-reset before succeeding', async (t) => {

@@ -1,6 +1,13 @@
+import { readFileSync } from 'node:fs';
 import { dirname, extname, join, basename } from 'node:path';
+import YAML from 'yaml';
 
 export const EVAL_CACHE_VERSION = 'auto-approval-evaluator-v2';
+
+export interface ModelRunConfig {
+  provider: string;
+  model: string;
+}
 
 type SleepImpl = (ms: number) => Promise<void>;
 
@@ -217,6 +224,33 @@ export function validateRunnerOptions({ concurrency, repeat }: { concurrency: nu
   if (!Number.isInteger(repeat) || repeat < 1) {
     throw new Error('--repeat must be an integer greater than or equal to 1');
   }
+}
+
+function assertModelRunList(provider: string, value: unknown): asserts value is string[] {
+  if (!Array.isArray(value) || value.length === 0 || !value.every((item) => typeof item === 'string' && item.trim())) {
+    throw new Error(`Provider "${provider}" must map to a list of models`);
+  }
+}
+
+export function parseModelRunsYaml(rawYaml: string): ModelRunConfig[] {
+  const parsed = YAML.parse(rawYaml);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Model run YAML must be a mapping of provider names to model lists');
+  }
+
+  const runs: ModelRunConfig[] = [];
+  for (const [provider, models] of Object.entries(parsed as Record<string, unknown>)) {
+    assertModelRunList(provider, models);
+    for (const model of models) {
+      runs.push({ provider, model });
+    }
+  }
+
+  return runs;
+}
+
+export function loadModelRunsFromYaml(path: string): ModelRunConfig[] {
+  return parseModelRunsYaml(readFileSync(path, 'utf-8'));
 }
 
 export function createCacheKey({

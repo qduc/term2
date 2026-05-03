@@ -94,6 +94,7 @@ export class LoggingService {
         if (!fs.existsSync(finalLogDir)) {
           fs.mkdirSync(finalLogDir, { recursive: true });
         }
+        this.cleanupProviderTraffic();
       } catch (error: any) {
         // Graceful degradation: log creation errors to stderr only
         this.emitConsoleError(`[LoggingService] Failed to create log directory: ${error.message}`);
@@ -325,6 +326,41 @@ export class LoggingService {
    */
   getCorrelationId(): string | undefined {
     return this.correlationId;
+  }
+
+  /**
+   * Remove provider traffic logs older than maxFiles (default 30d)
+   */
+  private cleanupProviderTraffic(maxDays = 30): void {
+    try {
+      if (!fs.existsSync(this.providerTrafficDir)) {
+        return;
+      }
+
+      const now = new Date();
+      const threshold = new Date(now.getTime() - maxDays * 24 * 60 * 60 * 1000);
+      const thresholdStr = threshold.toISOString().slice(0, 10); // YYYY-MM-DD
+
+      const entries = fs.readdirSync(this.providerTrafficDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const dirName = entry.name;
+          // Check if directory name matches YYYY-MM-DD pattern
+          if (/^\d{4}-\d{2}-\d{2}$/.test(dirName)) {
+            if (dirName < thresholdStr) {
+              const fullPath = path.join(this.providerTrafficDir, dirName);
+              try {
+                fs.rmSync(fullPath, { recursive: true, force: true });
+              } catch (err: any) {
+                this.emitConsoleError(`[LoggingService] Failed to delete old traffic log ${dirName}: ${err.message}`);
+              }
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      this.emitConsoleError(`[LoggingService] Error during provider traffic cleanup: ${error.message}`);
+    }
   }
 
   private log(level: string, message: string, meta?: Record<string, any>): void {

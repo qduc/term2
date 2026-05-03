@@ -10,18 +10,33 @@ interface UseSlashCommandsOptions {
 
 // Pure functions exported for testing
 export function filterCommands(commands: SlashCommand[], filter: string): SlashCommand[] {
-  return commands.filter((cmd) => {
-    const lowerFilter = filter.toLowerCase();
-    const lowerName = cmd.name.toLowerCase();
+  const lowerFilter = filter.toLowerCase();
 
-    // Case 1: Typing the command (e.g. "mod" matches "model")
-    if (!lowerFilter.includes(' ')) {
-      return lowerName.includes(lowerFilter);
-    }
+  return commands
+    .filter((cmd) => {
+      const lowerName = cmd.name.toLowerCase();
 
-    // Case 2: Command with arguments (e.g. "model gpt-4" matches "model")
-    return lowerFilter.startsWith(lowerName + ' ');
-  });
+      // Case 1: Typing the command (e.g. "mod" matches "model")
+      if (!lowerFilter.includes(' ')) {
+        return lowerName.includes(lowerFilter);
+      }
+
+      // Case 2: Command with arguments (e.g. "model gpt-4" matches "model")
+      return lowerFilter.startsWith(lowerName + ' ');
+    })
+    .sort((a, b) => {
+      const aLower = a.name.toLowerCase();
+      const bLower = b.name.toLowerCase();
+
+      const aStartsWith = aLower.startsWith(lowerFilter);
+      const bStartsWith = bLower.startsWith(lowerFilter);
+
+      if (aStartsWith && !bStartsWith) return -1;
+      if (!aStartsWith && bStartsWith) return 1;
+
+      // Maintain alphabetical order for items within the same priority
+      return aLower.localeCompare(bLower);
+    });
 }
 
 export function shouldAutocomplete(command: SlashCommand, filter: string): boolean {

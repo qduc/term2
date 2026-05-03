@@ -102,7 +102,7 @@ test('evaluates non-RED commands via chat and parses valid JSON results', async 
   t.is(chatCalls[0].options.reasoningEffort, 'none');
 });
 
-test('prompt distinguishes auto-approval from user-requested destructive intent', async (t) => {
+test('instructions distinguish auto-approval from user-requested destructive intent', async (t) => {
   const chatCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
   await evaluateShellAutoApprovalAdvisories({
     commands: [{ id: 'call-reset', command: 'git reset --hard HEAD' }],
@@ -120,14 +120,18 @@ test('prompt distinguishes auto-approval from user-requested destructive intent'
   });
 
   t.is(chatCalls.length, 1);
-  t.true(chatCalls[0].prompt.includes('without a human approval prompt'));
-  t.true(chatCalls[0].prompt.includes('even if the user requested them'));
-  t.true(chatCalls[0].prompt.includes('force flags'));
-  t.true(chatCalls[0].prompt.includes('resets'));
+  t.false(chatCalls[0].prompt.includes('without a human approval prompt'));
+  t.false(chatCalls[0].prompt.includes('even if the user requested them'));
+  t.false(chatCalls[0].prompt.includes('force flags'));
+  t.false(chatCalls[0].prompt.includes('resets'));
+  t.true(String(chatCalls[0].options.instructions).includes('without a human approval prompt'));
+  t.true(String(chatCalls[0].options.instructions).includes('even if the user requested them'));
+  t.true(String(chatCalls[0].options.instructions).includes('force flags'));
+  t.true(String(chatCalls[0].options.instructions).includes('resets'));
   t.false(chatCalls[0].prompt.includes('Think step-by-step'));
 });
 
-test('sends compact bounded history context instead of raw conversation items', async (t) => {
+test('prompt contains only user and assistant text from bounded history context', async (t) => {
   const largeToolOutput = 'SECRET_OUTPUT '.repeat(2_000);
   const largeAssistantText = 'assistant detail '.repeat(600);
   const largeUserText = 'please inspect the repository '.repeat(300);
@@ -162,9 +166,11 @@ test('sends compact bounded history context instead of raw conversation items', 
   t.is(chatCalls.length, 1);
   t.true(chatCalls[0].prompt.includes('[user]'));
   t.true(chatCalls[0].prompt.includes('[assistant]'));
-  t.true(chatCalls[0].prompt.includes('[tool call] shell'));
-  t.true(chatCalls[0].prompt.includes('[tool result] function_call_result'));
+  t.false(chatCalls[0].prompt.includes('[tool call]'));
+  t.false(chatCalls[0].prompt.includes('[tool result]'));
   t.false(chatCalls[0].prompt.includes('SECRET_OUTPUT'));
+  t.false(chatCalls[0].prompt.includes('pwd'));
+  t.false(chatCalls[0].prompt.includes('expensive hidden reasoning'));
   t.false(chatCalls[0].prompt.includes('reasoning_details'));
   t.true(chatCalls[0].prompt.length < 6_000);
 });

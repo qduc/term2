@@ -1,10 +1,11 @@
 import { registerProvider } from './registry.js';
+import type { ProviderDeps, ProviderFetch } from './registry.js';
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
 async function fetchOpenAIModels(
-  _deps: { settingsService: any; loggingService: any },
-  fetchImpl: (url: string, options?: any) => Promise<any> = fetch as any,
+  _deps: ProviderDeps,
+  fetchImpl: ProviderFetch = fetch as any,
 ): Promise<Array<{ id: string; name?: string }>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

@@ -1,4 +1,12 @@
 import type { Runner } from '@openai/agents';
+import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+
+export interface ProviderDeps {
+  settingsService: ISettingsService;
+  loggingService: ILoggingService;
+}
+
+export type ProviderFetch = (url: string, options?: any) => Promise<any>;
 
 /**
  * Defines the interface for a provider in the registry.
@@ -17,13 +25,10 @@ export interface ProviderDefinition {
    * NOTE: This accepts dependencies from the caller to avoid providers importing
    * services directly (which can create ESM circular dependency issues).
    */
-  createRunner?: (deps: { settingsService: any; loggingService: any }) => Runner | null;
+  createRunner?: (deps: ProviderDeps) => Runner | null;
 
   /** Function to fetch available models for this provider */
-  fetchModels: (
-    deps: { settingsService: any; loggingService: any },
-    fetchImpl?: (url: string, options?: any) => Promise<any>,
-  ) => Promise<Array<{ id: string; name?: string }>>;
+  fetchModels: (deps: ProviderDeps, fetchImpl?: ProviderFetch) => Promise<Array<{ id: string; name?: string }>>;
 
   /** Optional function to clear conversation state for this provider */
   clearConversations?: () => void;

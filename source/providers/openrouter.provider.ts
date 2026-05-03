@@ -1,10 +1,11 @@
 import { Runner } from '@openai/agents';
 import { registerProvider } from './registry.js';
+import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { OpenRouterProvider } from './openrouter.js';
 
 async function fetchOpenRouterModels(
-  deps: { settingsService: any; loggingService: any },
-  fetchImpl: (url: string, options?: any) => Promise<any> = fetch as any,
+  deps: ProviderDeps,
+  fetchImpl: ProviderFetch = fetch as any,
 ): Promise<Array<{ id: string; name?: string }>> {
   const { settingsService } = deps;
 

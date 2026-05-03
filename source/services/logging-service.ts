@@ -353,18 +353,22 @@ export class LoggingService {
 
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const dirName = entry.name;
-          // Check if directory name matches YYYY-MM-DD pattern
-          if (/^\d{4}-\d{2}-\d{2}$/.test(dirName)) {
-            if (dirName < thresholdStr) {
-              const fullPath = path.join(dir, dirName);
-              try {
-                fs.rmSync(fullPath, { recursive: true, force: true });
-              } catch (err: any) {
-                this.emitConsoleError(`[LoggingService] Failed to delete old traffic log ${dirName}: ${err.message}`);
-              }
-            }
+        if (!entry.isFile()) {
+          continue;
+        }
+
+        const match = entry.name.match(/^traffic-(\d{4}-\d{2}-\d{2})\.log$/);
+        if (!match) {
+          continue;
+        }
+
+        const dateKey = match[1];
+        if (dateKey < thresholdStr) {
+          const fullPath = path.join(dir, entry.name);
+          try {
+            fs.rmSync(fullPath, { force: true });
+          } catch (err: any) {
+            this.emitConsoleError(`[LoggingService] Failed to delete old traffic log ${entry.name}: ${err.message}`);
           }
         }
       }
@@ -434,7 +438,6 @@ export class LoggingService {
 
     const baseDir = trafficRecord.isEvaluator ? this.evaluatorTrafficDir : this.providerTrafficDir;
 
-    const sanitizeFilePart = (value: string): string => value.replace(/[^a-zA-Z0-9._-]/g, '_');
     const dateKey = (() => {
       const timestamp = String(trafficRecord.timestamp ?? '');
       const matched = timestamp.match(/^(\d{4}-\d{2}-\d{2})/);
@@ -444,39 +447,16 @@ export class LoggingService {
       return new Date().toISOString().slice(0, 10);
     })();
 
-    const timestampKey = sanitizeFilePart(
-      String(trafficRecord.timestamp || new Date().toISOString()).replace(/\s+/g, 'T'),
-    );
-    const traceKey = sanitizeFilePart(trafficRecord.traceId);
-    const messageId = sanitizeFilePart(String(runtimeRecord.messageId ?? `msg-${Date.now()}`));
-    const traceDir = path.join(baseDir, dateKey, traceKey);
-    const fileName = `${timestampKey}-${messageId}-${trafficRecord.direction}.json`;
-    const filePath = path.join(traceDir, fileName);
-
     const artifact = {
       ...trafficRecord,
       eventType: runtimeRecord.eventType,
       messageId: runtimeRecord.messageId,
-      file: path.join(traceKey, fileName),
     };
+    const filePath = path.join(baseDir, `traffic-${dateKey}.log`);
 
     try {
-      fs.mkdirSync(traceDir, { recursive: true });
-      fs.writeFileSync(filePath, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
-
-      const indexPath = path.join(baseDir, dateKey, 'index.ndjson');
-      fs.appendFileSync(
-        indexPath,
-        `${JSON.stringify({
-          traceId: trafficRecord.traceId,
-          timestamp: trafficRecord.timestamp,
-          direction: trafficRecord.direction,
-          eventType: runtimeRecord.eventType,
-          messageId: runtimeRecord.messageId,
-          file: path.join(traceKey, fileName),
-        })}\n`,
-        'utf8',
-      );
+      fs.mkdirSync(baseDir, { recursive: true });
+      fs.appendFileSync(filePath, `${JSON.stringify(artifact)}\n`, 'utf8');
     } catch (error: any) {
       this.emitConsoleError(`[LoggingService] Failed to write provider traffic artifact: ${error.message}`);
     }

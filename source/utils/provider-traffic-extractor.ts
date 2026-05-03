@@ -54,8 +54,7 @@ const buildEvaluatorPayload = (parsed: Record<string, unknown>): Record<string, 
   return {};
 };
 
-const isEvaluatorEventType = (eventType: unknown): boolean =>
-  eventType === 'provider.request.started' || eventType === 'provider.response.received';
+const isEvaluatorEventType = (eventType: string): boolean => eventType.startsWith('evaluator.');
 
 const toDirection = (value: unknown): 'sent' | 'received' | null => {
   if (value === 'sent' || value === 'received') {

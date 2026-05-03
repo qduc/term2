@@ -25,6 +25,12 @@ const cleanupLogs = () => {
   }
 };
 
+const formatDateDaysAgo = (days) => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
+};
+
 const findMainLogFile = (logDir) => {
   const files = fs.readdirSync(logDir);
   return files.find((f) => f.endsWith('.log') && f.startsWith('term2-') && !f.includes('openrouter'));
@@ -184,33 +190,54 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
   const providerRoot = path.join(logDir, 'provider-traffic');
   t.true(fs.existsSync(providerRoot));
 
-  const dateDirs = fs
+  const trafficFiles = fs
     .readdirSync(providerRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isFile() && /^traffic-\d{4}-\d{2}-\d{2}\.log$/.test(entry.name))
     .map((entry) => entry.name);
-  t.true(dateDirs.length > 0);
+  t.true(trafficFiles.length > 0);
 
-  const traceDir = path.join(providerRoot, dateDirs[0], traceId);
-  t.true(fs.existsSync(traceDir));
+  const trafficFile = path.join(providerRoot, trafficFiles[0]);
+  const content = fs.readFileSync(trafficFile, 'utf8');
+  const entries = content
+    .split('\n')
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line));
 
-  const files = fs.readdirSync(traceDir);
-  const sentFile = files.find((name) => name.endsWith('-sent.json'));
-  const receivedFile = files.find((name) => name.endsWith('-received.json'));
+  t.true(entries.length >= 2);
 
-  t.truthy(sentFile);
-  t.truthy(receivedFile);
-  if (!sentFile || !receivedFile) {
-    t.fail('expected sent and received provider artifact files');
+  const sent = entries.find((entry) => entry.direction === 'sent');
+  const received = entries.find((entry) => entry.direction === 'received');
+
+  t.truthy(sent);
+  t.truthy(received);
+  if (!sent || !received) {
+    t.fail('expected sent and received provider traffic records in the same daily file');
     return;
   }
-
-  const sent = JSON.parse(fs.readFileSync(path.join(traceDir, sentFile), 'utf8'));
-  const received = JSON.parse(fs.readFileSync(path.join(traceDir, receivedFile), 'utf8'));
 
   t.is(sent.direction, 'sent');
   t.deepEqual(sent.payload.messages, [{ role: 'system' }, { role: 'user', content: 'hello' }]);
   t.is(received.direction, 'received');
   t.is(received.payload.text, 'hi');
+});
+
+test.serial('cleans up old provider traffic files by date', async (t) => {
+  const logDir = getTestLogDir();
+  const providerRoot = path.join(logDir, 'provider-traffic');
+  const oldFile = path.join(providerRoot, `traffic-${formatDateDaysAgo(40)}.log`);
+  const recentFile = path.join(providerRoot, `traffic-${formatDateDaysAgo(5)}.log`);
+
+  fs.mkdirSync(providerRoot, { recursive: true });
+  fs.writeFileSync(oldFile, '{"direction":"sent"}\n', 'utf8');
+  fs.writeFileSync(recentFile, '{"direction":"received"}\n', 'utf8');
+
+  new LoggingService({
+    logDir,
+    disableLogging: false,
+  });
+
+  t.false(fs.existsSync(oldFile));
+  t.true(fs.existsSync(recentFile));
 });
 
 test.serial('suppresses console output when configured', async (t) => {

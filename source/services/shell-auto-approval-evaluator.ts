@@ -141,7 +141,7 @@ export async function evaluateShellAutoApprovalAdvisories({
 
   try {
     logger.info('Shell auto-approval evaluation request', {
-      eventType: 'provider.request.started',
+      eventType: 'evaluator.request.started',
       direction: 'sent',
       provider: autoApproveProvider,
       model: autoApproveModel,
@@ -159,7 +159,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     });
 
     logger.info('Shell auto-approval evaluation response', {
-      eventType: 'provider.response.received',
+      eventType: 'evaluator.response.received',
       direction: 'received',
       provider: autoApproveProvider,
       model: autoApproveModel,

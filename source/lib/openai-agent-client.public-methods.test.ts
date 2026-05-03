@@ -64,6 +64,7 @@ function ensureProviderRegistered() {
 let mentorProviderRegistered = false;
 let capturedMainAgentForMentorTest: any = null;
 let mentorInputs: any[] = [];
+let mentorInputsAltProvider: any[] = [];
 let mentorResponseCounter = 0;
 let chainingProviderRegistered = false;
 let chainingRunnerCalls: any[] = [];
@@ -93,6 +94,26 @@ function ensureMentorProvidersRegistered() {
         ({
           run: async (_agent: any, _input: any, _options: any) => {
             mentorInputs.push(_input);
+            mentorResponseCounter += 1;
+            return {
+              status: 'completed',
+              finalOutput: `mentor-${mentorResponseCounter}`,
+              responseId: `mentor-response-${mentorResponseCounter}`,
+              history: [],
+              messages: [],
+            };
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'mock-model' }],
+    });
+
+    registerProvider({
+      id: 'mock-mentor-refresh-alt',
+      label: 'Mock Mentor Refresh Alt',
+      createRunner: () =>
+        ({
+          run: async (_agent: any, _input: any, _options: any) => {
+            mentorInputsAltProvider.push(_input);
             mentorResponseCounter += 1;
             return {
               status: 'completed',
@@ -165,6 +186,7 @@ test.beforeEach(() => {
   ensureChainingProvidersRegistered();
   capturedMainAgentForMentorTest = null;
   mentorInputs = [];
+  mentorInputsAltProvider = [];
   mentorResponseCounter = 0;
   chainingRunnerCalls = [];
 });
@@ -393,7 +415,7 @@ test('setRetryCallback accepts callback function', (t) => {
   t.notThrows(() => client.setRetryCallback(() => {}));
 });
 
-test('setModel resets mentor conversation chain used by ask_mentor', async (t) => {
+test.serial('setModel resets mentor conversation chain used by ask_mentor', async (t) => {
   const settings = createMockSettings({
     'agent.provider': 'mock-main-mentor-refresh',
     'agent.model': 'mock-model',
@@ -427,4 +449,40 @@ test('setModel resets mentor conversation chain used by ask_mentor', async (t) =
   t.is(mentorInputs.length, 3);
   t.true(Array.isArray(mentorInputs[2]));
   t.is(mentorInputs[2].length, 1);
+});
+
+test.serial('ask_mentor resets conversation chain when mentor provider changes', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-main-mentor-refresh',
+    'agent.model': 'mock-model',
+    'agent.mentorModel': 'mock-mentor-model',
+    'agent.mentorProvider': 'mock-mentor-refresh',
+    'app.liteMode': false,
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings },
+  });
+
+  await client.chat('prime tools');
+
+  const askMentorTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_mentor');
+  t.truthy(askMentorTool);
+  t.is(typeof askMentorTool?.invoke, 'function');
+
+  await askMentorTool.invoke({}, JSON.stringify({ question: 'first' }), { toolCall: { callId: 'call-1' } });
+  await askMentorTool.invoke({}, JSON.stringify({ question: 'second' }), { toolCall: { callId: 'call-2' } });
+
+  t.is(mentorInputs.length, 2);
+  t.true(Array.isArray(mentorInputs[0]));
+  t.true(Array.isArray(mentorInputs[1]));
+  t.is(mentorInputs[0].length, 1);
+  t.true(mentorInputs[1].length > 1);
+
+  settings.set('agent.mentorProvider', 'mock-mentor-refresh-alt');
+
+  await askMentorTool.invoke({}, JSON.stringify({ question: 'third' }), { toolCall: { callId: 'call-3' } });
+
+  t.is(mentorInputsAltProvider.length, 1);
+  t.true(Array.isArray(mentorInputsAltProvider[0]));
+  t.is(mentorInputsAltProvider[0].length, 1);
 });

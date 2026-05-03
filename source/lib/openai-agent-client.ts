@@ -14,6 +14,91 @@ import { ConversationStore } from '../services/conversation-store.js';
 import { trimToolOutput } from '../utils/trim-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 
+class MentorSession {
+  #provider: string | null = null;
+  #runner: Runner | null = null;
+  #agent: Agent | null = null;
+  #store: ConversationStore | null = null;
+  #previousResponseId: string | null = null;
+
+  get provider(): string | null {
+    return this.#provider;
+  }
+
+  get runner(): Runner | null {
+    return this.#runner;
+  }
+
+  get agent(): Agent | null {
+    return this.#agent;
+  }
+
+  get previousResponseId(): string | null {
+    return this.#previousResponseId;
+  }
+
+  reset(): void {
+    if (this.#store) {
+      this.#store.clear();
+    }
+    this.#previousResponseId = null;
+    this.#store = null;
+    this.#runner = null;
+    this.#provider = null;
+    this.#agent = null;
+  }
+
+  switchProvider(provider: string): void {
+    if (this.#provider !== provider) {
+      this.#agent = null;
+      this.#store = null;
+      this.#previousResponseId = null;
+      this.#runner = null;
+      this.#provider = provider;
+    }
+  }
+
+  ensureRunner(provider: string, createRunner: (providerId: string) => Runner | null): Runner | null {
+    if (!this.#runner && provider !== 'openai') {
+      this.#runner = createRunner(provider);
+    }
+    return this.#runner;
+  }
+
+  ensureAgent(createAgent: () => Agent): Agent {
+    if (!this.#agent) {
+      this.#agent = createAgent();
+      this.#store = new ConversationStore();
+    }
+    return this.#agent;
+  }
+
+  addUserMessage(message: string): void {
+    this.#store!.addUserMessage(message);
+  }
+
+  getInput(question: string, supportsConversationChaining: boolean): any {
+    return supportsConversationChaining ? question : this.#store!.getHistory();
+  }
+
+  getRunOptions(supportsConversationChaining: boolean): Record<string, any> {
+    return {
+      stream: false,
+      maxTurns: 1,
+      ...(supportsConversationChaining && this.#previousResponseId
+        ? { previousResponseId: this.#previousResponseId }
+        : {}),
+    };
+  }
+
+  updateFromResult(result: any): void {
+    this.#store!.updateFromResult(result);
+    if (result.responseId) {
+      this.#previousResponseId = result.responseId;
+    }
+  }
+}
+
 /**
  * Minimal adapter that isolates usage of @openai/agents.
  * Swap this module to change the underlying agent provider without touching the UI.
@@ -25,8 +110,6 @@ export class OpenAIAgentClient {
   #reasoningEffort?: ModelSettingsReasoningEffort | 'default';
   #temperature?: number;
   #provider: string;
-  #mentorProvider: string | null = null;
-  #mentorRunner: Runner | null = null;
   #maxTurns: number;
   #retryAttempts: number;
   #currentAbortController: AbortController | null = null;
@@ -38,19 +121,10 @@ export class OpenAIAgentClient {
   #settings: ISettingsService;
   #executionContext?: ExecutionContext;
   #editor: ReturnType<typeof createEditorImpl>;
-  #mentorAgent: Agent | null = null;
-  #mentorStore: ConversationStore | null = null;
-  #mentorPreviousResponseId: string | null = null;
+  #mentorSession: MentorSession;
 
   #resetMentorState(): void {
-    if (this.#mentorStore) {
-      this.#mentorStore.clear();
-    }
-    this.#mentorPreviousResponseId = null;
-    this.#mentorStore = null;
-    this.#mentorRunner = null;
-    this.#mentorProvider = null;
-    this.#mentorAgent = null;
+    this.#mentorSession.reset();
   }
 
   constructor({
@@ -73,6 +147,7 @@ export class OpenAIAgentClient {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#executionContext = deps.executionContext;
+    this.#mentorSession = new MentorSession();
     this.#editor = createEditorImpl({
       loggingService: this.#logger,
       settingsService: this.#settings,
@@ -506,30 +581,34 @@ export class OpenAIAgentClient {
         maxTurns: 1, // Chat is usually single turn
       });
 
-      if (result.finalOutput) {
-        return result.finalOutput;
-      }
-
-      // Fallback: extract from messages if finalOutput is missing
-      if (result.messages && Array.isArray(result.messages)) {
-        const lastMessage = result.messages[result.messages.length - 1];
-        if (lastMessage && lastMessage.content) {
-          if (typeof lastMessage.content === 'string') {
-            return lastMessage.content;
-          }
-          if (Array.isArray(lastMessage.content)) {
-            return lastMessage.content.map((part: any) => part.text || part.value || '').join('');
-          }
-        }
-      }
-
-      return '';
+      return this.#extractResponse(result);
     } catch (error) {
       this.#logger.error('Agent chat failed', {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error; // Propagate error
     }
+  }
+
+  #extractResponse(result: any): string {
+    if (result.finalOutput) {
+      return result.finalOutput;
+    }
+
+    // Fallback: extract from messages if finalOutput is missing
+    if (result.messages && Array.isArray(result.messages)) {
+      const lastMessage = result.messages[result.messages.length - 1];
+      if (lastMessage && lastMessage.content) {
+        if (typeof lastMessage.content === 'string') {
+          return lastMessage.content;
+        }
+        if (Array.isArray(lastMessage.content)) {
+          return lastMessage.content.map((part: any) => part.text || part.value || '').join('');
+        }
+      }
+    }
+
+    return '';
   }
 
   #createMentor = async (question: string): Promise<string> => {
@@ -561,20 +640,12 @@ export class OpenAIAgentClient {
     const instructions = `${baseInstructions}\n\nEnvironment: ${envInfo}${agentsInstructions}`;
 
     // If mentor provider changed, reset mentor state to avoid mixing stores/prev ids across providers
-    if (this.#mentorProvider !== mentorProvider) {
-      this.#mentorAgent = null;
-      this.#mentorStore = null;
-      this.#mentorPreviousResponseId = null;
-      this.#mentorRunner = null;
-      this.#mentorProvider = mentorProvider;
-    }
+    this.#mentorSession.switchProvider(mentorProvider);
 
-    // Initialize mentor runner/agent and conversation store if needed
-    if (!this.#mentorRunner && mentorProvider !== 'openai') {
-      this.#mentorRunner = this.#createRunner(mentorProvider);
-    }
-
-    if (!this.#mentorAgent) {
+    const mentorRunner = this.#mentorSession.ensureRunner(mentorProvider, (providerId) =>
+      this.#createRunner(providerId),
+    );
+    const mentorAgent = this.#mentorSession.ensureAgent(() => {
       const reasoningEffort = this.#settings.get<string>('agent.mentorReasoningEffort');
       const modelSettings: any = {};
 
@@ -585,57 +656,36 @@ export class OpenAIAgentClient {
         };
       }
 
-      this.#mentorAgent = new Agent({
+      return new Agent({
         name: 'Mentor',
         model: mentorModel,
         ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
         instructions,
       });
-      this.#mentorStore = new ConversationStore();
-    }
+    });
 
     try {
       // Add user message to conversation history
-      this.#mentorStore!.addUserMessage(question);
+      this.#mentorSession.addUserMessage(question);
 
       // Determine input based on provider
       // OpenAI uses previousResponseId for server-side history
       // Others need full conversation history from store
       const { supportsConversationChaining } = this.#getProviderCapabilities(mentorProvider);
-      const input = supportsConversationChaining ? question : this.#mentorStore!.getHistory();
+      const input = this.#mentorSession.getInput(question, supportsConversationChaining);
 
-      const result = await this.#runAgentWithProvider(mentorProvider, this.#mentorRunner, this.#mentorAgent, input, {
-        stream: false,
-        maxTurns: 1,
-        ...(supportsConversationChaining && this.#mentorPreviousResponseId
-          ? { previousResponseId: this.#mentorPreviousResponseId }
-          : {}),
-      });
+      const result = await this.#runAgentWithProvider(
+        mentorProvider,
+        mentorRunner,
+        mentorAgent,
+        input,
+        this.#mentorSession.getRunOptions(supportsConversationChaining),
+      );
 
       // Update conversation store with result
-      this.#mentorStore!.updateFromResult(result);
+      this.#mentorSession.updateFromResult(result);
 
-      // Track previousResponseId when provided by the provider.
-      if (result.responseId) {
-        this.#mentorPreviousResponseId = result.responseId;
-      }
-
-      // Extract response
-      let response = '';
-      if (result.finalOutput) {
-        response = result.finalOutput;
-      } else if (result.messages && Array.isArray(result.messages)) {
-        const lastMessage = result.messages[result.messages.length - 1];
-        if (lastMessage && lastMessage.content) {
-          if (typeof lastMessage.content === 'string') {
-            response = lastMessage.content;
-          } else if (Array.isArray(lastMessage.content)) {
-            response = lastMessage.content.map((part: any) => part.text || part.value || '').join('');
-          }
-        }
-      }
-
-      return response;
+      return this.#extractResponse(result);
     } catch (error) {
       this.#logger.error('Mentor consultation failed', {
         error: error instanceof Error ? error.message : String(error),
@@ -671,9 +721,52 @@ export class OpenAIAgentClient {
       resolvedModel,
     );
 
-    // Determine if we should use the native applyPatchTool
     const shouldUseNativePatchTool = this.#provider === 'openai' && resolvedModel.startsWith('gpt-5.1');
+    const tools = this.#buildAgentTools({
+      toolDefinitions,
+      resolvedModel,
+      reasoningEffort,
+      shouldUseNativePatchTool,
+    });
 
+    const modelSettings = this.#buildModelSettings({
+      reasoningEffort,
+      resolvedTemperature,
+    });
+
+    const agent = new Agent({
+      name,
+      model: resolvedModel,
+      ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
+      instructions,
+      tools,
+    });
+
+    // Only add defaultRunOptions if an explicit effort is set (not
+    // 'default'). This ensures the API receives the param only when
+    // intended.
+    if (reasoningEffort && reasoningEffort !== 'default') {
+      (agent as any).defaultRunOptions = {
+        ...((agent as any).defaultRunOptions || {}),
+        // Pass through to underlying client for models that support it
+        reasoning: { effort: reasoningEffort },
+      };
+    }
+
+    return agent;
+  }
+
+  #buildAgentTools({
+    toolDefinitions,
+    resolvedModel,
+    reasoningEffort,
+    shouldUseNativePatchTool,
+  }: {
+    toolDefinitions: any[];
+    resolvedModel: string;
+    reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+    shouldUseNativePatchTool: boolean;
+  }): Tool[] {
     const tools: Tool[] = toolDefinitions
       .filter((definition) => {
         // Exclude custom apply_patch if we're using native one
@@ -790,10 +883,20 @@ export class OpenAIAgentClient {
       tools.push(webTool);
     }
 
+    return tools;
+  }
+
+  #buildModelSettings({
+    reasoningEffort,
+    resolvedTemperature,
+  }: {
+    reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+    resolvedTemperature?: number;
+  }): Record<string, any> {
     // Build modelSettings only if an explicit effort value (other than
     // 'default') was provided. 'default' means we should not pass the
     // effort param and allow the underlying API to choose the default.
-    const modelSettings: any = {};
+    const modelSettings: Record<string, any> = {};
     if (reasoningEffort && reasoningEffort !== 'default') {
       modelSettings.reasoning = {
         effort: reasoningEffort,
@@ -818,26 +921,7 @@ export class OpenAIAgentClient {
       };
     }
 
-    const agent = new Agent({
-      name,
-      model: resolvedModel,
-      ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
-      instructions,
-      tools,
-    });
-
-    // Only add defaultRunOptions if an explicit effort is set (not
-    // 'default'). This ensures the API receives the param only when
-    // intended.
-    if (reasoningEffort && reasoningEffort !== 'default') {
-      (agent as any).defaultRunOptions = {
-        ...((agent as any).defaultRunOptions || {}),
-        // Pass through to underlying client for models that support it
-        reasoning: { effort: reasoningEffort },
-      };
-    }
-
-    return agent;
+    return modelSettings;
   }
 
   getSettings(): ISettingsService {

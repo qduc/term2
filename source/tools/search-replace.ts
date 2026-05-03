@@ -163,7 +163,26 @@ interface EditCache {
   eol: string;
 }
 
-let lastEditCache: EditCache | null = null;
+class SearchReplaceEditCache {
+  private lastEditCache: EditCache | null = null;
+
+  get(params: SearchReplaceToolParams, content: string): EditCache | null {
+    const key = getEditCacheKey(params);
+    if (this.lastEditCache && this.lastEditCache.key === key && this.lastEditCache.content === content) {
+      return this.lastEditCache;
+    }
+    return null;
+  }
+
+  set(params: SearchReplaceToolParams, matchInfo: MatchInfo, content: string, eol: string): void {
+    this.lastEditCache = {
+      key: getEditCacheKey(params),
+      matchInfo,
+      content,
+      eol,
+    };
+  }
+}
 
 function getEditCacheKey(params: SearchReplaceToolParams): string {
   return JSON.stringify({
@@ -414,6 +433,103 @@ function findMatchesInContent(content: string, searchContent: string): MatchInfo
   return { type: 'none' };
 }
 
+interface ReplacementExecutionSuccess {
+  success: true;
+  newContent: string;
+  matchType: 'exact' | 'relaxed' | 'normalized' | 'gap';
+  replacedCount: number;
+}
+
+interface ReplacementExecutionFailure {
+  success: false;
+  error: string;
+}
+
+type ReplacementExecutionResult = ReplacementExecutionSuccess | ReplacementExecutionFailure;
+
+function replaceIndexedMatches(
+  content: string,
+  matches: { startIndex: number; endIndex: number }[],
+  replaceContent: string,
+  replaceAll: boolean,
+): { newContent: string; replacedCount: number } {
+  if (!replaceAll) {
+    const match = matches[0];
+    return {
+      newContent: content.substring(0, match.startIndex) + replaceContent + content.substring(match.endIndex),
+      replacedCount: 1,
+    };
+  }
+
+  let newContent = content;
+  const sortedMatches = [...matches].sort((a, b) => b.startIndex - a.startIndex);
+  for (const m of sortedMatches) {
+    newContent = newContent.substring(0, m.startIndex) + replaceContent + newContent.substring(m.endIndex);
+  }
+
+  return {
+    newContent,
+    replacedCount: matches.length,
+  };
+}
+
+function executeReplacement(
+  matchInfo: MatchInfo,
+  content: string,
+  eol: string,
+  options: {
+    normalizedSearchContent: string;
+    replaceContent: string;
+    replaceAll: boolean;
+  },
+): ReplacementExecutionResult {
+  const normalizedReplaceContent = normalizeToEOL(options.replaceContent, eol);
+
+  if (matchInfo.type === 'none') {
+    return {
+      success: false,
+      error: 'Search content not found. Try splitting the changes into smaller search pattern.',
+    };
+  }
+
+  if (matchInfo.type === 'exact') {
+    if (options.replaceAll) {
+      return {
+        success: true,
+        newContent: content.replaceAll(options.normalizedSearchContent, normalizedReplaceContent),
+        matchType: 'exact',
+        replacedCount: matchInfo.count,
+      };
+    }
+
+    const firstIndex = content.indexOf(options.normalizedSearchContent);
+    return {
+      success: true,
+      newContent:
+        content.substring(0, firstIndex) +
+        normalizedReplaceContent +
+        content.substring(firstIndex + options.normalizedSearchContent.length),
+      matchType: 'exact',
+      replacedCount: 1,
+    };
+  }
+
+  if (!options.replaceAll && matchInfo.count > 1) {
+    return {
+      success: false,
+      error: `Found ${matchInfo.count} ${matchInfo.type} matches. Please provide more context or set replace_all to true.`,
+    };
+  }
+
+  const replaced = replaceIndexedMatches(content, matchInfo.matches, normalizedReplaceContent, options.replaceAll);
+  return {
+    success: true,
+    newContent: replaced.newContent,
+    matchType: matchInfo.type,
+    replacedCount: replaced.replacedCount,
+  };
+}
+
 export const formatSearchReplaceCommandMessage = (
   item: any,
   index: number,
@@ -491,6 +607,7 @@ export function createSearchReplaceToolDefinition(deps: {
   editHealing?: typeof healSearchReplaceParams;
 }): ToolDefinition<SearchReplaceToolParams> {
   const { loggingService, settingsService, executionContext, editHealing = healSearchReplaceParams } = deps;
+  const editCache = new SearchReplaceEditCache();
 
   return {
     name: 'search_replace',
@@ -564,12 +681,7 @@ export function createSearchReplaceToolDefinition(deps: {
         const matchInfo = findMatchesInContent(content, normalizedSearchContent);
 
         // Cache the result for execute phase
-        lastEditCache = {
-          key: getEditCacheKey(params),
-          matchInfo,
-          content,
-          eol,
-        };
+        editCache.set(params, matchInfo, content, eol);
 
         if (matchInfo.type === 'exact') {
           if (!replace_all && matchInfo.count > 1) {
@@ -743,28 +855,25 @@ export function createSearchReplaceToolDefinition(deps: {
         }
 
         // Check cache first
-        const cacheKey = getEditCacheKey(params);
         let matchInfo: MatchInfo;
         let eol: string;
         let normalizedSearchContent: string;
-        let normalizedReplaceContent: string;
         let usedHealing = false;
         let healingAttempted = false;
         let healingSucceeded = false;
         let healedSearchLength = 0;
         let matchTypeAfterHealing: MatchInfo['type'] = 'none';
 
-        if (lastEditCache && lastEditCache.key === cacheKey && lastEditCache.content === content) {
+        const cachedEdit = editCache.get(params, content);
+        if (cachedEdit) {
           // Use cached results
-          matchInfo = lastEditCache.matchInfo;
-          eol = lastEditCache.eol;
+          matchInfo = cachedEdit.matchInfo;
+          eol = cachedEdit.eol;
           normalizedSearchContent = normalizeToEOL(removeLeadingFilepathComment(search_content, filePath), eol);
-          normalizedReplaceContent = normalizeToEOL(replace_content, eol);
         } else {
           // Detect EOL and normalize content
           eol = detectEOL(content);
           normalizedSearchContent = normalizeToEOL(removeLeadingFilepathComment(search_content, filePath), eol);
-          normalizedReplaceContent = normalizeToEOL(replace_content, eol);
 
           // Find matches using shared logic
           matchInfo = findMatchesInContent(content, normalizedSearchContent);
@@ -820,209 +929,47 @@ export function createSearchReplaceToolDefinition(deps: {
           }
         }
 
-        if (matchInfo.type === 'exact') {
-          let newContent: string;
-          if (replace_all) {
-            newContent = content.replaceAll(normalizedSearchContent, normalizedReplaceContent);
-          } else {
-            const firstIndex = content.indexOf(normalizedSearchContent);
-            newContent =
-              content.substring(0, firstIndex) +
-              normalizedReplaceContent +
-              content.substring(firstIndex + normalizedSearchContent.length);
-          }
-          await writeFileFn(targetPath, newContent);
+        const replacementResult = executeReplacement(matchInfo, content, eol, {
+          normalizedSearchContent,
+          replaceContent: replace_content,
+          replaceAll: replace_all,
+        });
 
-          if (enableFileLogging) {
-            loggingService.info('File updated (exact match)', {
-              path: filePath,
-              replace_all,
-              count: replace_all ? matchInfo.count : 1,
-              healed: usedHealing,
-            });
-          }
-
-          const successMessage = usedHealing
-            ? `Updated ${filePath} (healed match - original search had minor differences)`
-            : `Updated ${filePath} (${replace_all ? matchInfo.count : 1} exact match${
-                replace_all && matchInfo.count > 1 ? 'es' : ''
-              })`;
+        if (!replacementResult.success) {
           return JSON.stringify({
             output: [
               {
-                success: true,
-                operation: 'search_replace',
-                path: filePath,
-                message: successMessage,
-                healed: usedHealing,
+                success: false,
+                error: replacementResult.error,
               },
             ],
           });
         }
 
-        if (matchInfo.type === 'relaxed') {
-          if (!replace_all && matchInfo.count > 1) {
-            return JSON.stringify({
-              output: [
-                {
-                  success: false,
-                  error: `Found ${matchInfo.count} relaxed matches. Please provide more context or set replace_all to true.`,
-                },
-              ],
-            });
-          }
+        await writeFileFn(targetPath, replacementResult.newContent);
 
-          let newContent = content;
-          if (replace_all) {
-            // Sort matches by startIndex descending to replace from end
-            matchInfo.matches.sort((a, b) => b.startIndex - a.startIndex);
-            for (const m of matchInfo.matches) {
-              newContent =
-                newContent.substring(0, m.startIndex) + normalizedReplaceContent + newContent.substring(m.endIndex);
-            }
-          } else {
-            const m = matchInfo.matches[0];
-            newContent = content.substring(0, m.startIndex) + normalizedReplaceContent + content.substring(m.endIndex);
-          }
-          await writeFileFn(targetPath, newContent);
-
-          if (enableFileLogging) {
-            loggingService.info('File updated (relaxed match)', {
-              path: filePath,
-              replace_all,
-              count: replace_all ? matchInfo.count : 1,
-              healed: usedHealing,
-            });
-          }
-
-          const successMessage = usedHealing
-            ? `Updated ${filePath} (healed match - original search had minor differences)`
-            : `Updated ${filePath} (${replace_all ? matchInfo.count : 1} relaxed match${
-                replace_all && matchInfo.count > 1 ? 'es' : ''
-              })`;
-          return JSON.stringify({
-            output: [
-              {
-                success: true,
-                operation: 'search_replace',
-                path: filePath,
-                message: successMessage,
-                healed: usedHealing,
-              },
-            ],
+        if (enableFileLogging) {
+          loggingService.info(`File updated (${replacementResult.matchType} match)`, {
+            path: filePath,
+            replace_all,
+            count: replacementResult.replacedCount,
+            healed: usedHealing,
           });
         }
 
-        if (matchInfo.type === 'normalized') {
-          if (!replace_all && matchInfo.count > 1) {
-            return JSON.stringify({
-              output: [
-                {
-                  success: false,
-                  error: `Found ${matchInfo.count} normalized matches. Please provide more context or set replace_all to true.`,
-                },
-              ],
-            });
-          }
-
-          let newContent = content;
-          if (replace_all) {
-            matchInfo.matches.sort((a, b) => b.startIndex - a.startIndex);
-            for (const m of matchInfo.matches) {
-              newContent =
-                newContent.substring(0, m.startIndex) + normalizedReplaceContent + newContent.substring(m.endIndex);
-            }
-          } else {
-            const m = matchInfo.matches[0];
-            newContent = content.substring(0, m.startIndex) + normalizedReplaceContent + content.substring(m.endIndex);
-          }
-          await writeFileFn(targetPath, newContent);
-
-          if (enableFileLogging) {
-            loggingService.info('File updated (normalized match)', {
-              path: filePath,
-              replace_all,
-              count: replace_all ? matchInfo.count : 1,
-              healed: usedHealing,
-            });
-          }
-
-          const successMessage = usedHealing
-            ? `Updated ${filePath} (healed match - original search had minor differences)`
-            : `Updated ${filePath} (${replace_all ? matchInfo.count : 1} normalized match${
-                replace_all && matchInfo.count > 1 ? 'es' : ''
-              })`;
-          return JSON.stringify({
-            output: [
-              {
-                success: true,
-                operation: 'search_replace',
-                path: filePath,
-                message: successMessage,
-                healed: usedHealing,
-              },
-            ],
-          });
-        }
-
-        if (matchInfo.type === 'gap') {
-          if (!replace_all && matchInfo.count > 1) {
-            return JSON.stringify({
-              output: [
-                {
-                  success: false,
-                  error: `Found ${matchInfo.count} gap matches. Please provide more context or set replace_all to true.`,
-                },
-              ],
-            });
-          }
-
-          let newContent = content;
-          if (replace_all) {
-            matchInfo.matches.sort((a, b) => b.startIndex - a.startIndex);
-            for (const m of matchInfo.matches) {
-              newContent =
-                newContent.substring(0, m.startIndex) + normalizedReplaceContent + newContent.substring(m.endIndex);
-            }
-          } else {
-            const m = matchInfo.matches[0];
-            newContent = content.substring(0, m.startIndex) + normalizedReplaceContent + content.substring(m.endIndex);
-          }
-          await writeFileFn(targetPath, newContent);
-
-          if (enableFileLogging) {
-            loggingService.info('File updated (gap match)', {
-              path: filePath,
-              replace_all,
-              count: replace_all ? matchInfo.count : 1,
-              healed: usedHealing,
-            });
-          }
-
-          const successMessage = usedHealing
-            ? `Updated ${filePath} (healed match - original search had minor differences)`
-            : `Updated ${filePath} (${replace_all ? matchInfo.count : 1} gap match${
-                replace_all && matchInfo.count > 1 ? 'es' : ''
-              })`;
-          return JSON.stringify({
-            output: [
-              {
-                success: true,
-                operation: 'search_replace',
-                path: filePath,
-                message: successMessage,
-                healed: usedHealing,
-              },
-            ],
-          });
-        }
-
-        // matchInfo.type === 'none'
+        const successMessage = usedHealing
+          ? `Updated ${filePath} (healed match - original search had minor differences)`
+          : `Updated ${filePath} (${replacementResult.replacedCount} ${replacementResult.matchType} match${
+              replacementResult.replacedCount > 1 ? 'es' : ''
+            })`;
         return JSON.stringify({
           output: [
             {
-              success: false,
-              error: `Search content not found. Try splitting the changes into smaller search pattern.`,
+              success: true,
+              operation: 'search_replace',
+              path: filePath,
+              message: successMessage,
+              healed: usedHealing,
             },
           ],
         });

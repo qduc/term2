@@ -210,6 +210,29 @@ test.serial('execute rejects multiple relaxed matches when replace_all is false'
   });
 });
 
+test.serial('execute replaces all relaxed matches when replace_all is true', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, '  foo  \n\tbar\n---\n  foo  \n\tbar\n');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'foo\nbar',
+      replace_content: 'replacement',
+      replace_all: true,
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+    t.true(parsed.output[0].message.includes('relaxed'));
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'replacement---\nreplacement');
+  });
+});
+
 test.serial('execute creates a new file when search_content is empty and file is missing', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool();
@@ -393,6 +416,29 @@ test.serial('execute performs normalized whitespace match across line breaks', a
 
     const updated = await fs.readFile(absPath, 'utf8');
     t.is(updated, 'const foo = 1;\nconst bar = 42;\nconst baz = 3;\n');
+  });
+});
+
+test.serial('execute rejects multiple normalized matches when replace_all is false', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'normalized-multi.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'const foo = 1;\n   const bar = 2;\n---\nconst foo = 1;\tconst bar = 2;\n');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'const foo = 1; const bar = 2;',
+      replace_content: 'const foo = 9; const bar = 9;',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+    t.true(parsed.output[0].error.includes('normalized matches'));
+
+    const unchanged = await fs.readFile(absPath, 'utf8');
+    t.is(unchanged, 'const foo = 1;\n   const bar = 2;\n---\nconst foo = 1;\tconst bar = 2;\n');
   });
 });
 

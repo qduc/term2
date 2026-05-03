@@ -34,7 +34,7 @@ const cli = meow(
 	  --model         Model to evaluate (e.g. gpt-4o)
   --provider      Provider to use (openai, openrouter, etc.)
   --dataset       Path to dataset JSON (default: eval/auto-approval/dataset.json)
-  --models-file   Path to YAML file mapping providers to model lists
+  --models-file   Path to YAML file mapping providers to model lists (default: eval/auto-approval/models.yaml)
   --filter-cat    Filter by category
   --filter-sev    Filter by severity
   --concurrency   Max concurrent requests (default: 5)
@@ -55,7 +55,7 @@ const cli = meow(
       model: { type: 'string' },
       provider: { type: 'string', default: 'openai' },
       dataset: { type: 'string', default: 'eval/auto-approval/dataset.json' },
-      modelsFile: { type: 'string' },
+      modelsFile: { type: 'string', default: 'eval/auto-approval/models.yaml' },
       filterCat: { type: 'string' },
       filterSev: { type: 'string' },
       concurrency: { type: 'number', default: 5 },
@@ -102,11 +102,20 @@ async function run() {
     return;
   }
 
-  const modelRuns = flags.modelsFile
-    ? loadModelRunsFromYaml(flags.modelsFile)
-    : [{ provider: flags.provider, model: flags.model || 'gpt-4o' }];
+  const modelRuns =
+    flags.model && flags.modelsFile === 'eval/auto-approval/models.yaml' && !existsSync(flags.modelsFile)
+      ? [{ provider: flags.provider, model: flags.model }]
+      : flags.modelsFile && existsSync(flags.modelsFile)
+      ? loadModelRunsFromYaml(flags.modelsFile)
+      : flags.model
+      ? [{ provider: flags.provider, model: flags.model }]
+      : [];
 
   if (modelRuns.length === 0) {
+    if (!flags.model && (!flags.modelsFile || !existsSync(flags.modelsFile))) {
+      console.error('Error: Either --model must be specified, or a valid --models-file must exist.');
+      process.exit(1);
+    }
     console.log('No model runs configured.');
     return;
   }

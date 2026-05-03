@@ -145,14 +145,34 @@ export async function evaluateShellAutoApprovalAdvisories({
   if (toEvaluateByLLM.length === 0) return out;
 
   const expectedIds = new Set(toEvaluateByLLM.map((c) => c.id));
+  const instructions = 'You are a shell command safety evaluator. Respond ONLY with JSON.';
   const prompt = buildPrompt(toEvaluateByLLM, history);
 
   try {
+    logger.info('Shell auto-approval evaluation request', {
+      eventType: 'provider.request.started',
+      direction: 'sent',
+      provider: autoApproveProvider,
+      model: autoApproveModel,
+      payload: {
+        prompt,
+        instructions,
+      },
+    });
+
     const responseText = await agentClient.chat(prompt, {
       model: autoApproveModel,
       provider: autoApproveProvider,
       reasoningEffort: 'none',
-      instructions: 'You are a shell command safety evaluator. Respond ONLY with JSON.',
+      instructions,
+    });
+
+    logger.info('Shell auto-approval evaluation response', {
+      eventType: 'provider.response.received',
+      direction: 'received',
+      provider: autoApproveProvider,
+      model: autoApproveModel,
+      payload: { response: responseText },
     });
 
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);

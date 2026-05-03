@@ -10,6 +10,7 @@ export interface ProviderTrafficRecord {
   provider: string;
   model: string;
   payload: Record<string, unknown>;
+  isEvaluator?: boolean;
 }
 
 const toNonEmptyString = (value: unknown, fallback: string): string => {
@@ -45,17 +46,54 @@ const buildReceivedPayload = (parsed: Record<string, unknown>): Record<string, u
   toolCalls: parsed.toolCalls,
 });
 
+const buildEvaluatorPayload = (parsed: Record<string, unknown>): Record<string, unknown> => {
+  const payload = parsed.payload;
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    return payload as Record<string, unknown>;
+  }
+  return {};
+};
+
+const isEvaluatorEventType = (eventType: unknown): boolean =>
+  eventType === 'provider.request.started' || eventType === 'provider.response.received';
+
+const toDirection = (value: unknown): 'sent' | 'received' | null => {
+  if (value === 'sent' || value === 'received') {
+    return value;
+  }
+  return null;
+};
+
 export function extractProviderTrafficRecordFromRuntimeLog(
   parsed: Record<string, unknown>,
   lineNumber?: number,
 ): ProviderTrafficRecord | null {
   const sourceMessage = toNonEmptyString(parsed.message, '');
-  if (sourceMessage !== 'OpenRouter stream start' && sourceMessage !== 'OpenRouter stream done') {
+  const eventType = toNonEmptyString(parsed.eventType, '');
+  const parsedDirection = toDirection(parsed.direction);
+
+  const isEvaluator = isEvaluatorEventType(eventType);
+  const isOpenRouter = sourceMessage === 'OpenRouter stream start' || sourceMessage === 'OpenRouter stream done';
+
+  if (!isEvaluator && !isOpenRouter) {
     return null;
   }
 
-  const direction = sourceMessage === 'OpenRouter stream start' ? 'sent' : 'received';
-  const payload = direction === 'sent' ? buildSentPayload(parsed) : buildReceivedPayload(parsed);
+  const direction: 'sent' | 'received' =
+    parsedDirection ??
+    (sourceMessage === 'OpenRouter stream start'
+      ? 'sent'
+      : sourceMessage === 'OpenRouter stream done'
+      ? 'received'
+      : eventType === 'provider.request.started'
+      ? 'sent'
+      : 'received');
+
+  const payload = isEvaluator
+    ? buildEvaluatorPayload(parsed)
+    : direction === 'sent'
+    ? buildSentPayload(parsed)
+    : buildReceivedPayload(parsed);
 
   const record: ProviderTrafficRecord = {
     traceId: toNonEmptyString(parsed.traceId, 'trace-unknown'),
@@ -65,6 +103,7 @@ export function extractProviderTrafficRecordFromRuntimeLog(
     provider: toNonEmptyString(parsed.provider, 'unknown'),
     model: toNonEmptyString(parsed.model, 'unknown'),
     payload,
+    isEvaluator,
   };
 
   if (lineNumber !== undefined) {

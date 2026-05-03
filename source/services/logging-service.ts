@@ -12,7 +12,10 @@ import {
   shouldSampleLog,
   type LogCategory,
 } from './logging-contract.js';
-import { extractProviderTrafficRecordFromRuntimeLog } from '../utils/provider-traffic-extractor.js';
+import {
+  extractProviderTrafficRecordFromRuntimeLog,
+  type ProviderTrafficRecord,
+} from '../utils/provider-traffic-extractor.js';
 
 const LOG_LEVELS = {
   error: 0,
@@ -58,6 +61,7 @@ export class LoggingService {
   private suppressConsoleOutput: boolean;
   private openrouterLogger!: winston.Logger;
   private providerTrafficDir: string;
+  private evaluatorTrafficDir: string;
   private enabledCategories: Set<LogCategory> | null;
   private verbosePayloads: boolean;
   private sampleRate: number;
@@ -87,6 +91,7 @@ export class LoggingService {
     // Determine log directory
     const finalLogDir = logDir || path.join(envPaths('term2').log, 'logs');
     this.providerTrafficDir = path.join(finalLogDir, 'provider-traffic');
+    this.evaluatorTrafficDir = path.join(finalLogDir, 'evaluator-traffic');
 
     // Create log directory if needed and logging is enabled
     if (!resolvedDisableLogging) {
@@ -329,11 +334,16 @@ export class LoggingService {
   }
 
   /**
-   * Remove provider traffic logs older than maxFiles (default 30d)
+   * Remove provider and evaluator traffic logs older than maxFiles (default 30d)
    */
   private cleanupProviderTraffic(maxDays = 30): void {
+    this.cleanupTrafficDir(this.providerTrafficDir, maxDays);
+    this.cleanupTrafficDir(this.evaluatorTrafficDir, maxDays);
+  }
+
+  private cleanupTrafficDir(dir: string, maxDays: number): void {
     try {
-      if (!fs.existsSync(this.providerTrafficDir)) {
+      if (!fs.existsSync(dir)) {
         return;
       }
 
@@ -341,14 +351,14 @@ export class LoggingService {
       const threshold = new Date(now.getTime() - maxDays * 24 * 60 * 60 * 1000);
       const thresholdStr = threshold.toISOString().slice(0, 10); // YYYY-MM-DD
 
-      const entries = fs.readdirSync(this.providerTrafficDir, { withFileTypes: true });
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isDirectory()) {
           const dirName = entry.name;
           // Check if directory name matches YYYY-MM-DD pattern
           if (/^\d{4}-\d{2}-\d{2}$/.test(dirName)) {
             if (dirName < thresholdStr) {
-              const fullPath = path.join(this.providerTrafficDir, dirName);
+              const fullPath = path.join(dir, dirName);
               try {
                 fs.rmSync(fullPath, { recursive: true, force: true });
               } catch (err: any) {
@@ -414,13 +424,15 @@ export class LoggingService {
   }
 
   private writeProviderTrafficArtifact(runtimeRecord: Record<string, unknown>, message: string): void {
-    const trafficRecord = extractProviderTrafficRecordFromRuntimeLog({
+    const trafficRecord: ProviderTrafficRecord | null = extractProviderTrafficRecordFromRuntimeLog({
       ...runtimeRecord,
       message,
     });
     if (!trafficRecord) {
       return;
     }
+
+    const baseDir = trafficRecord.isEvaluator ? this.evaluatorTrafficDir : this.providerTrafficDir;
 
     const sanitizeFilePart = (value: string): string => value.replace(/[^a-zA-Z0-9._-]/g, '_');
     const dateKey = (() => {
@@ -437,7 +449,7 @@ export class LoggingService {
     );
     const traceKey = sanitizeFilePart(trafficRecord.traceId);
     const messageId = sanitizeFilePart(String(runtimeRecord.messageId ?? `msg-${Date.now()}`));
-    const traceDir = path.join(this.providerTrafficDir, dateKey, traceKey);
+    const traceDir = path.join(baseDir, dateKey, traceKey);
     const fileName = `${timestampKey}-${messageId}-${trafficRecord.direction}.json`;
     const filePath = path.join(traceDir, fileName);
 
@@ -452,7 +464,7 @@ export class LoggingService {
       fs.mkdirSync(traceDir, { recursive: true });
       fs.writeFileSync(filePath, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
 
-      const indexPath = path.join(this.providerTrafficDir, dateKey, 'index.ndjson');
+      const indexPath = path.join(baseDir, dateKey, 'index.ndjson');
       fs.appendFileSync(
         indexPath,
         `${JSON.stringify({

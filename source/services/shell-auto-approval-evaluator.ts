@@ -140,7 +140,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   const prompt = buildPrompt(toEvaluateByLLM, history);
 
   try {
-    logger.info('Shell auto-approval evaluation request', {
+    logger.debug('Shell auto-approval evaluation request', {
       eventType: 'evaluator.request.started',
       direction: 'sent',
       provider: autoApproveProvider,
@@ -158,7 +158,7 @@ export async function evaluateShellAutoApprovalAdvisories({
       instructions,
     });
 
-    logger.info('Shell auto-approval evaluation response', {
+    logger.debug('Shell auto-approval evaluation response', {
       eventType: 'evaluator.response.received',
       direction: 'received',
       provider: autoApproveProvider,

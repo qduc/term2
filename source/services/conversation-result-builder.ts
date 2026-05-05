@@ -68,7 +68,7 @@ export async function buildConversationResult(
       });
 
       if (shellAutoApproval.shouldAutoApprove(llmAdvisory)) {
-        logger.info('Shell command auto-approved by LLM', {
+        logger.debug('Shell command auto-approved by LLM', {
           eventType: 'approval.auto_approved',
           category: 'approval',
           phase: 'approval',

@@ -74,7 +74,7 @@ export function createCreateFileToolDefinition(deps: {
         const isRemote = executionContext?.isRemote() && !!sshService;
 
         if (enableFileLogging) {
-          loggingService.info(`File operation started: create_file`, {
+          loggingService.debug(`File operation started: create_file`, {
             path: filePath,
             targetPath,
           });
@@ -92,7 +92,7 @@ export function createCreateFileToolDefinition(deps: {
         }
 
         if (enableFileLogging) {
-          loggingService.info('File created', { path: filePath });
+          loggingService.debug('File created', { path: filePath });
         }
 
         return JSON.stringify({

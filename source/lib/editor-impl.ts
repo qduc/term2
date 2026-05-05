@@ -44,7 +44,7 @@ export function createEditorImpl(deps: {
         const targetPath = resolveWorkspacePath(filePath, cwd);
 
         if (enableFileLogging) {
-          loggingService.info('File operation started: create_file', {
+          loggingService.debug('File operation started: create_file', {
             path: filePath,
             targetPath,
           });
@@ -83,7 +83,7 @@ export function createEditorImpl(deps: {
         }
 
         if (enableFileLogging) {
-          loggingService.info('File created', {
+          loggingService.debug('File created', {
             path: filePath,
             contentLength: content.length,
           });
@@ -119,7 +119,7 @@ export function createEditorImpl(deps: {
         const targetPath = resolveWorkspacePath(filePath, cwd);
 
         if (enableFileLogging) {
-          loggingService.info('File operation started: update_file', {
+          loggingService.debug('File operation started: update_file', {
             path: filePath,
             targetPath,
           });
@@ -174,7 +174,7 @@ export function createEditorImpl(deps: {
         }
 
         if (enableFileLogging) {
-          loggingService.info('File updated', {
+          loggingService.debug('File updated', {
             path: filePath,
             originalLength: original.length,
             patchedLength: patched.length,
@@ -211,7 +211,7 @@ export function createEditorImpl(deps: {
         const targetPath = resolveWorkspacePath(filePath, cwd);
 
         if (enableFileLogging) {
-          loggingService.info('File operation started: delete_file', {
+          loggingService.debug('File operation started: delete_file', {
             path: filePath,
             targetPath,
           });
@@ -227,7 +227,7 @@ export function createEditorImpl(deps: {
         }
 
         if (enableFileLogging) {
-          loggingService.info('File deleted', {
+          loggingService.debug('File deleted', {
             path: filePath,
             targetPath,
           });

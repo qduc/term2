@@ -168,7 +168,7 @@ export function createApplyPatchToolDefinition(deps: {
                 isRemote && sshService ? await sshService.readFile(targetPath) : await readFile(targetPath, 'utf8');
               applyDiff(original, diff);
             }
-            loggingService.info('apply_patch validation passed', {
+            loggingService.debug('apply_patch validation passed', {
               type,
               path: filePath,
             });
@@ -271,7 +271,7 @@ export function createApplyPatchToolDefinition(deps: {
         const targetPath = resolveWorkspacePath(filePath, cwd);
 
         if (enableFileLogging) {
-          loggingService.info(`File operation started: ${type}`, {
+          loggingService.debug(`File operation started: ${type}`, {
             path: filePath,
             targetPath,
           });
@@ -318,7 +318,7 @@ export function createApplyPatchToolDefinition(deps: {
 
             if (enableFileLogging) {
               try {
-                loggingService.info('File created', {
+                loggingService.debug('File created', {
                   path: filePath,
                   contentLength: content.length,
                 });
@@ -371,7 +371,7 @@ export function createApplyPatchToolDefinition(deps: {
 
             if (enableFileLogging) {
               try {
-                loggingService.info('File updated', {
+                loggingService.debug('File updated', {
                   path: filePath,
                   originalLength: original.length,
                   patchedLength: patched.length,
@@ -398,7 +398,7 @@ export function createApplyPatchToolDefinition(deps: {
 
           //     if (enableFileLogging) {
           //         try {
-          //             loggingService.info('File deleted', {
+          //             loggingService.debug('File deleted', {
           //                 path: filePath,
           //                 targetPath,
           //             });

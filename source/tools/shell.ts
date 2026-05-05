@@ -234,7 +234,7 @@ export function createShellToolDefinition(deps: {
         const maxOutputLengthValue = max_output_length ?? settingsService.get('shell.maxOutputChars');
         const maxOutputLength = maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
 
-        loggingService.info('Shell command execution started', {
+        loggingService.debug('Shell command execution started', {
           commandCount: 1,
           commands: [command],
           timeout,
@@ -285,7 +285,7 @@ export function createShellToolDefinition(deps: {
           });
         }
 
-        loggingService.info('Shell command execution completed', {
+        loggingService.debug('Shell command execution completed', {
           commandCount: 1,
           successCount: outcome.type === 'exit' && outcome.exitCode === 0 ? 1 : 0,
           failureCount: outcome.type === 'exit' && outcome.exitCode !== 0 ? 1 : 0,

@@ -640,7 +640,7 @@ export function createSearchReplaceToolDefinition(deps: {
           }
         } catch (error: any) {
           if (search_content === '' && error?.code === 'ENOENT') {
-            loggingService.info('search_replace validation: creating new file because search_content is empty', {
+            loggingService.debug('search_replace validation: creating new file because search_content is empty', {
               path: filePath,
             });
             if (editMode && insideCwd) {
@@ -691,7 +691,7 @@ export function createSearchReplaceToolDefinition(deps: {
             });
             return true;
           }
-          loggingService.info('search_replace validation: exact match(es) found', {
+          loggingService.debug('search_replace validation: exact match(es) found', {
             path: filePath,
             count: matchInfo.count,
             replace_all,
@@ -714,7 +714,7 @@ export function createSearchReplaceToolDefinition(deps: {
             // Auto-approve - execute will handle the error gracefully
             return false;
           }
-          loggingService.info('search_replace validation: relaxed match(es) found', {
+          loggingService.debug('search_replace validation: relaxed match(es) found', {
             path: filePath,
             count: matchInfo.count,
             replace_all,
@@ -733,7 +733,7 @@ export function createSearchReplaceToolDefinition(deps: {
             );
             return false;
           }
-          loggingService.info('search_replace validation: normalized match(es) found', {
+          loggingService.debug('search_replace validation: normalized match(es) found', {
             path: filePath,
             count: matchInfo.count,
             replace_all,
@@ -752,7 +752,7 @@ export function createSearchReplaceToolDefinition(deps: {
             );
             return false;
           }
-          loggingService.info('search_replace validation: gap match(es) found', {
+          loggingService.debug('search_replace validation: gap match(es) found', {
             path: filePath,
             count: matchInfo.count,
             replace_all,
@@ -797,7 +797,7 @@ export function createSearchReplaceToolDefinition(deps: {
         };
 
         if (enableFileLogging) {
-          loggingService.info(`File operation started: search_replace`, {
+          loggingService.debug(`File operation started: search_replace`, {
             path: filePath,
             targetPath,
             replace_all,
@@ -811,7 +811,7 @@ export function createSearchReplaceToolDefinition(deps: {
           if (search_content === '' && error?.code === 'ENOENT') {
             await writeFileFn(targetPath, replace_content);
             if (enableFileLogging) {
-              loggingService.info('File created (search_content empty)', {
+              loggingService.debug('File created (search_content empty)', {
                 path: filePath,
               });
             }
@@ -905,7 +905,7 @@ export function createSearchReplaceToolDefinition(deps: {
             }
 
             if (enableFileLogging) {
-              loggingService.info('search_replace healing attempt', {
+              loggingService.debug('search_replace healing attempt', {
                 path: filePath,
                 healing_attempted: healingAttempted,
                 healing_succeeded: healingSucceeded,
@@ -949,7 +949,7 @@ export function createSearchReplaceToolDefinition(deps: {
         await writeFileFn(targetPath, replacementResult.newContent);
 
         if (enableFileLogging) {
-          loggingService.info(`File updated (${replacementResult.matchType} match)`, {
+          loggingService.debug(`File updated (${replacementResult.matchType} match)`, {
             path: filePath,
             replace_all,
             count: replacementResult.replacedCount,

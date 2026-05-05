@@ -175,7 +175,7 @@ export async function* processStreamEvents(
             arguments: normalizedArgs,
           };
 
-          logger.info('Tool execution started', {
+          logger.debug('Tool execution started', {
             eventType: 'tool_call.execution_started',
             category: 'tool',
             phase: 'execution',

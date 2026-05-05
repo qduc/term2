@@ -97,7 +97,7 @@ export class ApprovalFlowCoordinator {
     let toolStartedEvent: ConversationEvent | undefined;
 
     if (answer === 'y') {
-      this.deps.logger.info('Tool approval granted', {
+      this.deps.logger.debug('Tool approval granted', {
         eventType: 'approval.granted',
         category: 'approval',
         phase: 'approval',
@@ -139,7 +139,7 @@ export class ApprovalFlowCoordinator {
         reject?.call(state, interruption);
       }
 
-      this.deps.logger.info('Tool approval rejected', {
+      this.deps.logger.debug('Tool approval rejected', {
         eventType: 'approval.rejected',
         category: 'approval',
         phase: 'approval',

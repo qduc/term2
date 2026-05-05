@@ -159,7 +159,7 @@ export class OpenAIAgentClient {
     this.#retryAttempts = retryAttempts ?? 2;
     this.#agent = this.#createAgent({ model, reasoningEffort });
     this.#runner = this.#createRunner(this.#provider);
-    this.#logger.info('OpenAI Agent Client initialized', {
+    this.#logger.debug('OpenAI Agent Client initialized', {
       model: model || this.#settings.get<string>('agent.model'),
       reasoningEffort: reasoningEffort ?? 'default',
       temperature: this.#temperature,
@@ -307,7 +307,7 @@ export class OpenAIAgentClient {
 
     this.#refreshAgent();
 
-    this.#logger.info('Conversation and agent refreshed');
+    this.#logger.debug('Conversation and agent refreshed');
   }
 
   async startStream(
@@ -333,7 +333,7 @@ export class OpenAIAgentClient {
     this.#currentAbortController = new AbortController();
     const signal = this.#currentAbortController.signal;
 
-    this.#logger.info('Agent stream started', {
+    this.#logger.debug('Agent stream started', {
       eventType: 'provider.request.started',
       category: 'provider',
       phase: 'request_start',
@@ -738,7 +738,7 @@ export class OpenAIAgentClient {
               // Check if this execution should be intercepted
               const rejectionMessage = await this.#checkToolInterceptors(definition.name, params, toolCallId);
               if (rejectionMessage) {
-                this.#logger.info('Tool execution intercepted', {
+                this.#logger.debug('Tool execution intercepted', {
                   tool: definition.name,
                   params: JSON.stringify(params).substring(0, 100),
                 });
@@ -784,7 +784,7 @@ export class OpenAIAgentClient {
           }
           const rejectionMessage = await this.#checkToolInterceptors('apply_patch', params, toolCallId);
           if (rejectionMessage) {
-            this.#logger.info('Native tool execution intercepted', {
+            this.#logger.debug('Native tool execution intercepted', {
               tool: 'apply_patch',
               toolCallId,
               params: JSON.stringify(params).substring(0, 100),
@@ -807,12 +807,12 @@ export class OpenAIAgentClient {
       }
 
       tools.push(nativePatchTool);
-      this.#logger.info('Using native applyPatchTool from SDK', {
+      this.#logger.debug('Using native applyPatchTool from SDK', {
         model: resolvedModel,
         provider: this.#provider,
       });
     } else {
-      this.#logger.info('Using custom apply_patch implementation', {
+      this.#logger.debug('Using custom apply_patch implementation', {
         model: resolvedModel,
         provider: this.#provider,
       });

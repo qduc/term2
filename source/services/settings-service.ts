@@ -132,7 +132,7 @@ export class SettingsService {
     }
 
     if (!this.disableLogging) {
-      this.loggingService.info('SettingsService initialized', {
+      this.loggingService.debug('SettingsService initialized', {
         cliOverrides: Object.keys(flattenSettings(cli)).length > 0,
         envOverrides: Object.keys(flattenSettings(env)).length > 0,
         configOverrides: Object.keys(flattenSettings(fileConfig)).length > 0,
@@ -151,7 +151,7 @@ export class SettingsService {
       if (!this.disableFilePersistence) {
         this.saveToFile();
         if (!this.disableLogging) {
-          this.loggingService.info('Created settings file at startup', {
+          this.loggingService.debug('Created settings file at startup', {
             settingsFile: settingsFilePath,
           });
         }
@@ -160,7 +160,7 @@ export class SettingsService {
       if (!this.disableFilePersistence) {
         this.saveToFile();
         if (!this.disableLogging) {
-          this.loggingService.info('Updated settings file with new default values', {
+          this.loggingService.debug('Updated settings file with new default values', {
             settingsFile: settingsFilePath,
           });
         }

@@ -127,7 +127,7 @@ export class ConversationSession {
   ): AsyncIterable<ConversationEvent> {
     let stream: AgentStream | null = null;
     try {
-      this.logger.info('Conversation stream start', {
+      this.logger.debug('Conversation stream start', {
         eventType: 'stream.started',
         category: 'stream',
         phase: 'request_start',
@@ -252,7 +252,7 @@ export class ConversationSession {
       );
 
       if (resolvedResult.type === 'approval_required') {
-        this.logger.info('Tool approval required', {
+        this.logger.debug('Tool approval required', {
           eventType: 'approval.required',
           category: 'approval',
           phase: 'approval',
@@ -383,7 +383,7 @@ export class ConversationSession {
       );
 
       if (resolvedResult.type === 'approval_required') {
-        this.logger.info('Tool approval required', {
+        this.logger.debug('Tool approval required', {
           eventType: 'approval.required',
           category: 'approval',
           phase: 'approval',

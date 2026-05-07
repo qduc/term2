@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Fuse from 'fuse.js';
 import { getWorkspaceEntries, refreshWorkspaceEntries, type PathEntry } from '../services/file-service.js';
 import { useInputContext } from '../context/InputContext.js';
+import { useSelection } from './use-selection.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 
 export type PathCompletionItem = PathEntry;
@@ -28,7 +29,6 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
   }, [isOpen, triggerIndex, input, cursorOffset]);
 
   const [entries, setEntries] = useState<PathEntry[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,14 +78,7 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
       .slice(0, MAX_RESULTS);
   }, [entries, fuse, query]);
 
-  useEffect(() => {
-    setSelectedIndex((prev) => {
-      if (filteredEntries.length === 0) {
-        return 0;
-      }
-      return Math.min(prev, filteredEntries.length - 1);
-    });
-  }, [filteredEntries.length]);
+  const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredEntries);
 
   const open = useCallback(
     (startIndex: number, _initialQuery = '') => {
@@ -96,7 +89,7 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
       setSelectedIndex(0);
       // initialQuery is ignored because we derive it
     },
-    [mode, setMode, setTriggerIndex],
+    [mode, setMode, setTriggerIndex, setSelectedIndex],
   );
 
   const close = useCallback(() => {
@@ -105,35 +98,7 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
       setTriggerIndex(null);
       setSelectedIndex(0);
     }
-  }, [mode, setMode, setTriggerIndex]);
-
-  // updateQuery removed
-
-  const moveUp = useCallback(() => {
-    setSelectedIndex((prev) => {
-      if (filteredEntries.length === 0) {
-        return 0;
-      }
-      return prev > 0 ? prev - 1 : filteredEntries.length - 1;
-    });
-  }, [filteredEntries.length]);
-
-  const moveDown = useCallback(() => {
-    setSelectedIndex((prev) => {
-      if (filteredEntries.length === 0) {
-        return 0;
-      }
-      return prev < filteredEntries.length - 1 ? prev + 1 : 0;
-    });
-  }, [filteredEntries.length]);
-
-  const getSelectedItem = useCallback(() => {
-    if (filteredEntries.length === 0) {
-      return undefined;
-    }
-    const safeIndex = Math.min(selectedIndex, filteredEntries.length - 1);
-    return filteredEntries[safeIndex];
-  }, [filteredEntries, selectedIndex]);
+  }, [mode, setMode, setTriggerIndex, setSelectedIndex]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -149,6 +114,8 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
     }
   }, []);
 
+  // updateQuery removed
+
   return {
     isOpen,
     triggerIndex, // Still needed by consumers? Yes
@@ -160,7 +127,6 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
     error,
     open,
     close,
-    // updateQuery removed
     moveUp,
     moveDown,
     getSelectedItem,

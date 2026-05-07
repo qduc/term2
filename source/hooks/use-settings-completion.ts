@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Fuse from 'fuse.js';
 import { SETTING_KEYS, SENSITIVE_SETTINGS, type SettingsService } from '../services/settings-service.js';
 import { useInputContext } from '../context/InputContext.js';
+import { useSelection } from './use-selection.js';
 
 export type SettingCompletionItem = {
   key: string;
@@ -166,7 +167,6 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     return input.slice(triggerIndex, end);
   }, [isOpen, triggerIndex, input, cursorOffset]);
 
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [settingsVersion, setSettingsVersion] = useState(0);
 
   // Refresh the list whenever a setting changes so currentValue stays accurate
@@ -194,9 +194,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     return filterSettingsByQuery(allSettings, query, fuse, MAX_RESULTS);
   }, [allSettings, fuse, query]);
 
-  useEffect(() => {
-    setSelectedIndex((prev) => clampIndex(prev, filteredEntries.length));
-  }, [filteredEntries.length]);
+  const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredEntries);
 
   const [targetKey, setTargetKey] = useState<string | null>(null);
 
@@ -233,34 +231,6 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
       setSelectedIndex(0);
     }
   }, [mode, setMode, setTriggerIndex]);
-
-  // updateQuery removed as it is derived
-
-  const moveUp = useCallback(() => {
-    setSelectedIndex((prev) => {
-      if (filteredEntries.length === 0) {
-        return 0;
-      }
-      return prev > 0 ? prev - 1 : filteredEntries.length - 1;
-    });
-  }, [filteredEntries.length]);
-
-  const moveDown = useCallback(() => {
-    setSelectedIndex((prev) => {
-      if (filteredEntries.length === 0) {
-        return 0;
-      }
-      return prev < filteredEntries.length - 1 ? prev + 1 : 0;
-    });
-  }, [filteredEntries.length]);
-
-  const getSelectedItem = useCallback(() => {
-    if (filteredEntries.length === 0) {
-      return undefined;
-    }
-    const safeIndex = clampIndex(selectedIndex, filteredEntries.length);
-    return filteredEntries[safeIndex];
-  }, [filteredEntries, selectedIndex]);
 
   return {
     isOpen,

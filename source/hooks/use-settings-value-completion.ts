@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Fuse from 'fuse.js';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings-service.js';
+import { useSelection } from './use-selection.js';
 
 export type SettingValueSuggestion = {
   value: string;
@@ -149,7 +150,6 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
   const isOpen = mode === 'settings_value_completion';
 
   const [settingKey, setSettingKey] = useState<string | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [settingsVersion, setSettingsVersion] = useState(0);
 
   // Recompute current setting value suggestions when settings change.
@@ -185,12 +185,7 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     return filterSettingValueSuggestionsByQuery(allSuggestions, query, fuse, MAX_RESULTS, settingKey ?? undefined);
   }, [allSuggestions, query, fuse, settingKey]);
 
-  useEffect(() => {
-    setSelectedIndex((prev) => {
-      if (filteredEntries.length === 0) return 0;
-      return Math.min(prev, filteredEntries.length - 1);
-    });
-  }, [filteredEntries.length]);
+  const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredEntries);
 
   const open = useCallback(
     (key: string, valueStartIndex: number) => {
@@ -213,26 +208,6 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
       setSettingKey(null);
     }
   }, [mode, setMode, setTriggerIndex]);
-
-  const moveUp = useCallback(() => {
-    setSelectedIndex((prev) => {
-      if (filteredEntries.length === 0) return 0;
-      return prev > 0 ? prev - 1 : filteredEntries.length - 1;
-    });
-  }, [filteredEntries.length]);
-
-  const moveDown = useCallback(() => {
-    setSelectedIndex((prev) => {
-      if (filteredEntries.length === 0) return 0;
-      return prev < filteredEntries.length - 1 ? prev + 1 : 0;
-    });
-  }, [filteredEntries.length]);
-
-  const getSelectedItem = useCallback(() => {
-    if (filteredEntries.length === 0) return undefined;
-    const safeIndex = Math.min(selectedIndex, filteredEntries.length - 1);
-    return filteredEntries[safeIndex];
-  }, [filteredEntries, selectedIndex]);
 
   const isNumericSettings = useMemo(() => {
     return settingKey ? NUMBER_SETTING_KEYS.has(settingKey) : false;

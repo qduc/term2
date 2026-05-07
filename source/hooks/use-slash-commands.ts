@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { SlashCommand } from '../components/SlashCommandMenu.js';
 import { useInputContext } from '../context/InputContext.js';
+import { useSelection } from './use-selection.js';
 
 interface UseSlashCommandsOptions {
   commands: SlashCommand[];
@@ -54,7 +55,6 @@ export function extractCommandArgs(filter: string, commandName: string): string 
 
 export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions) => {
   const { mode, setMode, input, setInput } = useInputContext();
-  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const isOpen = mode === 'slash_commands';
 
@@ -62,6 +62,8 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
   const filter = isOpen ? (input.startsWith('/') ? input.slice(1) : input) : '';
 
   const filteredCommands = useMemo(() => filterCommands(commands, filter), [commands, filter]);
+
+  const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredCommands);
 
   const open = useCallback(() => {
     // Avoid resetting selection when already open to preserve
@@ -80,31 +82,22 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
 
   // No need for updateFilter anymore, it reacts to input changes automatically
 
-  const moveUp = useCallback(() => {
-    setSelectedIndex((prev) => (prev > 0 ? prev - 1 : filteredCommands.length - 1));
-  }, [filteredCommands.length]);
-
-  const moveDown = useCallback(() => {
-    setSelectedIndex((prev) => (prev < filteredCommands.length - 1 ? prev + 1 : 0));
-  }, [filteredCommands.length]);
-
   const executeSelected = useCallback(() => {
-    if (filteredCommands.length > 0 && selectedIndex < filteredCommands.length) {
-      const command = filteredCommands[selectedIndex];
+    const command = getSelectedItem();
+    if (!command) return;
 
-      // Handle autocomplete for commands that expect arguments
-      if (shouldAutocomplete(command, filter)) {
-        setInput(`/${command.name} `);
-        return;
-      }
-
-      const args = extractCommandArgs(filter, command.name);
-      const shouldClose = command?.action(args || undefined);
-      if (shouldClose !== false) {
-        close();
-      }
+    // Handle autocomplete for commands that expect arguments
+    if (shouldAutocomplete(command, filter)) {
+      setInput(`/${command.name} `);
+      return;
     }
-  }, [filteredCommands, selectedIndex, close, filter, setInput]);
+
+    const args = extractCommandArgs(filter, command.name);
+    const shouldClose = command?.action(args || undefined);
+    if (shouldClose !== false) {
+      close();
+    }
+  }, [getSelectedItem, close, filter, setInput]);
 
   return {
     isOpen,
@@ -116,6 +109,7 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
     // updateFilter removed
     moveUp,
     moveDown,
+    getSelectedItem,
     executeSelected,
   };
 };

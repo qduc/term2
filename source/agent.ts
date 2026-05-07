@@ -42,9 +42,11 @@ export function getEnvInfo(
   const osRelease = os.release();
   const osPlatform = os.platform();
 
+  const now = new Date().toISOString().slice(0, 10);
+
   if (lite) {
     // Minimal env info for lite mode - no cwd listing
-    return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}`;
+    return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; date: ${now}`;
   }
 
   // For remote sessions, we might not be able to list top-level entries efficiently or at all easily here synchronously
@@ -56,7 +58,7 @@ export function getEnvInfo(
     topLevel = `; top-level: ${getTopLevelEntries(cwd)}`;
   }
 
-  return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd: ${cwd}${topLevel}`;
+  return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd: ${cwd}${topLevel}; date: ${now}`;
 }
 
 export function getAgentsInstructions(cwd: string): string {

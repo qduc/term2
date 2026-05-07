@@ -36,6 +36,9 @@ export function buildEnvOverrides(): Partial<SettingsData> {
   if (env.TAVILY_API_KEY) {
     webSearch.tavily = { apiKey: env.TAVILY_API_KEY };
   }
+  if (env.EXA_API_KEY) {
+    webSearch.exa = { apiKey: env.EXA_API_KEY };
+  }
   if (env.WEB_SEARCH_PROVIDER) {
     webSearch.provider = env.WEB_SEARCH_PROVIDER;
   }

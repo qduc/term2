@@ -101,6 +101,10 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'advisory', description: 'LLM provides safety analysis' },
     { value: 'auto', description: 'Full auto-approval (CAUTION)' },
   ],
+  'webSearch.provider': [
+    { value: 'tavily', description: 'Tavily Search API' },
+    { value: 'exa', description: 'Exa (formerly Metaphor) Search API' },
+  ],
 };
 
 // Pure functions exported for testing

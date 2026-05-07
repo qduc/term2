@@ -23,6 +23,13 @@ test('buildSettingValueSuggestions returns enum suggestions for shell.autoApprov
   t.true(values.includes('auto'));
 });
 
+test('buildSettingValueSuggestions returns enum suggestions for webSearch.provider', (t) => {
+  const result = buildSettingValueSuggestions('webSearch.provider');
+  const values = result.map((r) => r.value);
+  t.true(values.includes('tavily'));
+  t.true(values.includes('exa'));
+});
+
 test('buildSettingValueSuggestions returns boolean suggestions for boolean settings', (t) => {
   const result = buildSettingValueSuggestions('logging.suppressConsoleOutput');
   t.deepEqual(result.map((r) => r.value).sort(), ['false', 'true']);

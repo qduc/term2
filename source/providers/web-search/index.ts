@@ -5,6 +5,7 @@
 
 // Import provider modules to trigger registration
 import './tavily.provider.js';
+import './exa.provider.js';
 
 // Re-export registry API and types
 export {

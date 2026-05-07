@@ -113,6 +113,11 @@ export const WebSearchSettingsSchema = z.object({
       apiKey: z.string().optional(),
     })
     .optional(),
+  exa: z
+    .object({
+      apiKey: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const CustomProviderSchema = z.object({
@@ -245,6 +250,7 @@ export interface SettingsWithSources {
   webSearch: {
     provider: SettingWithSource<string | undefined>;
     tavily: SettingWithSource<{ apiKey?: string } | undefined>;
+    exa: SettingWithSource<{ apiKey?: string } | undefined>;
   };
 }
 
@@ -294,6 +300,7 @@ export const SETTING_KEYS = {
   SSH_REMOTE_DIR: 'ssh.remoteDir',
   WEB_SEARCH_PROVIDER: 'webSearch.provider',
   WEB_SEARCH_TAVILY_API_KEY: 'webSearch.tavily.apiKey',
+  WEB_SEARCH_EXA_API_KEY: 'webSearch.exa.apiKey',
 } as const;
 
 // Define which settings are modifiable at runtime
@@ -317,6 +324,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
   SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
+  SETTING_KEYS.WEB_SEARCH_PROVIDER,
 ]);
 
 // Some settings with default values are optional to persist
@@ -381,6 +389,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   webSearch: {
     provider: 'tavily',
     tavily: {},
+    exa: {},
   },
 };
 

@@ -28,6 +28,7 @@ const MOCK_SETTING_KEYS = {
   APP_SHELL_PATH: 'app.shellPath',
   TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
   DEBUG_BASH_TOOL: 'debug.debugBashTool',
+  WEB_SEARCH_PROVIDER: 'webSearch.provider',
 } as const;
 
 const MOCK_DESCRIPTIONS: Record<string, string> = {
@@ -55,6 +56,7 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
   'app.shellPath': 'Path to shell executable',
   'tools.logFileOperations': 'Log file operations to disk',
   'debug.debugBashTool': 'Enable bash tool debugging',
+  'webSearch.provider': 'Web search provider (tavily, exa)',
 };
 
 // buildSettingsList tests

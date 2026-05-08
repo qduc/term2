@@ -343,6 +343,7 @@ export class OpenAIAgentClient {
       inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
       inputLength: typeof userInput === 'string' ? userInput.length : undefined,
       inputItems: Array.isArray(userInput) ? userInput.length : undefined,
+      messages: Array.isArray(userInput) ? userInput : undefined,
       hasPreviousResponseId: !!previousResponseId,
     });
 

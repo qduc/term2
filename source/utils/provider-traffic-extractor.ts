@@ -32,11 +32,60 @@ const tryParseJson = (line: string): Record<string, unknown> | null => {
   }
 };
 
+const TRUNCATE_LEN = 120;
+
+const truncate = (s: string): string => (s.length > TRUNCATE_LEN ? `${s.slice(0, TRUNCATE_LEN)}…` : s);
+
+const truncateReasoningDetails = (details: unknown): unknown => {
+  if (!Array.isArray(details)) return details;
+  return details.map((r: unknown) => {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return r;
+    const rd = r as Record<string, unknown>;
+    if (typeof rd.text === 'string') {
+      return { ...rd, text: truncate(rd.text) };
+    }
+    return r;
+  });
+};
+
+const stripMessageContent = (messages: unknown): unknown => {
+  if (!Array.isArray(messages)) return messages;
+  return messages.map((msg: unknown) => {
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return msg;
+    const m = msg as Record<string, unknown>;
+    if (m.role === 'system') {
+      const { content: _content, ...rest } = m;
+      return rest;
+    }
+    const result = { ...m };
+    if (typeof result.content === 'string') {
+      result.content = truncate(result.content);
+    }
+    if (Array.isArray(result.reasoning_details)) {
+      result.reasoning_details = truncateReasoningDetails(result.reasoning_details);
+    }
+    return result;
+  });
+};
+
+const stripToolSchemas = (tools: unknown): unknown => {
+  if (!Array.isArray(tools)) return tools;
+  return tools.map((tool: unknown) => {
+    if (!tool || typeof tool !== 'object' || Array.isArray(tool)) return tool;
+    const t = tool as Record<string, unknown>;
+    if (t.type === 'function' && t.function && typeof t.function === 'object') {
+      const fn = t.function as Record<string, unknown>;
+      return { type: t.type, function: { name: fn.name } };
+    }
+    return tool;
+  });
+};
+
 const buildSentPayload = (parsed: Record<string, unknown>): Record<string, unknown> => ({
   messageCount: parsed.messageCount,
-  messages: parsed.messages,
+  messages: stripMessageContent(parsed.messages),
   toolsCount: parsed.toolsCount,
-  tools: parsed.tools,
+  tools: stripToolSchemas(parsed.tools),
   modelRequest: parsed.modelRequest,
 });
 
@@ -72,17 +121,23 @@ export function extractProviderTrafficRecordFromRuntimeLog(
   const parsedDirection = toDirection(parsed.direction);
 
   const isEvaluator = isEvaluatorEventType(eventType);
-  const isOpenRouter = sourceMessage === 'OpenRouter stream start' || sourceMessage === 'OpenRouter stream done';
+  const isProviderEvent =
+    eventType === 'provider.request.started' ||
+    eventType === 'provider.response.received' ||
+    sourceMessage.endsWith(' stream start') ||
+    sourceMessage.endsWith(' stream done') ||
+    sourceMessage.endsWith(' response start') ||
+    sourceMessage.endsWith(' response done');
 
-  if (!isEvaluator && !isOpenRouter) {
+  if (!isEvaluator && !isProviderEvent) {
     return null;
   }
 
   const direction: 'sent' | 'received' =
     parsedDirection ??
-    (sourceMessage === 'OpenRouter stream start'
+    (sourceMessage.endsWith(' stream start') || sourceMessage.endsWith(' response start')
       ? 'sent'
-      : sourceMessage === 'OpenRouter stream done'
+      : sourceMessage.endsWith(' stream done') || sourceMessage.endsWith(' response done')
       ? 'received'
       : eventType === 'provider.request.started'
       ? 'sent'

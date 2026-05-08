@@ -21,7 +21,6 @@ const originalFetch = globalThis.fetch;
 
 // Use a dedicated logger instance for this test suite (avoid deprecated singleton)
 const logger = new LoggingService({ disableLogging: true });
-const originalLogToOpenrouter = logger.logToOpenrouter.bind(logger);
 
 // Create a mock settings service with OpenRouter API key for tests
 const mockSettingsService = createMockSettingsService({
@@ -44,7 +43,6 @@ test.beforeEach(() => {
 
 test.afterEach.always(() => {
   globalThis.fetch = originalFetch;
-  logger.logToOpenrouter = originalLogToOpenrouter as any;
 });
 
 test.serial('builds messages from explicit history, tool calls, and reasoning config', async (t) => {

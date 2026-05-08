@@ -59,7 +59,6 @@ export class LoggingService {
   private correlationId: string | undefined;
   private debugLogging: boolean;
   private suppressConsoleOutput: boolean;
-  private openrouterLogger!: winston.Logger;
   private providerTrafficDir: string;
   private evaluatorTrafficDir: string;
   private enabledCategories: Set<LogCategory> | null;
@@ -162,57 +161,6 @@ export class LoggingService {
         };
       }
     });
-
-    // Create openrouter logger
-    if (!resolvedDisableLogging) {
-      try {
-        const openrouterTransport = new DailyRotateFile({
-          dirname: finalLogDir,
-          filename: 'term2-openrouter-%DATE%.log',
-          datePattern: 'YYYY-MM-DD',
-          maxSize: '10m',
-          maxFiles: '14d',
-          format: winston.format.json(),
-          level: logLevel,
-        });
-        openrouterTransport.on('error', (error: any) => {
-          this.emitConsoleError(`[LoggingService] OpenRouter file transport error: ${error.message}`);
-        });
-        this.openrouterLogger = winston.createLogger({
-          levels: LOG_LEVELS,
-          format: winston.format.combine(
-            winston.format.timestamp({
-              format: 'YYYY-MM-DD HH:mm:ss',
-            }),
-            winston.format.json(),
-          ),
-          defaultMeta: {},
-          transports: [openrouterTransport],
-        });
-        // Add custom log levels
-        Object.keys(LOG_LEVELS).forEach((level) => {
-          if (typeof (this.openrouterLogger as any)[level] !== 'function') {
-            (this.openrouterLogger as any)[level] = (message: string, meta?: any) => {
-              this.openrouterLogger.log(level, message, meta);
-            };
-          }
-        });
-      } catch (error: any) {
-        if (this.debugLogging) {
-          this.emitConsoleError(`[LoggingService] Failed to configure openrouter transport: ${error.message}`);
-        }
-        // Fallback
-        this.openrouterLogger = winston.createLogger({
-          levels: LOG_LEVELS,
-          transports: [new winston.transports.Console({ silent: true })],
-        });
-      }
-    } else {
-      this.openrouterLogger = winston.createLogger({
-        levels: LOG_LEVELS,
-        transports: [new winston.transports.Console({ silent: true })],
-      });
-    }
   }
 
   /**
@@ -245,15 +193,6 @@ export class LoggingService {
 
       // Update each transport's level as well
       this.logger.transports.forEach((t: any) => {
-        try {
-          t.level = level;
-        } catch (err: any) {
-          // ignore
-        }
-      });
-
-      // Update openrouter logger transports
-      this.openrouterLogger.transports.forEach((t: any) => {
         try {
           t.level = level;
         } catch (err: any) {
@@ -298,18 +237,6 @@ export class LoggingService {
    */
   debug(message: string, meta?: Record<string, any>): void {
     this.#log('debug', message, meta);
-  }
-
-  logToOpenrouter(level: string, message: string, meta?: Record<string, any>): void {
-    try {
-      const metadata = {
-        ...meta,
-        ...(this.correlationId && { correlationId: this.correlationId }),
-      };
-      this.openrouterLogger.log(level, message, metadata);
-    } catch (error: any) {
-      this.emitConsoleError(`[LoggingService] Error logging to openrouter: ${error.message}`);
-    }
   }
 
   /**

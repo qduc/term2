@@ -32,13 +32,15 @@ export class OpenRouterModel implements Model {
     // Note: History is managed by the SDK, not by this provider.
     const resolvedModelId = this.#resolveModelFromRequest(request) || this.#modelId;
     const messages = buildMessagesFromRequest(request, resolvedModelId, this.#loggingService);
-
-    this.#loggingService.debug('OpenRouter message', { messages });
-
-    // Extract function tools from ModelRequest
-    // SDK Property: tools (SerializedTool[])
-    // Note: SDK-specific tools (shell, computer, etc.) are filtered out here
     const tools = extractFunctionToolsFromRequest(request);
+
+    this.#loggingService.debug('OpenRouter response start', {
+      model: resolvedModelId,
+      messageCount: Array.isArray(messages) ? messages.length : 0,
+      messages,
+      toolsCount: Array.isArray(tools) ? tools.length : 0,
+      tools,
+    });
 
     const res = await callOpenRouter({
       apiKey,
@@ -108,6 +110,12 @@ export class OpenRouterModel implements Model {
     const hasToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
     const shouldAddFallbackMessage = !hasTextContent && !hasToolCalls;
     const assistantText = hasTextContent ? textContent : shouldAddFallbackMessage ? 'No response from model.' : '';
+
+    this.#loggingService.debug('OpenRouter response done', {
+      text: assistantText,
+      reasoningDetails,
+      toolCalls,
+    });
 
     // Add assistant message when we have text or we need a fallback
     // (Don't add empty message when there are only tool calls)

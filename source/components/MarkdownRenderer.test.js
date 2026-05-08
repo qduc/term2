@@ -174,6 +174,21 @@ test('renders horizontal rule', (t) => {
   t.true(frame.includes('───')); // Check for rule characters
 });
 
+// --- Tables ---
+
+test('wraps long table cell content within a bounded table width', (t) => {
+  const markdown = `| File | Change |
+| --- | --- |
+| \`openai-compatible/model.ts\` | Track \`reasoningContent\` separately from \`reasoning\`; emit both \`reasoning_content\` and \`providerData\` in messages and function_calls; accumulate \`reasoning_content\` delta in streams |`;
+
+  const { lastFrame } = render(React.createElement(MarkdownRenderer, null, markdown));
+  const frame = stripAnsi(lastFrame());
+  const lines = frame.split('\n').filter(Boolean);
+
+  t.true(frame.includes('reasoningContent'));
+  t.true(lines.every((line) => line.length <= 100));
+});
+
 // --- Complex markdown ---
 
 test('renders complex markdown with multiple elements', (t) => {

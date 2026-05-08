@@ -19,8 +19,17 @@ interface TableToken {
   raw: string;
 }
 
+const TABLE_MAX_WIDTH = 100;
+const TABLE_CELL_PADDING = 1;
+const TABLE_MIN_COLUMN_WIDTH = 8;
+
 // Calculate column widths based on content
-const calculateColumnWidths = (header: TableCell[], rows: TableCell[][], padding = 2): number[] => {
+const calculateColumnWidths = (
+  header: TableCell[],
+  rows: TableCell[][],
+  padding = TABLE_CELL_PADDING,
+  maxTableWidth = TABLE_MAX_WIDTH,
+): number[] => {
   const numCols = header.length;
   const widths = new Array(numCols).fill(0);
 
@@ -38,8 +47,44 @@ const calculateColumnWidths = (header: TableCell[], rows: TableCell[][], padding
     });
   });
 
-  // Add padding
-  return widths.map((width) => width + padding * 2);
+  const desiredWidths = widths.map((width) => width + padding * 2);
+  const borderWidth = numCols + 1;
+  const availableWidth = Math.max(numCols, maxTableWidth - borderWidth);
+
+  if (desiredWidths.reduce((sum, width) => sum + width, 0) <= availableWidth) {
+    return desiredWidths;
+  }
+
+  const minWidth = Math.max(1, Math.min(TABLE_MIN_COLUMN_WIDTH, Math.floor(availableWidth / numCols)));
+  const cappedWidths = new Array(numCols).fill(minWidth);
+  let remainingWidth = availableWidth - minWidth * numCols;
+  const flexibleWidths = desiredWidths.map((width) => Math.max(0, width - minWidth));
+  let flexibleTotal = flexibleWidths.reduce((sum, width) => sum + width, 0);
+
+  while (remainingWidth > 0 && flexibleTotal > 0) {
+    let distributed = 0;
+
+    flexibleWidths.forEach((flex, index) => {
+      if (remainingWidth <= 0 || flex <= 0) {
+        return;
+      }
+
+      const share = Math.max(1, Math.floor((remainingWidth * flex) / flexibleTotal));
+      const amount = Math.min(share, flex, remainingWidth);
+      cappedWidths[index] += amount;
+      flexibleWidths[index] -= amount;
+      remainingWidth -= amount;
+      distributed += amount;
+    });
+
+    if (distributed === 0) {
+      break;
+    }
+
+    flexibleTotal = flexibleWidths.reduce((sum, width) => sum + width, 0);
+  }
+
+  return cappedWidths;
 };
 
 // Pad content based on alignment
@@ -60,10 +105,69 @@ const padContent = (content: string, width: number, align: string): string => {
   }
 };
 
+const splitLongWord = (word: string, width: number): string[] => {
+  const chunks: string[] = [];
+
+  for (let index = 0; index < word.length; index += width) {
+    chunks.push(word.slice(index, index + width));
+  }
+
+  return chunks;
+};
+
+const wrapCellText = (content: string, width: number): string[] => {
+  const normalized = content.replaceAll(/\s+/g, ' ').trim();
+
+  if (!normalized) {
+    return [''];
+  }
+
+  const words = normalized.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+
+  words.forEach((word) => {
+    const chunks = word.length > width ? splitLongWord(word, width) : [word];
+
+    chunks.forEach((chunk) => {
+      if (!currentLine) {
+        currentLine = chunk;
+        return;
+      }
+
+      if (currentLine.length + 1 + chunk.length <= width) {
+        currentLine += ` ${chunk}`;
+        return;
+      }
+
+      lines.push(currentLine);
+      currentLine = chunk;
+    });
+  });
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines;
+};
+
+const getCellTextLines = (cell: TableCell | undefined, width: number): string[] => {
+  const contentWidth = Math.max(1, width - TABLE_CELL_PADDING * 2);
+  return wrapCellText(cell?.text || '', contentWidth);
+};
+
 // Render cell content with inline formatting
-const renderCellContent = (cell: TableCell, width: number, align: string): React.ReactNode => {
-  const paddedContent = padContent(cell.text, width, align);
-  return <Text key={cell.text}>{paddedContent}</Text>;
+const renderCellContent = (content: string, width: number, align: string, isHeader = false): React.ReactNode => {
+  const contentWidth = Math.max(1, width - TABLE_CELL_PADDING * 2);
+  const paddedContent = padContent(content, contentWidth, align);
+  return (
+    <Text bold={isHeader}>
+      {' '.repeat(TABLE_CELL_PADDING)}
+      {paddedContent}
+      {' '.repeat(TABLE_CELL_PADDING)}
+    </Text>
+  );
 };
 
 // Generate table borders
@@ -134,37 +238,30 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
 
   const vertical = getVerticalBorder();
 
-  // Render header row
-  const renderHeaderRow = () => (
-    <Box flexDirection="row">
-      {vertical.left ? <Text color="#64748b">{vertical.left}</Text> : null}
-      {header.map((cell, index) => (
-        <React.Fragment key={index}>
-          <Box width={columnWidths[index]}>
-            <Text bold>{renderCellContent(cell, columnWidths[index], columnAlignment[index] || 'left')}</Text>
-          </Box>
-          {index < numCols - 1 && <Text color="#64748b">{vertical.middle}</Text>}
-        </React.Fragment>
-      ))}
-      {vertical.right ? <Text color="#64748b">{vertical.right}</Text> : null}
-    </Box>
-  );
+  const renderTableRow = (row: TableCell[], rowKey: string, isHeader = false) => {
+    const wrappedCells = columnWidths.map((width, index) => getCellTextLines(row[index], width));
+    const lineCount = Math.max(...wrappedCells.map((lines) => lines.length));
 
-  // Render data row
-  const renderDataRow = (row: TableCell[]) => (
-    <Box flexDirection="row">
-      {vertical.left ? <Text color="#64748b">{vertical.left}</Text> : null}
-      {row.map((cell, index) => (
-        <React.Fragment key={index}>
-          <Box width={columnWidths[index]}>
-            {renderCellContent(cell, columnWidths[index], columnAlignment[index] || 'left')}
-          </Box>
-          {index < numCols - 1 && <Text color="#64748b">{vertical.middle}</Text>}
-        </React.Fragment>
-      ))}
-      {vertical.right ? <Text color="#64748b">{vertical.right}</Text> : null}
-    </Box>
-  );
+    return Array.from({ length: lineCount }, (_, lineIndex) => (
+      <Box key={`${rowKey}-${lineIndex}`} flexDirection="row">
+        {vertical.left ? <Text color="#64748b">{vertical.left}</Text> : null}
+        {columnWidths.map((width, index) => {
+          const content = wrappedCells[index][lineIndex] || '';
+          const cell = (
+            <Box width={width}>{renderCellContent(content, width, columnAlignment[index] || 'left', isHeader)}</Box>
+          );
+
+          return (
+            <React.Fragment key={index}>
+              {cell}
+              {index < numCols - 1 && <Text color="#64748b">{vertical.middle}</Text>}
+            </React.Fragment>
+          );
+        })}
+        {vertical.right ? <Text color="#64748b">{vertical.right}</Text> : null}
+      </Box>
+    ));
+  };
 
   // Separator between header and data (only for bordered styles)
   const renderSeparator = () => {
@@ -183,15 +280,17 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
       </Box>
 
       {/* Header */}
-      <Box marginX={1}>{renderHeaderRow()}</Box>
+      <Box flexDirection="column" marginX={1}>
+        {renderTableRow(header, 'header', true)}
+      </Box>
 
       {/* Separator */}
       {renderSeparator()}
 
       {/* Data rows */}
       {rows.map((row, rowIndex) => (
-        <Box key={rowIndex} marginX={1}>
-          {renderDataRow(row)}
+        <Box key={rowIndex} flexDirection="column" marginX={1}>
+          {renderTableRow(row, `row-${rowIndex}`)}
         </Box>
       ))}
 

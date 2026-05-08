@@ -1,0 +1,46 @@
+import { SETTING_KEYS } from '../services/settings-schema.js';
+
+export type ModelSettingConfig = {
+  modelKey: string;
+  trigger: string;
+  providerKey: string;
+  fallbackProviderKey?: string;
+};
+
+export const MODEL_CMD_TRIGGER = '/model ';
+
+export const MODEL_SETTING_CONFIGS: ModelSettingConfig[] = [
+  {
+    modelKey: SETTING_KEYS.AGENT_MODEL,
+    trigger: '/settings agent.model ',
+    providerKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+  {
+    modelKey: SETTING_KEYS.AGENT_MENTOR_MODEL,
+    trigger: '/settings agent.mentorModel ',
+    providerKey: SETTING_KEYS.AGENT_MENTOR_PROVIDER,
+    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+  {
+    modelKey: SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
+    trigger: '/settings agent.autoApproveModel ',
+    providerKey: SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
+    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+  {
+    modelKey: SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
+    trigger: '/settings tools.editHealingModel ',
+    providerKey: SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
+    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+];
+
+export const MODEL_SETTING_TRIGGERS = MODEL_SETTING_CONFIGS.map((config) => config.trigger);
+
+export function getModelSettingConfig(modelKey: string): ModelSettingConfig | undefined {
+  return MODEL_SETTING_CONFIGS.find((config) => config.modelKey === modelKey);
+}
+
+export function getModelSettingConfigForInput(input: string): ModelSettingConfig | undefined {
+  return MODEL_SETTING_CONFIGS.find((config) => input.startsWith(config.trigger));
+}

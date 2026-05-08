@@ -80,6 +80,16 @@ export function upsertProvider(definition: ProviderDefinition): void {
 }
 
 /**
+ * Remove a provider definition.
+ *
+ * Primarily useful for tests that register runtime providers and need to
+ * restore global registry state.
+ */
+export function unregisterProvider(id: string): void {
+  providers.delete(id);
+}
+
+/**
  * Get a specific provider definition by ID.
  * Returns undefined if the provider is not registered.
  */

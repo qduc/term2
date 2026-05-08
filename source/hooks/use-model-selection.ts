@@ -4,11 +4,13 @@ import { fetchModels, filterModels, type ModelInfo } from '../services/model-ser
 import { getProviderIds } from '../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { parseModelProviderArg } from '../utils/model-provider-arg.js';
+import { MODEL_CMD_TRIGGER, getModelSettingConfigForInput, MODEL_SETTING_CONFIGS } from '../utils/model-settings.js';
 
-export const MODEL_TRIGGER = '/settings agent.model ';
-export const MODEL_CMD_TRIGGER = '/model ';
-export const MENTOR_TRIGGER = '/settings agent.mentorModel ';
-export const AUTO_APPROVE_MODEL_TRIGGER = '/settings agent.autoApproveModel ';
+export const MODEL_TRIGGER = MODEL_SETTING_CONFIGS[0].trigger;
+export { MODEL_CMD_TRIGGER };
+export const MENTOR_TRIGGER = MODEL_SETTING_CONFIGS[1].trigger;
+export const AUTO_APPROVE_MODEL_TRIGGER = MODEL_SETTING_CONFIGS[2].trigger;
+export const EDIT_HEALING_MODEL_TRIGGER = MODEL_SETTING_CONFIGS[3].trigger;
 
 export const useModelSelection = (
   deps: {
@@ -30,9 +32,9 @@ export const useModelSelection = (
   const isInitialLoadRef = useRef(true);
 
   const isOpen = mode === 'model_selection';
-  const isMentorTrigger = input.startsWith(MENTOR_TRIGGER);
-  const isAutoApproveTrigger = input.startsWith(AUTO_APPROVE_MODEL_TRIGGER);
-  const canSwitchProvider = isMentorTrigger || isAutoApproveTrigger || !hasConversationHistory;
+  const modelSettingConfig = getModelSettingConfigForInput(input);
+  const canSwitchProvider =
+    Boolean(modelSettingConfig && modelSettingConfig.providerKey !== 'agent.provider') || !hasConversationHistory;
 
   const query = useMemo(() => {
     if (!isOpen || triggerIndex === null) return '';
@@ -42,16 +44,15 @@ export const useModelSelection = (
 
   useEffect(() => {
     if (isOpen) {
-      const providerSetting = isMentorTrigger
-        ? settingsService.get<string>('agent.mentorProvider') ?? settingsService.get<string>('agent.provider')
-        : isAutoApproveTrigger
-        ? settingsService.get<string>('agent.autoApproveProvider') ?? settingsService.get<string>('agent.provider')
+      const providerSetting = modelSettingConfig
+        ? settingsService.get<string>(modelSettingConfig.providerKey) ??
+          settingsService.get<string>(modelSettingConfig.fallbackProviderKey ?? modelSettingConfig.providerKey)
         : settingsService.get<string>('agent.provider');
       setProvider(providerSetting);
       failedProvidersRef.current.clear();
       isInitialLoadRef.current = true;
     }
-  }, [isOpen, isMentorTrigger, isAutoApproveTrigger]);
+  }, [isOpen, modelSettingConfig, settingsService]);
 
   useEffect(() => {
     if (!isOpen || !provider) return;

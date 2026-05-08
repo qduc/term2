@@ -9,6 +9,7 @@ import './web-search/index.js';
 export {
   registerProvider,
   upsertProvider,
+  unregisterProvider,
   getProvider,
   getAllProviders,
   getProviderIds,

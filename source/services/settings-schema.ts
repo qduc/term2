@@ -92,6 +92,11 @@ export const ToolsSettingsSchema = z.object({
   logFileOperations: z.boolean().optional().default(true),
   enableEditHealing: z.boolean().optional().default(true),
   editHealingModel: z.string().optional().default('gpt-4o-mini'),
+  editHealingProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Provider to use for the edit-healing model (defaults to agent.provider when unset)'),
 });
 
 export const DebugSettingsSchema = z.object({
@@ -236,6 +241,7 @@ export interface SettingsWithSources {
     logFileOperations: SettingWithSource<boolean>;
     enableEditHealing: SettingWithSource<boolean>;
     editHealingModel: SettingWithSource<string>;
+    editHealingProvider: SettingWithSource<string | undefined>;
   };
   debug: {
     debugBashTool: SettingWithSource<boolean>;
@@ -292,6 +298,7 @@ export const SETTING_KEYS = {
   TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
   TOOLS_ENABLE_EDIT_HEALING: 'tools.enableEditHealing',
   TOOLS_EDIT_HEALING_MODEL: 'tools.editHealingModel',
+  TOOLS_EDIT_HEALING_PROVIDER: 'tools.editHealingProvider',
   DEBUG_BASH_TOOL: 'debug.debugBashTool',
   SSH_ENABLED: 'ssh.enabled',
   SSH_HOST: 'ssh.host',
@@ -324,6 +331,8 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
   SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
+  SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
+  SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
   SETTING_KEYS.WEB_SEARCH_PROVIDER,
 ]);
 
@@ -378,6 +387,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     logFileOperations: true,
     enableEditHealing: true,
     editHealingModel: 'gpt-4o-mini',
+    editHealingProvider: undefined,
   },
   debug: {
     debugBashTool: false,

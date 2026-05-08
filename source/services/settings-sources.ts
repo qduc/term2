@@ -46,6 +46,7 @@ const SETTINGS_SOURCE_KEYS = {
     logFileOperations: 'tools.logFileOperations',
     enableEditHealing: 'tools.enableEditHealing',
     editHealingModel: 'tools.editHealingModel',
+    editHealingProvider: 'tools.editHealingProvider',
   },
   debug: {
     debugBashTool: 'debug.debugBashTool',

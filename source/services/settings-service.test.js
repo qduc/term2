@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SettingsService } from '../../dist/services/settings-service.js';
 import { loggingService } from '../../dist/services/logging-service.js';
-import { getProvider, getAllProviders } from '../../dist/providers/index.js';
+import { getProvider, getAllProviders, unregisterProvider } from '../../dist/providers/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_BASE_DIR = path.join(__dirname, '../../test-settings');
@@ -257,7 +257,8 @@ test('config file overrides defaults', async (t) => {
 test('registers custom OpenAI-compatible providers from settings.json', async (t) => {
   const settingsDir = getTestSettingsDir();
 
-  const providerName = `lmstudio-${Date.now()}-${Math.random()}`;
+  const providerName = 'lmstudio-settings-service-test';
+  t.teardown(() => unregisterProvider(providerName));
 
   // Create a config file with providers
   const configFile = path.join(settingsDir, 'settings.json');
@@ -334,6 +335,8 @@ test('isRuntimeModifiable identifies correct settings', async (t) => {
   t.true(service.isRuntimeModifiable('agent.model'));
   t.true(service.isRuntimeModifiable('agent.reasoningEffort'));
   t.true(service.isRuntimeModifiable('agent.temperature'));
+  t.true(service.isRuntimeModifiable('tools.editHealingModel'));
+  t.true(service.isRuntimeModifiable('tools.editHealingProvider'));
   t.true(service.isRuntimeModifiable('shell.timeout'));
   t.true(service.isRuntimeModifiable('shell.maxOutputLines'));
   t.true(service.isRuntimeModifiable('shell.maxOutputChars'));

@@ -42,3 +42,26 @@ test('healSearchReplaceParams returns unmodified params for ambiguous matches', 
   t.is(result.params.search_content, baseParams.search_content);
   t.is(result.confidence, 0);
 });
+
+test('healSearchReplaceParams uses tools.editHealingProvider before agent.provider', async (t) => {
+  const fileContent = 'const foo = 1;\n';
+  let providerId = '';
+  const runModel = async (_prompt: string, meta: { providerId: string }) => {
+    providerId = meta.providerId;
+    return 'const foo = 1;';
+  };
+  const settingsService = {
+    get: (key: string) => {
+      if (key === 'tools.editHealingProvider') return 'openrouter';
+      if (key === 'agent.provider') return 'openai';
+      return undefined;
+    },
+  };
+
+  await healSearchReplaceParams(baseParams, fileContent, 'fast-healer', 'fake-key', {
+    runModel,
+    settingsService: settingsService as any,
+  });
+
+  t.is(providerId, 'openrouter');
+});

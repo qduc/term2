@@ -22,6 +22,14 @@ const NUMBER_SETTING_KEYS = new Set([
   'ssh.port',
 ]);
 
+const PROVIDER_VALUE_SUGGESTIONS: SettingValueSuggestion[] = [
+  { value: 'openai', description: 'OpenAI official API' },
+  { value: 'openrouter', description: 'OpenRouter.ai' },
+  { value: 'openai-compatible', description: 'Local models/Ollama' },
+  { value: 'anthropic', description: 'Anthropic Claude' },
+  { value: 'google', description: 'Google Gemini' },
+];
+
 // A small, curated set of value suggestions for common settings.
 // This is intentionally conservative: it's better to suggest a few helpful values
 // than to pretend we can enumerate every possible value.
@@ -42,20 +50,9 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'high', description: 'Highest reasoning' },
     { value: 'default', description: 'Model default' },
   ],
-  'agent.mentorProvider': [
-    { value: 'openai', description: 'OpenAI official API' },
-    { value: 'openrouter', description: 'OpenRouter.ai' },
-    { value: 'openai-compatible', description: 'Local models/Ollama' },
-    { value: 'anthropic', description: 'Anthropic Claude' },
-    { value: 'google', description: 'Google Gemini' },
-  ],
-  'agent.autoApproveProvider': [
-    { value: 'openai', description: 'OpenAI official API' },
-    { value: 'openrouter', description: 'OpenRouter.ai' },
-    { value: 'openai-compatible', description: 'Local models/Ollama' },
-    { value: 'anthropic', description: 'Anthropic Claude' },
-    { value: 'google', description: 'Google Gemini' },
-  ],
+  'agent.mentorProvider': PROVIDER_VALUE_SUGGESTIONS,
+  'agent.autoApproveProvider': PROVIDER_VALUE_SUGGESTIONS,
+  'tools.editHealingProvider': PROVIDER_VALUE_SUGGESTIONS,
   'logging.logLevel': [{ value: 'debug' }, { value: 'info' }, { value: 'warn' }, { value: 'error' }],
   'logging.suppressConsoleOutput': [{ value: 'true' }, { value: 'false' }],
   'tools.enableEditHealing': [{ value: 'true' }, { value: 'false' }],
@@ -66,13 +63,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   'app.mentorMode': [{ value: 'true' }, { value: 'false' }],
   'app.editMode': [{ value: 'true' }, { value: 'false' }],
   'app.liteMode': [{ value: 'true' }, { value: 'false' }],
-  'agent.provider': [
-    { value: 'openai', description: 'OpenAI official API' },
-    { value: 'openrouter', description: 'OpenRouter.ai' },
-    { value: 'openai-compatible', description: 'Local models/Ollama' },
-    { value: 'anthropic', description: 'Anthropic Claude' },
-    { value: 'google', description: 'Google Gemini' },
-  ],
+  'agent.provider': PROVIDER_VALUE_SUGGESTIONS,
   'agent.autoApproveModel': [
     { value: 'gpt-4o-mini', description: 'OpenAI fast model' },
     { value: 'claude-3-haiku-20240307', description: 'Anthropic fast model' },

@@ -30,6 +30,7 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE]: 'Suppress console output (true|false) to avoid interfering with Ink UI',
   [SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING]: 'Use AI to automatically correct failed search_replace operations',
   [SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL]: 'Model to use for edit healing (fast/cheap)',
+  [SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER]: 'Provider for the edit-healing model (optional)',
   [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Shell command auto-approval mode (off|advisory|auto)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL]: 'Model to use for auto-approval evaluation (fast/cheap)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER]: 'Provider for the auto-approval model (optional)',
@@ -45,6 +46,7 @@ const HIDDEN_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_PROVIDER,
   SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
   SETTING_KEYS.AGENT_MENTOR_PROVIDER,
+  SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
 ]);
 
 const MAX_RESULTS = 10;
@@ -150,7 +152,7 @@ export function clampIndex(currentIndex: number, arrayLength: number): number {
   if (arrayLength === 0) {
     return 0;
   }
-  return Math.min(currentIndex, arrayLength - 1);
+  return Math.max(0, Math.min(currentIndex, arrayLength - 1));
 }
 
 export const useSettingsCompletion = (settingsService: SettingsService) => {

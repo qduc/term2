@@ -65,7 +65,7 @@ export class OpenAICompatibleModel implements Model {
     const usage = normalizeUsage(json?.usage || {}) as any;
 
     const reasoningContent = choice?.message?.reasoning_content;
-    const reasoning = choice?.message?.reasoning || reasoningContent;
+    const reasoning = choice?.message?.reasoning;
     const reasoningDetails = choice?.message?.reasoning_details;
     const toolCalls = choice?.message?.tool_calls;
 
@@ -510,7 +510,7 @@ export class OpenAICompatibleModel implements Model {
       }
     }
 
-    const reasoningDelta = json?.choices?.[0]?.delta?.reasoning || json?.choices?.[0]?.delta?.reasoning_content;
+    const reasoningDelta = json?.choices?.[0]?.delta?.reasoning;
     if (typeof reasoningDelta === 'string' && reasoningDelta.length > 0) {
       state.accumulatedReasoningText += reasoningDelta;
     }

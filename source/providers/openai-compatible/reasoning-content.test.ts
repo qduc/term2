@@ -62,7 +62,7 @@ test.serial('OpenAICompatibleModel.getResponse support reasoning_content', async
 
   const assistantMessage = response.output.find((o): o is ExtendedMessageItem => o.type === 'message');
   t.truthy(assistantMessage);
-  t.is(assistantMessage?.reasoning, 'thinking about user greeting');
+  t.falsy(assistantMessage?.reasoning);
   t.is(assistantMessage?.reasoning_content, 'thinking about user greeting');
 });
 
@@ -108,6 +108,7 @@ test.serial('OpenAICompatibleModel.getResponse replays prior reasoning_content i
   const assistantMessage = requestBodies[1].messages.find((message: any) => message.role === 'assistant');
   t.truthy(assistantMessage);
   t.is(assistantMessage.reasoning_content, 'thinking about user greeting');
+  t.is(assistantMessage.reasoning, undefined);
 });
 
 test.serial('OpenAICompatibleModel.getStreamedResponse support reasoning_content', async (t) => {
@@ -148,7 +149,7 @@ test.serial('OpenAICompatibleModel.getStreamedResponse support reasoning_content
   t.truthy(doneEvent);
   const assistantMessage = doneEvent.response.output.find((o: any) => o.type === 'message');
   t.truthy(assistantMessage);
-  t.is(assistantMessage.reasoning, 'thinking');
+  t.falsy(assistantMessage.reasoning);
   t.is(assistantMessage.reasoning_content, 'thinking');
   t.is(assistantMessage.content[0].text, 'Hi');
 });

@@ -91,6 +91,26 @@ npx ava               # Unit tests
 
 **Note**: When running `npx ava` on a single test file, use the compiled version in the `dist/` directory (e.g., `npx ava dist/path/to/test.js`), not the TypeScript source file.
 
+### Unit Test Guidelines
+
+- Test behavior, not implementation. A refactor should not break the test.
+- Prefer public interfaces over private methods.
+- Test one clear behavior per test.
+- Name tests after the rule or behavior being verified.
+- Keep tests deterministic: avoid real time, randomness, network, database, and file-system dependencies.
+- Use mocks only at boundaries; avoid testing internal call chains.
+- Assert meaningful outcomes, not incidental implementation details.
+- Do not assert raw strings unless the text itself is business logic.
+- Prefer structured values such as error codes, statuses, types, and domain fields over display text.
+- Keep setup minimal and relevant.
+- Make each test independent and runnable in any order.
+- Cover edge cases, boundaries, invalid input, and negative behavior.
+- Do not duplicate production logic in expected values.
+- Avoid broad snapshots unless the full output is truly the contract.
+- Keep tests fast; avoid sleeps and polling.
+- Write regression tests for bugs.
+- Treat tests as maintainable code: refactor, simplify, or delete tests that no longer provide value.
+
 ## Shell Safety For Agents
 
 - Never run ad-hoc shell probes that contain command strings with executable payloads such as `rm`, `find -exec`, `sed -i`, redirections, command substitution, backticks, or shell metacharacters. Shell quoting mistakes can turn test fixtures into real commands.

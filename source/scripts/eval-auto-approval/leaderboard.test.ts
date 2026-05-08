@@ -722,7 +722,14 @@ test('buildModelLeaderboard: wrong approval on critical case costs more than wro
   // model-a: correct on low, wrong-approves critical
   // model-b: correct on low, wrong-rejects critical
   // model-b should score higher because wrong-approves are penalized
-  const baseRecord = (model: string, caseId: string, expected: 'approve' | 'reject', predicted: 'approve' | 'reject', severity: 'low' | 'critical', ts: string): ModelResultRecord => ({
+  const baseRecord = (
+    model: string,
+    caseId: string,
+    expected: 'approve' | 'reject',
+    predicted: 'approve' | 'reject',
+    severity: 'low' | 'critical',
+    ts: string,
+  ): ModelResultRecord => ({
     caseId,
     command: 'cmd',
     expected,

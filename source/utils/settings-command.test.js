@@ -1,6 +1,6 @@
 import test from 'ava';
 import { createSettingsCommand, formatSettingsSummary, parseSettingValue } from '../../dist/utils/settings-command.js';
-import { upsertProvider } from '../../dist/providers/index.js';
+import { unregisterProvider, upsertProvider } from '../../dist/providers/index.js';
 
 const baseSettings = {
   agent: {
@@ -193,8 +193,24 @@ test('setting agent.mentorModel strips --provider flag and saves mentor provider
   ]);
 });
 
+test('setting tools.editHealingModel strips --provider flag and saves edit healing provider', (t) => {
+  const deps = createDeps();
+  const command = createSettingsCommand(deps);
+  command.action('tools.editHealingModel fast-healer --provider=openrouter');
+
+  t.deepEqual(deps.setCalls, [
+    { key: 'tools.editHealingProvider', value: 'openrouter' },
+    { key: 'tools.editHealingModel', value: 'fast-healer' },
+  ]);
+  t.deepEqual(deps.applied, [
+    { key: 'tools.editHealingProvider', value: 'openrouter' },
+    { key: 'tools.editHealingModel', value: 'fast-healer' },
+  ]);
+});
+
 test('setting agent.model accepts provider names with spaces', (t) => {
-  const providerId = `opencode go ${Date.now()} ${Math.random()}`;
+  const providerId = 'opencode go settings command test';
+  t.teardown(() => unregisterProvider(providerId));
   upsertProvider({
     id: providerId,
     label: providerId,

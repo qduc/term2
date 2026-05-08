@@ -3,6 +3,7 @@ import type { SettingsService, SettingsWithSources } from '../services/settings-
 import { SETTING_KEYS } from '../services/settings-service.js';
 import { getProvider } from '../providers/index.js';
 import { parseModelProviderArg } from './model-provider-arg.js';
+import { getModelSettingConfig } from './model-settings.js';
 
 export function parseSettingValue(raw: string): any {
   const value = raw.trim();
@@ -153,13 +154,10 @@ export function createSettingsCommand({
       const rawValue = parts.slice(1).join(' ');
       let parsedValue = parseSettingValue(rawValue);
 
-      // Special handling for agent.model / agent.mentorModel / agent.autoApproveModel: handle --provider flag
-      if (
-        (key === SETTING_KEYS.AGENT_MODEL ||
-          key === SETTING_KEYS.AGENT_MENTOR_MODEL ||
-          key === SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL) &&
-        typeof parsedValue === 'string'
-      ) {
+      // Special handling for model settings: handle --provider flag and save
+      // the associated provider setting.
+      const modelSettingConfig = getModelSettingConfig(key);
+      if (modelSettingConfig && typeof parsedValue === 'string') {
         const { modelId, provider } = parseModelProviderArg(parsedValue);
         if (provider) {
           // Validate provider
@@ -168,12 +166,7 @@ export function createSettingsCommand({
             return false;
           }
           // Update provider setting
-          const providerKey =
-            key === SETTING_KEYS.AGENT_MENTOR_MODEL
-              ? SETTING_KEYS.AGENT_MENTOR_PROVIDER
-              : key === SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL
-              ? SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER
-              : SETTING_KEYS.AGENT_PROVIDER;
+          const providerKey = modelSettingConfig.providerKey;
           settingsService.set(providerKey, provider);
           // Apply runtime provider change
           if (applyRuntimeSetting) {

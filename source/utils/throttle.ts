@@ -4,9 +4,22 @@ export type ThrottledFunction<Args extends unknown[]> = {
   cancel: () => void;
 };
 
+export type ThrottleScheduler = {
+  now: () => number;
+  setTimeout: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
+  clearTimeout: (timeout: ReturnType<typeof setTimeout>) => void;
+};
+
+const defaultScheduler: ThrottleScheduler = {
+  now: Date.now,
+  setTimeout,
+  clearTimeout,
+};
+
 export const createThrottledFunction = <Args extends unknown[]>(
   fn: (...args: Args) => void,
   intervalMs: number,
+  scheduler: ThrottleScheduler = defaultScheduler,
 ): ThrottledFunction<Args> => {
   let lastCallTime = 0;
   let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -16,13 +29,13 @@ export const createThrottledFunction = <Args extends unknown[]>(
     if (!pendingArgs) return;
     const args = pendingArgs;
     pendingArgs = null;
-    lastCallTime = Date.now();
+    lastCallTime = scheduler.now();
     fn(...args);
   };
 
   const schedule = (delayMs: number) => {
     if (timeout) return;
-    timeout = setTimeout(() => {
+    timeout = scheduler.setTimeout(() => {
       timeout = null;
       invoke();
     }, delayMs);
@@ -31,7 +44,7 @@ export const createThrottledFunction = <Args extends unknown[]>(
   const throttled = (...args: Args) => {
     pendingArgs = args;
     if (timeout) return;
-    const now = Date.now();
+    const now = scheduler.now();
     const elapsed = now - lastCallTime;
     if (elapsed >= intervalMs) {
       invoke();
@@ -42,7 +55,7 @@ export const createThrottledFunction = <Args extends unknown[]>(
 
   const flush = () => {
     if (timeout) {
-      clearTimeout(timeout);
+      scheduler.clearTimeout(timeout);
       timeout = null;
     }
     invoke();
@@ -50,7 +63,7 @@ export const createThrottledFunction = <Args extends unknown[]>(
 
   const cancel = () => {
     if (timeout) {
-      clearTimeout(timeout);
+      scheduler.clearTimeout(timeout);
       timeout = null;
     }
     pendingArgs = null;

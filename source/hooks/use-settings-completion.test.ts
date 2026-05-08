@@ -380,11 +380,8 @@ test('clampIndex - handles length of 1', (t) => {
   t.is(clampIndex(10, 1), 0);
 });
 
-test('clampIndex - handles negative index (Math.min behavior)', (t) => {
-  // Math.min will return the negative value if it's smaller than arrayLength - 1
-  // This is the actual behavior of the implementation
-  const result = clampIndex(-1, 5);
-  t.is(result, -1, 'Math.min(-1, 4) = -1');
+test('clampIndex - clamps negative index to first item', (t) => {
+  t.is(clampIndex(-1, 5), 0);
 });
 
 // Integration tests

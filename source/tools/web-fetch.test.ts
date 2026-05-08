@@ -21,7 +21,7 @@ test('needsApproval: returns false', async (t) => {
   t.false(result);
 });
 
-test('execute: fetches and converts to markdown', async (t) => {
+test.serial('execute: fetches and converts to markdown', async (t) => {
   // Mock global fetch
   const originalFetch = global.fetch;
   global.fetch = async () => {
@@ -58,7 +58,7 @@ test('execute: fetches and converts to markdown', async (t) => {
   }
 });
 
-test('execute: handles fetch errors', async (t) => {
+test.serial('execute: handles fetch errors', async (t) => {
   const originalFetch = global.fetch;
   global.fetch = async () => {
     return {
@@ -77,7 +77,7 @@ test('execute: handles fetch errors', async (t) => {
   }
 });
 
-test('execute: converts github blob links to raw links', async (t) => {
+test.serial('execute: converts github blob links to raw links', async (t) => {
   const originalFetch = global.fetch;
   let fetchedUrl = '';
   global.fetch = async (url: string | URL | Request) => {

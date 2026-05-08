@@ -6,6 +6,7 @@ import {
   MODEL_CMD_TRIGGER,
   MENTOR_TRIGGER,
   AUTO_APPROVE_MODEL_TRIGGER,
+  EDIT_HEALING_MODEL_TRIGGER,
 } from '../hooks/use-model-selection.js';
 
 test('determineActiveMenu - model triggers (priority 0)', (t) => {
@@ -29,6 +30,11 @@ test('determineActiveMenu - model triggers (priority 0)', (t) => {
       input: '/settings agent.autoApproveModel haiku',
       cursor: '/settings agent.autoApproveModel haiku'.length,
       expected: { type: 'model', startIndex: AUTO_APPROVE_MODEL_TRIGGER.length },
+    },
+    {
+      input: '/settings tools.editHealingModel gpt-4o-mini',
+      cursor: '/settings tools.editHealingModel gpt-4o-mini'.length,
+      expected: { type: 'model', startIndex: EDIT_HEALING_MODEL_TRIGGER.length },
     },
   ];
 

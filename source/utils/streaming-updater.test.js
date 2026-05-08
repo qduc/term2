@@ -1,37 +1,69 @@
 import test from 'ava';
 import { createStreamingUpdateCoordinator } from '../../dist/utils/streaming-updater.js';
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const createScheduler = () => {
+  let now = 1000;
+  let nextId = 1;
+  const timers = new Map();
 
-test('coalesces rapid updates and uses latest value', async (t) => {
+  return {
+    scheduler: {
+      now: () => now,
+      setTimeout: (callback, delayMs) => {
+        const id = nextId++;
+        timers.set(id, { callback, dueAt: now + delayMs });
+        return id;
+      },
+      clearTimeout: (id) => {
+        timers.delete(id);
+      },
+    },
+    advance: (ms) => {
+      now += ms;
+      const ready = [...timers.entries()]
+        .filter(([, timer]) => timer.dueAt <= now)
+        .sort((a, b) => a[1].dueAt - b[1].dueAt);
+      for (const [id, timer] of ready) {
+        if (!timers.has(id)) continue;
+        timers.delete(id);
+        timer.callback();
+      }
+    },
+  };
+};
+
+test('coalesces rapid updates and uses latest value', (t) => {
   const calls = [];
-  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 40);
+  const clock = createScheduler();
+  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 40, clock.scheduler);
 
   updater.push('a');
   updater.push('b');
 
   t.deepEqual(calls, ['a']);
 
-  await wait(60);
+  clock.advance(60);
 
   t.deepEqual(calls, ['a', 'b']);
 });
 
-test('skips duplicate updates', async (t) => {
+test('skips duplicate updates', (t) => {
   const calls = [];
-  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 20);
+  const clock = createScheduler();
+  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 20, clock.scheduler);
 
   updater.push('same');
   updater.push('same');
 
-  await wait(30);
+  clock.advance(30);
 
   t.deepEqual(calls, ['same']);
 });
 
-test('flush emits pending update immediately', async (t) => {
+test('flush emits pending update immediately', (t) => {
   const calls = [];
-  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 100);
+  const clock = createScheduler();
+  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 100, clock.scheduler);
 
   updater.push('a');
   updater.push('b');
@@ -39,18 +71,19 @@ test('flush emits pending update immediately', async (t) => {
 
   t.deepEqual(calls, ['a', 'b']);
 
-  await wait(120);
+  clock.advance(120);
   t.deepEqual(calls, ['a', 'b']);
 });
 
-test('cancel drops pending update', async (t) => {
+test('cancel drops pending update', (t) => {
   const calls = [];
-  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 50);
+  const clock = createScheduler();
+  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 50, clock.scheduler);
 
   updater.push('a');
   updater.push('b');
   updater.cancel();
 
-  await wait(80);
+  clock.advance(80);
   t.deepEqual(calls, ['a']);
 });

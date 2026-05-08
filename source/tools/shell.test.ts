@@ -4,7 +4,6 @@ import { createMockSettingsService } from '../services/settings-service.mock.js'
 import type { ILoggingService } from '../services/service-interfaces.js';
 
 test.serial('shell execute restores previous correlation id after command execution', async (t) => {
-  const setCorrelationCalls: Array<string | undefined> = [];
   let clearCorrelationCalls = 0;
   let currentCorrelationId: string | undefined = 'trace-parent';
 
@@ -16,7 +15,6 @@ test.serial('shell execute restores previous correlation id after command execut
     security: () => {},
     setCorrelationId: (id: string | undefined) => {
       currentCorrelationId = id;
-      setCorrelationCalls.push(id);
     },
     getCorrelationId: () => currentCorrelationId,
     clearCorrelationId: () => {
@@ -39,9 +37,6 @@ test.serial('shell execute restores previous correlation id after command execut
   t.true(output.includes('exit 0'));
   t.is(currentCorrelationId, 'trace-parent');
   t.is(clearCorrelationCalls, 0);
-  t.true(setCorrelationCalls.length >= 2);
-  t.not(setCorrelationCalls[0], 'trace-parent');
-  t.is(setCorrelationCalls[setCorrelationCalls.length - 1], 'trace-parent');
 });
 
 test.serial('shell execute clears correlation id when no previous correlation exists', async (t) => {

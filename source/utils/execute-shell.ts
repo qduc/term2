@@ -2,7 +2,12 @@ import { exec } from 'child_process';
 import util from 'util';
 import process from 'process';
 
-const execPromise = util.promisify(exec);
+type ExecPromise = (
+  command: string,
+  options: { cwd?: string; timeout?: number; maxBuffer?: number },
+) => Promise<{ stdout?: string; stderr?: string }>;
+
+const defaultExecPromise: ExecPromise = util.promisify(exec);
 
 export interface ShellExecutionResult {
   stdout: string;
@@ -18,20 +23,21 @@ export interface ExecuteShellOptions {
   timeout?: number;
   maxBuffer?: number;
   sshService?: ISSHService;
+  execImpl?: ExecPromise;
 }
 
 export async function executeShellCommand(
   command: string,
   options: ExecuteShellOptions = {},
 ): Promise<ShellExecutionResult> {
-  const { cwd = process.cwd(), timeout, maxBuffer, sshService } = options;
+  const { cwd = process.cwd(), timeout, maxBuffer, sshService, execImpl = defaultExecPromise } = options;
 
   if (sshService) {
     return sshService.executeCommand(command, { cwd });
   }
 
   try {
-    const result = await execPromise(command, {
+    const result = await execImpl(command, {
       cwd,
       timeout,
       maxBuffer,

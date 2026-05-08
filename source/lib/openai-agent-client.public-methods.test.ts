@@ -193,7 +193,7 @@ test.beforeEach(() => {
 
 // ========== setModel tests ==========
 
-test('setModel updates the internal model', async (t) => {
+test.serial('setModel updates the internal model', async (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -213,7 +213,7 @@ test('setModel updates the internal model', async (t) => {
 
 // ========== setProvider / getProvider tests ==========
 
-test('getProvider returns current provider', (t) => {
+test.serial('getProvider returns current provider', (t) => {
   const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -222,7 +222,7 @@ test('getProvider returns current provider', (t) => {
   t.is(client.getProvider(), 'mock-provider-public-methods');
 });
 
-test('setProvider updates provider and persists to settings', (t) => {
+test.serial('setProvider updates provider and persists to settings', (t) => {
   const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -293,7 +293,7 @@ test.serial('abort logs with active trace id before clearing correlation', async
 
 // ========== addToolInterceptor tests ==========
 
-test('addToolInterceptor returns removal function', (t) => {
+test.serial('addToolInterceptor returns removal function', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -309,7 +309,7 @@ test('addToolInterceptor returns removal function', (t) => {
   t.pass();
 });
 
-test('addToolInterceptor can be removed', (t) => {
+test.serial('addToolInterceptor can be removed', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -329,7 +329,7 @@ test('addToolInterceptor can be removed', (t) => {
 
 // ========== abort tests ==========
 
-test('abort does not throw when called without active operation', (t) => {
+test.serial('abort does not throw when called without active operation', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -339,7 +339,7 @@ test('abort does not throw when called without active operation', (t) => {
   t.notThrows(() => client.abort());
 });
 
-test('abort can be called multiple times', (t) => {
+test.serial('abort can be called multiple times', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -354,7 +354,7 @@ test('abort can be called multiple times', (t) => {
 
 // ========== clearConversations tests ==========
 
-test('clearConversations does not throw', (t) => {
+test.serial('clearConversations does not throw', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -363,7 +363,7 @@ test('clearConversations does not throw', (t) => {
   t.notThrows(() => client.clearConversations());
 });
 
-test('clearConversations can be called multiple times', (t) => {
+test.serial('clearConversations can be called multiple times', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -377,7 +377,7 @@ test('clearConversations can be called multiple times', (t) => {
 
 // ========== setReasoningEffort tests ==========
 
-test('setReasoningEffort accepts valid effort levels', (t) => {
+test.serial('setReasoningEffort accepts valid effort levels', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -392,7 +392,7 @@ test('setReasoningEffort accepts valid effort levels', (t) => {
 
 // ========== setTemperature tests ==========
 
-test('setTemperature accepts numeric values', (t) => {
+test.serial('setTemperature accepts numeric values', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },
@@ -406,7 +406,7 @@ test('setTemperature accepts numeric values', (t) => {
 
 // ========== setRetryCallback tests ==========
 
-test('setRetryCallback accepts callback function', (t) => {
+test.serial('setRetryCallback accepts callback function', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
     deps: { logger: createMockLogger(), settings },

@@ -322,7 +322,7 @@ test('mkdir: creates directory', async (t) => {
 
   await new Promise((resolve) => setImmediate(resolve));
 
-  t.is(mockClient.lastExecCommand, 'mkdir  "/new/dir"');
+  t.regex(mockClient.lastExecCommand ?? '', /^mkdir\s+"\/new\/dir"$/);
 
   mockClient.mockStream!.simulateOutput('', '', 0);
   await resultPromise;
@@ -338,7 +338,7 @@ test('mkdir: creates directory recursively', async (t) => {
 
   await new Promise((resolve) => setImmediate(resolve));
 
-  t.is(mockClient.lastExecCommand, 'mkdir -p "/new/nested/dir"');
+  t.regex(mockClient.lastExecCommand ?? '', /^mkdir\s+-p\s+"\/new\/nested\/dir"$/);
 
   mockClient.mockStream!.simulateOutput('', '', 0);
   await resultPromise;

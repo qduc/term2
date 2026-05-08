@@ -26,7 +26,12 @@ const createJsonResponse = (body: any) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-test('OpenRouterModel.getResponse support reasoning_content', async (t) => {
+test.serial('OpenRouterModel.getResponse support reasoning_content', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.teardown(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   globalThis.fetch = async () =>
     createJsonResponse({
       id: 'resp-1',
@@ -56,7 +61,12 @@ test('OpenRouterModel.getResponse support reasoning_content', async (t) => {
   t.is(assistantMessage?.reasoning, 'thinking about user greeting');
 });
 
-test('OpenRouterModel.getStreamedResponse support reasoning_content', async (t) => {
+test.serial('OpenRouterModel.getStreamedResponse support reasoning_content', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.teardown(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
@@ -95,46 +105,54 @@ test('OpenRouterModel.getStreamedResponse support reasoning_content', async (t) 
   t.is(assistantMessage.content[0].text, 'Hi');
 });
 
-test('OpenRouterModel.getStreamedResponse ignores unknown reasoning detail types without dropping later reasoning', async (t) => {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    start(controller) {
-      controller.enqueue(
-        encoder.encode(
-          'data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.unknown","index":0,"data":"opaque"}]}}]}\n',
-        ),
-      );
-      controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"think"}}]}\n'));
-      controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"ing"}}]}\n'));
-      controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"Hi"}}]}\n'));
-      controller.enqueue(encoder.encode('data: [DONE]\n'));
-      controller.close();
-    },
-  });
-
-  globalThis.fetch = async () =>
-    new Response(stream as any, {
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
+test.serial(
+  'OpenRouterModel.getStreamedResponse ignores unknown reasoning detail types without dropping later reasoning',
+  async (t) => {
+    const originalFetch = globalThis.fetch;
+    t.teardown(() => {
+      globalThis.fetch = originalFetch;
     });
 
-  const model = new OpenRouterModel({
-    settingsService: mockSettingsService,
-    loggingService: logger,
-    modelId: 'test-model',
-  });
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.unknown","index":0,"data":"opaque"}]}}]}\n',
+          ),
+        );
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"think"}}]}\n'));
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"ing"}}]}\n'));
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"Hi"}}]}\n'));
+        controller.enqueue(encoder.encode('data: [DONE]\n'));
+        controller.close();
+      },
+    });
 
-  const events: any[] = [];
-  for await (const event of model.getStreamedResponse({
-    input: 'hi',
-  } as any)) {
-    events.push(event);
-  }
+    globalThis.fetch = async () =>
+      new Response(stream as any, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
 
-  const doneEvent = events.find((e) => e.type === 'response_done');
-  t.truthy(doneEvent);
-  const assistantMessage = doneEvent.response.output.find((o: any) => o.type === 'message');
-  t.truthy(assistantMessage);
-  t.is(assistantMessage.reasoning, 'thinking');
-  t.is(assistantMessage.content[0].text, 'Hi');
-});
+    const model = new OpenRouterModel({
+      settingsService: mockSettingsService,
+      loggingService: logger,
+      modelId: 'test-model',
+    });
+
+    const events: any[] = [];
+    for await (const event of model.getStreamedResponse({
+      input: 'hi',
+    } as any)) {
+      events.push(event);
+    }
+
+    const doneEvent = events.find((e) => e.type === 'response_done');
+    t.truthy(doneEvent);
+    const assistantMessage = doneEvent.response.output.find((o: any) => o.type === 'message');
+    t.truthy(assistantMessage);
+    t.is(assistantMessage.reasoning, 'thinking');
+    t.is(assistantMessage.content[0].text, 'Hi');
+  },
+);

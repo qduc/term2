@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Box, Text, Newline } from 'ink';
+import { Box, Text, Newline, useStdout } from 'ink';
 import { marked } from 'marked';
 
 // --- Table Rendering Utilities ---
@@ -22,6 +22,10 @@ interface TableToken {
 const TABLE_MAX_WIDTH = 100;
 const TABLE_CELL_PADDING = 1;
 const TABLE_MIN_COLUMN_WIDTH = 8;
+const TABLE_MARGIN_X = 1;
+
+const makeLine = (widths: number[], char: string, joiner: string, left = '', right = ''): string =>
+  left + widths.map((w, i) => char.repeat(i === widths.length - 1 ? w - 2 : w - 1)).join(joiner) + right;
 
 // Calculate column widths based on content
 const calculateColumnWidths = (
@@ -177,30 +181,28 @@ const generateBorder = (
 ): { top: string; middle: string; bottom: string } => {
   switch (style) {
     case 'unicode':
-      const unicodeTop = '┌' + widths.map((w) => '─'.repeat(w)).join('┬') + '┐';
-      const unicodeMiddle = '├' + widths.map((w) => '─'.repeat(w)).join('┼') + '┤';
-      const unicodeBottom = '└' + widths.map((w) => '─'.repeat(w)).join('┴') + '┘';
       return {
-        top: unicodeTop,
-        middle: unicodeMiddle,
-        bottom: unicodeBottom,
+        top: makeLine(widths, '─', '┬', '┌', '┐'),
+        middle: makeLine(widths, '─', '┼', '├', '┤'),
+        bottom: makeLine(widths, '─', '┴', '└', '┘'),
       };
 
-    case 'compact':
-      // Just separators without borders
-      const separators = widths.map((w) => '─'.repeat(w)).join('┼');
+    case 'compact': {
+      const separators = makeLine(widths, '─', '┼');
       return {
         top: separators,
         middle: separators,
         bottom: separators,
       };
+    }
 
     case 'ascii':
     default:
-      const asciiTop = '+' + widths.map((w) => '-'.repeat(w)).join('+') + '+';
-      const asciiMiddle = '+' + widths.map((w) => '-'.repeat(w)).join('+') + '+';
-      const asciiBottom = '+' + widths.map((w) => '-'.repeat(w)).join('+') + '+';
-      return { top: asciiTop, middle: asciiMiddle, bottom: asciiBottom };
+      return {
+        top: makeLine(widths, '-', '+', '+', '+'),
+        middle: makeLine(widths, '-', '+', '+', '+'),
+        bottom: makeLine(widths, '-', '+', '+', '+'),
+      };
   }
 };
 
@@ -213,9 +215,14 @@ interface TableRendererProps {
 const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
   const { header, rows, align } = token;
   const numCols = header.length;
+  const { stdout } = useStdout();
+
+  // Respect the real terminal width so the table never wraps
+  const terminalColumns = stdout.columns || TABLE_MAX_WIDTH;
+  const effectiveMaxWidth = Math.min(TABLE_MAX_WIDTH, terminalColumns - TABLE_MARGIN_X * 2);
 
   // Calculate column widths
-  const columnWidths = calculateColumnWidths(header, rows);
+  const columnWidths = calculateColumnWidths(header, rows, TABLE_CELL_PADDING, effectiveMaxWidth);
 
   // Generate borders
   const borders = generateBorder(columnWidths, style);
@@ -266,7 +273,7 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
   // Separator between header and data (only for bordered styles)
   const renderSeparator = () => {
     return (
-      <Box marginX={1}>
+      <Box marginX={TABLE_MARGIN_X}>
         <Text color="#64748b">{borders.middle}</Text>
       </Box>
     );
@@ -275,12 +282,12 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
   return (
     <Box flexDirection="column" marginBottom={1}>
       {/* Top border */}
-      <Box marginX={1}>
+      <Box marginX={TABLE_MARGIN_X}>
         <Text color="#64748b">{borders.top}</Text>
       </Box>
 
       {/* Header */}
-      <Box flexDirection="column" marginX={1}>
+      <Box flexDirection="column" marginX={TABLE_MARGIN_X}>
         {renderTableRow(header, 'header', true)}
       </Box>
 
@@ -289,13 +296,16 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
 
       {/* Data rows */}
       {rows.map((row, rowIndex) => (
-        <Box key={rowIndex} flexDirection="column" marginX={1}>
-          {renderTableRow(row, `row-${rowIndex}`)}
-        </Box>
+        <React.Fragment key={rowIndex}>
+          <Box flexDirection="column" marginX={TABLE_MARGIN_X}>
+            {renderTableRow(row, `row-${rowIndex}`)}
+          </Box>
+          {rowIndex < rows.length - 1 ? renderSeparator() : null}
+        </React.Fragment>
       ))}
 
       {/* Bottom border */}
-      <Box marginX={1}>
+      <Box marginX={TABLE_MARGIN_X}>
         <Text color="#64748b">{borders.bottom}</Text>
       </Box>
     </Box>

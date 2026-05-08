@@ -5,6 +5,7 @@ import { render } from 'ink-testing-library';
 import MarkdownRenderer from '../../dist/components/MarkdownRenderer.js';
 
 const stripAnsi = (s) => s.replaceAll(/\u001B\[[0-9;]*m/g, '');
+const rstrip = (s) => s.replaceAll(/[ \t]+$/g, '');
 
 // --- Basic text rendering ---
 
@@ -187,6 +188,33 @@ test('wraps long table cell content within a bounded table width', (t) => {
 
   t.true(frame.includes('reasoningContent'));
   t.true(lines.every((line) => line.length <= 100));
+});
+
+test('renders table borders and header separator with the same width as table rows', (t) => {
+  const markdown = `| A | B |
+| --- | --- |
+| 1 | 22 |`;
+
+  const { lastFrame } = render(React.createElement(MarkdownRenderer, null, markdown));
+  const frame = stripAnsi(lastFrame());
+  const lines = frame.split('\n').map(rstrip).filter(Boolean);
+
+  // ASCII style is the default.
+  const borderLines = lines.filter((line) => line.trimStart().startsWith('+'));
+  t.is(borderLines.length, 3);
+
+  const [top, middle, bottom] = borderLines;
+  t.is(top.length, middle.length);
+  t.is(top.length, bottom.length);
+
+  // Pick the first header row line and first data row line and ensure they match border width.
+  const headerLine = lines.find((line) => line.trimStart().startsWith('|')) ?? '';
+  t.true(headerLine.length > 0);
+  t.is(headerLine.length, top.length);
+
+  const dataLine = lines.findLast((line) => line.trimStart().startsWith('|')) ?? '';
+  t.true(dataLine.length > 0);
+  t.is(dataLine.length, top.length);
 });
 
 // --- Complex markdown ---

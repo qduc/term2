@@ -35,8 +35,15 @@ export class OpenAICompatibleModel implements Model {
   async getResponse(request: ModelRequest): Promise<ModelResponse> {
     const resolvedModelId = this.#resolveModelFromRequest(request) || this.#modelId;
     const messages = buildMessagesFromRequest(request, resolvedModelId, this.#loggingService);
-
     const tools = extractFunctionToolsFromRequest(request);
+
+    this.#loggingService.debug('OpenAI-compatible response start', {
+      provider: this.#providerId,
+      messageCount: Array.isArray(messages) ? messages.length : 0,
+      messages,
+      toolsCount: Array.isArray(tools) ? tools.length : 0,
+      tools,
+    });
 
     const res = await callOpenAICompatibleChatCompletions({
       baseUrl: this.#baseUrl,
@@ -57,7 +64,8 @@ export class OpenAICompatibleModel implements Model {
     const responseId = json?.id ?? randomUUID();
     const usage = normalizeUsage(json?.usage || {}) as any;
 
-    const reasoning = choice?.message?.reasoning || choice?.message?.reasoning_content;
+    const reasoningContent = choice?.message?.reasoning_content;
+    const reasoning = choice?.message?.reasoning || reasoningContent;
     const reasoningDetails = choice?.message?.reasoning_details;
     const toolCalls = choice?.message?.tool_calls;
 
@@ -108,7 +116,18 @@ export class OpenAICompatibleModel implements Model {
       }
     }
 
-    if (textContent) {
+    const hasTextContent = textContent.length > 0;
+    const hasToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
+    const shouldAddFallbackMessage = !hasTextContent && !hasToolCalls;
+    const assistantText = hasTextContent ? textContent : shouldAddFallbackMessage ? 'No response from model.' : '';
+
+    this.#loggingService.debug('OpenAI-compatible response done', {
+      text: assistantText,
+      reasoningDetails,
+      toolCalls,
+    });
+
+    if (hasTextContent || shouldAddFallbackMessage) {
       output.push({
         type: 'message',
         role: 'assistant',
@@ -116,11 +135,17 @@ export class OpenAICompatibleModel implements Model {
         content: [
           {
             type: 'output_text',
-            text: textContent,
+            text: assistantText,
           },
         ],
         ...(typeof reasoning === 'string' ? { reasoning } : {}),
+        ...(typeof reasoningContent === 'string' ? { reasoning_content: reasoningContent } : {}),
         ...(reasoningDetails != null ? { reasoning_details: reasoningDetails } : {}),
+        providerData: {
+          ...(typeof reasoning === 'string' ? { reasoning } : {}),
+          ...(typeof reasoningContent === 'string' ? { reasoning_content: reasoningContent } : {}),
+          ...(reasoningDetails != null ? { reasoning_details: reasoningDetails } : {}),
+        },
       } as any);
     }
 
@@ -136,7 +161,13 @@ export class OpenAICompatibleModel implements Model {
             arguments: decodedArgs,
             status: 'completed',
             ...(typeof reasoning === 'string' ? { reasoning } : {}),
+            ...(typeof reasoningContent === 'string' ? { reasoning_content: reasoningContent } : {}),
             ...(reasoningDetails != null ? { reasoning_details: reasoningDetails } : {}),
+            providerData: {
+              ...(typeof reasoning === 'string' ? { reasoning } : {}),
+              ...(typeof reasoningContent === 'string' ? { reasoning_content: reasoningContent } : {}),
+              ...(reasoningDetails != null ? { reasoning_details: reasoningDetails } : {}),
+            },
           } as any);
         }
       }
@@ -158,8 +189,9 @@ export class OpenAICompatibleModel implements Model {
     this.#loggingService.debug('OpenAI-compatible stream start', {
       provider: this.#providerId,
       messageCount: Array.isArray(messages) ? messages.length : 0,
-      messageRoles: Array.isArray(messages) ? messages.map((m: any) => m.role) : [],
+      messages,
       toolsCount: Array.isArray(tools) ? tools.length : 0,
+      tools,
     });
 
     const res = await callOpenAICompatibleChatCompletions({
@@ -180,6 +212,7 @@ export class OpenAICompatibleModel implements Model {
     let responseId = 'unknown';
     let usageData: any = null;
     let accumulatedReasoningText = '';
+    let accumulatedReasoningContent = '';
     const accumulatedReasoning: any[] = [];
     const accumulatedToolCalls: any[] = [];
 
@@ -201,6 +234,7 @@ export class OpenAICompatibleModel implements Model {
       responseId,
       usageData,
       accumulatedReasoningText,
+      accumulatedReasoningContent,
       accumulatedReasoning,
       accumulatedToolCalls,
     };
@@ -228,6 +262,7 @@ export class OpenAICompatibleModel implements Model {
     reasoningDetails?: any,
     toolCalls?: any[],
     reasoningText?: string,
+    reasoningContent?: string,
   ): any[] {
     const output: any[] = [];
 
@@ -278,7 +313,17 @@ export class OpenAICompatibleModel implements Model {
           },
         ],
         ...(typeof reasoningText === 'string' && reasoningText.length > 0 ? { reasoning: reasoningText } : {}),
+        ...(typeof reasoningContent === 'string' && reasoningContent.length > 0
+          ? { reasoning_content: reasoningContent }
+          : {}),
         ...(reasoningDetails != null ? { reasoning_details: reasoningDetails } : {}),
+        providerData: {
+          ...(typeof reasoningText === 'string' && reasoningText.length > 0 ? { reasoning: reasoningText } : {}),
+          ...(typeof reasoningContent === 'string' && reasoningContent.length > 0
+            ? { reasoning_content: reasoningContent }
+            : {}),
+          ...(reasoningDetails != null ? { reasoning_details: reasoningDetails } : {}),
+        },
       } as any);
     }
 
@@ -294,7 +339,17 @@ export class OpenAICompatibleModel implements Model {
             arguments: args,
             status: 'completed',
             ...(typeof reasoningText === 'string' && reasoningText.length > 0 ? { reasoning: reasoningText } : {}),
+            ...(typeof reasoningContent === 'string' && reasoningContent.length > 0
+              ? { reasoning_content: reasoningContent }
+              : {}),
             ...(reasoningDetails != null ? { reasoning_details: reasoningDetails } : {}),
+            providerData: {
+              ...(typeof reasoningText === 'string' && reasoningText.length > 0 ? { reasoning: reasoningText } : {}),
+              ...(typeof reasoningContent === 'string' && reasoningContent.length > 0
+                ? { reasoning_content: reasoningContent }
+                : {}),
+              ...(reasoningDetails != null ? { reasoning_details: reasoningDetails } : {}),
+            },
           } as any);
         }
       }
@@ -369,6 +424,12 @@ export class OpenAICompatibleModel implements Model {
 
     const reasoningDetails = state.accumulatedReasoning.length > 0 ? state.accumulatedReasoning : undefined;
 
+    this.#loggingService.debug('OpenAI-compatible stream done', {
+      text: state.accumulated,
+      reasoningDetails,
+      toolCalls: state.accumulatedToolCalls,
+    });
+
     yield {
       type: 'response_done',
       response: {
@@ -379,6 +440,7 @@ export class OpenAICompatibleModel implements Model {
           reasoningDetails,
           state.accumulatedToolCalls,
           state.accumulatedReasoningText,
+          state.accumulatedReasoningContent,
         ),
       },
     } as any;
@@ -451,6 +513,11 @@ export class OpenAICompatibleModel implements Model {
     const reasoningDelta = json?.choices?.[0]?.delta?.reasoning || json?.choices?.[0]?.delta?.reasoning_content;
     if (typeof reasoningDelta === 'string' && reasoningDelta.length > 0) {
       state.accumulatedReasoningText += reasoningDelta;
+    }
+
+    const reasoningContentDelta = json?.choices?.[0]?.delta?.reasoning_content;
+    if (typeof reasoningContentDelta === 'string' && reasoningContentDelta.length > 0) {
+      state.accumulatedReasoningContent += reasoningContentDelta;
     }
   }
 

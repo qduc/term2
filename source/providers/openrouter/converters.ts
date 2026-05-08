@@ -53,19 +53,20 @@ function convertAgentItemToOpenRouterMessage(item: any, loggingService: ILogging
 
     // Preserve OpenRouter "reasoning" field (aka reasoning tokens) when present.
     // This is distinct from reasoning_details blocks.
-    const reasoning = rawItem.reasoning ?? item.reasoning;
+    const providerData = rawItem.providerData ?? item.providerData;
+    const reasoning = rawItem.reasoning ?? item.reasoning ?? providerData?.reasoning;
     if (typeof reasoning === 'string') {
       message.reasoning = reasoning;
     }
 
-    const reasoningContent = rawItem.reasoning_content ?? item.reasoning_content;
+    const reasoningContent = rawItem.reasoning_content ?? item.reasoning_content ?? providerData?.reasoning_content;
     if (typeof reasoningContent === 'string') {
       message.reasoning_content = reasoningContent;
     }
 
     // Preserve reasoning_details EXACTLY as received (required by OpenRouter).
     // Some SDK history items may carry these fields under `rawItem`.
-    const reasoningDetails = rawItem.reasoning_details ?? item.reasoning_details;
+    const reasoningDetails = rawItem.reasoning_details ?? item.reasoning_details ?? providerData?.reasoning_details;
     if (reasoningDetails != null) {
       loggingService.debug('convertAgentItemToOpenRouterMessage: reasoning_details', reasoningDetails);
       message.reasoning_details = reasoningDetails;
@@ -99,9 +100,10 @@ function convertAgentItemToOpenRouterMessage(item: any, loggingService: ILogging
   if (rawItem?.type === 'function_call') {
     // Tool-call continuation: to preserve reasoning blocks across tool flows,
     // we may need to replay reasoning_details/reasoning alongside tool_calls.
-    const reasoning = rawItem.reasoning ?? item.reasoning;
-    const reasoningContent = rawItem.reasoning_content ?? item.reasoning_content;
-    const reasoningDetails = rawItem.reasoning_details ?? item.reasoning_details;
+    const providerData = rawItem.providerData ?? item.providerData;
+    const reasoning = rawItem.reasoning ?? item.reasoning ?? providerData?.reasoning;
+    const reasoningContent = rawItem.reasoning_content ?? item.reasoning_content ?? providerData?.reasoning_content;
+    const reasoningDetails = rawItem.reasoning_details ?? item.reasoning_details ?? providerData?.reasoning_details;
 
     return {
       role: 'assistant',

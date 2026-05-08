@@ -71,6 +71,37 @@ test('merges consecutive assistant messages with tool calls and preserves reason
   t.deepEqual(messages[0].reasoning_details, [{ type: 'reasoning.text', text: 'thinking' }]);
 });
 
+test('replays providerData reasoning_content on function calls', (t) => {
+  const input = [
+    {
+      type: 'function_call',
+      id: 'call-1',
+      name: 'tool1',
+      arguments: '{}',
+      providerData: {
+        reasoning_content: 'thinking before tool call',
+      },
+    },
+    {
+      type: 'function_call_result',
+      callId: 'call-1',
+      output: 'result',
+    },
+  ];
+
+  const messages = buildMessagesFromRequest(
+    {
+      input: input as any,
+      tools: [],
+    } as any,
+    'model-id',
+    logger,
+  );
+
+  t.is(messages[0].role, 'assistant');
+  t.is(messages[0].reasoning_content, 'thinking before tool call');
+});
+
 test('does not merge if intervening message', (t) => {
   const input = [
     {

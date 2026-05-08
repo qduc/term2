@@ -1,3 +1,43 @@
+## [0.2.0] - 2026-05-08
+
+### Features
+- Model setting configurations and provider handling for edit-healing
+- Exa search provider integration
+- `/copy` command to copy the last assistant message
+- `/auto-approve` slash command with enhanced StatusBar UI
+- Shell command auto-approval advisory mode with LLM-based safety evaluation and configurable settings
+- Auto-approval system with batch evaluation, caching, and leaderboard functionality
+- Auto-approval evaluator with YAML-based multi-provider/model configuration
+- Severity-weighted scoring and wrong-approval penalty in leaderboard calculations
+- Prompt version handling for improved result tracking
+- Current date in system prompt
+- Default path for `--models-file` with improved model runs validation
+
+### Bug Fixes
+- Fixed reasoning_content not included when using openai-compatible providers
+- Fixed stale closures in keyboard handlers and provider switching
+- Ensured reasoning_content correctly replaces reasoning in openai-compatible tests and model logic
+
+### Improvements
+- Table rendering with word wrapping and width constraints
+- Enhanced command safety classification and advisory logic for improved risk assessment
+- Improved logging for openai-compatible providers
+- Unified traffic log structure with simplified cleanup logic
+- Shell auto-approval evaluator with compact history context and truncation logic
+- Command search results now prioritized and sorted alphabetically
+- Reduced noisy logs throughout the application
+- Decoupled business logic and state management from main UI component
+- Decomposed ConversationSession into focused collaborator modules
+- Enhanced error handling and retry logic for rate-limited operations
+
+### Internal/Chores
+- Tests refactored to improve maintainability and coverage
+- Extracted shared selection logic into useSelection hook
+- Refactored approval rejection interceptor with comprehensive tests
+- Refactored InputBox into focused hooks and pure helpers
+- Replaced async result promises with async generators in conversation session flow
+- Upgraded @openai/agents, ink, and ink-prompt dependencies
+
 ## [0.1.8] - 2026-02-14
 
 ### Features

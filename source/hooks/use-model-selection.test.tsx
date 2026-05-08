@@ -7,11 +7,15 @@ import { createMockSettingsService } from '../services/settings-service.mock.js'
 import { Text } from 'ink';
 
 const TestComponent = ({ onResults }: { onResults: (results: any) => void }) => {
-  const { setMode } = useInputContext();
+  const { setInput, setCursorOffset, setMode, setTriggerIndex } = useInputContext();
 
   useEffect(() => {
+    const input = '/model deepseek-v4-flash --provider=opencode go';
+    setInput(input);
+    setCursorOffset(input.length);
+    setTriggerIndex('/model '.length);
     setMode('model_selection');
-  }, [setMode]);
+  }, [setCursorOffset, setInput, setMode, setTriggerIndex]);
 
   const models = useModelSelection({
     loggingService: { warn: () => {} } as any,
@@ -55,4 +59,20 @@ test('toggleProvider cycles through available providers', async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 50));
   const thirdProvider = capturedModels.provider;
   t.not(thirdProvider, secondProvider, 'Provider should have switched again');
+});
+
+test('model selection query strips provider suffix from input', async (t) => {
+  let capturedModels: any;
+  render(
+    <InputProvider>
+      <TestComponent
+        onResults={(m) => {
+          capturedModels = m;
+        }}
+      />
+    </InputProvider>,
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  t.is(capturedModels.query, 'deepseek-v4-flash');
 });

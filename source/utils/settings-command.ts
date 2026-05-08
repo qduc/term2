@@ -2,6 +2,7 @@ import type { SlashCommand } from '../components/SlashCommandMenu.js';
 import type { SettingsService, SettingsWithSources } from '../services/settings-service.js';
 import { SETTING_KEYS } from '../services/settings-service.js';
 import { getProvider } from '../providers/index.js';
+import { parseModelProviderArg } from './model-provider-arg.js';
 
 export function parseSettingValue(raw: string): any {
   const value = raw.trim();
@@ -159,9 +160,8 @@ export function createSettingsCommand({
           key === SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL) &&
         typeof parsedValue === 'string'
       ) {
-        const providerMatch = parsedValue.match(/--provider=(\w+)/);
-        if (providerMatch) {
-          const provider = providerMatch[1];
+        const { modelId, provider } = parseModelProviderArg(parsedValue);
+        if (provider) {
           // Validate provider
           if (!getProvider(provider)) {
             addSystemMessage(`Error: Unknown provider '${provider}'`);
@@ -180,7 +180,7 @@ export function createSettingsCommand({
             applyRuntimeSetting(providerKey, provider);
           }
         }
-        parsedValue = parsedValue.replace(/\s*--provider=\w+\s*/, '').trim();
+        parsedValue = modelId;
       }
 
       // Prevent changing provider via settings command - it can only be changed

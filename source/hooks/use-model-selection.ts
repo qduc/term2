@@ -3,6 +3,7 @@ import { useInputContext } from '../context/InputContext.js';
 import { fetchModels, filterModels, type ModelInfo } from '../services/model-service.js';
 import { getProviderIds } from '../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import { parseModelProviderArg } from '../utils/model-provider-arg.js';
 
 export const MODEL_TRIGGER = '/settings agent.model ';
 export const MODEL_CMD_TRIGGER = '/model ';
@@ -36,7 +37,7 @@ export const useModelSelection = (
   const query = useMemo(() => {
     if (!isOpen || triggerIndex === null) return '';
     const end = Math.min(cursorOffset, input.length);
-    return input.slice(triggerIndex, end);
+    return parseModelProviderArg(input.slice(triggerIndex, end)).modelId;
   }, [isOpen, triggerIndex, input, cursorOffset]);
 
   useEffect(() => {

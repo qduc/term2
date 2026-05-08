@@ -1,6 +1,7 @@
 import test from 'ava';
 import type { Message } from './use-conversation.js';
 import { getLastFinalAssistantText } from './use-app-commands.js';
+import { parseModelProviderArg } from '../utils/model-provider-arg.js';
 
 test('getLastFinalAssistantText returns the latest bot message', (t) => {
   const messages: Message[] = [
@@ -30,4 +31,11 @@ test('getLastFinalAssistantText returns null when no bot message exists', (t) =>
   ];
 
   t.is(getLastFinalAssistantText(messages), null);
+});
+
+test('parseModelProviderArg supports provider names with spaces for /model', (t) => {
+  t.deepEqual(parseModelProviderArg('deepseek-v4-flash --provider=opencode go'), {
+    modelId: 'deepseek-v4-flash',
+    provider: 'opencode go',
+  });
 });

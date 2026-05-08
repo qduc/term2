@@ -5,6 +5,7 @@ import { createSettingsCommand } from '../utils/settings-command.js';
 import { getProvider } from '../providers/index.js';
 import { copyToClipboard } from '../utils/clipboard.js';
 import { Message } from './use-conversation.js';
+import { parseModelProviderArg } from '../utils/model-provider-arg.js';
 
 interface UseAppCommandsProps {
   settingsService: SettingsService;
@@ -146,14 +147,9 @@ export const useAppCommands = ({
             return false;
           }
 
-          // Parse model and provider from args
-          // Format: "model-id --provider=providerid" or just "model-id"
-          const providerMatch = args.match(/--provider=(\w+)/);
-          const modelId = args.replace(/\s*--provider=\w+\s*/, '').trim();
+          const { modelId, provider } = parseModelProviderArg(args);
 
-          // Validate provider if specified
-          if (providerMatch) {
-            const provider = providerMatch[1];
+          if (provider) {
             if (!getProvider(provider)) {
               addSystemMessage(`Error: Unknown provider '${provider}'`);
               return false;
@@ -165,8 +161,7 @@ export const useAppCommands = ({
           applyRuntimeSetting('agent.model', modelId);
 
           let providerMsg = '';
-          if (providerMatch) {
-            const provider = providerMatch[1];
+          if (provider) {
             settingsService.set('agent.provider', provider);
             applyRuntimeSetting('agent.provider', provider);
             providerMsg = ` (${provider})`;

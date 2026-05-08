@@ -1,5 +1,6 @@
 import test from 'ava';
 import { createSettingsCommand, formatSettingsSummary, parseSettingValue } from '../../dist/utils/settings-command.js';
+import { upsertProvider } from '../../dist/providers/index.js';
 
 const baseSettings = {
   agent: {
@@ -189,5 +190,26 @@ test('setting agent.mentorModel strips --provider flag and saves mentor provider
   t.deepEqual(deps.applied, [
     { key: 'agent.mentorProvider', value: 'openrouter' },
     { key: 'agent.mentorModel', value: 'some/mentor-model' },
+  ]);
+});
+
+test('setting agent.model accepts provider names with spaces', (t) => {
+  const providerId = `opencode go ${Date.now()} ${Math.random()}`;
+  upsertProvider({
+    id: providerId,
+    label: providerId,
+    fetchModels: async () => [],
+  });
+  const deps = createDeps();
+  const command = createSettingsCommand(deps);
+  command.action(`agent.model deepseek-v4-flash --provider=${providerId}`);
+
+  t.deepEqual(deps.setCalls, [
+    { key: 'agent.provider', value: providerId },
+    { key: 'agent.model', value: 'deepseek-v4-flash' },
+  ]);
+  t.deepEqual(deps.applied, [
+    { key: 'agent.provider', value: providerId },
+    { key: 'agent.model', value: 'deepseek-v4-flash' },
   ]);
 });

@@ -190,6 +190,35 @@ test('wraps long table cell content within a bounded table width', (t) => {
   t.true(lines.every((line) => line.length <= 100));
 });
 
+test('renders wide table lines with room for terminal newline wrapping', (t) => {
+  const markdown = `| Product | Description | Price | Availability |
+| --- | --- | --- | --- |
+| Laptop Pro X1 | A high-performance ultrabook with a 15.6-inch 4K display, 16GB RAM, 512GB SSD storage, and Intel Core i7 processor for professionals who need speed and reliability. | $1,299.99 | In Stock |
+| Wireless Headphones Max | Premium noise-cancelling headphones with 30-hour battery life, Bluetooth 5.0 connectivity, memory foam ear cushions, and a sleek folding design for easy portability. | $349.99 | Only 3 left |`;
+
+  const { lastFrame } = render(React.createElement(MarkdownRenderer, null, markdown));
+  const frame = stripAnsi(lastFrame());
+  const lines = frame.split('\n').map(rstrip).filter(Boolean);
+
+  t.true(lines.every((line) => line.length < 100));
+});
+
+test('keeps table header labels intact when reserving column widths', (t) => {
+  const markdown = `| Product | Description | Price | Availability |
+| --- | --- | --- | --- |
+| Laptop Pro X1 | A high-performance ultrabook with a 15.6-inch 4K display, 16GB RAM, 512GB SSD storage, and Intel Core i7 processor for professionals who need speed and reliability. | $1,299.99 | In Stock |`;
+
+  const { lastFrame } = render(React.createElement(MarkdownRenderer, null, markdown));
+  const frame = stripAnsi(lastFrame());
+  const lines = frame.split('\n').map(rstrip).filter(Boolean);
+  const headerLines = lines.slice(
+    0,
+    lines.findIndex((line, index) => index > 0 && line.trimStart().startsWith('+')),
+  );
+
+  t.true(headerLines.some((line) => line.includes('Availability')));
+});
+
 test('renders table borders and header separator with the same width as table rows', (t) => {
   const markdown = `| A | B |
 | --- | --- |

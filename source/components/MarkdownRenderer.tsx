@@ -23,9 +23,10 @@ const TABLE_MAX_WIDTH = 100;
 const TABLE_CELL_PADDING = 1;
 const TABLE_MIN_COLUMN_WIDTH = 8;
 const TABLE_MARGIN_X = 1;
+const TABLE_TERMINAL_WRAP_SLACK = 1;
 
 const makeLine = (widths: number[], char: string, joiner: string, left = '', right = ''): string =>
-  left + widths.map((w, i) => char.repeat(i === widths.length - 1 ? w - 2 : w - 1)).join(joiner) + right;
+  left + widths.map((w) => char.repeat(w)).join(joiner) + right;
 
 // Calculate column widths based on content
 const calculateColumnWidths = (
@@ -59,10 +60,19 @@ const calculateColumnWidths = (
     return desiredWidths;
   }
 
-  const minWidth = Math.max(1, Math.min(TABLE_MIN_COLUMN_WIDTH, Math.floor(availableWidth / numCols)));
-  const cappedWidths = new Array(numCols).fill(minWidth);
-  let remainingWidth = availableWidth - minWidth * numCols;
-  const flexibleWidths = desiredWidths.map((width) => Math.max(0, width - minWidth));
+  const headerMinimumWidths = header.map((cell, index) =>
+    Math.min(desiredWidths[index], Math.max(TABLE_MIN_COLUMN_WIDTH, cell.text.length + padding * 2)),
+  );
+  const minimumTotal = headerMinimumWidths.reduce((sum, width) => sum + width, 0);
+
+  const minimumWidths =
+    minimumTotal <= availableWidth
+      ? headerMinimumWidths
+      : new Array(numCols).fill(Math.max(1, Math.min(TABLE_MIN_COLUMN_WIDTH, Math.floor(availableWidth / numCols))));
+
+  const cappedWidths = [...minimumWidths];
+  let remainingWidth = availableWidth - minimumWidths.reduce((sum, width) => sum + width, 0);
+  const flexibleWidths = desiredWidths.map((width, index) => Math.max(0, width - minimumWidths[index]));
   let flexibleTotal = flexibleWidths.reduce((sum, width) => sum + width, 0);
 
   while (remainingWidth > 0 && flexibleTotal > 0) {
@@ -219,7 +229,11 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
 
   // Respect the real terminal width so the table never wraps
   const terminalColumns = stdout.columns || TABLE_MAX_WIDTH;
-  const effectiveMaxWidth = Math.min(TABLE_MAX_WIDTH, terminalColumns - TABLE_MARGIN_X * 2);
+  const minimumTableWidth = numCols * (TABLE_CELL_PADDING * 2 + 1) + numCols + 1;
+  const effectiveMaxWidth = Math.max(
+    minimumTableWidth,
+    Math.min(TABLE_MAX_WIDTH, terminalColumns - TABLE_MARGIN_X * 2 - TABLE_TERMINAL_WRAP_SLACK),
+  );
 
   // Calculate column widths
   const columnWidths = calculateColumnWidths(header, rows, TABLE_CELL_PADDING, effectiveMaxWidth);

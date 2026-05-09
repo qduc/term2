@@ -1,7 +1,7 @@
 import { Runner } from '@openai/agents';
 import type { ISettingsService } from '../services/service-interfaces.js';
 import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry.js';
-import { OpenAICompatibleProvider } from './openai-compatible/provider.js';
+import { AiSdkOpenAICompatibleProvider } from './ai-sdk-openai-compatible.provider.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './openai-compatible/utils.js';
 
 export type CustomProviderConfig = {
@@ -35,14 +35,27 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     id: providerId,
     label,
     isRuntimeDefined: true,
-    createRunner: ({ settingsService, loggingService }) => {
+    createRunner: ({ settingsService }) => {
       // baseUrl/apiKey can change only with restart, but we re-resolve from
       // settings at runner creation time to respect precedence.
       return new Runner({
-        modelProvider: new OpenAICompatibleProvider({
-          settingsService,
-          loggingService,
-          providerId,
+        modelProvider: new AiSdkOpenAICompatibleProvider({
+          label,
+          defaultModel: settingsService.get('agent.model') || '',
+          resolveConfig: () => {
+            const resolved = findConfigFromSettings(settingsService, providerId);
+            if (!resolved) {
+              throw new Error(
+                `Custom provider '${providerId}' is not configured. ` +
+                  `Please add it to settings.json under \"providers\".`,
+              );
+            }
+
+            return {
+              baseURL: normalizeBaseUrl(resolved.baseUrl),
+              apiKey: resolved.apiKey,
+            };
+          },
         }),
       });
     },

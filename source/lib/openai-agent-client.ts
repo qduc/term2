@@ -439,9 +439,7 @@ export class OpenAIAgentClient {
       const providerLabel = providerDef?.label || providerId;
       throw new Error(
         `${providerLabel} is configured but could not be initialized. ` +
-          `Please check that all required credentials are set. ` +
-          `For OpenRouter, set OPENROUTER_API_KEY environment variable. ` +
-          `Get your API key from: https://openrouter.ai/keys`,
+          `Please check that all required credentials and provider settings are set.`,
       );
     }
 

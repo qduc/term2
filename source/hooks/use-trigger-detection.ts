@@ -1,6 +1,7 @@
 import { MutableRefObject, useEffect } from 'react';
 import type { InputMode } from '../context/InputContext.js';
 import { determineActiveMenu } from '../components/Input/determine-active-menu.js';
+import type { SlashCommand } from '../slash-commands.js';
 
 type MenuHandle = {
   open: (...args: never[]) => void;
@@ -23,6 +24,7 @@ type Options = {
   settings: SettingsHandle;
   settingsValue: SettingsValueHandle;
   models: ModelsHandle;
+  slashCommands: SlashCommand[];
 };
 
 // Closes are mode-guarded inside each hook, so calling them on inactive menus is a no-op.
@@ -40,6 +42,7 @@ export const useTriggerDetection = ({
   settings,
   settingsValue,
   models,
+  slashCommands,
 }: Options): void => {
   useEffect(() => {
     if (escPressedRef.current) {
@@ -47,7 +50,7 @@ export const useTriggerDetection = ({
       return;
     }
 
-    const active = determineActiveMenu(value, cursorOffset);
+    const active = determineActiveMenu(value, cursorOffset, slashCommands);
 
     switch (active.type) {
       case 'model':
@@ -82,7 +85,7 @@ export const useTriggerDetection = ({
     // Exhaustiveness check
     const _exhaustive: never = active;
     void _exhaustive;
-  }, [value, cursorOffset, mode, slash, path, settings, settingsValue, models, escPressedRef]);
+  }, [value, cursorOffset, mode, slash, path, settings, settingsValue, models, slashCommands, escPressedRef]);
 };
 
 // Re-export for callers that want to inspect the dispatch shape directly.

@@ -1,5 +1,6 @@
 import React, { FC } from 'react';
-import SlashCommandMenu, { SlashCommand } from '../SlashCommandMenu.js';
+import SlashCommandMenu from '../SlashCommandMenu.js';
+import type { SlashCommand } from '../../slash-commands.js';
 import PathSelectionMenu from '../PathSelectionMenu.js';
 import SettingsSelectionMenu from '../SettingsSelectionMenu.js';
 import SettingsValueSelectionMenu from '../SettingsValueSelectionMenu.js';

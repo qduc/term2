@@ -1,4 +1,5 @@
-import type { SlashCommand } from '../components/SlashCommandMenu.js';
+import type { SlashCommand } from '../slash-commands.js';
+import { SETTINGS_RESET_TRIGGER, SETTINGS_TRIGGER } from '../components/Input/triggers.js';
 import type { SettingsService, SettingsWithSources } from '../services/settings-service.js';
 import { SETTING_KEYS } from '../services/settings-service.js';
 import { getProvider } from '../providers/index.js';
@@ -119,6 +120,7 @@ export function createSettingsCommand({
     name: 'settings',
     description: 'View or modify settings',
     expectsArgs: true,
+    completion: { type: 'settings', trigger: SETTINGS_TRIGGER, resetTrigger: SETTINGS_RESET_TRIGGER },
     action: (args?: string) => {
       const trimmedArgs = args?.trim() ?? '';
 

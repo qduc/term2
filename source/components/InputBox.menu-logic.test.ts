@@ -1,13 +1,39 @@
 import test from 'ava';
 import { findPathTrigger } from './Input/triggers.js';
 import { determineActiveMenu, type ActiveMenu } from './Input/determine-active-menu.js';
+import type { SlashCommand } from '../slash-commands.js';
 import {
   MODEL_TRIGGER,
-  MODEL_CMD_TRIGGER,
   MENTOR_TRIGGER,
   AUTO_APPROVE_MODEL_TRIGGER,
   EDIT_HEALING_MODEL_TRIGGER,
 } from '../hooks/use-model-selection.js';
+
+const commandMetadata: SlashCommand[] = [
+  {
+    name: 'model',
+    description: 'Change model',
+    expectsArgs: true,
+    completion: { type: 'model', trigger: '/model ' },
+    action: () => {},
+  },
+  {
+    name: 'settings',
+    description: 'Settings',
+    expectsArgs: true,
+    completion: { type: 'settings', trigger: '/settings ', resetTrigger: '/settings reset ' },
+    action: () => {},
+  },
+  {
+    name: 'auto-approve',
+    description: 'Shell approval',
+    expectsArgs: true,
+    completion: { type: 'setting-value', trigger: '/auto-approve ', settingKey: 'shell.autoApproveMode' },
+    action: () => {},
+  },
+];
+
+const determine = (input: string, cursor = input.length) => determineActiveMenu(input, cursor, commandMetadata);
 
 test('determineActiveMenu - model triggers (priority 0)', (t) => {
   const cases: Array<{ input: string; cursor: number; expected: ActiveMenu }> = [
@@ -19,7 +45,7 @@ test('determineActiveMenu - model triggers (priority 0)', (t) => {
     {
       input: '/model gpt',
       cursor: '/model gpt'.length,
-      expected: { type: 'model', startIndex: MODEL_CMD_TRIGGER.length },
+      expected: { type: 'model', startIndex: '/model '.length },
     },
     {
       input: '/settings agent.mentorModel claude',
@@ -39,7 +65,7 @@ test('determineActiveMenu - model triggers (priority 0)', (t) => {
   ];
 
   for (const { input, cursor, expected } of cases) {
-    t.deepEqual(determineActiveMenu(input, cursor), expected, `Failed for input: "${input}"`);
+    t.deepEqual(determine(input, cursor), expected, `Failed for input: "${input}"`);
   }
 });
 
@@ -55,14 +81,14 @@ test('determineActiveMenu - settings menu (priority 1)', (t) => {
   ];
 
   for (const { input, cursor, expected } of cases) {
-    t.deepEqual(determineActiveMenu(input, cursor), expected, `Failed for input: "${input}"`);
+    t.deepEqual(determine(input, cursor), expected, `Failed for input: "${input}"`);
   }
 });
 
 test('determineActiveMenu - settings reset variant', (t) => {
   const reset = '/settings reset ';
-  t.deepEqual(determineActiveMenu(reset, reset.length), { type: 'settings', startIndex: reset.length });
-  t.deepEqual(determineActiveMenu(`${reset}log`, `${reset}log`.length), {
+  t.deepEqual(determine(reset), { type: 'settings', startIndex: reset.length });
+  t.deepEqual(determine(`${reset}log`), {
     type: 'settings',
     startIndex: reset.length,
   });
@@ -71,7 +97,7 @@ test('determineActiveMenu - settings reset variant', (t) => {
 test('determineActiveMenu - settings_value transition (key + space)', (t) => {
   // Generic key, not a model trigger.
   const input = '/settings logging.logLevel ';
-  t.deepEqual(determineActiveMenu(input, input.length), {
+  t.deepEqual(determine(input), {
     type: 'settings_value',
     key: 'logging.logLevel',
     startIndex: input.length,
@@ -80,7 +106,7 @@ test('determineActiveMenu - settings_value transition (key + space)', (t) => {
 
 test('determineActiveMenu - auto-approve trigger maps to settings_value', (t) => {
   const input = '/auto-approve ';
-  t.deepEqual(determineActiveMenu(input, input.length), {
+  t.deepEqual(determine(input), {
     type: 'settings_value',
     key: 'shell.autoApproveMode',
     startIndex: input.length,
@@ -95,7 +121,7 @@ test('determineActiveMenu - slash menu (priority 2)', (t) => {
   ];
 
   for (const { input, cursor, expected } of cases) {
-    t.deepEqual(determineActiveMenu(input, cursor), expected, `Failed for input: "${input}"`);
+    t.deepEqual(determine(input, cursor), expected, `Failed for input: "${input}"`);
   }
 });
 
@@ -111,7 +137,7 @@ test('determineActiveMenu - path menu (priority 3)', (t) => {
   ];
 
   for (const { input, cursor, expected } of cases) {
-    t.deepEqual(determineActiveMenu(input, cursor), expected, `Failed for input: "${input}"`);
+    t.deepEqual(determine(input, cursor), expected, `Failed for input: "${input}"`);
   }
 });
 
@@ -123,28 +149,46 @@ test('determineActiveMenu - none', (t) => {
   ];
 
   for (const { input, cursor, expected } of cases) {
-    t.deepEqual(determineActiveMenu(input, cursor), expected, `Failed for input: "${input}"`);
+    t.deepEqual(determine(input, cursor), expected, `Failed for input: "${input}"`);
   }
 });
 
 test('determineActiveMenu - priority enforcement', (t) => {
   // Settings beats slash.
-  t.deepEqual(determineActiveMenu('/settings ', 10), { type: 'settings', startIndex: 10 });
+  t.deepEqual(determine('/settings ', 10), { type: 'settings', startIndex: 10 });
 
   // Model beats settings when model trigger fully present.
-  t.deepEqual(determineActiveMenu('/settings agent.model ', MODEL_TRIGGER.length), {
+  t.deepEqual(determine('/settings agent.model ', MODEL_TRIGGER.length), {
     type: 'model',
     startIndex: MODEL_TRIGGER.length,
   });
 
   // Slash beats path: "/@test" stays slash.
-  t.deepEqual(determineActiveMenu('/@test', 6), { type: 'slash' });
+  t.deepEqual(determine('/@test', 6), { type: 'slash' });
+});
+
+test('determineActiveMenu - static setting-value commands come from command metadata', (t) => {
+  const commands: SlashCommand[] = [
+    {
+      name: 'theme-mode',
+      description: 'Set theme mode',
+      expectsArgs: true,
+      completion: { type: 'setting-value', trigger: '/theme-mode ', settingKey: 'ui.theme' },
+      action: () => {},
+    },
+  ];
+
+  t.deepEqual(determineActiveMenu('/theme-mode ', '/theme-mode '.length, commands), {
+    type: 'settings_value',
+    key: 'ui.theme',
+    startIndex: '/theme-mode '.length,
+  });
 });
 
 test('determineActiveMenu - cursor not yet past trigger returns none', (t) => {
   // value contains "/settings " but cursor is mid-trigger; cursor < trigger.length and the trailing
   // space disqualifies slash too, so no menu activates.
-  t.deepEqual(determineActiveMenu('/settings ', 5), { type: 'none' });
+  t.deepEqual(determine('/settings ', 5), { type: 'none' });
 });
 
 test('findPathTrigger - basic behavior preserved', (t) => {

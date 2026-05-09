@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import type { SlashCommand } from '../components/SlashCommandMenu.js';
+import type { SlashCommand } from '../slash-commands.js';
 import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
 

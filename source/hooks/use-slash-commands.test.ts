@@ -1,6 +1,6 @@
 import test from 'ava';
 import { filterCommands, shouldAutocomplete, extractCommandArgs } from './use-slash-commands.js';
-import type { SlashCommand } from '../components/SlashCommandMenu.js';
+import type { SlashCommand } from '../slash-commands.js';
 
 // Mock commands for testing
 const MOCK_COMMANDS: SlashCommand[] = [

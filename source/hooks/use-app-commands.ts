@@ -1,11 +1,13 @@
 import { useMemo, useCallback } from 'react';
-import type { SlashCommand } from '../components/SlashCommandMenu.js';
+import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings-service.js';
 import { createSettingsCommand } from '../utils/settings-command.js';
 import { getProvider } from '../providers/index.js';
 import { copyToClipboard } from '../utils/clipboard.js';
 import { Message } from './use-conversation.js';
 import { parseModelProviderArg } from '../utils/model-provider-arg.js';
+import { MODEL_CMD_TRIGGER } from '../utils/model-settings.js';
+import { AUTO_APPROVE_TRIGGER } from '../components/Input/triggers.js';
 
 interface UseAppCommandsProps {
   settingsService: SettingsService;
@@ -141,6 +143,7 @@ export const useAppCommands = ({
         name: 'model',
         description: 'Change the AI model (e.g. /model gpt-4)',
         expectsArgs: true,
+        completion: { type: 'model', trigger: MODEL_CMD_TRIGGER },
         action: (args?: string) => {
           if (!args) {
             setInput('/model ');
@@ -244,6 +247,7 @@ export const useAppCommands = ({
         name: 'auto-approve',
         description: 'Set or cycle shell auto-approval mode (off, advisory, auto)',
         expectsArgs: true,
+        completion: { type: 'setting-value', trigger: AUTO_APPROVE_TRIGGER, settingKey: 'shell.autoApproveMode' },
         action: autoApproveAction,
       },
       settingsCommand,

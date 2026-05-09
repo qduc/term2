@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import ApprovalPrompt from './ApprovalPrompt.js';
 import InputBox from './InputBox.js';
 import StatusBar from './StatusBar.js';
-import type { SlashCommand } from './SlashCommandMenu.js';
+import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings-service.js';
 import type { LoggingService } from '../services/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';

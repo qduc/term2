@@ -10,7 +10,7 @@ import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { useSettingsValueCompletion } from '../hooks/use-settings-value-completion.js';
 import { useModelSelection } from '../hooks/use-model-selection.js';
 import { PopupManager } from './Input/PopupManager.js';
-import type { SlashCommand } from './SlashCommandMenu.js';
+import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings-service.js';
 import type { LoggingService } from '../services/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';
@@ -190,6 +190,7 @@ const InputBox: FC<Props> = ({
     settings,
     settingsValue,
     models,
+    slashCommands,
   });
 
   // Tab handling for active menu (other keys flow to MultilineInput).

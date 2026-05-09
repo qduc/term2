@@ -1,12 +1,6 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
-
-export interface SlashCommand {
-  name: string;
-  description: string;
-  action: (args?: string) => boolean | void;
-  expectsArgs?: boolean;
-}
+import type { SlashCommand } from '../slash-commands.js';
 
 type Props = {
   commands: SlashCommand[];

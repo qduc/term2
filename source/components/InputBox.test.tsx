@@ -3,7 +3,7 @@ import React from 'react';
 import { render } from 'ink-testing-library';
 import InputBox, { calculateInputWidth } from './InputBox.js';
 import { InputProvider } from '../context/InputContext.js';
-import type { SlashCommand } from './SlashCommandMenu.js';
+import type { SlashCommand } from '../slash-commands.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
 
 // Mock slash commands

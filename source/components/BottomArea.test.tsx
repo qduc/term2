@@ -4,7 +4,7 @@ import { render } from 'ink-testing-library';
 import { InputProvider } from '../context/InputContext.js';
 import BottomArea, { type BottomAreaProps } from './BottomArea.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
-import type { SlashCommand } from './SlashCommandMenu.js';
+import type { SlashCommand } from '../slash-commands.js';
 
 const mockSlashCommands: SlashCommand[] = [{ name: '/clear', description: 'Clear screen', action: () => {} }];
 

@@ -1,5 +1,5 @@
 import test from 'ava';
-import { OpenRouterError } from '../providers/openrouter.js';
+import { OpenRouterError } from '../providers/common/provider-errors.js';
 
 test('OpenRouterError includes status and headers', (t) => {
   const error = new OpenRouterError('Test error', 429, { 'retry-after': '5', 'x-custom': 'value' }, 'response body');

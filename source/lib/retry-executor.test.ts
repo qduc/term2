@@ -1,7 +1,6 @@
 import test from 'ava';
 import { APIConnectionError, RateLimitError } from 'openai';
-import { OpenRouterError } from '../providers/openrouter.js';
-import { OpenAICompatibleError } from '../providers/openai-compatible/api.js';
+import { OpenRouterError, OpenAICompatibleError } from '../providers/common/provider-errors.js';
 import { executeWithRetry } from './retry-executor.js';
 
 function asInstanceOf<T extends object>(prototype: object, props: Partial<T>): T {

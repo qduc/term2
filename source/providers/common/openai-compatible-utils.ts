@@ -1,5 +1,3 @@
-import type { ISettingsService } from '../../services/service-interfaces.js';
-
 export function decodeHtmlEntities(text: string): string {
   return text
     .replace(/&lt;/g, '<')
@@ -14,17 +12,11 @@ export function normalizeToolCallName(name: unknown): string {
   return typeof name === 'string' ? name.trim() : '';
 }
 
-export function getOpenRouterBaseUrl(settingsService: ISettingsService): string {
-  return settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1';
-}
-
 export function normalizeUsage(openRouterUsage: any): {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
 } {
-  // OpenRouter returns: { prompt_tokens, completion_tokens, total_tokens }
-  // SDK expects: { inputTokens, outputTokens, totalTokens }
   return {
     inputTokens: openRouterUsage?.prompt_tokens ?? 0,
     outputTokens: openRouterUsage?.completion_tokens ?? 0,
@@ -35,4 +27,15 @@ export function normalizeUsage(openRouterUsage: any): {
 export function isAnthropicModel(modelId: string): boolean {
   const lowerModelId = modelId.toLowerCase();
   return lowerModelId.includes('anthropic') || lowerModelId.includes('claude');
+}
+
+export function normalizeBaseUrl(baseUrl: string): string {
+  const trimmed = String(baseUrl || '').trim();
+  return trimmed.replace(/\/+$/g, '');
+}
+
+export function buildOpenAICompatibleUrl(baseUrl: string, path: string): string {
+  const normalized = normalizeBaseUrl(baseUrl);
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${normalized}${normalizedPath}`;
 }

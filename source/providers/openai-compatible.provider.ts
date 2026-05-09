@@ -2,7 +2,7 @@ import { Runner } from '@openai/agents';
 import type { ISettingsService } from '../services/service-interfaces.js';
 import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkOpenAICompatibleProvider } from './ai-sdk-openai-compatible.provider.js';
-import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './openai-compatible/utils.js';
+import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
 
 export type CustomProviderConfig = {
   name: string;

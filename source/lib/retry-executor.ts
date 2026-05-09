@@ -1,6 +1,5 @@
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
-import { OpenRouterError } from '../providers/openrouter.js';
-import { OpenAICompatibleError } from '../providers/openai-compatible/api.js';
+import { OpenRouterError, OpenAICompatibleError } from '../providers/common/provider-errors.js';
 
 type RetryLogger = {
   warn(message: string, meta?: Record<string, unknown>): void;

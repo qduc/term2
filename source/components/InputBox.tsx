@@ -303,6 +303,7 @@ const InputBox: FC<Props> = ({
           images={images}
           onImagesChange={handleImagesChange}
           onPasteError={handlePasteError}
+          pasteThreshold={settingsService.get<number | undefined>('ui.pasteThreshold')}
         />
       </Box>
       {escHintVisible && <Text color="#64748b">Press ESC again to clear input</Text>}

@@ -64,6 +64,12 @@ export const ShellSettingsSchema = z.object({
 
 export const UISettingsSchema = z.object({
   historySize: z.number().int().positive().default(1000),
+  pasteThreshold: z
+    .number()
+    .int()
+    .positive()
+    .default(3000)
+    .describe('Max paste length before text is replaced by a placeholder'),
 });
 
 export const LoggingSettingsSchema = z.object({
@@ -221,6 +227,7 @@ export interface SettingsWithSources {
   };
   ui: {
     historySize: SettingWithSource<number>;
+    pasteThreshold: SettingWithSource<number | undefined>;
   };
   logging: {
     logLevel: SettingWithSource<string>;
@@ -286,6 +293,7 @@ export const SETTING_KEYS = {
   AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
   AGENT_AUTO_APPROVE_PROVIDER: 'agent.autoApproveProvider',
   UI_HISTORY_SIZE: 'ui.historySize',
+  UI_PASTE_THRESHOLD: 'ui.pasteThreshold',
   LOGGING_LOG_LEVEL: 'logging.logLevel',
   LOGGING_DISABLE: 'logging.disableLogging',
   LOGGING_DEBUG: 'logging.debugLogging',
@@ -329,6 +337,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_EDIT_MODE,
   SETTING_KEYS.APP_LITE_MODE,
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
+  SETTING_KEYS.UI_PASTE_THRESHOLD,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
   SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
   SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
@@ -367,6 +376,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   },
   ui: {
     historySize: 1000,
+    pasteThreshold: 3000,
   },
   logging: {
     logLevel: 'info',

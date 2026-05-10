@@ -12,6 +12,7 @@ coverage/
 # IDEs and editors
 .vscode/
 .idea/
+.junie/memory
 *.swp
 *.swo
 *~

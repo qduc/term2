@@ -30,6 +30,8 @@ export const useModelSelection = (
   const [scrollOffset, setScrollOffset] = useState(0);
   const failedProvidersRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
+  const loadRequestIdRef = useRef(0);
+  const modelsByProviderRef = useRef<Map<string, ModelInfo[]>>(new Map());
 
   const isOpen = mode === 'model_selection';
   const modelSettingConfig = getModelSettingConfigForInput(input);
@@ -57,6 +59,10 @@ export const useModelSelection = (
   useEffect(() => {
     if (!isOpen || !provider) return;
 
+    const requestId = ++loadRequestIdRef.current;
+    const isCurrentRequest = () => requestId === loadRequestIdRef.current;
+    const cachedModels = modelsByProviderRef.current.get(provider);
+
     const load = async () => {
       // If already marked as failed, don't try again in this session
       // unless it's the only one left (covered by logic below)
@@ -64,30 +70,38 @@ export const useModelSelection = (
         return;
       }
 
-      setLoading(true);
+      setModels(cachedModels ?? []);
+      setSelectedIndex(0);
+      setScrollOffset(0);
+      setLoading(!cachedModels);
       setError(null);
 
       try {
         const fetched = await fetchModels({ settingsService, loggingService }, provider);
+        modelsByProviderRef.current.set(provider, fetched);
+        if (!isCurrentRequest()) return;
         setModels(fetched);
         isInitialLoadRef.current = false;
       } catch (err) {
+        if (!isCurrentRequest()) return;
         const message = err instanceof Error ? err.message : String(err);
         loggingService.warn(`Model selection fetch failed for ${provider}`, { error: message });
 
         failedProvidersRef.current.add(provider);
         setError(message);
       } finally {
+        if (!isCurrentRequest()) return;
         setLoading(false);
       }
     };
 
     load().catch((err) => {
+      if (!isCurrentRequest()) return;
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
       setLoading(false);
     });
-  }, [isOpen, provider]);
+  }, [isOpen, provider, settingsService, loggingService]);
 
   const filteredModels = useMemo(() => {
     return filterModels(models, query);
@@ -161,15 +175,20 @@ export const useModelSelection = (
     // If no providers available, stay on current
     if (allProviderIds.length === 0) return;
 
-    setProvider((prev) => {
-      const currentIndex = allProviderIds.indexOf(prev || allProviderIds[0]);
-      const nextIndex = (currentIndex + 1) % allProviderIds.length;
-      const nextProvider = allProviderIds[nextIndex];
-      // If the user manually selects it, we should allow retrying it
-      failedProvidersRef.current.delete(nextProvider);
-      return nextProvider;
-    });
-  }, []);
+    const currentIndex = allProviderIds.indexOf(provider || allProviderIds[0]);
+    const nextIndex = (currentIndex + 1) % allProviderIds.length;
+    const nextProvider = allProviderIds[nextIndex];
+    const cachedModels = modelsByProviderRef.current.get(nextProvider);
+
+    // If the user manually selects it, we should allow retrying it
+    failedProvidersRef.current.delete(nextProvider);
+    setModels(cachedModels ?? []);
+    setSelectedIndex(0);
+    setScrollOffset(0);
+    setLoading(!cachedModels);
+    setError(null);
+    setProvider(nextProvider);
+  }, [provider]);
 
   return {
     isOpen,

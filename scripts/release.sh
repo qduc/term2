@@ -205,8 +205,9 @@ else
         echo -e "${YELLOW}No commits found. Skipping changelog generation.${NC}"
         CHANGELOG_ENTRY=""
     else
-        PROMPT="Generate a concise CHANGELOG.md entry for version $NEW_VERSION.
-        Group changes into sections: Features, Bug Fixes, Improvements, and Internal/Chores.
+        PROMPT="Generate a concise user-oriented CHANGELOG.md entry for version $NEW_VERSION.
+        Group changes into sections: Features, Bug Fixes, Improvements.
+        Do not list internal changes that end-user does not need to know.
         Here are the commits:
         $COMMITS
 

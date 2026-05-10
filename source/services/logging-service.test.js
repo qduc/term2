@@ -362,6 +362,79 @@ test.serial('emits canonical contract fields on logs', async (t) => {
   t.is(entry.phase, 'request_start');
 });
 
+test.serial('truncates base64 image data in provider.request.started', async (t) => {
+  const logDir = getTestLogDir();
+  const logger = new LoggingService({
+    logDir,
+    disableLogging: false,
+    logLevel: 'debug',
+  });
+
+  const longBase64 = 'data:image/png;base64,' + 'a'.repeat(10000);
+  logger.debug('Agent stream started', {
+    eventType: 'provider.request.started',
+    messages: [
+      {
+        content: [
+          { type: 'text', text: 'describe this' },
+          { type: 'image', image: longBase64 },
+        ],
+      },
+    ],
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  fs.mkdirSync(logDir, { recursive: true });
+  const mainLogFile = findMainLogFile(logDir);
+  const logFile = path.join(logDir, mainLogFile);
+  const content = fs.readFileSync(logFile, 'utf8');
+  const lines = content.split('\n').filter(Boolean);
+  const entry = JSON.parse(lines[lines.length - 1]);
+
+  const image = entry.messages[0].content[1].image;
+  t.true(image.length < 500, 'Image data should be truncated');
+  t.true(image.endsWith('... (truncated)'), 'Truncated data should have suffix');
+});
+
+test.serial('does not truncate base64 image data outside provider.request.started', async (t) => {
+  const logDir = getTestLogDir();
+  const logger = new LoggingService({
+    logDir,
+    disableLogging: false,
+    logLevel: 'debug',
+  });
+
+  const longBase64 = 'data:image/png;base64,' + 'a'.repeat(10000);
+  logger.debug('Agent stream finished', {
+    eventType: 'provider.response.received',
+    messages: [
+      {
+        content: [
+          { type: 'text', text: 'describe this' },
+          { type: 'image', image: longBase64 },
+        ],
+      },
+    ],
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  fs.mkdirSync(logDir, { recursive: true });
+  const mainLogFile = findMainLogFile(logDir);
+  t.truthy(mainLogFile);
+  if (!mainLogFile) {
+    t.fail('No main log file created');
+    return;
+  }
+  const logFile = path.join(logDir, mainLogFile);
+  const content = fs.readFileSync(logFile, 'utf8');
+  const lines = content.split('\n').filter(Boolean);
+  const entry = JSON.parse(lines[lines.length - 1]);
+
+  t.is(entry.messages[0].content[1].image, longBase64);
+});
+
 test.serial('respects LOG_CATEGORIES filter while preserving errors', async (t) => {
   const originalCategories = process.env.LOG_CATEGORIES;
   process.env.LOG_CATEGORIES = 'retry';

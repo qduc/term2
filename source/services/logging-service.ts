@@ -16,6 +16,7 @@ import {
   extractProviderTrafficRecordFromRuntimeLog,
   type ProviderTrafficRecord,
 } from '../utils/provider-traffic-extractor.js';
+import { sanitizeLogMetadata } from '../utils/log-truncation.js';
 
 const LOG_LEVELS = {
   error: 0,
@@ -306,10 +307,14 @@ export class LoggingService {
 
   private log(level: string, message: string, meta?: Record<string, any>): void {
     try {
-      const metadata = {
+      let metadata = {
         ...(meta ?? {}),
         ...(this.correlationId && { correlationId: this.correlationId }),
       } as Record<string, unknown>;
+
+      if (metadata.eventType === 'provider.request.started') {
+        metadata = sanitizeLogMetadata(metadata);
+      }
 
       const runtimeRecord = buildRuntimeLogRecord({
         level,

@@ -43,7 +43,6 @@ test.serial('fetchModels uses OpenRouter endpoint and caches results', async (t)
     };
   };
 
-  console.log('About to call fetchModels first time');
   const first = await fetchModels(
     {
       settingsService: createMockSettingsService(),
@@ -52,9 +51,7 @@ test.serial('fetchModels uses OpenRouter endpoint and caches results', async (t)
     'openrouter',
     fakeFetch as any,
   );
-  console.log(`After first fetchModels, calls.length = ${calls.length}`);
 
-  console.log('About to call fetchModels second time');
   const second = await fetchModels(
     {
       settingsService: createMockSettingsService(),
@@ -63,7 +60,6 @@ test.serial('fetchModels uses OpenRouter endpoint and caches results', async (t)
     'openrouter',
     fakeFetch as any,
   );
-  console.log(`After second fetchModels, calls.length = ${calls.length}`);
 
   t.deepEqual(
     first.map((m) => m.id),
@@ -118,7 +114,7 @@ test.serial('fetchModels uses /v1/models for custom OpenAI-compatible provider',
     providers: [
       {
         name: providerId,
-        baseUrl: 'http://localhost:1234',
+        baseUrl: 'http://localhost:1234/v1',
         apiKey: 'local-key',
       },
     ],

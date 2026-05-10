@@ -66,7 +66,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       }
 
       const baseUrl = normalizeBaseUrl(resolved.baseUrl);
-      const url = buildOpenAICompatibleUrl(baseUrl, '/v1/models');
+      const url = buildOpenAICompatibleUrl(baseUrl, '/models');
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',

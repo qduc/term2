@@ -10,7 +10,7 @@ export const AgentSettingsSchema = z.object({
   model: z.string().min(1).default('gpt-5.1'),
   // 'default' signals we should *not* explicitly pass a reasoningEffort
   // to the API, allowing it to decide what to use.
-  reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high']).default('default'),
+  reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']).default('default'),
   // Temperature controls randomness. We keep it optional so providers/models
   // can use their own defaults when unset.
   temperature: z.number().min(0).max(2).optional(),
@@ -35,7 +35,7 @@ export const AgentSettingsSchema = z.object({
     .optional()
     .describe('Provider to use for the mentor model (defaults to agent.provider when unset)'),
   mentorReasoningEffort: z
-    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high'])
+    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .default('default')
     .describe('Reasoning effort for the mentor model'),
   useFlexServiceTier: z

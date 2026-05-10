@@ -567,6 +567,34 @@ test('loads settings from config file on startup', async (t) => {
   t.is(service.get('agent.reasoningEffort'), 'high');
 });
 
+test('accepts xhigh reasoning effort for newer reasoning models', async (t) => {
+  const settingsDir = getTestSettingsDir();
+
+  const configFile = path.join(settingsDir, 'settings.json');
+  if (!fs.existsSync(settingsDir)) {
+    fs.mkdirSync(settingsDir, { recursive: true });
+  }
+
+  fs.writeFileSync(
+    configFile,
+    JSON.stringify({
+      agent: {
+        reasoningEffort: 'xhigh',
+        mentorReasoningEffort: 'xhigh',
+      },
+    }),
+    'utf-8',
+  );
+
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+  });
+
+  t.is(service.get('agent.reasoningEffort'), 'xhigh');
+  t.is(service.get('agent.mentorReasoningEffort'), 'xhigh');
+});
+
 test.serial('persists changes to config file', async (t) => {
   await withNonTestEnvironment(async () => {
     const settingsDir = getTestSettingsDir();

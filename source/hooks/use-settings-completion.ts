@@ -12,13 +12,13 @@ export type SettingCompletionItem = {
 
 const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_MODEL]: 'The AI model to use (e.g. gpt-4, claude-3-opus)',
-  [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort (none|minimal|low|medium|high|default)',
+  [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort (none|minimal|low|medium|high|xhigh|default)',
   [SETTING_KEYS.AGENT_TEMPERATURE]: 'Model temperature (0–2, controls randomness)',
   [SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER]: 'Use OpenAI Flex Service Tier to reduce costs (true|false, OpenAI only)',
   [SETTING_KEYS.AGENT_MENTOR_MODEL]: 'Mentor model to use (optional, enables ask_mentor tool)',
   [SETTING_KEYS.AGENT_MENTOR_PROVIDER]: 'Provider to use for mentor model (openai, openrouter, etc.)',
   [SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT]:
-    'Reasoning effort for the mentor model (none|minimal|low|medium|high|default)',
+    'Reasoning effort for the mentor model (none|minimal|low|medium|high|xhigh|default)',
   // agent.provider is hidden from UI - it can only be changed via model menu
   [SETTING_KEYS.AGENT_MAX_TURNS]: 'Maximum conversation turns',
   [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Number of retry attempts for failed requests',

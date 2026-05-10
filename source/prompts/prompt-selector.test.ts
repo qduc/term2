@@ -21,10 +21,27 @@ test('getPromptPath selects anthropic prompt for sonnet or haiku', (t) => {
 
 test('getPromptPath selects codex prompt for gpt-5 codex', (t) => {
   t.is(getPromptPath({ basePromptDir, model: 'gpt-5-codex', liteMode: false }), path.join(basePromptDir, 'codex.md'));
+  t.is(getPromptPath({ basePromptDir, model: 'gpt-5.3-codex', liteMode: false }), path.join(basePromptDir, 'codex.md'));
 });
 
-test('getPromptPath selects gpt-5 prompt when gpt-5 without codex', (t) => {
+test('getPromptPath selects legacy gpt-5 prompt for gpt-5 and gpt-5.1', (t) => {
   t.is(getPromptPath({ basePromptDir, model: ' GPT-5 ', liteMode: false }), path.join(basePromptDir, 'gpt-5.md'));
+  t.is(getPromptPath({ basePromptDir, model: 'gpt-5.1', liteMode: false }), path.join(basePromptDir, 'gpt-5.md'));
+});
+
+test('getPromptPath selects modern gpt-5 prompt for gpt-5.2 and newer', (t) => {
+  t.is(
+    getPromptPath({ basePromptDir, model: 'gpt-5.2', liteMode: false }),
+    path.join(basePromptDir, 'gpt-5-modern.md'),
+  );
+  t.is(
+    getPromptPath({ basePromptDir, model: 'gpt-5.4-mini', liteMode: false }),
+    path.join(basePromptDir, 'gpt-5-modern.md'),
+  );
+  t.is(
+    getPromptPath({ basePromptDir, model: 'gpt-5.5-2026-04-23', liteMode: false }),
+    path.join(basePromptDir, 'gpt-5-modern.md'),
+  );
 });
 
 test('getPromptPath falls back to simple prompt', (t) => {

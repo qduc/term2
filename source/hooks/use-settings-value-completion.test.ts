@@ -12,6 +12,7 @@ test('buildSettingValueSuggestions returns enum suggestions for reasoningEffort'
   t.true(values.includes('low'));
   t.true(values.includes('medium'));
   t.true(values.includes('high'));
+  t.true(values.includes('xhigh'));
   t.true(values.includes('default'));
 });
 

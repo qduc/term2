@@ -94,7 +94,7 @@ const modelFlag = typeof rawModelFlag === 'string' && rawModelFlag.trim().length
 const reasoningEffort =
   typeof rawReasoningFlag === 'string' && rawReasoningFlag.trim().length > 0 ? rawReasoningFlag.trim() : undefined;
 
-const validReasoningEfforts = ['default', 'none', 'minimal', 'low', 'medium', 'high', null] as const;
+const validReasoningEfforts = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', null] as const;
 type ModelSettingsReasoningEffort = (typeof validReasoningEfforts)[number];
 
 const validatedReasoningEffort: ModelSettingsReasoningEffort | undefined =

@@ -1,3 +1,13 @@
+## [0.3.1] - 2026-05-10
+
+### Features
+- Add OpenRouter provider support via AI SDK integration
+- Normalize assistant reasoning handling across AI SDK models
+- Add reasoning-delta event streaming support for improved real-time reasoning output
+
+### Bug Fixes
+- Fix incorrect model list loading when rapidly switching between providers
+
 ## [0.3.0] - 2026-05-10
 
 ### Features

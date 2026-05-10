@@ -14,6 +14,46 @@ test('addUserMessage() appends a user message item', (t) => {
   t.is(item.content, 'Hello');
 });
 
+test('addUserTurn() appends a text-only user message item', (t) => {
+  const store = new ConversationStore();
+  store.addUserTurn({ text: 'Hello' });
+
+  const history = store.getHistory();
+  t.is(history.length, 1);
+  const item: any = history[0];
+  t.is(item.role, 'user');
+  t.is(item.type, 'message');
+  t.is(item.content, 'Hello');
+});
+
+test('addUserTurn() appends multimodal user message content', (t) => {
+  const store = new ConversationStore();
+  store.addUserTurn({
+    text: 'Describe this',
+    images: [{ id: 'img-1', data: 'abc123', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
+  });
+
+  const history = store.getHistory();
+  t.is(history.length, 1);
+  const item: any = history[0];
+  t.is(item.role, 'user');
+  t.is(item.type, 'message');
+  t.deepEqual(item.content, [
+    { type: 'input_text', text: 'Describe this' },
+    { type: 'input_image', image: 'data:image/png;base64,abc123', detail: 'auto' },
+  ]);
+});
+
+test('getLastUserMessage() returns text from multimodal user content', (t) => {
+  const store = new ConversationStore();
+  store.addUserTurn({
+    text: 'What is in this image?',
+    images: [{ id: 'img-1', data: 'abc123', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
+  });
+
+  t.is(store.getLastUserMessage(), 'What is in this image?');
+});
+
 test('getHistory() returns a copy (external mutation does not affect store)', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('A');

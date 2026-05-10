@@ -18,6 +18,7 @@ import { parseInput } from './utils/input-parser.js';
 import { useRuntimeSettings } from './hooks/use-runtime-settings.js';
 import { useShellMode, SSHInfo } from './hooks/use-shell-mode.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
+import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 
 interface AppProps {
   conversationService: ConversationService;
@@ -137,8 +138,10 @@ const App: FC<AppProps> = ({
     toggleEditMode();
   });
 
-  const handleSubmit = async (value: string): Promise<void> => {
-    if (!value.trim()) return;
+  const handleSubmit = async (turn: UserTurn): Promise<void> => {
+    const value = turn.text;
+    const hasImages = Boolean(turn.images?.length);
+    if (!hasUserTurnContent(turn)) return;
 
     // If waiting for rejection reason, handle it
     if (waitingForRejectionReason) {
@@ -151,7 +154,7 @@ const App: FC<AppProps> = ({
     // If waiting for approval, ignore text input (handled by useInput)
     if (waitingForApproval) return;
 
-    if (liteMode && isShellMode) {
+    if (liteMode && isShellMode && !hasImages) {
       await handleShellSubmit(value);
       return;
     }
@@ -161,6 +164,9 @@ const App: FC<AppProps> = ({
 
     switch (parsed.type) {
       case 'slash-command': {
+        if (hasImages) {
+          break;
+        }
         // Find matching command
         const command = slashCommands.find((cmd) => cmd.name === parsed.commandName);
         if (command) {
@@ -179,15 +185,17 @@ const App: FC<AppProps> = ({
 
       case 'message':
         // Regular message, send to AI agent
-        historyService.addMessage(value);
+        if (value.trim()) {
+          historyService.addMessage(value);
+        }
         setInput('');
-        await sendUserMessage(value);
+        await sendUserMessage(turn);
         return;
     }
 
     // Fallback: unknown slash command, send as message
     setInput('');
-    await sendUserMessage(value);
+    await sendUserMessage(turn);
   };
 
   return (

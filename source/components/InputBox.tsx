@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { useEscapeKey } from '../hooks/use-escape-key.js';
 import { useTriggerDetection } from '../hooks/use-trigger-detection.js';
 import { MultilineInput } from 'ink-prompt';
+import type { ImageRef, PasteErrorReason } from 'ink-prompt';
 import { useInputContext } from '../context/InputContext.js';
 import { useSlashCommands } from '../hooks/use-slash-commands.js';
 import { usePathCompletion } from '../hooks/use-path-completion.js';
@@ -25,11 +26,29 @@ import {
 } from './Input/insertions.js';
 import { useModeHandlers } from '../hooks/use-mode-handlers.js';
 import { toPopupProps } from './Input/popup-props.js';
+import type { UserTurn } from '../types/user-turn.js';
 
 export { calculateInputWidth };
 
+const areImagesEqual = (a: ImageRef[], b: ImageRef[]): boolean => {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+
+  return a.every((image, index) => {
+    const other = b[index];
+    return (
+      other &&
+      image.id === other.id &&
+      image.data === other.data &&
+      image.mimeType === other.mimeType &&
+      image.byteSize === other.byteSize &&
+      image.displayNumber === other.displayNumber
+    );
+  });
+};
+
 type Props = {
-  onSubmit: (v: string) => void;
+  onSubmit: (v: UserTurn) => void | Promise<void>;
   slashCommands: SlashCommand[];
   hasConversationHistory?: boolean;
   waitingForRejectionReason?: boolean;
@@ -50,6 +69,7 @@ const InputBox: FC<Props> = ({
   historyService,
 }) => {
   const { input: value, setInput: onChange, mode, setMode, cursorOffset, setCursorOffset } = useInputContext();
+  const [images, setImages] = useState<ImageRef[]>([]);
 
   const escPressedRef = useRef(false);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
@@ -78,6 +98,16 @@ const InputBox: FC<Props> = ({
 
   const [, setInputKey] = useState(0);
   const remountInput = useCallback(() => setInputKey((prev) => prev + 1), []);
+  const handleImagesChange = useCallback((nextImages: ImageRef[]) => {
+    setImages((prevImages) => (areImagesEqual(prevImages, nextImages) ? prevImages : nextImages));
+  }, []);
+  const submitTextOnly = useCallback(
+    (text: string) => {
+      setImages([]);
+      void onSubmit({ text });
+    },
+    [onSubmit],
+  );
 
   const insertSelectedPath = useCallback(
     (appendTrailingSpace: boolean): boolean => {
@@ -119,10 +149,13 @@ const InputBox: FC<Props> = ({
       onChange(result.nextValue);
       setCursorOverride(result.nextCursor);
       settingsValue.close();
-      if (submitAfterInsert) onSubmit(result.nextValue);
+      if (submitAfterInsert) {
+        setImages([]);
+        submitTextOnly(result.nextValue);
+      }
       return true;
     },
-    [settingsValue, value, onChange, cursorOffset, onSubmit],
+    [settingsValue, value, onChange, cursorOffset, submitTextOnly],
   );
 
   const insertSelectedModel = useCallback(
@@ -138,10 +171,13 @@ const InputBox: FC<Props> = ({
       onChange(result.nextValue);
       setCursorOverride(result.nextCursor);
       models.close();
-      if (submitAfterInsert) onSubmit(result.nextValue);
+      if (submitAfterInsert) {
+        setImages([]);
+        submitTextOnly(result.nextValue);
+      }
       return true;
     },
-    [models, value, onChange, onSubmit],
+    [models, value, onChange, submitTextOnly],
   );
 
   const modeHandlers = useModeHandlers({
@@ -154,7 +190,7 @@ const InputBox: FC<Props> = ({
     insertSelectedSetting,
     insertSelectedSettingValue,
     insertSelectedModel,
-    onSubmit,
+    onSubmit: submitTextOnly,
     onSlashCommandRemount: remountInput,
   });
 
@@ -224,11 +260,21 @@ const InputBox: FC<Props> = ({
   );
 
   const handleWrapperSubmit = useCallback(
-    (submittedValue: string) => {
+    (submittedValue: string, submittedImages?: ImageRef[]) => {
       if (mode !== 'text' && modeHandlers[mode].onSubmit?.(submittedValue) === 'handled') return;
-      onSubmit(submittedValue);
+      const turnImages = submittedImages ?? images;
+      if (!submittedValue.trim() && turnImages.length === 0) return;
+      setImages([]);
+      void onSubmit({ text: submittedValue, ...(turnImages.length ? { images: turnImages } : {}) });
     },
-    [mode, modeHandlers, onSubmit],
+    [mode, modeHandlers, onSubmit, images],
+  );
+
+  const handlePasteError = useCallback(
+    (reason: PasteErrorReason) => {
+      loggingService.warn('Image paste failed', { reason });
+    },
+    [loggingService],
   );
 
   return (
@@ -253,6 +299,10 @@ const InputBox: FC<Props> = ({
           onCursorChange={setCursorOffset}
           cursorOverride={cursorOverride ?? undefined}
           onBoundaryArrow={handleBoundaryArrow}
+          enableImagePaste
+          images={images}
+          onImagesChange={handleImagesChange}
+          onPasteError={handlePasteError}
         />
       </Box>
       {escHintVisible && <Text color="#64748b">Press ESC again to clear input</Text>}

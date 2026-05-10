@@ -16,6 +16,7 @@ import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { buildConversationResult, toTerminalEvent } from './conversation-result-builder.js';
 import type { AgentStream } from './agent-stream.js';
+import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -116,7 +117,7 @@ export class ConversationSession {
    * This is the transport-friendly primitive that can later be bridged to SSE/WebSockets.
    */
   async *run(
-    text: string,
+    input: string | UserTurn,
     {
       hallucinationRetryCount = 0,
       skipUserMessage = false,
@@ -126,6 +127,8 @@ export class ConversationSession {
     } = {},
   ): AsyncIterable<ConversationEvent> {
     let stream: AgentStream | null = null;
+    const turn = normalizeUserTurn(input);
+    const text = turn.text;
     try {
       this.logger.debug('Conversation stream start', {
         eventType: 'stream.started',
@@ -139,7 +142,7 @@ export class ConversationSession {
 
       // Maintain canonical local history regardless of provider.
       if (shouldAddUserMessage) {
-        this.conversationStore.addUserMessage(text);
+        this.conversationStore.addUserTurn(turn);
       }
 
       // If there's an aborted approval, we need to resolve it first.
@@ -224,7 +227,10 @@ export class ConversationSession {
 
       const supportsChaining = supportsConversationChaining(provider);
 
-      stream = (await this.agentClient.startStream(supportsChaining ? text : this.conversationStore.getHistory(), {
+      const history = this.conversationStore.getHistory();
+      const latestInput = history[history.length - 1] ?? text;
+      const chainedInput = turn.images?.length ? latestInput : text;
+      stream = (await this.agentClient.startStream(supportsChaining ? chainedInput : history, {
         previousResponseId: this.previousResponseId,
       })) as AgentStream;
 
@@ -295,7 +301,7 @@ export class ConversationSession {
           this.conversationStore.removeLastUserMessage();
         }
 
-        yield* this.run(text, decision.nextRunOptions);
+        yield* this.run(turn, decision.nextRunOptions);
         return;
       }
 
@@ -409,7 +415,7 @@ export class ConversationSession {
   }
 
   async sendMessage(
-    text: string,
+    input: string | UserTurn,
     {
       onTextChunk,
       onReasoningChunk,
@@ -424,7 +430,7 @@ export class ConversationSession {
       hallucinationRetryCount?: number;
     } = {},
   ): Promise<ConversationResult> {
-    const result = await collectTerminalResult(this.run(text, { hallucinationRetryCount }), {
+    const result = await collectTerminalResult(this.run(input, { hallucinationRetryCount }), {
       onTextChunk,
       onReasoningChunk,
       onCommandMessage,

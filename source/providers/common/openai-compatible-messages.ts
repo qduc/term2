@@ -67,12 +67,23 @@ function convertAgentItemToOpenAICompatibleMessage(item: any, loggingService: IL
     }
 
     if (Array.isArray(rawItem.content)) {
-      const textContent = rawItem.content
-        .filter((c: any) => (c?.type === 'input_text' || c?.type === 'output_text') && c?.text)
-        .map((c: any) => c.text)
-        .join('');
-      if (textContent) {
-        return { role: 'user', content: textContent };
+      const content = rawItem.content.flatMap((c: any) => {
+        if ((c?.type === 'input_text' || c?.type === 'output_text') && typeof c?.text === 'string') {
+          return [{ type: 'text', text: c.text }];
+        }
+
+        const imageUrl = typeof c?.image === 'string' ? c.image : typeof c?.image_url === 'string' ? c.image_url : null;
+        if (c?.type === 'input_image' && imageUrl) {
+          return [{ type: 'image_url', image_url: { url: imageUrl } }];
+        }
+
+        return [];
+      });
+      if (content.length === 1 && content[0].type === 'text') {
+        return { role: 'user', content: content[0].text };
+      }
+      if (content.length > 0) {
+        return { role: 'user', content };
       }
     }
   }
@@ -174,6 +185,27 @@ export function addCacheControlToLastToolMessage(messages: any[]): void {
       break;
     }
   }
+}
+
+function appendOpenAICompatibleContent(existing: any, incoming: any): any {
+  const toParts = (content: any): any[] => {
+    if (content == null) {
+      return [];
+    }
+    if (typeof content === 'string') {
+      return [{ type: 'text', text: content }];
+    }
+    if (Array.isArray(content)) {
+      return content;
+    }
+    return [{ type: 'text', text: String(content) }];
+  };
+
+  if (typeof existing === 'string' && typeof incoming === 'string') {
+    return `${existing}\n${incoming}`;
+  }
+
+  return [...toParts(existing), ...toParts(incoming)];
 }
 
 export function buildMessagesFromRequest(req: ModelRequest, modelId?: string, loggingService?: ILoggingService): any[] {
@@ -289,7 +321,7 @@ export function buildMessagesFromRequest(req: ModelRequest, modelId?: string, lo
               if (lastMessage.content == null) {
                 lastMessage.content = converted.content;
               } else {
-                lastMessage.content = String(lastMessage.content) + '\n' + String(converted.content);
+                lastMessage.content = appendOpenAICompatibleContent(lastMessage.content, converted.content);
               }
             }
             continue;

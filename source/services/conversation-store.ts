@@ -1,4 +1,5 @@
 import type { AgentInputItem } from '@openai/agents';
+import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 
 /**
  * ConversationStore maintains the canonical conversation history for the app.
@@ -10,6 +11,36 @@ import type { AgentInputItem } from '@openai/agents';
  */
 export class ConversationStore {
   #history: AgentInputItem[] = [];
+
+  addUserTurn(input: string | UserTurn): void {
+    const turn = normalizeUserTurn(input);
+    const images = turn.images ?? [];
+    const text = turn.text ?? '';
+
+    if (images.length === 0) {
+      this.addUserMessage(text);
+      return;
+    }
+
+    const content: any[] = [];
+    if (text) {
+      content.push({ type: 'input_text', text });
+    }
+    for (const image of images) {
+      content.push({
+        type: 'input_image',
+        image: `data:${image.mimeType};base64,${image.data}`,
+        detail: 'auto',
+      });
+    }
+
+    const item: AgentInputItem = {
+      role: 'user',
+      type: 'message',
+      content,
+    } as AgentInputItem;
+    this.#history.push(item);
+  }
 
   addUserMessage(text: string): void {
     const trimmed = text ?? '';

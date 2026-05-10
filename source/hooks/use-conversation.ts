@@ -15,6 +15,7 @@ import {
   filterPendingCommandMessagesForApproval,
   type ApprovedToolContext,
 } from '../services/approval-presentation-policy.js';
+import { formatUserTurnForDisplay, hasUserTurnContent, normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 
 export interface UserMessage {
   id: string;
@@ -177,15 +178,16 @@ export const useConversation = ({
   );
 
   const sendUserMessage = useCallback(
-    async (value: string) => {
-      if (!value.trim()) {
+    async (input: string | UserTurn) => {
+      const turn = normalizeUserTurn(input);
+      if (!hasUserTurnContent(turn)) {
         return;
       }
 
       const userMessage: UserMessage = {
         id: createMessageId(),
         sender: 'user',
-        text: value,
+        text: formatUserTurnForDisplay(turn),
       };
       appendMessages([userMessage]);
       setIsProcessing(true);
@@ -207,7 +209,7 @@ export const useConversation = ({
         );
 
       try {
-        const result = await conversationService.sendMessage(value, {
+        const result = await conversationService.sendMessage(turn, {
           onEvent: applyConversationEvent,
         });
 

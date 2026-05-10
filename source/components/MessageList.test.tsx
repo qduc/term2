@@ -14,6 +14,23 @@ test('MessageList renders user and bot messages', (t) => {
   t.true(output.includes('hi there'));
 });
 
+test('MessageList renders image attachment summaries without leaked sentinel ids', (t) => {
+  const messages = [
+    {
+      id: 1,
+      sender: 'user',
+      text: 'Tell me what you see\n[1 image attached]',
+    },
+  ];
+
+  const { lastFrame } = render(<MessageList messages={messages} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('❯ Tell me what you see'));
+  t.true(output.includes('[1 image attached]'));
+  t.false(output.includes('f9uatvt88vql1'));
+});
+
 test('splitStaticHistory keeps running command messages active even when outside the count window', (t) => {
   const messages = [
     ...Array.from({ length: 25 }, (_, index) => ({

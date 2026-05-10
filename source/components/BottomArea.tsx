@@ -10,6 +10,7 @@ import type { HistoryService } from '../services/history-service.js';
 import type { SSHInfo } from '../hooks/use-shell-mode.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 import type { PendingApproval } from '../contracts/conversation.js';
+import type { UserTurn } from '../types/user-turn.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -18,7 +19,7 @@ export type BottomAreaProps = {
   isProcessing: boolean;
   isShellMode?: boolean;
   lastUsage?: NormalizedUsage | null;
-  onSubmit: (value: string) => Promise<void>;
+  onSubmit: (value: UserTurn) => Promise<void>;
   slashCommands: SlashCommand[];
   hasConversationHistory: boolean;
   settingsService: SettingsService;

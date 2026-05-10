@@ -1,4 +1,13 @@
-import { Agent, run, tool as createTool, webSearchTool, applyPatchTool, type Tool, Runner } from '@openai/agents';
+import {
+  Agent,
+  run,
+  tool as createTool,
+  webSearchTool,
+  applyPatchTool,
+  type Tool,
+  type AgentInputItem,
+  Runner,
+} from '@openai/agents';
 import { getProvider } from '../providers/index.js';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
@@ -311,7 +320,7 @@ export class OpenAIAgentClient {
   }
 
   async startStream(
-    userInput: string | any[],
+    userInput: string | AgentInputItem | AgentInputItem[],
     { previousResponseId }: { previousResponseId?: string | null } = {},
   ): Promise<any> {
     // Abort any previous operation

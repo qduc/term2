@@ -1,7 +1,7 @@
 import { Runner } from '@openai/agents';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
-import { AiSdkOpenAICompatibleProvider } from './ai-sdk-openai-compatible.provider.js';
+import { AiSdkOpenRouterProvider } from './ai-sdk-openrouter.provider.js';
 
 async function fetchOpenRouterModels(
   deps: ProviderDeps,
@@ -50,8 +50,7 @@ registerProvider({
     }
 
     return new Runner({
-      modelProvider: new AiSdkOpenAICompatibleProvider({
-        label: 'OpenRouter',
+      modelProvider: new AiSdkOpenRouterProvider({
         defaultModel: settingsService.get('agent.model') || 'openrouter/auto',
         resolveConfig: () => ({
           baseURL: settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1',
@@ -60,6 +59,8 @@ registerProvider({
             'HTTP-Referer': settingsService.get('agent.openrouter.referrer') || 'http://localhost',
             'X-Title': settingsService.get('agent.openrouter.title') || 'term2',
           },
+          appUrl: settingsService.get('agent.openrouter.referrer') || 'http://localhost',
+          appName: settingsService.get('agent.openrouter.title') || 'term2',
         }),
       }),
     });

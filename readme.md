@@ -15,18 +15,22 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 
 - 🎭 **Three Operating Modes** - Default (full-power), Lite (fast & safe), and Mentor (get help from a smarter model on complex problems)
 - 🌍 **Open Source** - MIT licensed, hackable, auditable, community-driven
-- 🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, and OpenAI-compatible APIs
+- 🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, OpenAI-compatible APIs, and Vercel AI SDK providers
 - 🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
-- 🛠️ **Advanced Tools** - Shell execution, file patching, search/replace, grep, find files, file reading, web search, and mentor consultation
-- 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite` for easy control
+- 🛠️ **Advanced Tools** - Shell execution, file patching, search/replace (with `<...>` gap matching), grep, find files, file reading, file creation, web search, and mentor consultation
+- 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite`, `/copy`, `/auto-approve` for easy control
 - 📝 **Smart Context** - The assistant understands your environment and provides relevant help
 - 🎯 **Streaming Responses** - See the AI's thoughts and reasoning in real-time
 - 🧠 **Reasoning Effort Control** - Configurable reasoning levels (minimal to high) for O1/O3 models
 - ⚡ **Command History** - Navigate previous inputs with arrow keys
-- 🎨 **Markdown Rendering** - Formatted code blocks and text in the terminal
+- 🎨 **Markdown Rendering** - Formatted code blocks, tables, and text in the terminal
 - 🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
 - 🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
 - 🤖 **Non-Interactive Mode** - Run commands from the CLI without starting the full UI
+- ✏️ **Edit Mode** - Press `Shift+Tab` to auto-approve file edits in your workspace for faster development
+- 🤖 **Auto-Approval** - Optional LLM-based safety evaluation can automatically approve safe shell commands
+- 🖼️ **Image Pasting** - Paste images from your clipboard directly into the terminal for vision-model analysis
+- 📈 **Real-time Token Usage** - Live token consumption displayed during streaming
 
 ## Why term2 vs Alternatives?
 
@@ -51,7 +55,7 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 
 **Requirements:**
 
-- Node.js 16 or higher
+- Node.js 20 or higher
 - An API key from OpenAI, OpenRouter, or any OpenAI-compatible provider
 
 Install globally via npm:
@@ -139,6 +143,8 @@ While in the chat, you can use these commands:
 - `/model [model-name]` - Switch to a different model
 - `/mentor` - Toggle mentor mode (see "Operating Modes" section for details)
 - `/lite` - Toggle lite mode (see "Operating Modes" section for details)
+- `/copy` - Copy the latest assistant response
+- `/auto-approve [off|advisory|auto]` - Set or cycle shell auto-approval mode
 - `/settings [key] [value]` - Modify runtime settings (e.g., `/settings agent.temperature 0.7`)
 
 ## Operating Modes
@@ -222,7 +228,7 @@ Mentor mode gives you two AI minds working together on your codebase. Your prima
 
 **Requirements:**
 
-- Configure `agent.mentorModel` in settings (e.g., `gpt-5.2`, `claude-opus-4.5` or `gemini-3-pro-preview`)
+- Configure `agent.mentorModel` in settings (e.g., `gpt-5.5`, `claude-opus-4.6` or `gemini-3.1-pro-preview`)
 - Mentor model should be more capable than primary model for best results
 - Toggle with `/mentor` command mid-session
 
@@ -253,10 +259,11 @@ AI: [Does additional checks based on mentor's questions]
 
 Modes are mutually exclusive—each represents a different working style matched to your task. You can switch modes mid-session:
 
-- `/lite` - Toggle lite mode (clears history when switching)
+- `/lite` - Toggle lite mode (requires clearing history first if session is active)
 - `/mentor` - Toggle mentor mode
+- `Shift+Tab` - Toggle edit mode (auto-approves file edits in workspace)
 - Switching to lite mode automatically disables edit/mentor modes
-- Enabling edit or mentor mode automatically disables lite mode
+- Enabling lite mode disables edit and mentor modes
 
 ## SSH Mode
 
@@ -375,8 +382,11 @@ export OPENAI_API_KEY="sk-..."
 # OpenRouter (for Claude, Gemini, and other models)
 export OPENROUTER_API_KEY="sk-or-v1-..."
 
-# Web Search (Tavily)
+# Web Search (Tavily — default)
 export TAVILY_API_KEY="tvly-..."
+
+# Web Search (Exa)
+export EXA_API_KEY="..."
 ```
 
 To make them permanent, add these exports to your shell configuration file (`~/.bashrc`, `~/.zshrc`, or `~/.profile`).
@@ -477,17 +487,12 @@ term2 works with multiple AI providers:
 
 ### OpenAI (default)
 
-- `gpt-5.2` (latest)
+- `gpt-5.5` (latest)
+- `gpt-5.4`
+- `gpt-5.4-mini`
+- `gpt-5.3-codex`
+- `gpt-5.2`
 - `gpt-5.1` (default)
-- `gpt-5`
-- `gpt-5-mini`
-- `gpt-4.1`
-- `gpt-4.1-mini`
-- `gpt-5.1`
-- `gpt-5.1-mini`
-- `o3` (supports reasoning effort)
-- `o3-mini` (supports reasoning effort)
-- `o1` (supports reasoning effort)
 
 ### OpenRouter
 
@@ -503,13 +508,14 @@ Use CLI flags (`-m model-name`) or settings file to select OpenRouter models.
 
 term2 can connect to any OpenAI-compatible API. This allows you to use:
 
-- **Local Models**: Run private models locally via Ollama, LM Studio, vLLM, or LocalAI.
+- **Local Models**: Run private models locally via Ollama, LM Studio, vLLM, or llama.cpp.
 - **Self-Hosted**: Connect to private deployments of models.
 - **Other Providers**: Any service offering an OpenAI-compatible endpoint (e.g., Groq, Together AI).
 
 ## Safety Features
 
 - **Command Approval** - Every destructive operation requires your explicit confirmation
+- **Auto-Approval** - Optional LLM-based safety evaluation with advisory and auto modes for shell commands
 - **Diff Preview** - See exact file changes before approving patches or edits
 - **Risk Analysis** - Dangerous operations (like `rm -rf`, `git push --force`) are flagged
 - **Path Safety** - Operations on sensitive directories require extra caution
@@ -616,6 +622,9 @@ term2 --ssh user@host --lite
 - Use arrow keys to navigate through your command history
 - Be specific in your requests for better results
 - Use `/mentor` to get expert consultation on difficult architectural decisions
+- Use `Shift+Tab` to toggle edit mode for faster file editing workflows
+- Use `/auto-approve` to enable LLM-based safety evaluation for faster shell command workflows
+- Paste images directly into the terminal when using vision-capable models
 - Use `--lite` flag when SSH'ing to servers for general system work without codebase context
 
 ## Contributing
@@ -634,7 +643,3 @@ Built with:
 - [Ink](https://github.com/vadimdemedes/ink) - React for CLI
 - [TypeScript](https://www.typescriptlang.org/)
 - [ssh2](https://github.com/mscdex/ssh2) - SSH client for Node.js
-
----
-
-Made with ❤️ by [qduc](https://github.com/qduc)

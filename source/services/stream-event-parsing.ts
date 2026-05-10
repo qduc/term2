@@ -71,7 +71,7 @@ export function extractReasoningDelta(event: any): string {
     if (
       eventDetail &&
       typeof eventDetail === 'object' &&
-      eventDetail.type === 'response.reasoning_summary_text.delta'
+      (eventDetail.type === 'response.reasoning_summary_text.delta' || eventDetail.type === 'reasoning-delta')
     ) {
       return eventDetail.delta ?? '';
     }

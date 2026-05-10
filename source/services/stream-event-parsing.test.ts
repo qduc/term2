@@ -33,6 +33,21 @@ test('extractReasoningDelta: extracts OpenAI reasoning summary deltas', (t) => {
   t.is(extractReasoningDelta(event), 'think');
 });
 
+test('extractReasoningDelta: extracts model reasoning-delta events', (t) => {
+  const event = {
+    data: {
+      type: 'model',
+      event: {
+        type: 'reasoning-delta',
+        delta: 'The',
+        id: 'msfDurU72uN4YQQg',
+      },
+    },
+  };
+
+  t.is(extractReasoningDelta(event), 'The');
+});
+
 test('extractReasoningDelta: extracts OpenRouter reasoning delta fields', (t) => {
   const reasoningEvent = {
     data: {

@@ -1,3 +1,17 @@
+## [0.3.0] - 2026-05-10
+
+### Features
+- Support image pasting in the terminal
+- Add configurable paste threshold setting
+- Vercel AI SDK integration for additional provider support
+
+### Bug Fixes
+- Fix models endpoint path for OpenAI-compatible providers
+
+### Improvements
+- Improve table column width calculation and terminal wrapping
+- Ensure table borders adapt to terminal width and align with rows
+
 ## [0.2.0] - 2026-05-08
 
 ### Features

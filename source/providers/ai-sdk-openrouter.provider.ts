@@ -5,7 +5,7 @@ import { withMergedAssistantReasoning } from './ai-sdk-message-normalizer.js';
 
 export type AiSdkOpenRouterConfig = Pick<
   OpenRouterProviderSettings,
-  'baseURL' | 'apiKey' | 'headers' | 'appName' | 'appUrl'
+  'baseURL' | 'apiKey' | 'headers' | 'appName' | 'appUrl' | 'fetch'
 >;
 
 export type AiSdkOpenRouterProviderFactory = (

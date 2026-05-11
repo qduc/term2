@@ -870,7 +870,7 @@ export class OpenAIAgentClient {
     // This reduces costs by using the flex service tier for lower priority requests
     // See: https://platform.openai.com/docs/guides/service-tier
     const useFlexServiceTier = this.#settings.get<boolean>('agent.useFlexServiceTier');
-    if (useFlexServiceTier && this.#provider === 'openai') {
+    if (useFlexServiceTier && (this.#provider === 'openai' || this.#provider === 'openrouter')) {
       modelSettings.providerData = {
         ...(modelSettings.providerData || {}),
         service_tier: 'flex',

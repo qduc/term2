@@ -81,10 +81,15 @@ For implementation details, chronological change logs, and rationale, consult th
 ## Testing & Quality
 
 This project follows TDD approach. You MUST write tests first and then write the minimum code to pass them.
-After making code changes, you MUST run the tests and report the results.
+After making code changes, you MUST run tests appropriate to the scope of the task and report the results.
+
+- For small, localized changes: run focused tests for the affected area.
+- For broad changes, architectural changes, shared utilities, or changes that may affect multiple areas: run the full test suite.
+- If no relevant focused test exists, run the smallest applicable broader test command and explain why.
 
 ```bash
 npm test              # Run all tests
+npm test:verbose -- <file>      # Run test for a single file
 npx prettier --check . # Format check
 npx ava               # Unit tests
 ```
@@ -148,7 +153,7 @@ npx ava               # Unit tests
 - **Diff generation?** → `source/utils/diff.ts`
 - **Modifying configuration?** → Edit `~/Library/Logs/term2-nodejs/settings.json` (macOS) or `~/.local/state/term2-nodejs/settings.json` (Linux), or use environment variables / CLI flags
 - **Web search configuration?** → `source/services/settings-service.ts` (webSearch settings), `source/providers/web-search/registry.ts` (provider lookup), environment variable `TAVILY_API_KEY`
-- **Testing?** → See `test/` directory for test utilities, test files are co-located with source files
+- **Testing?** → See `test/` directory for test utilities, test files are co-located with source files. **Note**: `npm test` does not support file arguments due to output filtering. Use `npm run test:verbose -- <file>` or `npx ava <file>` to run specific tests.
 - **SSH mode?** → `source/services/ssh-service.ts` (SSH connection and operations), `source/services/execution-context.ts` (local/remote abstraction)
 
 ## Resources

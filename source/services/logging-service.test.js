@@ -435,6 +435,46 @@ test.serial('does not truncate base64 image data outside provider.request.starte
   t.is(entry.messages[0].content[1].image, longBase64);
 });
 
+test.serial('truncates long provider response text in file logs', async (t) => {
+  const logDir = getTestLogDir();
+  const logger = new LoggingService({
+    logDir,
+    disableLogging: false,
+    logLevel: 'debug',
+  });
+
+  const longText = ': OPENROUTER PROCESSING\n' + 'data: {"chunk":"value"}\n'.repeat(220) + 'data: {"tail":"preserved"}';
+  logger.error('OpenRouter stream done', {
+    eventType: 'provider.response.received',
+    provider: 'openrouter',
+    model: 'deepseek/deepseek-v4-flash',
+    text: longText,
+    payload: { raw: longText },
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  fs.mkdirSync(logDir, { recursive: true });
+  const mainLogFile = findMainLogFile(logDir);
+  t.truthy(mainLogFile);
+  if (!mainLogFile) {
+    t.fail('No main log file created');
+    return;
+  }
+
+  const logFile = path.join(logDir, mainLogFile);
+  const content = fs.readFileSync(logFile, 'utf8');
+  const lines = content.split('\n').filter(Boolean);
+  const entry = JSON.parse(lines[lines.length - 1]);
+
+  t.true(entry.text.length < longText.length);
+  t.true(entry.text.startsWith(': OPENROUTER PROCESSING'));
+  t.true(entry.text.endsWith('data: {"tail":"preserved"}'));
+  t.true(entry.payload.raw.length < longText.length);
+  t.true(entry.payload.raw.startsWith(': OPENROUTER PROCESSING'));
+  t.true(entry.payload.raw.endsWith('data: {"tail":"preserved"}'));
+});
+
 test.serial('respects LOG_CATEGORIES filter while preserving errors', async (t) => {
   const originalCategories = process.env.LOG_CATEGORIES;
   process.env.LOG_CATEGORIES = 'retry';

@@ -2,6 +2,7 @@ import { Runner } from '@openai/agents';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkOpenRouterProvider } from './ai-sdk-openrouter.provider.js';
+import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
 
 async function fetchOpenRouterModels(
   deps: ProviderDeps,
@@ -43,15 +44,17 @@ async function fetchOpenRouterModels(
 registerProvider({
   id: 'openrouter',
   label: 'OpenRouter',
-  createRunner: ({ settingsService }) => {
+  createRunner: ({ settingsService, loggingService }) => {
     const apiKey = settingsService.get('agent.openrouter.apiKey');
     if (!apiKey) {
       return null;
     }
 
+    const defaultModel = settingsService.get('agent.model') || 'openrouter/auto';
+
     return new Runner({
       modelProvider: new AiSdkOpenRouterProvider({
-        defaultModel: settingsService.get('agent.model') || 'openrouter/auto',
+        defaultModel,
         resolveConfig: () => ({
           baseURL: settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1',
           apiKey,
@@ -61,6 +64,11 @@ registerProvider({
           },
           appUrl: settingsService.get('agent.openrouter.referrer') || 'http://localhost',
           appName: settingsService.get('agent.openrouter.title') || 'term2',
+          fetch: createAiSdkLoggingFetch({
+            provider: 'openrouter',
+            model: settingsService.get('agent.model') || defaultModel,
+            loggingService,
+          }),
         }),
       }),
     });

@@ -7,6 +7,7 @@ export type AiSdkOpenAICompatibleConfig = {
   baseURL: string;
   apiKey?: string;
   headers?: Record<string, string>;
+  fetch?: typeof fetch;
 };
 
 export type AiSdkOpenAICompatibleProviderFactory = (options: {
@@ -15,6 +16,7 @@ export type AiSdkOpenAICompatibleProviderFactory = (options: {
   apiKey?: string;
   headers?: Record<string, string>;
   includeUsage?: boolean;
+  fetch?: typeof fetch;
 }) => (modelId: string) => any;
 
 export class AiSdkOpenAICompatibleProvider implements ModelProvider {
@@ -43,6 +45,7 @@ export class AiSdkOpenAICompatibleProvider implements ModelProvider {
       apiKey: config.apiKey,
       headers: config.headers,
       includeUsage: true,
+      fetch: config.fetch,
     });
 
     return aisdk(withMergedAssistantReasoning(provider(modelName || this.#defaultModel))) as unknown as Model;

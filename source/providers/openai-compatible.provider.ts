@@ -2,6 +2,7 @@ import { Runner } from '@openai/agents';
 import type { ISettingsService } from '../services/service-interfaces.js';
 import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkOpenAICompatibleProvider } from './ai-sdk-openai-compatible.provider.js';
+import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
 
 export type CustomProviderConfig = {
@@ -35,7 +36,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     id: providerId,
     label,
     isRuntimeDefined: true,
-    createRunner: ({ settingsService }) => {
+    createRunner: ({ settingsService, loggingService }) => {
       // baseUrl/apiKey can change only with restart, but we re-resolve from
       // settings at runner creation time to respect precedence.
       return new Runner({
@@ -54,6 +55,11 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
             return {
               baseURL: normalizeBaseUrl(resolved.baseUrl),
               apiKey: resolved.apiKey,
+              fetch: createAiSdkLoggingFetch({
+                provider: providerId,
+                model: settingsService.get('agent.model') || '',
+                loggingService,
+              }),
             };
           },
         }),

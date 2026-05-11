@@ -71,3 +71,32 @@ test('AiSdkOpenAICompatibleProvider uses the default model when none is requeste
 
   t.is(requestedModel, 'fallback-model');
 });
+
+test('AiSdkOpenAICompatibleProvider passes configured fetch to OpenAI-compatible provider', (t) => {
+  const fetchImpl = async () => new Response('{}');
+  const calls: any[] = [];
+  const provider = new AiSdkOpenAICompatibleProvider({
+    label: 'Example',
+    defaultModel: 'fallback-model',
+    resolveConfig: () => ({
+      baseURL: 'https://example.test/v1',
+      fetch: fetchImpl,
+    }),
+    createProvider: (options: any) => {
+      calls.push(options);
+      return (modelId: string) =>
+        ({
+          specificationVersion: 'v3',
+          provider: 'example.chat',
+          modelId,
+          supportedUrls: {},
+          doGenerate: async () => ({}),
+          doStream: async () => ({ stream: [] }),
+        } as any);
+    },
+  });
+
+  provider.getModel('selected-model');
+
+  t.is(calls[0].fetch, fetchImpl);
+});

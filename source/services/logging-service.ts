@@ -12,11 +12,11 @@ import {
   shouldSampleLog,
   type LogCategory,
 } from './logging-contract.js';
+import { truncateLogText, sanitizeLogMetadata } from '../utils/log-truncation.js';
 import {
   extractProviderTrafficRecordFromRuntimeLog,
   type ProviderTrafficRecord,
 } from '../utils/provider-traffic-extractor.js';
-import { sanitizeLogMetadata } from '../utils/log-truncation.js';
 
 const LOG_LEVELS = {
   error: 0,
@@ -314,6 +314,23 @@ export class LoggingService {
 
       if (metadata.eventType === 'provider.request.started') {
         metadata = sanitizeLogMetadata(metadata);
+      }
+      if (metadata.eventType === 'provider.response.received') {
+        const nextMetadata = { ...metadata } as Record<string, unknown>;
+        if (typeof nextMetadata.text === 'string') {
+          nextMetadata.text = truncateLogText(nextMetadata.text);
+        }
+        if (nextMetadata.payload && typeof nextMetadata.payload === 'object' && !Array.isArray(nextMetadata.payload)) {
+          const payload = { ...(nextMetadata.payload as Record<string, unknown>) };
+          if (typeof payload.raw === 'string') {
+            payload.raw = truncateLogText(payload.raw);
+          }
+          if (typeof payload.rawPreview === 'string') {
+            payload.rawPreview = truncateLogText(payload.rawPreview);
+          }
+          nextMetadata.payload = payload;
+        }
+        metadata = nextMetadata;
       }
 
       const runtimeRecord = buildRuntimeLogRecord({

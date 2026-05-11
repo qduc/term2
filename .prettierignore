@@ -4,3 +4,4 @@ generated
 log_viewer
 *.md
 eval/*
+.junie

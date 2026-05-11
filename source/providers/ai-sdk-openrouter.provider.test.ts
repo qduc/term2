@@ -73,3 +73,30 @@ test('AiSdkOpenRouterProvider uses the default model when none is requested', (t
 
   t.is(requestedModel, 'openrouter/auto');
 });
+
+test('AiSdkOpenRouterProvider passes configured fetch to OpenRouter provider', (t) => {
+  const fetchImpl = async () => new Response('{}');
+  const calls: any[] = [];
+  const provider = new AiSdkOpenRouterProvider({
+    defaultModel: 'openrouter/auto',
+    resolveConfig: () => ({
+      fetch: fetchImpl,
+    }),
+    createProvider: (options: any) => {
+      calls.push(options);
+      return (modelId: string) =>
+        ({
+          specificationVersion: 'v3',
+          provider: 'openrouter.chat',
+          modelId,
+          supportedUrls: {},
+          doGenerate: async () => ({}),
+          doStream: async () => ({ stream: [] }),
+        } as any);
+    },
+  });
+
+  provider.getModel('selected-model');
+
+  t.is(calls[0].fetch, fetchImpl);
+});

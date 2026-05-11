@@ -1,13 +1,13 @@
 import { useMemo, useCallback } from 'react';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings-service.js';
-import { createSettingsCommand } from '../utils/settings-command.js';
+import { createSettingsCommand, parseSettingValue } from '../utils/settings-command.js';
 import { getProvider } from '../providers/index.js';
 import { copyToClipboard } from '../utils/clipboard.js';
 import { Message } from './use-conversation.js';
 import { parseModelProviderArg } from '../utils/model-provider-arg.js';
 import { MODEL_CMD_TRIGGER } from '../utils/model-settings.js';
-import { AUTO_APPROVE_TRIGGER } from '../components/Input/triggers.js';
+import { AUTO_APPROVE_TRIGGER, EFFORT_TRIGGER } from '../components/Input/triggers.js';
 
 interface UseAppCommandsProps {
   settingsService: SettingsService;
@@ -249,6 +249,40 @@ export const useAppCommands = ({
         expectsArgs: true,
         completion: { type: 'setting-value', trigger: AUTO_APPROVE_TRIGGER, settingKey: 'shell.autoApproveMode' },
         action: autoApproveAction,
+      },
+      {
+        name: 'effort',
+        description: 'Set reasoning effort (alias for /settings agent.reasoningEffort)',
+        expectsArgs: true,
+        completion: { type: 'setting-value', trigger: EFFORT_TRIGGER, settingKey: 'agent.reasoningEffort' },
+        action: (args?: string) => {
+          if (!args) {
+            setInput('/effort ');
+            return false;
+          }
+
+          // Reuse settings command logic for agent.reasoningEffort
+          const parts = args.trim().split(/\s+/).filter(Boolean);
+          if (parts.length === 0) {
+            setInput('/effort ');
+            return false;
+          }
+
+          const rawValue = parts.join(' ');
+          const parsedValue = parseSettingValue(rawValue);
+
+          if (!settingsService.isRuntimeModifiable('agent.reasoningEffort')) {
+            addSystemMessage(`Cannot modify 'agent.reasoningEffort' at runtime. Restart required.`);
+            return true;
+          }
+
+          settingsService.set('agent.reasoningEffort', parsedValue);
+          if (applyRuntimeSetting) {
+            applyRuntimeSetting('agent.reasoningEffort', parsedValue);
+          }
+          addSystemMessage(`Set agent.reasoningEffort to ${parsedValue}`);
+          return true;
+        },
       },
       settingsCommand,
     ];

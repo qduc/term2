@@ -2,7 +2,7 @@ import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
 import type { SettingCompletionItem } from '../../hooks/use-settings-completion.js';
 import type { SettingValueSuggestion } from '../../hooks/use-settings-value-completion.js';
 import type { ModelInfo } from '../../services/model-service.js';
-import { SETTINGS_TRIGGER, SETTINGS_RESET_TRIGGER, AUTO_APPROVE_TRIGGER } from './triggers.js';
+import { SETTINGS_TRIGGER, SETTINGS_RESET_TRIGGER, AUTO_APPROVE_TRIGGER, EFFORT_TRIGGER } from './triggers.js';
 
 export type Insertion = { nextValue: string; nextCursor: number };
 
@@ -47,7 +47,8 @@ export const computeSettingValueInsertion = (args: {
 }): Insertion | null => {
   const { suggestion, settingKey, triggerIndex, value, cursorOffset } = args;
   if (!suggestion || !settingKey || triggerIndex === null) return null;
-  const startsWithKnownTrigger = value.startsWith(SETTINGS_TRIGGER) || value.startsWith(AUTO_APPROVE_TRIGGER);
+  const startsWithKnownTrigger =
+    value.startsWith(SETTINGS_TRIGGER) || value.startsWith(AUTO_APPROVE_TRIGGER) || value.startsWith(EFFORT_TRIGGER);
   if (!startsWithKnownTrigger) return null;
   const safeCursor = Math.min(cursorOffset, value.length);
   const before = value.slice(0, triggerIndex);

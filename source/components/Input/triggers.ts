@@ -2,6 +2,7 @@ export const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 export const SETTINGS_TRIGGER = '/settings ';
 export const SETTINGS_RESET_TRIGGER = '/settings reset ';
 export const AUTO_APPROVE_TRIGGER = '/auto-approve ';
+export const EFFORT_TRIGGER = '/effort ';
 
 const whitespaceRegex = /\s/;
 

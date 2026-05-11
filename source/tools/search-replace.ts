@@ -8,6 +8,7 @@ import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage
 import { healSearchReplaceParams } from './edit-healing.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { getApprovalPresentationCapability } from './tool-capabilities.js';
+import { withFileLock } from './file-locks.js';
 
 /**
  * Detect the predominant EOL style in file content.
@@ -78,7 +79,7 @@ function detectSummarizationMarkers(content: string): string | null {
   return null;
 }
 
-const searchReplaceParametersSchema = z.object({
+const searchReplaceOperationSchema = z.object({
   path: z.string().describe('The absolute or relative path to the file'),
   search_content: z
     .string()
@@ -93,7 +94,63 @@ const searchReplaceParametersSchema = z.object({
     .describe('Whether to replace all occurrences of the search content. If false, requires exactly one match.'),
 });
 
-export type SearchReplaceToolParams = z.infer<typeof searchReplaceParametersSchema>;
+const searchReplaceParametersSchema = z
+  .object({
+    path: z.string().describe('The absolute or relative path to the file').optional(),
+    search_content: z
+      .string()
+      .describe(
+        'The exact content to search for. Use <...> on its own line to skip unchanged middle content (gap matching).',
+      )
+      .optional(),
+    replace_content: z.string().describe('The content to replace it with').optional(),
+    replace_all: z
+      .boolean()
+      .optional()
+      .describe('Whether to replace all occurrences of the search content. If false, requires exactly one match.'),
+    replacements: z.array(searchReplaceOperationSchema).min(1).optional(),
+  })
+  .superRefine((params, ctx) => {
+    const hasBatch = Array.isArray(params.replacements);
+    const hasSingle =
+      params.path !== undefined || params.search_content !== undefined || params.replace_content !== undefined;
+
+    if (hasBatch && hasSingle) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either replacements or a single path/search_content/replace_content edit, not both.',
+      });
+      return;
+    }
+
+    if (
+      !hasBatch &&
+      (params.path === undefined || params.search_content === undefined || params.replace_content === undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide replacements or all single edit fields: path, search_content, and replace_content.',
+      });
+    }
+  });
+
+export type SearchReplaceOperation = z.infer<typeof searchReplaceOperationSchema>;
+export type SearchReplaceToolParams = SearchReplaceOperation | { replacements: SearchReplaceOperation[] };
+
+function getSearchReplaceOperations(params: SearchReplaceToolParams): SearchReplaceOperation[] {
+  if ('replacements' in params && params.replacements) {
+    return params.replacements;
+  }
+  const operation = params as SearchReplaceOperation;
+  return [
+    {
+      path: operation.path,
+      search_content: operation.search_content,
+      replace_content: operation.replace_content,
+      replace_all: operation.replace_all ?? false,
+    },
+  ];
+}
 
 /**
  * Gap marker constant used to indicate omitted middle content in search strings.
@@ -166,7 +223,7 @@ interface EditCache {
 class SearchReplaceEditCache {
   private lastEditCache: EditCache | null = null;
 
-  get(params: SearchReplaceToolParams, content: string): EditCache | null {
+  get(params: SearchReplaceOperation, content: string): EditCache | null {
     const key = getEditCacheKey(params);
     if (this.lastEditCache && this.lastEditCache.key === key && this.lastEditCache.content === content) {
       return this.lastEditCache;
@@ -174,7 +231,7 @@ class SearchReplaceEditCache {
     return null;
   }
 
-  set(params: SearchReplaceToolParams, matchInfo: MatchInfo, content: string, eol: string): void {
+  set(params: SearchReplaceOperation, matchInfo: MatchInfo, content: string, eol: string): void {
     this.lastEditCache = {
       key: getEditCacheKey(params),
       matchInfo,
@@ -184,7 +241,7 @@ class SearchReplaceEditCache {
   }
 }
 
-function getEditCacheKey(params: SearchReplaceToolParams): string {
+function getEditCacheKey(params: SearchReplaceOperation): string {
   return JSON.stringify({
     path: params.path,
     search_content: params.search_content,
@@ -570,9 +627,10 @@ export const formatSearchReplaceCommandMessage = (
   for (const [replaceIndex, replaceResult] of replaceOutputItems.entries()) {
     const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
     const args = normalizeToolArguments(normalizedArgs) ?? {};
-    const filePath = args?.path ?? replaceResult?.path ?? 'unknown';
-    const searchContent = args?.search_content ?? '';
-    const replaceContent = args?.replace_content ?? '';
+    const operationArgs = Array.isArray(args?.replacements) ? args.replacements[replaceIndex] : args;
+    const filePath = operationArgs?.path ?? replaceResult?.path ?? 'unknown';
+    const searchContent = operationArgs?.search_content ?? '';
+    const replaceContent = operationArgs?.replace_content ?? '';
 
     const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
     const isHealed = replaceResult?.healed === true;
@@ -592,7 +650,7 @@ export const formatSearchReplaceCommandMessage = (
           path: filePath,
           search_content: searchContent,
           replace_content: replaceContent,
-          replace_all: args?.replace_all ?? false,
+          replace_all: operationArgs?.replace_all ?? false,
         },
       }),
     );
@@ -621,8 +679,22 @@ export function createSearchReplaceToolDefinition(deps: {
     needsApproval: async (params) => {
       try {
         const editMode = settingsService.get<boolean>('app.editMode');
-        const { path: filePath, search_content, replace_all = false } = params;
+        const operations = getSearchReplaceOperations(params);
         const cwd = executionContext?.getCwd() || process.cwd();
+        if (operations.length > 1) {
+          const allInsideCwd = operations.every((operation) => {
+            try {
+              const targetPath = resolveWorkspacePath(operation.path, cwd);
+              return targetPath.startsWith(cwd + path.sep);
+            } catch {
+              return false;
+            }
+          });
+          return !(editMode && allInsideCwd);
+        }
+
+        const operation = operations[0];
+        const { path: filePath, search_content, replace_all = false } = operation;
         const targetPath = resolveWorkspacePath(filePath, cwd);
         const workspaceRoot = cwd;
         const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
@@ -681,7 +753,7 @@ export function createSearchReplaceToolDefinition(deps: {
         const matchInfo = findMatchesInContent(content, normalizedSearchContent);
 
         // Cache the result for execute phase
-        editCache.set(params, matchInfo, content, eol);
+        editCache.set(operation, matchInfo, content, eol);
 
         if (matchInfo.type === 'exact') {
           if (!replace_all && matchInfo.count > 1) {
@@ -778,83 +850,43 @@ export function createSearchReplaceToolDefinition(deps: {
     },
     execute: async (params) => {
       const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
-      try {
-        const { path: filePath, search_content, replace_content, replace_all = false } = params;
-        const cwd = executionContext?.getCwd() || process.cwd();
-        const targetPath = resolveWorkspacePath(filePath, cwd);
+      const cwd = executionContext?.getCwd() || process.cwd();
+      const sshService = executionContext?.getSSHService();
+      const isRemote = executionContext?.isRemote() && !!sshService;
 
-        const sshService = executionContext?.getSSHService();
-        const isRemote = executionContext?.isRemote() && !!sshService;
+      const readFileFn = async (p: string) => {
+        if (isRemote && sshService) return sshService.readFile(p);
+        return readFile(p, 'utf8');
+      };
 
-        const readFileFn = async (p: string) => {
-          if (isRemote && sshService) return sshService.readFile(p);
-          return readFile(p, 'utf8');
-        };
+      const writeFileFn = async (p: string, c: string) => {
+        if (isRemote && sshService) return sshService.writeFile(p, c);
+        return writeFile(p, c, 'utf8');
+      };
 
-        const writeFileFn = async (p: string, c: string) => {
-          if (isRemote && sshService) return sshService.writeFile(p, c);
-          return writeFile(p, c, 'utf8');
-        };
-
-        if (enableFileLogging) {
-          loggingService.debug(`File operation started: search_replace`, {
-            path: filePath,
-            targetPath,
-            replace_all,
-          });
-        }
-
-        let content: string;
-        try {
-          content = await readFileFn(targetPath);
-        } catch (error: any) {
-          if (search_content === '' && error?.code === 'ENOENT') {
-            await writeFileFn(targetPath, replace_content);
-            if (enableFileLogging) {
-              loggingService.debug('File created (search_content empty)', {
-                path: filePath,
-              });
-            }
-            return JSON.stringify({
-              output: [
-                {
-                  success: true,
-                  operation: 'search_replace',
-                  path: filePath,
-                  message: `Created ${filePath} (new file)`,
-                },
-              ],
-            });
-          }
-          throw error;
-        }
+      const applyToContent = async (operation: SearchReplaceOperation, content: string) => {
+        const { path: filePath, search_content, replace_content, replace_all = false } = operation;
 
         if (search_content === '') {
-          return JSON.stringify({
-            output: [
-              {
-                success: false,
-                error:
-                  'search_content must not be empty when editing an existing file. Provide search text or create a new file with an empty search.',
-              },
-            ],
-          });
+          return {
+            output: {
+              success: false,
+              error:
+                'search_content must not be empty when editing an existing file. Provide search text or create a new file with an empty search.',
+            },
+          };
         }
 
-        // Check for summarization markers
         const markerError = detectSummarizationMarkers(search_content);
         if (markerError) {
-          return JSON.stringify({
-            output: [
-              {
-                success: false,
-                error: markerError,
-              },
-            ],
-          });
+          return {
+            output: {
+              success: false,
+              error: markerError,
+            },
+          };
         }
 
-        // Check cache first
         let matchInfo: MatchInfo;
         let eol: string;
         let normalizedSearchContent: string;
@@ -864,18 +896,14 @@ export function createSearchReplaceToolDefinition(deps: {
         let healedSearchLength = 0;
         let matchTypeAfterHealing: MatchInfo['type'] = 'none';
 
-        const cachedEdit = editCache.get(params, content);
+        const cachedEdit = editCache.get(operation, content);
         if (cachedEdit) {
-          // Use cached results
           matchInfo = cachedEdit.matchInfo;
           eol = cachedEdit.eol;
           normalizedSearchContent = normalizeToEOL(removeLeadingFilepathComment(search_content, filePath), eol);
         } else {
-          // Detect EOL and normalize content
           eol = detectEOL(content);
           normalizedSearchContent = normalizeToEOL(removeLeadingFilepathComment(search_content, filePath), eol);
-
-          // Find matches using shared logic
           matchInfo = findMatchesInContent(content, normalizedSearchContent);
         }
 
@@ -884,10 +912,16 @@ export function createSearchReplaceToolDefinition(deps: {
           if (enableEditHealing) {
             healingAttempted = true;
             const healingModel = settingsService.get<string>('tools.editHealingModel') ?? 'gpt-4o-mini';
-            const healingResult = await editHealing(params, content, healingModel, process.env.OPENAI_API_KEY ?? '', {
-              settingsService,
-              loggingService,
-            });
+            const healingResult = await editHealing(
+              operation,
+              content,
+              healingModel,
+              process.env.OPENAI_API_KEY ?? '',
+              {
+                settingsService,
+                loggingService,
+              },
+            );
 
             healedSearchLength = healingResult.params.search_content.length;
 
@@ -916,15 +950,13 @@ export function createSearchReplaceToolDefinition(deps: {
             }
 
             if (!usedHealing) {
-              return JSON.stringify({
-                output: [
-                  {
-                    success: false,
-                    error:
-                      'Search content not found. Auto-healing attempted but no match found. Try splitting changes into smaller patterns.',
-                  },
-                ],
-              });
+              return {
+                output: {
+                  success: false,
+                  error:
+                    'Search content not found. Auto-healing attempted but no match found. Try splitting changes into smaller patterns.',
+                },
+              };
             }
           }
         }
@@ -936,17 +968,13 @@ export function createSearchReplaceToolDefinition(deps: {
         });
 
         if (!replacementResult.success) {
-          return JSON.stringify({
-            output: [
-              {
-                success: false,
-                error: replacementResult.error,
-              },
-            ],
-          });
+          return {
+            output: {
+              success: false,
+              error: replacementResult.error,
+            },
+          };
         }
-
-        await writeFileFn(targetPath, replacementResult.newContent);
 
         if (enableFileLogging) {
           loggingService.debug(`File updated (${replacementResult.matchType} match)`, {
@@ -962,22 +990,109 @@ export function createSearchReplaceToolDefinition(deps: {
           : `Updated ${filePath} (${replacementResult.replacedCount} ${replacementResult.matchType} match${
               replacementResult.replacedCount > 1 ? 'es' : ''
             })`;
+        return {
+          newContent: replacementResult.newContent,
+          output: {
+            success: true,
+            operation: 'search_replace',
+            path: filePath,
+            message: successMessage,
+            healed: usedHealing,
+          },
+        };
+      };
+
+      try {
+        const operations = getSearchReplaceOperations(params);
+        const indexedOperations = operations.map((operation, index) => ({
+          operation,
+          index,
+          targetPath: resolveWorkspacePath(operation.path, cwd),
+        }));
+        const groups = new Map<string, typeof indexedOperations>();
+        for (const indexedOperation of indexedOperations) {
+          groups.set(indexedOperation.targetPath, [
+            ...(groups.get(indexedOperation.targetPath) ?? []),
+            indexedOperation,
+          ]);
+        }
+
+        const output: Array<Record<string, unknown>> = new Array(operations.length);
+
+        for (const [targetPath, group] of groups) {
+          await withFileLock(targetPath, async () => {
+            let content = '';
+            let fileExists = true;
+
+            try {
+              content = await readFileFn(targetPath);
+            } catch (error: any) {
+              if (error?.code === 'ENOENT') {
+                fileExists = false;
+              } else {
+                throw error;
+              }
+            }
+
+            if (enableFileLogging) {
+              loggingService.debug(`File operation started: search_replace`, {
+                path: group[0].operation.path,
+                targetPath,
+                operationCount: group.length,
+              });
+            }
+
+            let nextContent = content;
+            let changed = false;
+            let failed = false;
+
+            for (const { operation, index } of group) {
+              if (!fileExists) {
+                if (operation.search_content === '') {
+                  nextContent = operation.replace_content;
+                  fileExists = true;
+                  changed = true;
+                  output[index] = {
+                    success: true,
+                    operation: 'search_replace',
+                    path: operation.path,
+                    message: `Created ${operation.path} (new file)`,
+                  };
+                  continue;
+                }
+
+                failed = true;
+                output[index] = {
+                  success: false,
+                  error: `File not found: ${operation.path}`,
+                };
+                break;
+              }
+
+              const result = await applyToContent(operation, nextContent);
+              output[index] = result.output;
+              if (!result.output.success) {
+                failed = true;
+                break;
+              }
+              nextContent = result.newContent!;
+              changed = true;
+            }
+
+            if (!failed && changed) {
+              await writeFileFn(targetPath, nextContent);
+            }
+          });
+        }
+
         return JSON.stringify({
-          output: [
-            {
-              success: true,
-              operation: 'search_replace',
-              path: filePath,
-              message: successMessage,
-              healed: usedHealing,
-            },
-          ],
+          output: output.filter(Boolean),
         });
       } catch (error: any) {
         if (enableFileLogging) {
           loggingService.error('File operation failed', {
             type: 'search_replace',
-            path: params.path,
+            path: 'replacements' in params ? 'multiple' : params.path,
             error: error instanceof Error ? error.message : String(error),
           });
         }

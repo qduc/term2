@@ -84,6 +84,68 @@ test.serial('update_file: updates an existing file', async (t) => {
   });
 });
 
+test.serial('update_file: preserves parallel patches to different regions of the same file', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    const filePath = 'parallel-patch.txt';
+    const absPath = path.join(dir, filePath);
+    const tokens = Array.from({ length: 12 }, (_, index) => `token_${index}`);
+    await fs.writeFile(absPath, tokens.join('\n'));
+
+    const results = await Promise.all(
+      tokens.map((token, index) =>
+        tool.execute({
+          type: 'update_file',
+          path: filePath,
+          diff: `@@\n-${token}\n+done_${index}`,
+        }),
+      ),
+    );
+
+    for (const result of results) {
+      const parsed = JSON.parse(result);
+      t.true(parsed.output[0].success);
+    }
+
+    const content = await fs.readFile(absPath, 'utf8');
+    t.deepEqual(
+      content.split('\n'),
+      tokens.map((_, index) => `done_${index}`),
+    );
+  });
+});
+
+test.serial('execute: applies batched patch operations in order', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+
+    const result = await tool.execute({
+      operations: [
+        {
+          type: 'create_file',
+          path: 'batch.txt',
+          diff: '@@ -0,0 +1,2 @@\n+Hello\n+World',
+        },
+        {
+          type: 'update_file',
+          path: 'batch.txt',
+          diff: '@@\n Hello\n-World\n+Universe',
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output.every((item: { success: boolean }) => item.success));
+    t.deepEqual(
+      parsed.output.map((item: { operation: string }) => item.operation),
+      ['create_file', 'update_file'],
+    );
+
+    const content = await fs.readFile(path.join(dir, 'batch.txt'), 'utf8');
+    t.is(content, 'Hello\nUniverse\n');
+  });
+});
+
 // test.serial('delete_file: deletes a file', async t => {
 //     await withTempDir(async (dir) => {
 //         const filePath = 'to-delete.txt';

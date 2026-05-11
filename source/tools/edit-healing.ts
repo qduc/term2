@@ -1,10 +1,10 @@
 import { Agent, run, type Runner } from '@openai/agents';
-import type { SearchReplaceToolParams } from './search-replace.js';
+import type { SearchReplaceOperation } from './search-replace.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { getProvider } from '../providers/index.js';
 
 export interface HealingResult {
-  params: SearchReplaceToolParams;
+  params: SearchReplaceOperation;
   wasModified: boolean;
   confidence: number;
 }
@@ -196,7 +196,7 @@ async function runHealingPrompt(
 }
 
 export async function healSearchReplaceParams(
-  originalParams: SearchReplaceToolParams,
+  originalParams: SearchReplaceOperation,
   fileContent: string,
   model: string,
   apiKey: string,

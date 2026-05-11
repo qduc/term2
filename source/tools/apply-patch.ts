@@ -7,6 +7,7 @@ import type { ToolDefinition, CommandMessage } from './types.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
 import { ExecutionContext } from '../services/execution-context.js';
+import { withFileLock } from './file-locks.js';
 
 /**
  * Error thrown when patch validation fails (malformed diff)
@@ -18,13 +19,61 @@ export class PatchValidationError extends Error {
   }
 }
 
-const applyPatchParametersSchema = z.object({
+const applyPatchOperationSchema = z.object({
   type: z.enum(['create_file', 'update_file']),
   path: z.string().min(1, 'File path cannot be empty'),
   diff: z.string().describe('Unified diff content for create/update operations'),
 });
 
+const applyPatchParametersSchema = z
+  .object({
+    type: z.enum(['create_file', 'update_file']).optional(),
+    path: z.string().min(1, 'File path cannot be empty').optional(),
+    diff: z.string().describe('Unified diff content for create/update operations').optional(),
+    operations: z.array(applyPatchOperationSchema).min(1).optional(),
+  })
+  .superRefine((params, ctx) => {
+    const hasBatch = Array.isArray(params.operations);
+    const hasSingle = params.type !== undefined || params.path !== undefined || params.diff !== undefined;
+
+    if (hasBatch && hasSingle) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either operations or a single type/path/diff operation, not both.',
+      });
+      return;
+    }
+
+    if (!hasBatch && (params.type === undefined || params.path === undefined || params.diff === undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide operations or all single operation fields: type, path, and diff.',
+      });
+    }
+  });
+
 export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;
+type ApplyPatchOperation = z.infer<typeof applyPatchOperationSchema>;
+type ApplyPatchOutput = {
+  success: boolean;
+  operation?: string;
+  path?: string;
+  message?: string;
+  error?: string;
+};
+
+function getApplyPatchOperations(params: ApplyPatchToolParams): ApplyPatchOperation[] {
+  if (params.operations) {
+    return params.operations;
+  }
+  return [
+    {
+      type: params.type!,
+      path: params.path!,
+      diff: params.diff!,
+    },
+  ];
+}
 
 export const formatApplyPatchCommandMessage = (
   item: any,
@@ -58,8 +107,9 @@ export const formatApplyPatchCommandMessage = (
   for (const [patchIndex, patchResult] of patchOutputItems.entries()) {
     const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
     const args = normalizeToolArguments(normalizedArgs) ?? {};
-    const operationType = args?.type ?? patchResult?.operation ?? 'unknown';
-    const filePath = args?.path ?? patchResult?.path ?? 'unknown';
+    const operationArgs = Array.isArray(args?.operations) ? args.operations[patchIndex] : args;
+    const operationType = operationArgs?.type ?? patchResult?.operation ?? 'unknown';
+    const filePath = operationArgs?.path ?? patchResult?.path ?? 'unknown';
 
     const command = `apply_patch ${operationType} ${filePath}`;
     const output = patchResult?.message ?? patchResult?.error ?? 'No output';
@@ -133,110 +183,108 @@ export function createApplyPatchToolDefinition(deps: {
     needsApproval: async (params) => {
       try {
         const editMode = settingsService.get<boolean>('app.editMode');
-        const { type, path: filePath, diff } = params;
         const workspaceRoot = executionContext?.getCwd() || process.cwd();
         const sshService = executionContext?.getSSHService();
         const isRemote = executionContext?.isRemote() && !!sshService;
+        const operations = getApplyPatchOperations(params);
 
-        // Resolve and ensure target within workspace before any validation.
-        // This prevents validation from running against a mismatched cwd.
-        let targetPath: string;
-        try {
-          targetPath = resolveWorkspacePath(filePath, workspaceRoot);
-        } catch (e: any) {
-          // Outside workspace => require approval
-          loggingService.security('apply_patch needsApproval: outside workspace', {
-            editMode,
-            type,
-            path: filePath,
-            error: e?.message || String(e),
-          });
-          return true;
-        }
-
-        // Validate diff syntax by attempting a dry-run (before approval)
-        if (type === 'create_file' || type === 'update_file') {
+        for (const { type, path: filePath, diff } of operations) {
+          // Resolve and ensure target within workspace before any validation.
+          // This prevents validation from running against a mismatched cwd.
+          let targetPath: string;
           try {
-            if (type === 'create_file') {
-              // Dry-run: apply diff to empty content for new file
-              applyDiff('', diff);
-            } else {
-              // Dry-run: read existing file and test diff application.
-              // Read failures are environment/file-state issues, not
-              // deterministic patch syntax failures.
-              const original =
-                isRemote && sshService ? await sshService.readFile(targetPath) : await readFile(targetPath, 'utf8');
-              applyDiff(original, diff);
-            }
-            loggingService.debug('apply_patch validation passed', {
+            targetPath = resolveWorkspacePath(filePath, workspaceRoot);
+          } catch (e: any) {
+            // Outside workspace => require approval
+            loggingService.security('apply_patch needsApproval: outside workspace', {
+              editMode,
               type,
               path: filePath,
+              error: e?.message || String(e),
             });
-          } catch (diffError: any) {
-            // Keep fast UX for deterministic patch-format errors, but
-            // require approval for environment/file-state failures.
-            const fileAccessFailure =
-              typeof diffError?.code === 'string' ||
-              ['enoent', 'not found', 'no such file', 'permission denied', 'eacces', 'eperm', 'is a directory'].some(
-                (token) =>
-                  String(diffError?.message || '')
-                    .toLowerCase()
-                    .includes(token),
-              );
+            return true;
+          }
 
-            if (fileAccessFailure) {
-              loggingService.warn('apply_patch prevalidation could not confirm patch due to file/context issue', {
+          // Validate diff syntax by attempting a dry-run (before approval)
+          if (type === 'create_file' || type === 'update_file') {
+            try {
+              if (type === 'create_file') {
+                // Dry-run: apply diff to empty content for new file
+                applyDiff('', diff);
+              } else {
+                // Dry-run: read existing file and test diff application.
+                // Read failures are environment/file-state issues, not
+                // deterministic patch syntax failures.
+                const original =
+                  isRemote && sshService ? await sshService.readFile(targetPath) : await readFile(targetPath, 'utf8');
+                applyDiff(original, diff);
+              }
+              loggingService.debug('apply_patch validation passed', {
+                type,
+                path: filePath,
+              });
+            } catch (diffError: any) {
+              // Keep fast UX for deterministic patch-format errors, but
+              // require approval for environment/file-state failures.
+              const fileAccessFailure =
+                typeof diffError?.code === 'string' ||
+                ['enoent', 'not found', 'no such file', 'permission denied', 'eacces', 'eperm', 'is a directory'].some(
+                  (token) =>
+                    String(diffError?.message || '')
+                      .toLowerCase()
+                      .includes(token),
+                );
+
+              if (fileAccessFailure) {
+                loggingService.warn('apply_patch prevalidation could not confirm patch due to file/context issue', {
+                  type,
+                  path: filePath,
+                  error: diffError?.message || String(diffError),
+                });
+                return true;
+              }
+
+              // Diff-format validation failed - auto-approve and let execute
+              // return a structured error without bothering the user.
+              loggingService.error('apply_patch validation failed - will fail in execute', {
                 type,
                 path: filePath,
                 error: diffError?.message || String(diffError),
               });
-              return true;
+              // Return false to auto-approve - execute will handle the error gracefully
+              return false;
             }
+          }
 
-            // Diff-format validation failed - auto-approve and let execute
-            // return a structured error without bothering the user.
-            loggingService.error('apply_patch validation failed - will fail in execute', {
+          // Deletions ALWAYS require approval per policy
+          // if (type === 'delete_file') {
+          //     loggingService.security('apply_patch needsApproval: delete requires approval', {
+          //         mode,
+          //         type,
+          //         path: filePath,
+          //     });
+          //     return true;
+          // }
+
+          const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
+
+          if (!editMode || !insideCwd || (type !== 'create_file' && type !== 'update_file')) {
+            loggingService.security('apply_patch needsApproval: approval required', {
+              editMode,
               type,
               path: filePath,
-              error: diffError?.message || String(diffError),
+              targetPath,
+              insideCwd,
             });
-            // Return false to auto-approve - execute will handle the error gracefully
-            return false;
+            return true;
           }
         }
 
-        // Deletions ALWAYS require approval per policy
-        // if (type === 'delete_file') {
-        //     loggingService.security('apply_patch needsApproval: delete requires approval', {
-        //         mode,
-        //         type,
-        //         path: filePath,
-        //     });
-        //     return true;
-        // }
-
-        const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
-
-        // In edit mode, auto-approve create/update within cwd
-        if (editMode && insideCwd && (type === 'create_file' || type === 'update_file')) {
-          loggingService.security('apply_patch needsApproval: auto-approved in edit mode', {
-            editMode,
-            type,
-            path: filePath,
-            targetPath,
-          });
-          return false;
-        }
-
-        // Otherwise, require approval (default behavior)
-        loggingService.security('apply_patch needsApproval: approval required', {
+        loggingService.security('apply_patch needsApproval: auto-approved in edit mode', {
           editMode,
-          type,
-          path: filePath,
-          targetPath,
-          insideCwd,
+          operationCount: operations.length,
         });
-        return true;
+        return false;
       } catch (error: any) {
         loggingService.error('apply_patch needsApproval error', {
           error: error?.message || String(error),
@@ -266,8 +314,7 @@ export function createApplyPatchToolDefinition(deps: {
         return mkdir(p, { recursive: true });
       };
 
-      try {
-        const { type, path: filePath, diff } = params;
+      const runOperation = async ({ type, path: filePath, diff }: ApplyPatchOperation) => {
         const targetPath = resolveWorkspacePath(filePath, cwd);
 
         if (enableFileLogging) {
@@ -277,164 +324,119 @@ export function createApplyPatchToolDefinition(deps: {
           });
         }
 
-        // Re-validate patch before executing
-        if (type === 'create_file' || type === 'update_file') {
-          try {
-            if (type === 'create_file') {
-              // Test applying diff to empty content
-              applyDiff('', diff);
-            } else {
-              // Test applying diff to existing file content
-              const original = await readFileFn(targetPath);
-              applyDiff(original, diff);
-            }
-          } catch (validationError: any) {
-            loggingService.error('Patch validation failed in execute', {
-              type,
-              path: filePath,
-              error: validationError?.message || String(validationError),
-            });
-            return JSON.stringify({
-              output: [
-                {
-                  success: false,
-                  error: `Invalid patch: ${
-                    validationError?.message || String(validationError)
-                  }. Please check the file path and diff format.`,
-                },
-              ],
-            });
-          }
-        }
-
         switch (type) {
           case 'create_file': {
-            // Ensure parent directory exists
-            await mkdirFn(path.dirname(targetPath));
+            return withFileLock(targetPath, async () => {
+              // Ensure parent directory exists
+              await mkdirFn(path.dirname(targetPath));
 
-            // Apply diff to empty content for new file
-            const content = applyDiff('', diff);
-            await writeFileFn(targetPath, content);
+              // Apply diff to empty content for new file
+              const content = applyDiff('', diff);
+              await writeFileFn(targetPath, content);
 
-            if (enableFileLogging) {
-              try {
-                loggingService.debug('File created', {
-                  path: filePath,
-                  contentLength: content.length,
-                });
-              } catch (error) {
-                // Ignore logging errors to prevent operation failure
+              if (enableFileLogging) {
+                try {
+                  loggingService.debug('File created', {
+                    path: filePath,
+                    contentLength: content.length,
+                  });
+                } catch (error) {
+                  // Ignore logging errors to prevent operation failure
+                }
               }
-            }
 
-            return JSON.stringify({
-              output: [
-                {
-                  success: true,
-                  operation: 'create_file',
-                  path: filePath,
-                  message: `Created ${filePath}`,
-                },
-              ],
+              return {
+                success: true,
+                operation: 'create_file',
+                path: filePath,
+                message: `Created ${filePath}`,
+              };
             });
           }
 
           case 'update_file': {
-            // Read existing file
-            let original: string;
-            try {
-              original = await readFileFn(targetPath);
-            } catch (error: any) {
-              if (error?.code === 'ENOENT') {
-                if (enableFileLogging) {
-                  loggingService.error('Cannot update missing file', {
-                    path: filePath,
-                    targetPath,
-                  });
-                }
-                return JSON.stringify({
-                  output: [
-                    {
-                      success: false,
-                      error: `Cannot update missing file: ${filePath}`,
-                    },
-                  ],
-                });
-              }
-
-              throw error;
-            }
-
-            // Apply diff to existing content
-            const patched = applyDiff(original, diff);
-            await writeFileFn(targetPath, patched);
-
-            if (enableFileLogging) {
+            return withFileLock(targetPath, async () => {
+              // Read existing file
+              let original: string;
               try {
-                loggingService.debug('File updated', {
-                  path: filePath,
-                  originalLength: original.length,
-                  patchedLength: patched.length,
-                });
-              } catch (error) {
-                // Ignore logging errors to prevent operation failure
-              }
-            }
+                original = await readFileFn(targetPath);
+              } catch (error: any) {
+                if (error?.code === 'ENOENT') {
+                  if (enableFileLogging) {
+                    loggingService.error('Cannot update missing file', {
+                      path: filePath,
+                      targetPath,
+                    });
+                  }
+                  return {
+                    success: false,
+                    error: `Cannot update missing file: ${filePath}`,
+                  };
+                }
 
-            return JSON.stringify({
-              output: [
-                {
-                  success: true,
-                  operation: 'update_file',
-                  path: filePath,
-                  message: `Updated ${filePath}`,
-                },
-              ],
+                throw error;
+              }
+
+              // Re-apply validation against the locked, current content.
+              const patched = applyDiff(original, diff);
+              await writeFileFn(targetPath, patched);
+
+              if (enableFileLogging) {
+                try {
+                  loggingService.debug('File updated', {
+                    path: filePath,
+                    originalLength: original.length,
+                    patchedLength: patched.length,
+                  });
+                } catch (error) {
+                  // Ignore logging errors to prevent operation failure
+                }
+              }
+
+              return {
+                success: true,
+                operation: 'update_file',
+                path: filePath,
+                message: `Updated ${filePath}`,
+              };
             });
           }
 
-          // case 'delete_file': {
-          //     await rm(targetPath, {force: true});
-
-          //     if (enableFileLogging) {
-          //         try {
-          //             loggingService.debug('File deleted', {
-          //                 path: filePath,
-          //                 targetPath,
-          //             });
-          //         } catch (error) {
-          //             // Ignore logging errors to prevent operation failure
-          //         }
-          //     }
-
-          //     return JSON.stringify({
-          //         output: [
-          //             {
-          //                 success: true,
-          //                 operation: 'delete_file',
-          //                 path: filePath,
-          //                 message: `Deleted ${filePath}`,
-          //             },
-          //         ],
-          //     });
-          // }
-
           default: {
-            return JSON.stringify({
-              output: [
-                {
-                  success: false,
-                  error: `Unknown operation type: ${type}`,
-                },
-              ],
+            return {
+              success: false,
+              error: `Unknown operation type: ${type}`,
+            };
+          }
+        }
+      };
+
+      try {
+        const output: ApplyPatchOutput[] = [];
+        for (const operation of getApplyPatchOperations(params)) {
+          try {
+            output.push(await runOperation(operation));
+          } catch (operationError: any) {
+            loggingService.error('Patch operation failed in execute', {
+              type: operation.type,
+              path: operation.path,
+              error: operationError?.message || String(operationError),
+            });
+            output.push({
+              success: false,
+              error: `Invalid patch: ${
+                operationError?.message || String(operationError)
+              }. Please check the file path and diff format.`,
             });
           }
         }
+
+        return JSON.stringify({ output });
       } catch (error: any) {
         if (enableFileLogging) {
           loggingService.error('File operation failed', {
-            type: params.type,
-            path: params.path,
+            type: params.type ?? 'batch',
+            path: params.path ?? 'multiple',
             error: error instanceof Error ? error.message : String(error),
           });
         }

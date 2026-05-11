@@ -254,6 +254,108 @@ test.serial('execute creates a new file when search_content is empty and file is
   });
 });
 
+test.serial('execute preserves parallel edits to different regions of the same file', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'parallel.txt';
+    const absPath = path.join(dir, filePath);
+    const tokens = Array.from({ length: 20 }, (_, index) => `token_${index}`);
+    await fs.writeFile(absPath, tokens.join('\n'));
+
+    const results = await Promise.all(
+      tokens.map((token, index) =>
+        tool.execute({
+          path: filePath,
+          search_content: token,
+          replace_content: `done_${index}`,
+          replace_all: false,
+        }),
+      ),
+    );
+
+    for (const result of results) {
+      const parsed = JSON.parse(result);
+      t.true(parsed.output[0].success);
+    }
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.deepEqual(
+      updated.split('\n'),
+      tokens.map((_, index) => `done_${index}`),
+    );
+  });
+});
+
+test.serial('execute applies batched replacements to one file with a single result per edit', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'batch.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'alpha\nbeta\ngamma\n');
+
+    const result = await tool.execute({
+      replacements: [
+        {
+          path: filePath,
+          search_content: 'alpha',
+          replace_content: 'ALPHA',
+          replace_all: false,
+        },
+        {
+          path: filePath,
+          search_content: 'gamma',
+          replace_content: 'GAMMA',
+          replace_all: false,
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output.every((item: { success: boolean }) => item.success));
+    t.deepEqual(
+      parsed.output.map((item: { path: string }) => item.path),
+      [filePath, filePath],
+    );
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'ALPHA\nbeta\nGAMMA\n');
+  });
+});
+
+test.serial('execute does not write a batched file when one replacement fails', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'batch-failure.txt';
+    const absPath = path.join(dir, filePath);
+    const originalContent = 'alpha\nbeta\n';
+    await fs.writeFile(absPath, originalContent);
+
+    const result = await tool.execute({
+      replacements: [
+        {
+          path: filePath,
+          search_content: 'alpha',
+          replace_content: 'ALPHA',
+          replace_all: false,
+        },
+        {
+          path: filePath,
+          search_content: 'missing',
+          replace_content: 'MISSING',
+          replace_all: false,
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+    t.false(parsed.output[1].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, originalContent);
+  });
+});
+
 test.serial('execute reports failure when search string is not found', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));

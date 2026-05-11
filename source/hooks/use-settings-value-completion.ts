@@ -188,9 +188,22 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
       setSettingKey(key);
       setMode('settings_value_completion');
       setTriggerIndex(valueStartIndex);
-      setSelectedIndex(0);
+
+      // Get current value from settingsService and find it in suggestions
+      try {
+        const currentValue = settingsService.get(key);
+        const suggestions = buildSettingValueSuggestions(key);
+        const currentIndex =
+          currentValue !== undefined ? suggestions.findIndex((s) => s.value === String(currentValue)) : -1;
+
+        // If current value found in suggestions, select it; otherwise default to 0
+        setSelectedIndex(currentIndex >= 0 ? currentIndex : 0);
+      } catch {
+        // If there's an error getting the value, default to first item
+        setSelectedIndex(0);
+      }
     },
-    [mode, setMode, setTriggerIndex, settingKey],
+    [mode, setMode, setTriggerIndex, settingKey, settingsService],
   );
 
   const close = useCallback(() => {

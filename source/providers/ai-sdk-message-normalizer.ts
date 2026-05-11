@@ -3,40 +3,90 @@ type AiSdkModelLike = {
   doStream: (options: any) => PromiseLike<any> | any;
 };
 
-function isAssistantReasoningOnlyMessage(message: any): boolean {
-  const content = message?.content;
-
-  if (
-    message?.role === 'assistant' &&
-    Array.isArray(content) &&
-    content.length > 0 &&
-    content.every((part) => part?.type === 'reasoning') &&
-    !Array.isArray(message.tool_calls)
-  ) {
-    return true;
-  }
-
-  return (
-    message?.role === 'assistant' &&
-    typeof message.reasoning_content === 'string' &&
-    (message.content === '' || message.content === null || message.content === undefined) &&
-    !Array.isArray(message.tool_calls)
-  );
+function hasContent(content: any): boolean {
+  return content !== null && content !== undefined && content !== '';
 }
 
-function isAssistantToolCallMessage(message: any): boolean {
-  const content = message?.content;
-
-  if (
-    message?.role === 'assistant' &&
-    Array.isArray(content) &&
-    content.some((part) => part?.type === 'tool-call') &&
-    message.reasoning_content === undefined
-  ) {
-    return true;
+function contentToParts(content: any): any[] {
+  if (!hasContent(content)) {
+    return [];
   }
 
-  return message?.role === 'assistant' && Array.isArray(message.tool_calls) && message.reasoning_content === undefined;
+  if (Array.isArray(content)) {
+    return content;
+  }
+
+  return [{ type: 'text', text: String(content) }];
+}
+
+function mergeAssistantContent(existing: any, incoming: any): any {
+  if (!hasContent(existing)) {
+    return incoming;
+  }
+
+  if (!hasContent(incoming)) {
+    return existing;
+  }
+
+  if (typeof existing === 'string' && typeof incoming === 'string') {
+    return `${existing}\n${incoming}`;
+  }
+
+  return [...contentToParts(existing), ...contentToParts(incoming)];
+}
+
+function appendStringField(message: any, field: 'reasoning' | 'reasoning_content', value: any): void {
+  if (typeof value !== 'string') {
+    return;
+  }
+
+  message[field] = typeof message[field] === 'string' ? `${message[field]}${value}` : value;
+}
+
+function appendArrayLikeField(message: any, field: 'tool_calls' | 'reasoning_details', value: any): void {
+  if (value == null) {
+    return;
+  }
+
+  const values = Array.isArray(value) ? value : [value];
+  if (values.length === 0) {
+    return;
+  }
+
+  message[field] = [...(Array.isArray(message[field]) ? message[field] : []), ...values];
+}
+
+function mergeAssistantMessages(existing: any, incoming: any): any {
+  const merged = {
+    ...existing,
+    ...incoming,
+    role: 'assistant',
+    content: mergeAssistantContent(existing.content, incoming.content),
+    tool_calls: undefined,
+    reasoning: undefined,
+    reasoning_content: undefined,
+    reasoning_details: undefined,
+  };
+
+  appendArrayLikeField(merged, 'tool_calls', existing.tool_calls);
+  appendArrayLikeField(merged, 'tool_calls', incoming.tool_calls);
+  appendStringField(merged, 'reasoning', existing.reasoning);
+  appendStringField(merged, 'reasoning', incoming.reasoning);
+  appendStringField(merged, 'reasoning_content', existing.reasoning_content);
+  appendStringField(merged, 'reasoning_content', incoming.reasoning_content);
+  appendArrayLikeField(merged, 'reasoning_details', existing.reasoning_details);
+  appendArrayLikeField(merged, 'reasoning_details', incoming.reasoning_details);
+
+  for (const field of ['tool_calls', 'reasoning', 'reasoning_content', 'reasoning_details'] as const) {
+    if (merged[field] === undefined) {
+      delete merged[field];
+    }
+  }
+  if (merged.content === undefined) {
+    delete merged.content;
+  }
+
+  return merged;
 }
 
 export function mergeAssistantReasoningIntoToolCalls(messages: any[]): any[] {
@@ -45,19 +95,8 @@ export function mergeAssistantReasoningIntoToolCalls(messages: any[]): any[] {
   for (const message of messages) {
     const previous = merged[merged.length - 1];
 
-    if (isAssistantReasoningOnlyMessage(previous) && isAssistantToolCallMessage(message)) {
-      if (Array.isArray(previous.content) && Array.isArray(message.content)) {
-        merged[merged.length - 1] = {
-          ...message,
-          content: [...previous.content, ...message.content],
-        };
-        continue;
-      }
-
-      merged[merged.length - 1] = {
-        ...message,
-        reasoning_content: previous.reasoning_content,
-      };
+    if (previous?.role === 'assistant' && message?.role === 'assistant') {
+      merged[merged.length - 1] = mergeAssistantMessages(previous, message);
       continue;
     }
 

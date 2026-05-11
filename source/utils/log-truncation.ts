@@ -1,11 +1,14 @@
 const MAX_IMAGE_DATA_LEN = 100;
-const MAX_SYSTEM_PROMPT_LEN = 500;
-const MAX_TOOL_DESC_LEN = 200;
-const MAX_LOG_TEXT_LEN = 1200;
+const MAX_SYSTEM_PROMPT_LEN = 20;
+const MAX_TOOL_DESC_LEN = 20;
+const MAX_TOOL_CALL_LEN = 20;
+const MAX_TOOL_OUTPUT_LEN = 20;
+const MAX_LOG_TEXT_LEN = 100;
 
 /**
  * Truncates verbose data in log metadata to prevent log overflow.
- * Targets: base64 images in messages, system/developer prompt content, and tool descriptions.
+ * Targets: base64 images in messages, system/developer prompt content, tool descriptions,
+ * tool call arguments, and tool output.
  */
 export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, any> {
   if (!meta || typeof meta !== 'object') {
@@ -14,7 +17,7 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
 
   let result = meta;
 
-  // Truncate image data and system messages in content arrays
+  // Truncate image data, system messages, tool calls, and tool output in messages
   if (Array.isArray(result.messages)) {
     let messagesModified = false;
 
@@ -71,6 +74,59 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
         newMsg = { ...base, content: truncated };
       }
 
+      // Truncate assistant tool call arguments
+      if (Array.isArray(msg.tool_calls)) {
+        const toolCalls = msg.tool_calls.map((toolCall: any) => {
+          if (!toolCall || typeof toolCall !== 'object') {
+            return toolCall;
+          }
+
+          const fn = toolCall.function;
+          if (!fn || typeof fn !== 'object') {
+            return toolCall;
+          }
+
+          let fnModified = false;
+          const newFn = { ...fn };
+
+          if (typeof newFn.arguments === 'string' && newFn.arguments.length > MAX_TOOL_CALL_LEN) {
+            newFn.arguments = truncateString(newFn.arguments, MAX_TOOL_CALL_LEN);
+            fnModified = true;
+          }
+
+          return fnModified ? { ...toolCall, function: newFn } : toolCall;
+        });
+
+        const toolCallsModified = toolCalls.some((toolCall: any, index: number) => toolCall !== msg.tool_calls[index]);
+        if (toolCallsModified) {
+          const base = newMsg ?? { ...msg };
+          newMsg = { ...base, tool_calls: toolCalls };
+        }
+      }
+
+      // Truncate tool output
+      if (msg.role === 'tool') {
+        const base = newMsg ?? { ...msg };
+        let toolMsgModified = false;
+        const updatedToolMsg = { ...base };
+
+        if (typeof updatedToolMsg.content === 'string' && updatedToolMsg.content.length > MAX_TOOL_OUTPUT_LEN) {
+          updatedToolMsg.content = truncateString(updatedToolMsg.content, MAX_TOOL_OUTPUT_LEN);
+          toolMsgModified = true;
+        }
+
+        for (const key of ['output', 'result', 'data']) {
+          if (typeof updatedToolMsg[key] === 'string' && updatedToolMsg[key].length > MAX_TOOL_OUTPUT_LEN) {
+            updatedToolMsg[key] = truncateString(updatedToolMsg[key], MAX_TOOL_OUTPUT_LEN);
+            toolMsgModified = true;
+          }
+        }
+
+        if (toolMsgModified) {
+          newMsg = updatedToolMsg;
+        }
+      }
+
       return newMsg ?? msg;
     });
 
@@ -113,6 +169,7 @@ export function truncateImageData(meta: Record<string, any>): Record<string, any
 }
 
 export function truncateLogText(text: string, maxLen = MAX_LOG_TEXT_LEN): string {
+  if (maxLen < 0) return text;
   const normalized = text.replace(/\r\n/g, '\n');
   if (normalized.length <= maxLen) {
     return normalized;

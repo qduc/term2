@@ -86,7 +86,6 @@ const buildSentPayload = (parsed: Record<string, unknown>): Record<string, unkno
   messages: stripMessageContent(parsed.messages),
   toolsCount: parsed.toolsCount,
   tools: stripToolSchemas(parsed.tools),
-  modelRequest: parsed.modelRequest,
 });
 
 const buildReceivedPayload = (parsed: Record<string, unknown>): Record<string, unknown> => ({

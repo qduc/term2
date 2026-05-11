@@ -1,3 +1,6 @@
+import { wrapLanguageModel, type LanguageModelMiddleware } from 'ai';
+import type { LanguageModelV3 } from '@ai-sdk/provider';
+
 type AiSdkModelLike = {
   doGenerate: (options: any) => PromiseLike<any> | any;
   doStream: (options: any) => PromiseLike<any> | any;
@@ -118,18 +121,14 @@ function normalizeOptions(options: any): any {
   };
 }
 
+const mergeAssistantReasoningMiddleware: LanguageModelMiddleware = {
+  specificationVersion: 'v3',
+  transformParams: ({ params }) => normalizeOptions(params),
+};
+
 export function withMergedAssistantReasoning<T extends AiSdkModelLike>(model: T): T {
-  return new Proxy(model, {
-    get(target, property) {
-      if (property === 'doGenerate') {
-        return (options: any) => target.doGenerate(normalizeOptions(options));
-      }
-
-      if (property === 'doStream') {
-        return (options: any) => target.doStream(normalizeOptions(options));
-      }
-
-      return Reflect.get(target, property, target);
-    },
-  });
+  return wrapLanguageModel({
+    model: model as unknown as LanguageModelV3,
+    middleware: mergeAssistantReasoningMiddleware,
+  }) as unknown as T;
 }

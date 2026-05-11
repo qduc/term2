@@ -357,6 +357,32 @@ test('withMergedAssistantReasoning normalizes doGenerate messages before delegat
   });
 });
 
+test('withMergedAssistantReasoning normalizes doGenerate prompt before delegating', async (t) => {
+  let delegatedOptions: any;
+  const model = withMergedAssistantReasoning({
+    provider: 'example',
+    modelId: 'model',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    doGenerate: async (options: any) => {
+      delegatedOptions = options;
+      return { text: 'ok' };
+    },
+    doStream: async () => ({ stream: [] }),
+  });
+
+  await model.doGenerate({
+    prompt: [
+      { role: 'assistant', content: '', reasoning_content: 'reasoning' },
+      { role: 'assistant', content: null, tool_calls: [{ id: 'call:0' }] },
+    ],
+  });
+
+  t.deepEqual(delegatedOptions.prompt, [
+    { role: 'assistant', content: null, reasoning_content: 'reasoning', tool_calls: [{ id: 'call:0' }] },
+  ]);
+});
+
 test('withMergedAssistantReasoning normalizes doStream messages before delegating', async (t) => {
   let delegatedOptions: any;
   const model = withMergedAssistantReasoning({

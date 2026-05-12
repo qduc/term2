@@ -294,6 +294,42 @@ test('registers custom OpenAI-compatible providers from settings.json', async (t
   t.is(service.get('agent.provider'), providerName);
 });
 
+test('custom providers default missing type for old settings.json files', async (t) => {
+  const settingsDir = getTestSettingsDir();
+
+  const providerName = 'legacy-compatible-settings-service-test';
+  t.teardown(() => unregisterProvider(providerName));
+
+  const configFile = path.join(settingsDir, 'settings.json');
+  if (!fs.existsSync(settingsDir)) {
+    fs.mkdirSync(settingsDir, { recursive: true });
+  }
+
+  fs.writeFileSync(
+    configFile,
+    JSON.stringify({
+      providers: [
+        {
+          name: providerName,
+          baseUrl: 'http://localhost:1234',
+        },
+      ],
+      agent: {
+        provider: providerName,
+      },
+    }),
+    'utf-8',
+  );
+
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+    disableFilePersistence: true,
+  });
+
+  t.is(service.get('providers')[0].type, 'openai-compatible');
+});
+
 test('set() modifies runtime-modifiable settings', async (t) => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({

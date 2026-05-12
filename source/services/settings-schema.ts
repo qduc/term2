@@ -133,6 +133,7 @@ export const WebSearchSettingsSchema = z.object({
 
 export const CustomProviderSchema = z.object({
   name: z.string().min(1),
+  type: z.string().min(1).optional().default('openai-compatible'),
   baseUrl: z.string().url(),
   apiKey: z.string().optional(),
 });

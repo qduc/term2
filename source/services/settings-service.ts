@@ -191,6 +191,7 @@ export class SettingsService {
         upsertProvider(
           createOpenAICompatibleProviderDefinition({
             name: String(providerId),
+            type: (p as any)?.type ? String((p as any).type) : 'openai-compatible',
             baseUrl: String(baseUrl),
             apiKey: (p as any)?.apiKey ? String((p as any).apiKey) : undefined,
           }),

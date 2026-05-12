@@ -105,3 +105,72 @@ test('adaptAiSdkModelForAgents makes reasoning visible to AI SDK doStream option
 
   t.deepEqual(seenOptions.reasoning, { effort: 'high', summary: 'auto' });
 });
+
+test('adaptAiSdkModelForAgents forwards OpenRouter reasoning through providerOptions', async (t) => {
+  let seenOptions: any;
+  const model = adaptAiSdkModelForAgents({
+    provider: 'openrouter.chat',
+    modelId: 'openai/gpt-oss-120b',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    doGenerate: async () => ({ content: [], usage: {} }),
+    doStream: async (options: any) => {
+      seenOptions = options;
+      return {
+        stream: (async function* () {})(),
+      };
+    },
+  });
+
+  for await (const _event of model.getStreamedResponse({
+    input: 'hi',
+    tools: [],
+    handoffs: [],
+    outputType: 'text',
+    modelSettings: {
+      reasoning: { effort: 'none', summary: 'auto' },
+      providerData: { service_tier: 'flex' },
+    },
+  } as any)) {
+    // Consume the stream.
+  }
+
+  t.deepEqual(seenOptions.providerOptions.openrouter.reasoning, {
+    effort: 'none',
+    summary: 'auto',
+  });
+  t.is(seenOptions.providerOptions.openrouter.service_tier, 'flex');
+  t.is(seenOptions.service_tier, 'flex');
+});
+
+test('adaptAiSdkModelForAgents forwards OpenRouter service tier without reasoning', async (t) => {
+  let seenOptions: any;
+  const model = adaptAiSdkModelForAgents({
+    provider: 'openrouter.chat',
+    modelId: 'openai/gpt-oss-120b',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    doGenerate: async () => ({ content: [], usage: {} }),
+    doStream: async (options: any) => {
+      seenOptions = options;
+      return {
+        stream: (async function* () {})(),
+      };
+    },
+  });
+
+  for await (const _event of model.getStreamedResponse({
+    input: 'hi',
+    tools: [],
+    handoffs: [],
+    outputType: 'text',
+    modelSettings: {
+      providerData: { service_tier: 'flex' },
+    },
+  } as any)) {
+    // Consume the stream.
+  }
+
+  t.is(seenOptions.providerOptions.openrouter.service_tier, 'flex');
+  t.false('reasoning' in seenOptions.providerOptions.openrouter);
+});

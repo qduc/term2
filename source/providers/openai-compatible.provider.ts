@@ -7,6 +7,7 @@ import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-comp
 
 export type CustomProviderConfig = {
   name: string;
+  type?: string;
   baseUrl: string;
   apiKey?: string;
 };
@@ -19,6 +20,7 @@ function findConfigFromSettings(settingsService: ISettingsService, providerId: s
 
   return {
     name: String(entry.name),
+    type: entry.type ? String(entry.type) : 'openai-compatible',
     baseUrl: String(entry.baseUrl),
     apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
   };
@@ -30,6 +32,7 @@ function toLabel(name: string): string {
 
 export function createOpenAICompatibleProviderDefinition(config: CustomProviderConfig): ProviderDefinition {
   const providerId = config.name;
+  const providerType = config.type || 'openai-compatible';
   const label = toLabel(config.name);
 
   return {
@@ -42,6 +45,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       return new Runner({
         modelProvider: new AiSdkOpenAICompatibleProvider({
           label,
+          providerType,
           defaultModel: settingsService.get('agent.model') || '',
           resolveConfig: () => {
             const resolved = findConfigFromSettings(settingsService, providerId);
@@ -53,6 +57,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
             }
 
             return {
+              providerType: resolved.type,
               baseURL: normalizeBaseUrl(resolved.baseUrl),
               apiKey: resolved.apiKey,
               fetch: createAiSdkLoggingFetch({

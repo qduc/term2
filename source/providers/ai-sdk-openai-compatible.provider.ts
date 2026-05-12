@@ -3,6 +3,7 @@ import { type ModelProvider, type Model } from '@openai/agents-core';
 import { adaptAiSdkModelForAgents } from './ai-sdk-agents-adapter.js';
 
 export type AiSdkOpenAICompatibleConfig = {
+  providerType?: string;
   baseURL: string;
   apiKey?: string;
   headers?: Record<string, string>;
@@ -18,19 +19,24 @@ export type AiSdkOpenAICompatibleProviderFactory = (options: {
   fetch?: typeof fetch;
 }) => (modelId: string) => any;
 
+function getProviderOptionsKey(providerType: string): string {
+  return providerType.split('.')[0] || providerType;
+}
+
 export class AiSdkOpenAICompatibleProvider implements ModelProvider {
-  #label: string;
+  #providerType: string;
   #defaultModel: string;
   #resolveConfig: () => AiSdkOpenAICompatibleConfig;
   #createProvider: AiSdkOpenAICompatibleProviderFactory;
 
   constructor(deps: {
     label: string;
+    providerType?: string;
     defaultModel: string;
     resolveConfig: () => AiSdkOpenAICompatibleConfig;
     createProvider?: AiSdkOpenAICompatibleProviderFactory;
   }) {
-    this.#label = deps.label;
+    this.#providerType = deps.providerType || 'openai-compatible';
     this.#defaultModel = deps.defaultModel;
     this.#resolveConfig = deps.resolveConfig;
     this.#createProvider = deps.createProvider ?? (createOpenAICompatible as AiSdkOpenAICompatibleProviderFactory);
@@ -38,8 +44,9 @@ export class AiSdkOpenAICompatibleProvider implements ModelProvider {
 
   getModel(modelName?: string): Promise<Model> | Model {
     const config = this.#resolveConfig();
+    const providerType = config.providerType || this.#providerType;
     const provider = this.#createProvider({
-      name: this.#label,
+      name: providerType,
       baseURL: config.baseURL,
       apiKey: config.apiKey,
       headers: config.headers,
@@ -47,6 +54,10 @@ export class AiSdkOpenAICompatibleProvider implements ModelProvider {
       fetch: config.fetch,
     });
 
-    return adaptAiSdkModelForAgents(provider(modelName || this.#defaultModel));
+    return adaptAiSdkModelForAgents(
+      provider(modelName || this.#defaultModel),
+      undefined,
+      getProviderOptionsKey(providerType),
+    );
   }
 }

@@ -410,6 +410,33 @@ test.serial('execute heals search content when no match is found', async (t) => 
   });
 });
 
+test.serial('execute includes auto-healing failure reason when healing does not find a match', async (t) => {
+  await withTempDir(async (dir) => {
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'const foo = 1;\n');
+
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': true }), async (params) => ({
+      params,
+      wasModified: false,
+      confidence: 0,
+      failureReason: 'model returned NO_MATCH',
+    }));
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'const foo = 2;\n',
+      replace_content: 'const foo = 3;\n',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+    t.is(parsed.output[0].healing_failure_reason, 'model returned NO_MATCH');
+    t.true(parsed.output[0].error.includes('model returned NO_MATCH'));
+  });
+});
+
 test.serial('execute treats special regex characters literally', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool();

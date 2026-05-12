@@ -895,6 +895,7 @@ export function createSearchReplaceToolDefinition(deps: {
         let healingSucceeded = false;
         let healedSearchLength = 0;
         let matchTypeAfterHealing: MatchInfo['type'] = 'none';
+        let healingFailureReason: string | undefined;
 
         const cachedEdit = editCache.get(operation, content);
         if (cachedEdit) {
@@ -924,6 +925,7 @@ export function createSearchReplaceToolDefinition(deps: {
             );
 
             healedSearchLength = healingResult.params.search_content.length;
+            healingFailureReason = healingResult.failureReason;
 
             if (healingResult.wasModified) {
               normalizedSearchContent = normalizeToEOL(
@@ -946,15 +948,17 @@ export function createSearchReplaceToolDefinition(deps: {
                 original_search_length: search_content.length,
                 healed_search_length: healedSearchLength,
                 match_type_after_healing: matchTypeAfterHealing,
+                failure_reason: healingFailureReason,
               });
             }
 
             if (!usedHealing) {
+              const reasonSuffix = healingFailureReason ? ` Reason: ${healingFailureReason}.` : '';
               return {
                 output: {
                   success: false,
-                  error:
-                    'Search content not found. Auto-healing attempted but no match found. Try splitting changes into smaller patterns.',
+                  error: `Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.`,
+                  healing_failure_reason: healingFailureReason,
                 },
               };
             }

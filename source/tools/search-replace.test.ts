@@ -403,7 +403,7 @@ test.serial('execute heals search content when no match is found', async (t) => 
 
     const parsed = JSON.parse(result);
     t.true(parsed.output[0].success);
-    t.true(parsed.output[0].message.includes('healed match'));
+    t.true(parsed.output[0].message.includes('auto healing'));
 
     const updated = await fs.readFile(absPath, 'utf8');
     t.is(updated, 'const foo = 3;\n');

@@ -59,7 +59,7 @@ function appendArrayLikeField(message: any, field: 'tool_calls' | 'reasoning_det
   message[field] = [...(Array.isArray(message[field]) ? message[field] : []), ...values];
 }
 
-function mergeAssistantMessages(existing: any, incoming: any): any {
+function mergeAssistantMessagePair(existing: any, incoming: any): any {
   const merged = {
     ...existing,
     ...incoming,
@@ -92,14 +92,14 @@ function mergeAssistantMessages(existing: any, incoming: any): any {
   return merged;
 }
 
-export function mergeAssistantReasoningIntoToolCalls(messages: any[]): any[] {
+export function mergeAssistantMessages(messages: any[]): any[] {
   const merged: any[] = [];
 
   for (const message of messages) {
     const previous = merged[merged.length - 1];
 
     if (previous?.role === 'assistant' && message?.role === 'assistant') {
-      merged[merged.length - 1] = mergeAssistantMessages(previous, message);
+      merged[merged.length - 1] = mergeAssistantMessagePair(previous, message);
       continue;
     }
 
@@ -109,26 +109,26 @@ export function mergeAssistantReasoningIntoToolCalls(messages: any[]): any[] {
   return merged;
 }
 
-function normalizeOptions(options: any): any {
+function normalizeMessageOptions(options: any): any {
   if (!Array.isArray(options?.prompt) && !Array.isArray(options?.messages)) {
     return options;
   }
 
   return {
     ...options,
-    ...(Array.isArray(options.prompt) ? { prompt: mergeAssistantReasoningIntoToolCalls(options.prompt) } : {}),
-    ...(Array.isArray(options.messages) ? { messages: mergeAssistantReasoningIntoToolCalls(options.messages) } : {}),
+    ...(Array.isArray(options.prompt) ? { prompt: mergeAssistantMessages(options.prompt) } : {}),
+    ...(Array.isArray(options.messages) ? { messages: mergeAssistantMessages(options.messages) } : {}),
   };
 }
 
-const mergeAssistantReasoningMiddleware: LanguageModelMiddleware = {
+const mergeAssistantMessagesMiddleware: LanguageModelMiddleware = {
   specificationVersion: 'v3',
-  transformParams: ({ params }) => normalizeOptions(params),
+  transformParams: ({ params }) => normalizeMessageOptions(params),
 };
 
-export function withMergedAssistantReasoning<T extends AiSdkModelLike>(model: T): T {
+export function withMergedAssistantMessages<T extends AiSdkModelLike>(model: T): T {
   return wrapLanguageModel({
     model: model as unknown as LanguageModelV3,
-    middleware: mergeAssistantReasoningMiddleware,
+    middleware: mergeAssistantMessagesMiddleware,
   }) as unknown as T;
 }

@@ -1,6 +1,6 @@
 import { aisdk, type AiSdkModelOptions } from '@openai/agents-extensions/ai-sdk';
 import type { Model, ModelRequest } from '@openai/agents-core';
-import { withMergedAssistantReasoning } from './ai-sdk-message-normalizer.js';
+import { withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
 
 type LanguageModelCompatible = Parameters<typeof aisdk>[0];
 
@@ -106,7 +106,7 @@ export function adaptAiSdkModelForAgents(
   options?: AiSdkModelOptions,
   providerOptionsKey?: string,
 ): Model {
-  const normalizedModel = withMergedAssistantReasoning(model);
+  const normalizedModel = withMergedAssistantMessages(model);
   const agentsModel = aisdk(normalizedModel, options);
   return withForwardedReasoningSettings(agentsModel, model.provider, providerOptionsKey);
 }

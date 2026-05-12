@@ -1,7 +1,7 @@
 import test from 'ava';
-import { mergeAssistantReasoningIntoToolCalls, withMergedAssistantReasoning } from './ai-sdk-message-normalizer.js';
+import { mergeAssistantMessages, withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
 
-test('mergeAssistantReasoningIntoToolCalls folds assistant reasoning into following assistant tool call', (t) => {
+test('mergeAssistantMessages folds assistant reasoning into following assistant tool call', (t) => {
   const messages = [
     { role: 'user', content: 'what time is it?' },
     {
@@ -25,7 +25,7 @@ test('mergeAssistantReasoningIntoToolCalls folds assistant reasoning into follow
     },
   ];
 
-  t.deepEqual(mergeAssistantReasoningIntoToolCalls(messages), [
+  t.deepEqual(mergeAssistantMessages(messages), [
     { role: 'user', content: 'what time is it?' },
     {
       role: 'assistant',
@@ -45,7 +45,7 @@ test('mergeAssistantReasoningIntoToolCalls folds assistant reasoning into follow
   ]);
 });
 
-test('mergeAssistantReasoningIntoToolCalls folds AI SDK reasoning content part into following assistant tool call', (t) => {
+test('mergeAssistantMessages folds AI SDK reasoning content part into following assistant tool call', (t) => {
   const messages = [
     {
       role: 'assistant',
@@ -75,7 +75,7 @@ test('mergeAssistantReasoningIntoToolCalls folds AI SDK reasoning content part i
     },
   ];
 
-  t.deepEqual(mergeAssistantReasoningIntoToolCalls(messages), [
+  t.deepEqual(mergeAssistantMessages(messages), [
     {
       role: 'assistant',
       content: [
@@ -99,7 +99,7 @@ test('mergeAssistantReasoningIntoToolCalls folds AI SDK reasoning content part i
   ]);
 });
 
-test('mergeAssistantReasoningIntoToolCalls preserves assistant messages separated by non-assistant messages', (t) => {
+test('mergeAssistantMessages preserves assistant messages separated by non-assistant messages', (t) => {
   const messages = [
     {
       role: 'assistant',
@@ -117,10 +117,10 @@ test('mergeAssistantReasoningIntoToolCalls preserves assistant messages separate
     },
   ];
 
-  t.deepEqual(mergeAssistantReasoningIntoToolCalls(messages), messages);
+  t.deepEqual(mergeAssistantMessages(messages), messages);
 });
 
-test('mergeAssistantReasoningIntoToolCalls merges contiguous assistant messages', (t) => {
+test('mergeAssistantMessages merges contiguous assistant messages', (t) => {
   const messages = [
     { role: 'user', content: 'start' },
     { role: 'assistant', content: 'first' },
@@ -130,7 +130,7 @@ test('mergeAssistantReasoningIntoToolCalls merges contiguous assistant messages'
     { role: 'assistant', content: 'after tool' },
   ];
 
-  t.deepEqual(mergeAssistantReasoningIntoToolCalls(messages), [
+  t.deepEqual(mergeAssistantMessages(messages), [
     { role: 'user', content: 'start' },
     {
       role: 'assistant',
@@ -143,7 +143,7 @@ test('mergeAssistantReasoningIntoToolCalls merges contiguous assistant messages'
   ]);
 });
 
-test('mergeAssistantReasoningIntoToolCalls merges contiguous AI SDK assistant content parts', (t) => {
+test('mergeAssistantMessages merges contiguous AI SDK assistant content parts', (t) => {
   const messages = [
     {
       role: 'assistant',
@@ -159,7 +159,7 @@ test('mergeAssistantReasoningIntoToolCalls merges contiguous AI SDK assistant co
     },
   ];
 
-  t.deepEqual(mergeAssistantReasoningIntoToolCalls(messages), [
+  t.deepEqual(mergeAssistantMessages(messages), [
     {
       role: 'assistant',
       content: [
@@ -171,7 +171,7 @@ test('mergeAssistantReasoningIntoToolCalls merges contiguous AI SDK assistant co
   ]);
 });
 
-test('mergeAssistantReasoningIntoToolCalls merges real-world split assistant turns before tool results', (t) => {
+test('mergeAssistantMessages merges real-world split assistant turns before tool results', (t) => {
   const messages = [
     {
       role: 'system',
@@ -259,7 +259,7 @@ test('mergeAssistantReasoningIntoToolCalls merges real-world split assistant tur
     },
   ];
 
-  t.deepEqual(mergeAssistantReasoningIntoToolCalls(messages), [
+  t.deepEqual(mergeAssistantMessages(messages), [
     {
       role: 'system',
       content: [{ type: 'text', text: 'You are a lightweight terminal assistant fo...' }],
@@ -329,9 +329,9 @@ test('mergeAssistantReasoningIntoToolCalls merges real-world split assistant tur
   ]);
 });
 
-test('withMergedAssistantReasoning normalizes doGenerate messages before delegating', async (t) => {
+test('withMergedAssistantMessages normalizes doGenerate messages before delegating', async (t) => {
   let delegatedOptions: any;
-  const model = withMergedAssistantReasoning({
+  const model = withMergedAssistantMessages({
     provider: 'example',
     modelId: 'model',
     specificationVersion: 'v3',
@@ -357,9 +357,9 @@ test('withMergedAssistantReasoning normalizes doGenerate messages before delegat
   });
 });
 
-test('withMergedAssistantReasoning normalizes doGenerate prompt before delegating', async (t) => {
+test('withMergedAssistantMessages normalizes doGenerate prompt before delegating', async (t) => {
   let delegatedOptions: any;
-  const model = withMergedAssistantReasoning({
+  const model = withMergedAssistantMessages({
     provider: 'example',
     modelId: 'model',
     specificationVersion: 'v3',
@@ -383,9 +383,9 @@ test('withMergedAssistantReasoning normalizes doGenerate prompt before delegatin
   ]);
 });
 
-test('withMergedAssistantReasoning normalizes doStream messages before delegating', async (t) => {
+test('withMergedAssistantMessages normalizes doStream messages before delegating', async (t) => {
   let delegatedOptions: any;
-  const model = withMergedAssistantReasoning({
+  const model = withMergedAssistantMessages({
     provider: 'example',
     modelId: 'model',
     specificationVersion: 'v3',
@@ -409,7 +409,7 @@ test('withMergedAssistantReasoning normalizes doStream messages before delegatin
   ]);
 });
 
-test('withMergedAssistantReasoning preserves model properties exposed by getters', (t) => {
+test('withMergedAssistantMessages preserves model properties exposed by getters', (t) => {
   class GetterBackedModel {
     #provider = 'example.chat';
     #modelId = 'selected-model';
@@ -439,7 +439,7 @@ test('withMergedAssistantReasoning preserves model properties exposed by getters
     }
   }
 
-  const model = withMergedAssistantReasoning(new GetterBackedModel());
+  const model = withMergedAssistantMessages(new GetterBackedModel());
 
   t.is(model.provider, 'example.chat');
   t.is(model.modelId, 'selected-model');

@@ -50,7 +50,6 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.76",
     "@ai-sdk/google": "^3.0.72",
-    "@ai-sdk/openai-compatible": "^2.0.47",
     "@mozilla/readability": "^0.6.0",
     "@openai/agents": "^0.8.3",
     "@openai/agents-extensions": "^0.11.1",

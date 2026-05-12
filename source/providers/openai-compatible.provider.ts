@@ -48,6 +48,23 @@ function applyLlamaCppReasoningControls(target: Record<string, any>, reasoningEf
   };
 }
 
+function preserveReasoningContentForOpenAICompatibleMessages(messages: any[]): any[] {
+  return messages.map((message) => {
+    if (
+      message?.role === 'assistant' &&
+      typeof message.reasoning === 'string' &&
+      typeof message.reasoning_content !== 'string'
+    ) {
+      return {
+        ...message,
+        reasoning_content: message.reasoning,
+      };
+    }
+
+    return message;
+  });
+}
+
 function createOpenAICompatibleFetch(
   fetchImpl: typeof fetch | undefined,
   providerType: string,
@@ -61,7 +78,7 @@ function createOpenAICompatibleFetch(
         let changed = false;
 
         if (Array.isArray(body?.messages)) {
-          body.messages = mergeAssistantMessages(body.messages);
+          body.messages = preserveReasoningContentForOpenAICompatibleMessages(mergeAssistantMessages(body.messages));
           changed = true;
         }
 

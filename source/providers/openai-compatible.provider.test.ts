@@ -158,6 +158,64 @@ test('modelSettings.reasoning.effort is forwarded as reasoning_effort', async (t
   t.is(captured[0].body.reasoning_effort, 'high');
 });
 
+test('assistant reasoning_content is passed back with the following tool call', async (t) => {
+  const captured: CapturedRequest[] = [];
+  const provider = buildProvider(captured, successResponse);
+  const model = await provider.getModel('provider-model');
+
+  await runUnderTrace(() =>
+    model.getResponse({
+      ...baseRequest,
+      input: [
+        { role: 'user', type: 'message', content: 'what time is it?' },
+        {
+          type: 'reasoning',
+          rawContent: [{ type: 'reasoning_text', text: 'Need to use the shell for the exact time.' }],
+        },
+        {
+          type: 'function_call',
+          callId: 'shell:0',
+          name: 'shell',
+          arguments: '{"command":"date"}',
+        },
+        {
+          type: 'function_call_result',
+          callId: 'shell:0',
+          output: 'Tue May 12 18:40:41 +07 2026',
+        },
+        { role: 'user', type: 'message', content: 'thanks' },
+      ] as any,
+      modelSettings: {},
+    } as any),
+  );
+
+  t.is(captured.length, 1);
+  t.deepEqual(captured[0].body.messages.slice(1, 4), [
+    {
+      role: 'assistant',
+      content: null,
+      reasoning: 'Need to use the shell for the exact time.',
+      reasoning_content: 'Need to use the shell for the exact time.',
+      tool_calls: [
+        {
+          id: 'shell:0',
+          type: 'function',
+          function: {
+            name: 'shell',
+            arguments: '{"command":"date"}',
+          },
+        },
+      ],
+    },
+    {
+      role: 'tool',
+      content: 'Tue May 12 18:40:41 +07 2026',
+      tool_call_id: 'shell:0',
+    },
+    { role: 'user', content: 'thanks' },
+  ]);
+});
+
 test('llama.cpp maps high reasoning effort to chat template kwargs', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');

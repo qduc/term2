@@ -65,133 +65,61 @@ function preserveReasoningContentForOpenAICompatibleMessages(messages: any[]): a
   });
 }
 
-function mirrorReasoningContent(target: any): boolean {
+function normalizeMessageField(target: any): void {
   if (target && typeof target.reasoning_content === 'string' && typeof target.reasoning !== 'string') {
     target.reasoning = target.reasoning_content;
-    return true;
   }
-
-  return false;
 }
 
-function normalizeOpenAICompatibleResponseBody(body: any): boolean {
-  if (!Array.isArray(body?.choices)) {
-    return false;
-  }
+/**
+ * Normalizes `reasoning_content` → `reasoning` on responses from the OpenAI client,
+ * after the HTTP response has been parsed. This is needed because the OpenAI Agents
+ * SDK's `OpenAIChatCompletionsModel` checks for `reasoning` (not `reasoning_content`),
+ * while many OpenAI-compatible providers return `reasoning_content` (the official
+ * Chat Completions API field name).
+ */
+function applyClientResponseNormalization(client: OpenAI): void {
+  const originalCreate = client.chat.completions.create.bind(client.chat.completions) as (...args: any[]) => any;
 
-  let changed = false;
-  for (const choice of body.choices) {
-    changed = mirrorReasoningContent(choice?.message) || changed;
-    changed = mirrorReasoningContent(choice?.delta) || changed;
-  }
+  (client.chat.completions as any).create = async (...args: any[]) => {
+    const result = await originalCreate(...args);
 
-  return changed;
-}
+    if (!result || typeof result !== 'object') return result;
 
-function responseHeadersWithoutContentLength(headers: Headers): Headers {
-  const next = new Headers(headers);
-  next.delete('content-length');
-  return next;
-}
-
-async function normalizeOpenAICompatibleJsonResponse(response: Response): Promise<Response> {
-  let text = '';
-  try {
-    text = await response.text();
-    const body = text ? JSON.parse(text) : null;
-    if (!normalizeOpenAICompatibleResponseBody(body)) {
-      return new Response(text, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-      });
+    if (Array.isArray(result.choices)) {
+      // Non-streaming ChatCompletion
+      for (const choice of result.choices) {
+        normalizeMessageField(choice.message);
+      }
+      return result;
     }
 
-    return new Response(JSON.stringify(body), {
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeadersWithoutContentLength(response.headers),
-    });
-  } catch {
-    return new Response(text, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeadersWithoutContentLength(response.headers),
-    });
-  }
-}
-
-function normalizeOpenAICompatibleSseLine(line: string): string {
-  if (!line.startsWith('data:')) {
-    return line;
-  }
-
-  const data = line.slice(5).trimStart();
-  if (!data || data === '[DONE]') {
-    return line;
-  }
-
-  try {
-    const body = JSON.parse(data);
-    if (!normalizeOpenAICompatibleResponseBody(body)) {
-      return line;
+    // Streaming (Stream<ChatCompletionChunk>)
+    if (typeof result[Symbol.asyncIterator] === 'function') {
+      return createNormalizedReasoningStream(result);
     }
-    return `data: ${JSON.stringify(body)}`;
-  } catch {
-    return line;
-  }
+
+    return result;
+  };
 }
 
-function normalizeOpenAICompatibleSseResponse(response: Response): Response {
-  if (!response.body) {
-    return response;
-  }
-
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-  let buffered = '';
-
-  const stream = response.body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        buffered += decoder.decode(chunk, { stream: true });
-
-        const parts = buffered.split(/(\r?\n)/);
-        buffered = parts.pop() ?? '';
-
-        for (let i = 0; i < parts.length; i += 2) {
-          const line = parts[i] ?? '';
-          const newline = parts[i + 1] ?? '';
-          controller.enqueue(encoder.encode(`${normalizeOpenAICompatibleSseLine(line)}${newline}`));
-        }
-      },
-      flush(controller) {
-        buffered += decoder.decode();
-        if (buffered) {
-          controller.enqueue(encoder.encode(normalizeOpenAICompatibleSseLine(buffered)));
-        }
-      },
-    }),
-  );
-
-  return new Response(stream, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: responseHeadersWithoutContentLength(response.headers),
-  });
-}
-
-async function normalizeOpenAICompatibleResponse(response: Response): Promise<Response> {
-  const contentType = response.headers.get('content-type') ?? '';
-  if (contentType.includes('text/event-stream')) {
-    return normalizeOpenAICompatibleSseResponse(response);
-  }
-
-  if (contentType.includes('application/json')) {
-    return normalizeOpenAICompatibleJsonResponse(response);
-  }
-
-  return response;
+function createNormalizedReasoningStream(stream: AsyncIterable<any>): AsyncIterable<any> {
+  const iterator = stream[Symbol.asyncIterator]();
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          const result = await iterator.next();
+          if (!result.done && result.value?.choices) {
+            for (const choice of result.value.choices) {
+              normalizeMessageField(choice.delta);
+            }
+          }
+          return result;
+        },
+      };
+    },
+  };
 }
 
 function createOpenAICompatibleFetch(
@@ -201,8 +129,6 @@ function createOpenAICompatibleFetch(
   if (!fetchImpl) return undefined;
 
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    let nextInit = init;
-
     if (typeof init?.body === 'string') {
       try {
         const body = JSON.parse(init.body);
@@ -221,14 +147,14 @@ function createOpenAICompatibleFetch(
         }
 
         if (changed) {
-          nextInit = { ...init, body: JSON.stringify(body) };
+          return fetchImpl(input, { ...init, body: JSON.stringify(body) });
         }
       } catch {
-        nextInit = init;
+        return fetchImpl(input, init);
       }
     }
 
-    return normalizeOpenAICompatibleResponse(await fetchImpl(input, nextInit));
+    return fetchImpl(input, init);
   }) as typeof fetch;
 }
 
@@ -311,6 +237,7 @@ export function createCustomProviderModelProvider(
         apiKey: config.apiKey || 'no-key',
         fetch: createOpenAICompatibleFetch(deps.fetch, providerType) as any,
       });
+      applyClientResponseNormalization(openAIClient);
       return new OpenAIProvider({
         openAIClient: openAIClient as any,
         useResponses: false,

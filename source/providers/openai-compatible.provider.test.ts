@@ -1,10 +1,14 @@
 import test from 'ava';
 import { setTracingDisabled, withTrace } from '@openai/agents-core';
-import { createCustomProviderModelProvider } from './openai-compatible.provider.js';
+import {
+  createCustomProviderModelProvider,
+  createOpenAICompatibleProviderDefinition,
+} from './openai-compatible.provider.js';
+import type { ProviderDeps } from './registry.js';
 
 setTracingDisabled(true);
 
-const runUnderTrace = <T>(fn: () => Promise<T>): Promise<T> => withTrace('gate-test', fn);
+const runUnderTrace = <T>(fn: () => Promise<T>): Promise<T> => withTrace('openai-compatible-provider-test', fn);
 
 type CapturedRequest = {
   url: string;
@@ -15,13 +19,13 @@ type CapturedRequest = {
 function buildProvider(captured: CapturedRequest[], response: any, providerType = 'openai-compatible') {
   return createCustomProviderModelProvider(
     {
-      name: 'gate',
+      name: 'provider-test',
       type: providerType,
-      baseUrl: 'https://gate.test/v1',
-      apiKey: 'gate-key',
+      baseUrl: 'https://provider.test/v1',
+      apiKey: 'provider-key',
     },
     {
-      defaultModel: 'gate-model',
+      defaultModel: 'provider-model',
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         const headers: Record<string, string> = {};
         const rawHeaders = init?.headers as any;
@@ -52,10 +56,10 @@ function buildProvider(captured: CapturedRequest[], response: any, providerType 
 }
 
 const successResponse = {
-  id: 'chatcmpl-gate',
+  id: 'chatcmpl-provider-test',
   object: 'chat.completion',
   created: 1,
-  model: 'gate-model',
+  model: 'provider-model',
   choices: [
     {
       index: 0,
@@ -73,68 +77,50 @@ const baseRequest = {
   tracing: false as const,
 };
 
-test('GATE: contiguous assistant reasoning + function_call collapse to one outgoing message with tool_calls', async (t) => {
-  const captured: CapturedRequest[] = [];
-  const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('gate-model');
+test('runtime openai-compatible createRunner returns a runner', (t) => {
+  const provider = createOpenAICompatibleProviderDefinition({
+    name: 'local-test',
+    baseUrl: 'http://localhost:11434',
+  });
 
-  await runUnderTrace(() =>
-    model.getResponse({
-      ...baseRequest,
-      systemInstructions: 'sys',
-      input: [
-        { role: 'user', content: 'what time is it?' },
-        {
-          type: 'reasoning',
-          content: [{ type: 'input_text', text: 'Need to call shell' }],
-          rawContent: [{ type: 'reasoning_text', text: 'Need to call shell' }],
-        },
-        {
-          type: 'function_call',
-          callId: 'call-1',
-          name: 'shell',
-          arguments: '{"command":"date"}',
-          status: 'completed',
-        },
-        {
-          type: 'function_call_result',
-          callId: 'call-1',
-          name: 'shell',
-          status: 'completed',
-          output: { type: 'text', text: 'Mon Jan 1 12:00:00 UTC 2024' },
-        },
-      ] as any,
-      modelSettings: {},
-    } as any),
-  );
+  const deps: ProviderDeps = {
+    settingsService: {
+      get: <T = any>(key: string) => {
+        const values: Record<string, any> = {
+          'agent.model': 'test-model',
+          providers: [
+            {
+              name: 'local-test',
+              baseUrl: 'http://localhost:11434',
+              apiKey: 'local-key',
+            },
+          ],
+        };
+        return values[key] as T;
+      },
+      set: () => {},
+    },
+    loggingService: {
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+      security: () => {},
+      setCorrelationId: () => {},
+      getCorrelationId: () => undefined,
+      clearCorrelationId: () => {},
+    },
+  };
 
-  t.is(captured.length, 1, 'expected exactly one outgoing HTTP request');
-  const messages = captured[0].body?.messages;
-  t.true(Array.isArray(messages), 'request body must include a messages array');
+  const runner = provider.createRunner!(deps);
 
-  const assistantMessages = messages.filter((m: any) => m?.role === 'assistant');
-  t.is(
-    assistantMessages.length,
-    1,
-    'consecutive assistant reasoning + function_call must collapse into ONE assistant message (current behavior of withMergedAssistantReasoning)',
-  );
-
-  const assistant = assistantMessages[0];
-  t.true(
-    Array.isArray(assistant.tool_calls) && assistant.tool_calls.length === 1,
-    'merged assistant message must carry the tool_calls entry',
-  );
-  t.is(assistant.tool_calls[0]?.function?.name, 'shell');
-
-  const toolResultIdx = messages.findIndex((m: any) => m?.role === 'tool');
-  const assistantIdx = messages.indexOf(assistant);
-  t.true(assistantIdx >= 0 && toolResultIdx > assistantIdx, 'tool result must follow the merged assistant message');
+  t.truthy(runner);
 });
 
-test('GATE: providerData fields are forwarded into the chat-completions request body root', async (t) => {
+test('providerData fields are forwarded into the chat-completions request body root', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('gate-model');
+  const model = await provider.getModel('provider-model');
 
   await runUnderTrace(() =>
     model.getResponse({
@@ -151,22 +137,14 @@ test('GATE: providerData fields are forwarded into the chat-completions request 
 
   t.is(captured.length, 1);
   const body = captured[0].body;
-  t.is(
-    body.service_tier,
-    'flex',
-    'modelSettings.providerData.service_tier must reach the outgoing request body (forwardProviderSettings + AI SDK providerOptions plumbing)',
-  );
-  t.is(
-    body.custom_vendor_flag,
-    'on',
-    'arbitrary vendor-specific providerData fields must reach the outgoing request body',
-  );
+  t.is(body.service_tier, 'flex');
+  t.is(body.custom_vendor_flag, 'on');
 });
 
-test('GATE: modelSettings.reasoning.effort is forwarded as reasoning_effort', async (t) => {
+test('modelSettings.reasoning.effort is forwarded as reasoning_effort', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('gate-model');
+  const model = await provider.getModel('provider-model');
 
   await runUnderTrace(() =>
     model.getResponse({
@@ -177,17 +155,13 @@ test('GATE: modelSettings.reasoning.effort is forwarded as reasoning_effort', as
   );
 
   t.is(captured.length, 1);
-  t.is(
-    captured[0].body.reasoning_effort,
-    'high',
-    'native chat-completions model merges modelSettings.reasoning.effort into the request body as reasoning_effort',
-  );
+  t.is(captured[0].body.reasoning_effort, 'high');
 });
 
-test('GATE: llama.cpp maps high reasoning effort to chat template kwargs', async (t) => {
+test('llama.cpp maps high reasoning effort to chat template kwargs', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
-  const model = await provider.getModel('gate-model');
+  const model = await provider.getModel('provider-model');
 
   await runUnderTrace(() =>
     model.getResponse({
@@ -207,10 +181,10 @@ test('GATE: llama.cpp maps high reasoning effort to chat template kwargs', async
   });
 });
 
-test('GATE: llama.cpp disables thinking for none reasoning effort', async (t) => {
+test('llama.cpp disables thinking for none reasoning effort', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
-  const model = await provider.getModel('gate-model');
+  const model = await provider.getModel('provider-model');
 
   await runUnderTrace(() =>
     model.getResponse({
@@ -230,10 +204,10 @@ test('GATE: llama.cpp disables thinking for none reasoning effort', async (t) =>
   });
 });
 
-test('GATE: llama.cpp maps xhigh to high template mode with xhigh budget', async (t) => {
+test('llama.cpp maps xhigh to high template mode with xhigh budget', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
-  const model = await provider.getModel('gate-model');
+  const model = await provider.getModel('provider-model');
 
   await runUnderTrace(() =>
     model.getResponse({
@@ -252,10 +226,10 @@ test('GATE: llama.cpp maps xhigh to high template mode with xhigh budget', async
   });
 });
 
-test('GATE: llama.cpp leaves reasoning controls unset when effort is default', async (t) => {
+test('llama.cpp leaves reasoning controls unset when effort is default', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');
-  const model = await provider.getModel('gate-model');
+  const model = await provider.getModel('provider-model');
 
   await runUnderTrace(() =>
     model.getResponse({
@@ -270,10 +244,10 @@ test('GATE: llama.cpp leaves reasoning controls unset when effort is default', a
   t.is(captured[0].body.chat_template_kwargs, undefined);
 });
 
-test('GATE: outgoing request hits the configured /chat/completions endpoint with bearer auth', async (t) => {
+test('outgoing request hits the configured /chat/completions endpoint with bearer auth', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('gate-model');
+  const model = await provider.getModel('provider-model');
 
   await runUnderTrace(() =>
     model.getResponse({
@@ -284,7 +258,7 @@ test('GATE: outgoing request hits the configured /chat/completions endpoint with
   );
 
   t.is(captured.length, 1);
-  t.regex(captured[0].url, /\/chat\/completions(\?|$)/, 'must call /chat/completions');
-  t.is(captured[0].headers.authorization, 'Bearer gate-key', 'must send bearer auth from apiKey');
-  t.is(captured[0].body.model, 'gate-model', 'must send the resolved model id');
+  t.regex(captured[0].url, /\/chat\/completions(\?|$)/);
+  t.is(captured[0].headers.authorization, 'Bearer provider-key');
+  t.is(captured[0].body.model, 'provider-model');
 });

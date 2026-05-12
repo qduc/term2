@@ -6,6 +6,7 @@ import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
 import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
+import { mergeAssistantMessages } from './ai-sdk-message-normalizer.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
 
 export type CustomProviderConfig = {
@@ -47,19 +48,35 @@ function applyLlamaCppReasoningControls(target: Record<string, any>, reasoningEf
   };
 }
 
-function createLlamaCppFetch(fetchImpl: typeof fetch | undefined): typeof fetch | undefined {
+function createOpenAICompatibleFetch(
+  fetchImpl: typeof fetch | undefined,
+  providerType: string,
+): typeof fetch | undefined {
   if (!fetchImpl) return undefined;
 
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof init?.body === 'string') {
-      const body = JSON.parse(init.body);
-      if (body && typeof body === 'object') {
+      try {
+        const body = JSON.parse(init.body);
+        let changed = false;
+
+        if (Array.isArray(body?.messages)) {
+          body.messages = mergeAssistantMessages(body.messages);
+          changed = true;
+        }
+
         const reasoningEffort = typeof body.reasoning_effort === 'string' ? body.reasoning_effort : undefined;
-        if (reasoningEffort) {
+        if (providerType === 'llama.cpp' && reasoningEffort) {
           delete body.reasoning_effort;
           applyLlamaCppReasoningControls(body, reasoningEffort);
+          changed = true;
+        }
+
+        if (changed) {
           return fetchImpl(input, { ...init, body: JSON.stringify(body) });
         }
+      } catch {
+        return fetchImpl(input, init);
       }
     }
 
@@ -144,7 +161,7 @@ export function createCustomProviderModelProvider(
       const openAIClient = new OpenAI({
         baseURL: normalizeBaseUrl(config.baseUrl),
         apiKey: config.apiKey || 'no-key',
-        fetch: (providerType === 'llama.cpp' ? createLlamaCppFetch(deps.fetch) : deps.fetch) as any,
+        fetch: createOpenAICompatibleFetch(deps.fetch, providerType) as any,
       });
       return new OpenAIProvider({
         openAIClient: openAIClient as any,

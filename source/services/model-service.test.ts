@@ -149,6 +149,94 @@ test.serial('fetchModels uses /v1/models for custom OpenAI-compatible provider',
   t.is(calls[0].options?.headers?.Authorization, 'Bearer local-key');
 });
 
+test.serial('fetchModels uses Anthropic auth headers for custom anthropic provider', async (t) => {
+  const providerId = `anthropic-test-${Date.now()}-${Math.random()}`;
+  const settingsService = createMockSettingsService({
+    providers: [
+      {
+        name: providerId,
+        type: 'anthropic',
+        baseUrl: 'https://api.anthropic.com/v1',
+        apiKey: 'anthropic-key',
+      },
+    ],
+  });
+
+  const calls: Array<{ url: string; options: any }> = [];
+  const fakeFetch = async (url: string, options: any) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({
+        data: [{ id: 'claude-test-1' }, { id: 'claude-test-2' }],
+      }),
+    };
+  };
+
+  const models = await fetchModels(
+    {
+      settingsService,
+      loggingService: { warn: () => {} } as any,
+    },
+    providerId,
+    fakeFetch as any,
+  );
+
+  t.deepEqual(
+    models.map((m) => m.id),
+    ['claude-test-1', 'claude-test-2'],
+  );
+  t.is(calls.length, 1);
+  t.is(calls[0].url, 'https://api.anthropic.com/v1/models');
+  t.is(calls[0].options?.headers?.['x-api-key'], 'anthropic-key');
+  t.is(calls[0].options?.headers?.['anthropic-version'], '2023-06-01');
+});
+
+test.serial('fetchModels uses Google auth headers for custom google provider', async (t) => {
+  const providerId = `google-test-${Date.now()}-${Math.random()}`;
+  const settingsService = createMockSettingsService({
+    providers: [
+      {
+        name: providerId,
+        type: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'google-key',
+      },
+    ],
+  });
+
+  const calls: Array<{ url: string; options: any }> = [];
+  const fakeFetch = async (url: string, options: any) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({
+        models: [
+          { name: 'models/gemini-test-1', baseModelId: 'gemini-test-1', displayName: 'Gemini Test 1' },
+          { name: 'models/gemini-test-2', baseModelId: 'gemini-test-2', displayName: 'Gemini Test 2' },
+        ],
+      }),
+    };
+  };
+
+  const models = await fetchModels(
+    {
+      settingsService,
+      loggingService: { warn: () => {} } as any,
+    },
+    providerId,
+    fakeFetch as any,
+  );
+
+  t.deepEqual(
+    models.map((m) => m.id),
+    ['gemini-test-1', 'gemini-test-2'],
+  );
+  t.is(calls.length, 1);
+  t.is(calls[0].url, 'https://generativelanguage.googleapis.com/v1beta/models');
+  t.is(calls[0].options?.headers?.['x-goog-api-key'], 'google-key');
+});
+
 test('filterModels matches by id or name and limits results', (t) => {
   const models = [
     { id: 'gpt-4o', name: 'OpenAI 4o', provider: 'openai' as const },

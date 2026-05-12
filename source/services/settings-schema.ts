@@ -131,9 +131,19 @@ export const WebSearchSettingsSchema = z.object({
     .optional(),
 });
 
+export const KNOWN_CUSTOM_PROVIDER_TYPES = ['openai', 'openai-compatible', 'llama.cpp', 'anthropic', 'google'] as const;
+
+export type KnownCustomProviderType = (typeof KNOWN_CUSTOM_PROVIDER_TYPES)[number];
+
+export function isKnownCustomProviderType(value: string): value is KnownCustomProviderType {
+  return (KNOWN_CUSTOM_PROVIDER_TYPES as readonly string[]).includes(value);
+}
+
+export const CustomProviderTypeSchema = z.enum(KNOWN_CUSTOM_PROVIDER_TYPES).default('openai-compatible');
+
 export const CustomProviderSchema = z.object({
   name: z.string().min(1),
-  type: z.string().min(1).optional().default('openai-compatible'),
+  type: CustomProviderTypeSchema,
   baseUrl: z.string().url(),
   apiKey: z.string().optional(),
 });

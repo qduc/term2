@@ -29,7 +29,7 @@ export function getSearchViaShellAddendum(options: SearchViaShellOptions = {}): 
 
   const header = `### Searching via the shell
 
-You have no dedicated \`grep\` or \`find_files\` tool. Use the shell tool with the standard CLI binaries instead.`;
+Use the \`shell\` tool with the standard CLI binaries.`;
 
   const textSearch = hasRg
     ? `**For text search**, use \`rg\` (ripgrep). Examples:

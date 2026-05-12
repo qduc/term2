@@ -35,6 +35,8 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL]: 'Model to use for auto-approval evaluation (fast/cheap)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER]: 'Provider for the auto-approval model (optional)',
   [SETTING_KEYS.WEB_SEARCH_PROVIDER]: 'Web search provider (tavily, exa)',
+  [SETTING_KEYS.APP_SEARCH_VIA_SHELL]:
+    'Use shell commands (ripgrep/find) for codebase search instead of built-in tools (true|false)',
 };
 
 /**

@@ -19,12 +19,12 @@ Editing is different — a structured `apply_patch` gives us diff previews and a
 
 ## Scope
 
-In: a CLI flag — e.g. `--search-via-shell` — that skips registering `grep` and `find_files`. Everything else (`read_file`, `apply_patch`, `search_replace`, `ask_mentor`, `web_search`, SSH, shell) stays.
+In: an app setting — `app.searchViaShell` (configurable via `settings.json` or `/settings app.searchViaShell` at runtime) — that skips registering `grep` and `find_files`. **Note: If changed at runtime, a new conversation must be started for the change to take effect.** Everything else (`read_file`, `apply_patch`, `search_replace`, `ask_mentor`, `web_search`, SSH, shell) stays.
 
 Out (for the experiment):
 - New tools.
 - Changes to approval flow or sandbox beyond minor allowlist tweaks.
-- Removing the curated search tools from the codebase. The experiment is purely additive: a flag, a system-prompt addendum, possibly two extra entries in the safety allowlist.
+- Removing the curated search tools from the codebase. The experiment is purely additive: a setting, a dynamic system-prompt addendum, possibly two extra entries in the safety allowlist.
 
 ## Approval ergonomics — mostly already handled
 
@@ -41,15 +41,18 @@ So `rg pattern src/`, `find . -name '*.ts'`, `cat foo.ts`, `head -50 bar.ts` all
 
 No deeper refactor of the safety classifier needed for the experiment.
 
-## System-prompt addendum
+## Dynamic System-Prompt Addendum
 
-When `--search-via-shell` is on, append this guidance to the system prompt. It's adapted from the conventions Claude Code's own harness uses, generalized for any model:
+When `app.searchViaShell` is enabled, the prompt builder performs a quick availability check on the host system (e.g., via `which rg` / `which fd` or caching binary presence at startup) to dynamically tailor the search guidance. Rather than presenting generic fallback rules, the system prompt directly instructs the agent to use the available tools.
+
+### Scenario A: `rg` and `fd` are available
+Append this guidance to the system prompt:
 
 > ### Searching via the shell
 >
 > You have no dedicated `grep` or `find_files` tool. Use the shell tool with the standard CLI binaries instead.
 >
-> **For text search**, prefer `rg` (ripgrep) over `grep`. Examples:
+> **For text search**, use `rg` (ripgrep). Examples:
 > - `rg "pattern" src/` — basic search, respects `.gitignore` by default.
 > - `rg -i "pattern"` — case-insensitive.
 > - `rg --no-ignore "pattern"` — when you need to search `node_modules`, build output, or anything in `.gitignore`.
@@ -60,16 +63,11 @@ When `--search-via-shell` is on, append this guidance to the system prompt. It's
 > - `rg -l "pattern"` — list files only.
 > - `rg -C 3 "pattern"` — 3 lines of context.
 >
-> **For file search**, prefer `fd` over `find` when available:
+> **For file search**, use `fd`. Examples:
 > - `fd '\.ts$'` — regex over basenames.
 > - `fd -e ts` — by extension.
 > - `fd -H -I` — include hidden + gitignored (`-uu` style).
 > - `fd 'pattern' path/` — scoped to a directory.
->
-> Falling back to `find`:
-> - `find src/ -type f -name '*.ts'` — search a subtree, basename glob.
-> - **Always search from a specific path, not `/`.** Scanning the whole filesystem can exhaust resources on large trees.
-> - When using `find -regex` with alternation, put the longest alternative first: `'.*\.(tsx|ts)'` works; `'.*\.(ts|tsx)'` silently skips `.tsx`.
 >
 > **General shell hygiene:**
 > - Quote paths that contain spaces.
@@ -77,6 +75,24 @@ When `--search-via-shell` is on, append this guidance to the system prompt. It's
 > - When chaining commands, use `&&` for "stop on first failure", `;` only if you accept failures, never raw newlines.
 > - Don't use `cat` / `head` / `tail` / `sed` / `echo` for reading or writing files — use the dedicated `read_file`, `apply_patch`, and `search_replace` tools. The shell is for *search* and *one-shot inspection*, not for editing.
 > - For destructive operations (deletes, force-pushes, schema migrations), pause and confirm before running.
+
+### Scenario B: Fallbacks (`grep` and `find` only)
+If `rg` is not found, the text search guidance is dynamically substituted with standard `grep` usage:
+
+> **For text search**, use `grep`. Examples:
+> - `grep -rn "pattern" src/` — recursive search with line numbers.
+> - `grep -ri "pattern" src/` — case-insensitive recursive search.
+> - `grep -rl "pattern" src/` — list matching files only.
+> - `grep -C 3 "pattern" src/` — show 3 lines of context.
+
+If `fd` is not found, the file search guidance is dynamically substituted with standard `find` usage:
+
+> **For file search**, use `find`. Examples:
+> - `find src/ -type f -name '*.ts'` — search a subtree by basename glob.
+> - **Always search from a specific path, not `/`.** Scanning the whole filesystem can exhaust resources on large trees.
+> - When using `find -regex` with alternation, put the longest alternative first: `'.*\.(tsx|ts)'` works; `'.*\.(ts|tsx)'` silently skips `.tsx`.
+
+*(The **General shell hygiene** guidelines block is always appended regardless of which search binaries are selected.)*
 
 The "don't use `cat`/`sed` for editing" line is the load-bearing one: it preserves the diff-preview UX of `apply_patch` instead of letting the agent fall back to `sed -i`.
 
@@ -90,14 +106,15 @@ After ~20 representative tasks run side-by-side (curated-search vs search-via-sh
 
 ## Sketch of the change
 
-- Add `--search-via-shell` CLI flag in `source/cli.tsx`.
-- In `source/agent.ts`, branch on the flag: skip registering `grep` and `find_files`.
-- Add `source/prompts/search-via-shell.ts` with the addendum above, conditionally concatenated to the active system prompt.
+- Add `app.searchViaShell` boolean setting in `source/services/settings-schema.ts` (default `false`) and expose it in `RUNTIME_MODIFIABLE_SETTINGS`.
+- In `source/agent.ts`, branch on the setting (`settings.app.searchViaShell`): skip registering `grep` and `find_files`. Ensure documentation or UI warns that runtime setting changes require starting a new conversation to take effect.
+- Implement a quick availability check utility (`which rg`, `which fd`) to determine host capabilities.
+- Add `source/prompts/search-via-shell.ts` to dynamically assemble the search addendum based on tool availability, conditionally concatenated to the active system prompt.
 - Add `'fd'` to `ALLOWED_COMMANDS` in `source/utils/command-safety/constants.ts`.
 
 ## Decision point
 
 After the comparison runs:
-- Shell-search wins → delete `grep` and `find_files` tools, fold the addendum into the default system prompt, retire the flag.
+- Shell-search wins → delete `grep` and `find_files` tools, fold the dynamic system prompt addendum into the default system prompt, retire the setting.
 - Curated wins → close the experiment, write down *why* (probably token efficiency or specific failure modes), keep the wrappers.
 - Mixed → narrow further: e.g. keep `find_files` (limited surface area) but drop `grep` (which is where most of the wrapper bugs have lived).

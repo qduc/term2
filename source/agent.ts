@@ -16,6 +16,7 @@ import type { ISettingsService, ILoggingService } from './services/service-inter
 import { ExecutionContext } from './services/execution-context.js';
 import { getPromptPath } from './prompts/prompt-selector.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
+import { getSearchViaShellAddendum } from './prompts/search-via-shell.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 
@@ -108,6 +109,7 @@ export const getAgentDefinition = (
 
   const mentorMode = settingsService.get<boolean>('app.mentorMode');
   const liteMode = settingsService.get<boolean>('app.liteMode');
+  const searchViaShell = settingsService.get<boolean>('app.searchViaShell');
   const promptPath = getPromptPath({ basePromptDir: BASE_PROMPT_PATH, model: resolvedModel, liteMode });
   let prompt = resolvePrompt(promptPath);
 
@@ -118,6 +120,23 @@ export const getAgentDefinition = (
       prompt = `${prompt}\n\n${addon}`;
     } catch (e) {
       loggingService.error(`Failed to load mentor addon: ${e}`);
+    }
+  }
+
+  if (searchViaShell) {
+    try {
+      const addendum = getSearchViaShellAddendum({ executionContext });
+      prompt = `${prompt}\n\n${addendum}`;
+    } catch (e) {
+      loggingService.error(`Failed to load search-via-shell addendum: ${e}`);
+    }
+  } else {
+    const isGpt5 = !liteMode && shouldPreferPatchEditingModel(resolvedModel);
+    if (!isGpt5) {
+      const searchToolsDoc = liteMode
+        ? '### Search Tools\n\n- `find_files`: locate files by name or glob.\n- `grep`: search file contents.'
+        : '### Search Tools\n\n- Prefer `find_files` for locating files by name or glob.\n- Prefer `grep` for searching code content or symbols.';
+      prompt = `${prompt}\n\n${searchToolsDoc}`;
     }
   }
 
@@ -138,13 +157,17 @@ export const getAgentDefinition = (
 
   if (liteMode) {
     // Lite mode: shell + read-only tools only (no editing tools)
+    if (!searchViaShell) {
+      tools.push(
+        createGrepToolDefinition({ executionContext }),
+        createFindFilesToolDefinition({
+          executionContext,
+          allowOutsideWorkspace: true,
+        }),
+      );
+    }
     tools.push(
-      createGrepToolDefinition({ executionContext }),
       createReadFileToolDefinition({
-        executionContext,
-        allowOutsideWorkspace: true,
-      }),
-      createFindFilesToolDefinition({
         executionContext,
         allowOutsideWorkspace: true,
       }),
@@ -156,10 +179,11 @@ export const getAgentDefinition = (
     if (isGpt5) {
       tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext }));
     } else {
+      if (!searchViaShell) {
+        tools.push(createGrepToolDefinition({ executionContext }), createFindFilesToolDefinition({ executionContext }));
+      }
       tools.push(
-        createGrepToolDefinition({ executionContext }),
         createReadFileToolDefinition({ executionContext }),
-        createFindFilesToolDefinition({ executionContext }),
         createCreateFileToolDefinition({
           settingsService,
           loggingService,

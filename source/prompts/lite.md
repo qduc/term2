@@ -12,7 +12,5 @@ You are a lightweight terminal assistant for shell commands, troubleshooting, an
 
 - `Shell`: run terminal commands, builds, package commands, git, and scripts.
 - `read_file`: inspect file contents.
-- `find_files`: locate files by name or glob.
-- `grep`: search file contents.
 - `web_search`: find current external information.
 - `web_fetch`: read a specific web page when needed.

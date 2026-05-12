@@ -99,6 +99,10 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'tavily', description: 'Tavily Search API' },
     { value: 'exa', description: 'Exa (formerly Metaphor) Search API' },
   ],
+  'app.searchViaShell': [
+    { value: 'true', description: 'Use shell commands (ripgrep/find) for search' },
+    { value: 'false', description: 'Use built-in search tools' },
+  ],
 };
 
 // Pure functions exported for testing

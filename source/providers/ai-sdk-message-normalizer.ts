@@ -10,6 +10,22 @@ function hasContent(content: any): boolean {
   return content !== null && content !== undefined && content !== '';
 }
 
+function hasAssistantPayload(message: any): boolean {
+  if (message?.role !== 'assistant') {
+    return true;
+  }
+
+  if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+    return true;
+  }
+
+  if (!Array.isArray(message.content)) {
+    return hasContent(message.content);
+  }
+
+  return message.content.some((part: any) => part?.type !== 'reasoning');
+}
+
 function contentToParts(content: any): any[] {
   if (!hasContent(content)) {
     return [];
@@ -106,7 +122,7 @@ export function mergeAssistantMessages(messages: any[]): any[] {
     merged.push(message);
   }
 
-  return merged;
+  return merged.filter(hasAssistantPayload);
 }
 
 function normalizeMessageOptions(options: any): any {

@@ -25,3 +25,23 @@ test('buildMessagesFromRequest() preserves user text and image content', (t) => 
     },
   ]);
 });
+
+test('buildMessagesFromRequest() omits assistant messages without content or tool calls', (t) => {
+  const messages = buildMessagesFromRequest({
+    input: [
+      { role: 'user', type: 'message', content: 'read package json' },
+      {
+        role: 'assistant',
+        type: 'message',
+        content: [],
+        reasoning_content: 'I should inspect the file.',
+      },
+      { role: 'user', type: 'message', content: 'retry after failed hallucinated tool call' },
+    ],
+  } as any);
+
+  t.deepEqual(messages, [
+    { role: 'user', content: 'read package json' },
+    { role: 'user', content: 'retry after failed hallucinated tool call' },
+  ]);
+});

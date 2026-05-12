@@ -45,6 +45,24 @@ test('mergeAssistantMessages folds assistant reasoning into following assistant 
   ]);
 });
 
+test('mergeAssistantMessages drops reasoning-only assistant messages with no content or tool calls', (t) => {
+  const messages = [
+    { role: 'user', content: 'show package json' },
+    {
+      role: 'assistant',
+      content: '',
+      reasoning_content: 'I should inspect the file.',
+      reasoning_details: [{ type: 'reasoning.text', text: 'I should inspect the file.' }],
+    },
+    { role: 'user', content: 'retry after failed hallucinated tool call' },
+  ];
+
+  t.deepEqual(mergeAssistantMessages(messages), [
+    { role: 'user', content: 'show package json' },
+    { role: 'user', content: 'retry after failed hallucinated tool call' },
+  ]);
+});
+
 test('mergeAssistantMessages folds AI SDK reasoning content part into following assistant tool call', (t) => {
   const messages = [
     {

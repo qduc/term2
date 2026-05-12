@@ -135,6 +135,18 @@ function convertAgentItemToOpenAICompatibleMessage(item: any, loggingService: IL
   return null;
 }
 
+function hasAssistantPayload(message: any): boolean {
+  if (message?.role !== 'assistant') {
+    return true;
+  }
+
+  if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+    return true;
+  }
+
+  return message.content !== null && message.content !== undefined && message.content !== '';
+}
+
 export function addCacheControlToLastUserMessage(messages: any[]): void {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
@@ -338,7 +350,7 @@ export function buildMessagesFromRequest(req: ModelRequest, modelId?: string, lo
     addCacheControlToLastToolMessage(messages);
   }
 
-  return messages;
+  return messages.filter(hasAssistantPayload);
 }
 
 export function extractFunctionToolsFromRequest(req: ModelRequest): any[] {

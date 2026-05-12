@@ -99,21 +99,17 @@ test.serial('execute: finds files in nested directories with glob pattern', asyn
   });
 });
 
-test.serial('execute: supports glob patterns with path segments in find fallback', async (t) => {
+test.serial('execute: rejects patterns with path segments', async (t) => {
   await withTempDir(async (dir) => {
     await fs.mkdir(path.join(dir, 'src'));
-    await fs.mkdir(path.join(dir, 'src/utils'));
     await fs.writeFile(path.join(dir, 'src/index.ts'), '');
-    await fs.writeFile(path.join(dir, 'src/utils/helper.ts'), '');
-    await fs.writeFile(path.join(dir, 'readme.md'), '');
 
     const result = await findFilesToolDefinitionFindFallback.execute({
       pattern: 'src/**/*',
     });
 
-    t.true(result.includes('src/index.ts'));
-    t.true(result.includes('src/utils/helper.ts'));
-    t.false(result.includes('readme.md'));
+    t.true(result.startsWith('Error'));
+    t.true(result.includes('basename-only'));
   });
 });
 
@@ -223,11 +219,12 @@ test.serial('execute: in allowOutsideWorkspace mode, can search outside workspac
 
 test.serial('execute: handles non-existent directory', async (t) => {
   await withTempDir(async () => {
-    const result = await findFilesToolDefinition.execute({
-      pattern: '*.ts',
-      path: 'nonexistent',
-    });
-
-    t.true(result.includes('Error') || result.includes('No files found'));
+    await t.throwsAsync(
+      findFilesToolDefinition.execute({
+        pattern: '*.ts',
+        path: 'nonexistent',
+      }),
+      { message: /File search failed/ },
+    );
   });
 });

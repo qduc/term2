@@ -23,6 +23,12 @@ const searchParametersSchema = z.object({
   pattern: z.string().describe('The text or regex pattern to search for'),
   path: z.string().describe('The directory or file to search in. Use "." for current directory.'),
   file_pattern: z.string().optional().describe('Glob pattern for files to include (e.g., "*.ts").'),
+  no_ignore: z
+    .boolean()
+    .optional()
+    .describe(
+      'Set true to search files normally skipped by .gitignore/.ignore (e.g., node_modules, vendor, build output). Defaults to false.',
+    ),
 });
 
 export type SearchToolParams = z.infer<typeof searchParametersSchema>;
@@ -72,7 +78,7 @@ export const createGrepToolDefinition = (
     parameters: searchParametersSchema,
     needsApproval: () => false, // Search is read-only and safe
     execute: async (params) => {
-      const { pattern, path: searchPath, file_pattern } = params;
+      const { pattern, path: searchPath, file_pattern, no_ignore } = params;
 
       // Validate pattern is not empty
       if (!pattern || pattern.trim() === '') {
@@ -92,6 +98,7 @@ export const createGrepToolDefinition = (
       if (useRg) {
         const args = ['rg', '--line-number', '--no-heading', '--color=never'];
         if (!case_sensitive) args.push('--ignore-case');
+        if (no_ignore) args.push('--no-ignore');
         if (file_pattern) args.push('-g', `'${file_pattern}'`);
         if (exclude_pattern) args.push('-g', `'!${exclude_pattern}'`);
 
@@ -117,53 +124,8 @@ export const createGrepToolDefinition = (
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();
 
-      try {
-        const { stdout } = await executeShellCommand(command, {
-          maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-          cwd,
-          sshService,
-        });
-
-        const trimmed = stdout.trim();
-        const lineCount = trimmed.split('\n').length;
-        const result = trimOutput(trimmed, limit);
-
-        // Add hint if results were truncated
-        if (lineCount > limit) {
-          return `${result}\n\nNote: Results exceeded ${limit} lines. Consider narrowing your search with a more specific pattern or file_pattern.`;
-        }
-
-        return result || 'No matches found.';
-      } catch (error: any) {
-        // grep/rg returns exit code 1 if no matches found, which executeShellCommand might NOT treat as error if we handle it there?
-        // executeShellCommand catches errors.
-        // sshService.executeCommand catches error? no, creates promise.
-        // Wait, executeShellCommand wraps exec and returns object even on error.
-        // But if it THROWS, we catch it here.
-        // executeShellCommand returns object with exitCode. It does NOT throw for non-zero exit code usually?
-        // Let's check executeShellCommand implementation.
-        // "const exitCode = typeof error?.code === 'number' ? error.code : null;" in catch block.
-        // It catches exec exceptions and returns ShellExecutionResult.
-        // So result.exitCode check is needed.
-        // But wait, I am destructuring {stdout} and ignoring exitCode.
-        // If grep returns 1, stdout is likely empty.
-        // Let's refine the try/catch logic or result inspection.
-        // executeShellCommand returns {stdout, stderr, exitCode}.
-        // If grep fails (exit 1), exitCode is 1.
-        // However, previous code used `execPromise` which throws on exit code != 0.
-        // executeShellCommand handles parsing.
-        // I should capture result and check exitCode.
-        // But wait, executeShellCommand throws?
-        // No, look at implementation: it catches error and returns object.
-        // So my destructing was: const {stdout} = await executeShellCommand(...)
-        // If exitCode is 1 (no match), stdout is empty.
-        // If exitCode is 2 (error), stderr has content.
-        // So I should check stderr?
-      }
-
-      // Re-implementing try block with proper check
       const result = await executeShellCommand(command, {
-        maxBuffer: 10 * 1024 * 1024,
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
         cwd,
         sshService,
       });
@@ -173,11 +135,11 @@ export const createGrepToolDefinition = (
       }
 
       if (result.exitCode !== 0 && result.exitCode !== null) {
-        throw new Error(`Search failed: ${result.stderr}`);
+        throw new Error(`Search failed: ${result.stderr.trim() || `exit code ${result.exitCode}`}`);
       }
 
       const trimmed = result.stdout.trim();
-      const lineCount = trimmed.split('\n').length;
+      const lineCount = trimmed ? trimmed.split('\n').length : 0;
       const outputTrimmed = trimOutput(trimmed, limit);
 
       if (lineCount > limit) {

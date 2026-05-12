@@ -9,7 +9,11 @@ import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFrom
 const execPromise = util.promisify(exec);
 
 const findFilesParametersSchema = z.object({
-  pattern: z.string().describe('Glob pattern or filename to search for (e.g., "*.ts", "**/*.test.ts", "README.md")'),
+  pattern: z
+    .string()
+    .describe(
+      'Basename glob or filename to search for (e.g., "*.ts", "README.md"). Path segments are not allowed — use the `path` parameter to scope the directory.',
+    ),
   path: z
     .string()
     .optional()
@@ -19,6 +23,12 @@ const findFilesParametersSchema = z.object({
     .positive()
     .optional()
     .describe('Maximum number of results to return. Defaults to 50.'),
+  no_ignore: z
+    .boolean()
+    .optional()
+    .describe(
+      'Set true to include files normally skipped by .gitignore/.ignore and hidden files (e.g., node_modules, .git, build output). Defaults to false. Only takes effect when fd is available.',
+    ),
 });
 
 export type FindFilesToolParams = z.infer<typeof findFilesParametersSchema>;
@@ -108,182 +118,86 @@ export const createFindFilesToolDefinition = (
     parameters: findFilesParametersSchema,
     needsApproval: () => false, // Search is read-only and safe
     execute: async (params) => {
-      const { pattern, path: searchPath, max_results } = params;
+      const { pattern, path: searchPath, max_results, no_ignore } = params;
 
-      // Validate pattern is not empty
       if (!pattern || pattern.trim() === '') {
         return 'Error: Search pattern cannot be empty. Please provide a valid file name or glob pattern.';
+      }
+
+      if (patternHasPathSegments(pattern)) {
+        return 'Error: pattern must be basename-only (e.g., "*.ts", "README.md"). Use the `path` parameter to scope the directory. To search outside the workspace, use the shell tool.';
       }
 
       const limit = max_results ?? 50;
       const targetPath = searchPath?.trim() || '.';
       const cwd = executionContext?.getCwd() || process.cwd();
 
+      let absolutePath: string;
       try {
         // In Lite Mode we may allow searching outside the current workspace.
-        const absolutePath = resolveWorkspacePath(targetPath, cwd, {
-          allowOutsideWorkspace,
-        });
-
-        const useFd = forceFindFallback ? false : await checkFdAvailability(executionContext);
-        const isRemote = executionContext?.isRemote() ?? false;
-
-        if (isRemote && !useFd && patternHasPathSegments(pattern)) {
-          return 'Error: SSH search without fd does not support path segments in the pattern. Use the path parameter with a basename glob like "*.ts" or "*" instead.';
-        }
-        let command = '';
-
-        if (useFd) {
-          // Use fd (faster and more user-friendly)
-          const args = [
-            'fd',
-            '--color=never',
-            '--type',
-            'f', // files only
-            '--glob', // use glob pattern matching
-          ];
-
-          // Escape pattern for shell
-          args.push(`'${pattern.replace(/'/g, "'\\''")}'`);
-          args.push(`'${absolutePath.replace(/'/g, "'\\''")}'`);
-
-          command = args.join(' ');
-        } else {
-          // Fallback to find (list all files; filter in JS to match fd glob semantics)
-          const args = ['find', `'${absolutePath.replace(/'/g, "'\\''")}'`, '-type', 'f'];
-          command = args.join(' ');
-        }
-
-        const sshService = executionContext?.getSSHService();
-
-        const result = await executeShellCommand(command, {
-          maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-          cwd,
-          sshService,
-        });
-
-        if (result.exitCode === 1) {
-          return `No files found matching pattern: ${pattern}`;
-        }
-
-        if (result.exitCode !== 0 && result.exitCode !== null) {
-          throw new Error(result.stderr || 'Unknown error');
-        }
-
-        const trimmed = result.stdout.trim();
-
-        if (!trimmed) {
-          return `No files found matching pattern: ${pattern}`;
-        }
-
-        const lines = trimmed.split('\n');
-        const cleanedLines = useFd
-          ? lines.map((line) => (line.startsWith('./') ? line.substring(2) : line))
-          : filterFindResults(lines, absolutePath, pattern);
-
-        if (cleanedLines.length === 0) {
-          return `No files found matching pattern: ${pattern}`;
-        }
-
-        // Apply limit
-        let resultText = cleanedLines.slice(0, limit).join('\n');
-
-        // Add note if results were truncated
-        if (cleanedLines.length > limit) {
-          resultText += `\n\nNote: Results limited to ${limit} files. Found ${cleanedLines.length} total matches. Use max_results parameter to see more.`;
-        }
-
-        return resultText;
+        absolutePath = resolveWorkspacePath(targetPath, cwd, { allowOutsideWorkspace });
       } catch (error: any) {
-        // Handle path resolution errors
         if (error.message?.includes('outside workspace')) {
           return `Error: ${error.message}`;
         }
-
-        // fd/find returns exit code 1 if no matches found
-        if (error.code === 1) {
-          return `No files found matching pattern: ${pattern}`;
-        }
-
-        // Handle other errors
-        return `Error: ${error.message || String(error)}`;
+        throw error;
       }
+
+      const useFd = forceFindFallback ? false : await checkFdAvailability(executionContext);
+      const escapedPattern = `'${pattern.replace(/'/g, "'\\''")}'`;
+      const escapedPath = `'${absolutePath.replace(/'/g, "'\\''")}'`;
+
+      let command: string;
+      if (useFd) {
+        const args = ['fd', '--color=never', '--type', 'f', '--glob'];
+        if (no_ignore) args.push('--no-ignore', '--hidden');
+        args.push(escapedPattern, escapedPath);
+        command = args.join(' ');
+      } else {
+        // find pushes the glob down via -name so we don't enumerate the whole tree.
+        command = ['find', escapedPath, '-type', 'f', '-name', escapedPattern].join(' ');
+      }
+
+      const sshService = executionContext?.getSSHService();
+      const result = await executeShellCommand(command, {
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+        cwd,
+        sshService,
+      });
+
+      if (result.exitCode !== 0 && result.exitCode !== null) {
+        throw new Error(`File search failed: ${result.stderr.trim() || `exit code ${result.exitCode}`}`);
+      }
+
+      const trimmed = result.stdout.trim();
+      if (!trimmed) {
+        return `No files found matching pattern: ${pattern}`;
+      }
+
+      const cleanedLines = trimmed
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => toRelative(line, absolutePath));
+
+      let resultText = cleanedLines.slice(0, limit).join('\n');
+      if (cleanedLines.length > limit) {
+        resultText += `\n\nNote: Results limited to ${limit} files. Found ${cleanedLines.length} total matches. Use max_results parameter to see more.`;
+      }
+
+      return resultText;
     },
     formatCommandMessage: formatFindFilesCommandMessage,
   };
 };
 
-function filterFindResults(lines: string[], absolutePath: string, pattern: string): string[] {
-  const normalizedPattern = pattern.replace(/\\/g, '/').replace(/^\.\//, '');
-  const patternHasSlash = normalizedPattern.includes('/');
-  const matcher = globToRegex(normalizedPattern);
-  const root = absolutePath.replace(/\\/g, '/').replace(/\/+$/, '');
-
-  const results: string[] = [];
-
-  for (const line of lines) {
-    if (!line) continue;
-    const normalizedLine = line.replace(/\\/g, '/');
-    const relative = path.posix.relative(root, normalizedLine);
-    if (relative.startsWith('..')) continue;
-    const target = patternHasSlash ? relative : path.posix.basename(relative);
-    if (matcher.test(target)) {
-      results.push(relative);
-    }
-  }
-
-  return results;
-}
-
 function patternHasPathSegments(pattern: string): boolean {
-  const normalized = pattern.replace(/\\/g, '/');
-  return normalized.includes('/');
+  return pattern.replace(/\\/g, '/').includes('/');
 }
 
-function globToRegex(pattern: string): RegExp {
-  let regex = '^';
-  let index = 0;
-
-  while (index < pattern.length) {
-    const char = pattern[index];
-    if (char === '*') {
-      const isDoubleStar = pattern[index + 1] === '*';
-      if (isDoubleStar) {
-        const nextChar = pattern[index + 2];
-        if (nextChar === '/') {
-          regex += '(?:.*/)?';
-          index += 2;
-        } else {
-          while (pattern[index + 1] === '*') {
-            index += 1;
-          }
-          regex += '.*';
-        }
-      } else {
-        regex += '[^/]*';
-      }
-    } else if (char === '?') {
-      regex += '[^/]';
-    } else if (char === '[') {
-      const endIndex = pattern.indexOf(']', index + 1);
-      if (endIndex === -1) {
-        regex += '\\[';
-      } else {
-        const content = pattern.slice(index + 1, endIndex);
-        const escaped = content.replace(/\\/g, '\\\\');
-        regex += `[${escaped}]`;
-        index = endIndex;
-      }
-    } else {
-      regex += escapeRegexChar(char);
-    }
-    index += 1;
-  }
-
-  regex += '$';
-  return new RegExp(regex);
-}
-
-function escapeRegexChar(char: string): string {
-  return /[.+^${}()|\\]/.test(char) ? `\\${char}` : char;
+function toRelative(line: string, absolutePath: string): string {
+  const normalized = line.replace(/\\/g, '/');
+  if (normalized.startsWith('./')) return normalized.slice(2);
+  const root = absolutePath.replace(/\\/g, '/').replace(/\/+$/, '');
+  const rel = path.posix.relative(root, normalized);
+  return rel || normalized;
 }

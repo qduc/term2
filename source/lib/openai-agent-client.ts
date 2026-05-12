@@ -1,13 +1,4 @@
-import {
-  Agent,
-  run,
-  tool as createTool,
-  webSearchTool,
-  applyPatchTool,
-  type Tool,
-  type AgentInputItem,
-  Runner,
-} from '@openai/agents';
+import { Agent, run, tool as createTool, applyPatchTool, type Tool, type AgentInputItem, Runner } from '@openai/agents';
 import { getProvider } from '../providers/index.js';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
@@ -702,7 +693,6 @@ export class OpenAIAgentClient {
     const tools = this.#buildAgentTools({
       toolDefinitions,
       resolvedModel,
-      reasoningEffort,
       shouldUseNativePatchTool: shouldUseNativePatchToolForModel,
     });
 
@@ -736,7 +726,6 @@ export class OpenAIAgentClient {
   #buildAgentTools({
     toolDefinitions,
     resolvedModel,
-    reasoningEffort,
     shouldUseNativePatchTool,
   }: {
     toolDefinitions: any[];
@@ -849,19 +838,6 @@ export class OpenAIAgentClient {
         model: resolvedModel,
         provider: this.#provider,
       });
-    }
-
-    // Add web search tool. If the user explicitly selected 'minimal' we
-    // disable it; if they selected 'default', we don't influence the
-    // decision and leave the web tool enabled.
-    if (reasoningEffort !== 'minimal') {
-      const webTool = webSearchTool();
-
-      // Note: webSearchTool is a HostedTool that runs server-side and cannot be intercepted
-      // the same way as FunctionTools. Interception for hosted tools would need to be
-      // handled differently, likely through approval mechanisms.
-
-      tools.push(webTool);
     }
 
     return tools;

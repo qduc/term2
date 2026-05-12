@@ -1,7 +1,6 @@
-import { aisdk } from '@openai/agents-extensions/ai-sdk';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { type ModelProvider, type Model } from '@openai/agents-core';
-import { withMergedAssistantReasoning } from './ai-sdk-message-normalizer.js';
+import { adaptAiSdkModelForAgents } from './ai-sdk-agents-adapter.js';
 
 export type AiSdkOpenAICompatibleConfig = {
   baseURL: string;
@@ -48,6 +47,6 @@ export class AiSdkOpenAICompatibleProvider implements ModelProvider {
       fetch: config.fetch,
     });
 
-    return aisdk(withMergedAssistantReasoning(provider(modelName || this.#defaultModel))) as unknown as Model;
+    return adaptAiSdkModelForAgents(provider(modelName || this.#defaultModel));
   }
 }

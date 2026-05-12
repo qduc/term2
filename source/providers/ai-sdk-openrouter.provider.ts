@@ -1,7 +1,6 @@
-import { aisdk } from '@openai/agents-extensions/ai-sdk';
 import { createOpenRouter, type OpenRouterProviderSettings } from '@openrouter/ai-sdk-provider';
 import { type ModelProvider, type Model } from '@openai/agents-core';
-import { withMergedAssistantReasoning } from './ai-sdk-message-normalizer.js';
+import { adaptAiSdkModelForAgents } from './ai-sdk-agents-adapter.js';
 
 export type AiSdkOpenRouterConfig = Pick<
   OpenRouterProviderSettings,
@@ -34,6 +33,6 @@ export class AiSdkOpenRouterProvider implements ModelProvider {
       compatibility: 'strict',
     });
 
-    return aisdk(withMergedAssistantReasoning(provider(modelName || this.#defaultModel))) as unknown as Model;
+    return adaptAiSdkModelForAgents(provider(modelName || this.#defaultModel));
   }
 }

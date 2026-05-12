@@ -206,10 +206,14 @@ export function createConversationEventHandler<
       }
 
       case 'retry': {
+        const text =
+          event.retryType === 'flex_service_tier'
+            ? 'Flex service tier timed out. Falling back to standard service tier and retrying...'
+            : `Tool hallucination detected (${event.toolName}). Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
         const systemMessage: SystemMessage = {
           id: createMessageId(),
           sender: 'system',
-          text: `Tool hallucination detected (${event.toolName}). Retrying... (Attempt ${event.attempt}/${event.maxRetries})`,
+          text,
         };
         setMessages((prev) => [...prev, systemMessage as unknown as MessageT]);
         return;

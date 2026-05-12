@@ -68,6 +68,49 @@ test('run() streams ConversationEvents (text_delta → final) in order', async (
   t.is(emitted[2].finalText, 'Hello world');
 });
 
+test('run() falls back to standard service tier after flex timeout', async (t) => {
+  const timeoutError = new Error(
+    'data: {"error":{"code":504,"message":"The operation was aborted","metadata":{"error_type":"timeout"}}}',
+  );
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  successStream.finalOutput = 'Recovered';
+  const calls = [];
+
+  const mockClient = {
+    shouldRetryWithoutFlexServiceTier(error) {
+      return error === timeoutError;
+    },
+    useStandardServiceTierForNextRequest() {
+      calls.push('fallback');
+    },
+    async startStream(input) {
+      calls.push(input);
+      if (calls.length === 1) {
+        throw timeoutError;
+      }
+      return successStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('hi')) {
+    emitted.push(ev);
+  }
+
+  t.deepEqual(
+    emitted.map((event) => event.type),
+    ['retry', 'text_delta', 'final'],
+  );
+  t.is(emitted[0].retryType, 'flex_service_tier');
+  t.is(emitted[0].toolName, 'service_tier');
+  t.deepEqual(calls, ['hi', 'fallback', 'hi']);
+});
+
 test('continue() streams events after approval decision', async (t) => {
   const interruption = {
     name: 'bash',

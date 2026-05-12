@@ -120,9 +120,11 @@ export class ConversationSession {
     input: string | UserTurn,
     {
       hallucinationRetryCount = 0,
+      flexServiceTierFallbackCount = 0,
       skipUserMessage = false,
     }: {
       hallucinationRetryCount?: number;
+      flexServiceTierFallbackCount?: number;
       skipUserMessage?: boolean;
     } = {},
   ): AsyncIterable<ConversationEvent> {
@@ -273,6 +275,42 @@ export class ConversationSession {
       yield toTerminalEvent(resolvedResult);
     } catch (error) {
       const streamHistoryLength = Array.isArray((stream as any)?.history) ? (stream as any).history.length : 0;
+      const shouldRetryWithoutFlex = getMethod<[unknown], boolean>(
+        this.agentClient,
+        'shouldRetryWithoutFlexServiceTier',
+      )?.call(this.agentClient, error);
+
+      if (shouldRetryWithoutFlex && flexServiceTierFallbackCount === 0) {
+        this.logger.warn('Flex service tier timed out, retrying with standard service tier', {
+          eventType: 'retry.flex_service_tier',
+          category: 'retry',
+          phase: 'retry',
+          retryType: 'flex_service_tier',
+          retryAttempt: 1,
+          attempt: 1,
+          maxRetries: 1,
+          sessionId: this.id,
+          traceId: this.logger.getCorrelationId(),
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+
+        yield {
+          type: 'retry',
+          toolName: 'service_tier',
+          attempt: 1,
+          maxRetries: 1,
+          errorMessage: 'Flex service tier timed out. Falling back to standard service tier and retrying.',
+          retryType: 'flex_service_tier',
+        };
+
+        getMethod<[], void>(this.agentClient, 'useStandardServiceTierForNextRequest')?.call(this.agentClient);
+        yield* this.run(turn, {
+          skipUserMessage: true,
+          flexServiceTierFallbackCount: flexServiceTierFallbackCount + 1,
+        });
+        return;
+      }
+
       const decision = decideRetry(error, hallucinationRetryCount, Boolean(stream), streamHistoryLength);
 
       if (decision.kind === 'retry') {

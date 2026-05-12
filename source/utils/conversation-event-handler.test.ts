@@ -366,6 +366,28 @@ test('retry: adds system message about hallucination retry', (t) => {
   t.true(result[0].text.includes('1/2'));
 });
 
+test('retry: adds system message about flex service tier fallback', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'retry',
+    toolName: 'service_tier',
+    attempt: 1,
+    maxRetries: 1,
+    errorMessage: 'Flex service tier timed out',
+    retryType: 'flex_service_tier',
+  } as ConversationEvent);
+
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const result = updater([]);
+  t.is(result.length, 1);
+  t.is(result[0].sender, 'system');
+  t.true(result[0].text.includes('Flex service tier timed out'));
+  t.true(result[0].text.includes('standard service tier'));
+});
+
 // =============================================================================
 // unknown event tests
 // =============================================================================

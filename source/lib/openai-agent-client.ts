@@ -21,6 +21,7 @@ import { trimToolOutput } from '../utils/trim-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 import { executeWithRetry } from './retry-executor.js';
 import { shouldUseNativePatchTool, shouldUseStrictToolSchema } from './tool-selection-policy.js';
+import { isFlexServiceTierTimeout } from '../utils/flex-service-tier.js';
 
 class MentorSession {
   #provider: string | null = null;
@@ -124,6 +125,7 @@ export class OpenAIAgentClient {
   #currentCorrelationId: string | null = null;
   #retryCallback: (() => void) | null = null;
   #runner: Runner | null = null;
+  #serviceTierOverrideForNextRequest: 'standard' | null = null;
   #toolInterceptors: ((name: string, params: any, toolCallId?: string) => Promise<string | null>)[] = [];
   #logger: ILoggingService;
   #settings: ISettingsService;
@@ -275,6 +277,21 @@ export class OpenAIAgentClient {
 
   setRetryCallback(callback: () => void): void {
     this.#retryCallback = callback;
+  }
+
+  shouldRetryWithoutFlexServiceTier(error: unknown): boolean {
+    const useFlexServiceTier = this.#settings.get<boolean>('agent.useFlexServiceTier');
+    return (
+      useFlexServiceTier &&
+      this.#serviceTierOverrideForNextRequest !== 'standard' &&
+      (this.#provider === 'openai' || this.#provider === 'openrouter') &&
+      isFlexServiceTierTimeout(error)
+    );
+  }
+
+  useStandardServiceTierForNextRequest(): void {
+    this.#serviceTierOverrideForNextRequest = 'standard';
+    this.#refreshAgent();
   }
 
   #refreshAgent(): void {
@@ -459,8 +476,16 @@ export class OpenAIAgentClient {
     return run(agent, input, effectiveOptions);
   }
 
-  #runAgent(agent: Agent, input: any, options: any): Promise<any> {
-    return this.#runAgentWithProvider(this.#provider, this.#runner, agent, input, options);
+  async #runAgent(agent: Agent, input: any, options: any): Promise<any> {
+    const shouldResetServiceTierOverride = this.#serviceTierOverrideForNextRequest === 'standard';
+    try {
+      return await this.#runAgentWithProvider(this.#provider, this.#runner, agent, input, options);
+    } finally {
+      if (shouldResetServiceTierOverride) {
+        this.#serviceTierOverrideForNextRequest = null;
+        this.#refreshAgent();
+      }
+    }
   }
 
   async #executeWithRetry<T>(operation: () => Promise<T>, retries = this.#retryAttempts): Promise<T> {
@@ -870,7 +895,11 @@ export class OpenAIAgentClient {
     // This reduces costs by using the flex service tier for lower priority requests
     // See: https://platform.openai.com/docs/guides/service-tier
     const useFlexServiceTier = this.#settings.get<boolean>('agent.useFlexServiceTier');
-    if (useFlexServiceTier && (this.#provider === 'openai' || this.#provider === 'openrouter')) {
+    if (
+      useFlexServiceTier &&
+      this.#serviceTierOverrideForNextRequest !== 'standard' &&
+      (this.#provider === 'openai' || this.#provider === 'openrouter')
+    ) {
       modelSettings.providerData = {
         ...(modelSettings.providerData || {}),
         service_tier: 'flex',

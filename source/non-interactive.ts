@@ -41,6 +41,9 @@ const formatEventForStderr = (event: ConversationEvent): string | null => {
     case 'approval_required':
       return `approval_required ${event.approval.toolName}\n`;
     case 'retry':
+      if (event.retryType === 'flex_service_tier') {
+        return `retry service_tier: ${event.errorMessage}\n`;
+      }
       return `retry ${event.toolName} ${event.attempt}/${event.maxRetries}: ${event.errorMessage}\n`;
     case 'error':
       return `error ${event.message}\n`;

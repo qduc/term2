@@ -143,7 +143,7 @@ export function createCustomProviderModelProvider(
     default: {
       const openAIClient = new OpenAI({
         baseURL: normalizeBaseUrl(config.baseUrl),
-        apiKey: config.apiKey ?? '',
+        apiKey: config.apiKey || 'no-key',
         fetch: (providerType === 'llama.cpp' ? createLlamaCppFetch(deps.fetch) : deps.fetch) as any,
       });
       return new OpenAIProvider({

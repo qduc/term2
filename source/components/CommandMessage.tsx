@@ -1,7 +1,7 @@
 import React, { FC, useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { generateDiff } from '../utils/diff.js';
-import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
 
 type Props = {
   command: string;
@@ -119,6 +119,11 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
         return `"${search}" → "${replace}" "${path}"`;
       }
 
+      case TOOL_NAME_CREATE_FILE: {
+        const filePath = normalizedArgs.path || 'unknown';
+        return `"${filePath}"`;
+      }
+
       case 'ask_mentor': {
         const question = normalizedArgs.question || 'Unknown question';
         return question.length > 80 ? `${question.slice(0, 80)}...` : question;
@@ -208,6 +213,28 @@ const CommandMessage: FC<Props> = ({
           {toolArgs.replace_all && <Text color="magenta"> (all occurrences)</Text>}
         </Box>
         <DiffView diff={diff} />
+        {failureReason && <Text color="red">Error: {failureReason}</Text>}
+        <Text color={success === false ? 'red' : '#64748b'}>{displayed}</Text>
+      </Box>
+    );
+  }
+
+  // Special handling for create_file
+  if (toolName === TOOL_NAME_CREATE_FILE && toolArgs) {
+    const diffLines = (toolArgs.content ?? '')
+      .split('\n')
+      .map((line: string) => `+${line}`)
+      .join('\n');
+
+    return (
+      <Box flexDirection="column">
+        <Box>
+          <Text color={success === false ? 'red' : 'green'} bold>
+            [CREATE]
+          </Text>
+          <Text> {toolArgs.path}</Text>
+        </Box>
+        {success !== false && <DiffView diff={diffLines} />}
         {failureReason && <Text color="red">Error: {failureReason}</Text>}
         <Text color={success === false ? 'red' : '#64748b'}>{displayed}</Text>
       </Box>

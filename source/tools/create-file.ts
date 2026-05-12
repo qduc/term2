@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { resolveWorkspacePath } from './utils.js';
 import type { ToolDefinition, CommandMessage } from './types.js';
+import { TOOL_NAME_CREATE_FILE } from './tool-names.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
 import { ExecutionContext } from '../services/execution-context.js';
@@ -33,7 +34,7 @@ export const formatCreateFileCommandMessage = (
       command,
       output,
       success,
-      toolName: 'create_file',
+      toolName: TOOL_NAME_CREATE_FILE,
       toolArgs: args,
     }),
   ];
@@ -47,7 +48,7 @@ export function createCreateFileToolDefinition(deps: {
   const { loggingService, settingsService, executionContext } = deps;
 
   return {
-    name: 'create_file',
+    name: TOOL_NAME_CREATE_FILE,
     description: 'Create a new file with the specified content. Fails if the file already exists.',
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {

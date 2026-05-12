@@ -46,6 +46,9 @@ function buildProvider(captured: CapturedRequest[], response: any, providerType 
           body: rawBody ? JSON.parse(rawBody) : null,
           headers,
         });
+        if (response instanceof Response) {
+          return response;
+        }
         return new Response(JSON.stringify(response), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -214,6 +217,84 @@ test('assistant reasoning_content is passed back with the following tool call', 
     },
     { role: 'user', content: 'thanks' },
   ]);
+});
+
+test('assistant reasoning_content from provider response is preserved as reasoning output', async (t) => {
+  const captured: CapturedRequest[] = [];
+  const provider = buildProvider(captured, {
+    ...successResponse,
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: 'I will check.',
+          reasoning_content: 'Need to inspect the project first.',
+        },
+        finish_reason: 'stop',
+      },
+    ],
+  });
+  const model = await provider.getModel('provider-model');
+
+  const result = await runUnderTrace(() =>
+    model.getResponse({
+      ...baseRequest,
+      input: [{ role: 'user', content: 'hello' }] as any,
+      modelSettings: {},
+    } as any),
+  );
+
+  t.deepEqual(result.output[0], {
+    type: 'reasoning',
+    content: [],
+    rawContent: [{ type: 'reasoning_text', text: 'Need to inspect the project first.' }],
+  });
+});
+
+test('assistant reasoning_content from provider stream is preserved as reasoning output', async (t) => {
+  const captured: CapturedRequest[] = [];
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder();
+      controller.enqueue(
+        encoder.encode(
+          [
+            'data: {"id":"chatcmpl-provider-test","choices":[{"delta":{"reasoning_content":"Need to stream reasoning."}}]}',
+            'data: {"id":"chatcmpl-provider-test","choices":[{"delta":{"content":"ok"}}]}',
+            'data: {"id":"chatcmpl-provider-test","choices":[{"delta":{},"finish_reason":"stop"}]}',
+            'data: [DONE]',
+            '',
+          ].join('\n\n'),
+        ),
+      );
+      controller.close();
+    },
+  });
+  const provider = buildProvider(
+    captured,
+    new Response(stream, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    }),
+  );
+  const model = await provider.getModel('provider-model');
+
+  const events: any[] = [];
+  for await (const event of model.getStreamedResponse({
+    ...baseRequest,
+    input: [{ role: 'user', content: 'hello' }] as any,
+    modelSettings: {},
+  } as any)) {
+    events.push(event);
+  }
+
+  const finalEvent = events.find((event: any) => event.type === 'response_done') as any;
+  t.deepEqual(finalEvent.response.output[0], {
+    type: 'reasoning',
+    content: [],
+    rawContent: [{ type: 'reasoning_text', text: 'Need to stream reasoning.' }],
+  });
 });
 
 test('llama.cpp maps high reasoning effort to chat template kwargs', async (t) => {

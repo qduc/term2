@@ -65,6 +65,135 @@ function preserveReasoningContentForOpenAICompatibleMessages(messages: any[]): a
   });
 }
 
+function mirrorReasoningContent(target: any): boolean {
+  if (target && typeof target.reasoning_content === 'string' && typeof target.reasoning !== 'string') {
+    target.reasoning = target.reasoning_content;
+    return true;
+  }
+
+  return false;
+}
+
+function normalizeOpenAICompatibleResponseBody(body: any): boolean {
+  if (!Array.isArray(body?.choices)) {
+    return false;
+  }
+
+  let changed = false;
+  for (const choice of body.choices) {
+    changed = mirrorReasoningContent(choice?.message) || changed;
+    changed = mirrorReasoningContent(choice?.delta) || changed;
+  }
+
+  return changed;
+}
+
+function responseHeadersWithoutContentLength(headers: Headers): Headers {
+  const next = new Headers(headers);
+  next.delete('content-length');
+  return next;
+}
+
+async function normalizeOpenAICompatibleJsonResponse(response: Response): Promise<Response> {
+  let text = '';
+  try {
+    text = await response.text();
+    const body = text ? JSON.parse(text) : null;
+    if (!normalizeOpenAICompatibleResponseBody(body)) {
+      return new Response(text, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+    }
+
+    return new Response(JSON.stringify(body), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeadersWithoutContentLength(response.headers),
+    });
+  } catch {
+    return new Response(text, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeadersWithoutContentLength(response.headers),
+    });
+  }
+}
+
+function normalizeOpenAICompatibleSseLine(line: string): string {
+  if (!line.startsWith('data:')) {
+    return line;
+  }
+
+  const data = line.slice(5).trimStart();
+  if (!data || data === '[DONE]') {
+    return line;
+  }
+
+  try {
+    const body = JSON.parse(data);
+    if (!normalizeOpenAICompatibleResponseBody(body)) {
+      return line;
+    }
+    return `data: ${JSON.stringify(body)}`;
+  } catch {
+    return line;
+  }
+}
+
+function normalizeOpenAICompatibleSseResponse(response: Response): Response {
+  if (!response.body) {
+    return response;
+  }
+
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffered = '';
+
+  const stream = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        buffered += decoder.decode(chunk, { stream: true });
+
+        const parts = buffered.split(/(\r?\n)/);
+        buffered = parts.pop() ?? '';
+
+        for (let i = 0; i < parts.length; i += 2) {
+          const line = parts[i] ?? '';
+          const newline = parts[i + 1] ?? '';
+          controller.enqueue(encoder.encode(`${normalizeOpenAICompatibleSseLine(line)}${newline}`));
+        }
+      },
+      flush(controller) {
+        buffered += decoder.decode();
+        if (buffered) {
+          controller.enqueue(encoder.encode(normalizeOpenAICompatibleSseLine(buffered)));
+        }
+      },
+    }),
+  );
+
+  return new Response(stream, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeadersWithoutContentLength(response.headers),
+  });
+}
+
+async function normalizeOpenAICompatibleResponse(response: Response): Promise<Response> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('text/event-stream')) {
+    return normalizeOpenAICompatibleSseResponse(response);
+  }
+
+  if (contentType.includes('application/json')) {
+    return normalizeOpenAICompatibleJsonResponse(response);
+  }
+
+  return response;
+}
+
 function createOpenAICompatibleFetch(
   fetchImpl: typeof fetch | undefined,
   providerType: string,
@@ -72,6 +201,8 @@ function createOpenAICompatibleFetch(
   if (!fetchImpl) return undefined;
 
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    let nextInit = init;
+
     if (typeof init?.body === 'string') {
       try {
         const body = JSON.parse(init.body);
@@ -90,14 +221,14 @@ function createOpenAICompatibleFetch(
         }
 
         if (changed) {
-          return fetchImpl(input, { ...init, body: JSON.stringify(body) });
+          nextInit = { ...init, body: JSON.stringify(body) };
         }
       } catch {
-        return fetchImpl(input, init);
+        nextInit = init;
       }
     }
 
-    return fetchImpl(input, init);
+    return normalizeOpenAICompatibleResponse(await fetchImpl(input, nextInit));
   }) as typeof fetch;
 }
 

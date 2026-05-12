@@ -298,15 +298,13 @@ export function createShellToolDefinition(deps: {
 
         const statusLine = outcome.type === 'timeout' ? 'timeout' : `exit ${outcome.exitCode ?? 'null'}`;
 
-        const noteLine = optimizedCommand !== command ? 'note: stripped redundant cd prefix' : '';
-
         // Add helpful note when command succeeds with no output
         const emptyOutputNote =
           combinedOutput === '' && outcome.type === 'exit' && outcome.exitCode === 0
             ? 'note: command succeeded with no output'
             : '';
 
-        return [statusLine, combinedOutput, noteLine, emptyOutputNote].filter(Boolean).join('\n');
+        return [statusLine, combinedOutput, emptyOutputNote].filter(Boolean).join('\n');
       } finally {
         if (previousCorrelationId) {
           loggingService.setCorrelationId(previousCorrelationId);

@@ -16,7 +16,7 @@ const LiveResponse: FC<Props> = ({ text }) => {
   const trimmedText = text.replace(/\n\s*$/, '');
 
   return (
-    <Box marginBottom={1} flexDirection="column">
+    <Box marginY={1} flexDirection="column">
       <Text>{trimmedText}</Text>
     </Box>
   );

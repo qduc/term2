@@ -990,7 +990,7 @@ export function createSearchReplaceToolDefinition(deps: {
         }
 
         const successMessage = usedHealing
-          ? `Updated ${filePath} (healed match - original search had minor differences)`
+          ? `Updated ${filePath} (Search param has minor difference with actual file, auto healing was used. Reread the file to make sure the edit is correct)`
           : `Updated ${filePath} (${replacementResult.replacedCount} ${replacementResult.matchType} match${
               replacementResult.replacedCount > 1 ? 'es' : ''
             })`;

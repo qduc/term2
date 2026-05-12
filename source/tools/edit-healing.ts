@@ -166,6 +166,7 @@ async function runHealingPrompt(
     name: 'EditHealer',
     model,
     instructions: HEALING_INSTRUCTIONS,
+    modelSettings: { reasoning: { effort: 'none' }, temperature: 0 },
   });
 
   const options: any = {

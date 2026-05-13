@@ -21,7 +21,7 @@ test('healSearchReplaceParams returns modified params when model finds a match',
   t.true(result.confidence >= 0.6);
 });
 
-test('healSearchReplaceParams sends data-only JSON to the healing model', async (t) => {
+test('healSearchReplaceParams sends structured plain-text to the healing model', async (t) => {
   const fileContent = 'const fake = "<search>";\nconst foo = 1;\n';
   let capturedPrompt = '';
   const runModel = async (prompt: string) => {
@@ -31,13 +31,47 @@ test('healSearchReplaceParams sends data-only JSON to the healing model', async 
 
   await healSearchReplaceParams(baseParams, fileContent, 'gpt-4o-mini', 'fake-key', { runModel });
 
-  const payload = JSON.parse(capturedPrompt);
-  t.deepEqual(Object.keys(payload), ['path', 'search_content', 'replace_content', 'file_content']);
-  t.is(payload.path, baseParams.path);
-  t.is(payload.search_content, baseParams.search_content);
-  t.is(payload.replace_content, baseParams.replace_content);
-  t.is(payload.file_content, fileContent);
-  t.false(capturedPrompt.includes('Find the section'));
+  t.false(capturedPrompt.startsWith('{'));
+  t.true(capturedPrompt.includes(baseParams.path));
+  t.true(capturedPrompt.includes(baseParams.search_content));
+  t.true(capturedPrompt.includes(baseParams.replace_content));
+  t.true(capturedPrompt.includes(fileContent));
+});
+
+test('healSearchReplaceParams swaps delimiter when default collides with content', async (t) => {
+  const fileContent = 'line1\n---\nline2\n';
+  let capturedPrompt = '';
+  const runModel = async (prompt: string) => {
+    capturedPrompt = prompt;
+    return 'line2';
+  };
+
+  const params = { ...baseParams, search_content: 'line2', replace_content: 'line3' };
+  await healSearchReplaceParams(params, fileContent, 'gpt-4o-mini', 'fake-key', { runModel });
+
+  const lines = capturedPrompt.split('\n');
+  const delimiterLine = lines.find(
+    (l) => ['---', '===', '<<<>>>', '|||', '###BOUNDARY###'].includes(l) || l.startsWith('__DELIM_'),
+  );
+  t.truthy(delimiterLine, 'prompt should contain a delimiter line');
+  t.not(delimiterLine, '---', 'should not use --- when it collides with content');
+});
+
+test('healSearchReplaceParams falls back to random delimiter when all candidates collide', async (t) => {
+  const collisions = '---\n===\n<<<>>>\n|||\n###BOUNDARY###\n';
+  const fileContent = `prefix\n${collisions}suffix\n`;
+  let capturedPrompt = '';
+  const runModel = async (prompt: string) => {
+    capturedPrompt = prompt;
+    return 'suffix';
+  };
+
+  const params = { ...baseParams, search_content: 'suffix', replace_content: 'new' };
+  await healSearchReplaceParams(params, fileContent, 'gpt-4o-mini', 'fake-key', { runModel });
+
+  const lines = capturedPrompt.split('\n');
+  const randomDelim = lines.find((l) => l.startsWith('__DELIM_'));
+  t.truthy(randomDelim, 'should fall back to random __DELIM_ delimiter');
 });
 
 test('healSearchReplaceParams returns unmodified params on NO_MATCH', async (t) => {

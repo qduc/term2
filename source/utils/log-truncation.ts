@@ -74,6 +74,14 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
         newMsg = { ...base, content: truncated };
       }
 
+      // Omit reasoning fields from logs
+      if ('reasoning' in (newMsg ?? msg) || 'reasoning_content' in (newMsg ?? msg)) {
+        const base = newMsg ?? { ...msg };
+        delete base['reasoning'];
+        delete base['reasoning_content'];
+        newMsg = base;
+      }
+
       // Truncate assistant tool call arguments
       if (Array.isArray(msg.tool_calls)) {
         const toolCalls = msg.tool_calls.map((toolCall: any) => {

@@ -174,6 +174,25 @@ test('sanitizeLogMetadata returns original when tools array has no descriptions 
   t.is(sanitizeLogMetadata(meta), meta);
 });
 
+test('sanitizeLogMetadata omits reasoning fields from assistant messages', (t) => {
+  const meta = {
+    messages: [
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'hello' }],
+        reasoning: 'some long reasoning text',
+        reasoning_content: 'some long reasoning text',
+      },
+    ],
+  };
+
+  const sanitized = sanitizeLogMetadata(meta);
+  const msg = sanitized.messages[0]!;
+  t.false('reasoning' in msg);
+  t.false('reasoning_content' in msg);
+  t.deepEqual(msg.content, meta.messages[0]!.content);
+});
+
 test('truncateLogText keeps the head and tail of long text', (t) => {
   const text = `HEAD-${'a'.repeat(2000)}-TAIL`;
   const truncated = truncateLogText(text, 1200);

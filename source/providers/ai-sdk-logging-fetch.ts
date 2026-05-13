@@ -99,8 +99,6 @@ export function createAiSdkLoggingFetch({
       messageCount: Array.isArray(parsedRequest?.messages) ? parsedRequest.messages.length : undefined,
       messages: parsedRequest?.messages,
       toolsCount: Array.isArray(parsedRequest?.tools) ? parsedRequest.tools.length : undefined,
-      tools: parsedRequest?.tools,
-      modelRequest: parsedRequest ?? undefined,
     });
 
     let response: Response;

@@ -28,6 +28,7 @@ export const useModelSelection = (
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [provider, setProvider] = useState<string | null>(null);
   const [scrollOffset, setScrollOffset] = useState(0);
+  const providerRef = useRef<string | null>(null);
   const failedProvidersRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
   const loadRequestIdRef = useRef(0);
@@ -44,17 +45,27 @@ export const useModelSelection = (
     return parseModelProviderArg(input.slice(triggerIndex, end)).modelId;
   }, [isOpen, triggerIndex, input, cursorOffset]);
 
+  const getInitialProvider = useCallback(() => {
+    return modelSettingConfig
+      ? settingsService.get<string>(modelSettingConfig.providerKey) ??
+          settingsService.get<string>(modelSettingConfig.fallbackProviderKey ?? modelSettingConfig.providerKey)
+      : settingsService.get<string>('agent.provider');
+  }, [modelSettingConfig, settingsService]);
+
+  const setCurrentProvider = useCallback((nextProvider: string | null) => {
+    providerRef.current = nextProvider;
+    setProvider(nextProvider);
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
-      const providerSetting = modelSettingConfig
-        ? settingsService.get<string>(modelSettingConfig.providerKey) ??
-          settingsService.get<string>(modelSettingConfig.fallbackProviderKey ?? modelSettingConfig.providerKey)
-        : settingsService.get<string>('agent.provider');
-      setProvider(providerSetting);
+      if (providerRef.current === null) {
+        setCurrentProvider(getInitialProvider());
+      }
       failedProvidersRef.current.clear();
       isInitialLoadRef.current = true;
     }
-  }, [isOpen, modelSettingConfig, settingsService]);
+  }, [isOpen, getInitialProvider, setCurrentProvider]);
 
   useEffect(() => {
     if (!isOpen || !provider) return;
@@ -132,22 +143,24 @@ export const useModelSelection = (
   const open = useCallback(
     (startIndex: number) => {
       if (mode === 'model_selection') return;
+      setCurrentProvider(getInitialProvider());
       setMode('model_selection');
       setTriggerIndex(startIndex);
       setSelectedIndex(0);
       setScrollOffset(0);
     },
-    [mode, setMode, setTriggerIndex],
+    [mode, getInitialProvider, setCurrentProvider, setMode, setTriggerIndex],
   );
 
   const close = useCallback(() => {
     if (mode === 'model_selection') {
       setMode('text');
       setTriggerIndex(null);
+      setCurrentProvider(null);
       setSelectedIndex(0);
       setScrollOffset(0);
     }
-  }, [mode, setMode, setTriggerIndex]);
+  }, [mode, setCurrentProvider, setMode, setTriggerIndex]);
 
   const moveUp = useCallback(() => {
     setSelectedIndex((prev) => {
@@ -169,26 +182,34 @@ export const useModelSelection = (
     return filteredModels[safeIndex];
   }, [filteredModels, selectedIndex]);
 
-  const toggleProvider = useCallback(() => {
-    const allProviderIds = getProviderIds();
+  const toggleProvider = useCallback(
+    (direction: 'next' | 'prev' = 'next') => {
+      const allProviderIds = getProviderIds();
 
-    // If no providers available, stay on current
-    if (allProviderIds.length === 0) return;
+      // If no providers available, stay on current
+      if (allProviderIds.length === 0) return;
 
-    const currentIndex = allProviderIds.indexOf(provider || allProviderIds[0]);
-    const nextIndex = (currentIndex + 1) % allProviderIds.length;
-    const nextProvider = allProviderIds[nextIndex];
-    const cachedModels = modelsByProviderRef.current.get(nextProvider);
+      const currentProvider = providerRef.current || getInitialProvider() || allProviderIds[0];
+      const currentIndex = allProviderIds.indexOf(currentProvider);
+      const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
+      const nextIndex =
+        direction === 'prev'
+          ? (safeCurrentIndex - 1 + allProviderIds.length) % allProviderIds.length
+          : (safeCurrentIndex + 1) % allProviderIds.length;
+      const nextProvider = allProviderIds[nextIndex];
+      const cachedModels = modelsByProviderRef.current.get(nextProvider);
 
-    // If the user manually selects it, we should allow retrying it
-    failedProvidersRef.current.delete(nextProvider);
-    setModels(cachedModels ?? []);
-    setSelectedIndex(0);
-    setScrollOffset(0);
-    setLoading(!cachedModels);
-    setError(null);
-    setProvider(nextProvider);
-  }, [provider]);
+      // If the user manually selects it, we should allow retrying it
+      failedProvidersRef.current.delete(nextProvider);
+      setModels(cachedModels ?? []);
+      setSelectedIndex(0);
+      setScrollOffset(0);
+      setLoading(!cachedModels);
+      setError(null);
+      setCurrentProvider(nextProvider);
+    },
+    [getInitialProvider, setCurrentProvider],
+  );
 
   return {
     isOpen,

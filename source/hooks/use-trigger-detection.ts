@@ -79,6 +79,13 @@ export const useTriggerDetection = ({
         return;
 
       case 'none':
+        if (mode === 'model_selection') {
+          const activeAtEnd = determineActiveMenu(value, value.length, slashCommands);
+          if (activeAtEnd.type === 'model') {
+            closeAll([slash, path, settings, settingsValue]);
+            return;
+          }
+        }
         closeAll([slash, path, settings, settingsValue, models]);
         return;
     }

@@ -7,13 +7,15 @@ export type SubmitResult = 'handled' | 'fallthrough';
 export type ModeHandler = {
   moveUp: () => void;
   moveDown: () => void;
+  moveLeft?: () => void;
+  moveRight?: () => void;
   onTab?: () => void;
   onSubmit?: (submittedValue: string) => SubmitResult;
 };
 
 type Movable = { moveUp: () => void; moveDown: () => void };
 type Slash = Movable & { executeSelected: () => void };
-type Models = Movable & { canSwitchProvider: boolean; toggleProvider: () => void };
+type Models = Movable & { canSwitchProvider: boolean; toggleProvider: (direction?: 'next' | 'prev') => void };
 
 type Options = {
   slash: Slash;
@@ -97,6 +99,12 @@ export const useModeHandlers = ({
       model_selection: {
         moveUp: models.moveUp,
         moveDown: models.moveDown,
+        moveLeft: () => {
+          if (models.canSwitchProvider) models.toggleProvider('prev');
+        },
+        moveRight: () => {
+          if (models.canSwitchProvider) models.toggleProvider('next');
+        },
         onTab: () => {
           if (models.canSwitchProvider) models.toggleProvider();
         },

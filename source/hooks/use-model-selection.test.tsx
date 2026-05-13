@@ -1,5 +1,5 @@
 import test from 'ava';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { render } from 'ink-testing-library';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
 import { useModelSelection } from './use-model-selection.js';
@@ -12,6 +12,11 @@ type TestComponentProps = {
   onResults: (results: any) => void;
   settingsService?: ReturnType<typeof createMockSettingsService>;
   initialInput?: string;
+};
+
+type ImmediateToggleComponentProps = {
+  onResults: (results: any) => void;
+  settingsService?: ReturnType<typeof createMockSettingsService>;
 };
 
 const TestComponent = ({
@@ -50,6 +55,41 @@ const TestComponent = ({
   return <Text>Provider: {models.provider}</Text>;
 };
 
+const ImmediateToggleComponent = ({ onResults, settingsService }: ImmediateToggleComponentProps) => {
+  const { setInput, setCursorOffset } = useInputContext();
+  const resolvedSettingsService = useMemo(
+    () =>
+      settingsService ??
+      createMockSettingsService({
+        'agent.openrouter.apiKey': 'fake-key',
+      }),
+    [settingsService],
+  );
+  const loggingService = useMemo(() => ({ warn: () => {} } as any), []);
+
+  const models = useModelSelection({
+    loggingService,
+    settingsService: resolvedSettingsService,
+  });
+  const didToggleRef = useRef(false);
+
+  useEffect(() => {
+    if (didToggleRef.current) return;
+    didToggleRef.current = true;
+    const input = '/model ';
+    setInput(input);
+    setCursorOffset(input.length);
+    models.open(input.length);
+    models.toggleProvider('prev');
+  }, [models, setCursorOffset, setInput]);
+
+  useEffect(() => {
+    onResults(models);
+  }, [models, onResults]);
+
+  return <Text>Provider: {models.provider}</Text>;
+};
+
 test.serial('toggleProvider cycles through available providers', async (t) => {
   let capturedModels: any;
   render(
@@ -78,6 +118,62 @@ test.serial('toggleProvider cycles through available providers', async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 50));
   const thirdProvider = capturedModels.provider;
   t.not(thirdProvider, secondProvider, 'Provider should have switched again');
+});
+
+test.serial('toggleProvider supports prev and next direction', async (t) => {
+  let capturedModels: any;
+  render(
+    <InputProvider>
+      <TestComponent
+        onResults={(m) => {
+          capturedModels = m;
+        }}
+      />
+    </InputProvider>,
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const firstProvider = capturedModels.provider;
+  t.truthy(firstProvider);
+
+  // Toggle prev should switch to the last provider
+  capturedModels.toggleProvider('prev');
+
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const lastProvider = capturedModels.provider;
+  t.not(lastProvider, firstProvider, 'Provider should have switched to previous/last');
+
+  // Toggle next should switch back to the first provider
+  capturedModels.toggleProvider('next');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  t.is(capturedModels.provider, firstProvider, 'Provider should have switched back to first');
+});
+
+test.serial('toggleProvider uses the configured provider immediately after opening', async (t) => {
+  const providerIds = getProviderIds();
+  t.true(providerIds.length > 1);
+
+  let capturedModels: any;
+  const configuredProvider = providerIds[1];
+  const expectedPrevious = providerIds[0];
+  const settingsService = createMockSettingsService({
+    'agent.provider': configuredProvider,
+    'agent.openrouter.apiKey': 'fake-key',
+  });
+
+  render(
+    <InputProvider>
+      <ImmediateToggleComponent
+        settingsService={settingsService}
+        onResults={(m) => {
+          capturedModels = m;
+        }}
+      />
+    </InputProvider>,
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  t.is(capturedModels.provider, expectedPrevious);
 });
 
 test.serial('model selection query strips provider suffix from input', async (t) => {

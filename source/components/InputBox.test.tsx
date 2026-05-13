@@ -1,8 +1,9 @@
 import test from 'ava';
 import React from 'react';
 import { render } from 'ink-testing-library';
+import { Box, Text } from 'ink';
 import InputBox, { calculateInputWidth } from './InputBox.js';
-import { InputProvider } from '../context/InputContext.js';
+import { InputProvider, useInputContext } from '../context/InputContext.js';
 import type { SlashCommand } from '../slash-commands.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
 
@@ -43,6 +44,37 @@ const TestInputBox = (props: typeof defaultProps) => (
     <InputBox {...props} />
   </InputProvider>
 );
+
+const TestInputBoxWithCursorState = (props: typeof defaultProps) => (
+  <InputProvider>
+    <CursorState />
+    <InputBox {...props} />
+  </InputProvider>
+);
+
+const CursorState = () => {
+  const { cursorOffset } = useInputContext();
+
+  return (
+    <Box>
+      <Text>Cursor:{cursorOffset}</Text>
+    </Box>
+  );
+};
+
+const getCursorFromFrame = (frame: string | undefined): number | null => {
+  const match = frame?.match(/Cursor:(\d+)/);
+  return match ? Number(match[1]) : null;
+};
+
+const waitForCursor = async (lastFrame: () => string | undefined, predicate: (cursor: number | null) => boolean) => {
+  for (let i = 0; i < 20; i++) {
+    const cursor = getCursorFromFrame(lastFrame());
+    if (predicate(cursor)) return cursor;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return getCursorFromFrame(lastFrame());
+};
 
 test('InputBox renders without crashing', (t) => {
   const { lastFrame } = render(<TestInputBox {...defaultProps} />);
@@ -107,6 +139,31 @@ test('InputBox accepts history callbacks', (t) => {
   t.false(historyUpCalled);
   t.false(historyDownCalled);
   t.pass();
+});
+
+test('InputBox keeps cursor fixed when left arrow switches model provider', async (t) => {
+  const initialValue = '/model gpt-5';
+  const { lastFrame, stdin } = render(
+    <TestInputBoxWithCursorState
+      {...defaultProps}
+      slashCommands={[
+        ...mockSlashCommands,
+        {
+          name: '/model',
+          description: 'Select model',
+          action: () => {},
+          completion: { type: 'model', trigger: '/model ' },
+        },
+      ]}
+    />,
+  );
+
+  stdin.write(initialValue);
+  const beforeCursor = await waitForCursor(lastFrame, (cursor) => cursor !== null && cursor > 0);
+  stdin.write('\u001B[D');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  t.is(getCursorFromFrame(lastFrame()), beforeCursor, lastFrame());
 });
 
 test('calculateInputWidth uses default prompt width for normal mode', (t) => {

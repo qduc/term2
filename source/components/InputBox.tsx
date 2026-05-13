@@ -72,6 +72,8 @@ const InputBox: FC<Props> = ({
   const [images, setImages] = useState<ImageRef[]>([]);
 
   const escPressedRef = useRef(false);
+  const cursorOffsetRef = useRef(cursorOffset);
+  const lockedCursorRef = useRef<number | null>(null);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
   const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode });
 
@@ -96,8 +98,36 @@ const InputBox: FC<Props> = ({
 
   const { navigateUp, navigateDown } = useInputHistory(historyService);
 
-  const [, setInputKey] = useState(0);
+  const [inputKey, setInputKey] = useState(0);
   const remountInput = useCallback(() => setInputKey((prev) => prev + 1), []);
+  const lockCursor = useCallback((offset: number) => {
+    lockedCursorRef.current = offset;
+    setCursorOverride(offset);
+    setTimeout(() => {
+      if (lockedCursorRef.current === offset) {
+        lockedCursorRef.current = null;
+      }
+    }, 20);
+  }, []);
+  const handleCursorChange = useCallback(
+    (nextOffset: number) => {
+      const lockedCursor = lockedCursorRef.current;
+      if (lockedCursor !== null) {
+        if (nextOffset !== lockedCursor) {
+          lockedCursorRef.current = null;
+          cursorOffsetRef.current = lockedCursor;
+          setCursorOffset(lockedCursor);
+          setCursorOverride(lockedCursor);
+          remountInput();
+          return;
+        }
+      }
+
+      cursorOffsetRef.current = nextOffset;
+      setCursorOffset(nextOffset);
+    },
+    [remountInput, setCursorOffset],
+  );
   const handleImagesChange = useCallback((nextImages: ImageRef[]) => {
     setImages((prevImages) => (areImagesEqual(prevImages, nextImages) ? prevImages : nextImages));
   }, []);
@@ -194,9 +224,28 @@ const InputBox: FC<Props> = ({
     onSlashCommandRemount: remountInput,
   });
 
-  const stateRef = useRef({ mode, modeHandlers });
+  const stateRef = useRef({
+    mode,
+    modeHandlers,
+    value,
+    onChange,
+    setCursorOffset,
+    setCursorOverride,
+    lockCursor,
+    remountInput,
+  });
   useEffect(() => {
-    stateRef.current = { mode, modeHandlers };
+    cursorOffsetRef.current = cursorOffset;
+    stateRef.current = {
+      mode,
+      modeHandlers,
+      value,
+      onChange,
+      setCursorOffset,
+      setCursorOverride,
+      lockCursor,
+      remountInput,
+    };
   });
 
   const { escHintVisible } = useEscapeKey({
@@ -229,12 +278,84 @@ const InputBox: FC<Props> = ({
     slashCommands,
   });
 
-  // Tab handling for active menu (other keys flow to MultilineInput).
+  // Popup menus own input while open so MultilineInput cannot move the text cursor underneath them.
   useInput((_input, key) => {
-    const { mode: currentMode, modeHandlers: currentHandlers } = stateRef.current;
+    const {
+      mode: currentMode,
+      modeHandlers: currentHandlers,
+      value: currentValue,
+      onChange: changeInput,
+      setCursorOffset: updateCursorOffset,
+      setCursorOverride: overrideCursor,
+      lockCursor: lockCurrentCursor,
+      remountInput: remountCurrentInput,
+    } = stateRef.current;
+    const currentCursor = cursorOffsetRef.current;
     if (currentMode === 'text') return;
+
+    if (key.upArrow) {
+      currentHandlers[currentMode].moveUp();
+      return;
+    }
+    if (key.downArrow) {
+      currentHandlers[currentMode].moveDown();
+      return;
+    }
     if (key.tab && !key.shift) {
       currentHandlers[currentMode].onTab?.();
+      return;
+    }
+    if (key.leftArrow && currentHandlers[currentMode].moveLeft) {
+      lockCurrentCursor(currentCursor);
+      currentHandlers[currentMode].moveLeft?.();
+      remountCurrentInput();
+      return;
+    }
+    if (key.rightArrow && currentHandlers[currentMode].moveRight) {
+      lockCurrentCursor(currentCursor);
+      currentHandlers[currentMode].moveRight?.();
+      remountCurrentInput();
+      return;
+    }
+    if (key.return) {
+      currentHandlers[currentMode].onSubmit?.(currentValue);
+      return;
+    }
+    if (key.backspace) {
+      if (currentCursor <= 0) return;
+      const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
+      const nextCursor = currentCursor - 1;
+      changeInput(nextValue);
+      cursorOffsetRef.current = nextCursor;
+      updateCursorOffset(nextCursor);
+      overrideCursor(nextCursor);
+      return;
+    }
+    if (key.delete) {
+      if (currentCursor >= currentValue.length) return;
+      const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
+      changeInput(nextValue);
+      overrideCursor(currentCursor);
+      return;
+    }
+    if (
+      _input &&
+      !key.ctrl &&
+      !key.meta &&
+      !key.escape &&
+      !key.tab &&
+      !key.return &&
+      !key.upArrow &&
+      !key.downArrow &&
+      !key.leftArrow &&
+      !key.rightArrow
+    ) {
+      const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
+      const nextCursor = currentCursor + _input.length;
+      changeInput(nextValue);
+      cursorOffsetRef.current = nextCursor;
+      updateCursorOffset(nextCursor);
+      overrideCursor(nextCursor);
     }
   });
 
@@ -292,11 +413,13 @@ const InputBox: FC<Props> = ({
           <Text color="#22d3ee">❯ </Text>
         )}
         <MultilineInput
+          key={`${mode}-${inputKey}`}
           value={value}
           width={terminalWidth}
+          isActive={mode === 'text'}
           onChange={onChange}
           onSubmit={handleWrapperSubmit}
-          onCursorChange={setCursorOffset}
+          onCursorChange={handleCursorChange}
           cursorOverride={cursorOverride ?? undefined}
           onBoundaryArrow={handleBoundaryArrow}
           enableImagePaste

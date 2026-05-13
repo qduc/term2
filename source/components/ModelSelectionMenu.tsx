@@ -53,7 +53,7 @@ const ProviderTabs: FC<{
             );
           })}
         </Box>
-        {canSwitch && <Text color="#64748b">Tab → switch provider</Text>}
+        {canSwitch && <Text color="#64748b">Tab/←→ → switch provider</Text>}
       </Box>
       {!canSwitch && (
         <Box marginTop={0}>
@@ -100,7 +100,7 @@ const ModelSelectionMenu: FC<Props> = ({
         <Box borderStyle="round" borderColor="red" paddingX={1}>
           <Text color="red">Unable to load models: {error}</Text>
         </Box>
-        <Text color="#64748b">Tab → switch provider · Esc → cancel</Text>
+        <Text color="#64748b">Tab/←→ → switch provider · Esc → cancel</Text>
       </Box>
     );
   }
@@ -112,7 +112,7 @@ const ModelSelectionMenu: FC<Props> = ({
         <Box borderStyle="round" borderColor="magenta" paddingX={1}>
           <Text color="#64748b">No models match "{query || '*'}"</Text>
         </Box>
-        <Text color="#64748b">Tab → switch provider · Esc → cancel</Text>
+        <Text color="#64748b">Tab/←→ → switch provider · Esc → cancel</Text>
       </Box>
     );
   }

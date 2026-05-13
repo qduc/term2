@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Fuse from 'fuse.js';
 import { getWorkspaceEntries, refreshWorkspaceEntries, type PathEntry } from '../services/file-service.js';
+import { filterPathEntries } from './path-completion-filter.js';
 import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 
 export type PathCompletionItem = PathEntry;
 
-const MAX_RESULTS = 12;
+const MAX_RESULTS = 100;
 
 export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) => {
   const logger = deps?.loggingService;
@@ -59,26 +59,28 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
     });
   }, [loadEntries, logger]);
 
-  const fuse = useMemo(() => {
-    return new Fuse(entries, {
-      keys: ['path'],
-      threshold: 0.4,
-      ignoreLocation: true,
-    });
-  }, [entries]);
-
   const filteredEntries = useMemo(() => {
-    if (!query.trim()) {
-      return entries.slice(0, MAX_RESULTS);
-    }
-
-    return fuse
-      .search(query.trim())
-      .map((result) => result.item)
-      .slice(0, MAX_RESULTS);
-  }, [entries, fuse, query]);
+    return filterPathEntries(entries, query, MAX_RESULTS);
+  }, [entries, query]);
 
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredEntries);
+
+  const [scrollOffset, setScrollOffset] = useState(0);
+
+  // Reset scroll to top when query changes (filtering)
+  useEffect(() => {
+    setScrollOffset(0);
+  }, [query]);
+
+  // Auto-scroll to keep selected item visible
+  useEffect(() => {
+    const maxHeight = 10;
+    if (selectedIndex < scrollOffset) {
+      setScrollOffset(selectedIndex);
+    } else if (selectedIndex >= scrollOffset + maxHeight) {
+      setScrollOffset(selectedIndex - maxHeight + 1);
+    }
+  }, [selectedIndex, scrollOffset]);
 
   const open = useCallback(
     (startIndex: number, _initialQuery = '') => {
@@ -87,6 +89,7 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
       setMode('path_completion');
       setTriggerIndex(startIndex);
       setSelectedIndex(0);
+      setScrollOffset(0);
       // initialQuery is ignored because we derive it
     },
     [mode, setMode, setTriggerIndex, setSelectedIndex],
@@ -97,6 +100,7 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
       setMode('text');
       setTriggerIndex(null);
       setSelectedIndex(0);
+      setScrollOffset(0);
     }
   }, [mode, setMode, setTriggerIndex, setSelectedIndex]);
 
@@ -123,6 +127,7 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
     entries,
     filteredEntries,
     selectedIndex,
+    scrollOffset,
     loading,
     error,
     open,

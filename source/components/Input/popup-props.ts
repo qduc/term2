@@ -33,6 +33,7 @@ export const toPopupProps = ({
     isOpen: path.isOpen,
     items: path.filteredEntries,
     selectedIndex: path.selectedIndex,
+    scrollOffset: path.scrollOffset,
     query: path.query,
     loading: path.loading,
     error: path.error,

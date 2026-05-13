@@ -22,6 +22,7 @@ interface PopupManagerProps {
     isOpen: boolean;
     items: PathCompletionItem[];
     selectedIndex: number;
+    scrollOffset?: number;
     query: string;
     loading: boolean;
     error: string | null;
@@ -82,6 +83,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
         <PathSelectionMenu
           items={path.items}
           selectedIndex={path.selectedIndex}
+          scrollOffset={path.scrollOffset}
           query={path.query}
           loading={path.loading}
           error={path.error}

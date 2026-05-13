@@ -115,8 +115,8 @@ export function createConversationEventHandler<
 
     reasoningUpdater.flush();
     state.flushedReasoningLength += state.accumulatedReasoningText.length;
-    state.accumulatedReasoningText = '';
     markCurrentReasoningFinalized();
+    state.accumulatedReasoningText = '';
     state.currentReasoningMessageId = null;
   };
 

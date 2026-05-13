@@ -258,7 +258,45 @@ test('tool_started: flushes accumulated reasoning before showing tool', (t) => {
   t.true(deps.calls.reasoningFlushed);
   t.is(state.accumulatedReasoningText, '');
   t.is(state.flushedReasoningLength, 14); // 'Some reasoning'.length
-  t.is(state.currentReasoningMessageId, null);
+  t.true(state.currentReasoningMessageId === null);
+});
+
+test('tool_started: finalizes live reasoning text before clearing it', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  state.currentReasoningMessageId = 'active-reasoning';
+  state.accumulatedReasoningText = 'Reasoning before the tool';
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-1',
+    toolName: 'shell',
+    arguments: { command: 'ls' },
+  } as ConversationEvent);
+
+  t.true(deps.calls.reasoningFlushed);
+  t.is(deps.calls.setMessagesCalls.length, 1);
+
+  const next = deps.calls.setMessagesCalls[0]([
+    {
+      id: 'active-reasoning',
+      sender: 'reasoning',
+      text: 'Reasoning before the tool',
+    },
+  ]);
+
+  t.deepEqual(next, [
+    {
+      id: 'active-reasoning',
+      sender: 'reasoning',
+      status: 'finalized',
+      text: 'Reasoning before the tool',
+    },
+  ]);
+  t.is(state.accumulatedReasoningText, '');
+  t.is(state.flushedReasoningLength, 'Reasoning before the tool'.length);
+  t.true(state.currentReasoningMessageId === null);
 });
 
 test('tool_started: creates pending command message with shell command', (t) => {

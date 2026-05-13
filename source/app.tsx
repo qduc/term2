@@ -1,9 +1,8 @@
 import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import { useInputActions } from './context/InputContext.js';
 
-import { Box, Static, useApp, useInput } from 'ink';
+import { Box, useApp, useInput } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
-import Banner from './components/Banner.js';
 import MessageList from './components/MessageList.js';
 import LiveResponse from './components/LiveResponse.js';
 import BottomArea from './components/BottomArea.js';
@@ -214,18 +213,15 @@ const App: FC<AppProps> = ({
 
   return (
     <ErrorBoundary loggingService={loggingService}>
-      <Static items={startupBannerIds}>
-        {(id) => (
-          <Box key={id}>
-            <Banner settingsService={settingsService} isShellMode={isShellMode} />
-          </Box>
-        )}
-      </Static>
-
       <Box flexDirection="column" flexGrow={1} paddingX={2}>
         {/* Main content area grows to fill available vertical space */}
         <Box flexDirection="column" flexGrow={1}>
-          <MessageList messages={messages} />
+          <MessageList
+            messages={messages}
+            bannerItems={startupBannerIds}
+            settingsService={settingsService}
+            isShellMode={isShellMode}
+          />
 
           {liveResponse && liveResponse.text && <LiveResponse text={liveResponse.text} />}
         </Box>

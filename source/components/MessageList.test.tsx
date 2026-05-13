@@ -1,6 +1,5 @@
 import test from 'ava';
 import React from 'react';
-import { Box, Static, Text } from 'ink';
 import { render } from 'ink-testing-library';
 import MessageList, { splitStaticHistory } from './MessageList.js';
 
@@ -32,17 +31,10 @@ test('MessageList renders image attachment summaries without leaked sentinel ids
   t.false(output.includes('f9uatvt88vql1'));
 });
 
-test('MessageList can follow a static startup banner across rerenders', (t) => {
-  const TestFrame = ({ messages }: { messages: any[] }) => (
-    <Box flexDirection="column">
-      <Static items={['startup-banner']}>{() => <Text key="startup-banner">BANNER</Text>}</Static>
-      <MessageList messages={messages} />
-    </Box>
-  );
-
-  const renderer = render(<TestFrame messages={[{ id: 'one', sender: 'bot', text: 'one' }]} />);
+test('MessageList retains static history across rerenders', (t) => {
+  const renderer = render(<MessageList messages={[{ id: 'one', sender: 'bot', text: 'one' }]} />);
   renderer.rerender(
-    <TestFrame
+    <MessageList
       messages={[
         { id: 'one', sender: 'bot', text: 'one' },
         { id: 'two', sender: 'bot', text: 'two' },

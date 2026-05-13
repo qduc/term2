@@ -2,9 +2,14 @@ import React, { FC, useMemo } from 'react';
 import { Box, Static } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import ChatMessage from './ChatMessage.js';
+import Banner from './Banner.js';
+import type { SettingsService } from '../services/settings-service.js';
 
 type Props = {
   messages: any[];
+  bannerItems?: string[];
+  settingsService?: SettingsService;
+  isShellMode?: boolean;
 };
 
 type MessageLike = {
@@ -36,13 +41,15 @@ export const splitStaticHistory = <T extends MessageLike>(messages: T[]) => {
   };
 };
 
-const MessageList: FC<Props> = ({ messages }) => {
+const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, isShellMode = false }) => {
   // Use useMemo to prevent array recreation on every render.
   // This stabilizes the references passed to Static and the active Box,
   // preventing unnecessary re-renders and fixing flickering in long sessions.
   const { history, active } = useMemo(() => {
     return splitStaticHistory(messages);
   }, [messages]);
+
+  const staticItems = useMemo(() => [...bannerItems, ...history], [bannerItems, history]);
 
   const renderMessage = (msg: any, idx: number, collection: any[]) => {
     // Use consistent marginTop to prevent layout reflow.
@@ -71,9 +78,22 @@ const MessageList: FC<Props> = ({ messages }) => {
     );
   };
 
+  const renderStaticItem = (item: any, idx: number) => {
+    if (typeof item === 'string') {
+      return (
+        <Box key={item}>
+          {settingsService && <Banner settingsService={settingsService} isShellMode={isShellMode} />}
+        </Box>
+      );
+    }
+    return renderMessage(item, idx - bannerItems.length, history);
+  };
+
   return (
     <Box flexDirection="column">
-      <Static items={history}>{(msg, idx) => renderMessage(msg, idx, history)}</Static>
+      <Static items={staticItems} style={{ paddingLeft: 2 }}>
+        {renderStaticItem}
+      </Static>
 
       <Box flexDirection="column">{active.map((msg, idx) => renderMessage(msg, idx, active))}</Box>
     </Box>

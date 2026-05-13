@@ -91,10 +91,7 @@ After making code changes, you MUST run tests appropriate to the scope of the ta
 npm test              # Run all tests
 npm test:verbose -- <file>      # Run test for a single file
 npx prettier --check . # Format check
-npx ava               # Unit tests
 ```
-
-**Note**: When running `npx ava` on a single test file, use the compiled version in the `dist/` directory (e.g., `npx ava dist/path/to/test.js`), not the TypeScript source file.
 
 ### Unit Test Guidelines
 

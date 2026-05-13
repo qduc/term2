@@ -137,6 +137,85 @@ test('reasoning_delta: ignores empty reasoning', (t) => {
   t.deepEqual(deps.calls.reasoningPushes, []);
 });
 
+test('reasoning_delta: finalizes stable paragraphs and streams only the unfinished tail', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'reasoning_delta',
+    delta: 'tail',
+    fullText: 'First paragraph.\n\nSecond paragraph.\n\nCurrent tail',
+  } as ConversationEvent);
+
+  t.is(deps.calls.appendedMessages.length, 1);
+  t.deepEqual(deps.calls.appendedMessages[0], [
+    {
+      id: 'msg-0',
+      sender: 'reasoning',
+      status: 'finalized',
+      text: 'First paragraph.\n\nSecond paragraph.\n\n',
+    },
+  ]);
+  t.is(state.flushedReasoningLength, 'First paragraph.\n\nSecond paragraph.\n\n'.length);
+  t.is(state.accumulatedReasoningText, 'Current tail');
+  t.deepEqual(deps.calls.reasoningPushes, ['Current tail']);
+});
+
+test('reasoning_delta: does not finalize until a paragraph boundary exists', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'reasoning_delta',
+    delta: 'tail',
+    fullText: 'Single paragraph still growing',
+  } as ConversationEvent);
+
+  t.deepEqual(deps.calls.appendedMessages, []);
+  t.is(state.flushedReasoningLength, 0);
+  t.is(state.accumulatedReasoningText, 'Single paragraph still growing');
+  t.deepEqual(deps.calls.reasoningPushes, ['Single paragraph still growing']);
+});
+
+test('reasoning_delta: finalizes an existing live reasoning message in place before streaming a new tail', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  state.currentReasoningMessageId = 'active-reasoning';
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'reasoning_delta',
+    delta: 'tail',
+    fullText: 'Old tail now complete.\n\nNew tail',
+  } as ConversationEvent);
+
+  t.deepEqual(deps.calls.appendedMessages, []);
+  t.is(deps.calls.setMessagesCalls.length, 1);
+
+  const next = deps.calls.setMessagesCalls[0]([
+    {
+      id: 'active-reasoning',
+      sender: 'reasoning',
+      text: 'Old tail',
+    },
+  ]);
+
+  t.deepEqual(next, [
+    {
+      id: 'active-reasoning',
+      sender: 'reasoning',
+      status: 'finalized',
+      text: 'Old tail now complete.\n\n',
+    },
+  ]);
+  t.true(state.currentReasoningMessageId === null);
+  t.is(state.flushedReasoningLength, 'Old tail now complete.\n\n'.length);
+  t.is(state.accumulatedReasoningText, 'New tail');
+  t.deepEqual(deps.calls.reasoningPushes, ['New tail']);
+});
+
 // =============================================================================
 // tool_started tests
 // =============================================================================

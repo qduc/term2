@@ -83,3 +83,29 @@ test('splitStaticHistory keeps reasoning messages active while moving finalized 
   t.false(history.some((message) => message.id === 'reasoning-message'));
   t.true(active.some((message) => message.id === 'reasoning-message'));
 });
+
+test('splitStaticHistory moves finalized reasoning messages to static history', (t) => {
+  const messages = [
+    ...Array.from({ length: 25 }, (_, index) => ({
+      id: `msg-${index}`,
+      sender: 'bot',
+      text: `message ${index}`,
+    })),
+    {
+      id: 'finalized-reasoning',
+      sender: 'reasoning',
+      status: 'finalized',
+      text: 'stable paragraph',
+    },
+    ...Array.from({ length: 25 }, (_, index) => ({
+      id: `tail-${index}`,
+      sender: 'bot',
+      text: `tail ${index}`,
+    })),
+  ];
+
+  const { history, active } = splitStaticHistory(messages, 20);
+
+  t.true(history.some((message) => message.id === 'finalized-reasoning'));
+  t.false(active.some((message) => message.id === 'finalized-reasoning'));
+});

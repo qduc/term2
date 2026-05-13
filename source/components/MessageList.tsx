@@ -16,7 +16,7 @@ type MessageLike = {
 
 const canRenderStatically = (message: MessageLike) => {
   if (message.sender === 'reasoning') {
-    return false;
+    return message.status === 'finalized';
   }
 
   if (message.sender === 'command') {

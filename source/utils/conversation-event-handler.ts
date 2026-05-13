@@ -22,6 +22,13 @@ export interface SystemMessage {
   text: string;
 }
 
+export interface ReasoningMessage {
+  id: string;
+  sender: 'reasoning';
+  text: string;
+  status?: 'finalized';
+}
+
 export type UIMessage = {
   id: string | number;
   sender: string;
@@ -79,6 +86,40 @@ export function createConversationEventHandler<
 
   const activeRunningToolCallIds = new Set<string>();
 
+  const markCurrentReasoningFinalized = () => {
+    if (!state.currentReasoningMessageId) {
+      return;
+    }
+
+    const currentReasoningMessageId = state.currentReasoningMessageId;
+    const finalizedText = state.accumulatedReasoningText;
+    setMessages((prev) => {
+      const index = prev.findIndex((msg) => msg.id === currentReasoningMessageId);
+      if (index === -1) return prev;
+
+      const current = prev[index];
+      if (current.sender !== 'reasoning') {
+        return prev;
+      }
+
+      const next = prev.slice();
+      next[index] = { ...current, status: 'finalized', text: finalizedText };
+      return trimMessages(next);
+    });
+  };
+
+  const flushReasoning = () => {
+    if (!state.accumulatedReasoningText.trim()) {
+      return;
+    }
+
+    reasoningUpdater.flush();
+    state.flushedReasoningLength += state.accumulatedReasoningText.length;
+    state.accumulatedReasoningText = '';
+    markCurrentReasoningFinalized();
+    state.currentReasoningMessageId = null;
+  };
+
   return (event: ConversationEvent) => {
     switch (event.type) {
       case 'text_delta': {
@@ -90,9 +131,32 @@ export function createConversationEventHandler<
       case 'reasoning_delta': {
         const fullReasoningText = event.fullText ?? '';
         // Only show reasoning text after what was already flushed
-        const newReasoningText = fullReasoningText.slice(state.flushedReasoningLength);
-        state.accumulatedReasoningText = newReasoningText;
+        let newReasoningText = fullReasoningText.slice(state.flushedReasoningLength);
 
+        const lastParagraphBoundary = newReasoningText.lastIndexOf('\n\n');
+        if (lastParagraphBoundary !== -1) {
+          const finalizedText = newReasoningText.slice(0, lastParagraphBoundary + 2);
+          newReasoningText = newReasoningText.slice(lastParagraphBoundary + 2);
+
+          if (finalizedText.trim()) {
+            if (state.currentReasoningMessageId) {
+              state.accumulatedReasoningText = finalizedText;
+              markCurrentReasoningFinalized();
+              state.currentReasoningMessageId = null;
+            } else {
+              const finalizedMessage: ReasoningMessage = {
+                id: createMessageId(),
+                sender: 'reasoning',
+                status: 'finalized',
+                text: finalizedText,
+              };
+              appendMessages([finalizedMessage as unknown as MessageT]);
+            }
+            state.flushedReasoningLength += finalizedText.length;
+          }
+        }
+
+        state.accumulatedReasoningText = newReasoningText;
         if (!newReasoningText.trim()) return;
         reasoningUpdater.push(newReasoningText);
         return;
@@ -100,12 +164,7 @@ export function createConversationEventHandler<
 
       case 'tool_started': {
         // Flush reasoning state
-        if (state.accumulatedReasoningText.trim()) {
-          reasoningUpdater.flush();
-          state.flushedReasoningLength += state.accumulatedReasoningText.length;
-          state.accumulatedReasoningText = '';
-          state.currentReasoningMessageId = null;
-        }
+        flushReasoning();
 
         // Flush any accumulated text before showing the tool call
         if (state.accumulatedText.trim()) {
@@ -161,12 +220,7 @@ export function createConversationEventHandler<
         const messagesToAdd: BotMessage[] = [];
 
         // Flush reasoning state
-        if (state.accumulatedReasoningText.trim()) {
-          reasoningUpdater.flush();
-          state.flushedReasoningLength += state.accumulatedReasoningText.length;
-          state.accumulatedReasoningText = '';
-          state.currentReasoningMessageId = null;
-        }
+        flushReasoning();
 
         // Flush any accumulated text before adding command message
         if (state.accumulatedText.trim()) {

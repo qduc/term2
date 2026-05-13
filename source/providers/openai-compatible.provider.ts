@@ -128,6 +128,33 @@ function createNormalizedReasoningStream(stream: AsyncIterable<any>): AsyncItera
   };
 }
 
+function sanitizeOpenAICompatibleMessages(messages: any[]): any[] {
+  return messages.map((message) => {
+    if (!message || typeof message !== 'object') return message;
+
+    let newContent = message.content;
+    if (Array.isArray(message.content)) {
+      // Check if it's exclusively text parts
+      const isAllText = message.content.every((part: any) => part && part.type === 'text');
+      if (isAllText) {
+        newContent = message.content.map((part: any) => part.text || '').join('');
+      } else {
+        // Strip annotations from parts
+        newContent = message.content.map((part: any) => {
+          if (!part || typeof part !== 'object') return part;
+          const { annotations, ...rest } = part;
+          return rest;
+        });
+      }
+    }
+
+    return {
+      ...message,
+      content: newContent,
+    };
+  });
+}
+
 function createOpenAICompatibleFetch(
   fetchImpl: typeof fetch | undefined,
   providerType: string,
@@ -141,7 +168,9 @@ function createOpenAICompatibleFetch(
         let changed = false;
 
         if (Array.isArray(body?.messages)) {
-          body.messages = preserveReasoningContentForOpenAICompatibleMessages(mergeAssistantMessages(body.messages));
+          body.messages = sanitizeOpenAICompatibleMessages(
+            preserveReasoningContentForOpenAICompatibleMessages(mergeAssistantMessages(body.messages)),
+          );
           changed = true;
         }
 

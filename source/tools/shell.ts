@@ -300,9 +300,7 @@ export function createShellToolDefinition(deps: {
 
         // Add helpful note when command succeeds with no output
         const emptyOutputNote =
-          combinedOutput === '' && outcome.type === 'exit' && outcome.exitCode === 0
-            ? 'note: command succeeded with no output'
-            : '';
+          combinedOutput === '' && outcome.type === 'exit' && outcome.exitCode === 0 ? '(No output)' : '';
 
         return [statusLine, combinedOutput, emptyOutputNote].filter(Boolean).join('\n');
       } finally {

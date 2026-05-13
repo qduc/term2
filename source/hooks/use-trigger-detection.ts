@@ -89,9 +89,6 @@ export const useTriggerDetection = ({
         closeAll([slash, path, settings, settingsValue, models]);
         return;
     }
-    // Exhaustiveness check
-    const _exhaustive: never = active;
-    void _exhaustive;
   }, [value, cursorOffset, mode, slash, path, settings, settingsValue, models, slashCommands, escPressedRef]);
 };
 

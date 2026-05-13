@@ -35,6 +35,7 @@ interface PopupManagerProps {
     error: string | null;
     provider?: string | null;
     scrollOffset?: number;
+    providerScrollOffset?: number;
     canSwitchProvider?: boolean;
   };
   settings: {

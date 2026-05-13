@@ -101,8 +101,9 @@ export const useModelSelection = (
         failedProvidersRef.current.add(provider);
         setError(message);
       } finally {
-        if (!isCurrentRequest()) return;
-        setLoading(false);
+        if (isCurrentRequest()) {
+          setLoading(false);
+        }
       }
     };
 

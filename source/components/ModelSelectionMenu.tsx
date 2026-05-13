@@ -29,11 +29,54 @@ const ProviderTabs: FC<{
     hasCredentials: hasProviderCredentials(settingsService, p.id),
   }));
 
+  const terminalWidth = process.stdout.columns || 80;
+  const labelLength = canSwitch ? 'Tab/←→ → switch provider'.length : 0;
+  const availableWidth = terminalWidth - labelLength - 2;
+
+  const getTabWidth = (p: (typeof providers)[0]) => {
+    return 1 + p.label.length + (!p.hasCredentials ? 9 : 0) + 1; // " {label}{ (no key)} "
+  };
+
+  const activeIndex = providers.findIndex((p) => p.id === activeProvider);
+  const safeActiveIndex = activeIndex >= 0 ? activeIndex : 0;
+
+  let start = safeActiveIndex;
+  let end = safeActiveIndex;
+  let currentWidth = getTabWidth(providers[safeActiveIndex]) + 4; // +4 for "◀ " and " ▶"
+
+  while (true) {
+    let expanded = false;
+    // Try to expand right
+    if (end + 1 < providers.length) {
+      const rightWidth = getTabWidth(providers[end + 1]) + 3; // " │ "
+      if (currentWidth + rightWidth <= availableWidth) {
+        currentWidth += rightWidth;
+        end++;
+        expanded = true;
+      }
+    }
+    // Try to expand left
+    if (start - 1 >= 0) {
+      const leftWidth = getTabWidth(providers[start - 1]) + 3; // " │ "
+      if (currentWidth + leftWidth <= availableWidth) {
+        currentWidth += leftWidth;
+        start--;
+        expanded = true;
+      }
+    }
+    if (!expanded) break;
+  }
+
+  const visibleProviders = providers.slice(start, end + 1);
+  const hasLeftScroll = start > 0;
+  const hasRightScroll = end < providers.length - 1;
+
   return (
     <Box flexDirection="column">
       <Box justifyContent="space-between">
         <Box>
-          {providers.map((provider, index) => {
+          {hasLeftScroll && <Text color="#64748b">◀ </Text>}
+          {visibleProviders.map((provider, index) => {
             const isActive = provider.id === activeProvider;
             const isDisabled = !provider.hasCredentials;
             return (
@@ -48,10 +91,11 @@ const ProviderTabs: FC<{
                   {provider.label}
                   {isDisabled ? ' (no key)' : ''}{' '}
                 </Text>
-                {index < providers.length - 1 && <Text color="#64748b">{' │ '}</Text>}
+                {index < visibleProviders.length - 1 && <Text color="#64748b">{' │ '}</Text>}
               </Box>
             );
           })}
+          {hasRightScroll && <Text color="#64748b"> ▶</Text>}
         </Box>
         {canSwitch && <Text color="#64748b">Tab/←→ → switch provider</Text>}
       </Box>

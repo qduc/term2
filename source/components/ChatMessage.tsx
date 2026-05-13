@@ -4,9 +4,10 @@ import MarkdownRenderer from './MarkdownRenderer.js';
 
 type Props = {
   msg: any;
+  maxWidth?: number;
 };
 
-const ChatMessage: FC<Props> = ({ msg }) => {
+const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
   return (
     <Box flexDirection="column">
       {msg.sender === 'user' ? (
@@ -14,11 +15,11 @@ const ChatMessage: FC<Props> = ({ msg }) => {
       ) : msg.sender === 'system' ? (
         <Text color="#64748b">{msg.text}</Text>
       ) : msg.sender === 'reasoning' ? (
-        <MarkdownRenderer defaultColor="#64748b" dimColor>
+        <MarkdownRenderer defaultColor="#64748b" maxWidth={maxWidth}>
           {msg.text}
         </MarkdownRenderer>
       ) : (
-        <MarkdownRenderer>{msg.text}</MarkdownRenderer>
+        <MarkdownRenderer maxWidth={maxWidth}>{msg.text}</MarkdownRenderer>
       )}
     </Box>
   );

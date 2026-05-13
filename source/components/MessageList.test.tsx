@@ -2,6 +2,9 @@ import test from 'ava';
 import React from 'react';
 import { render } from 'ink-testing-library';
 import MessageList, { splitStaticHistory } from './MessageList.js';
+import { createMockSettingsService } from '../services/settings-service.mock.js';
+
+const countOccurrences = (text, pattern) => text.split(pattern).length - 1;
 
 test('MessageList renders user and bot messages', (t) => {
   const messages = [
@@ -45,6 +48,52 @@ test('MessageList retains static history across rerenders', (t) => {
   const output = renderer.lastFrame() ?? '';
   t.true(output.includes('one'));
   t.true(output.includes('two'));
+});
+
+test('MessageList appends a fresh startup banner after clearing conversation history', (t) => {
+  const settingsService = createMockSettingsService();
+  const renderer = render(
+    <MessageList
+      messages={[{ id: 'one', sender: 'bot', text: 'one' }]}
+      bannerItems={['startup-banner-0']}
+      settingsService={settingsService}
+    />,
+  );
+
+  renderer.rerender(
+    <MessageList
+      messages={[]}
+      bannerItems={['startup-banner-0', 'startup-banner-1']}
+      settingsService={settingsService}
+    />,
+  );
+
+  const output = renderer.lastFrame() ?? '';
+  t.is(countOccurrences(output, 'term²'), 2);
+});
+
+test('MessageList moves a message from active to static without duplicating it', (t) => {
+  const renderer = render(
+    <MessageList
+      messages={[
+        { id: 'before', sender: 'bot', text: 'before' },
+        { id: 'running-command', sender: 'command', status: 'running', command: 'npm test', output: '' },
+      ]}
+    />,
+  );
+
+  renderer.rerender(
+    <MessageList
+      messages={[
+        { id: 'before', sender: 'bot', text: 'before' },
+        { id: 'running-command', sender: 'command', status: 'completed', command: 'npm test', output: '' },
+      ]}
+    />,
+  );
+
+  const output = renderer.lastFrame() ?? '';
+  t.is(countOccurrences(output, 'before'), 1);
+  t.is(countOccurrences(output, 'npm test'), 1);
 });
 
 test('splitStaticHistory keeps running command messages active regardless of position', (t) => {

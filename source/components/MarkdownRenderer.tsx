@@ -232,19 +232,23 @@ interface TableRendererProps {
   token: TableToken;
   style?: 'ascii' | 'unicode' | 'compact';
   options?: MarkdownRenderOptions;
+  maxWidth?: number;
 }
 
-const TableRenderer = ({ token, style = 'ascii', options = {} }: TableRendererProps) => {
+const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: TableRendererProps) => {
   const { header, rows, align } = token;
   const numCols = header.length;
   const { stdout } = useStdout();
 
-  // Respect the real terminal width so the table never wraps
+  // Respect the real terminal width so the table never wraps.
+  // If a maxWidth is provided (e.g. from a parent with padding), use it
+  // instead of the raw terminal width.
   const terminalColumns = stdout.columns || TABLE_MAX_WIDTH;
+  const containerWidth = maxWidth ?? terminalColumns;
   const minimumTableWidth = numCols * (TABLE_CELL_PADDING * 2 + 1) + numCols + 1;
   const effectiveMaxWidth = Math.max(
     minimumTableWidth,
-    Math.min(TABLE_MAX_WIDTH, terminalColumns - TABLE_MARGIN_X * 2 - TABLE_TERMINAL_WRAP_SLACK),
+    Math.min(TABLE_MAX_WIDTH, containerWidth - TABLE_MARGIN_X * 2 - TABLE_TERMINAL_WRAP_SLACK),
   );
 
   // Calculate column widths
@@ -434,7 +438,15 @@ const InlineContent = ({ tokens, options = {} }: { tokens: any[]; options?: Mark
 };
 
 // Render Block elements (Headings, Paragraphs, Lists)
-const BlockRenderer = ({ token, options = {} }: { token: any; options?: MarkdownRenderOptions }) => {
+const BlockRenderer = ({
+  token,
+  options = {},
+  maxWidth,
+}: {
+  token: any;
+  options?: MarkdownRenderOptions;
+  maxWidth?: number;
+}) => {
   switch (token.type) {
     case 'heading':
       const isMain = token.depth === 1;
@@ -491,6 +503,7 @@ const BlockRenderer = ({ token, options = {} }: { token: any; options?: Markdown
       );
 
     case 'code':
+      if (!token.text || !token.text.trim()) return null;
       return (
         <Box borderStyle="round" borderColor="#64748b" paddingX={1} marginBottom={1} flexDirection="column">
           <Text color="yellow" dimColor={options.dimColor}>
@@ -533,7 +546,7 @@ const BlockRenderer = ({ token, options = {} }: { token: any; options?: Markdown
       );
 
     case 'table':
-      return <TableRenderer token={token} options={options} />;
+      return <TableRenderer token={token} options={options} maxWidth={maxWidth} />;
 
     default:
       // Fallback for unknown blocks
@@ -546,11 +559,15 @@ const BlockRenderer = ({ token, options = {} }: { token: any; options?: Markdown
 // During streaming, only the trailing (in-progress) block will ever change, so all
 // prior blocks keep their existing React subtrees without reconciliation.
 const MemoBlock = React.memo(
-  ({ token, options }: { token: any; options: MarkdownRenderOptions }) => (
-    <BlockRenderer token={token} options={options} />
+  ({ token, options, maxWidth }: { token: any; options: MarkdownRenderOptions; maxWidth?: number }) => (
+    <BlockRenderer token={token} options={options} maxWidth={maxWidth} />
   ),
   (prev, next) => {
     if (prev.options !== next.options) {
+      return false;
+    }
+
+    if (prev.maxWidth !== next.maxWidth) {
       return false;
     }
 
@@ -569,6 +586,7 @@ interface MarkdownRendererProps {
   tokens?: any[];
   defaultColor?: string;
   dimColor?: boolean;
+  maxWidth?: number;
 }
 
 // Generate a stable key for a token based on its type and content
@@ -583,7 +601,7 @@ const getTokenKey = (token: any, index: number): string => {
   return `${token.type}-${rawPreview}-${index}`;
 };
 
-const MarkdownRenderer = ({ children, tokens, defaultColor, dimColor }: MarkdownRendererProps) => {
+const MarkdownRenderer = ({ children, tokens, defaultColor, dimColor, maxWidth }: MarkdownRendererProps) => {
   // Allow passing raw text (which we parse) OR pre-parsed tokens
   const ast = useMemo(() => tokens || marked.lexer(String(children || '')), [tokens, children]);
   const options = useMemo(() => ({ defaultColor, dimColor }), [defaultColor, dimColor]);
@@ -591,7 +609,7 @@ const MarkdownRenderer = ({ children, tokens, defaultColor, dimColor }: Markdown
   return (
     <Box flexDirection="column">
       {ast.map((token: any, index: number) => (
-        <MemoBlock key={getTokenKey(token, index)} token={token} options={options} />
+        <MemoBlock key={getTokenKey(token, index)} token={token} options={options} maxWidth={maxWidth} />
       ))}
     </Box>
   );

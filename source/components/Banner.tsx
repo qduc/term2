@@ -30,7 +30,7 @@ const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
   const lightSlate = '#94a3b8';
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={accent} paddingX={2} paddingY={1}>
+    <Box flexDirection="column" width="100%" borderStyle="round" borderColor={accent} paddingX={2} paddingY={1}>
       {/* Header */}
       <Box justifyContent="space-between" alignItems="center">
         <Box alignItems="center">

@@ -1,5 +1,5 @@
-import React, { FC, useMemo } from 'react';
-import { Box, Static } from 'ink';
+import React, { FC, useMemo, useRef } from 'react';
+import { Box, Static, useStdout } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import ChatMessage from './ChatMessage.js';
 import Banner from './Banner.js';
@@ -13,9 +13,23 @@ type Props = {
 };
 
 type MessageLike = {
+  id: string;
   sender?: string;
   status?: string;
 };
+
+type StaticBannerItem = {
+  kind: 'banner';
+  id: string;
+};
+
+type StaticMessageItem = {
+  kind: 'message';
+  id: string;
+  message: MessageLike;
+};
+
+type StaticItem = StaticBannerItem | StaticMessageItem;
 
 const canRenderStatically = (message: MessageLike) => {
   if (message.sender === 'reasoning') {
@@ -41,7 +55,20 @@ export const splitStaticHistory = <T extends MessageLike>(messages: T[]) => {
   };
 };
 
+const createStaticItems = (bannerItems: string[], history: MessageLike[]): StaticItem[] => [
+  ...bannerItems.map((id) => ({ kind: 'banner' as const, id })),
+  ...history.map((message) => ({ kind: 'message' as const, id: message.id, message })),
+];
+
 const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, isShellMode = false }) => {
+  const { stdout } = useStdout();
+
+  // The Static wrapper has paddingLeft: 2, paddingRight: 2 (4 chars total),
+  // so the available width for content inside it is terminal width minus 4.
+  // The active section has no such padding, so it uses the full terminal width.
+  const terminalColumns = stdout.columns || 80;
+  const staticMaxWidth = terminalColumns - 4;
+
   // Use useMemo to prevent array recreation on every render.
   // This stabilizes the references passed to Static and the active Box,
   // preventing unnecessary re-renders and fixing flickering in long sessions.
@@ -49,9 +76,39 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
     return splitStaticHistory(messages);
   }, [messages]);
 
-  const staticItems = useMemo(() => [...bannerItems, ...history], [bannerItems, history]);
+  const staticItemsRef = useRef<StaticItem[]>(createStaticItems(bannerItems, history));
+  const seenBannerIdsRef = useRef<Set<string>>(new Set(bannerItems));
+  const seenMessageIdsRef = useRef<Set<string>>(new Set(history.map((message) => message.id)));
 
-  const renderMessage = (msg: any, idx: number, collection: any[]) => {
+  const staticItems = useMemo(() => {
+    const additions: StaticItem[] = [];
+
+    for (const bannerId of bannerItems) {
+      if (seenBannerIdsRef.current.has(bannerId)) {
+        continue;
+      }
+
+      seenBannerIdsRef.current.add(bannerId);
+      additions.push({ kind: 'banner', id: bannerId });
+    }
+
+    for (const message of history) {
+      if (seenMessageIdsRef.current.has(message.id)) {
+        continue;
+      }
+
+      seenMessageIdsRef.current.add(message.id);
+      additions.push({ kind: 'message', id: message.id, message });
+    }
+
+    if (additions.length > 0) {
+      staticItemsRef.current = [...staticItemsRef.current, ...additions];
+    }
+
+    return staticItemsRef.current;
+  }, [bannerItems, history]);
+
+  const renderMessage = (msg: any, idx: number, collection: any[], maxWidth?: number) => {
     // Use consistent marginTop to prevent layout reflow.
     // This ensures stable spacing regardless of message order or streaming updates.
     // The first message in each collection has no top margin to avoid extra space.
@@ -72,26 +129,27 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
             hadApproval={msg.hadApproval}
           />
         ) : (
-          <ChatMessage msg={msg} />
+          <ChatMessage msg={msg} maxWidth={maxWidth} />
         )}
       </Box>
     );
   };
 
-  const renderStaticItem = (item: any, idx: number) => {
-    if (typeof item === 'string') {
+  const renderStaticItem = (item: StaticItem, idx: number) => {
+    if (item.kind === 'banner') {
       return (
-        <Box key={item}>
+        <Box key={item.id}>
           {settingsService && <Banner settingsService={settingsService} isShellMode={isShellMode} />}
         </Box>
       );
     }
-    return renderMessage(item, idx - bannerItems.length, history);
+
+    return renderMessage(item.message, idx, staticItems, staticMaxWidth);
   };
 
   return (
     <Box flexDirection="column">
-      <Static items={staticItems} style={{ paddingLeft: 2 }}>
+      <Static items={staticItems} style={{ paddingLeft: 2, paddingRight: 2 }}>
         {renderStaticItem}
       </Static>
 

@@ -9,6 +9,13 @@ interface UseSlashCommandsOptions {
   // setText is no longer needed as we use context
 }
 
+type ExecuteSlashCommandSelectionArgs = {
+  command: SlashCommand | undefined;
+  filter: string;
+  setInput: (value: string) => void;
+  close: () => void;
+};
+
 // Pure functions exported for testing
 export function filterCommands(commands: SlashCommand[], filter: string): SlashCommand[] {
   const lowerFilter = filter.toLowerCase();
@@ -53,6 +60,27 @@ export function extractCommandArgs(filter: string, commandName: string): string 
   return filter.slice(commandName.length).trim();
 }
 
+export function executeSlashCommandSelection({
+  command,
+  filter,
+  setInput,
+  close,
+}: ExecuteSlashCommandSelectionArgs): void {
+  if (!command) return;
+
+  if (shouldAutocomplete(command, filter)) {
+    setInput(`/${command.name} `);
+    return;
+  }
+
+  const args = extractCommandArgs(filter, command.name);
+  const shouldClose = command.action(args || undefined);
+  if (shouldClose !== false) {
+    setInput('');
+    close();
+  }
+}
+
 export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions) => {
   const { mode, setMode, input, setInput } = useInputContext();
 
@@ -83,20 +111,12 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
   // No need for updateFilter anymore, it reacts to input changes automatically
 
   const executeSelected = useCallback(() => {
-    const command = getSelectedItem();
-    if (!command) return;
-
-    // Handle autocomplete for commands that expect arguments
-    if (shouldAutocomplete(command, filter)) {
-      setInput(`/${command.name} `);
-      return;
-    }
-
-    const args = extractCommandArgs(filter, command.name);
-    const shouldClose = command?.action(args || undefined);
-    if (shouldClose !== false) {
-      close();
-    }
+    executeSlashCommandSelection({
+      command: getSelectedItem(),
+      filter,
+      setInput,
+      close,
+    });
   }, [getSelectedItem, close, filter, setInput]);
 
   return {

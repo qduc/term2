@@ -24,6 +24,7 @@ import {
   computeSettingValueInsertion,
   computeModelInsertion,
 } from './Input/insertions.js';
+import { getPopupNavigationCursor } from './Input/popup-key-navigation.js';
 import { useModeHandlers } from '../hooks/use-mode-handlers.js';
 import { toPopupProps } from './Input/popup-props.js';
 import type { UserTurn } from '../types/user-turn.js';
@@ -292,6 +293,23 @@ const InputBox: FC<Props> = ({
     } = stateRef.current;
     const currentCursor = cursorOffsetRef.current;
     if (currentMode === 'text') return;
+    const hasMoveLeft = Boolean(currentHandlers[currentMode].moveLeft);
+    const hasMoveRight = Boolean(currentHandlers[currentMode].moveRight);
+
+    const navigatedCursor = getPopupNavigationCursor({
+      input: _input,
+      key,
+      cursor: currentCursor,
+      valueLength: currentValue.length,
+      hasModeLeftHandler: hasMoveLeft,
+      hasModeRightHandler: hasMoveRight,
+    });
+    if (navigatedCursor !== null) {
+      cursorOffsetRef.current = navigatedCursor;
+      updateCursorOffset(navigatedCursor);
+      overrideCursor(navigatedCursor);
+      return;
+    }
 
     if (key.upArrow) {
       currentHandlers[currentMode].moveUp();

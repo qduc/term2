@@ -1,5 +1,10 @@
 import test from 'ava';
-import { filterCommands, shouldAutocomplete, extractCommandArgs } from './use-slash-commands.js';
+import {
+  filterCommands,
+  shouldAutocomplete,
+  extractCommandArgs,
+  executeSlashCommandSelection,
+} from './use-slash-commands.js';
 import type { SlashCommand } from '../slash-commands.js';
 
 // Mock commands for testing
@@ -286,4 +291,61 @@ test('Integration - filter and execute flow for command without args', (t) => {
   // Extract args (should be empty)
   const args = extractCommandArgs('clear', 'clear');
   t.is(args, '');
+});
+
+test('executeSlashCommandSelection clears input after successful command execution', (t) => {
+  let input = '/cle';
+  let closed = false;
+  let actionCalled = false;
+
+  executeSlashCommandSelection({
+    command: {
+      name: 'clear',
+      description: 'Clear screen',
+      action: () => {
+        actionCalled = true;
+        return true;
+      },
+    },
+    filter: 'cle',
+    setInput: (next) => {
+      input = next;
+    },
+    close: () => {
+      closed = true;
+    },
+  });
+
+  t.true(actionCalled);
+  t.true(closed);
+  t.is(input, '');
+});
+
+test('executeSlashCommandSelection keeps autocomplete value for expectsArgs commands', (t) => {
+  let input = '/mod';
+  let closed = false;
+  let actionCalled = false;
+
+  executeSlashCommandSelection({
+    command: {
+      name: 'model',
+      description: 'Change model',
+      expectsArgs: true,
+      action: () => {
+        actionCalled = true;
+        return true;
+      },
+    },
+    filter: 'mod',
+    setInput: (next) => {
+      input = next;
+    },
+    close: () => {
+      closed = true;
+    },
+  });
+
+  t.false(actionCalled);
+  t.false(closed);
+  t.is(input, '/model ');
 });

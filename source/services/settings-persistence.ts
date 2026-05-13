@@ -10,17 +10,39 @@ type LoggerLike = {
   error: (message: string, meta?: any) => void;
 };
 
+/**
+ * Try to parse each top-level section of the settings object independently.
+ * Valid sections are included in the result; invalid sections are omitted so
+ * they fall back to defaults in mergeSettings. The file on disk is never touched.
+ */
+function parsePartialSections(parsed: any, schema: ZodTypeAny): Partial<SettingsData> {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+  const shape = (schema as any).shape as Record<string, ZodTypeAny> | undefined;
+  if (!shape || typeof shape !== 'object') return {};
+
+  const partial: Record<string, any> = {};
+  for (const [key, sectionSchema] of Object.entries(shape)) {
+    if (!(key in parsed)) continue;
+    const result = sectionSchema.safeParse(parsed[key]);
+    if (result.success) {
+      partial[key] = result.data;
+    }
+  }
+  return partial as Partial<SettingsData>;
+}
+
 export function loadSettingsFromFile(opts: {
   settingsDir: string;
   schema: ZodTypeAny;
   disableLogging?: boolean;
   loggingService?: LoggerLike;
-}): { validated: Partial<SettingsData>; raw: any } {
+}): { validated: Partial<SettingsData>; raw: any; hadErrors: boolean } {
   try {
     const settingsFile = path.join(opts.settingsDir, 'settings.json');
 
     if (!fs.existsSync(settingsFile)) {
-      return { validated: {}, raw: {} };
+      return { validated: {}, raw: {}, hadErrors: false };
     }
 
     const content = fs.readFileSync(settingsFile, 'utf-8');
@@ -39,11 +61,12 @@ export function loadSettingsFromFile(opts: {
         });
       }
 
-      // Return empty object to trigger defaults
-      return { validated: {}, raw: parsed };
+      // Preserve valid top-level sections; invalid sections fall back to defaults
+      // via mergeSettings. The file is left unchanged for the user to fix.
+      return { validated: parsePartialSections(parsed, opts.schema), raw: parsed, hadErrors: true };
     }
 
-    return { validated: validated.data as Partial<SettingsData>, raw: parsed };
+    return { validated: validated.data as Partial<SettingsData>, raw: parsed, hadErrors: false };
   } catch (error: any) {
     if (!opts.disableLogging) {
       opts.loggingService?.error('Failed to load settings file', {
@@ -52,7 +75,7 @@ export function loadSettingsFromFile(opts: {
       });
     }
 
-    return { validated: {}, raw: {} };
+    return { validated: {}, raw: {}, hadErrors: false };
   }
 }
 

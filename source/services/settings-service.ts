@@ -103,7 +103,7 @@ export class SettingsService {
     // Load settings with precedence: CLI > Env > Config > Default
     const settingsFilePath = path.join(this.settingsDir, 'settings.json');
     const configFileExisted = fs.existsSync(settingsFilePath);
-    const { validated: fileConfig, raw: rawFileConfig } = this.loadFromFile();
+    const { validated: fileConfig, raw: rawFileConfig, hadErrors: fileHadErrors } = this.loadFromFile();
     this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, env, cli, {
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
@@ -156,7 +156,7 @@ export class SettingsService {
           });
         }
       }
-    } else if (shouldUpdateFile) {
+    } else if (shouldUpdateFile && !fileHadErrors) {
       if (!this.disableFilePersistence) {
         this.saveToFile();
         if (!this.disableLogging) {
@@ -175,7 +175,9 @@ export class SettingsService {
     for (const p of configured) {
       const providerId = (p as any)?.name;
       const baseUrl = (p as any)?.baseUrl;
-      if (!providerId || !baseUrl) continue;
+      const providerType = String((p as any)?.type || '');
+      const baseUrlOptional = providerType === 'anthropic' || providerType === 'google';
+      if (!providerId || (!baseUrl && !baseUrlOptional)) continue;
 
       const existing = getProvider(providerId);
       if (existing && !existing.isRuntimeDefined) {
@@ -192,7 +194,7 @@ export class SettingsService {
           createOpenAICompatibleProviderDefinition({
             name: String(providerId),
             type: (p as any)?.type ? String((p as any).type) : 'openai-compatible',
-            baseUrl: String(baseUrl),
+            baseUrl: baseUrl ? String(baseUrl) : undefined,
             apiKey: (p as any)?.apiKey ? String((p as any).apiKey) : undefined,
           }),
         );
@@ -418,6 +420,7 @@ export class SettingsService {
   private loadFromFile(): {
     validated: Partial<SettingsData>;
     raw: any;
+    hadErrors: boolean;
   } {
     return loadSettingsFromFile({
       settingsDir: this.settingsDir,

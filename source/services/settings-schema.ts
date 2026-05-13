@@ -142,12 +142,22 @@ export function isKnownCustomProviderType(value: string): value is KnownCustomPr
 
 export const CustomProviderTypeSchema = z.enum(KNOWN_CUSTOM_PROVIDER_TYPES).default('openai-compatible');
 
-export const CustomProviderSchema = z.object({
-  name: z.string().min(1),
-  type: CustomProviderTypeSchema,
-  baseUrl: z.string().url(),
-  apiKey: z.string().optional(),
-});
+export const CustomProviderSchema = z
+  .object({
+    name: z.string().min(1),
+    type: CustomProviderTypeSchema,
+    baseUrl: z.string().url().optional(),
+    apiKey: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.type !== 'anthropic' && data.type !== 'google' && !data.baseUrl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'baseUrl is required for this provider type',
+        path: ['baseUrl'],
+      });
+    }
+  });
 
 /**
  * Settings that are sensitive and should NEVER be saved to disk.

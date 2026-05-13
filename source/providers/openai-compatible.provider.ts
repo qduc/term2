@@ -12,8 +12,18 @@ import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-comp
 export type CustomProviderConfig = {
   name: string;
   type?: string;
-  baseUrl: string;
+  baseUrl?: string;
   apiKey?: string;
+};
+
+const DEFAULT_BASE_URLS: Record<string, string> = {
+  anthropic: 'https://api.anthropic.com/v1',
+  google: 'https://generativelanguage.googleapis.com/v1beta',
+};
+
+const DEFAULT_ENV_API_KEYS: Record<string, string> = {
+  anthropic: 'ANTHROPIC_API_KEY',
+  google: 'GOOGLE_GENERATIVE_AI_API_KEY',
 };
 
 export type CustomProviderRuntimeDeps = {
@@ -167,7 +177,7 @@ function findConfigFromSettings(settingsService: ISettingsService, providerId: s
   return {
     name: String(entry.name),
     type: entry.type ? String(entry.type) : 'openai-compatible',
-    baseUrl: String(entry.baseUrl),
+    baseUrl: entry.baseUrl ? String(entry.baseUrl) : undefined,
     apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
   };
 }
@@ -202,7 +212,7 @@ export function createCustomProviderModelProvider(
 ): OpenAIProvider | AiSdkAnthropicProvider | AiSdkGoogleProvider {
   const providerType = config.type || 'openai-compatible';
   const resolveConfig = () => ({
-    baseURL: normalizeBaseUrl(config.baseUrl),
+    baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
     apiKey: config.apiKey,
     fetch: deps.fetch,
     name: config.name,
@@ -212,7 +222,7 @@ export function createCustomProviderModelProvider(
     case 'openai':
       return new OpenAIProvider({
         apiKey: config.apiKey,
-        baseURL: normalizeBaseUrl(config.baseUrl),
+        baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
       });
     case 'anthropic':
       return new AiSdkAnthropicProvider({
@@ -233,7 +243,7 @@ export function createCustomProviderModelProvider(
     case 'llama.cpp':
     default: {
       const openAIClient = new OpenAI({
-        baseURL: normalizeBaseUrl(config.baseUrl),
+        baseURL: normalizeBaseUrl(config.baseUrl ?? ''),
         apiKey: config.apiKey || 'no-key',
         fetch: createOpenAICompatibleFetch(deps.fetch, providerType) as any,
       });
@@ -284,23 +294,30 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
         throw new Error(`Custom provider '${providerId}' is not configured in settings.json`);
       }
 
-      const baseUrl = normalizeBaseUrl(resolved.baseUrl);
+      const effectiveBaseUrl = resolved.baseUrl ?? (resolved.type ? DEFAULT_BASE_URLS[resolved.type] : undefined);
+      if (!effectiveBaseUrl) {
+        throw new Error(`Custom provider '${providerId}' requires a baseUrl to list models`);
+      }
+      const baseUrl = normalizeBaseUrl(effectiveBaseUrl);
       const url = buildOpenAICompatibleUrl(baseUrl, '/models');
+
+      const resolvedApiKey =
+        resolved.apiKey ?? (resolved.type ? process.env[DEFAULT_ENV_API_KEYS[resolved.type] ?? ''] : undefined);
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
       if (resolved.type === 'anthropic') {
         headers['anthropic-version'] = '2023-06-01';
-        if (resolved.apiKey) {
-          headers['x-api-key'] = resolved.apiKey;
+        if (resolvedApiKey) {
+          headers['x-api-key'] = resolvedApiKey;
         }
       } else if (resolved.type === 'google') {
-        if (resolved.apiKey) {
-          headers['x-goog-api-key'] = resolved.apiKey;
+        if (resolvedApiKey) {
+          headers['x-goog-api-key'] = resolvedApiKey;
         }
-      } else if (resolved.apiKey) {
-        headers.Authorization = `Bearer ${resolved.apiKey}`;
+      } else if (resolvedApiKey) {
+        headers.Authorization = `Bearer ${resolvedApiKey}`;
       }
 
       const response = await fetchImpl(url, { headers });

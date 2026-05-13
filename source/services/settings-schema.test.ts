@@ -59,3 +59,45 @@ test('CustomProviderSchema rejects invalid provider type format', (t) => {
 
   t.truthy(error);
 });
+
+test('CustomProviderSchema allows anthropic type without baseUrl', (t) => {
+  const parsed = CustomProviderSchema.parse({
+    name: 'my-anthropic',
+    type: 'anthropic',
+  });
+
+  t.is(parsed.type, 'anthropic');
+  t.is(parsed.baseUrl, undefined);
+});
+
+test('CustomProviderSchema allows google type without baseUrl', (t) => {
+  const parsed = CustomProviderSchema.parse({
+    name: 'my-google',
+    type: 'google',
+  });
+
+  t.is(parsed.type, 'google');
+  t.is(parsed.baseUrl, undefined);
+});
+
+test('CustomProviderSchema rejects openai-compatible type without baseUrl', (t) => {
+  const error = t.throws(() =>
+    CustomProviderSchema.parse({
+      name: 'local',
+      type: 'openai-compatible',
+    }),
+  );
+
+  t.truthy(error);
+});
+
+test('CustomProviderSchema rejects openai type without baseUrl', (t) => {
+  const error = t.throws(() =>
+    CustomProviderSchema.parse({
+      name: 'local',
+      type: 'openai',
+    }),
+  );
+
+  t.truthy(error);
+});

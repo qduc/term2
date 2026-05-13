@@ -10,7 +10,7 @@ import {
   type OutputTrimConfig,
 } from '../utils/output-trim.js';
 import type { ToolDefinition, CommandMessage } from './types.js';
-import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
+import { getOutputText, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
 
 const execPromise = util.promisify(exec);
 
@@ -50,9 +50,8 @@ const formatSearchCommandMessage = (
   index: number,
   _toolCallArgumentsById: Map<string, unknown>,
 ): CommandMessage[] => {
-  const parsedOutput = safeJsonParse(getOutputText(item));
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
-  const args = normalizeToolArguments(normalizedArgs) ?? parsedOutput?.arguments ?? {};
+  const args = normalizeToolArguments(normalizedArgs) ?? {};
   const pattern = args?.pattern ?? '';
   const searchPath = args?.path ?? '.';
 
@@ -69,9 +68,7 @@ const formatSearchCommandMessage = (
   }
 
   const command = parts.join(' ');
-  const output = parsedOutput?.output ?? getOutputText(item) ?? 'No output';
-  // Success is determined by the grep tool - it returns "No matches found."
-  // for empty results and throws for actual errors
+  const output = getOutputText(item) ?? 'No output';
   const success = true;
 
   return [
@@ -130,19 +127,11 @@ export const grepToolDefinition: ToolDefinition<SearchToolParams> = {
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       });
 
-      const result = trimOutput(stdout.trim(), limit);
-
-      return JSON.stringify({
-        arguments: params,
-        output: result,
-      });
+      return trimOutput(stdout.trim(), limit) || 'No matches found.';
     } catch (error: any) {
       // grep/rg returns exit code 1 if no matches found, which execPromise treats as error
       if (error.code === 1) {
-        return JSON.stringify({
-          arguments: params,
-          output: 'No matches found.',
-        });
+        return 'No matches found.';
       }
       throw new Error(`Search failed: ${error.message}`);
     }

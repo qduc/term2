@@ -1,13 +1,15 @@
-import { exec } from 'child_process';
-import util from 'util';
+import { exec, type ChildProcess } from 'child_process';
 import process from 'process';
 
-type ExecPromise = (
+type ExecCallback = (error: any, stdout: string | Buffer, stderr: string | Buffer) => void;
+
+type ExecImpl = (
   command: string,
   options: { cwd?: string; timeout?: number; maxBuffer?: number },
-) => Promise<{ stdout?: string; stderr?: string }>;
+  callback: ExecCallback,
+) => ChildProcess;
 
-const defaultExecPromise: ExecPromise = util.promisify(exec);
+const defaultExecImpl: ExecImpl = exec;
 
 export interface ShellExecutionResult {
   stdout: string;
@@ -23,29 +25,46 @@ export interface ExecuteShellOptions {
   timeout?: number;
   maxBuffer?: number;
   sshService?: ISSHService;
-  execImpl?: ExecPromise;
+  execImpl?: ExecImpl;
 }
 
 export async function executeShellCommand(
   command: string,
   options: ExecuteShellOptions = {},
 ): Promise<ShellExecutionResult> {
-  const { cwd = process.cwd(), timeout, maxBuffer, sshService, execImpl = defaultExecPromise } = options;
+  const { cwd = process.cwd(), timeout, maxBuffer, sshService, execImpl = defaultExecImpl } = options;
 
   if (sshService) {
     return sshService.executeCommand(command, { cwd });
   }
 
   try {
-    const result = await execImpl(command, {
-      cwd,
-      timeout,
-      maxBuffer,
+    const result = await new Promise<{ stdout?: string | Buffer; stderr?: string | Buffer }>((resolve, reject) => {
+      const child = execImpl(
+        command,
+        {
+          cwd,
+          timeout,
+          maxBuffer,
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            error.stdout = stdout;
+            error.stderr = stderr;
+            reject(error);
+            return;
+          }
+
+          resolve({ stdout, stderr });
+        },
+      );
+
+      child.stdin?.end();
     });
 
     return {
-      stdout: result.stdout ?? '',
-      stderr: result.stderr ?? '',
+      stdout: result.stdout?.toString() ?? '',
+      stderr: result.stderr?.toString() ?? '',
       exitCode: 0,
       timedOut: false,
     };
@@ -54,8 +73,8 @@ export async function executeShellCommand(
     const timedOut = Boolean(error?.killed || error?.signal === 'SIGTERM');
 
     return {
-      stdout: error?.stdout ?? '',
-      stderr: error?.stderr ?? '',
+      stdout: error?.stdout?.toString() ?? '',
+      stderr: error?.stderr?.toString() ?? '',
       exitCode,
       timedOut,
     };

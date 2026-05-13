@@ -28,7 +28,7 @@ function convertAgentItemToOpenAICompatibleMessage(item: any, loggingService: IL
     const message: any = { role: 'assistant' };
     if (Array.isArray(rawItem.content)) {
       const textContent = rawItem.content
-        .filter((c: any) => c?.type === 'output_text' && c?.text)
+        .filter((c: any) => (c?.type === 'output_text' || c?.type === 'text') && c?.text)
         .map((c: any) => c.text)
         .join('');
       if (textContent) {

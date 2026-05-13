@@ -26,6 +26,37 @@ test('buildMessagesFromRequest() preserves user text and image content', (t) => 
   ]);
 });
 
+test('buildMessagesFromRequest() extracts text from assistant content blocks with type=text (Responses API shape)', (t) => {
+  const messages = buildMessagesFromRequest({
+    input: [
+      {
+        role: 'assistant',
+        type: 'message',
+        content: [{ type: 'text', text: 'Hi! How can I help?', annotations: [] }],
+      },
+    ],
+  } as any);
+
+  t.deepEqual(messages, [{ role: 'assistant', content: 'Hi! How can I help?' }]);
+});
+
+test('buildMessagesFromRequest() concatenates mixed output_text and text content blocks', (t) => {
+  const messages = buildMessagesFromRequest({
+    input: [
+      {
+        role: 'assistant',
+        type: 'message',
+        content: [
+          { type: 'output_text', text: 'Part one.' },
+          { type: 'text', text: ' Part two.', annotations: [] },
+        ],
+      },
+    ],
+  } as any);
+
+  t.deepEqual(messages, [{ role: 'assistant', content: 'Part one. Part two.' }]);
+});
+
 test('buildMessagesFromRequest() omits assistant messages without content or tool calls', (t) => {
   const messages = buildMessagesFromRequest({
     input: [

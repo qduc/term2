@@ -60,18 +60,14 @@ function applyLlamaCppReasoningControls(target: Record<string, any>, reasoningEf
 
 function preserveReasoningContentForOpenAICompatibleMessages(messages: any[]): any[] {
   return messages.map((message) => {
-    if (
-      message?.role === 'assistant' &&
-      typeof message.reasoning === 'string' &&
-      typeof message.reasoning_content !== 'string'
-    ) {
-      return {
-        ...message,
-        reasoning_content: message.reasoning,
-      };
+    if (message?.role !== 'assistant' || typeof message.reasoning !== 'string') {
+      return message;
     }
-
-    return message;
+    const { reasoning, ...rest } = message;
+    return {
+      ...rest,
+      reasoning_content: typeof message.reasoning_content === 'string' ? message.reasoning_content : reasoning,
+    };
   });
 }
 

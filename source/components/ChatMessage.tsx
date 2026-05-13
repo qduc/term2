@@ -14,7 +14,9 @@ const ChatMessage: FC<Props> = ({ msg }) => {
       ) : msg.sender === 'system' ? (
         <Text color="#64748b">{msg.text}</Text>
       ) : msg.sender === 'reasoning' ? (
-        <Text color="#64748b">{msg.text}</Text>
+        <MarkdownRenderer defaultColor="#64748b" dimColor>
+          {msg.text}
+        </MarkdownRenderer>
       ) : (
         <MarkdownRenderer>{msg.text}</MarkdownRenderer>
       )}

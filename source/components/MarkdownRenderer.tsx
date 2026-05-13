@@ -2,6 +2,11 @@ import React, { useMemo } from 'react';
 import { Box, Text, Newline, useStdout } from 'ink';
 import { marked } from 'marked';
 
+type MarkdownRenderOptions = {
+  defaultColor?: string;
+  dimColor?: boolean;
+};
+
 // --- Table Rendering Utilities ---
 
 interface TableCell {
@@ -172,11 +177,17 @@ const getCellTextLines = (cell: TableCell | undefined, width: number): string[] 
 };
 
 // Render cell content with inline formatting
-const renderCellContent = (content: string, width: number, align: string, isHeader = false): React.ReactNode => {
+const renderCellContent = (
+  content: string,
+  width: number,
+  align: string,
+  isHeader = false,
+  options: MarkdownRenderOptions = {},
+): React.ReactNode => {
   const contentWidth = Math.max(1, width - TABLE_CELL_PADDING * 2);
   const paddedContent = padContent(content, contentWidth, align);
   return (
-    <Text bold={isHeader}>
+    <Text bold={isHeader} color={options.defaultColor} dimColor={options.dimColor}>
       {' '.repeat(TABLE_CELL_PADDING)}
       {paddedContent}
       {' '.repeat(TABLE_CELL_PADDING)}
@@ -220,9 +231,10 @@ const generateBorder = (
 interface TableRendererProps {
   token: TableToken;
   style?: 'ascii' | 'unicode' | 'compact';
+  options?: MarkdownRenderOptions;
 }
 
-const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
+const TableRenderer = ({ token, style = 'ascii', options = {} }: TableRendererProps) => {
   const { header, rows, align } = token;
   const numCols = header.length;
   const { stdout } = useStdout();
@@ -265,21 +277,35 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
 
     return Array.from({ length: lineCount }, (_, lineIndex) => (
       <Box key={`${rowKey}-${lineIndex}`} flexDirection="row">
-        {vertical.left ? <Text color="#64748b">{vertical.left}</Text> : null}
+        {vertical.left ? (
+          <Text color="#64748b" dimColor={options.dimColor}>
+            {vertical.left}
+          </Text>
+        ) : null}
         {columnWidths.map((width, index) => {
           const content = wrappedCells[index][lineIndex] || '';
           const cell = (
-            <Box width={width}>{renderCellContent(content, width, columnAlignment[index] || 'left', isHeader)}</Box>
+            <Box width={width}>
+              {renderCellContent(content, width, columnAlignment[index] || 'left', isHeader, options)}
+            </Box>
           );
 
           return (
             <React.Fragment key={index}>
               {cell}
-              {index < numCols - 1 && <Text color="#64748b">{vertical.middle}</Text>}
+              {index < numCols - 1 && (
+                <Text color="#64748b" dimColor={options.dimColor}>
+                  {vertical.middle}
+                </Text>
+              )}
             </React.Fragment>
           );
         })}
-        {vertical.right ? <Text color="#64748b">{vertical.right}</Text> : null}
+        {vertical.right ? (
+          <Text color="#64748b" dimColor={options.dimColor}>
+            {vertical.right}
+          </Text>
+        ) : null}
       </Box>
     ));
   };
@@ -288,7 +314,9 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
   const renderSeparator = () => {
     return (
       <Box marginX={TABLE_MARGIN_X}>
-        <Text color="#64748b">{borders.middle}</Text>
+        <Text color="#64748b" dimColor={options.dimColor}>
+          {borders.middle}
+        </Text>
       </Box>
     );
   };
@@ -297,7 +325,9 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
     <Box flexDirection="column" marginBottom={1}>
       {/* Top border */}
       <Box marginX={TABLE_MARGIN_X}>
-        <Text color="#64748b">{borders.top}</Text>
+        <Text color="#64748b" dimColor={options.dimColor}>
+          {borders.top}
+        </Text>
       </Box>
 
       {/* Header */}
@@ -320,7 +350,9 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
 
       {/* Bottom border */}
       <Box marginX={TABLE_MARGIN_X}>
-        <Text color="#64748b">{borders.bottom}</Text>
+        <Text color="#64748b" dimColor={options.dimColor}>
+          {borders.bottom}
+        </Text>
       </Box>
     </Box>
   );
@@ -329,7 +361,7 @@ const TableRenderer = ({ token, style = 'ascii' }: TableRendererProps) => {
 // --- Token Renderers ---
 
 // recursively render inline content (bold, italic, links, etc.)
-const InlineContent = ({ tokens }: { tokens: any[] }) => {
+const InlineContent = ({ tokens, options = {} }: { tokens: any[]; options?: MarkdownRenderOptions }) => {
   if (!tokens) return null;
 
   return (
@@ -342,41 +374,45 @@ const InlineContent = ({ tokens }: { tokens: any[] }) => {
           case 'escape':
             // Handle nested formatting inside text tokens if marked provides them
             if (token.tokens) {
-              return <InlineContent key={key} tokens={token.tokens} />;
+              return <InlineContent key={key} tokens={token.tokens} options={options} />;
             }
-            return <Text key={key}>{token.text}</Text>;
+            return (
+              <Text key={key} color={options.defaultColor} dimColor={options.dimColor}>
+                {token.text}
+              </Text>
+            );
 
           case 'strong':
             return (
-              <Text key={key} bold>
-                <InlineContent tokens={token.tokens} />
+              <Text key={key} bold color={options.defaultColor} dimColor={options.dimColor}>
+                <InlineContent tokens={token.tokens} options={options} />
               </Text>
             );
 
           case 'em':
             return (
-              <Text key={key} italic>
-                <InlineContent tokens={token.tokens} />
+              <Text key={key} italic color={options.defaultColor} dimColor={options.dimColor}>
+                <InlineContent tokens={token.tokens} options={options} />
               </Text>
             );
 
           case 'codespan':
             return (
-              <Text key={key} color="yellow" backgroundColor="#333">
+              <Text key={key} color="yellow" backgroundColor="#333" dimColor={options.dimColor}>
                 {` ${token.text} `}
               </Text>
             );
 
           case 'link':
             return (
-              <Text key={key} color="#3b82f6" underline>
+              <Text key={key} color="#3b82f6" underline dimColor={options.dimColor}>
                 {token.text}
               </Text>
             );
 
           case 'image':
             return (
-              <Text key={key} color="#64748b">
+              <Text key={key} color="#64748b" dimColor={options.dimColor}>
                 {' '}
                 [Image: {token.text}]{' '}
               </Text>
@@ -386,7 +422,11 @@ const InlineContent = ({ tokens }: { tokens: any[] }) => {
             return <Newline key={key} />;
 
           default:
-            return <Text key={key}>{token.raw}</Text>;
+            return (
+              <Text key={key} color={options.defaultColor} dimColor={options.dimColor}>
+                {token.raw}
+              </Text>
+            );
         }
       })}
     </>
@@ -394,15 +434,15 @@ const InlineContent = ({ tokens }: { tokens: any[] }) => {
 };
 
 // Render Block elements (Headings, Paragraphs, Lists)
-const BlockRenderer = ({ token }: { token: any }) => {
+const BlockRenderer = ({ token, options = {} }: { token: any; options?: MarkdownRenderOptions }) => {
   switch (token.type) {
     case 'heading':
       const isMain = token.depth === 1;
       return (
         <Box flexDirection="column" marginTop={1} marginBottom={1}>
-          <Text bold underline={isMain} color={isMain ? 'green' : 'cyan'}>
+          <Text bold underline={isMain} color={isMain ? 'green' : 'cyan'} dimColor={options.dimColor}>
             {isMain ? '# ' : '## '}
-            <InlineContent tokens={token.tokens} />
+            <InlineContent tokens={token.tokens} options={options} />
           </Text>
         </Box>
       );
@@ -410,8 +450,8 @@ const BlockRenderer = ({ token }: { token: any }) => {
     case 'paragraph':
       return (
         <Box marginBottom={1}>
-          <Text>
-            <InlineContent tokens={token.tokens} />
+          <Text color={options.defaultColor} dimColor={options.dimColor}>
+            <InlineContent tokens={token.tokens} options={options} />
           </Text>
         </Box>
       );
@@ -420,7 +460,7 @@ const BlockRenderer = ({ token }: { token: any }) => {
       return (
         <Box flexDirection="column" marginBottom={1}>
           {token.items.map((item: any, index: number) => (
-            <BlockRenderer key={index} token={item} />
+            <BlockRenderer key={index} token={item} options={options} />
           ))}
         </Box>
       );
@@ -429,7 +469,9 @@ const BlockRenderer = ({ token }: { token: any }) => {
       return (
         <Box flexDirection="row">
           <Box marginRight={1}>
-            <Text color="green">•</Text>
+            <Text color="green" dimColor={options.dimColor}>
+              •
+            </Text>
           </Box>
           <Box flexDirection="column" flexGrow={1}>
             {/* List items can contain multiple block tokens (like sub-lists or paragraphs) */}
@@ -437,12 +479,12 @@ const BlockRenderer = ({ token }: { token: any }) => {
               // If it's just text inside the list item, marked might wrap it in a generic block
               if (subToken.type === 'text') {
                 return (
-                  <Text key={i}>
-                    <InlineContent tokens={subToken.tokens} />
+                  <Text key={i} color={options.defaultColor} dimColor={options.dimColor}>
+                    <InlineContent tokens={subToken.tokens} options={options} />
                   </Text>
                 );
               }
-              return <BlockRenderer key={i} token={subToken} />;
+              return <BlockRenderer key={i} token={subToken} options={options} />;
             })}
           </Box>
         </Box>
@@ -451,7 +493,9 @@ const BlockRenderer = ({ token }: { token: any }) => {
     case 'code':
       return (
         <Box borderStyle="round" borderColor="#64748b" paddingX={1} marginBottom={1} flexDirection="column">
-          <Text color="yellow">{token.text}</Text>
+          <Text color="yellow" dimColor={options.dimColor}>
+            {token.text}
+          </Text>
         </Box>
       );
 
@@ -471,7 +515,7 @@ const BlockRenderer = ({ token }: { token: any }) => {
           {/* Blockquotes often contain nested paragraphs which render as Boxes */}
           {/* We cannot wrap them in Text because Box in Text causes a crash */}
           {token.tokens.map((t: any, i: number) => (
-            <BlockRenderer key={i} token={t} />
+            <BlockRenderer key={i} token={t} options={options} />
           ))}
         </Box>
       );
@@ -482,12 +526,14 @@ const BlockRenderer = ({ token }: { token: any }) => {
     case 'hr':
       return (
         <Box marginY={1}>
-          <Text color="#64748b">────────────────────────────────────────</Text>
+          <Text color="#64748b" dimColor={options.dimColor}>
+            ────────────────────────────────────────
+          </Text>
         </Box>
       );
 
     case 'table':
-      return <TableRenderer token={token} />;
+      return <TableRenderer token={token} options={options} />;
 
     default:
       // Fallback for unknown blocks
@@ -501,6 +547,8 @@ const BlockRenderer = ({ token }: { token: any }) => {
 interface MarkdownRendererProps {
   children?: React.ReactNode;
   tokens?: any[];
+  defaultColor?: string;
+  dimColor?: boolean;
 }
 
 // Generate a stable key for a token based on its type and content
@@ -515,14 +563,15 @@ const getTokenKey = (token: any, index: number): string => {
   return `${token.type}-${rawPreview}-${index}`;
 };
 
-const MarkdownRenderer = ({ children, tokens }: MarkdownRendererProps) => {
+const MarkdownRenderer = ({ children, tokens, defaultColor, dimColor }: MarkdownRendererProps) => {
   // Allow passing raw text (which we parse) OR pre-parsed tokens
   const ast = useMemo(() => tokens || marked.lexer(String(children || '')), [tokens, children]);
+  const options = useMemo(() => ({ defaultColor, dimColor }), [defaultColor, dimColor]);
 
   return (
     <Box flexDirection="column">
       {ast.map((token: any, index: number) => (
-        <BlockRenderer key={getTokenKey(token, index)} token={token} />
+        <BlockRenderer key={getTokenKey(token, index)} token={token} options={options} />
       ))}
     </Box>
   );

@@ -1,14 +1,13 @@
 import React, { FC } from 'react';
-import { Box, Text } from 'ink';
+import { Box } from 'ink';
+import MarkdownRenderer from './MarkdownRenderer.js';
 
 type Props = {
   text: string;
 };
 
 /**
- * LiveResponse displays streaming text as plain text to avoid
- * issues with Markdown parsing of incomplete/partial content.
- * The final response will be rendered with full Markdown formatting.
+ * LiveResponse displays streaming text with Markdown formatting.
  * Reasoning text is displayed in slate (#64748b) before the main response.
  */
 const LiveResponse: FC<Props> = ({ text }) => {
@@ -17,7 +16,7 @@ const LiveResponse: FC<Props> = ({ text }) => {
 
   return (
     <Box marginY={1} flexDirection="column">
-      <Text>{trimmedText}</Text>
+      <MarkdownRenderer>{trimmedText}</MarkdownRenderer>
     </Box>
   );
 };

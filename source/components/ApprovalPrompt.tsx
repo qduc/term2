@@ -98,7 +98,9 @@ const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
         <Text color="cyan" bold>
           Command:{' '}
         </Text>
-        <Text>{args.commands}</Text>
+        <Text bold color="white">
+          {args.commands}
+        </Text>
       </Box>
       {args.timeout_ms && (
         <Box>

@@ -1,7 +1,7 @@
-import React, { FC, useCallback, useEffect, useMemo } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import { useInputActions } from './context/InputContext.js';
 
-import { Box, useApp, useInput } from 'ink';
+import { Box, Static, useApp, useInput } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
 import Banner from './components/Banner.js';
 import MessageList from './components/MessageList.js';
@@ -29,6 +29,8 @@ interface AppProps {
   sshService?: ISSHService;
 }
 
+export const appendStartupBannerId = (ids: string[]): string[] => [...ids, `startup-banner-${ids.length}`];
+
 const App: FC<AppProps> = ({
   conversationService,
   settingsService,
@@ -39,6 +41,7 @@ const App: FC<AppProps> = ({
 }) => {
   const { exit } = useApp();
   const { setInput } = useInputActions();
+  const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
 
   const {
@@ -83,12 +86,21 @@ const App: FC<AppProps> = ({
     sshService,
   });
 
+  const refreshStartupBanner = useCallback(() => {
+    setStartupBannerIds(appendStartupBannerId);
+  }, []);
+
+  const clearConversationAndRefreshBanner = useCallback(() => {
+    clearConversation();
+    refreshStartupBanner();
+  }, [clearConversation, refreshStartupBanner]);
+
   const { slashCommands, toggleEditMode } = useAppCommands({
     settingsService,
     addSystemMessage,
     applyRuntimeSetting,
     setInput,
-    clearConversation,
+    clearConversation: clearConversationAndRefreshBanner,
     exit,
     messages,
     setModel,
@@ -202,8 +214,15 @@ const App: FC<AppProps> = ({
 
   return (
     <ErrorBoundary loggingService={loggingService}>
+      <Static items={startupBannerIds}>
+        {(id) => (
+          <Box key={id}>
+            <Banner settingsService={settingsService} isShellMode={isShellMode} />
+          </Box>
+        )}
+      </Static>
+
       <Box flexDirection="column" flexGrow={1} paddingX={2}>
-        <Banner settingsService={settingsService} isShellMode={isShellMode} />
         {/* Main content area grows to fill available vertical space */}
         <Box flexDirection="column" flexGrow={1}>
           <MessageList messages={messages} />

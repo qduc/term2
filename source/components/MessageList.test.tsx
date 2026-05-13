@@ -31,7 +31,7 @@ test('MessageList renders image attachment summaries without leaked sentinel ids
   t.false(output.includes('f9uatvt88vql1'));
 });
 
-test('splitStaticHistory keeps running command messages active even when outside the count window', (t) => {
+test('splitStaticHistory keeps running command messages active regardless of position', (t) => {
   const messages = [
     ...Array.from({ length: 25 }, (_, index) => ({
       id: `msg-${index}`,
@@ -52,13 +52,16 @@ test('splitStaticHistory keeps running command messages active even when outside
     })),
   ];
 
-  const { history, active } = splitStaticHistory(messages, 20);
+  const { history, active } = splitStaticHistory(messages);
 
   t.false(history.some((message) => message.id === 'running-command'));
   t.true(active.some((message) => message.id === 'running-command'));
+  // Only the prefix before the running command can be static without reordering output.
+  t.true(history.some((message) => message.id === 'msg-0'));
+  t.true(active.some((message) => message.id === 'tail-24'));
 });
 
-test('splitStaticHistory keeps reasoning messages active while moving finalized overflow to history', (t) => {
+test('splitStaticHistory keeps unfinalized reasoning messages and following messages active', (t) => {
   const messages = [
     ...Array.from({ length: 25 }, (_, index) => ({
       id: `msg-${index}`,
@@ -77,11 +80,44 @@ test('splitStaticHistory keeps reasoning messages active while moving finalized 
     })),
   ];
 
-  const { history, active } = splitStaticHistory(messages, 20);
+  const { history, active } = splitStaticHistory(messages);
 
   t.true(history.some((message) => message.id === 'msg-0'));
+  t.true(active.some((message) => message.id === 'tail-24'));
   t.false(history.some((message) => message.id === 'reasoning-message'));
   t.true(active.some((message) => message.id === 'reasoning-message'));
+});
+
+test('splitStaticHistory preserves chronological order after the first active message', (t) => {
+  const messages = [
+    { id: 'before', sender: 'bot', text: 'before' },
+    {
+      id: 'running-command',
+      sender: 'command',
+      status: 'running',
+      command: 'npm test',
+      output: '',
+    },
+    {
+      id: 'completed-command',
+      sender: 'command',
+      status: 'completed',
+      command: 'pwd',
+      output: '/tmp',
+    },
+    { id: 'after', sender: 'bot', text: 'after' },
+  ];
+
+  const { history, active } = splitStaticHistory(messages);
+
+  t.deepEqual(
+    history.map((message) => message.id),
+    ['before'],
+  );
+  t.deepEqual(
+    active.map((message) => message.id),
+    ['running-command', 'completed-command', 'after'],
+  );
 });
 
 test('splitStaticHistory moves finalized reasoning messages to static history', (t) => {
@@ -104,8 +140,9 @@ test('splitStaticHistory moves finalized reasoning messages to static history', 
     })),
   ];
 
-  const { history, active } = splitStaticHistory(messages, 20);
+  const { history, active } = splitStaticHistory(messages);
 
   t.true(history.some((message) => message.id === 'finalized-reasoning'));
   t.false(active.some((message) => message.id === 'finalized-reasoning'));
+  t.is(active.length, 0);
 });

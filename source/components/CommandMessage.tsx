@@ -1,4 +1,4 @@
-import React, { FC, useState, useEffect } from 'react';
+import React, { FC, useState, useEffect, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { generateDiff } from '../utils/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
@@ -164,6 +164,25 @@ const CommandMessage: FC<Props> = ({
   const isRunning = status === 'pending' || status === 'running';
   const [isVisible, setIsVisible] = useState(!isRunning);
 
+  const diff = useMemo(
+    () =>
+      toolName === TOOL_NAME_SEARCH_REPLACE && toolArgs
+        ? generateDiff(toolArgs.search_content, toolArgs.replace_content)
+        : '',
+    [toolName, toolArgs?.search_content, toolArgs?.replace_content],
+  );
+
+  const createFileDiffLines = useMemo(
+    () =>
+      toolName === TOOL_NAME_CREATE_FILE && toolArgs
+        ? (toolArgs.content ?? '')
+            .split('\n')
+            .map((line: string) => `+${line}`)
+            .join('\n')
+        : '',
+    [toolName, toolArgs?.content],
+  );
+
   useEffect(() => {
     if (!isRunning) {
       setIsVisible(true);
@@ -191,8 +210,6 @@ const CommandMessage: FC<Props> = ({
 
   // Special handling for search_replace
   if (toolName === TOOL_NAME_SEARCH_REPLACE && toolArgs) {
-    const diff = generateDiff(toolArgs.search_content, toolArgs.replace_content);
-
     // For search_replace that had an approval prompt (user said 'y'), only show output
     if (hadApproval) {
       return (
@@ -221,11 +238,6 @@ const CommandMessage: FC<Props> = ({
 
   // Special handling for create_file
   if (toolName === TOOL_NAME_CREATE_FILE && toolArgs) {
-    const diffLines = (toolArgs.content ?? '')
-      .split('\n')
-      .map((line: string) => `+${line}`)
-      .join('\n');
-
     return (
       <Box flexDirection="column">
         <Box>
@@ -234,7 +246,7 @@ const CommandMessage: FC<Props> = ({
           </Text>
           <Text> {toolArgs.path}</Text>
         </Box>
-        {success !== false && <DiffView diff={diffLines} />}
+        {success !== false && <DiffView diff={createFileDiffLines} />}
         {failureReason && <Text color="red">Error: {failureReason}</Text>}
         <Text color={success === false ? 'red' : '#64748b'}>{displayed}</Text>
       </Box>

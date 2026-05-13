@@ -297,6 +297,27 @@ test('accepts pre-parsed tokens instead of children', (t) => {
   t.true(frame.includes('Custom tokens'));
 });
 
+test('rerenders pre-parsed tokens without raw content', (t) => {
+  const makeTokens = (text) => [
+    {
+      type: 'paragraph',
+      tokens: [
+        {
+          type: 'text',
+          text,
+        },
+      ],
+    },
+  ];
+
+  const renderer = render(React.createElement(MarkdownRenderer, { tokens: makeTokens('First tokens') }));
+  renderer.rerender(React.createElement(MarkdownRenderer, { tokens: makeTokens('Second tokens') }));
+
+  const frame = stripAnsi(renderer.lastFrame());
+  t.true(frame.includes('Second tokens'));
+  t.false(frame.includes('First tokens'));
+});
+
 // --- Edge cases ---
 
 test('handles line breaks', (t) => {

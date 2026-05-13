@@ -7,8 +7,6 @@ type Props = {
   messages: any[];
 };
 
-const WINDOW_SIZE = 20;
-
 type MessageLike = {
   sender?: string;
   status?: string;
@@ -26,21 +24,16 @@ const canRenderStatically = (message: MessageLike) => {
   return true;
 };
 
-export const splitStaticHistory = <T extends MessageLike>(messages: T[], windowSize = WINDOW_SIZE) => {
-  const activeStart = Math.max(0, messages.length - windowSize);
-  const history: T[] = [];
-  const active: T[] = [];
+export const splitStaticHistory = <T extends MessageLike>(messages: T[]) => {
+  const activeStart = messages.findIndex((message) => !canRenderStatically(message));
+  if (activeStart === -1) {
+    return { history: messages, active: [] };
+  }
 
-  messages.forEach((message, index) => {
-    if (index >= activeStart || !canRenderStatically(message)) {
-      active.push(message);
-      return;
-    }
-
-    history.push(message);
-  });
-
-  return { history, active };
+  return {
+    history: messages.slice(0, activeStart),
+    active: messages.slice(activeStart),
+  };
 };
 
 const MessageList: FC<Props> = ({ messages }) => {

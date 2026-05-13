@@ -542,6 +542,26 @@ const BlockRenderer = ({ token, options = {} }: { token: any; options?: Markdown
   }
 };
 
+// Re-renders only when raw token content or render options change.
+// During streaming, only the trailing (in-progress) block will ever change, so all
+// prior blocks keep their existing React subtrees without reconciliation.
+const MemoBlock = React.memo(
+  ({ token, options }: { token: any; options: MarkdownRenderOptions }) => (
+    <BlockRenderer token={token} options={options} />
+  ),
+  (prev, next) => {
+    if (prev.options !== next.options) {
+      return false;
+    }
+
+    if (typeof prev.token.raw !== 'string' || typeof next.token.raw !== 'string') {
+      return false;
+    }
+
+    return prev.token.raw === next.token.raw;
+  },
+);
+
 // --- Main Component ---
 
 interface MarkdownRendererProps {
@@ -571,10 +591,10 @@ const MarkdownRenderer = ({ children, tokens, defaultColor, dimColor }: Markdown
   return (
     <Box flexDirection="column">
       {ast.map((token: any, index: number) => (
-        <BlockRenderer key={getTokenKey(token, index)} token={token} options={options} />
+        <MemoBlock key={getTokenKey(token, index)} token={token} options={options} />
       ))}
     </Box>
   );
 };
 
-export default MarkdownRenderer;
+export default React.memo(MarkdownRenderer);

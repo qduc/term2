@@ -506,6 +506,45 @@ test('retry: adds system message about flex service tier fallback', (t) => {
 });
 
 // =============================================================================
+// final event tests
+// =============================================================================
+
+test('final: finalizes trailing reasoning message that was never followed by a tool call', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  state.currentReasoningMessageId = 'active-reasoning';
+  state.accumulatedReasoningText = 'Trailing reasoning with no tool call';
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({ type: 'final', finalText: '' } as any);
+
+  t.true(deps.calls.reasoningFlushed);
+  t.is(state.accumulatedReasoningText, '');
+  t.true(state.currentReasoningMessageId === null);
+
+  // markCurrentReasoningFinalized sets status via setMessages
+  t.is(deps.calls.setMessagesCalls.length, 1);
+  const next = deps.calls.setMessagesCalls[0]!([
+    { id: 'active-reasoning', sender: 'reasoning', text: 'Trailing reasoning with no tool call' },
+  ]);
+  t.deepEqual(next, [
+    { id: 'active-reasoning', sender: 'reasoning', status: 'finalized', text: 'Trailing reasoning with no tool call' },
+  ]);
+});
+
+test('final: is a no-op when there is no pending reasoning', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({ type: 'final', finalText: '' } as any);
+
+  t.false(deps.calls.reasoningFlushed);
+  t.is(deps.calls.setMessagesCalls.length, 0);
+  t.is(deps.calls.appendedMessages.length, 0);
+});
+
+// =============================================================================
 // unknown event tests
 // =============================================================================
 

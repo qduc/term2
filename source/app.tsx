@@ -1,4 +1,4 @@
-import React, { FC, useCallback, useEffect } from 'react';
+import React, { FC, useCallback, useEffect, useMemo } from 'react';
 import { useInputActions } from './context/InputContext.js';
 
 import { Box, useApp, useInput } from 'ink';
@@ -93,6 +93,8 @@ const App: FC<AppProps> = ({
     messages,
     setModel,
   });
+
+  const hasConversationHistory = useMemo(() => messages.some((msg) => msg.sender !== 'system'), [messages]);
 
   // Handle Ctrl+C to exit immediately
   useInput((_input: string, key) => {
@@ -219,7 +221,7 @@ const App: FC<AppProps> = ({
           lastUsage={lastUsage}
           onSubmit={handleSubmit}
           slashCommands={slashCommands}
-          hasConversationHistory={messages.filter((msg) => msg.sender !== 'system').length > 0}
+          hasConversationHistory={hasConversationHistory}
           settingsService={settingsService}
           loggingService={loggingService}
           historyService={historyService}

@@ -2,7 +2,6 @@ import { useCallback, useRef, useState } from 'react';
 import type { ConversationService } from '../services/conversation-service.js';
 import { isAbortLikeError } from '../utils/error-helpers.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
-import { createStreamingUpdateCoordinator } from '../utils/streaming-updater.js';
 import { appendMessagesCapped } from '../utils/message-buffer.js';
 import { createMessageId } from './message-id.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils.js';
@@ -27,6 +26,7 @@ export interface BotMessage {
   id: string;
   sender: 'bot';
   text: string;
+  status?: 'streaming' | 'finalized';
   reasoningText?: string;
 }
 
@@ -48,13 +48,6 @@ export interface ReasoningMessage {
 
 export type Message = UserMessage | BotMessage | CommandMessage | SystemMessage | ReasoningMessage;
 
-interface LiveResponse {
-  id: string;
-  sender: 'bot';
-  text: string;
-}
-
-const LIVE_RESPONSE_THROTTLE_MS = 150;
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 const MAX_MESSAGE_COUNT = 300;
 
@@ -70,25 +63,8 @@ export const useConversation = ({
   const [waitingForRejectionReason, setWaitingForRejectionReason] = useState<boolean>(false);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [liveResponse, setLiveResponse] = useState<LiveResponse | null>(null);
   const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(null);
   const approvedContextRef = useRef<ApprovedToolContext | null>(null);
-  const createLiveResponseUpdater = useCallback(
-    (liveMessageId: string) =>
-      createStreamingUpdateCoordinator((text: string) => {
-        setLiveResponse((prev) =>
-          prev && prev.id === liveMessageId
-            ? { ...prev, text }
-            : {
-                id: liveMessageId,
-                sender: 'bot',
-                text,
-              },
-        );
-      }, LIVE_RESPONSE_THROTTLE_MS),
-    [],
-  );
-
   const trimMessages = useCallback((list: Message[]) => appendMessagesCapped(list, [], MAX_MESSAGE_COUNT), []);
 
   const appendMessages = useCallback(
@@ -115,26 +91,12 @@ export const useConversation = ({
   }, []);
 
   const applyServiceResult = useCallback(
-    (result: ConversationTerminal | null, remainingText?: string, textWasFlushed?: boolean) => {
+    (result: ConversationTerminal | null, textWasFlushed: boolean) => {
       if (!result) {
         return;
       }
 
       if (result.type === 'approval_required') {
-        // Flush reasoning and text separately before showing approval prompt
-        const messagesToAdd: Message[] = [];
-
-        if (remainingText?.trim() && !textWasFlushed) {
-          const textMessage: BotMessage = {
-            id: createMessageId(),
-            sender: 'bot',
-            text: remainingText,
-          };
-          messagesToAdd.push(textMessage);
-        }
-
-        appendMessages(messagesToAdd);
-
         // Don't also show the transient pending/running command message.
         setMessages((prev) => trimMessages(filterPendingCommandMessagesForApproval(prev, result.approval)));
         setPendingApproval({
@@ -146,21 +108,20 @@ export const useConversation = ({
         return;
       }
 
-      // If text was already flushed before command messages, don't add it again
-      // Only add final text if there's new text after the commands
-      const shouldAddBotMessage = !textWasFlushed || remainingText?.trim();
-      const finalText = remainingText?.trim() ? remainingText : result.finalText;
+      const finalText = result.finalText;
 
       setMessages((prev) => {
-        const messagesToAdd: Message[] = [];
         const annotatedCommands = result.commandMessages.map(annotateCommandMessage);
+        let next = [...prev, ...annotatedCommands];
 
-        let next = [...prev, ...messagesToAdd, ...annotatedCommands];
-
-        if (shouldAddBotMessage && finalText) {
-          const botMessage: BotMessage = {
+        // Append finalText only when streaming never pushed it via text_delta/final events.
+        // Providers that skip streaming (synchronous or non-interactive) may return text
+        // solely in result.finalText without emitting any text_delta events.
+        if (finalText?.trim() && !textWasFlushed) {
+          const botMessage: Message = {
             id: createMessageId(),
             sender: 'bot',
+            status: 'finalized',
             text: finalText,
           };
           next = [...next, botMessage];
@@ -174,7 +135,7 @@ export const useConversation = ({
         setLastUsage(result.usage);
       }
     },
-    [annotateCommandMessage, appendMessages, trimMessages],
+    [annotateCommandMessage, trimMessages],
   );
 
   const sendUserMessage = useCallback(
@@ -192,17 +153,15 @@ export const useConversation = ({
       appendMessages([userMessage]);
       setIsProcessing(true);
 
-      const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } =
+      const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
         createStreamingSession<Message>(
           {
             appendMessages,
             setMessages,
-            setLiveResponse,
             trimMessages,
             annotateCommandMessage,
             loggingService,
             setLastUsage,
-            createLiveResponseUpdater,
             reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
           },
           'sendUserMessage',
@@ -213,7 +172,8 @@ export const useConversation = ({
           onEvent: applyConversationEvent,
         });
 
-        applyServiceResult(result, streamingState.accumulatedText, streamingState.textWasFlushed);
+        applyConversationEvent({ type: 'final', finalText: '' } as any);
+        applyServiceResult(result, streamingState.textWasFlushed);
       } catch (error) {
         loggingService.error('Error in sendUserMessage', {
           error: error instanceof Error ? error.message : String(error),
@@ -245,6 +205,7 @@ export const useConversation = ({
           const botErrorMessage: BotMessage = {
             id: createMessageId(),
             sender: 'bot',
+            status: 'finalized',
             text: `Error: ${errorMessage}`,
           };
           appendMessages([botErrorMessage]);
@@ -256,14 +217,13 @@ export const useConversation = ({
         loggingService.debug('sendUserMessage finally block - resetting state');
         // flushLog();
         reasoningUpdater.flush();
-        liveResponseUpdater.cancel();
-        setLiveResponse(null);
+        botResponseUpdater.cancel();
         setIsProcessing(false);
         // Don't reset waitingForApproval here - it's set by applyServiceResult
         // and should only be cleared by handleApprovalDecision or stopProcessing
       }
     },
-    [conversationService, applyServiceResult, appendMessages, trimMessages, loggingService, createLiveResponseUpdater],
+    [conversationService, applyServiceResult, appendMessages, trimMessages, loggingService],
   );
 
   const handleApprovalDecision = useCallback(
@@ -295,17 +255,15 @@ export const useConversation = ({
       if (isMaxTurnsPrompt && answer === 'y') {
         setIsProcessing(true);
 
-        const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } =
+        const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
           createStreamingSession<Message>(
             {
               appendMessages,
               setMessages,
-              setLiveResponse,
               trimMessages,
               annotateCommandMessage,
               loggingService,
               setLastUsage,
-              createLiveResponseUpdater,
               reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
             },
             'maxTurnsContinuation',
@@ -318,7 +276,8 @@ export const useConversation = ({
             onEvent: applyConversationEvent,
           });
 
-          applyServiceResult(result, streamingState.accumulatedText, streamingState.textWasFlushed);
+          applyConversationEvent({ type: 'final', finalText: '' } as any);
+          applyServiceResult(result, streamingState.textWasFlushed);
         } catch (error) {
           loggingService.error('Error in continuation after max turns', {
             error: error instanceof Error ? error.message : String(error),
@@ -336,6 +295,7 @@ export const useConversation = ({
           const botErrorMessage: BotMessage = {
             id: createMessageId(),
             sender: 'bot',
+            status: 'finalized',
             text: `Error: ${errorMessage}`,
           };
           appendMessages([botErrorMessage]);
@@ -344,25 +304,22 @@ export const useConversation = ({
         } finally {
           // flushLog();
           reasoningUpdater.flush();
-          liveResponseUpdater.cancel();
-          setLiveResponse(null);
+          botResponseUpdater.cancel();
           setIsProcessing(false);
         }
         return;
       }
 
       setIsProcessing(true);
-      const { liveResponseUpdater, reasoningUpdater, streamingState, applyConversationEvent } =
+      const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
         createStreamingSession<Message>(
           {
             appendMessages,
             setMessages,
-            setLiveResponse,
             trimMessages,
             annotateCommandMessage,
             loggingService,
             setLastUsage,
-            createLiveResponseUpdater,
             reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
           },
           'approvalDecision',
@@ -372,7 +329,8 @@ export const useConversation = ({
         const result = await conversationService.handleApprovalDecision(answer, rejectionReason, {
           onEvent: applyConversationEvent,
         });
-        applyServiceResult(result, streamingState.accumulatedText, streamingState.textWasFlushed);
+        applyConversationEvent({ type: 'final', finalText: '' } as any);
+        applyServiceResult(result, streamingState.textWasFlushed);
       } catch (error) {
         loggingService.error('Error in handleApprovalDecision', {
           error: error instanceof Error ? error.message : String(error),
@@ -390,6 +348,7 @@ export const useConversation = ({
         const botErrorMessage: BotMessage = {
           id: createMessageId(),
           sender: 'bot',
+          status: 'finalized',
           text: `Error: ${errorMessage}`,
         };
         appendMessages([botErrorMessage]);
@@ -398,10 +357,8 @@ export const useConversation = ({
         setPendingApproval(null);
       } finally {
         loggingService.debug('handleApprovalDecision finally block - resetting state');
-        // flushLog();
         reasoningUpdater.flush();
-        liveResponseUpdater.cancel();
-        setLiveResponse(null);
+        botResponseUpdater.cancel();
         setIsProcessing(false);
         // Don't reset approval state here - if the result is another approval_required,
         // applyServiceResult will set waitingForApproval=true, but this finally block
@@ -416,7 +373,6 @@ export const useConversation = ({
       appendMessages,
       trimMessages,
       loggingService,
-      createLiveResponseUpdater,
     ],
   );
 
@@ -428,7 +384,6 @@ export const useConversation = ({
     setPendingApproval(null);
     approvedContextRef.current = null;
     setIsProcessing(false);
-    setLiveResponse(null);
     setLastUsage(null);
   }, [conversationService]);
 
@@ -439,7 +394,6 @@ export const useConversation = ({
     setPendingApproval(null);
     approvedContextRef.current = null;
     setIsProcessing(false);
-    setLiveResponse(null);
   }, [conversationService]);
 
   const setModel = useCallback(
@@ -505,7 +459,6 @@ export const useConversation = ({
 
   return {
     messages,
-    liveResponse,
     lastUsage,
     pendingApproval,
     waitingForApproval,

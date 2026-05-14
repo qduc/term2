@@ -153,6 +153,40 @@ test('splitStaticHistory keeps unfinalized reasoning messages and following mess
   t.true(active.some((message) => message.id === 'reasoning-message'));
 });
 
+test('splitStaticHistory keeps streaming bot messages and following messages active', (t) => {
+  const messages = [
+    { id: 'before', sender: 'bot', text: 'before', status: 'finalized' },
+    { id: 'streaming-bot', sender: 'bot', text: 'partial', status: 'streaming' },
+    { id: 'after', sender: 'bot', text: 'after', status: 'finalized' },
+  ];
+
+  const { history, active } = splitStaticHistory(messages);
+
+  t.deepEqual(
+    history.map((message) => message.id),
+    ['before'],
+  );
+  t.deepEqual(
+    active.map((message) => message.id),
+    ['streaming-bot', 'after'],
+  );
+});
+
+test('splitStaticHistory moves finalized bot messages to static history', (t) => {
+  const messages = [
+    { id: 'first', sender: 'bot', text: 'first', status: 'finalized' },
+    { id: 'second', sender: 'bot', text: 'second', status: 'finalized' },
+  ];
+
+  const { history, active } = splitStaticHistory(messages);
+
+  t.deepEqual(
+    history.map((message) => message.id),
+    ['first', 'second'],
+  );
+  t.deepEqual(active, []);
+});
+
 test('splitStaticHistory preserves chronological order after the first active message', (t) => {
   const messages = [
     { id: 'before', sender: 'bot', text: 'before' },

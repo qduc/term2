@@ -18,12 +18,10 @@ import { createMessageIdFactory } from '../hooks/message-id.js';
 export interface StreamingSessionFactoryDeps<MessageT extends UIMessage = UIMessage> {
   appendMessages: ConversationEventHandlerDeps<MessageT>['appendMessages'];
   setMessages: ConversationEventHandlerDeps<MessageT>['setMessages'];
-  setLiveResponse: ConversationEventHandlerDeps<MessageT>['setLiveResponse'];
   trimMessages: ConversationEventHandlerDeps<MessageT>['trimMessages'];
   annotateCommandMessage: ConversationEventHandlerDeps<MessageT>['annotateCommandMessage'];
   loggingService: ILoggingService;
   setLastUsage: (usage: NormalizedUsage) => void;
-  createLiveResponseUpdater: (liveMessageId: string) => ConversationEventHandlerDeps<MessageT>['liveResponseUpdater'];
   reasoningThrottleMs: number;
   now?: () => number;
   createStreamingState?: () => StreamingState;
@@ -32,7 +30,7 @@ export interface StreamingSessionFactoryDeps<MessageT extends UIMessage = UIMess
 }
 
 export interface StreamingSession {
-  liveResponseUpdater: ConversationEventHandlerDeps['liveResponseUpdater'];
+  botResponseUpdater: ConversationEventHandlerDeps['botResponseUpdater'];
   reasoningUpdater: ConversationEventHandlerDeps['reasoningUpdater'];
   streamingState: StreamingState;
   applyConversationEvent: (event: ConversationEvent) => void;
@@ -48,15 +46,35 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
   const createEventHandler = deps.createConversationEventHandler ?? createConversationEventHandler;
   const createMessageId = createMessageIdFactory(now);
 
-  const liveMessageId = createMessageId();
-  deps.setLiveResponse({
-    id: liveMessageId,
-    sender: 'bot',
-    text: '',
-  });
-  const liveResponseUpdater = deps.createLiveResponseUpdater(liveMessageId);
-
   const streamingState = createState();
+
+  const botResponseUpdater = createCoordinator((newBotText: string) => {
+    deps.setMessages((prev) => {
+      if (streamingState.currentBotMessageId !== null) {
+        const index = prev.findIndex((msg) => msg.id === streamingState.currentBotMessageId);
+        if (index === -1) return prev;
+        const current = prev[index];
+        if (current.sender !== 'bot') {
+          return prev;
+        }
+        const next = prev.slice();
+        next[index] = { ...current, status: 'streaming', text: newBotText };
+        return deps.trimMessages(next);
+      }
+
+      const newId = createMessageId();
+      streamingState.currentBotMessageId = newId;
+      return deps.trimMessages([
+        ...prev,
+        {
+          id: newId,
+          sender: 'bot',
+          status: 'streaming',
+          text: newBotText,
+        },
+      ] as unknown as MessageT[]);
+    });
+  }, 150);
 
   const reasoningUpdater = createCoordinator((newReasoningText: string) => {
     deps.setMessages((prev) => {
@@ -87,11 +105,10 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
 
   const baseEventHandler = createEventHandler(
     {
-      liveResponseUpdater,
+      botResponseUpdater,
       reasoningUpdater,
       appendMessages: deps.appendMessages,
       setMessages: deps.setMessages,
-      setLiveResponse: deps.setLiveResponse,
       createMessageId,
       trimMessages: deps.trimMessages,
       annotateCommandMessage: deps.annotateCommandMessage,
@@ -116,7 +133,7 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
   };
 
   return {
-    liveResponseUpdater,
+    botResponseUpdater,
     reasoningUpdater,
     streamingState,
     applyConversationEvent,

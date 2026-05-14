@@ -40,6 +40,10 @@ const canRenderStatically = (message: MessageLike) => {
     return message.status !== 'pending' && message.status !== 'running';
   }
 
+  if (message.sender === 'bot') {
+    return message.status !== 'streaming';
+  }
+
   return true;
 };
 

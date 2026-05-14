@@ -8,11 +8,10 @@ import type { ConversationEvent } from '../services/conversation-events.js';
 // =============================================================================
 
 interface MockDeps extends ConversationEventHandlerDeps {
-  liveResponseUpdater: { push: (text: string) => void; cancel: () => void; flush: () => void };
+  botResponseUpdater: { push: (text: string) => void; cancel: () => void; flush: () => void };
   reasoningUpdater: { push: (text: string) => void; cancel: () => void; flush: () => void };
   appendMessages: (messages: any[]) => void;
   setMessages: (updater: (prev: any[]) => any[]) => void;
-  setLiveResponse: (response: any) => void;
   createMessageId: () => string;
   trimMessages: (messages: any[]) => any[];
   annotateCommandMessage: (msg: any) => any;
@@ -20,25 +19,23 @@ interface MockDeps extends ConversationEventHandlerDeps {
 
 function createMockDeps(): MockDeps & {
   calls: {
-    liveResponsePushes: string[];
-    liveResponseCancelled: boolean;
-    liveResponseFlushed: boolean;
+    botResponsePushes: string[];
+    botResponseCancelled: boolean;
+    botResponseFlushed: boolean;
     reasoningPushes: string[];
     reasoningFlushed: boolean;
     appendedMessages: any[][];
     setMessagesCalls: Array<(prev: any[]) => any[]>;
-    liveResponses: any[];
   };
 } {
   const calls = {
-    liveResponsePushes: [] as string[],
-    liveResponseCancelled: false,
-    liveResponseFlushed: false,
+    botResponsePushes: [] as string[],
+    botResponseCancelled: false,
+    botResponseFlushed: false,
     reasoningPushes: [] as string[],
     reasoningFlushed: false,
     appendedMessages: [] as any[][],
     setMessagesCalls: [] as Array<(prev: any[]) => any[]>,
-    liveResponses: [] as any[],
   };
 
   return {
@@ -47,13 +44,13 @@ function createMockDeps(): MockDeps & {
       let seq = 0;
       return () => `msg-${seq++}`;
     })(),
-    liveResponseUpdater: {
-      push: (text: string) => calls.liveResponsePushes.push(text),
+    botResponseUpdater: {
+      push: (text: string) => calls.botResponsePushes.push(text),
       cancel: () => {
-        calls.liveResponseCancelled = true;
+        calls.botResponseCancelled = true;
       },
       flush: () => {
-        calls.liveResponseFlushed = true;
+        calls.botResponseFlushed = true;
       },
     },
     reasoningUpdater: {
@@ -65,7 +62,6 @@ function createMockDeps(): MockDeps & {
     },
     appendMessages: (messages: any[]) => calls.appendedMessages.push(messages),
     setMessages: (updater: (prev: any[]) => any[]) => calls.setMessagesCalls.push(updater),
-    setLiveResponse: (response: any) => calls.liveResponses.push(response),
     trimMessages: (messages: any[]) => messages,
     annotateCommandMessage: (msg: any) => ({ ...msg, annotated: true }),
   };
@@ -84,7 +80,119 @@ test('text_delta: accumulates text and pushes to live response', (t) => {
   handler({ type: 'text_delta', delta: 'world!' } as ConversationEvent);
 
   t.is(state.accumulatedText, 'Hello world!');
-  t.deepEqual(deps.calls.liveResponsePushes, ['Hello ', 'Hello world!']);
+  t.deepEqual(deps.calls.botResponsePushes, ['Hello ', 'Hello world!']);
+});
+
+test('text_delta: finalizes stable paragraphs and streams only the unfinished tail', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  // Single delta that contains two complete paragraphs followed by an unfinished tail.
+  // The handler should flush the completed paragraphs as a finalized message and
+  // push only the tail to the live updater.
+  handler({
+    type: 'text_delta',
+    delta: 'First paragraph.\n\nSecond paragraph.\n\nCurrent tail',
+  } as ConversationEvent);
+
+  t.is(deps.calls.appendedMessages.length, 1);
+  t.deepEqual(deps.calls.appendedMessages[0], [
+    {
+      id: 'msg-0',
+      sender: 'bot',
+      status: 'finalized',
+      text: 'First paragraph.\n\nSecond paragraph.\n\n',
+    },
+  ]);
+  t.is(state.flushedTextLength, 'First paragraph.\n\nSecond paragraph.\n\n'.length);
+  t.deepEqual(deps.calls.botResponsePushes, ['Current tail']);
+  t.true(deps.calls.botResponseCancelled);
+});
+
+test('text_delta: does not finalize until a paragraph boundary exists', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({ type: 'text_delta', delta: 'Single paragraph still growing' } as ConversationEvent);
+
+  t.deepEqual(deps.calls.appendedMessages, []);
+  t.is(state.flushedTextLength, 0);
+  t.is(state.accumulatedText, 'Single paragraph still growing');
+  t.deepEqual(deps.calls.botResponsePushes, ['Single paragraph still growing']);
+});
+
+test('text_delta: finalizes an existing live bot message in place before streaming a new tail', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  state.currentBotMessageId = 'active-bot';
+  const handler = createConversationEventHandler(deps, state);
+
+  // Arrive with a delta that completes the first paragraph and starts a new tail.
+  // The handler should update the existing 'active-bot' message with the finalized
+  // paragraph text and push the new tail to the live updater.
+  handler({
+    type: 'text_delta',
+    delta: 'Old tail now complete.\n\nNew tail',
+  } as ConversationEvent);
+
+  t.deepEqual(deps.calls.appendedMessages, []);
+  t.is(deps.calls.setMessagesCalls.length, 1);
+
+  const next = deps.calls.setMessagesCalls[0]([
+    {
+      id: 'active-bot',
+      sender: 'bot',
+      text: 'Old tail',
+    },
+  ]);
+
+  t.deepEqual(next, [
+    {
+      id: 'active-bot',
+      sender: 'bot',
+      status: 'finalized',
+      text: 'Old tail now complete.\n\n',
+    },
+  ]);
+  t.true(state.currentBotMessageId === null);
+  t.is(state.flushedTextLength, 'Old tail now complete.\n\n'.length);
+  t.deepEqual(deps.calls.botResponsePushes, ['New tail']);
+  t.true(deps.calls.botResponseCancelled);
+});
+
+test('text_delta: cancels pending live bot update when paragraph boundary leaves no tail', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  state.currentBotMessageId = 'active-bot';
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'text_delta',
+    delta: 'Finished paragraph.\n\n',
+  } as ConversationEvent);
+
+  t.is(deps.calls.setMessagesCalls.length, 1);
+  const next = deps.calls.setMessagesCalls[0]([
+    {
+      id: 'active-bot',
+      sender: 'bot',
+      status: 'streaming',
+      text: 'Finished paragraph.',
+    },
+  ]);
+
+  t.deepEqual(next, [
+    {
+      id: 'active-bot',
+      sender: 'bot',
+      status: 'finalized',
+      text: 'Finished paragraph.\n\n',
+    },
+  ]);
+  t.deepEqual(deps.calls.botResponsePushes, []);
+  t.true(deps.calls.botResponseCancelled);
 });
 
 // =============================================================================
@@ -235,10 +343,11 @@ test('tool_started: flushes accumulated text before showing tool', (t) => {
 
   t.is(state.accumulatedText, '');
   t.is(state.textWasFlushed, true);
-  t.true(deps.calls.liveResponseCancelled);
+  t.true(deps.calls.botResponseCancelled);
   // Should append text message and command message
   t.is(deps.calls.appendedMessages.length, 2);
   t.is(deps.calls.appendedMessages[0][0].sender, 'bot');
+  t.is(deps.calls.appendedMessages[0][0].status, 'finalized');
   t.is(deps.calls.appendedMessages[0][0].text, 'Some text before tool');
 });
 
@@ -454,6 +563,7 @@ test('command_message: flushes accumulated text before adding', (t) => {
   t.is(state.accumulatedText, '');
   t.is(state.textWasFlushed, true);
   t.is(deps.calls.appendedMessages.length, 1);
+  t.is(deps.calls.appendedMessages[0][0].status, 'finalized');
   t.is(deps.calls.appendedMessages[0][0].text, 'Partial response');
 });
 

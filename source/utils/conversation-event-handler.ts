@@ -14,6 +14,7 @@ export interface BotMessage {
   id: string;
   sender: 'bot';
   text: string;
+  status?: 'streaming' | 'finalized';
 }
 
 export interface SystemMessage {
@@ -40,7 +41,7 @@ export interface ConversationEventHandlerDeps<
   MessageT extends UIMessage = UIMessage,
   CommandMessageT extends CommandMessage = CommandMessage,
 > {
-  liveResponseUpdater: {
+  botResponseUpdater: {
     push: (text: string) => void;
     cancel: () => void;
     flush: () => void;
@@ -52,7 +53,6 @@ export interface ConversationEventHandlerDeps<
   };
   appendMessages: (messages: MessageT[]) => void;
   setMessages: (updater: (prev: MessageT[]) => MessageT[]) => void;
-  setLiveResponse: (response: { id: string; sender: 'bot'; text: string } | null) => void;
   createMessageId: () => string;
   trimMessages: (messages: MessageT[]) => MessageT[];
   annotateCommandMessage: (msg: CommandMessageT) => CommandMessageT;
@@ -74,11 +74,10 @@ export function createConversationEventHandler<
   state: StreamingState,
 ): (event: ConversationEvent) => void {
   const {
-    liveResponseUpdater,
+    botResponseUpdater,
     reasoningUpdater,
     appendMessages,
     setMessages,
-    setLiveResponse,
     createMessageId,
     trimMessages,
     annotateCommandMessage,
@@ -120,11 +119,96 @@ export function createConversationEventHandler<
     state.currentReasoningMessageId = null;
   };
 
+  const flushBotText = () => {
+    const unescapedText = state.accumulatedText.slice(state.flushedTextLength);
+    if (!unescapedText.trim()) {
+      state.flushedTextLength += unescapedText.length;
+      return;
+    }
+
+    // Do NOT call botResponseUpdater.flush() here. flushBotText writes the
+    // finalized text directly via setMessages/appendMessages below. Calling
+    // flush() first would write the same text a second time (creating or
+    // updating the live-streaming message slot), making the subsequent write
+    // either a redundant overwrite (when currentBotMessageId is set after
+    // flush) or causing a double message (if flush is deferred and the slot
+    // doesn't exist yet at evaluation time). Callers that want to discard the
+    // in-flight live tail should call botResponseUpdater.cancel() after this.
+    state.flushedTextLength += unescapedText.length;
+    state.textWasFlushed = true;
+
+    if (state.currentBotMessageId) {
+      const botMessageId = state.currentBotMessageId;
+      setMessages((prev) => {
+        const index = prev.findIndex((msg) => msg.id === botMessageId);
+        if (index === -1) return prev;
+        const current = prev[index];
+        if (current.sender !== 'bot') return prev;
+        const next = prev.slice();
+        next[index] = { ...current, status: 'finalized', text: unescapedText };
+        return trimMessages(next);
+      });
+      state.currentBotMessageId = null;
+    } else {
+      const finalizedMessage: BotMessage = {
+        id: createMessageId(),
+        sender: 'bot',
+        status: 'finalized',
+        text: unescapedText,
+      };
+      appendMessages([finalizedMessage as unknown as MessageT]);
+    }
+  };
+
+  const resetBotTextTracking = () => {
+    state.accumulatedText = '';
+    state.flushedTextLength = 0;
+    state.currentBotMessageId = null;
+  };
+
   return (event: ConversationEvent) => {
     switch (event.type) {
       case 'text_delta': {
         state.accumulatedText += event.delta;
-        liveResponseUpdater.push(state.accumulatedText);
+
+        let newBotText = state.accumulatedText.slice(state.flushedTextLength);
+
+        const lastParagraphBoundary = newBotText.lastIndexOf('\n\n');
+        if (lastParagraphBoundary !== -1) {
+          botResponseUpdater.cancel();
+          const finalizedText = newBotText.slice(0, lastParagraphBoundary + 2);
+          newBotText = newBotText.slice(lastParagraphBoundary + 2);
+
+          if (finalizedText.trim()) {
+            if (state.currentBotMessageId) {
+              const botMessageId = state.currentBotMessageId;
+              state.currentBotMessageId = null;
+              setMessages((prev) => {
+                const index = prev.findIndex((m) => m.id === botMessageId);
+                if (index === -1) return prev;
+                const current = prev[index];
+                if (current.sender !== 'bot') return prev;
+                const next = prev.slice();
+                next[index] = { ...current, status: 'finalized', text: finalizedText };
+                return trimMessages(next);
+              });
+            } else {
+              const finalizedMessage: BotMessage = {
+                id: createMessageId(),
+                sender: 'bot',
+                status: 'finalized',
+                text: finalizedText,
+              };
+              appendMessages([finalizedMessage as unknown as MessageT]);
+            }
+            state.textWasFlushed = true;
+          }
+
+          state.flushedTextLength += finalizedText.length;
+        }
+
+        if (!newBotText.trim()) return;
+        botResponseUpdater.push(newBotText);
         return;
       }
 
@@ -167,18 +251,9 @@ export function createConversationEventHandler<
         flushReasoning();
 
         // Flush any accumulated text before showing the tool call
-        if (state.accumulatedText.trim()) {
-          const textMessage: BotMessage = {
-            id: createMessageId(),
-            sender: 'bot',
-            text: state.accumulatedText,
-          };
-          appendMessages([textMessage as unknown as MessageT]);
-          state.accumulatedText = '';
-          state.textWasFlushed = true;
-          liveResponseUpdater.cancel();
-          setLiveResponse(null);
-        }
+        flushBotText();
+        resetBotTextTracking();
+        botResponseUpdater.cancel();
 
         // Emit a "pending" command message when tool starts running
         const { toolCallId, toolName, arguments: rawArgs } = event;
@@ -217,28 +292,13 @@ export function createConversationEventHandler<
         }
         const annotated = annotateCommandMessage(cmdMsg as CommandMessageT);
 
-        const messagesToAdd: BotMessage[] = [];
-
         // Flush reasoning state
         flushReasoning();
 
         // Flush any accumulated text before adding command message
-        if (state.accumulatedText.trim()) {
-          const textMessage: BotMessage = {
-            id: createMessageId(),
-            sender: 'bot',
-            text: state.accumulatedText,
-          };
-          messagesToAdd.push(textMessage);
-          state.accumulatedText = '';
-          state.textWasFlushed = true;
-        }
-
-        if (messagesToAdd.length > 0) {
-          appendMessages(messagesToAdd as unknown as MessageT[]);
-          liveResponseUpdater.cancel();
-          setLiveResponse(null);
-        }
+        flushBotText();
+        resetBotTextTracking();
+        botResponseUpdater.cancel();
 
         // Replace pending message with completed one, or add new if not found
         setMessages((prev) => {
@@ -278,6 +338,7 @@ export function createConversationEventHandler<
         // tool_started and command_message already call flushReasoning; this handles
         // the text-only turn path where neither fires before the stream closes.
         flushReasoning();
+        flushBotText();
         return;
 
       case 'usage_update':

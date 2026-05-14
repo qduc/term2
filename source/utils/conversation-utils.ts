@@ -10,6 +10,8 @@ import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-n
  */
 export interface StreamingState {
   accumulatedText: string;
+  flushedTextLength: number;
+  currentBotMessageId: string | null;
   accumulatedReasoningText: string;
   flushedReasoningLength: number;
   textWasFlushed: boolean;
@@ -86,6 +88,8 @@ export function formatToolCommand(toolName: string, args: Record<string, unknown
 export function createStreamingState(): StreamingState {
   return {
     accumulatedText: '',
+    flushedTextLength: 0,
+    currentBotMessageId: null,
     accumulatedReasoningText: '',
     flushedReasoningLength: 0,
     textWasFlushed: false,

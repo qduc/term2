@@ -3,9 +3,6 @@ import { createStreamingSession } from './streaming-session-factory.js';
 
 test('createStreamingSession wires state and logs final usage', (t) => {
   const calls: {
-    liveResponses: any[];
-    liveResponseIds: string[];
-    coordinatorInterval?: number;
     eventHandlerEvents: any[];
     debugMessages: Array<{ message: string; meta?: any }>;
     lastUsage?: any;
@@ -13,13 +10,10 @@ test('createStreamingSession wires state and logs final usage', (t) => {
     eventHandlerState?: any;
     streamingState?: any;
   } = {
-    liveResponses: [],
-    liveResponseIds: [],
     eventHandlerEvents: [],
     debugMessages: [],
   };
 
-  const liveResponseUpdater = { push: () => {}, cancel: () => {}, flush: () => {} };
   const reasoningUpdater = { push: () => {}, cancel: () => {}, flush: () => {} };
   const usage = { total_tokens: 12 };
 
@@ -27,7 +21,6 @@ test('createStreamingSession wires state and logs final usage', (t) => {
     {
       appendMessages: () => {},
       setMessages: () => {},
-      setLiveResponse: (response) => calls.liveResponses.push(response),
       trimMessages: (messages) => messages,
       annotateCommandMessage: (msg) => msg,
       loggingService: {
@@ -43,15 +36,13 @@ test('createStreamingSession wires state and logs final usage', (t) => {
       setLastUsage: (nextUsage) => {
         calls.lastUsage = nextUsage;
       },
-      createLiveResponseUpdater: (id) => {
-        calls.liveResponseIds.push(id);
-        return liveResponseUpdater;
-      },
       reasoningThrottleMs: 200,
       now: () => 123,
       createStreamingState: () => {
         const state = {
           accumulatedText: '',
+          flushedTextLength: 0,
+          currentBotMessageId: null,
           accumulatedReasoningText: '',
           flushedReasoningLength: 0,
           textWasFlushed: false,
@@ -60,8 +51,7 @@ test('createStreamingSession wires state and logs final usage', (t) => {
         calls.streamingState = state;
         return state;
       },
-      createStreamingUpdateCoordinator: (_callback, interval) => {
-        calls.coordinatorInterval = interval;
+      createStreamingUpdateCoordinator: (_callback) => {
         return reasoningUpdater;
       },
       createConversationEventHandler: (deps, state) => {
@@ -73,12 +63,7 @@ test('createStreamingSession wires state and logs final usage', (t) => {
     'sendUserMessage',
   );
 
-  t.deepEqual(calls.liveResponses, [{ id: '123-0', sender: 'bot', text: '' }]);
-  t.deepEqual(calls.liveResponseIds, ['123-0']);
-  t.is(calls.coordinatorInterval, 200);
   t.is(calls.eventHandlerState, calls.streamingState);
-  t.is(calls.eventHandlerDeps.liveResponseUpdater, liveResponseUpdater);
-  t.is(calls.eventHandlerDeps.reasoningUpdater, reasoningUpdater);
 
   const finalEvent = { type: 'final', usage, finalText: '' } as const;
   session.applyConversationEvent(finalEvent);
@@ -90,4 +75,55 @@ test('createStreamingSession wires state and logs final usage', (t) => {
 
   session.applyConversationEvent({ type: 'final', finalText: '' } as const);
   t.is(calls.debugMessages[1]?.message, 'UI final event has no usage (sendUserMessage)');
+});
+
+test('botResponseUpdater creates and updates streaming bot messages', (t) => {
+  let messages: any[] = [];
+
+  const session = createStreamingSession(
+    {
+      appendMessages: (additions) => {
+        messages = [...messages, ...additions];
+      },
+      setMessages: (updater) => {
+        messages = updater(messages);
+      },
+      trimMessages: (nextMessages) => nextMessages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: {
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        debug: () => {},
+        security: () => {},
+        setCorrelationId: () => {},
+        getCorrelationId: () => undefined,
+        clearCorrelationId: () => {},
+      },
+      setLastUsage: () => {},
+      reasoningThrottleMs: 200,
+      now: () => 456,
+      createStreamingUpdateCoordinator: (callback) => {
+        const invoke = callback as unknown as (...args: any[]) => void;
+        return {
+          push: (...args: any[]) => invoke(...args),
+          flush: () => {},
+          cancel: () => {},
+        };
+      },
+    },
+    'sendUserMessage',
+  );
+
+  session.botResponseUpdater.push('Partial');
+  session.botResponseUpdater.push('Partial response');
+
+  t.deepEqual(messages, [
+    {
+      id: '456-0',
+      sender: 'bot',
+      status: 'streaming',
+      text: 'Partial response',
+    },
+  ]);
 });

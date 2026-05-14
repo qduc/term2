@@ -4,7 +4,6 @@ import { useInputActions } from './context/InputContext.js';
 import { Box, useApp, useInput } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
 import MessageList from './components/MessageList.js';
-import LiveResponse from './components/LiveResponse.js';
 import BottomArea from './components/BottomArea.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import type { ConversationService } from './services/conversation-service.js';
@@ -45,7 +44,6 @@ const App: FC<AppProps> = ({
 
   const {
     messages,
-    liveResponse,
     lastUsage,
     pendingApproval,
     waitingForApproval,
@@ -222,8 +220,6 @@ const App: FC<AppProps> = ({
             settingsService={settingsService}
             isShellMode={isShellMode}
           />
-
-          {liveResponse && liveResponse.text && <LiveResponse text={liveResponse.text} />}
         </Box>
 
         {/* Fixed bottom area for input / status */}

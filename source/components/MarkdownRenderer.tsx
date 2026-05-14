@@ -326,7 +326,7 @@ const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: Table
   };
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column">
       {/* Top border */}
       <Box marginX={TABLE_MARGIN_X}>
         <Text color="#64748b" dimColor={options.dimColor}>
@@ -451,7 +451,7 @@ const BlockRenderer = ({
     case 'heading':
       const isMain = token.depth === 1;
       return (
-        <Box flexDirection="column" marginTop={1} marginBottom={1}>
+        <Box flexDirection="column">
           <Text bold underline={isMain} color={isMain ? 'green' : 'cyan'} dimColor={options.dimColor}>
             {isMain ? '# ' : '## '}
             <InlineContent tokens={token.tokens} options={options} />
@@ -461,7 +461,7 @@ const BlockRenderer = ({
 
     case 'paragraph':
       return (
-        <Box marginBottom={1}>
+        <Box>
           <Text color={options.defaultColor} dimColor={options.dimColor}>
             <InlineContent tokens={token.tokens} options={options} />
           </Text>
@@ -470,7 +470,7 @@ const BlockRenderer = ({
 
     case 'list':
       return (
-        <Box flexDirection="column" marginBottom={1}>
+        <Box flexDirection="column">
           {token.items.map((item: any, index: number) => (
             <BlockRenderer key={index} token={item} options={options} />
           ))}
@@ -505,7 +505,7 @@ const BlockRenderer = ({
     case 'code':
       if (!token.text || !token.text.trim()) return null;
       return (
-        <Box borderStyle="round" borderColor="#64748b" paddingX={1} marginBottom={1} flexDirection="column">
+        <Box borderStyle="round" borderColor="#64748b" paddingX={1} flexDirection="column">
           <Text color="yellow" dimColor={options.dimColor}>
             {token.text}
           </Text>
@@ -522,7 +522,6 @@ const BlockRenderer = ({
           borderTop={false}
           borderBottom={false}
           borderColor="magenta"
-          marginBottom={1}
           flexDirection="column"
         >
           {/* Blockquotes often contain nested paragraphs which render as Boxes */}
@@ -538,7 +537,7 @@ const BlockRenderer = ({
 
     case 'hr':
       return (
-        <Box marginY={1}>
+        <Box>
           <Text color="#64748b" dimColor={options.dimColor}>
             ────────────────────────────────────────
           </Text>

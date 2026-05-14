@@ -293,6 +293,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       // baseUrl/apiKey can change only with restart, but we re-resolve from
       // settings at runner creation time to respect precedence.
       return new Runner({
+        tracingDisabled: true,
         modelProvider: (() => {
           const resolved = findConfigFromSettings(settingsService, providerId);
           if (!resolved) {

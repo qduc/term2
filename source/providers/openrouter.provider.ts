@@ -53,6 +53,7 @@ registerProvider({
     const defaultModel = settingsService.get('agent.model') || 'openrouter/auto';
 
     return new Runner({
+      tracingDisabled: true,
       modelProvider: new AiSdkOpenRouterProvider({
         defaultModel,
         resolveConfig: () => ({

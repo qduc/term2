@@ -82,6 +82,12 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
               <Box marginX={1}>
                 <Text color={accent}>{model}</Text>
                 <Text color={slate}> ({providerLabel})</Text>
+                {reasoningEffort && reasoningEffort !== 'default' && (
+                  <Text color={slate}>
+                    {' '}
+                    <Text color={glow}>({reasoningEffort})</Text>
+                  </Text>
+                )}
               </Box>
             </>
           )}
@@ -100,24 +106,15 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
 
       {/* Row 2: Status & Metrics */}
       <Box justifyContent="space-between" width="100%">
-        <Box>
-          {autoApproveMode !== 'off' && (
-            <Box marginRight={1}>
-              <Text color={slate}>Auto: </Text>
-              <Text color={autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
-                {autoApproveMode}
-              </Text>
-              {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
-            </Box>
-          )}
-
-          {reasoningEffort && reasoningEffort !== 'default' && (
-            <Box marginX={autoApproveMode !== 'off' ? 1 : 0}>
-              {autoApproveMode !== 'off' && <Text color={slate}>│ </Text>}
-              <Text color={glow}>Reasoning: {reasoningEffort}</Text>
-            </Box>
-          )}
-        </Box>
+        {autoApproveMode !== 'off' && (
+          <Box marginRight={1}>
+            <Text color={slate}>Auto: </Text>
+            <Text color={autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
+              {autoApproveMode}
+            </Text>
+            {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
+          </Box>
+        )}
 
         {usageText && (
           <Box>

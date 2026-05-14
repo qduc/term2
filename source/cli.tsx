@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import './env-setup.js';
 import React from 'react';
 import type { ReactNode } from 'react';
 import { render } from 'ink';

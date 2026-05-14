@@ -132,7 +132,14 @@ export const WebSearchSettingsSchema = z.object({
     .optional(),
 });
 
-export const KNOWN_CUSTOM_PROVIDER_TYPES = ['openai', 'openai-compatible', 'llama.cpp', 'anthropic', 'google'] as const;
+export const KNOWN_CUSTOM_PROVIDER_TYPES = [
+  'openai',
+  'openai-compatible',
+  'llama.cpp',
+  'anthropic',
+  'google',
+  'opencode',
+] as const;
 
 export type KnownCustomProviderType = (typeof KNOWN_CUSTOM_PROVIDER_TYPES)[number];
 
@@ -150,7 +157,7 @@ export const CustomProviderSchema = z
     apiKey: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.type !== 'anthropic' && data.type !== 'google' && !data.baseUrl) {
+    if (data.type !== 'anthropic' && data.type !== 'google' && data.type !== 'opencode' && !data.baseUrl) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'baseUrl is required for this provider type',

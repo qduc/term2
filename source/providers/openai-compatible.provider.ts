@@ -1,6 +1,7 @@
 import { Runner } from '@openai/agents';
 import { OpenAIProvider } from '@openai/agents-openai';
 import OpenAI from 'openai';
+import { randomBytes } from 'node:crypto';
 import type { ISettingsService } from '../services/service-interfaces.js';
 import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
@@ -19,11 +20,13 @@ export type CustomProviderConfig = {
 const DEFAULT_BASE_URLS: Record<string, string> = {
   anthropic: 'https://api.anthropic.com/v1',
   google: 'https://generativelanguage.googleapis.com/v1beta',
+  opencode: 'https://opencode.ai/v1',
 };
 
 const DEFAULT_ENV_API_KEYS: Record<string, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+  opencode: 'OPENCODE_API_KEY',
 };
 
 export type CustomProviderRuntimeDeps = {
@@ -155,11 +158,38 @@ function sanitizeOpenAICompatibleMessages(messages: any[]): any[] {
   });
 }
 
+const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/**
+ * Generates a session ID in the format `ses_<12_hex_timestamp><14_base62_random>`.
+ * Total length: 30 characters.
+ * Example: `ses_01944e8574766859367c346a09`
+ */
+function generateOpencodeSessionId(): string {
+  const timestamp = Date.now().toString(16).padStart(12, '0').slice(0, 12);
+  const bytes = randomBytes(11);
+  let value = 0n;
+  for (let i = 0; i < bytes.length; i++) {
+    value = (value << 8n) + BigInt(bytes[i]);
+  }
+  let random = '';
+  for (let i = 0; i < 14; i++) {
+    random += BASE62_ALPHABET[Number(value % 62n)];
+    value /= 62n;
+  }
+  return `ses_${timestamp}${random}`;
+}
+
 function createOpenAICompatibleFetch(
   fetchImpl: typeof fetch | undefined,
   providerType: string,
+  baseUrl?: string,
 ): typeof fetch | undefined {
   if (!fetchImpl) return undefined;
+
+  const isOpencode =
+    providerType === 'opencode' || (typeof baseUrl === 'string' && baseUrl.toLowerCase().includes('opencode.ai'));
+  const sessionId = isOpencode ? generateOpencodeSessionId() : undefined;
 
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof init?.body === 'string') {
@@ -181,8 +211,32 @@ function createOpenAICompatibleFetch(
           changed = true;
         }
 
+        if (isOpencode && sessionId) {
+          changed = true;
+        }
+
         if (changed) {
-          return fetchImpl(input, { ...init, body: JSON.stringify(body) });
+          let newInit: RequestInit = { ...init, body: JSON.stringify(body) };
+          if (isOpencode && sessionId) {
+            const existingHeaders: Record<string, string> = {};
+            if (init.headers) {
+              if (typeof (init.headers as any).forEach === 'function') {
+                (init.headers as any).forEach((v: string, k: string) => {
+                  existingHeaders[k] = v;
+                });
+              } else {
+                Object.assign(existingHeaders, init.headers);
+              }
+            }
+            newInit = {
+              ...newInit,
+              headers: {
+                ...existingHeaders,
+                'x-opencode-session': sessionId,
+              },
+            };
+          }
+          return fetchImpl(input, newInit);
         }
       } catch {
         return fetchImpl(input, init);
@@ -266,11 +320,20 @@ export function createCustomProviderModelProvider(
       });
     case 'openai-compatible':
     case 'llama.cpp':
+    case 'opencode':
     default: {
+      const isOpencode =
+        providerType === 'opencode' ||
+        config.name === 'opencode' ||
+        (typeof config.baseUrl === 'string' && config.baseUrl.toLowerCase().includes('opencode.ai'));
+
+      const effectiveBaseUrl = config.baseUrl ?? (isOpencode ? 'https://opencode.ai/v1' : '');
+      const effectiveApiKey = config.apiKey ?? (isOpencode ? process.env.OPENCODE_API_KEY : undefined);
+
       const openAIClient = new OpenAI({
-        baseURL: normalizeBaseUrl(config.baseUrl ?? ''),
-        apiKey: config.apiKey || 'no-key',
-        fetch: createOpenAICompatibleFetch(deps.fetch, providerType) as any,
+        baseURL: normalizeBaseUrl(effectiveBaseUrl),
+        apiKey: effectiveApiKey || 'no-key',
+        fetch: createOpenAICompatibleFetch(deps.fetch, providerType, effectiveBaseUrl) as any,
       });
       applyClientResponseNormalization(openAIClient);
       return new OpenAIProvider({
@@ -320,7 +383,16 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
         throw new Error(`Custom provider '${providerId}' is not configured in settings.json`);
       }
 
-      const effectiveBaseUrl = resolved.baseUrl ?? (resolved.type ? DEFAULT_BASE_URLS[resolved.type] : undefined);
+      const isOpencode =
+        resolved.type === 'opencode' ||
+        resolved.name === 'opencode' ||
+        (typeof resolved.baseUrl === 'string' && resolved.baseUrl.toLowerCase().includes('opencode.ai'));
+
+      const effectiveBaseUrl =
+        resolved.baseUrl ??
+        (resolved.type ? DEFAULT_BASE_URLS[resolved.type] : undefined) ??
+        (isOpencode ? 'https://opencode.ai/v1' : undefined);
+
       if (!effectiveBaseUrl) {
         throw new Error(`Custom provider '${providerId}' requires a baseUrl to list models`);
       }
@@ -328,7 +400,9 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       const url = buildOpenAICompatibleUrl(baseUrl, '/models');
 
       const resolvedApiKey =
-        resolved.apiKey ?? (resolved.type ? process.env[DEFAULT_ENV_API_KEYS[resolved.type] ?? ''] : undefined);
+        resolved.apiKey ??
+        (resolved.type ? process.env[DEFAULT_ENV_API_KEYS[resolved.type] ?? ''] : undefined) ??
+        (isOpencode ? process.env.OPENCODE_API_KEY : undefined);
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',

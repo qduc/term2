@@ -16,12 +16,17 @@ type CapturedRequest = {
   headers: Record<string, string>;
 };
 
-function buildProvider(captured: CapturedRequest[], response: any, providerType = 'openai-compatible') {
+function buildProvider(
+  captured: CapturedRequest[],
+  response: any,
+  providerType = 'openai-compatible',
+  baseUrl = 'https://provider.test/v1',
+) {
   return createCustomProviderModelProvider(
     {
       name: 'provider-test',
       type: providerType,
-      baseUrl: 'https://provider.test/v1',
+      baseUrl,
       apiKey: 'provider-key',
     },
     {
@@ -437,4 +442,154 @@ test('outgoing request hits the configured /chat/completions endpoint with beare
   t.regex(captured[0].url, /\/chat\/completions(\?|$)/);
   t.is(captured[0].headers.authorization, 'Bearer provider-key');
   t.is(captured[0].body.model, 'provider-model');
+});
+
+test('opencode.ai baseUrl adds x-opencode-session header and promptCacheKey body field', async (t) => {
+  const captured: CapturedRequest[] = [];
+  const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://opencode.ai/v1');
+  const model = await provider.getModel('provider-model');
+
+  await runUnderTrace(() =>
+    model.getResponse({
+      ...baseRequest,
+      input: [{ role: 'user', content: 'hello' }] as any,
+      modelSettings: {},
+    } as any),
+  );
+
+  t.is(captured.length, 1);
+  t.truthy(captured[0].headers['x-opencode-session'], 'should have x-opencode-session header');
+  t.truthy(captured[0].body.promptCacheKey, 'should have promptCacheKey body field');
+  t.is(
+    captured[0].headers['x-opencode-session'],
+    captured[0].body.promptCacheKey,
+    'header and body values should match',
+  );
+  t.regex(
+    captured[0].headers['x-opencode-session'],
+    /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/,
+    'session ID should match ses_<12hex><14base62> format (30 chars)',
+  );
+  t.is(captured[0].headers['x-opencode-session'].length, 30, 'session ID should be exactly 30 characters');
+});
+
+test('opencode session ID is stable across requests within a session', async (t) => {
+  const captured: CapturedRequest[] = [];
+  const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://opencode.ai/v1');
+  const model = await provider.getModel('provider-model');
+
+  const makeRequest = () =>
+    runUnderTrace(() =>
+      model.getResponse({
+        ...baseRequest,
+        input: [{ role: 'user', content: 'hello' }] as any,
+        modelSettings: {},
+      } as any),
+    );
+
+  await makeRequest();
+  const firstSessionId = captured[0].headers['x-opencode-session'];
+
+  await makeRequest();
+  t.is(
+    captured[1].headers['x-opencode-session'],
+    firstSessionId,
+    'session ID should be stable across requests in the same session',
+  );
+});
+
+test('non-opencode.ai baseUrl does not add opencode headers or body fields', async (t) => {
+  const captured: CapturedRequest[] = [];
+  const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://other-provider.com/v1');
+  const model = await provider.getModel('provider-model');
+
+  await runUnderTrace(() =>
+    model.getResponse({
+      ...baseRequest,
+      input: [{ role: 'user', content: 'hello' }] as any,
+      modelSettings: {},
+    } as any),
+  );
+
+  t.is(captured.length, 1);
+  t.falsy(captured[0].headers['x-opencode-session'], 'should not have x-opencode-session header');
+  t.falsy(captured[0].body.promptCacheKey, 'should not have promptCacheKey body field');
+});
+
+test('opencode.ai detection is case-insensitive', async (t) => {
+  const captured: CapturedRequest[] = [];
+  const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://OPENCODE.AI/v1');
+  const model = await provider.getModel('provider-model');
+
+  await runUnderTrace(() =>
+    model.getResponse({
+      ...baseRequest,
+      input: [{ role: 'user', content: 'hello' }] as any,
+      modelSettings: {},
+    } as any),
+  );
+
+  t.is(captured.length, 1);
+  t.truthy(captured[0].headers['x-opencode-session'], 'should detect OPENCODE.AI case-insensitively');
+  t.truthy(captured[0].body.promptCacheKey, 'should add promptCacheKey for OPENCODE.AI');
+});
+
+test('opencode provider type uses default base URL and falls back to OPENCODE_API_KEY', async (t) => {
+  const captured: CapturedRequest[] = [];
+  process.env.OPENCODE_API_KEY = 'env-opencode-key';
+  t.teardown(() => {
+    delete process.env.OPENCODE_API_KEY;
+  });
+
+  const provider = createCustomProviderModelProvider(
+    {
+      name: 'opencode-test',
+      type: 'opencode',
+      // baseUrl and apiKey omitted
+    },
+    {
+      defaultModel: 'provider-model',
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const headers: Record<string, string> = {};
+        const rawHeaders = init?.headers as any;
+        if (rawHeaders) {
+          if (typeof rawHeaders.forEach === 'function') {
+            rawHeaders.forEach((v: string, k: string) => {
+              headers[k.toLowerCase()] = String(v);
+            });
+          } else {
+            for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
+              headers[k.toLowerCase()] = String(v);
+            }
+          }
+        }
+        const rawBody = typeof init?.body === 'string' ? init.body : '';
+        captured.push({
+          url: typeof input === 'string' ? input : (input as URL).toString(),
+          body: rawBody ? JSON.parse(rawBody) : null,
+          headers,
+        });
+        return new Response(JSON.stringify(successResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch,
+    },
+  );
+
+  const model = await provider.getModel('provider-model');
+
+  await runUnderTrace(() =>
+    model.getResponse({
+      ...baseRequest,
+      input: [{ role: 'user', content: 'hello' }] as any,
+      modelSettings: {},
+    } as any),
+  );
+
+  t.is(captured.length, 1);
+  t.regex(captured[0].url, /^https:\/\/opencode\.ai\/v1\/chat\/completions(\?|$)/);
+  t.is(captured[0].headers.authorization, 'Bearer env-opencode-key');
+  t.truthy(captured[0].headers['x-opencode-session']);
+  t.truthy(captured[0].body.promptCacheKey);
 });

@@ -176,7 +176,7 @@ export class SettingsService {
       const providerId = (p as any)?.name;
       const baseUrl = (p as any)?.baseUrl;
       const providerType = String((p as any)?.type || '');
-      const baseUrlOptional = providerType === 'anthropic' || providerType === 'google';
+      const baseUrlOptional = providerType === 'anthropic' || providerType === 'google' || providerType === 'opencode';
       if (!providerId || (!baseUrl && !baseUrlOptional)) continue;
 
       const existing = getProvider(providerId);

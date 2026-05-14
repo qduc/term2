@@ -1,4 +1,4 @@
-import Fuse from 'fuse.js';
+import { scoreSubsequence } from '../utils/subsequence-filter.js';
 import { getProvider } from '../providers/index.js';
 import type { ILoggingService, ISettingsService } from './service-interfaces.js';
 
@@ -56,15 +56,24 @@ export function clearModelCache(): void {
 }
 
 export function filterModels(models: ModelInfo[], query: string): ModelInfo[] {
-  if (!query.trim()) {
+  const trimmed = query.trim();
+  if (!trimmed) {
     return models;
   }
 
-  const fuse = new Fuse(models, {
-    keys: ['id', 'name'],
-    threshold: 0.4,
-    ignoreLocation: true,
-  });
+  return models
+    .map((model) => {
+      const idScore = scoreSubsequence(trimmed, model.id);
+      const nameScore = model.name ? scoreSubsequence(trimmed, model.name) : -Infinity;
 
-  return fuse.search(query.trim()).map((match) => match.item);
+      // Reward ID match more than Name match
+      const weightedId = idScore === -Infinity ? -Infinity : idScore * 2;
+      const weightedName = nameScore === -Infinity ? -Infinity : nameScore;
+
+      const score = Math.max(weightedId, weightedName);
+      return { model, score };
+    })
+    .filter(({ score }) => score !== -Infinity)
+    .sort((a, b) => b.score - a.score)
+    .map(({ model }) => model);
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Fuse from 'fuse.js';
+import { scoreSubsequence } from '../utils/subsequence-filter.js';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings-service.js';
 import { useSelection } from './use-selection.js';
@@ -114,25 +114,40 @@ export function buildSettingValueSuggestions(key: string): SettingValueSuggestio
 export function filterSettingValueSuggestionsByQuery(
   suggestions: SettingValueSuggestion[],
   query: string,
-  fuse: Fuse<SettingValueSuggestion>,
   maxResults: number = MAX_RESULTS,
   key?: string,
 ): SettingValueSuggestion[] {
-  if (!query.trim()) {
+  const trimmed = query.trim();
+  if (!trimmed) {
     return suggestions.slice(0, maxResults);
   }
 
-  const results = fuse.search(query.trim()).map((r) => r.item);
+  const scoredResults = suggestions
+    .map((item) => {
+      const valueScore = scoreSubsequence(trimmed, item.value);
+      const descriptionScore = item.description ? scoreSubsequence(trimmed, item.description) : -Infinity;
+
+      // Reward value match more than description match
+      const weightedValue = valueScore === -Infinity ? -Infinity : valueScore * 2;
+      const weightedDescription = descriptionScore === -Infinity ? -Infinity : descriptionScore;
+
+      const score = Math.max(weightedValue, weightedDescription);
+      return { item, score };
+    })
+    .filter(({ score }) => score !== -Infinity)
+    .sort((a, b) => b.score - a.score);
+
+  const results = scoredResults.map((r) => r.item);
 
   // For number settings, if the query itself is a valid number and not already
   // in the results as an exact match, add it as a "Custom value" option.
-  if (key && NUMBER_SETTING_KEYS.has(key) && query.trim() && !results.some((r) => r.value === query.trim())) {
-    const numValue = Number(query.trim());
+  if (key && NUMBER_SETTING_KEYS.has(key) && trimmed && !results.some((r) => r.value === trimmed)) {
+    const numValue = Number(trimmed);
     if (!isNaN(numValue)) {
       // Add to the START of results so it's the default choice
       // when typing a custom value.
       results.unshift({
-        value: query.trim(),
+        value: trimmed,
         description: 'Custom value',
       });
     }
@@ -171,16 +186,9 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     return buildSettingValueSuggestions(settingKey);
   }, [settingKey, settingsVersion]);
 
-  const fuse = useMemo(() => {
-    return new Fuse(allSuggestions, {
-      keys: ['value', 'description'],
-      threshold: 0.4,
-    });
-  }, [allSuggestions]);
-
   const filteredEntries = useMemo(() => {
-    return filterSettingValueSuggestionsByQuery(allSuggestions, query, fuse, MAX_RESULTS, settingKey ?? undefined);
-  }, [allSuggestions, query, fuse, settingKey]);
+    return filterSettingValueSuggestionsByQuery(allSuggestions, query, MAX_RESULTS, settingKey ?? undefined);
+  }, [allSuggestions, query, settingKey]);
 
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredEntries);
 

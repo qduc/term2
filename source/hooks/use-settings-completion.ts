@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Fuse from 'fuse.js';
 import { SETTING_KEYS, SENSITIVE_SETTINGS, type SettingsService } from '../services/settings-service.js';
 import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
+import { scoreSubsequence } from '../utils/subsequence-filter.js';
 
 export type SettingCompletionItem = {
   key: string;
@@ -137,17 +137,28 @@ export function buildSettingsList(
 export function filterSettingsByQuery(
   settings: SettingCompletionItem[],
   query: string,
-  fuseInstance: Fuse<SettingCompletionItem>,
   maxResults: number = 10,
 ): SettingCompletionItem[] {
-  if (!query.trim()) {
-    return settings;
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return settings.slice(0, maxResults);
   }
 
-  return fuseInstance
-    .search(query.trim())
-    .map((result) => result.item)
-    .slice(0, maxResults);
+  return settings
+    .map((item) => {
+      const keyScore = scoreSubsequence(trimmed, item.key);
+      const descriptionScore = item.description ? scoreSubsequence(trimmed, item.description) : -Infinity;
+
+      const weightedKey = keyScore === -Infinity ? -Infinity : keyScore * 3;
+      const weightedDescription = descriptionScore === -Infinity ? -Infinity : descriptionScore;
+
+      const score = Math.max(weightedKey, weightedDescription);
+      return { item, score };
+    })
+    .filter(({ score }) => score !== -Infinity)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxResults)
+    .map(({ item }) => item);
 }
 
 export function clampIndex(currentIndex: number, arrayLength: number): number {
@@ -187,16 +198,9 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     );
   }, [settingsVersion, settingsService]);
 
-  const fuse = useMemo(() => {
-    return new Fuse(allSettings, {
-      keys: ['key', 'description'],
-      threshold: 0.4,
-    });
-  }, [allSettings]);
-
   const filteredEntries = useMemo(() => {
-    return filterSettingsByQuery(allSettings, query, fuse, MAX_RESULTS);
-  }, [allSettings, fuse, query]);
+    return filterSettingsByQuery(allSettings, query, MAX_RESULTS);
+  }, [allSettings, query]);
 
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredEntries);
 

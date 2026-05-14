@@ -1,5 +1,4 @@
 import test from 'ava';
-import Fuse from 'fuse.js';
 import {
   buildSettingValueSuggestions,
   filterSettingValueSuggestionsByQuery,
@@ -44,12 +43,7 @@ test('filterSettingValueSuggestionsByQuery filters by partial match', (t) => {
     { value: 'error' },
   ];
 
-  const fuse = new Fuse(suggestions, {
-    keys: ['value', 'description'],
-    threshold: 0.4,
-  });
-
-  const result = filterSettingValueSuggestionsByQuery(suggestions, 'err', fuse, 10);
+  const result = filterSettingValueSuggestionsByQuery(suggestions, 'err', 10);
 
   t.true(result.some((r) => r.value === 'error'));
 });
@@ -57,12 +51,7 @@ test('filterSettingValueSuggestionsByQuery filters by partial match', (t) => {
 test('filterSettingValueSuggestionsByQuery includes custom number value for number settings', (t) => {
   const suggestions: SettingValueSuggestion[] = [{ value: '100' }, { value: '200' }];
 
-  const fuse = new Fuse(suggestions, {
-    keys: ['value', 'description'],
-    threshold: 0.4,
-  });
-
-  const result = filterSettingValueSuggestionsByQuery(suggestions, '150', fuse, 10, 'ui.historySize');
+  const result = filterSettingValueSuggestionsByQuery(suggestions, '150', 10, 'ui.historySize');
 
   t.true(result.length >= 1);
   t.is(result[0]?.value, '150');
@@ -72,12 +61,7 @@ test('filterSettingValueSuggestionsByQuery includes custom number value for numb
 test('filterSettingValueSuggestionsByQuery does not include custom number if already present', (t) => {
   const suggestions: SettingValueSuggestion[] = [{ value: '100' }, { value: '200' }];
 
-  const fuse = new Fuse(suggestions, {
-    keys: ['value', 'description'],
-    threshold: 0.4,
-  });
-
-  const result = filterSettingValueSuggestionsByQuery(suggestions, '100', fuse, 10, 'ui.historySize');
+  const result = filterSettingValueSuggestionsByQuery(suggestions, '100', 10, 'ui.historySize');
 
   t.true(result.length >= 1);
   t.is(result[0]?.value, '100');
@@ -87,9 +71,7 @@ test('filterSettingValueSuggestionsByQuery does not include custom number if alr
 
 test('filterSettingValueSuggestionsByQuery does not include non-number custom values even for number settings', (t) => {
   const suggestions: SettingValueSuggestion[] = [];
-  const fuse = new Fuse(suggestions, {});
-
-  const result = filterSettingValueSuggestionsByQuery(suggestions, 'abc', fuse, 10, 'ui.historySize');
+  const result = filterSettingValueSuggestionsByQuery(suggestions, 'abc', 10, 'ui.historySize');
 
   t.is(result.length, 0);
 });

@@ -1,5 +1,4 @@
 import test from 'ava';
-import Fuse from 'fuse.js';
 import { buildSettingsList, filterSettingsByQuery, clampIndex } from './use-settings-completion.js';
 
 // Mock setting keys for testing (matching actual SETTING_KEYS structure)
@@ -195,46 +194,30 @@ test('buildSettingsList - no duplicate keys', (t) => {
 });
 
 // filterSettingsByQuery tests
-test('filterSettingsByQuery - empty query returns all settings', (t) => {
+test('filterSettingsByQuery - empty query returns limited settings', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
-  const result = filterSettingsByQuery(settings, '', fuse, 3);
-  t.is(result.length, settings.length);
+  const result = filterSettingsByQuery(settings, '', 3);
+  t.is(result.length, 3);
 });
 
-test('filterSettingsByQuery - whitespace-only query returns all settings', (t) => {
+test('filterSettingsByQuery - whitespace-only query returns limited settings', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
-  const result = filterSettingsByQuery(settings, '   ', fuse, 3);
-  t.is(result.length, settings.length);
+  const result = filterSettingsByQuery(settings, '   ', 3);
+  t.is(result.length, 3);
 });
 
 test('filterSettingsByQuery - exact key match returns result', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
-  const result = filterSettingsByQuery(settings, 'agent.model', fuse, 10);
+  const result = filterSettingsByQuery(settings, 'agent.model', 10);
   t.true(result.length > 0);
   t.true(result.some((item) => item.key === 'agent.model'));
 });
 
 test('filterSettingsByQuery - partial key match returns results', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
   const cases = [
     { query: 'agent', expectedKeySubstring: 'agent' },
@@ -243,7 +226,7 @@ test('filterSettingsByQuery - partial key match returns results', (t) => {
   ];
 
   for (const { query, expectedKeySubstring } of cases) {
-    const result = filterSettingsByQuery(settings, query, fuse, 10);
+    const result = filterSettingsByQuery(settings, query, 10);
     t.true(result.length > 0, `Query "${query}" should return results`);
     t.true(
       result.some((item) => item.key.includes(expectedKeySubstring)),
@@ -254,10 +237,6 @@ test('filterSettingsByQuery - partial key match returns results', (t) => {
 
 test('filterSettingsByQuery - search by description returns results', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
   const cases = [
     { query: 'timeout', expectedKey: 'shell.timeout' },
@@ -266,7 +245,7 @@ test('filterSettingsByQuery - search by description returns results', (t) => {
   ];
 
   for (const { query, expectedKey } of cases) {
-    const result = filterSettingsByQuery(settings, query, fuse, 10);
+    const result = filterSettingsByQuery(settings, query, 10);
     t.true(result.length > 0, `Query "${query}" should return results`);
     t.true(
       result.some((item) => item.key === expectedKey),
@@ -277,69 +256,51 @@ test('filterSettingsByQuery - search by description returns results', (t) => {
 
 test('filterSettingsByQuery - respects maxResults parameter for search queries', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
   // Use a broad query that matches multiple settings
-  const result1 = filterSettingsByQuery(settings, 'agent', fuse, 2);
+  const result1 = filterSettingsByQuery(settings, 'agent', 2);
   t.true(result1.length <= 2);
 
-  const result2 = filterSettingsByQuery(settings, 'agent', fuse, 4);
+  const result2 = filterSettingsByQuery(settings, 'agent', 4);
   t.true(result2.length <= 4);
 
-  const result3 = filterSettingsByQuery(settings, 'agent', fuse, 100);
+  const result3 = filterSettingsByQuery(settings, 'agent', 100);
   t.true(result3.length <= settings.length);
 });
 
 test('filterSettingsByQuery - case insensitive search', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
-  const lowerCase = filterSettingsByQuery(settings, 'agent', fuse, 10);
-  const upperCase = filterSettingsByQuery(settings, 'AGENT', fuse, 10);
-  const mixedCase = filterSettingsByQuery(settings, 'AgEnT', fuse, 10);
+  const lowerCase = filterSettingsByQuery(settings, 'agent', 10);
+  const upperCase = filterSettingsByQuery(settings, 'AGENT', 10);
+  const mixedCase = filterSettingsByQuery(settings, 'AgEnT', 10);
 
   t.true(lowerCase.length > 0);
   t.true(upperCase.length > 0);
   t.true(mixedCase.length > 0);
-  // Note: Fuzzy search might return slightly different results, but all should find matches
+  t.is(lowerCase.length, upperCase.length);
+  t.is(lowerCase.length, mixedCase.length);
 });
 
 test('filterSettingsByQuery - handles query with no matches', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
-  const result = filterSettingsByQuery(settings, 'xyzzzznonexistent', fuse, 10);
-  // Fuzzy search might still return some results due to threshold, but likely empty
-  t.true(Array.isArray(result));
+  const result = filterSettingsByQuery(settings, 'xyzzzznonexistent', 10);
+  t.is(result.length, 0);
 });
 
 test('filterSettingsByQuery - trims query before searching', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
-  const trimmed = filterSettingsByQuery(settings, 'agent', fuse, 10);
-  const withSpaces = filterSettingsByQuery(settings, '  agent  ', fuse, 10);
+  const trimmed = filterSettingsByQuery(settings, 'agent', 10);
+  const withSpaces = filterSettingsByQuery(settings, '  agent  ', 10);
 
   t.true(trimmed.length > 0);
-  t.true(withSpaces.length > 0);
+  t.is(trimmed.length, withSpaces.length);
 });
 
 test('filterSettingsByQuery - handles empty settings array', (t) => {
-  const fuse = new Fuse([], { keys: ['key', 'description'], threshold: 0.4 });
-
-  const result = filterSettingsByQuery([], 'agent', fuse, 10);
+  const result = filterSettingsByQuery([], 'agent', 10);
   t.is(result.length, 0);
 });
 
@@ -387,26 +348,18 @@ test('clampIndex - clamps negative index to first item', (t) => {
 // Integration tests
 test('Integration - buildSettingsList and filterSettingsByQuery work together', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
   // Search for "model" should find agent.model
-  const result = filterSettingsByQuery(settings, 'model', fuse, 10);
+  const result = filterSettingsByQuery(settings, 'model', 10);
   t.true(result.some((item) => item.key === 'agent.model'));
   t.true(result.some((item) => item.description?.includes('model')));
 });
 
 test('Integration - clampIndex with filtered results', (t) => {
   const settings = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
-  const fuse = new Fuse(settings, {
-    keys: ['key', 'description'],
-    threshold: 0.4,
-  });
 
   // Get filtered results
-  const filtered = filterSettingsByQuery(settings, 'agent', fuse, 3);
+  const filtered = filterSettingsByQuery(settings, 'agent', 3);
 
   // Clamp selection index to filtered results
   t.is(clampIndex(0, filtered.length), 0);

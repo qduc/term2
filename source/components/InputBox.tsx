@@ -417,7 +417,7 @@ const InputBox: FC<Props> = ({
   );
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" marginTop={1}>
       <PopupManager
         {...toPopupProps({ slash, path, settings, settingsValue, models })}
         settingsService={settingsService}

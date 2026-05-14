@@ -37,10 +37,10 @@ test('renders italic text', (t) => {
   t.true(frame.includes('This is'));
 });
 
-test('renders inline code', (t) => {
+test('renders inline code with non-breaking space padding', (t) => {
   const { lastFrame } = render(React.createElement(MarkdownRenderer, null, 'Run `npm install` to start'));
   const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('npm install'));
+  t.true(frame.includes('\u00A0npm install\u00A0'));
 });
 
 test('renders links', (t) => {

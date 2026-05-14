@@ -3,7 +3,7 @@ import { useInputActions } from './context/InputContext.js';
 
 import { Box, useApp, useInput } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
-import MessageList from './components/MessageList.js';
+import MessageList, { MESSAGE_HORIZONTAL_PADDING } from './components/MessageList.js';
 import BottomArea from './components/BottomArea.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import type { ConversationService } from './services/conversation-service.js';
@@ -211,7 +211,7 @@ const App: FC<AppProps> = ({
 
   return (
     <ErrorBoundary loggingService={loggingService}>
-      <Box flexDirection="column" flexGrow={1} paddingX={2}>
+      <Box flexDirection="column" flexGrow={1}>
         {/* Main content area grows to fill available vertical space */}
         <Box flexDirection="column" flexGrow={1}>
           <MessageList
@@ -223,23 +223,25 @@ const App: FC<AppProps> = ({
         </Box>
 
         {/* Fixed bottom area for input / status */}
-        <BottomArea
-          pendingApproval={pendingApproval}
-          waitingForApproval={waitingForApproval}
-          waitingForRejectionReason={waitingForRejectionReason}
-          isProcessing={isProcessing}
-          isShellMode={isShellMode}
-          lastUsage={lastUsage}
-          onSubmit={handleSubmit}
-          slashCommands={slashCommands}
-          hasConversationHistory={hasConversationHistory}
-          settingsService={settingsService}
-          loggingService={loggingService}
-          historyService={historyService}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          sshInfo={sshInfo}
-        />
+        <Box paddingX={MESSAGE_HORIZONTAL_PADDING}>
+          <BottomArea
+            pendingApproval={pendingApproval}
+            waitingForApproval={waitingForApproval}
+            waitingForRejectionReason={waitingForRejectionReason}
+            isProcessing={isProcessing}
+            isShellMode={isShellMode}
+            lastUsage={lastUsage}
+            onSubmit={handleSubmit}
+            slashCommands={slashCommands}
+            hasConversationHistory={hasConversationHistory}
+            settingsService={settingsService}
+            loggingService={loggingService}
+            historyService={historyService}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            sshInfo={sshInfo}
+          />
+        </Box>
       </Box>
     </ErrorBoundary>
   );

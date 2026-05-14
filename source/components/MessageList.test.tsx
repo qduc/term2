@@ -5,6 +5,12 @@ import MessageList, { splitStaticHistory } from './MessageList.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
 
 const countOccurrences = (text, pattern) => text.split(pattern).length - 1;
+const stripAnsi = (text: string) => text.replaceAll(/\u001B\[[0-9;]*m/g, '');
+const firstTableBorder = (text: string) =>
+  stripAnsi(text)
+    .split('\n')
+    .find((line) => line.trimStart().startsWith('+')) ?? '';
+const renderedLines = (text: string) => stripAnsi(text).trim().split('\n');
 
 test('MessageList renders user and bot messages', (t) => {
   const messages = [
@@ -94,6 +100,37 @@ test('MessageList moves a message from active to static without duplicating it',
   const output = renderer.lastFrame() ?? '';
   t.is(countOccurrences(output, 'before'), 1);
   t.is(countOccurrences(output, 'npm test'), 1);
+});
+
+test('MessageList renders active and static markdown tables with the same padded width', (t) => {
+  const markdown = `| File | Change |
+| --- | --- |
+| \`openai-compatible/model.ts\` | Track \`reasoningContent\` separately from \`reasoning\`; emit both \`reasoning_content\` and \`providerData\` in messages and function_calls; accumulate \`reasoning_content\` delta in streams |`;
+
+  const renderer = render(
+    <MessageList messages={[{ id: 'table', sender: 'bot', status: 'streaming', text: markdown }]} />,
+  );
+  const activeBorder = firstTableBorder(renderer.lastFrame() ?? '');
+
+  renderer.rerender(<MessageList messages={[{ id: 'table', sender: 'bot', status: 'finalized', text: markdown }]} />);
+  const staticBorder = firstTableBorder(renderer.lastFrame() ?? '');
+
+  t.regex(activeBorder, /^ {2,}\+/);
+  t.is(staticBorder, activeBorder);
+});
+
+test('MessageList renders active and static wrapped text with the same line breaks', (t) => {
+  const text =
+    'This paragraph is intentionally long enough to wrap near the terminal boundary while the message is streaming and must keep the same wrapped shape after it is finalized.';
+
+  const renderer = render(<MessageList messages={[{ id: 'paragraph', sender: 'bot', status: 'streaming', text }]} />);
+  const activeLines = renderedLines(renderer.lastFrame() ?? '');
+
+  renderer.rerender(<MessageList messages={[{ id: 'paragraph', sender: 'bot', status: 'finalized', text }]} />);
+  const staticLines = renderedLines(renderer.lastFrame() ?? '');
+
+  t.true(activeLines.length > 1);
+  t.deepEqual(staticLines, activeLines);
 });
 
 test('splitStaticHistory keeps running command messages active regardless of position', (t) => {

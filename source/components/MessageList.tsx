@@ -31,6 +31,8 @@ type StaticMessageItem = {
 
 type StaticItem = StaticBannerItem | StaticMessageItem;
 
+export const MESSAGE_HORIZONTAL_PADDING = 2;
+
 const canRenderStatically = (message: MessageLike) => {
   if (message.sender === 'reasoning') {
     return message.status === 'finalized';
@@ -67,11 +69,8 @@ const createStaticItems = (bannerItems: string[], history: MessageLike[]): Stati
 const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, isShellMode = false }) => {
   const { stdout } = useStdout();
 
-  // The Static wrapper has paddingLeft: 2, paddingRight: 2 (4 chars total),
-  // so the available width for content inside it is terminal width minus 4.
-  // The active section has no such padding, so it uses the full terminal width.
   const terminalColumns = stdout.columns || 80;
-  const staticMaxWidth = terminalColumns - 4;
+  const contentWidth = Math.max(1, terminalColumns - MESSAGE_HORIZONTAL_PADDING * 2);
 
   // Use useMemo to prevent array recreation on every render.
   // This stabilizes the references passed to Static and the active Box,
@@ -119,7 +118,7 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
     const isFirst = idx === 0 && collection === active && history.length === 0;
 
     return (
-      <Box key={msg.id} marginTop={isFirst ? 0 : 1}>
+      <Box key={msg.id} marginTop={isFirst ? 0 : 1} width={maxWidth}>
         {msg.sender === 'command' ? (
           <CommandMessage
             command={msg.command}
@@ -148,16 +147,21 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
       );
     }
 
-    return renderMessage(item.message, idx, staticItems, staticMaxWidth);
+    return renderMessage(item.message, idx, staticItems, contentWidth);
   };
 
   return (
     <Box flexDirection="column">
-      <Static items={staticItems} style={{ paddingLeft: 2, paddingRight: 2 }}>
+      <Static
+        items={staticItems}
+        style={{ paddingLeft: MESSAGE_HORIZONTAL_PADDING, paddingRight: MESSAGE_HORIZONTAL_PADDING }}
+      >
         {renderStaticItem}
       </Static>
 
-      <Box flexDirection="column">{active.map((msg, idx) => renderMessage(msg, idx, active))}</Box>
+      <Box flexDirection="column" paddingX={MESSAGE_HORIZONTAL_PADDING}>
+        {active.map((msg, idx) => renderMessage(msg, idx, active, contentWidth))}
+      </Box>
     </Box>
   );
 };

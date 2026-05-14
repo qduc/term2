@@ -403,7 +403,7 @@ const InlineContent = ({ tokens, options = {} }: { tokens: any[]; options?: Mark
           case 'codespan':
             return (
               <Text key={key} color="yellow" backgroundColor="#333" dimColor={options.dimColor}>
-                {` ${token.text} `}
+                {`\u00A0${token.text}\u00A0`}
               </Text>
             );
 

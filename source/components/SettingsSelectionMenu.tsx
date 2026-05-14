@@ -5,6 +5,7 @@ import type { SettingCompletionItem } from '../hooks/use-settings-completion.js'
 type Props = {
   items: SettingCompletionItem[];
   selectedIndex: number;
+  scrollOffset?: number;
   query: string;
 };
 
@@ -54,10 +55,10 @@ function formatValue(value: string | number | boolean): {
   return { text: truncate(value, 40), color: 'cyan' };
 }
 
-const VISIBLE_COUNT = 15;
+const VISIBLE_COUNT = 10;
 const KEY_COL_WIDTH = 32;
 
-const SettingsSelectionMenu: FC<Props> = ({ items, selectedIndex, query }) => {
+const SettingsSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query }) => {
   if (items.length === 0) {
     return (
       <Box flexDirection="column" borderStyle="round" borderColor="red" paddingX={1}>
@@ -69,24 +70,10 @@ const SettingsSelectionMenu: FC<Props> = ({ items, selectedIndex, query }) => {
     );
   }
 
-  // Calculate viewport
-  let viewportStart = 0;
-  if (items.length > VISIBLE_COUNT) {
-    const half = Math.floor(VISIBLE_COUNT / 2);
-    if (selectedIndex <= half) {
-      viewportStart = 0;
-    } else if (selectedIndex >= items.length - half) {
-      viewportStart = items.length - VISIBLE_COUNT;
-    } else {
-      viewportStart = selectedIndex - half;
-    }
-  }
-
-  // Ensure start is valid
-  viewportStart = Math.max(0, Math.min(viewportStart, items.length - VISIBLE_COUNT));
-  // If items < VISIBLE_COUNT, start is 0.
-
+  const viewportStart = Math.max(0, Math.min(scrollOffset, Math.max(0, items.length - VISIBLE_COUNT)));
   const visibleItems = items.slice(viewportStart, viewportStart + VISIBLE_COUNT);
+  const hasScrollUp = viewportStart > 0;
+  const hasScrollDown = viewportStart + VISIBLE_COUNT < items.length;
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
@@ -114,7 +101,17 @@ const SettingsSelectionMenu: FC<Props> = ({ items, selectedIndex, query }) => {
           <Text color="gray">Type to filter</Text>
         )}
         <Text color="gray"> · {items.length} items</Text>
+        {items.length > VISIBLE_COUNT && (
+          <>
+            <Text color="gray"> · </Text>
+            <Text color="gray">
+              {viewportStart + 1}-{Math.min(viewportStart + VISIBLE_COUNT, items.length)}/{items.length}
+            </Text>
+          </>
+        )}
       </Box>
+
+      {hasScrollUp && <Text color="#64748b">↑ {viewportStart} more</Text>}
 
       {visibleItems.map((item, index) => {
         const realIndex = viewportStart + index;
@@ -168,6 +165,8 @@ const SettingsSelectionMenu: FC<Props> = ({ items, selectedIndex, query }) => {
           </Box>
         );
       })}
+
+      {hasScrollDown && <Text color="#64748b">↓ {items.length - viewportStart - VISIBLE_COUNT} more</Text>}
 
       <Box
         marginTop={1}

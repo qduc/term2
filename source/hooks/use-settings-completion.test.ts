@@ -62,8 +62,21 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
 test('buildSettingsList - creates list from keys and descriptions', (t) => {
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS);
 
-  // Should exclude 5 sensitive settings + 2 hidden settings by default
-  const expectedCount = Object.keys(MOCK_SETTING_KEYS).length - 7;
+  const excludedKeys = new Set([
+    'agent.provider',
+    'agent.mentorProvider',
+    'agent.openrouter.apiKey',
+    'agent.openrouter.baseUrl',
+    'agent.openrouter.referrer',
+    'agent.openrouter.title',
+    'logging.debugLogging',
+    'logging.suppressConsoleOutput',
+    'environment.nodeEnv',
+    'app.shellPath',
+    'tools.logFileOperations',
+    'debug.debugBashTool',
+  ]);
+  const expectedCount = Object.values(MOCK_SETTING_KEYS).filter((key) => !excludedKeys.has(key)).length;
   t.is(result.length, expectedCount);
   t.true(result.every(() => true));
   t.true(result.every((item) => item.description !== undefined));
@@ -89,11 +102,22 @@ test('buildSettingsList - can include sensitive settings when requested', (t) =>
   const result = buildSettingsList(MOCK_SETTING_KEYS, MOCK_DESCRIPTIONS, false);
   const keys = new Set(result.map((item) => item.key));
 
-  // Should include all settings except hidden ones when excludeSensitive is false
-  // Two hidden settings present in MOCK_SETTING_KEYS: agent.provider and agent.mentorProvider
-  t.is(result.length, Object.keys(MOCK_SETTING_KEYS).length - 2);
+  const hiddenKeys = new Set([
+    'agent.provider',
+    'agent.mentorProvider',
+    'logging.debugLogging',
+    'logging.suppressConsoleOutput',
+    'environment.nodeEnv',
+    'app.shellPath',
+    'tools.logFileOperations',
+    'debug.debugBashTool',
+  ]);
+  const expectedCount = Object.values(MOCK_SETTING_KEYS).filter((key) => !hiddenKeys.has(key)).length;
+
+  // Should include all settings except UI-hidden ones when excludeSensitive is false
+  t.is(result.length, expectedCount);
   t.true(keys.has('agent.openrouter.apiKey'));
-  t.true(keys.has('app.shellPath'));
+  t.false(keys.has('app.shellPath'));
   // Hidden settings should still be excluded
   t.false(keys.has('agent.provider'));
 });
@@ -179,8 +203,21 @@ test('buildSettingsList - handles missing descriptions with empty string', (t) =
 test('buildSettingsList - handles empty descriptions object', (t) => {
   const result = buildSettingsList(MOCK_SETTING_KEYS, {});
 
-  // Should exclude sensitive settings + hidden settings
-  const expectedCount = Object.keys(MOCK_SETTING_KEYS).length - 7;
+  const excludedKeys = new Set([
+    'agent.provider',
+    'agent.mentorProvider',
+    'agent.openrouter.apiKey',
+    'agent.openrouter.baseUrl',
+    'agent.openrouter.referrer',
+    'agent.openrouter.title',
+    'logging.debugLogging',
+    'logging.suppressConsoleOutput',
+    'environment.nodeEnv',
+    'app.shellPath',
+    'tools.logFileOperations',
+    'debug.debugBashTool',
+  ]);
+  const expectedCount = Object.values(MOCK_SETTING_KEYS).filter((key) => !excludedKeys.has(key)).length;
   t.is(result.length, expectedCount);
   t.true(result.every((item) => item.description === ''));
 });

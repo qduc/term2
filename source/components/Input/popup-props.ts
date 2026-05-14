@@ -53,6 +53,7 @@ export const toPopupProps = ({
     isOpen: settings.isOpen,
     items: settings.filteredEntries,
     selectedIndex: settings.selectedIndex,
+    scrollOffset: settings.scrollOffset,
     query: settings.query,
   },
   settingsValue: {

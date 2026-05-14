@@ -49,6 +49,20 @@ const HIDDEN_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
   SETTING_KEYS.AGENT_MENTOR_PROVIDER,
   SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
+  SETTING_KEYS.LOGGING_DEBUG,
+  SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE,
+  SETTING_KEYS.ENV_NODE_ENV,
+  SETTING_KEYS.APP_SHELL_PATH,
+  SETTING_KEYS.APP_MENTOR_MODE,
+  SETTING_KEYS.APP_EDIT_MODE,
+  SETTING_KEYS.APP_LITE_MODE,
+  SETTING_KEYS.TOOLS_LOG_FILE_OPS,
+  SETTING_KEYS.DEBUG_BASH_TOOL,
+  SETTING_KEYS.SSH_ENABLED,
+  SETTING_KEYS.SSH_HOST,
+  SETTING_KEYS.SSH_PORT,
+  SETTING_KEYS.SSH_USERNAME,
+  SETTING_KEYS.SSH_REMOTE_DIR,
 ]);
 
 const MAX_RESULTS = 10;
@@ -199,12 +213,25 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
   }, [settingsVersion, settingsService]);
 
   const filteredEntries = useMemo(() => {
-    return filterSettingsByQuery(allSettings, query, MAX_RESULTS);
+    return filterSettingsByQuery(allSettings, query, allSettings.length);
   }, [allSettings, query]);
 
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredEntries);
+  const [scrollOffset, setScrollOffset] = useState(0);
 
   const [targetKey, setTargetKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    setScrollOffset(0);
+  }, [query]);
+
+  useEffect(() => {
+    if (selectedIndex < scrollOffset) {
+      setScrollOffset(selectedIndex);
+    } else if (selectedIndex >= scrollOffset + MAX_RESULTS) {
+      setScrollOffset(selectedIndex - MAX_RESULTS + 1);
+    }
+  }, [selectedIndex, scrollOffset]);
 
   // Effect to select a target key once it appears in filteredEntries
   useEffect(() => {
@@ -228,6 +255,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
       } else {
         setSelectedIndex(0);
       }
+      setScrollOffset(0);
     },
     [mode, setMode, setTriggerIndex],
   );
@@ -237,6 +265,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
       setMode('text');
       setTriggerIndex(null);
       setSelectedIndex(0);
+      setScrollOffset(0);
     }
   }, [mode, setMode, setTriggerIndex]);
 
@@ -246,6 +275,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     query,
     filteredEntries,
     selectedIndex,
+    scrollOffset,
     open,
     close,
     // updateQuery,

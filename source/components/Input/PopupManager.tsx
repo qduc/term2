@@ -43,6 +43,7 @@ interface PopupManagerProps {
     isOpen: boolean;
     items: SettingCompletionItem[];
     selectedIndex: number;
+    scrollOffset?: number;
     query: string;
   };
   settingsValue: {
@@ -93,7 +94,12 @@ export const PopupManager: FC<PopupManagerProps> = ({
         <SlashCommandMenu commands={slash.commands} selectedIndex={slash.selectedIndex} filter={slash.filter} />
       )}
       {settings.isOpen && (
-        <SettingsSelectionMenu items={settings.items} selectedIndex={settings.selectedIndex} query={settings.query} />
+        <SettingsSelectionMenu
+          items={settings.items}
+          selectedIndex={settings.selectedIndex}
+          scrollOffset={settings.scrollOffset}
+          query={settings.query}
+        />
       )}
       {settingsValue.isOpen && settingsValue.settingKey && (
         <SettingsValueSelectionMenu

@@ -34,14 +34,15 @@ Use the \`shell\` tool with the standard CLI binaries.`;
   const textSearch = hasRg
     ? `**For text search**, use \`rg\` (ripgrep). Examples:
 - \`rg "pattern" src/\` — basic search, respects \`.gitignore\` by default.
-- \`rg -i "pattern"\` — case-insensitive.
-- \`rg --no-ignore "pattern"\` — when you need to search \`node_modules\`, build output, or anything in \`.gitignore\`.
-- \`rg -uu "pattern"\` — include hidden + gitignored.
-- \`rg -g '*.ts' "pattern"\` — restrict by glob.
-- \`rg -t ts "pattern"\` — restrict by language preset.
-- \`rg -n "pattern"\` — show line numbers (useful for follow-up edits).
-- \`rg -l "pattern"\` — list files only.
-- \`rg -C 3 "pattern"\` — 3 lines of context.`
+- \`rg -i "pattern" .\` — case-insensitive.
+- \`rg --no-ignore "pattern" .\` — when you need to search \`node_modules\`, build output, or anything in \`.gitignore\`.
+- \`rg -uu "pattern" .\` — include hidden + gitignored.
+- \`rg -g '*.ts' "pattern" .\` — restrict by glob.
+- \`rg -t ts "pattern" .\` — restrict by language preset.
+- \`rg -n "pattern" .\` — show line numbers (useful for follow-up edits).
+- \`rg -l "pattern" .\` — list files only.
+- \`rg -C 3 "pattern" .\` — 3 lines of context.
+- **Always pass an explicit path** (e.g. \`.\` or \`src/\`) to \`rg\`. When no path is given and stdin is a pipe, ripgrep reads stdin instead of searching the filesystem, returning no results.`
     : `**For text search**, use \`grep\`. Examples:
 - \`grep -rn "pattern" src/\` — recursive search with line numbers.
 - \`grep -ri "pattern" src/\` — case-insensitive recursive search.

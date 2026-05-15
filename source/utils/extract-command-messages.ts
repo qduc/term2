@@ -7,7 +7,13 @@ import { formatSearchReplaceCommandMessage } from '../tools/search-replace.js';
 import { formatAskMentorCommandMessage } from '../tools/ask-mentor.js';
 import { formatReadFileCommandMessage } from '../tools/read-file.js';
 import { formatFindFilesCommandMessage } from '../tools/find-files.js';
-import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
+import {
+  TOOL_NAME_APPLY_PATCH,
+  TOOL_NAME_CODE_CONTEXT_SEARCH,
+  TOOL_NAME_READ_CODE_OUTLINE,
+  TOOL_NAME_SEARCH_REPLACE,
+} from '../tools/tool-names.js';
+import { formatCodeContextSearchCommandMessage, formatReadCodeOutlineCommandMessage } from '../tools/code-context.js';
 
 const approvalRejectionCallIds = new Set<string>();
 
@@ -68,6 +74,8 @@ const toolFormatters: Record<string, Function> = {
   [TOOL_NAME_APPLY_PATCH]: formatApplyPatchCommandMessage,
   read_file: formatReadFileCommandMessage,
   find_files: formatFindFilesCommandMessage,
+  [TOOL_NAME_READ_CODE_OUTLINE]: formatReadCodeOutlineCommandMessage,
+  [TOOL_NAME_CODE_CONTEXT_SEARCH]: formatCodeContextSearchCommandMessage,
   [TOOL_NAME_SEARCH_REPLACE]: formatSearchReplaceCommandMessage,
   ask_mentor: formatAskMentorCommandMessage,
 };

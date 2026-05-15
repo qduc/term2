@@ -7,6 +7,7 @@ import { grepToolDefinition as searchToolDefinition } from './search.js';
 import { createWebFetchToolDefinition } from './web-fetch.js';
 import { createAskMentorToolDefinition } from './ask-mentor.js';
 import { createSearchReplaceToolDefinition } from './search-replace.js';
+import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './code-context.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 
@@ -109,4 +110,25 @@ test('search_replace schema uses optional replace_all default', (t) => {
     tool.parameters.safeParse({ path: 'a.ts', search_content: 'old', replace_content: 'new', replace_all: null })
       .success,
   );
+});
+
+test('read_code_outline schema requires path and rejects null', (t) => {
+  const tool = createReadCodeOutlineToolDefinition();
+
+  t.true(tool.parameters.safeParse({ path: 'source/app.tsx' }).success);
+  t.false(tool.parameters.safeParse({}).success);
+  t.false(tool.parameters.safeParse({ path: null }).success);
+});
+
+test('code_context_search schema uses query-specific optional params instead of nullable', (t) => {
+  const tool = createCodeContextSearchToolDefinition();
+
+  t.true(tool.parameters.safeParse({ query_type: 'related', path: 'source/app.tsx' }).success);
+  t.false(tool.parameters.safeParse({ query_type: 'related' }).success);
+  t.false(tool.parameters.safeParse({ query_type: 'related', path: null }).success);
+  t.false(tool.parameters.safeParse({ query_type: 'related', path: 'source/app.tsx', max_results: null }).success);
+  t.true(tool.parameters.safeParse({ query_type: 'symbol', symbol: 'getAgentDefinition' }).success);
+  t.false(tool.parameters.safeParse({ query_type: 'symbol' }).success);
+  t.false(tool.parameters.safeParse({ query_type: 'symbol', symbol: null }).success);
+  t.false(tool.parameters.safeParse({ query_type: 'symbol', symbol: 'getAgentDefinition', max_results: null }).success);
 });

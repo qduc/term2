@@ -26,6 +26,8 @@ test('getAgentDefinition includes grep and find_files when searchViaShell is fal
   const toolNames = definition.tools.map((tool) => tool.name);
   t.true(toolNames.includes('grep'));
   t.true(toolNames.includes('find_files'));
+  t.true(toolNames.includes('read_code_outline'));
+  t.true(toolNames.includes('code_context_search'));
 });
 
 test('getAgentDefinition excludes grep and find_files when searchViaShell is true', (t) => {
@@ -42,6 +44,8 @@ test('getAgentDefinition excludes grep and find_files when searchViaShell is tru
   const toolNames = definition.tools.map((tool) => tool.name);
   t.false(toolNames.includes('grep'));
   t.false(toolNames.includes('find_files'));
+  t.true(toolNames.includes('read_code_outline'));
+  t.true(toolNames.includes('code_context_search'));
 });
 
 test('getAgentDefinition preserves read_file and editing tools when searchViaShell is true', (t) => {
@@ -57,6 +61,8 @@ test('getAgentDefinition preserves read_file and editing tools when searchViaShe
 
   const toolNames = definition.tools.map((tool) => tool.name);
   t.true(toolNames.includes('read_file'));
+  t.true(toolNames.includes('read_code_outline'));
+  t.true(toolNames.includes('code_context_search'));
   t.true(toolNames.includes('search_replace'));
   t.true(toolNames.includes('create_file'));
   t.true(toolNames.includes('shell'));
@@ -77,6 +83,8 @@ test('getAgentDefinition excludes grep and find_files in lite mode when searchVi
   const toolNames = definition.tools.map((tool) => tool.name);
   t.false(toolNames.includes('grep'));
   t.false(toolNames.includes('find_files'));
+  t.true(toolNames.includes('read_code_outline'));
+  t.true(toolNames.includes('code_context_search'));
   t.true(toolNames.includes('read_file'));
   t.false(toolNames.includes('search_replace'));
 });
@@ -95,6 +103,8 @@ test('getAgentDefinition for gpt-5 omits grep and find_files regardless of searc
   const toolNames = definition.tools.map((tool) => tool.name);
   t.false(toolNames.includes('grep'));
   t.false(toolNames.includes('find_files'));
+  t.true(toolNames.includes('read_code_outline'));
+  t.true(toolNames.includes('code_context_search'));
   t.true(toolNames.includes('apply_patch'));
 });
 
@@ -140,6 +150,9 @@ test('getAgentDefinition dynamically includes dedicated search tool references w
 
   t.true(definition.instructions.includes('Prefer `find_files`'));
   t.true(definition.instructions.includes('Prefer `grep`'));
+  t.true(definition.instructions.includes('read_code_outline'));
+  t.true(definition.instructions.includes('code_context_search'));
+  t.true(definition.instructions.includes('Use `read_file` before editing'));
 });
 
 test('getAgentDefinition uses fallback search prompt for remote execution', (t) => {
@@ -165,4 +178,28 @@ test('getAgentDefinition uses fallback search prompt for remote execution', (t) 
   t.true(definition.instructions.includes('use `find`'));
   t.false(definition.instructions.includes('use `rg` (ripgrep)'));
   t.false(definition.instructions.includes('use `fd`'));
+});
+
+test('getAgentDefinition excludes code-context tools in remote (SSH) execution', (t) => {
+  const settingsService = createMockSettingsService({
+    'app.searchViaShell': false,
+    'agent.model': 'gpt-4o',
+  });
+
+  const mockExecutionContext = {
+    isRemote: () => true,
+    getCwd: () => '/remote',
+    getSSHService: () => ({}),
+  } as any;
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+    executionContext: mockExecutionContext,
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  t.false(toolNames.includes('read_code_outline'));
+  t.false(toolNames.includes('code_context_search'));
+  t.false(definition.instructions.includes('read_code_outline'));
 });

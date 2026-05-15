@@ -546,3 +546,81 @@ test('extracts read_file output', (t) => {
     restore();
   }
 });
+
+test('extracts read_code_outline output', (t) => {
+  const restore = withStubbedNow(1700000000900);
+
+  try {
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: 'FILE source/app.tsx\nLANG typescript',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'read_code_outline',
+          arguments: JSON.stringify({
+            path: 'source/app.tsx',
+          }),
+        },
+      },
+    ];
+    const messages = extractCommandMessages(items);
+
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: '1700000000900-0-0',
+      sender: 'command',
+      status: 'completed',
+      command: 'read_code_outline "source/app.tsx"',
+      output: 'FILE source/app.tsx\nLANG typescript',
+      success: true,
+      isApprovalRejection: false,
+      toolName: 'read_code_outline',
+      toolArgs: {
+        path: 'source/app.tsx',
+      },
+    });
+  } finally {
+    restore();
+  }
+});
+
+test('extracts code_context_search output', (t) => {
+  const restore = withStubbedNow(1700000000910);
+
+  try {
+    const items = [
+      {
+        type: 'tool_call_output_item',
+        output: 'QUERY symbol\nSYMBOL getAgentDefinition',
+        rawItem: {
+          type: 'function_call_result',
+          name: 'code_context_search',
+          arguments: JSON.stringify({
+            query_type: 'symbol',
+            symbol: 'getAgentDefinition',
+          }),
+        },
+      },
+    ];
+    const messages = extractCommandMessages(items);
+
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: '1700000000910-0-0',
+      sender: 'command',
+      status: 'completed',
+      command: 'code_context_search symbol "getAgentDefinition"',
+      output: 'QUERY symbol\nSYMBOL getAgentDefinition',
+      success: true,
+      isApprovalRejection: false,
+      toolName: 'code_context_search',
+      toolArgs: {
+        query_type: 'symbol',
+        symbol: 'getAgentDefinition',
+      },
+    });
+  } finally {
+    restore();
+  }
+});

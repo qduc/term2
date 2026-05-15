@@ -8,6 +8,7 @@ import { createAskMentorToolDefinition } from './tools/ask-mentor.js';
 import { createWebSearchToolDefinition } from './tools/web-search.js';
 import { createWebFetchToolDefinition } from './tools/web-fetch.js';
 import { createCreateFileToolDefinition } from './tools/create-file.js';
+import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './tools/code-context.js';
 import type { ToolDefinition } from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
@@ -110,6 +111,9 @@ export const getAgentDefinition = (
   const mentorMode = settingsService.get<boolean>('app.mentorMode');
   const liteMode = settingsService.get<boolean>('app.liteMode');
   const searchViaShell = settingsService.get<boolean>('app.searchViaShell');
+  // Code-context tools operate on the local filesystem only; disable them for
+  // remote (SSH) execution where the workspace lives on another host.
+  const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const promptPath = getPromptPath({ basePromptDir: BASE_PROMPT_PATH, model: resolvedModel, liteMode });
   let prompt = resolvePrompt(promptPath);
 
@@ -133,9 +137,14 @@ export const getAgentDefinition = (
   } else {
     const isGpt5 = !liteMode && shouldPreferPatchEditingModel(resolvedModel);
     if (!isGpt5) {
+      const codeContextLine = codeContextEnabled
+        ? liteMode
+          ? '\n- `read_code_outline`: inspect file structure; `code_context_search`: find related files or symbol declarations. Use `read_file` before editing.'
+          : '\n- Use `read_code_outline` for a compact file outline and `code_context_search` for related files or symbol declarations. Use `read_file` before editing.'
+        : '';
       const searchToolsDoc = liteMode
-        ? '### Search Tools\n\n- `find_files`: locate files by name or glob.\n- `grep`: search file contents.'
-        : '### Search Tools\n\n- Prefer `find_files` for locating files by name or glob.\n- Prefer `grep` for searching code content or symbols.';
+        ? `### Search Tools\n\n- \`find_files\`: locate files by name or glob.\n- \`grep\`: search file contents.${codeContextLine}`
+        : `### Search Tools\n\n- Prefer \`find_files\` for locating files by name or glob.\n- Prefer \`grep\` for searching code content or symbols.${codeContextLine}`;
       prompt = `${prompt}\n\n${searchToolsDoc}`;
     }
   }
@@ -154,6 +163,13 @@ export const getAgentDefinition = (
       loggingService,
     }),
   ];
+
+  if (codeContextEnabled) {
+    tools.push(
+      createReadCodeOutlineToolDefinition({ executionContext }),
+      createCodeContextSearchToolDefinition({ executionContext }),
+    );
+  }
 
   if (liteMode) {
     // Lite mode: shell + read-only tools only (no editing tools)

@@ -358,3 +358,76 @@ test.serial('execute: code_context_search rejects unsafe symbol names', async (t
     t.true(result.toLowerCase().includes('identifier'));
   });
 });
+
+test.serial('outline: inline type imports do not leak the type keyword into names', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'src/inline-type.ts';
+    const absPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(
+      absPath,
+      [
+        "import { type Foo, Bar } from './types';",
+        "import { type Baz as Renamed, Qux } from './other';",
+        'export const x = 1;',
+      ].join('\n'),
+    );
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    // 'type Foo' should not appear — only 'Foo'
+    t.false(result.includes('type Foo'));
+    t.true(result.includes('Foo'));
+    t.true(result.includes('Bar'));
+
+    // 'type Baz' should not appear — only 'Renamed' (the alias)
+    t.false(result.includes('type Baz'));
+    t.true(result.includes('Renamed'));
+    t.true(result.includes('Qux'));
+  });
+});
+
+test.serial('outline: async functions retain async in declarations', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'src/async-fn.ts';
+    const absPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(
+      absPath,
+      [
+        'export async function fetchData() {',
+        "  return 'data';",
+        '}',
+        'async function internalFetch() {',
+        "  return 'internal';",
+        '}',
+        'function syncThing() {',
+        "  return 'sync';",
+        '}',
+      ].join('\n'),
+    );
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    // Async functions should show 'async function', not just 'function'
+    t.true(result.includes('async function fetchData'));
+    t.true(result.includes('async function internalFetch'));
+    // Sync function stays as 'function'
+    t.true(result.includes('function syncThing'));
+  });
+});
+
+test.serial('outline: JSON files extract top-level keys as declarations', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'package.json';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, JSON.stringify({ name: 'test', version: '1.0.0', scripts: { build: 'tsc' } }));
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    t.true(result.includes('LANG json'));
+    t.true(result.includes('name'));
+    t.true(result.includes('version'));
+    t.true(result.includes('scripts'));
+  });
+});

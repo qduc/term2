@@ -6,14 +6,79 @@ import type { Tool, FunctionTool } from '@openai/agents';
  */
 const MAX_REPAIR_LENGTH = 200_000;
 
+const escapeRawControlCharactersInStrings = (text: string): string => {
+  let result = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+
+    if (!inString) {
+      if (char === '"') {
+        inString = true;
+      }
+      result += char;
+      continue;
+    }
+
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = false;
+      result += char;
+      continue;
+    }
+
+    if (char === '\r') {
+      if (text[index + 1] === '\n') {
+        index++;
+      }
+      result += '\\n';
+      continue;
+    }
+
+    if (char === '\n') {
+      result += '\\n';
+      continue;
+    }
+
+    if (char === '\t') {
+      result += '\\t';
+      continue;
+    }
+
+    const charCode = char.charCodeAt(0);
+    if (charCode < 0x20) {
+      result += `\\u${charCode.toString(16).padStart(4, '0')}`;
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+};
+
 /**
  * Heuristic-based JSON repair for common model-generated errors.
  *
  * Fixes applied (in order):
  * 1. Strip markdown code fences (```json ... ```)
  * 2. Extract JSON object/array from surrounding prose
- * 3. Escape unescaped double-quotes inside JSON string values
- * 4. Remove trailing commas before closing braces/brackets
+ * 3. Escape raw control characters inside JSON string values
+ * 4. Escape unescaped double-quotes inside JSON string values
+ * 5. Remove trailing commas before closing braces/brackets
  *
  * IMPORTANT: Only runs the repair heuristics when `JSON.parse` fails on the
  * input, so already-valid JSON is never modified.
@@ -51,7 +116,19 @@ export const repairJson = (text: string): string => {
     // Continue with deeper repairs
   }
 
-  // 3. Fix unescaped double quotes inside values.
+  // 3. Fix raw control characters inside string values. This commonly
+  // happens when models emit multiline tool arguments like apply_patch diffs
+  // with literal newlines instead of JSON-escaped \n sequences.
+  repaired = escapeRawControlCharactersInStrings(repaired);
+
+  try {
+    JSON.parse(repaired);
+    return repaired;
+  } catch {
+    // Continue with deeper repairs
+  }
+
+  // 4. Fix unescaped double quotes inside values.
   // Logic: find content between : " and "[,}] and escape only the quotes *inside* that content.
   repaired = repaired.replace(/(:\s*")([\s\S]*?)("(?=\s*[,}\]]))/g, (_match, prefix, content, suffix) => {
     // Escape unescaped double quotes (quotes not preceded by a backslash)
@@ -59,7 +136,9 @@ export const repairJson = (text: string): string => {
     return prefix + escapedContent + suffix;
   });
 
-  // 4. Fix trailing commas in objects/arrays
+  repaired = escapeRawControlCharactersInStrings(repaired);
+
+  // 5. Fix trailing commas in objects/arrays
   repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
 
   return repaired;

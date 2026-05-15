@@ -120,6 +120,20 @@ test('repairJson handles markdown fence + trailing comma', (t) => {
   t.deepEqual(JSON.parse(result), { a: 1, b: 2 });
 });
 
+test('repairJson escapes raw newlines inside multiline tool arguments', (t) => {
+  const broken = '{"type":"create_file","path":"notes.txt","diff":"+line 1\n+line 2\n"}';
+  t.throws(() => JSON.parse(broken));
+
+  const result = repairJson(broken);
+
+  t.notThrows(() => JSON.parse(result));
+  t.deepEqual(JSON.parse(result), {
+    type: 'create_file',
+    path: 'notes.txt',
+    diff: '+line 1\n+line 2\n',
+  });
+});
+
 test('repairJson handles prose + unescaped quotes', (t) => {
   const broken = 'Here you go: {"content": "No results for "query" found"}';
   const result = repairJson(broken);
@@ -186,4 +200,21 @@ test('wrapToolInvoke stringifies object inputs for tool invocations', async (t) 
   const result = await wrappedTool.invoke({} as RunContext, '{"value":"hi"}');
 
   t.is(result, 'ok:hi');
+});
+
+test('wrapToolInvoke repairs multiline string arguments before SDK validation', async (t) => {
+  const rawTool = createTool({
+    name: 'patch_like_tool',
+    description: 'A test tool with a multiline diff argument',
+    parameters: z.object({
+      diff: z.string(),
+    }),
+    strict: true,
+    execute: async (params) => params.diff,
+  });
+
+  const wrappedTool = wrapToolInvoke(rawTool);
+  const result = await wrappedTool.invoke({} as RunContext, '{"diff":"+line 1\n+line 2\n"}');
+
+  t.is(result, '+line 1\n+line 2\n');
 });

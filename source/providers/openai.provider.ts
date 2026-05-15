@@ -31,7 +31,8 @@ async function fetchOpenAIModels(
       const name = item?.name || item?.display_name || item?.description;
       return id ? { id, name } : null;
     })
-    .filter(Boolean) as Array<{ id: string; name?: string }>;
+    .filter(Boolean)
+    .reverse() as Array<{ id: string; name?: string }>;
 }
 
 // Register OpenAI provider

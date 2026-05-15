@@ -100,7 +100,7 @@ test.serial('fetchModels uses OpenAI models endpoint when provider is openai', a
 
   t.deepEqual(
     models.map((m) => m.id),
-    ['gpt-4o', 'gpt-4.1'],
+    ['gpt-4.1', 'gpt-4o'],
   );
   t.is(calls.length, 1);
   t.is(calls[0].url, 'https://api.openai.com/v1/models');

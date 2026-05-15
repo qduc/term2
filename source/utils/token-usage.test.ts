@@ -38,8 +38,8 @@ test('extractUsage finds usage in nested locations', (t) => {
 test('formatFooterUsage returns formatted string', (t) => {
   t.is(
     formatFooterUsage({ prompt_tokens: 1200, completion_tokens: 350, total_tokens: 1550 }),
-    'Tok: 1,200 in / 350 out / 1,550 total',
+    'Tok: 1,200 in / 350 out',
   );
-  t.is(formatFooterUsage({ total_tokens: 100 }), 'Tok: 100 total');
+  t.is(formatFooterUsage({ total_tokens: 100 }), '');
   t.is(formatFooterUsage(null), '');
 });

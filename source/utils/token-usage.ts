@@ -151,9 +151,6 @@ export function formatFooterUsage(usage: NormalizedUsage | null | undefined): st
   if (usage.completion_tokens != null) {
     parts.push(`${usage.completion_tokens.toLocaleString()} out`);
   }
-  if (usage.total_tokens != null) {
-    parts.push(`${usage.total_tokens.toLocaleString()} total`);
-  }
 
   if (parts.length === 0) return '';
   return `Tok: ${parts.join(' / ')}`;

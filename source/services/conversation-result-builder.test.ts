@@ -60,6 +60,28 @@ test('response outcome when stream has no interruptions', async (t) => {
   }
 });
 
+test('response outcome uses completed final output when it extends streamed output', async (t) => {
+  const stream = makeStream({
+    finalOutput: 'Intro\n\n## Missing Header\n\nBody',
+    history: [],
+    newItems: [],
+  });
+  const outcome = await buildConversationResult(
+    {
+      result: stream,
+      finalOutputOverride: 'Intro\n\n',
+      toolCallArgumentsById: new Map(),
+      emittedCommandIds: new Set(),
+    },
+    makeDeps(),
+  );
+
+  t.is(outcome.kind, 'response');
+  if (outcome.kind === 'response') {
+    t.is(outcome.result.finalText, 'Intro\n\n## Missing Header\n\nBody');
+  }
+});
+
 test('approval_required outcome when stream has interruptions', async (t) => {
   const stream = makeStream({
     interruptions: [

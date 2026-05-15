@@ -670,6 +670,26 @@ test('final: finalizes trailing reasoning message that was never followed by a t
   ]);
 });
 
+test('final: appends missing final text after already flushed streamed text', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({ type: 'text_delta', delta: 'Intro\n\n' } as ConversationEvent);
+  handler({ type: 'final', finalText: 'Intro\n\n## Missing Header\n\nBody' } as ConversationEvent);
+
+  t.is(state.accumulatedText, 'Intro\n\n## Missing Header\n\nBody');
+  t.is(deps.calls.appendedMessages.length, 2);
+  t.deepEqual(deps.calls.appendedMessages[1], [
+    {
+      id: 'msg-1',
+      sender: 'bot',
+      status: 'finalized',
+      text: '## Missing Header\n\nBody',
+    },
+  ]);
+});
+
 test('final: is a no-op when there is no pending reasoning', (t) => {
   const deps = createMockDeps();
   const state = createStreamingState();

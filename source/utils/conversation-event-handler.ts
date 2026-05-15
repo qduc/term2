@@ -339,6 +339,15 @@ export function createConversationEventHandler<
       }
 
       case 'final':
+        if (
+          event.finalText?.trim() &&
+          (!state.accumulatedText ||
+            (event.finalText.length > state.accumulatedText.length &&
+              event.finalText.startsWith(state.accumulatedText)))
+        ) {
+          state.accumulatedText = event.finalText;
+        }
+
         // Finalize any trailing reasoning message that was never followed by a tool call.
         // tool_started and command_message already call flushReasoning; this handles
         // the text-only turn path where neither fires before the stream closes.

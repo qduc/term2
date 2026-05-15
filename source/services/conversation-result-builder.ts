@@ -37,6 +37,18 @@ export interface ResultBuilderInput {
   toolCallArgumentsById: Map<string, unknown>;
 }
 
+const resolveFinalText = (streamedText: string | undefined, completedText: string | undefined): string => {
+  if (streamedText !== undefined) {
+    if (completedText && completedText.length > streamedText.length && completedText.startsWith(streamedText)) {
+      return completedText;
+    }
+
+    return streamedText;
+  }
+
+  return completedText ?? 'Done.';
+};
+
 export async function buildConversationResult(
   input: ResultBuilderInput,
   deps: ResultBuilderDeps,
@@ -120,7 +132,7 @@ export async function buildConversationResult(
     result: {
       type: 'response',
       commandMessages: visibleCommandMessages,
-      finalText: finalOutputOverride ?? result.finalOutput ?? 'Done.',
+      finalText: resolveFinalText(finalOutputOverride, result.finalOutput),
       reasoningText: reasoningOutputOverride,
       usage: usage ?? extractUsage(result),
     },

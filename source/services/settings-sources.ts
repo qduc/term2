@@ -23,6 +23,7 @@ const SETTINGS_SOURCE_KEYS = {
     maxOutputLines: 'shell.maxOutputLines',
     maxOutputChars: 'shell.maxOutputChars',
     autoApproveMode: 'shell.autoApproveMode',
+    useRtkCompression: 'shell.useRtkCompression',
   },
   ui: {
     historySize: 'ui.historySize',

@@ -73,3 +73,36 @@ test.serial('shell execute clears correlation id when no previous correlation ex
   t.is(currentCorrelationId, undefined);
   t.is(clearCorrelationCalls, 1);
 });
+
+test.serial('shell execute does not install RTK for unsupported commands', async (t) => {
+  let installCalled = false;
+
+  const loggingService: ILoggingService = {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+    security: () => {},
+    setCorrelationId: () => {},
+    getCorrelationId: () => undefined,
+    clearCorrelationId: () => {},
+  };
+
+  const tool = createShellToolDefinition({
+    loggingService,
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    rtkInstaller: async () => {
+      installCalled = true;
+      return '/tmp/rtk';
+    },
+  });
+
+  const output = await tool.execute({
+    command: 'printf hello',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(output.includes('exit 0'));
+  t.false(installCalled);
+});

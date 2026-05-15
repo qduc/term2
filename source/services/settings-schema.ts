@@ -60,6 +60,7 @@ export const ShellSettingsSchema = z.object({
   maxOutputLines: z.number().int().positive().default(1000),
   maxOutputChars: z.number().int().positive().default(10000),
   autoApproveMode: z.enum(['off', 'advisory', 'auto']).default('off').describe('Mode for shell command auto-approval'),
+  useRtkCompression: z.boolean().optional().default(false).describe('Use RTK to compress shell command output'),
 });
 
 export const UISettingsSchema = z.object({
@@ -253,6 +254,7 @@ export interface SettingsWithSources {
     maxOutputLines: SettingWithSource<number>;
     maxOutputChars: SettingWithSource<number>;
     autoApproveMode: SettingWithSource<'off' | 'advisory' | 'auto'>;
+    useRtkCompression: SettingWithSource<boolean>;
   };
   ui: {
     historySize: SettingWithSource<number>;
@@ -320,6 +322,7 @@ export const SETTING_KEYS = {
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
   SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
   SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
+  SHELL_USE_RTK_COMPRESSION: 'shell.useRtkCompression',
   AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
   AGENT_AUTO_APPROVE_PROVIDER: 'agent.autoApproveProvider',
   UI_HISTORY_SIZE: 'ui.historySize',
@@ -369,6 +372,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_LITE_MODE,
   SETTING_KEYS.APP_SEARCH_VIA_SHELL,
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
+  SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
   SETTING_KEYS.UI_PASTE_THRESHOLD,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
   SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
@@ -405,6 +409,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     maxOutputLines: 1000,
     maxOutputChars: 10000,
     autoApproveMode: 'off',
+    useRtkCompression: false,
   },
   ui: {
     historySize: 1000,

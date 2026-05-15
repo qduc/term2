@@ -37,6 +37,8 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.WEB_SEARCH_PROVIDER]: 'Web search provider (tavily, exa)',
   [SETTING_KEYS.APP_SEARCH_VIA_SHELL]:
     'Use shell commands (ripgrep/find) for codebase search instead of built-in tools (true|false)',
+  [SETTING_KEYS.SHELL_USE_RTK_COMPRESSION]:
+    'Use RTK (third-party) to compress shell command output; term2 downloads it automatically (true|false)',
 };
 
 /**

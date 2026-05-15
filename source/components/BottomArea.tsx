@@ -67,22 +67,24 @@ const BottomArea: FC<BottomAreaProps> = ({
 
   return (
     <Box flexDirection="column">
-      {showApprovalPrompt ? (
-        <ApprovalPrompt approval={pendingApproval} onApprove={onApprove} onReject={onReject} />
-      ) : showInput ? (
-        <InputBox
-          onSubmit={onSubmit}
-          slashCommands={slashCommands}
-          hasConversationHistory={hasConversationHistory}
-          waitingForRejectionReason={waitingForRejectionReason}
-          isShellMode={isShellMode}
-          settingsService={settingsService}
-          loggingService={loggingService}
-          historyService={historyService}
-        />
-      ) : null}
-
-      {isProcessing && <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>}
+      <Box flexDirection="column" marginTop={1}>
+        {showApprovalPrompt ? (
+          <ApprovalPrompt approval={pendingApproval} onApprove={onApprove} onReject={onReject} />
+        ) : isProcessing ? (
+          <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
+        ) : showInput ? (
+          <InputBox
+            onSubmit={onSubmit}
+            slashCommands={slashCommands}
+            hasConversationHistory={hasConversationHistory}
+            waitingForRejectionReason={waitingForRejectionReason}
+            isShellMode={isShellMode}
+            settingsService={settingsService}
+            loggingService={loggingService}
+            historyService={historyService}
+          />
+        ) : null}
+      </Box>
 
       <StatusBar settingsService={settingsService} isShellMode={isShellMode} sshInfo={sshInfo} lastUsage={lastUsage} />
     </Box>

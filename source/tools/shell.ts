@@ -23,6 +23,7 @@ import {
   getCallIdFromItem,
 } from './format-helpers.js';
 import { ExecutionContext } from '../services/execution-context.js';
+import { ensureRtkInstalled, isRtkSupportedCommand, wrapWithRtk } from '../services/rtk-service.js';
 
 const shellParametersSchema = z.object({
   command: z.string().min(1).describe('Single shell command to execute.'),
@@ -183,8 +184,9 @@ export function createShellToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
+  rtkInstaller?: typeof ensureRtkInstalled;
 }): ToolDefinition<ShellToolParams> {
-  const { loggingService, settingsService, executionContext } = deps;
+  const { loggingService, settingsService, executionContext, rtkInstaller = ensureRtkInstalled } = deps;
 
   // Create command logger function with dependencies
   const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
@@ -251,7 +253,21 @@ export function createShellToolDefinition(deps: {
             cwd,
           });
         }
-        const result = await executeShellCommand(optimizedCommand, {
+
+        let commandToRun = optimizedCommand;
+        if (
+          !sshService &&
+          settingsService.get<boolean>('shell.useRtkCompression') &&
+          isRtkSupportedCommand(optimizedCommand)
+        ) {
+          const rtkPath = await rtkInstaller({ loggingService });
+          if (rtkPath) {
+            commandToRun = wrapWithRtk(optimizedCommand, rtkPath);
+            loggingService.debug('Wrapped command with rtk', { rtkPath, original: optimizedCommand });
+          }
+        }
+
+        const result = await executeShellCommand(commandToRun, {
           cwd,
           timeout,
           maxBuffer: 1024 * 1024, // 1MB max buffer

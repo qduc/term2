@@ -151,7 +151,7 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
   };
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" marginBottom={1}>
       <Static
         items={staticItems}
         style={{ paddingLeft: MESSAGE_HORIZONTAL_PADDING, paddingRight: MESSAGE_HORIZONTAL_PADDING }}

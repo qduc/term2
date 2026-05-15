@@ -281,6 +281,11 @@ When using the shell, you must adhere to the following guidelines:
 
 - Read files in chunks with a max chunk size of 250 lines. Do not use python scripts to attempt to output larger chunks of a file.
 
+## Code context
+
+- Use `read_code_outline` to get a compact map of a file's imports, exports, and declarations before reading it in full or deciding what to edit.
+- Use `code_context_search` to locate related files (`query_type: related` by path) or symbol declarations (`query_type: symbol` by name) instead of broad shell searches; then read the relevant results before editing.
+
 ## apply_patch
 
 Use the `apply_patch` tool to edit files. Your patch language is a stripped‑down, file‑oriented diff format designed to be easy to parse and safe to apply. You can think of it as a high‑level envelope:

@@ -408,6 +408,34 @@ test('tool_started: finalizes live reasoning text before clearing it', (t) => {
   t.true(state.currentReasoningMessageId === null);
 });
 
+test('reasoning_delta: does not drop prefix when reasoning restarts after a tool', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'reasoning_delta',
+    delta: 'Before tool',
+    fullText: 'Before tool',
+  } as ConversationEvent);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-1',
+    toolName: 'shell',
+    arguments: { command: 'ls' },
+  } as ConversationEvent);
+
+  handler({
+    type: 'reasoning_delta',
+    delta: 'After tool reasoning',
+    fullText: 'After tool reasoning',
+  } as ConversationEvent);
+
+  t.is(state.accumulatedReasoningText, 'After tool reasoning');
+  t.deepEqual(deps.calls.reasoningPushes, ['Before tool', 'After tool reasoning']);
+});
+
 test('tool_started: creates pending command message with shell command', (t) => {
   const deps = createMockDeps();
   const state = createStreamingState();

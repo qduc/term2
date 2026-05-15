@@ -214,6 +214,11 @@ export function createConversationEventHandler<
 
       case 'reasoning_delta': {
         const fullReasoningText = event.fullText ?? '';
+        // Continuation streams can restart fullText after a tool, while the UI
+        // still remembers the pre-tool reasoning length that was flushed.
+        if (state.flushedReasoningLength > 0 && !state.accumulatedReasoningText && event.fullText === event.delta) {
+          state.flushedReasoningLength = 0;
+        }
         // Only show reasoning text after what was already flushed
         let newReasoningText = fullReasoningText.slice(state.flushedReasoningLength);
 

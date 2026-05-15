@@ -333,6 +333,12 @@ test('extracts successful apply_patch create_file operation', (t) => {
       output: 'Created test.txt',
       success: true,
       isApprovalRejection: false,
+      toolName: 'apply_patch',
+      toolArgs: {
+        path: 'test.txt',
+        diff: '',
+        type: 'create_file',
+      },
     });
   } finally {
     restore();
@@ -377,6 +383,12 @@ test('extracts successful apply_patch update_file operation', (t) => {
       output: 'Updated existing.txt',
       success: true,
       isApprovalRejection: false,
+      toolName: 'apply_patch',
+      toolArgs: {
+        path: 'existing.txt',
+        diff: '',
+        type: 'update_file',
+      },
     });
   } finally {
     restore();
@@ -461,6 +473,12 @@ test('extracts failed apply_patch operation', (t) => {
       output: 'Invalid diff format',
       success: false,
       isApprovalRejection: false,
+      toolName: 'apply_patch',
+      toolArgs: {
+        path: 'bad.txt',
+        diff: '',
+        type: 'update_file',
+      },
     });
   } finally {
     restore();

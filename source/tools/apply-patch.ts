@@ -8,6 +8,7 @@ import type { ILoggingService, ISettingsService } from '../services/service-inte
 import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { withFileLock } from './file-locks.js';
+import { TOOL_NAME_APPLY_PATCH } from './tool-names.js';
 
 /**
  * Error thrown when patch validation fails (malformed diff)
@@ -98,6 +99,8 @@ export const formatApplyPatchCommandMessage = (
         command,
         output,
         success,
+        toolName: TOOL_NAME_APPLY_PATCH,
+        toolArgs: { path: filePath, diff: args?.diff ?? '', type: operationType },
       }),
     ];
   }
@@ -120,6 +123,8 @@ export const formatApplyPatchCommandMessage = (
         command,
         output,
         success,
+        toolName: TOOL_NAME_APPLY_PATCH,
+        toolArgs: { path: filePath, diff: operationArgs?.diff ?? '', type: operationType },
       }),
     );
   }

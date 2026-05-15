@@ -2,7 +2,7 @@ import test from 'ava';
 import React from 'react';
 import { render } from 'ink-testing-library';
 import CommandMessage from './CommandMessage.js';
-import { TOOL_NAME_CREATE_FILE } from '../tools/tool-names.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE } from '../tools/tool-names.js';
 
 test('CommandMessage does not duplicate parameters when they are already in command string', async (t) => {
   const props = {
@@ -72,6 +72,64 @@ test('CommandMessage renders create_file content as diff with + prefix', async (
 
   t.true(output.includes('+line 1'), `Expected "+line 1" in output: ${output}`);
   t.true(output.includes('+line 2'), `Expected "+line 2" in output: ${output}`);
+});
+
+test('CommandMessage renders apply_patch update_file with [PATCH] header and diff', async (t) => {
+  const diff = ' context line\n-old line\n+new line\n context line';
+  const props = {
+    command: 'apply_patch update_file src/file.ts',
+    toolName: TOOL_NAME_APPLY_PATCH,
+    toolArgs: { path: 'src/file.ts', diff, type: 'update_file' },
+    status: 'completed' as 'running' | 'pending' | 'completed' | 'failed',
+    success: true,
+    output: 'Updated src/file.ts',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('[PATCH]'), `Expected "[PATCH]" in output: ${output}`);
+  t.true(output.includes('src/file.ts'), `Expected file path in output: ${output}`);
+  t.true(output.includes('-old line'), `Expected removed line in output: ${output}`);
+  t.true(output.includes('+new line'), `Expected added line in output: ${output}`);
+});
+
+test('CommandMessage renders apply_patch create_file with [CREATE FILE] header and diff', async (t) => {
+  const diff = '+line 1\n+line 2';
+  const props = {
+    command: 'apply_patch create_file src/new.ts',
+    toolName: TOOL_NAME_APPLY_PATCH,
+    toolArgs: { path: 'src/new.ts', diff, type: 'create_file' },
+    status: 'completed' as 'running' | 'pending' | 'completed' | 'failed',
+    success: true,
+    output: 'Created src/new.ts',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('[CREATE FILE]'), `Expected "[CREATE FILE]" in output: ${output}`);
+  t.true(output.includes('src/new.ts'), `Expected file path in output: ${output}`);
+  t.true(output.includes('+line 1'), `Expected added lines in output: ${output}`);
+});
+
+test('CommandMessage renders apply_patch with only output when hadApproval is true', async (t) => {
+  const diff = ' context\n-old\n+new';
+  const props = {
+    command: 'apply_patch update_file src/file.ts',
+    toolName: TOOL_NAME_APPLY_PATCH,
+    toolArgs: { path: 'src/file.ts', diff, type: 'update_file' },
+    status: 'completed' as 'running' | 'pending' | 'completed' | 'failed',
+    success: true,
+    output: 'Updated src/file.ts',
+    hadApproval: true,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.false(output.includes('[PATCH]'), `Expected no "[PATCH]" when hadApproval: ${output}`);
+  t.true(output.includes('Updated src/file.ts'), `Expected output message: ${output}`);
 });
 
 test('CommandMessage renders create_file failure in red', async (t) => {

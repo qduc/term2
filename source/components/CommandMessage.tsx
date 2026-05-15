@@ -208,6 +208,32 @@ const CommandMessage: FC<Props> = ({
         })()
       : outputText;
 
+  // Special handling for apply_patch
+  if (toolName === TOOL_NAME_APPLY_PATCH && toolArgs) {
+    if (hadApproval) {
+      return (
+        <Box flexDirection="column">
+          <Text color={success === false ? 'red' : '#64748b'}>{displayed}</Text>
+        </Box>
+      );
+    }
+
+    const isCreate = toolArgs.type === 'create_file';
+    return (
+      <Box flexDirection="column">
+        <Box>
+          <Text color={isCreate ? 'green' : 'yellow'} bold>
+            {isCreate ? '[CREATE FILE]' : '[PATCH]'}
+          </Text>
+          <Text> {toolArgs.path}</Text>
+        </Box>
+        {toolArgs.diff && success !== false && <DiffView diff={toolArgs.diff} />}
+        {failureReason && <Text color="red">Error: {failureReason}</Text>}
+        <Text color={success === false ? 'red' : '#64748b'}>{displayed}</Text>
+      </Box>
+    );
+  }
+
   // Special handling for search_replace
   if (toolName === TOOL_NAME_SEARCH_REPLACE && toolArgs) {
     // For search_replace that had an approval prompt (user said 'y'), only show output

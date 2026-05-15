@@ -105,18 +105,16 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
       </Box>
 
       {/* Row 2: Status & Metrics */}
-      <Box width="100%">
-        <Box flexGrow={1}>
-          {autoApproveMode !== 'off' && (
-            <Box marginRight={1}>
-              <Text color={slate}>Auto: </Text>
-              <Text color={autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
-                {autoApproveMode}
-              </Text>
-              {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
-            </Box>
-          )}
-        </Box>
+      <Box justifyContent="space-between" width="100%">
+        {autoApproveMode !== 'off' && (
+          <Box marginRight={1}>
+            <Text color={slate}>Auto: </Text>
+            <Text color={autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
+              {autoApproveMode}
+            </Text>
+            {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
+          </Box>
+        )}
 
         {usageText && (
           <Box>

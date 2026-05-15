@@ -66,7 +66,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   const showInput = (!isProcessing && !waitingForApproval) || waitingForRejectionReason;
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width="100%">
       <Box flexDirection="column" marginTop={1}>
         {showApprovalPrompt ? (
           <ApprovalPrompt approval={pendingApproval} onApprove={onApprove} onReject={onReject} />

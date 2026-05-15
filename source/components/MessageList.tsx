@@ -55,9 +55,19 @@ export const splitStaticHistory = <T extends MessageLike>(messages: T[]) => {
     return { history: messages, active: [] };
   }
 
+  const firstActiveMessage = messages[activeStart];
+  const previousMessage = activeStart > 0 ? messages[activeStart - 1] : undefined;
+  const activeStartWithToolLeadIn =
+    firstActiveMessage?.sender === 'command' &&
+    (firstActiveMessage.status === 'pending' || firstActiveMessage.status === 'running') &&
+    previousMessage?.sender === 'bot' &&
+    previousMessage.status === 'finalized'
+      ? activeStart - 1
+      : activeStart;
+
   return {
-    history: messages.slice(0, activeStart),
-    active: messages.slice(activeStart),
+    history: messages.slice(0, activeStartWithToolLeadIn),
+    active: messages.slice(activeStartWithToolLeadIn),
   };
 };
 

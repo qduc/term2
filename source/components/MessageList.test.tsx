@@ -102,6 +102,32 @@ test('MessageList moves a message from active to static without duplicating it',
   t.is(countOccurrences(output, 'npm test'), 1);
 });
 
+test('MessageList preserves spaces in bot text immediately before a command message', (t) => {
+  const messages = [
+    {
+      id: 'before-tool',
+      sender: 'bot',
+      status: 'finalized',
+      text: 'I will read this file:',
+    },
+    {
+      id: 'read-file-call',
+      sender: 'command',
+      status: 'running',
+      command: 'source/components/MessageList.tsx',
+      output: '',
+      toolName: 'read_file',
+      toolArgs: { path: 'source/components/MessageList.tsx' },
+    },
+  ];
+
+  const { lastFrame } = render(<MessageList messages={messages} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('read this file:'));
+  t.false(output.includes('read thisfile:'));
+});
+
 test('MessageList renders active and static markdown tables with the same padded width', (t) => {
   const markdown = `| File | Change |
 | --- | --- |
@@ -161,6 +187,31 @@ test('splitStaticHistory keeps running command messages active regardless of pos
   // Only the prefix before the running command can be static without reordering output.
   t.true(history.some((message) => message.id === 'msg-0'));
   t.true(active.some((message) => message.id === 'tail-24'));
+});
+
+test('splitStaticHistory keeps bot text before a running command active', (t) => {
+  const messages = [
+    { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },
+    { id: 'before-tool', sender: 'bot', text: 'I will read this file:', status: 'finalized' },
+    {
+      id: 'running-command',
+      sender: 'command',
+      status: 'running',
+      command: 'read_file "source/components/MessageList.tsx"',
+      output: '',
+    },
+  ];
+
+  const { history, active } = splitStaticHistory(messages);
+
+  t.deepEqual(
+    history.map((message) => message.id),
+    ['older'],
+  );
+  t.deepEqual(
+    active.map((message) => message.id),
+    ['before-tool', 'running-command'],
+  );
 });
 
 test('splitStaticHistory keeps unfinalized reasoning messages and following messages active', (t) => {

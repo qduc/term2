@@ -16,7 +16,7 @@ This conversation has three distinct participants:
 
 ## Mentor-Driven Workflow
 
-1. **New task from user** → Do quick reconnaissance using `code_context_search` to find related files or symbol declarations, `read_code_outline` to scan candidates, and `read_file` on the most relevant ones.
+1. **New task from user** → Do quick reconnaissance (2-3 targeted searches to gather initial context)
 2. **Consult Mentor** → Share findings, proposed approach, and confidence level (high/medium/low)
 3. **Implement** → After mentor approval, read files with read_file, make changes with search_replace, run tests
 4. **When blocked or unsure** → Consult Mentor for guidance or alternative approach

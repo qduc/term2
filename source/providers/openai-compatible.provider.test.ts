@@ -444,7 +444,7 @@ test('outgoing request hits the configured /chat/completions endpoint with beare
   t.is(captured[0].body.model, 'provider-model');
 });
 
-test('opencode.ai baseUrl adds x-opencode-session header and promptCacheKey body field', async (t) => {
+test('opencode.ai baseUrl adds x-opencode-session header', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://opencode.ai/v1');
   const model = await provider.getModel('provider-model');
@@ -459,12 +459,6 @@ test('opencode.ai baseUrl adds x-opencode-session header and promptCacheKey body
 
   t.is(captured.length, 1);
   t.truthy(captured[0].headers['x-opencode-session'], 'should have x-opencode-session header');
-  t.truthy(captured[0].body.promptCacheKey, 'should have promptCacheKey body field');
-  t.is(
-    captured[0].headers['x-opencode-session'],
-    captured[0].body.promptCacheKey,
-    'header and body values should match',
-  );
   t.regex(
     captured[0].headers['x-opencode-session'],
     /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/,
@@ -513,7 +507,6 @@ test('non-opencode.ai baseUrl does not add opencode headers or body fields', asy
 
   t.is(captured.length, 1);
   t.falsy(captured[0].headers['x-opencode-session'], 'should not have x-opencode-session header');
-  t.falsy(captured[0].body.promptCacheKey, 'should not have promptCacheKey body field');
 });
 
 test('opencode.ai detection is case-insensitive', async (t) => {
@@ -531,7 +524,6 @@ test('opencode.ai detection is case-insensitive', async (t) => {
 
   t.is(captured.length, 1);
   t.truthy(captured[0].headers['x-opencode-session'], 'should detect OPENCODE.AI case-insensitively');
-  t.truthy(captured[0].body.promptCacheKey, 'should add promptCacheKey for OPENCODE.AI');
 });
 
 test('opencode provider type uses default base URL and falls back to OPENCODE_API_KEY', async (t) => {
@@ -591,5 +583,4 @@ test('opencode provider type uses default base URL and falls back to OPENCODE_AP
   t.regex(captured[0].url, /^https:\/\/opencode\.ai\/v1\/chat\/completions(\?|$)/);
   t.is(captured[0].headers.authorization, 'Bearer env-opencode-key');
   t.truthy(captured[0].headers['x-opencode-session']);
-  t.truthy(captured[0].body.promptCacheKey);
 });

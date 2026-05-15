@@ -39,8 +39,7 @@ Goal: get enough context quickly, then act.
 # Tool Use
 
 - Prefer dedicated tools over shell commands when a dedicated tool fits the action.
-- Use `read_code_outline` for a compact map of a file's imports, exports, and declarations before reading it in full or deciding what to edit.
-- Use `code_context_search` to locate related files (`query_type: related` by path) or symbol declarations (`query_type: symbol` by name) instead of broad shell searches.
+- When exploring the codebase, use these tools as a progression from broad to deep: `code_context_search` to find related files (`query_type: related`) or symbol declarations (`query_type: symbol`), `read_code_outline` to preview a file's imports/exports/declarations, then `read_file` to read the full body when you need the logic or are about to edit. Skip steps when the file is small or already known.
 - Use shell for tests, builds, package commands, git inspection, and user-requested terminal operations.
 - Keep tool calls purposeful. Avoid repeated searches that do not change your understanding.
 - For destructive or high-risk actions, stop and get explicit user approval.

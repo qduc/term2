@@ -283,8 +283,13 @@ When using the shell, you must adhere to the following guidelines:
 
 ## Code context
 
-- Use `read_code_outline` to get a compact map of a file's imports, exports, and declarations before reading it in full or deciding what to edit.
-- Use `code_context_search` to locate related files (`query_type: related` by path) or symbol declarations (`query_type: symbol` by name) instead of broad shell searches; then read the relevant results before editing.
+When exploring the codebase, use these tools as a progression from broad to deep:
+
+1. **`code_context_search`** — find related files (`query_type: related`) or symbol declarations (`query_type: symbol`). Use instead of broad shell searches.
+2. **`read_code_outline`** — preview a file's imports, exports, and declarations before deciding whether to read it in full.
+3. **`read_file`** — read the full body when you need the actual logic or are about to edit.
+
+Start with context search to locate files, outline to scan candidates, then full read on what matters. Skip steps when the file is small or already known.
 
 ## apply_patch
 

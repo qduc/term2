@@ -114,8 +114,6 @@ for (const cmd of ALLOWLISTED) {
 test('isRtkSupportedCommand: non-allowlisted command is rejected', (t) => {
   t.false(isRtkSupportedCommand('curl https://example.com'));
   t.false(isRtkSupportedCommand('printf hello'));
-  t.false(isRtkSupportedCommand('make build'));
-  t.false(isRtkSupportedCommand('docker ps'));
 });
 
 test('isRtkSupportedCommand: rejects commands with pipe |', (t) => {

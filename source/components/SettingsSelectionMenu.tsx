@@ -1,6 +1,9 @@
 import React, { FC } from 'react';
+import fs from 'node:fs';
 import { Box, Text } from 'ink';
 import type { SettingCompletionItem } from '../hooks/use-settings-completion.js';
+import { SETTING_KEYS } from '../services/settings-service.js';
+import { getRtkBinaryPath } from '../services/rtk-service.js';
 
 type Props = {
   items: SettingCompletionItem[];
@@ -39,13 +42,20 @@ function truncate(text: string, max: number): string {
   return text.slice(0, Math.max(0, max - 1)) + '…';
 }
 
-function formatValue(value: string | number | boolean): {
+function formatValue(
+  value: string | number | boolean,
+  key: string,
+): {
   text: string;
   color?: string;
 } {
   if (typeof value === 'boolean') {
+    let text = value ? 'ON' : 'OFF';
+    if (value && key === SETTING_KEYS.SHELL_USE_RTK_COMPRESSION && fs.existsSync(getRtkBinaryPath())) {
+      text += ' (installed)';
+    }
     return {
-      text: value ? 'ON' : 'OFF',
+      text,
       color: value ? 'green' : 'red',
     };
   }
@@ -129,7 +139,7 @@ const SettingsSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset =
         const prevCategory = realIndex > 0 ? getCategoryForKey(items[realIndex - 1]!.key) : null;
         const showHeader = index === 0 || category !== prevCategory;
 
-        const valueObj = item.currentValue !== undefined ? formatValue(item.currentValue) : null;
+        const valueObj = item.currentValue !== undefined ? formatValue(item.currentValue, item.key) : null;
         const paddedKey =
           item.key.length > KEY_COL_WIDTH
             ? truncate(item.key, KEY_COL_WIDTH).padEnd(KEY_COL_WIDTH, ' ')

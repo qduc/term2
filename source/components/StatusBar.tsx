@@ -1,12 +1,10 @@
 import React, { FC } from 'react';
-import fs from 'fs';
 import { Box, Text } from 'ink';
 import { useSetting } from '../hooks/use-setting.js';
 import { getProvider } from '../providers/index.js';
 import type { SettingsService } from '../services/settings-service.js';
 import type { SSHInfo } from '../hooks/use-shell-mode.js';
 import { formatFooterUsage, type NormalizedUsage } from '../utils/token-usage.js';
-import { getRtkBinaryPath } from '../services/rtk-service.js';
 
 interface StatusBarProps {
   settingsService: SettingsService;
@@ -19,7 +17,6 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
   const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
   const editMode = useSetting<boolean>(settingsService, 'app.editMode') ?? false;
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
-  const useRtkCompression = useSetting<boolean>(settingsService, 'shell.useRtkCompression') ?? false;
   const model = useSetting<string>(settingsService, 'agent.model');
   const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
   const providerKey = useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
@@ -116,13 +113,6 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
               {autoApproveMode}
             </Text>
             {autoApproveModel && <Text color={slate}> ({autoApproveModel})</Text>}
-          </Box>
-        )}
-        {useRtkCompression && (
-          <Box marginRight={1}>
-            <Text color={slate}>
-              {fs.existsSync(getRtkBinaryPath()) ? 'RTK: installed' : 'RTK: will download on first use'}
-            </Text>
           </Box>
         )}
 

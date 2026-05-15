@@ -2,7 +2,6 @@ import path from 'path';
 
 const DEFAULT_PROMPT = 'simple.md';
 const ANTHROPIC_PROMPT = 'anthropic.md';
-const GPT_PROMPT = 'gpt-5.md';
 const MODERN_GPT_PROMPT = 'gpt-5-modern.md';
 const CODEX_PROMPT = 'codex.md';
 const LITE_PROMPT = 'lite.md';
@@ -25,16 +24,7 @@ export function getPromptPath({ basePromptDir, model, liteMode }: PromptSelector
     return path.join(basePromptDir, ANTHROPIC_PROMPT);
   if (normalizedModel.includes('gpt-5') && normalizedModel.includes('codex'))
     return path.join(basePromptDir, CODEX_PROMPT);
-  if (isModernGpt5Model(normalizedModel)) return path.join(basePromptDir, MODERN_GPT_PROMPT);
-  if (normalizedModel.includes('gpt-5')) return path.join(basePromptDir, GPT_PROMPT);
+  if (normalizedModel.includes('gpt-5')) return path.join(basePromptDir, MODERN_GPT_PROMPT);
 
   return path.join(basePromptDir, DEFAULT_PROMPT);
-}
-
-function isModernGpt5Model(model: string): boolean {
-  const match = model.match(/^gpt-5(?:\.(\d+))?(?:-|$)/);
-  if (!match) return false;
-
-  const minor = match[1];
-  return minor !== undefined && Number(minor) >= 2;
 }

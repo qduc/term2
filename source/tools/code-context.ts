@@ -103,8 +103,7 @@ export const createReadCodeOutlineToolDefinition = (
   const { executionContext } = deps;
   return {
     name: 'read_code_outline',
-    description:
-      'Compact outline of one file: imports, exports, declarations. No bodies. Use `read_file` before editing.',
+    description: 'Compact outline of one file: imports, exports, declarations. No bodies.',
     parameters: readCodeOutlineParametersSchema,
     needsApproval: () => false,
     execute: async ({ path: filePath }) => {
@@ -139,7 +138,7 @@ export const createCodeContextSearchToolDefinition = (
   return {
     name: 'code_context_search',
     description:
-      'Bounded just-in-time search for related files (by path) or symbol declarations (by name). Plain text, fixed relation tokens. Use `read_file` before editing.',
+      'Bounded just-in-time search for related files (by path) or symbol declarations (by name). Plain text, fixed relation tokens.',
     parameters: codeContextSearchParametersSchema,
     needsApproval: () => false,
     execute: async (params) => {

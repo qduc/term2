@@ -92,14 +92,12 @@ const ApplyPatchPrompt: FC<{ args: ApplyPatchArgs }> = ({ args }) => {
 };
 
 const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
+  const cmd = (args as any).command ?? args.commands ?? '';
   return (
-    <Box flexDirection="column" marginLeft={2}>
+    <Box flexDirection="column" marginLeft={2} marginTop={1}>
       <Box>
-        <Text color="cyan" bold>
-          Command:{' '}
-        </Text>
-        <Text bold color="white">
-          {args.commands}
+        <Text bold color="cyan">
+          {cmd}
         </Text>
       </Box>
       {args.timeout_ms && (
@@ -222,35 +220,42 @@ const ApprovalPrompt: FC<Props & { onApprove: () => void; onReject: () => void }
   }
 
   // Try to parse and render arguments nicely based on tool type
-  let content: React.ReactNode = <Text color="#64748b">{approval.argumentsText}</Text>;
+  let content: React.ReactNode = (
+    <Box marginTop={1}>
+      <Text bold color="cyan">
+        {approval.argumentsText}
+      </Text>
+    </Box>
+  );
 
   if (approval.toolName === TOOL_NAME_APPLY_PATCH) {
     try {
       const args: ApplyPatchArgs = JSON.parse(approval.argumentsText);
       content = <ApplyPatchPrompt args={args} />;
     } catch {
-      // Fall back to raw JSON if parsing fails
+      // Fall back to styled raw text if parsing fails
     }
   } else if (approval.toolName === 'shell') {
     try {
       const args: ShellArgs = JSON.parse(approval.argumentsText);
       content = <ShellPrompt args={args} />;
     } catch {
-      // Fall back to raw JSON if parsing fails
+      // Fall back to ShellPrompt with raw command string if parsing fails
+      content = <ShellPrompt args={{ commands: approval.argumentsText }} />;
     }
   } else if (approval.toolName === TOOL_NAME_SEARCH_REPLACE) {
     try {
       const args: SearchReplaceArgs = JSON.parse(approval.argumentsText);
       content = <SearchReplacePrompt args={args} />;
     } catch {
-      // Fall back to raw JSON if parsing fails
+      // Fall back to styled raw text if parsing fails
     }
   } else if (approval.toolName === 'create_file') {
     try {
       const args: CreateFileArgs = JSON.parse(approval.argumentsText);
       content = <CreateFilePrompt args={args} />;
     } catch {
-      // Fall back to raw JSON if parsing fails
+      // Fall back to styled raw text if parsing fails
     }
   }
 

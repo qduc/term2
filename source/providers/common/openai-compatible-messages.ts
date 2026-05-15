@@ -147,55 +147,21 @@ function hasAssistantPayload(message: any): boolean {
   return message.content !== null && message.content !== undefined && message.content !== '';
 }
 
-export function addCacheControlToLastUserMessage(messages: any[]): void {
-  for (let i = messages.length - 1; i >= 0; i--) {
+export function addCacheControlToLastTwoMessages(messages: any[]): void {
+  let count = 0;
+  for (let i = messages.length - 1; i >= 0 && count < 2; i--) {
     const msg = messages[i];
-    if (msg.role === 'user') {
-      if (typeof msg.content === 'string') {
-        msg.content = [
-          {
-            type: 'text',
-            text: msg.content,
-            cache_control: { type: 'ephemeral' },
-          },
-        ];
-      } else if (Array.isArray(msg.content) && msg.content.length > 0) {
-        for (let j = msg.content.length - 1; j >= 0; j--) {
-          const item = msg.content[j];
-          if (item.type === 'text') {
-            item.cache_control = { type: 'ephemeral' };
-            break;
-          }
+    if (typeof msg.content === 'string') {
+      msg.content = [{ type: 'text', text: msg.content, cache_control: { type: 'ephemeral' } }];
+    } else if (Array.isArray(msg.content) && msg.content.length > 0) {
+      for (let j = msg.content.length - 1; j >= 0; j--) {
+        if (msg.content[j].type === 'text') {
+          msg.content[j] = { ...msg.content[j], cache_control: { type: 'ephemeral' } };
+          break;
         }
       }
-      break;
     }
-  }
-}
-
-export function addCacheControlToLastToolMessage(messages: any[]): void {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg.role === 'tool') {
-      if (typeof msg.content === 'string') {
-        msg.content = [
-          {
-            type: 'text',
-            text: msg.content,
-            cache_control: { type: 'ephemeral' },
-          },
-        ];
-      } else if (Array.isArray(msg.content) && msg.content.length > 0) {
-        for (let j = msg.content.length - 1; j >= 0; j--) {
-          const item = msg.content[j];
-          if (item.type === 'text') {
-            item.cache_control = { type: 'ephemeral' };
-            break;
-          }
-        }
-      }
-      break;
-    }
+    count++;
   }
 }
 
@@ -346,8 +312,7 @@ export function buildMessagesFromRequest(req: ModelRequest, modelId?: string, lo
   }
 
   if (modelId && isAnthropicModel(modelId)) {
-    addCacheControlToLastUserMessage(messages);
-    addCacheControlToLastToolMessage(messages);
+    addCacheControlToLastTwoMessages(messages);
   }
 
   return messages.filter(hasAssistantPayload);

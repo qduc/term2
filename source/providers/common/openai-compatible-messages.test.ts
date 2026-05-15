@@ -1,5 +1,5 @@
 import test from 'ava';
-import { buildMessagesFromRequest } from './openai-compatible-messages.js';
+import { buildMessagesFromRequest, addCacheControlToLastTwoMessages } from './openai-compatible-messages.js';
 
 test('buildMessagesFromRequest() preserves user text and image content', (t) => {
   const messages = buildMessagesFromRequest({
@@ -55,6 +55,58 @@ test('buildMessagesFromRequest() concatenates mixed output_text and text content
   } as any);
 
   t.deepEqual(messages, [{ role: 'assistant', content: 'Part one. Part two.' }]);
+});
+
+test('addCacheControlToLastTwoMessages() converts string content to array with cache_control on last 2 messages', (t) => {
+  const messages = [
+    { role: 'user', content: 'first' },
+    { role: 'assistant', content: 'second' },
+    { role: 'user', content: 'third' },
+  ];
+  addCacheControlToLastTwoMessages(messages);
+  t.deepEqual(messages[0].content, 'first');
+  t.deepEqual(messages[1].content, [{ type: 'text', text: 'second', cache_control: { type: 'ephemeral' } }]);
+  t.deepEqual(messages[2].content, [{ type: 'text', text: 'third', cache_control: { type: 'ephemeral' } }]);
+});
+
+test('addCacheControlToLastTwoMessages() adds cache_control to last text block in array content', (t) => {
+  const messages = [
+    { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    { role: 'user', content: [{ type: 'text', text: 'world' }] },
+  ];
+  addCacheControlToLastTwoMessages(messages);
+  t.deepEqual(messages[0].content, [{ type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } }]);
+  t.deepEqual(messages[1].content, [{ type: 'text', text: 'world', cache_control: { type: 'ephemeral' } }]);
+});
+
+test('addCacheControlToLastTwoMessages() leaves earlier messages untouched', (t) => {
+  const messages = [
+    { role: 'user', content: 'untouched' },
+    { role: 'user', content: 'untouched2' },
+    { role: 'assistant', content: 'marked1' },
+    { role: 'user', content: 'marked2' },
+  ];
+  addCacheControlToLastTwoMessages(messages);
+  t.is(messages[0].content, 'untouched');
+  t.is(messages[1].content, 'untouched2');
+  t.deepEqual(messages[2].content, [{ type: 'text', text: 'marked1', cache_control: { type: 'ephemeral' } }]);
+  t.deepEqual(messages[3].content, [{ type: 'text', text: 'marked2', cache_control: { type: 'ephemeral' } }]);
+});
+
+test('addCacheControlToLastTwoMessages() does nothing on empty array', (t) => {
+  const messages: any[] = [];
+  t.notThrows(() => addCacheControlToLastTwoMessages(messages));
+  t.deepEqual(messages, []);
+});
+
+test('addCacheControlToLastTwoMessages() skips messages with no text content block', (t) => {
+  const messages = [
+    { role: 'tool', content: [{ type: 'image', data: 'abc' }] },
+    { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+  ];
+  addCacheControlToLastTwoMessages(messages);
+  t.deepEqual(messages[0].content, [{ type: 'image', data: 'abc' }]);
+  t.deepEqual(messages[1].content, [{ type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } }]);
 });
 
 test('buildMessagesFromRequest() omits assistant messages without content or tool calls', (t) => {

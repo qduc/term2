@@ -9,6 +9,7 @@ import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
 import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
 import { mergeAssistantMessages } from './ai-sdk-message-normalizer.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
+import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
 
 export type CustomProviderConfig = {
   name: string;
@@ -201,6 +202,7 @@ function createOpenAICompatibleFetch(
           body.messages = sanitizeOpenAICompatibleMessages(
             preserveReasoningContentForOpenAICompatibleMessages(mergeAssistantMessages(body.messages)),
           );
+          addCacheControlToLastTwoMessages(body.messages);
           changed = true;
         }
 
@@ -285,6 +287,24 @@ function mapModelListItem(providerType: string | undefined, item: any): { id: st
   return id ? { id, name } : null;
 }
 
+function createCacheControlFetch(fetchImpl: typeof fetch | undefined): typeof fetch | undefined {
+  if (!fetchImpl) return undefined;
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (typeof init?.body === 'string') {
+      try {
+        const body = JSON.parse(init.body);
+        if (Array.isArray(body?.messages)) {
+          addCacheControlToLastTwoMessages(body.messages);
+          return fetchImpl(input, { ...init, body: JSON.stringify(body) });
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    return fetchImpl(input, init);
+  }) as typeof fetch;
+}
+
 export function createCustomProviderModelProvider(
   config: CustomProviderConfig,
   deps: CustomProviderRuntimeDeps,
@@ -308,6 +328,7 @@ export function createCustomProviderModelProvider(
         defaultModel: deps.defaultModel,
         resolveConfig: () => ({
           ...resolveConfig(),
+          fetch: createCacheControlFetch(deps.fetch),
           headers: {
             'anthropic-version': '2023-06-01',
           },

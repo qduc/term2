@@ -216,10 +216,10 @@ test('assistant reasoning_content is passed back with the following tool call', 
     },
     {
       role: 'tool',
-      content: 'Tue May 12 18:40:41 +07 2026',
+      content: [{ type: 'text', text: 'Tue May 12 18:40:41 +07 2026', cache_control: { type: 'ephemeral' } }],
       tool_call_id: 'shell:0',
     },
-    { role: 'user', content: 'thanks' },
+    { role: 'user', content: [{ type: 'text', text: 'thanks', cache_control: { type: 'ephemeral' } }] },
   ]);
 });
 

@@ -3,6 +3,26 @@ import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkOpenRouterProvider } from './ai-sdk-openrouter.provider.js';
 import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
+import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
+
+type FetchLike = typeof fetch;
+
+function createOpenRouterCacheControlFetch(fetchImpl: FetchLike): FetchLike {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (typeof init?.body === 'string') {
+      try {
+        const body = JSON.parse(init.body);
+        if (Array.isArray(body?.messages)) {
+          addCacheControlToLastTwoMessages(body.messages);
+          return fetchImpl(input, { ...init, body: JSON.stringify(body) });
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    return fetchImpl(input, init);
+  }) as FetchLike;
+}
 
 async function fetchOpenRouterModels(
   deps: ProviderDeps,
@@ -65,11 +85,13 @@ registerProvider({
           },
           appUrl: settingsService.get('agent.openrouter.referrer') || 'http://localhost',
           appName: settingsService.get('agent.openrouter.title') || 'term2',
-          fetch: createAiSdkLoggingFetch({
-            provider: 'openrouter',
-            model: settingsService.get('agent.model') || defaultModel,
-            loggingService,
-          }),
+          fetch: createOpenRouterCacheControlFetch(
+            createAiSdkLoggingFetch({
+              provider: 'openrouter',
+              model: settingsService.get('agent.model') || defaultModel,
+              loggingService,
+            }),
+          ),
         }),
       }),
     });

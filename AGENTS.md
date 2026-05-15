@@ -89,7 +89,7 @@ After making code changes, you MUST run tests appropriate to the scope of the ta
 
 ```bash
 npm test              # Run all tests
-npm test:verbose -- <file>      # Run test for a single file
+npm test:verbose -- dist/<path to JS test file>  # Run test for a single file, compiled JS only
 npx prettier --check . # Format check
 ```
 

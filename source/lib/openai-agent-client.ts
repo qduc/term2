@@ -100,6 +100,35 @@ class MentorSession {
 }
 
 /**
+ * Wraps a tool definition's needsApproval so that structurally invalid params
+ * (those that fail Zod schema validation) never trigger an approval prompt.
+ * The tool's execute will receive those params and return a structured error.
+ *
+ * Top-level null values are normalized to undefined before validation. When using
+ * OpenAI strict tool schemas, toOpenAIStrictToolSchema converts optional fields to
+ * nullable-with-null-default, so the API sends null for omitted optional fields.
+ * The original Zod schema uses .optional() which rejects null, so without this
+ * normalization valid strict-schema calls would incorrectly bypass approval.
+ */
+export function wrapNeedsApproval(definition: {
+  parameters: { safeParse: (v: unknown) => { success: boolean } };
+  needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean;
+}): (context: unknown, params: unknown) => Promise<boolean> {
+  return async (context, params) => {
+    const normalized =
+      params !== null && typeof params === 'object' && !Array.isArray(params)
+        ? Object.fromEntries(
+            Object.entries(params as Record<string, unknown>).map(([k, v]) => [k, v === null ? undefined : v]),
+          )
+        : params;
+    if (!definition.parameters.safeParse(normalized).success) {
+      return false;
+    }
+    return definition.needsApproval(normalized, context);
+  };
+}
+
+/**
  * Minimal adapter that isolates usage of @openai/agents.
  * Swap this module to change the underlying agent provider without touching the UI.
  */
@@ -752,7 +781,7 @@ export class OpenAIAgentClient {
             name: definition.name,
             description: definition.description,
             parameters: useStrictToolSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
-            needsApproval: async (context, params) => definition.needsApproval(params, context),
+            needsApproval: wrapNeedsApproval(definition),
             execute: async (params, _context, details) => {
               const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');
               // Extract tool call ID from details if available

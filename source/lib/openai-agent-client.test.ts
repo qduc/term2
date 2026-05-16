@@ -1,5 +1,7 @@
 import test from 'ava';
+import { z } from 'zod';
 import { OpenRouterError } from '../providers/common/provider-errors.js';
+import { wrapNeedsApproval } from './openai-agent-client.js';
 
 test('OpenRouterError includes status and headers', (t) => {
   const error = new OpenRouterError('Test error', 429, { 'retry-after': '5', 'x-custom': 'value' }, 'response body');
@@ -228,4 +230,80 @@ test('retry attempt index calculation', (t) => {
 
   // Third retry: retries=0, attemptIndex=2
   t.is(maxRetries - 0, 2);
+});
+
+// ========== wrapNeedsApproval Tests ==========
+
+const makeDefinition = (needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean) => ({
+  parameters: z.object({ command: z.string() }),
+  needsApproval,
+});
+
+test('wrapNeedsApproval returns false for params that fail schema validation', async (t) => {
+  const definition = makeDefinition(async () => true);
+  const wrapped = wrapNeedsApproval(definition);
+
+  t.false(await wrapped(null, {})); // missing required 'command'
+  t.false(await wrapped(null, { command: 123 })); // wrong type
+  t.false(await wrapped(null, null)); // not an object
+});
+
+test('wrapNeedsApproval delegates to the tool when params are valid', async (t) => {
+  const definition = makeDefinition(async () => true);
+  const wrapped = wrapNeedsApproval(definition);
+
+  t.true(await wrapped(null, { command: 'ls' }));
+});
+
+test('wrapNeedsApproval passes context through to the tool', async (t) => {
+  let receivedContext: unknown;
+  const definition = makeDefinition(async (_params, ctx) => {
+    receivedContext = ctx;
+    return false;
+  });
+  const wrapped = wrapNeedsApproval(definition);
+  const ctx = { some: 'context' };
+
+  await wrapped(ctx, { command: 'ls' });
+
+  t.is(receivedContext, ctx);
+});
+
+test('wrapNeedsApproval short-circuits before calling the tool on invalid params', async (t) => {
+  let called = false;
+  const definition = makeDefinition(async () => {
+    called = true;
+    return true;
+  });
+  const wrapped = wrapNeedsApproval(definition);
+
+  await wrapped(null, { command: 123 }); // invalid
+
+  t.false(called);
+});
+
+test('wrapNeedsApproval delegates when optional fields arrive as null (OpenAI strict schema)', async (t) => {
+  // toOpenAIStrictToolSchema converts optional() → nullable().default(null), so the
+  // OpenAI API sends null for omitted optional fields. wrapNeedsApproval must not
+  // treat these as invalid params and must still call the tool's needsApproval.
+  let called = false;
+  const definition = {
+    // Schema with optional fields — mirrors shell/search-replace/apply-patch
+    parameters: z.object({
+      command: z.string(),
+      timeout_ms: z.number().optional(),
+    }),
+    needsApproval: async (_params: unknown, _ctx?: unknown): Promise<boolean> => {
+      called = true;
+      return true;
+    },
+  };
+  const wrapped = wrapNeedsApproval(definition);
+
+  // Simulates what OpenAI sends for { command: "rm file" } under strict schema:
+  // optional timeout_ms arrives as null rather than being omitted
+  const result = await wrapped(null, { command: 'rm file', timeout_ms: null });
+
+  t.true(called); // must reach the tool's needsApproval (not short-circuited)
+  t.true(result); // must respect its decision (true = needs approval)
 });

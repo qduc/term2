@@ -7,7 +7,7 @@ import { createMessageId } from './message-id.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils.js';
 import { createStreamingSession } from '../utils/streaming-session-factory.js';
 import type { CommandMessage as BaseCommandMessage } from '../tools/types.js';
-import type { NormalizedUsage } from '../utils/token-usage.js';
+import type { NormalizedUsage, UsageAccumulator } from '../utils/token-usage.js';
 import type { ConversationTerminal, PendingApproval, ReasoningEffortSetting } from '../contracts/conversation.js';
 import {
   annotateApprovedCommandMessage,
@@ -54,9 +54,11 @@ const MAX_MESSAGE_COUNT = 300;
 export const useConversation = ({
   conversationService,
   loggingService,
+  usageAccumulator,
 }: {
   conversationService: ConversationService;
   loggingService: ILoggingService;
+  usageAccumulator?: UsageAccumulator;
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [waitingForApproval, setWaitingForApproval] = useState<boolean>(false);
@@ -132,10 +134,11 @@ export const useConversation = ({
       setWaitingForApproval(false);
       setPendingApproval(null);
       if (result.usage) {
+        usageAccumulator?.add(result.usage);
         setLastUsage(result.usage);
       }
     },
-    [annotateCommandMessage, trimMessages],
+    [annotateCommandMessage, trimMessages, usageAccumulator],
   );
 
   const sendUserMessage = useCallback(
@@ -385,7 +388,8 @@ export const useConversation = ({
     approvedContextRef.current = null;
     setIsProcessing(false);
     setLastUsage(null);
-  }, [conversationService]);
+    usageAccumulator?.reset();
+  }, [conversationService, usageAccumulator]);
 
   const stopProcessing = useCallback(() => {
     conversationService.abort();

@@ -1,6 +1,6 @@
 import test from 'ava';
 import type { Message } from './use-conversation.js';
-import { getLastFinalAssistantText } from './use-app-commands.js';
+import { createUsageSlashCommand, getLastFinalAssistantText } from './use-app-commands.js';
 import { parseModelProviderArg } from '../utils/model-provider-arg.js';
 
 test('getLastFinalAssistantText returns the response from the latest assistant turn', (t) => {
@@ -50,4 +50,16 @@ test('parseModelProviderArg supports provider names with spaces for /model', (t)
     modelId: 'deepseek-v4-flash',
     provider: 'opencode go',
   });
+});
+
+test('createUsageSlashCommand shows current session usage', (t) => {
+  const messages: string[] = [];
+  const command = createUsageSlashCommand(
+    (text) => messages.push(text),
+    () => 'Token usage: 100,000 input (1,000,000 cached), 20,000 output',
+  );
+
+  t.is(command.name, 'usage');
+  t.is(command.action(), true);
+  t.deepEqual(messages, ['Token usage: 100,000 input (1,000,000 cached), 20,000 output']);
 });

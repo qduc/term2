@@ -13,6 +13,12 @@ export interface NormalizedUsage {
   completion_ms?: number;
 }
 
+export interface UsageAccumulator {
+  add(usage: NormalizedUsage | null | undefined): void;
+  reset(): void;
+  get(): NormalizedUsage;
+}
+
 function toNumber(value: unknown): number | undefined {
   if (value == null) return undefined;
   const asNumber = Number(value);
@@ -220,4 +226,54 @@ export function formatFooterUsage(usage: NormalizedUsage | null | undefined): st
 
   if (parts.length === 0) return '';
   return `Tok: ${parts.join(' / ')}`;
+}
+
+export function addTokenUsage(
+  current: NormalizedUsage | null | undefined,
+  next: NormalizedUsage | null | undefined,
+): NormalizedUsage {
+  const result: NormalizedUsage = { ...(current ?? {}) };
+  if (!next) return result;
+
+  const addField = (field: keyof NormalizedUsage) => {
+    const value = next[field];
+    if (value == null) return;
+    result[field] = (result[field] ?? 0) + value;
+  };
+
+  addField('prompt_tokens');
+  addField('completion_tokens');
+  addField('total_tokens');
+  addField('reasoning_tokens');
+  addField('cache_read_tokens');
+  addField('cache_creation_tokens');
+  addField('prompt_ms');
+  addField('completion_ms');
+
+  return result;
+}
+
+export function createUsageAccumulator(initialUsage?: NormalizedUsage | null): UsageAccumulator {
+  let accumulated = addTokenUsage(undefined, initialUsage);
+
+  return {
+    add(usage) {
+      accumulated = addTokenUsage(accumulated, usage);
+    },
+    reset() {
+      accumulated = {};
+    },
+    get() {
+      return { ...accumulated };
+    },
+  };
+}
+
+export function formatSessionTokenUsage(usage: NormalizedUsage | null | undefined): string {
+  const promptTokens = usage?.prompt_tokens ?? 0;
+  const completionTokens = usage?.completion_tokens ?? 0;
+  const cachedTokens = usage?.cache_read_tokens ?? 0;
+
+  const cachedPart = cachedTokens > 0 ? ` (${cachedTokens.toLocaleString()} cached)` : '';
+  return `Token usage: ${promptTokens.toLocaleString()} input${cachedPart}, ${completionTokens.toLocaleString()} output`;
 }

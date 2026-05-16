@@ -15,6 +15,7 @@ interface UseAppCommandsProps {
   applyRuntimeSetting: (key: string, value: any) => void;
   setInput: (input: string) => void;
   clearConversation: () => void;
+  getSessionUsage: () => string;
   exit: () => void;
   messages: Message[];
   setModel: (model: string) => void;
@@ -49,12 +50,27 @@ export function getLastFinalAssistantText(messages: Message[]): string | null {
   return texts.join('').trim() || null;
 }
 
+export function createUsageSlashCommand(
+  addSystemMessage: (text: string) => void,
+  getSessionUsage: () => string,
+): SlashCommand {
+  return {
+    name: 'usage',
+    description: 'Show token usage for the current session',
+    action: () => {
+      addSystemMessage(getSessionUsage());
+      return true;
+    },
+  };
+}
+
 export const useAppCommands = ({
   settingsService,
   addSystemMessage,
   applyRuntimeSetting,
   setInput,
   clearConversation,
+  getSessionUsage,
   exit,
   messages,
   setModel,
@@ -142,6 +158,7 @@ export const useAppCommands = ({
           return true;
         },
       },
+      createUsageSlashCommand(addSystemMessage, getSessionUsage),
       {
         name: 'clear',
         description: 'Start a new conversation',
@@ -304,7 +321,17 @@ export const useAppCommands = ({
       },
       settingsCommand,
     ];
-  }, [addSystemMessage, applyRuntimeSetting, clearConversation, exit, messages, setModel, setInput, settingsService]);
+  }, [
+    addSystemMessage,
+    applyRuntimeSetting,
+    clearConversation,
+    exit,
+    getSessionUsage,
+    messages,
+    setModel,
+    setInput,
+    settingsService,
+  ]);
 
   return {
     slashCommands,

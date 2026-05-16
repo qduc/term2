@@ -1,5 +1,12 @@
 import test from 'ava';
-import { normalizeUsage, extractUsage, formatFooterUsage } from './token-usage.js';
+import {
+  addTokenUsage,
+  createUsageAccumulator,
+  extractUsage,
+  formatFooterUsage,
+  formatSessionTokenUsage,
+  normalizeUsage,
+} from './token-usage.js';
 
 test('normalizeUsage handles multiple formats', (t) => {
   // OpenAI style
@@ -136,4 +143,50 @@ test('formatFooterUsage returns formatted string', (t) => {
   t.is(formatFooterUsage({ cache_read_tokens: 42 }), '');
   t.is(formatFooterUsage({ total_tokens: 100 }), '');
   t.is(formatFooterUsage(null), '');
+});
+
+test('addTokenUsage accumulates usage counters', (t) => {
+  t.deepEqual(
+    addTokenUsage(
+      { prompt_tokens: 1000, completion_tokens: 200, cache_read_tokens: 800 },
+      { prompt_tokens: 2000, completion_tokens: 300, cache_read_tokens: 1200, cache_creation_tokens: 50 },
+    ),
+    {
+      prompt_tokens: 3000,
+      completion_tokens: 500,
+      cache_read_tokens: 2000,
+      cache_creation_tokens: 50,
+    },
+  );
+
+  t.deepEqual(addTokenUsage(undefined, undefined), {});
+});
+
+test('createUsageAccumulator adds and resets session usage', (t) => {
+  const accumulator = createUsageAccumulator({ prompt_tokens: 10, completion_tokens: 2 });
+  accumulator.add({ prompt_tokens: 5, completion_tokens: 3, cache_read_tokens: 4 });
+
+  t.deepEqual(accumulator.get(), {
+    prompt_tokens: 15,
+    completion_tokens: 5,
+    cache_read_tokens: 4,
+  });
+
+  accumulator.reset();
+  t.deepEqual(accumulator.get(), {});
+});
+
+test('formatSessionTokenUsage matches slash command output', (t) => {
+  t.is(
+    formatSessionTokenUsage({
+      prompt_tokens: 100000,
+      completion_tokens: 20000,
+      cache_read_tokens: 1000000,
+      cache_creation_tokens: 500,
+    }),
+    'Token usage: 100,000 input (1,000,000 cached), 20,000 output',
+  );
+
+  t.is(formatSessionTokenUsage({ prompt_tokens: 100, completion_tokens: 20 }), 'Token usage: 100 input, 20 output');
+  t.is(formatSessionTokenUsage(null), 'Token usage: 0 input, 0 output');
 });

@@ -17,6 +17,7 @@ import { useRuntimeSettings } from './hooks/use-runtime-settings.js';
 import { useShellMode, SSHInfo } from './hooks/use-shell-mode.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
+import { createUsageAccumulator, formatSessionTokenUsage, type UsageAccumulator } from './utils/token-usage.js';
 
 interface AppProps {
   conversationService: ConversationService;
@@ -25,6 +26,9 @@ interface AppProps {
   loggingService: LoggingService;
   sshInfo?: SSHInfo;
   sshService?: ISSHService;
+  usageAccumulator?: UsageAccumulator;
+  onPrintUsage?: () => void;
+  onExitUsage?: () => void;
 }
 
 export const appendStartupBannerId = (ids: string[]): string[] => [...ids, `startup-banner-${ids.length}`];
@@ -36,11 +40,15 @@ const App: FC<AppProps> = ({
   loggingService,
   sshInfo,
   sshService,
+  usageAccumulator,
+  onPrintUsage,
+  onExitUsage,
 }) => {
   const { exit } = useApp();
   const { setInput } = useInputActions();
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
+  const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
 
   const {
     messages,
@@ -59,7 +67,7 @@ const App: FC<AppProps> = ({
     addSystemMessage,
     setTemperature,
     addShellMessage,
-  } = useConversation({ conversationService, loggingService });
+  } = useConversation({ conversationService, loggingService, usageAccumulator: sessionUsage });
 
   useEffect(() => {
     conversationService.setRetryCallback(() => addSystemMessage('Retrying due to upstream error...'));
@@ -88,9 +96,17 @@ const App: FC<AppProps> = ({
   }, []);
 
   const clearConversationAndRefreshBanner = useCallback(() => {
+    onPrintUsage?.();
     clearConversation();
     refreshStartupBanner();
-  }, [clearConversation, refreshStartupBanner]);
+  }, [clearConversation, onPrintUsage, refreshStartupBanner]);
+
+  const getSessionUsage = useCallback(() => formatSessionTokenUsage(sessionUsage.get()), [sessionUsage]);
+
+  const exitWithUsage = useCallback(() => {
+    onExitUsage?.();
+    exit();
+  }, [exit, onExitUsage]);
 
   const { slashCommands, toggleEditMode } = useAppCommands({
     settingsService,
@@ -98,7 +114,8 @@ const App: FC<AppProps> = ({
     applyRuntimeSetting,
     setInput,
     clearConversation: clearConversationAndRefreshBanner,
-    exit,
+    getSessionUsage,
+    exit: exitWithUsage,
     messages,
     setModel,
   });
@@ -108,7 +125,7 @@ const App: FC<AppProps> = ({
   // Handle Ctrl+C to exit immediately
   useInput((_input: string, key) => {
     if (key.ctrl && _input === 'c') {
-      exit();
+      exitWithUsage();
     }
   });
 

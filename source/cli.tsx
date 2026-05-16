@@ -16,12 +16,25 @@ import { SSHService, SSHConfig } from './services/ssh-service.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { resolveSSHHost } from './utils/ssh-config-parser.js';
+import { createUsageAccumulator, formatSessionTokenUsage } from './utils/token-usage.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
 
-// Global Ctrl+C handler for immediate exit
+const sessionUsageAccumulator = createUsageAccumulator();
+let usagePrinted = false;
+const printUsage = () => {
+  process.stdout.write(`\n${formatSessionTokenUsage(sessionUsageAccumulator.get())}\n`);
+};
+const printUsageOnce = () => {
+  if (usagePrinted) return;
+  usagePrinted = true;
+  printUsage();
+};
+
+// Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
 process.on('SIGINT', () => {
+  printUsageOnce();
   process.exit(0);
 });
 
@@ -308,6 +321,9 @@ const { waitUntilExit } = render(
         loggingService={logger}
         sshInfo={sshInfo}
         sshService={sshService}
+        usageAccumulator={sessionUsageAccumulator}
+        onPrintUsage={printUsage}
+        onExitUsage={printUsageOnce}
       />
     </InputProvider>
   ) as ReactNode,
@@ -315,4 +331,5 @@ const { waitUntilExit } = render(
 );
 
 await waitUntilExit();
+printUsageOnce();
 process.exit(0);

@@ -2,21 +2,54 @@
 // Note: 'sed' is useful for read-only transformations. We allow it by default
 // but add guards below to prevent in-place edits (-i) and unapproved redirections.
 export const ALLOWED_COMMANDS = new Set([
-  'ls',
+  // navigation / listing
   'pwd',
+  'ls',
+  'find',
+
+  // file viewing
+  'cat',
+  'head',
+  'tail',
+  'nl',
+  'sed',
+
+  // searching / matching
   'grep',
   'rg',
   'fd',
-  'cat',
-  'echo',
-  'head',
-  'tail',
-  'sed',
-  'find',
+
+  // counting / metadata
   'wc',
+  'stat',
+  'file',
+
+  // text inspection / transformation to stdout
+  'sort',
+  'uniq',
+  'cut',
+  'tr',
+  'strings',
+  'echo',
+
+  // structured data inspection
+  'jq',
+
+  // checksums
+  'sha256sum',
+  'sha1sum',
+  'md5sum',
+
+  // basic identity / environment context
+  'whoami',
+  'id',
+  'uname',
+  'date',
+
   // Git read-only commands
   'git',
 ]);
+
 export const BLOCKED_COMMANDS = new Set([
   // Inherently destructive filesystem operations
   'rm',

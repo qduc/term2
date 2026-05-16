@@ -94,6 +94,9 @@ export function classifyCommandDetailed(
             };
             const result = handler.handle(node, helpers);
             upgradeStatus(result.status, result.reasons.join('; '));
+            traverse(node.name);
+            traverse(node.prefix);
+            traverse(node.suffix);
             return;
           }
         }

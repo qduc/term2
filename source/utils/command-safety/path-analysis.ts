@@ -21,6 +21,8 @@ const nullLoggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
+const SENSITIVE_LOCAL_PATH_SEGMENTS = new Set(['.ssh', '.gnupg', '.aws', '.kube', '.git', '.config', '.env']);
+
 function getLogger(loggingService?: ILoggingService): ILoggingService {
   return loggingService ?? nullLoggingService;
 }
@@ -129,6 +131,14 @@ export function analyzePathRisk(inputPath: string | undefined, loggingService?: 
   // YELLOW: Directory Traversal
   if (candidate.includes('..')) {
     logger.security('Path risk: directory traversal detected', {
+      path: candidate,
+    });
+    return SafetyStatus.YELLOW;
+  }
+
+  const pathSegments = normalizedCandidate.split(/[\\/]+/).filter(Boolean);
+  if (pathSegments.some((segment) => SENSITIVE_LOCAL_PATH_SEGMENTS.has(segment))) {
+    logger.security('Path risk: sensitive local dot-directory', {
       path: candidate,
     });
     return SafetyStatus.YELLOW;

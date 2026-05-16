@@ -308,6 +308,22 @@ test('Path risk - hidden files (YELLOW)', (t) => {
   }
 });
 
+test('Path risk - sensitive hidden directories inside project (YELLOW)', (t) => {
+  const sensitivePaths = [
+    '.ssh/id_rsa',
+    'src/.aws/credentials',
+    'config/.kube/config',
+    '.env/production',
+    '.git/config',
+    '.gnupg/private-keys-v1.d/key',
+  ];
+
+  for (const path of sensitivePaths) {
+    const result = analyzePathRisk(path);
+    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (sensitive hidden directory)`);
+  }
+});
+
 test('Path risk - empty or undefined paths (GREEN)', (t) => {
   const emptyPaths = [undefined, '', '   '];
 

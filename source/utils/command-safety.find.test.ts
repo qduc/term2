@@ -299,7 +299,7 @@ test('find - interpreter bypasses (YELLOW)', (t) => {
   const commands = [
     'find . -exec perl -e "unlink" {} \\;',
     'find . -exec python -c "import os; os.system(\\"rm *\\")" {} \\;',
-    'find . -exec ruby -e "`rm *`" {} \\;',
+    'find . -exec ruby -e "system(\\"rm *\\")" {} \\;',
     'find . -exec node -e "require(\\"child_process\\").execSync(\\"rm *\\")" {} \\;',
   ];
 

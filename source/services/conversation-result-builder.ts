@@ -38,15 +38,15 @@ export interface ResultBuilderInput {
 }
 
 const resolveFinalText = (streamedText: string | undefined, completedText: string | undefined): string => {
-  if (streamedText !== undefined) {
-    if (completedText && completedText.length > streamedText.length && completedText.startsWith(streamedText)) {
-      return completedText;
-    }
-
-    return streamedText;
+  if (
+    completedText !== undefined &&
+    completedText !== '' &&
+    !(streamedText !== undefined && completedText === 'Done.')
+  ) {
+    return completedText;
   }
 
-  return completedText ?? 'Done.';
+  return streamedText ?? completedText ?? 'Done.';
 };
 
 export async function buildConversationResult(

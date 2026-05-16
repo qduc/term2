@@ -82,6 +82,50 @@ test('response outcome uses completed final output when it extends streamed outp
   }
 });
 
+test('response outcome uses completed final output when it corrects streamed text with the same length', async (t) => {
+  const stream = makeStream({
+    finalOutput: 'Hello world',
+    history: [],
+    newItems: [],
+  });
+  const outcome = await buildConversationResult(
+    {
+      result: stream,
+      finalOutputOverride: 'Hello wrold',
+      toolCallArgumentsById: new Map(),
+      emittedCommandIds: new Set(),
+    },
+    makeDeps(),
+  );
+
+  t.is(outcome.kind, 'response');
+  if (outcome.kind === 'response') {
+    t.is(outcome.result.finalText, 'Hello world');
+  }
+});
+
+test('response outcome uses completed final output when it shortens streamed text', async (t) => {
+  const stream = makeStream({
+    finalOutput: 'The answer is 42.',
+    history: [],
+    newItems: [],
+  });
+  const outcome = await buildConversationResult(
+    {
+      result: stream,
+      finalOutputOverride: 'The answer is 42. Extra hallucinated sentence.',
+      toolCallArgumentsById: new Map(),
+      emittedCommandIds: new Set(),
+    },
+    makeDeps(),
+  );
+
+  t.is(outcome.kind, 'response');
+  if (outcome.kind === 'response') {
+    t.is(outcome.result.finalText, 'The answer is 42.');
+  }
+});
+
 test('approval_required outcome when stream has interruptions', async (t) => {
   const stream = makeStream({
     interruptions: [

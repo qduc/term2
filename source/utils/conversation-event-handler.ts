@@ -175,11 +175,11 @@ export function createConversationEventHandler<
 
         const lastParagraphBoundary = newBotText.lastIndexOf('\n\n');
         if (lastParagraphBoundary !== -1) {
-          botResponseUpdater.cancel();
           const finalizedText = newBotText.slice(0, lastParagraphBoundary + 2);
           newBotText = newBotText.slice(lastParagraphBoundary + 2);
 
           if (finalizedText.trim()) {
+            botResponseUpdater.cancel();
             if (state.currentBotMessageId) {
               const botMessageId = state.currentBotMessageId;
               state.currentBotMessageId = null;
@@ -202,9 +202,8 @@ export function createConversationEventHandler<
               appendMessages([finalizedMessage as unknown as MessageT]);
             }
             state.textWasFlushed = true;
+            state.flushedTextLength += finalizedText.length;
           }
-
-          state.flushedTextLength += finalizedText.length;
         }
 
         if (!newBotText.trim()) return;
@@ -311,7 +310,7 @@ export function createConversationEventHandler<
             ? prev.findIndex(
                 (msg) => msg.sender === 'command' && msg.callId === annotated.callId && msg.status === 'running',
               )
-            : -1;
+            : prev.findIndex((msg) => msg.sender === 'command' && !msg.callId && msg.status === 'running');
 
           if (pendingIndex !== -1) {
             const next = [...prev];
@@ -339,12 +338,7 @@ export function createConversationEventHandler<
       }
 
       case 'final':
-        if (
-          event.finalText?.trim() &&
-          (!state.accumulatedText ||
-            (event.finalText.length > state.accumulatedText.length &&
-              event.finalText.startsWith(state.accumulatedText)))
-        ) {
+        if (event.finalText?.trim()) {
           state.accumulatedText = event.finalText;
         }
 

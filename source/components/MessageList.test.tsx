@@ -56,6 +56,20 @@ test('MessageList retains static history across rerenders', (t) => {
   t.true(output.includes('two'));
 });
 
+test('MessageList updates static history when a message with the same id is corrected', (t) => {
+  const renderer = render(
+    <MessageList messages={[{ id: 'corrected-message', sender: 'bot', status: 'finalized', text: 'Hello wrold' }]} />,
+  );
+
+  renderer.rerender(
+    <MessageList messages={[{ id: 'corrected-message', sender: 'bot', status: 'finalized', text: 'Hello world' }]} />,
+  );
+
+  const output = renderer.lastFrame() ?? '';
+  t.true(output.includes('Hello world'));
+  t.false(output.includes('Hello wrold'));
+});
+
 test('MessageList appends a fresh startup banner after clearing conversation history', (t) => {
   const settingsService = createMockSettingsService();
   const renderer = render(

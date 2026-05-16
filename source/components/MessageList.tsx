@@ -76,6 +76,14 @@ const createStaticItems = (bannerItems: string[], history: MessageLike[]): Stati
   ...history.map((message) => ({ kind: 'message' as const, id: message.id, message })),
 ];
 
+const createMessageSignature = (message: MessageLike) => {
+  try {
+    return JSON.stringify(message);
+  } catch {
+    return `${message.id}:${message.sender ?? ''}:${message.status ?? ''}`;
+  }
+};
+
 const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, isShellMode = false }) => {
   const { stdout } = useStdout();
 
@@ -89,12 +97,14 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
     return splitStaticHistory(messages);
   }, [messages]);
 
-  const staticItemsRef = useRef<StaticItem[]>(createStaticItems(bannerItems, history));
+  const staticItemsRef = useRef<StaticItem[]>(createStaticItems(bannerItems, []));
   const seenBannerIdsRef = useRef<Set<string>>(new Set(bannerItems));
-  const seenMessageIdsRef = useRef<Set<string>>(new Set(history.map((message) => message.id)));
+  const committedMessageSignaturesRef = useRef<Map<string, string>>(new Map());
+  const candidateMessageSignaturesRef = useRef<Map<string, string>>(new Map());
 
-  const staticItems = useMemo(() => {
+  const { staticItems, deferredHistory } = useMemo(() => {
     const additions: StaticItem[] = [];
+    const deferred: MessageLike[] = [];
 
     for (const bannerId of bannerItems) {
       if (seenBannerIdsRef.current.has(bannerId)) {
@@ -105,27 +115,51 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
       additions.push({ kind: 'banner', id: bannerId });
     }
 
+    const historyIds = new Set(history.map((message) => message.id));
+    for (const messageId of candidateMessageSignaturesRef.current.keys()) {
+      if (!historyIds.has(messageId)) {
+        candidateMessageSignaturesRef.current.delete(messageId);
+      }
+    }
+
     for (const message of history) {
-      if (seenMessageIdsRef.current.has(message.id)) {
+      const signature = createMessageSignature(message);
+      const committedSignature = committedMessageSignaturesRef.current.get(message.id);
+
+      if (committedSignature === signature) {
         continue;
       }
 
-      seenMessageIdsRef.current.add(message.id);
-      additions.push({ kind: 'message', id: message.id, message });
+      if (committedSignature !== undefined) {
+        candidateMessageSignaturesRef.current.set(message.id, signature);
+        deferred.push(message);
+        continue;
+      }
+
+      if (candidateMessageSignaturesRef.current.get(message.id) === signature) {
+        committedMessageSignaturesRef.current.set(message.id, signature);
+        additions.push({ kind: 'message', id: message.id, message });
+        continue;
+      }
+
+      candidateMessageSignaturesRef.current.set(message.id, signature);
+      deferred.push(message);
     }
 
     if (additions.length > 0) {
       staticItemsRef.current = [...staticItemsRef.current, ...additions];
     }
 
-    return staticItemsRef.current;
+    return { staticItems: staticItemsRef.current, deferredHistory: deferred };
   }, [bannerItems, history]);
+
+  const dynamicItems = useMemo(() => [...deferredHistory, ...active], [deferredHistory, active]);
 
   const renderMessage = (msg: any, idx: number, collection: any[], maxWidth?: number) => {
     // Use consistent marginTop to prevent layout reflow.
     // This ensures stable spacing regardless of message order or streaming updates.
     // The first message in each collection has no top margin to avoid extra space.
-    const isFirst = idx === 0 && collection === active && history.length === 0;
+    const isFirst = idx === 0 && collection === dynamicItems && staticItems.length === 0;
 
     return (
       <Box key={msg.id} marginTop={isFirst ? 0 : 1} width={maxWidth}>
@@ -170,7 +204,7 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
       </Static>
 
       <Box flexDirection="column" paddingX={MESSAGE_HORIZONTAL_PADDING}>
-        {active.map((msg, idx) => renderMessage(msg, idx, active, contentWidth))}
+        {dynamicItems.map((msg, idx) => renderMessage(msg, idx, dynamicItems, contentWidth))}
       </Box>
     </Box>
   );

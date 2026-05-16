@@ -717,3 +717,114 @@ test('unknown event: is ignored without error', (t) => {
   t.is(deps.calls.appendedMessages.length, 0);
   t.is(deps.calls.setMessagesCalls.length, 0);
 });
+
+// =============================================================================
+// Bug: final event silently ignores corrections when finalText.length <= accumulatedText.length
+// =============================================================================
+
+test('final: ignores corrected finalText when it is the same length as accumulated streamed text', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  // Simulate streaming that produced a typo whose length matches the correct text
+  state.accumulatedText = 'Hello wrold';
+  state.flushedTextLength = 0;
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({ type: 'final', finalText: 'Hello world' } as any);
+
+  // The guard `finalText.length > accumulatedText.length` is false for equal-length strings.
+  // accumulatedText is never updated, so the typo is what gets flushed.
+  t.is(deps.calls.appendedMessages.length, 1);
+  const flushedMsg = deps.calls.appendedMessages[0][0];
+  // Fails: actual is 'Hello wrold' (the typo) — correction from finalText is silently lost
+  t.is(flushedMsg.text, 'Hello world');
+});
+
+test('final: flushes over-accumulated streamed content when finalText is shorter than accumulated', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  // Simulate streaming that over-shot the authoritative answer
+  state.accumulatedText = 'The answer is 42. Extra hallucinated sentence.';
+  state.flushedTextLength = 0;
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({ type: 'final', finalText: 'The answer is 42.' } as any);
+
+  // The guard `finalText.length > accumulatedText.length` is false when final is shorter.
+  // accumulatedText is not corrected, so the hallucinated tail is included in the flush.
+  t.is(deps.calls.appendedMessages.length, 1);
+  const flushedMsg = deps.calls.appendedMessages[0][0];
+  // Fails: actual is the full over-accumulated string including ' Extra hallucinated sentence.'
+  t.is(flushedMsg.text, 'The answer is 42.');
+});
+
+// =============================================================================
+// Bug: whitespace-only content before a paragraph boundary is permanently dropped
+// =============================================================================
+
+test('text_delta: whitespace-only content before first paragraph boundary is silently dropped', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  // Response begins with whitespace before the paragraph boundary
+  handler({ type: 'text_delta', delta: '   \n\nActual content' } as ConversationEvent);
+
+  // flushedTextLength is NOT advanced — whitespace content is kept in the unflushed window
+  t.is(state.flushedTextLength, 0);
+  t.is(deps.calls.appendedMessages.length, 0);
+
+  // The live updater only received 'Actual content' — the leading spaces are gone
+  t.deepEqual(deps.calls.botResponsePushes, ['Actual content']);
+
+  // After final, only 'Actual content' is written; the three leading spaces are permanently lost
+  handler({ type: 'final', finalText: '   \n\nActual content' } as any);
+  t.is(deps.calls.appendedMessages.length, 1);
+  // Fails: actual is 'Actual content' — '   ' is not recoverable
+  t.is(deps.calls.appendedMessages[0][0].text, '   \n\nActual content');
+});
+
+// =============================================================================
+// Bug: command_message without callId leaves the running message stranded
+// =============================================================================
+
+test('command_message: leaves stale running message when no callId is present on either side', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  // tool_started with no callId appends a running message with no way to match it later
+  handler({
+    type: 'tool_started',
+    toolCallId: undefined,
+    toolName: 'shell',
+    arguments: { command: 'ls' },
+  } as any);
+
+  const runningMsg = deps.calls.appendedMessages[0][0];
+  t.is(runningMsg.status, 'running');
+  t.is(runningMsg.callId, undefined);
+
+  // command_message also has no callId, so pendingIndex is immediately -1
+  // and the completed message is appended rather than replacing the running one
+  handler({
+    type: 'command_message',
+    message: {
+      id: 'result-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'ls',
+      output: 'file.txt',
+      callId: undefined,
+      toolName: 'shell',
+    },
+  } as any);
+
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const result = updater([runningMsg]);
+
+  // Fails: result has 2 messages — the stale 'running' + the new 'completed'
+  // Expected: 1 message, the running entry replaced by the completed one
+  t.is(result.length, 1);
+  t.is(result[0].status, 'completed');
+});

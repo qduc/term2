@@ -731,6 +731,65 @@ test('auto mode: batch of two commands — first auto-approved, second triggers 
   t.is(chatCalls.length, 1);
 });
 
+test('auto mode: response usage includes the auto-approved first turn, not just the continuation', async (t) => {
+  const initialStream = createInterruptedStream([
+    createShellInterruption({ callId: 'call-usage-1', command: 'ls source' }),
+  ]);
+  (initialStream as any).usage = { input_tokens: 100, output_tokens: 20 };
+
+  const finalStream = createFinalStream('Files listed.');
+  (finalStream as any).usage = { input_tokens: 200, output_tokens: 30 };
+
+  const { session } = createSessionHarness({
+    settingsOverrides: { 'shell.autoApproveMode': 'auto' },
+    startStreams: [initialStream],
+    continuationStreams: [finalStream],
+    chatImpl: async () =>
+      JSON.stringify({
+        results: [{ id: 'call-usage-1', reasoning: 'Listing files is read-only and safe.', approved: true }],
+      }),
+  });
+
+  const result = getResponseResult(t, await session.sendMessage('list the source files'));
+
+  // First turn (100 in / 20 out) must be combined with the continuation (200 in / 30 out).
+  t.is(result.usage?.prompt_tokens, 300);
+  t.is(result.usage?.completion_tokens, 50);
+});
+
+test('auto mode: approval_required usage includes the auto-approved first turn', async (t) => {
+  const first = createShellInterruption({ callId: 'call-usage-batch-1', command: 'ls source' });
+  const second = createShellInterruption({ callId: 'call-usage-batch-2', command: 'git log --all --format="%H"' });
+
+  const initialStream = createInterruptedStream([first, second]);
+  (initialStream as any).usage = { input_tokens: 100, output_tokens: 20 };
+
+  const continuationAfterFirst = createInterruptedStream([second]);
+  (continuationAfterFirst as any).usage = { input_tokens: 200, output_tokens: 30 };
+
+  const { session } = createSessionHarness({
+    settingsOverrides: { 'shell.autoApproveMode': 'auto' },
+    startStreams: [initialStream],
+    continuationStreams: [continuationAfterFirst],
+    chatImpl: async () =>
+      JSON.stringify({
+        results: [
+          { id: 'call-usage-batch-1', reasoning: 'Listing files is safe.', approved: true },
+          {
+            id: 'call-usage-batch-2',
+            reasoning: 'Dumping all commit hashes is not aligned with the current task.',
+            approved: false,
+          },
+        ],
+      }),
+  });
+
+  const approvalResult = getApprovalResult(t, await session.sendMessage('inspect repository and dump history'));
+
+  t.is(approvalResult.usage?.prompt_tokens, 300);
+  t.is(approvalResult.usage?.completion_tokens, 50);
+});
+
 test('auto mode: evaluator error falls back to prompt without crashing', async (t) => {
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-auto-err', command: 'ls source' }),

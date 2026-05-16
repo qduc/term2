@@ -4,7 +4,7 @@ import { ConversationStore } from './conversation-store.js';
 import { decideRetry, MAX_HALLUCINATION_RETRIES } from './conversation-retry-policy.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../tools/types.js';
-import type { NormalizedUsage } from '../utils/token-usage.js';
+import { addTokenUsage, type NormalizedUsage } from '../utils/token-usage.js';
 import { getProvider } from '../providers/index.js';
 import { ApprovalState } from './approval-state.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
@@ -570,19 +570,29 @@ export class ConversationSession {
     let finalText = '';
     let reasoningText = '';
     let finalUsage: NormalizedUsage | undefined;
+    let continuationApprovalUsage: NormalizedUsage | undefined;
     const commandMessages: CommandMessage[] = [];
     let approvalRequiredResult: ConversationResult | undefined;
 
     for await (const event of this['continue']({ answer: 'y' })) {
-      yield event;
-
       if (event.type === 'approval_required') {
+        continuationApprovalUsage = event.usage;
+        const mergedUsage =
+          usage || continuationApprovalUsage ? addTokenUsage(usage, continuationApprovalUsage) : undefined;
+        const usagePatch = mergedUsage && Object.keys(mergedUsage).length > 0 ? { usage: mergedUsage } : {};
+
+        // Merge the first (auto-approved) turn's usage onto the event itself.
+        // collectTerminalResult returns on the first approval_required event, so an
+        // unmerged event here would drop the auto-approved turn from the accumulator.
+        yield { ...event, ...usagePatch };
+
         approvalRequiredResult = {
           type: 'approval_required',
           approval: {
             ...event.approval,
             rawInterruption: this.approvalFlow.getPendingInterruption(),
           },
+          ...usagePatch,
         };
       } else if (event.type === 'final') {
         finalText = event.finalText;
@@ -591,6 +601,9 @@ export class ConversationSession {
         if (event.commandMessages) {
           commandMessages.push(...event.commandMessages);
         }
+        yield event;
+      } else {
+        yield event;
       }
     }
 
@@ -598,12 +611,13 @@ export class ConversationSession {
       return approvalRequiredResult;
     }
 
+    const combinedUsage = usage || finalUsage ? addTokenUsage(usage, finalUsage) : undefined;
     return {
       type: 'response',
       commandMessages,
       finalText: finalText || 'Done.',
       ...(reasoningText ? { reasoningText } : {}),
-      ...(finalUsage ? { usage: finalUsage } : {}),
+      ...(combinedUsage && Object.keys(combinedUsage).length > 0 ? { usage: combinedUsage } : {}),
     };
   }
 }

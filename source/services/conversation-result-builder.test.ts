@@ -104,6 +104,30 @@ test('approval_required outcome when stream has interruptions', async (t) => {
   }
 });
 
+test('approval_required outcome preserves usage from model turn', async (t) => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'call-usage',
+        arguments: { command: 'ls' },
+        agent: { name: 'TestAgent' },
+      },
+    ],
+    state: { id: 'state-usage' },
+  });
+  const usage = { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 };
+  const outcome = await buildConversationResult(
+    { result: stream, usage, toolCallArgumentsById: new Map() },
+    makeDeps(),
+  );
+
+  t.is(outcome.kind, 'approval_required');
+  if (outcome.kind === 'approval_required') {
+    t.deepEqual(outcome.result.usage, usage);
+  }
+});
+
 test('auto_approve outcome when LLM advises approval and mode=auto', async (t) => {
   const stream = makeStream({
     interruptions: [
@@ -192,10 +216,12 @@ test('toTerminalEvent shapes approval_required with optional fields', (t) => {
       callId: 'c1',
       rawInterruption: { name: 'shell' },
     },
+    usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
   });
   t.is(event.type, 'approval_required');
   if (event.type === 'approval_required') {
     t.is(event.approval.callId, 'c1');
     t.is(event.approval.toolName, 'shell');
+    t.deepEqual(event.usage, { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 });
   }
 });

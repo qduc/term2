@@ -40,6 +40,32 @@ test('collectTerminalResult returns approval_required with raw interruption from
   }
 });
 
+test('collectTerminalResult preserves usage on approval_required', async (t) => {
+  const result = await collectTerminalResult(
+    asAsyncIterable([
+      {
+        type: 'final',
+        finalText: '',
+        usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 },
+      },
+      {
+        type: 'approval_required',
+        usage: { prompt_tokens: 120, completion_tokens: 12, total_tokens: 132 },
+        approval: {
+          agentName: 'CLI Agent',
+          toolName: 'shell',
+          argumentsText: 'ls source',
+        },
+      },
+    ]),
+  );
+
+  t.is(result.type, 'approval_required');
+  if (result.type === 'approval_required') {
+    t.deepEqual(result.usage, { prompt_tokens: 120, completion_tokens: 12, total_tokens: 132 });
+  }
+});
+
 test('collectTerminalResult accumulates streamed callbacks and returns final response payload', async (t) => {
   const seenText: string[] = [];
   const seenReasoning: string[] = [];

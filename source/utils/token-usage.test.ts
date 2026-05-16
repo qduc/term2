@@ -1,5 +1,6 @@
 import test from 'ava';
 import {
+  addBillableSessionTokenUsage,
   addTokenUsage,
   createUsageAccumulator,
   extractUsage,
@@ -162,12 +163,31 @@ test('addTokenUsage accumulates usage counters', (t) => {
   t.deepEqual(addTokenUsage(undefined, undefined), {});
 });
 
-test('createUsageAccumulator adds and resets session usage', (t) => {
+test('addBillableSessionTokenUsage subtracts cached input before accumulating prompt tokens', (t) => {
+  t.deepEqual(
+    addBillableSessionTokenUsage(
+      { prompt_tokens: 100, completion_tokens: 20, cache_read_tokens: 50 },
+      { prompt_tokens: 1000, completion_tokens: 200, cache_read_tokens: 800 },
+    ),
+    {
+      prompt_tokens: 300,
+      completion_tokens: 220,
+      cache_read_tokens: 850,
+    },
+  );
+
+  t.deepEqual(addBillableSessionTokenUsage(undefined, { prompt_tokens: 100, cache_read_tokens: 150 }), {
+    prompt_tokens: 0,
+    cache_read_tokens: 150,
+  });
+});
+
+test('createUsageAccumulator adds billable input and resets session usage', (t) => {
   const accumulator = createUsageAccumulator({ prompt_tokens: 10, completion_tokens: 2 });
   accumulator.add({ prompt_tokens: 5, completion_tokens: 3, cache_read_tokens: 4 });
 
   t.deepEqual(accumulator.get(), {
-    prompt_tokens: 15,
+    prompt_tokens: 11,
     completion_tokens: 5,
     cache_read_tokens: 4,
   });
@@ -176,15 +196,33 @@ test('createUsageAccumulator adds and resets session usage', (t) => {
   t.deepEqual(accumulator.get(), {});
 });
 
+test('createUsageAccumulator subtracts cached input on every model turn', (t) => {
+  const accumulator = createUsageAccumulator();
+
+  accumulator.add({ prompt_tokens: 1000, completion_tokens: 100, cache_read_tokens: 800 });
+  t.deepEqual(accumulator.get(), {
+    prompt_tokens: 200,
+    completion_tokens: 100,
+    cache_read_tokens: 800,
+  });
+
+  accumulator.add({ prompt_tokens: 1000, completion_tokens: 100, cache_read_tokens: 800 });
+  t.deepEqual(accumulator.get(), {
+    prompt_tokens: 400,
+    completion_tokens: 200,
+    cache_read_tokens: 1600,
+  });
+});
+
 test('formatSessionTokenUsage matches slash command output', (t) => {
   t.is(
     formatSessionTokenUsage({
-      prompt_tokens: 100000,
+      prompt_tokens: 20000,
       completion_tokens: 20000,
       cache_read_tokens: 1000000,
       cache_creation_tokens: 500,
     }),
-    'Token usage: 100,000 input (1,000,000 cached), 20,000 output',
+    'Token usage: 20,000 input (1,000,000 cached), 20,000 output',
   );
 
   t.is(formatSessionTokenUsage({ prompt_tokens: 100, completion_tokens: 20 }), 'Token usage: 100 input, 20 output');

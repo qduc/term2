@@ -59,6 +59,8 @@ export interface ApprovalRequiredEvent {
   approval: Omit<ApprovalDescriptor, 'rawInterruption'> & {
     llmAdvisory?: LLMAdvisory;
   };
+  /** Token usage for the model turn that requested approval. */
+  usage?: NormalizedUsage;
 }
 
 /**

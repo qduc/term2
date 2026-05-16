@@ -56,10 +56,10 @@ test('createUsageSlashCommand shows current session usage', (t) => {
   const messages: string[] = [];
   const command = createUsageSlashCommand(
     (text) => messages.push(text),
-    () => 'Token usage: 100,000 input (1,000,000 cached), 20,000 output',
+    () => 'Token usage: 20,000 input (1,000,000 cached), 20,000 output',
   );
 
   t.is(command.name, 'usage');
   t.is(command.action(), true);
-  t.deepEqual(messages, ['Token usage: 100,000 input (1,000,000 cached), 20,000 output']);
+  t.deepEqual(messages, ['Token usage: 20,000 input (1,000,000 cached), 20,000 output']);
 });

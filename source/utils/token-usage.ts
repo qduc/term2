@@ -253,12 +253,27 @@ export function addTokenUsage(
   return result;
 }
 
+export function addBillableSessionTokenUsage(
+  current: NormalizedUsage | null | undefined,
+  next: NormalizedUsage | null | undefined,
+): NormalizedUsage {
+  if (!next) return { ...(current ?? {}) };
+
+  const billablePromptTokens =
+    next.prompt_tokens == null ? undefined : Math.max(0, next.prompt_tokens - (next.cache_read_tokens ?? 0));
+
+  return addTokenUsage(current, {
+    ...next,
+    ...(billablePromptTokens != null ? { prompt_tokens: billablePromptTokens } : {}),
+  });
+}
+
 export function createUsageAccumulator(initialUsage?: NormalizedUsage | null): UsageAccumulator {
-  let accumulated = addTokenUsage(undefined, initialUsage);
+  let accumulated = addBillableSessionTokenUsage(undefined, initialUsage);
 
   return {
     add(usage) {
-      accumulated = addTokenUsage(accumulated, usage);
+      accumulated = addBillableSessionTokenUsage(accumulated, usage);
     },
     reset() {
       accumulated = {};

@@ -25,6 +25,7 @@ export interface ApprovalDescriptor {
 export interface ApprovalRequiredTerminal {
   type: 'approval_required';
   approval: ApprovalDescriptor;
+  usage?: NormalizedUsage;
 }
 
 export interface FinalTerminal {

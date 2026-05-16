@@ -112,6 +112,7 @@ export async function buildConversationResult(
           ...(callId ? { callId: String(callId) } : {}),
           llmAdvisory,
         },
+        usage: usage ?? extractUsage(result),
       },
     };
   }
@@ -150,6 +151,7 @@ export const toTerminalEvent = (result: ConversationResult): ConversationEvent =
         ...(result.approval.callId ? { callId: result.approval.callId } : {}),
         ...(result.approval.llmAdvisory ? { llmAdvisory: result.approval.llmAdvisory } : {}),
       },
+      ...(result.usage ? { usage: result.usage } : {}),
     };
   }
 

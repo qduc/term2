@@ -55,6 +55,7 @@ export async function collectTerminalResult(
             callId: event.approval.callId,
             llmAdvisory: event.approval.llmAdvisory,
           },
+          ...(event.usage ? { usage: event.usage } : usage ? { usage } : {}),
         };
       }
       case 'final': {

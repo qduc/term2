@@ -99,6 +99,10 @@ export const useConversation = ({
       }
 
       if (result.type === 'approval_required') {
+        if (result.usage) {
+          usageAccumulator?.add(result.usage);
+          setLastUsage(result.usage);
+        }
         // Don't also show the transient pending/running command message.
         setMessages((prev) => trimMessages(filterPendingCommandMessagesForApproval(prev, result.approval)));
         setPendingApproval({

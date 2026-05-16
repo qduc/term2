@@ -1,3 +1,39 @@
+## [0.4.0] - 2026-05-16
+
+### Features
+
+- **Token usage tracking and reporting** — Session token usage is now tracked and propagated through the approval flow with billable calculations
+- **Code context tools** — New code searching capabilities with multi-language support for better code exploration
+- **apply_patch tool** — Direct support for applying patches to files
+- **Reasoning formatting** — Reasoning and streaming text now rendered with Markdown formatting for better readability
+- **Auto-healing enhancements** — Improved auto-healing with detailed failure reasons and extended recovery capabilities
+- **File batch operations** — Support for parallel edits with file locking utilities
+- **Slash command additions** — New `/effort` slash command for configuring reasoning effort levels
+- **Provider expansion** — Anthropic and Google now available as first-class provider types; OpenCode provider added with session headers
+- **Search tool improvements** — Search output now uses plain-text format for better efficiency; added `no_ignore` option for search and file tools
+- **Settings enhancements** — Support for optional `baseUrl` configuration in providers; current setting values now highlighted in suggestions
+- **Cache control** — Prompt cache now applied to last two messages for extended context preservation
+
+### Bug Fixes
+
+- **Dotfiles in file matching** — Dotfiles are now properly included in file matching operations
+- **Conversation event handling** — Fixed flushing and correction issues in conversation event processing
+- **Batched replacements** — Improved error handling and increased edit-healing timeout
+- **Reasoning text persistence** — Fixed reasoning text being reset when restarting after tool execution
+- **Shell command handling** — Fixed hanging issue with shell commands expecting stdin input
+- **Rendering improvements** — Better fallback rendering in shell prompts and approval flows
+- **Layout fixes** — Fixed horizontal padding alignment between static and active message sections; improved table layout width propagation
+- **Provider configuration** — Fixed support for empty `apiKey` in provider configuration
+
+### Improvements
+
+- Enhanced token usage extraction and caching logic
+- Improved command safety inspection and path analysis
+- Better message streaming with streamlined status bar alignment
+- OpenAI-compatible message sanitization for improved compatibility
+- Optimized settings menu with scrollable result list and better filtering
+- Disabled OpenAI agents tracing globally by default for reduced overhead
+
 ## [0.3.1] - 2026-05-10
 
 ### Features

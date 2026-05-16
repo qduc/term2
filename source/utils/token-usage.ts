@@ -2,12 +2,13 @@
  * Token usage normalization and extraction utilities.
  * Ported from backend/src/lib/utils/usage.js
  */
-
 export interface NormalizedUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
   reasoning_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
   prompt_ms?: number;
   completion_ms?: number;
 }
@@ -39,6 +40,11 @@ function sumNumbers(...values: unknown[]): number | undefined {
   return found ? total : undefined;
 }
 
+function asUsageContainer(value: unknown): Record<string, any> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as Record<string, any>;
+}
+
 export function normalizeUsage(usage: any): NormalizedUsage | undefined {
   if (!usage || typeof usage !== 'object') return undefined;
 
@@ -66,9 +72,24 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.predicted_n,
   );
 
-  const cacheCreationTokens = coalesceNumber(usage.cache_creation_input_tokens, usage.cacheCreationInputTokens);
+  const cacheCreationTokens = coalesceNumber(
+    usage.cache_creation_input_tokens,
+    usage.cacheCreationInputTokens,
+    usage.cache_creation_tokens,
+    usage.cacheCreationTokens,
+  );
 
-  const cacheReadTokens = coalesceNumber(usage.cache_read_input_tokens, usage.cacheReadInputTokens);
+  const cacheReadTokens = coalesceNumber(
+    usage.cache_read_input_tokens,
+    usage.cacheReadInputTokens,
+    usage.cache_read_tokens,
+    usage.cached_tokens,
+    usage.cachedTokens,
+    usage.prompt_tokens_details?.cached_tokens,
+    usage.promptTokensDetails?.cachedTokens,
+    usage.cachedContentTokenCount,
+    usage.cached_content_token_count,
+  );
 
   const totalTokens =
     coalesceNumber(
@@ -76,7 +97,7 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
       usage.total_token_count,
       usage.totalTokenCount,
       usage.totalTokens, // Agents SDK
-    ) ?? sumNumbers(promptTokens, completionTokens, cacheCreationTokens, cacheReadTokens);
+    ) ?? sumNumbers(promptTokens, completionTokens, cacheCreationTokens);
 
   const reasoningTokens = coalesceNumber(
     usage.reasoning_tokens,
@@ -103,32 +124,50 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
   if (completionTokens != null) mapped.completion_tokens = completionTokens;
   if (totalTokens != null) mapped.total_tokens = totalTokens;
   if (reasoningTokens != null) mapped.reasoning_tokens = reasoningTokens;
+  if (cacheReadTokens != null) mapped.cache_read_tokens = cacheReadTokens;
+  if (cacheCreationTokens != null) mapped.cache_creation_tokens = cacheCreationTokens;
   if (promptMs != null) mapped.prompt_ms = promptMs;
   if (completionMs != null) mapped.completion_ms = completionMs;
 
   return Object.keys(mapped).length > 0 ? mapped : undefined;
 }
 
-export function extractUsage(payload: any): NormalizedUsage | undefined {
-  if (!payload || typeof payload !== 'object') return undefined;
+export function extractUsage(payload: unknown): NormalizedUsage | undefined {
+  const root = asUsageContainer(payload);
+  if (!root) return undefined;
 
   const results: NormalizedUsage[] = [];
+  const seen = new Set<Record<string, any>>();
+  const enqueue = (candidate: unknown) => {
+    const record = asUsageContainer(candidate);
+    if (!record || seen.has(record)) return;
+    seen.add(record);
 
-  const direct = normalizeUsage(payload.usage);
-  if (direct) results.push(direct);
+    const direct = normalizeUsage(record.usage);
+    if (direct) results.push(direct);
 
-  const metadata = normalizeUsage(payload.usageMetadata || payload.usage_metadata);
-  if (metadata) results.push(metadata);
+    const metadata = normalizeUsage(record.usageMetadata || record.usage_metadata);
+    if (metadata) results.push(metadata);
 
-  const nested = normalizeUsage(payload.response?.usage);
-  if (nested) results.push(nested);
+    const responseUsage = normalizeUsage(asUsageContainer(record.response)?.usage);
+    if (responseUsage) results.push(responseUsage);
 
-  const timings = normalizeUsage(payload.timings);
-  if (timings) results.push(timings);
+    const eventUsage = normalizeUsage(asUsageContainer(record.event)?.usage);
+    if (eventUsage) results.push(eventUsage);
 
-  // Fallback search for any usage field in the payload itself
-  const self = normalizeUsage(payload);
-  if (self) results.push(self);
+    const timings = normalizeUsage(record.timings);
+    if (timings) results.push(timings);
+
+    const self = normalizeUsage(record);
+    if (self) results.push(self);
+  };
+
+  enqueue(root);
+  enqueue(root.data);
+  enqueue(root.event);
+  enqueue(asUsageContainer(root.data)?.event);
+  enqueue(root.response);
+  enqueue(asUsageContainer(root.data)?.response);
 
   if (results.length === 0) return undefined;
 
@@ -137,8 +176,24 @@ export function extractUsage(payload: any): NormalizedUsage | undefined {
     Object.assign(merged, results[i]);
   }
 
+  const mergedComponentTotal = sumNumbers(merged.prompt_tokens, merged.completion_tokens, merged.cache_creation_tokens);
+  if (mergedComponentTotal != null) {
+    merged.total_tokens = mergedComponentTotal;
+  }
+
   // Re-normalize to fix up computed total_tokens if components were merged from different sources
   return normalizeUsage(merged);
+}
+
+export function mergeUsage(
+  preferred: NormalizedUsage | undefined,
+  fallback: NormalizedUsage | undefined,
+): NormalizedUsage | undefined {
+  if (!preferred) return fallback;
+  if (!fallback) return preferred;
+
+  const merged = { ...fallback, ...preferred };
+  return normalizeUsage(merged) ?? merged;
 }
 
 export function formatFooterUsage(usage: NormalizedUsage | null | undefined): string {
@@ -146,7 +201,18 @@ export function formatFooterUsage(usage: NormalizedUsage | null | undefined): st
 
   const parts: string[] = [];
   if (usage.prompt_tokens != null) {
-    parts.push(`${usage.prompt_tokens.toLocaleString()} in`);
+    let promptPart = `${usage.prompt_tokens.toLocaleString()} in`;
+    const promptDetails: string[] = [];
+    if (usage.cache_read_tokens != null) {
+      promptDetails.push(`${usage.cache_read_tokens.toLocaleString()} cached`);
+    }
+    if (usage.cache_creation_tokens != null) {
+      promptDetails.push(`${usage.cache_creation_tokens.toLocaleString()} cache write`);
+    }
+    if (promptDetails.length > 0) {
+      promptPart += ` (${promptDetails.join(', ')})`;
+    }
+    parts.push(promptPart);
   }
   if (usage.completion_tokens != null) {
     parts.push(`${usage.completion_tokens.toLocaleString()} out`);

@@ -9,6 +9,34 @@ test('normalizeUsage handles multiple formats', (t) => {
     total_tokens: 30,
   });
 
+  // OpenAI prompt token details style
+  t.deepEqual(
+    normalizeUsage({ prompt_tokens: 10, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 4 } }),
+    {
+      prompt_tokens: 10,
+      completion_tokens: 20,
+      total_tokens: 30,
+      cache_read_tokens: 4,
+    },
+  );
+
+  // Anthropic style
+  t.deepEqual(
+    normalizeUsage({
+      input_tokens: 100,
+      output_tokens: 25,
+      cache_read_input_tokens: 60,
+      cache_creation_input_tokens: 12,
+    }),
+    {
+      prompt_tokens: 100,
+      completion_tokens: 25,
+      total_tokens: 137,
+      cache_read_tokens: 60,
+      cache_creation_tokens: 12,
+    },
+  );
+
   // Agents SDK style
   t.deepEqual(normalizeUsage({ inputTokens: 5, outputTokens: 15, totalTokens: 20 }), {
     prompt_tokens: 5,
@@ -35,11 +63,77 @@ test('extractUsage finds usage in nested locations', (t) => {
   });
 });
 
+test('extractUsage preserves cache usage when merging normalized sources', (t) => {
+  const payload = {
+    usage: {
+      prompt_tokens: 10,
+      prompt_tokens_details: { cached_tokens: 4 },
+    },
+    response: {
+      usage: {
+        completion_tokens: 2,
+      },
+    },
+  };
+
+  t.deepEqual(extractUsage(payload), {
+    prompt_tokens: 10,
+    completion_tokens: 2,
+    total_tokens: 12,
+    cache_read_tokens: 4,
+  });
+});
+
+test('extractUsage finds usage in raw model stream event payload shape', (t) => {
+  const payload = {
+    data: {
+      type: 'model',
+      event: {
+        id: '8d03b4e8-46ab-45f7-aed4-670157c3dd6d',
+        object: 'chat.completion.chunk',
+        created: 1778912418,
+        model: 'deepseek-v4-flash',
+        usage: {
+          prompt_tokens: 8,
+          completion_tokens: 3,
+          total_tokens: 11,
+        },
+      },
+      providerData: {
+        rawModelEventSource: 'openai-chat-completions',
+      },
+    },
+    source: 'openai-chat-completions',
+    type: 'raw_model_stream_event',
+  };
+
+  t.deepEqual(extractUsage(payload), {
+    prompt_tokens: 8,
+    completion_tokens: 3,
+    total_tokens: 11,
+  });
+});
+
 test('formatFooterUsage returns formatted string', (t) => {
   t.is(
     formatFooterUsage({ prompt_tokens: 1200, completion_tokens: 350, total_tokens: 1550 }),
     'Tok: 1,200 in / 350 out',
   );
+  t.is(
+    formatFooterUsage({
+      prompt_tokens: 1200,
+      completion_tokens: 350,
+      total_tokens: 1550,
+      cache_read_tokens: 900,
+      cache_creation_tokens: 120,
+    }),
+    'Tok: 1,200 in (900 cached, 120 cache write) / 350 out',
+  );
+  t.is(
+    formatFooterUsage({ prompt_tokens: 2054, completion_tokens: 74, cache_read_tokens: 1920 }),
+    'Tok: 2,054 in (1,920 cached) / 74 out',
+  );
+  t.is(formatFooterUsage({ cache_read_tokens: 42 }), '');
   t.is(formatFooterUsage({ total_tokens: 100 }), '');
   t.is(formatFooterUsage(null), '');
 });

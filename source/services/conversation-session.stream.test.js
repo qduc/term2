@@ -554,6 +554,49 @@ test('sendMessage() extracts usage from stream.rawResponses when completed is vo
   });
 });
 
+test('sendMessage() preserves cache usage from streaming events when final usage omits it', async (t) => {
+  const events = [
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'model',
+        event: {
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 20,
+            total_tokens: 120,
+            prompt_tokens_details: { cached_tokens: 60 },
+          },
+        },
+      },
+    },
+  ];
+
+  const stream = new MockStream(events, {
+    usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+  });
+
+  const mockClient = {
+    async startStream() {
+      return stream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const result = await session.sendMessage('Hello');
+  t.is(result.type, 'response');
+  t.deepEqual(result.usage, {
+    prompt_tokens: 100,
+    completion_tokens: 20,
+    total_tokens: 120,
+    cache_read_tokens: 60,
+  });
+});
+
 test('run() emits usage_update when usage is nested in event.data (raw_model_stream_event)', async (t) => {
   // Simulates a raw_model_stream_event with type 'response.completed' where
   // usage lives at event.data.response.usage
@@ -594,6 +637,53 @@ test('run() emits usage_update when usage is nested in event.data (raw_model_str
   t.is(usageEvents[0].usage.prompt_tokens, 50);
   t.is(usageEvents[0].usage.completion_tokens, 25);
   t.is(usageEvents[0].usage.total_tokens, 75);
+});
+
+test('run() emits usage_update when raw model stream usage is nested in event.data.event', async (t) => {
+  const events = [
+    { type: 'response.output_text.delta', delta: 'Hello' },
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'model',
+        event: {
+          id: '8d03b4e8-46ab-45f7-aed4-670157c3dd6d',
+          object: 'chat.completion.chunk',
+          created: 1778912418,
+          model: 'deepseek-v4-flash',
+          usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 },
+        },
+        providerData: {
+          rawModelEventSource: 'openai-chat-completions',
+        },
+      },
+    },
+  ];
+
+  const stream = new MockStream(events);
+  stream.finalOutput = 'Hello';
+
+  const mockClient = {
+    async startStream() {
+      return stream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('hi')) {
+    emitted.push(ev);
+  }
+
+  const usageEvents = emitted.filter((e) => e.type === 'usage_update');
+  t.true(usageEvents.length >= 1, 'Should emit at least one usage_update event');
+  t.is(usageEvents[0].usage.prompt_tokens, 8);
+  t.is(usageEvents[0].usage.completion_tokens, 3);
+  t.is(usageEvents[0].usage.total_tokens, 11);
 });
 
 test('run() emits usage_update when usage is at top level of event', async (t) => {

@@ -189,3 +189,40 @@ test('end-of-stream usage harvest from completed promise', async (t) => {
   }
   t.truthy(acc.latestUsage);
 });
+
+test('end-of-stream usage preserves cache counters from streaming events when completion omits them', async (t) => {
+  const stream = makeStream(
+    [
+      {
+        type: 'raw_model_stream_event',
+        data: {
+          type: 'model',
+          event: {
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 20,
+              total_tokens: 120,
+              prompt_tokens_details: { cached_tokens: 60 },
+            },
+          },
+        },
+      },
+    ],
+    {
+      completed: Promise.resolve({
+        usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+      }),
+    },
+  );
+  const acc = createStreamAccumulator();
+  for await (const _ of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    void _;
+  }
+
+  t.deepEqual(acc.latestUsage, {
+    prompt_tokens: 100,
+    completion_tokens: 20,
+    total_tokens: 120,
+    cache_read_tokens: 60,
+  });
+});

@@ -1,6 +1,6 @@
 import type { ConversationEvent } from './conversation-events.js';
 import type { ILoggingService } from './service-interfaces.js';
-import { extractUsage, type NormalizedUsage } from '../utils/token-usage.js';
+import { extractUsage, mergeUsage, type NormalizedUsage } from '../utils/token-usage.js';
 import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.js';
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
 import { createInvalidToolCallDiagnostic } from './logging-contract.js';
@@ -72,20 +72,22 @@ export async function* processStreamEvents(
   for await (const rawEvent of stream) {
     const event = asRecord(rawEvent);
     const eventData = asRecord(event?.data);
+    const modelEvent = asRecord(eventData?.event);
     const eventType = getString(event, 'type');
 
     // Extract usage if present in any of the common locations.
-    // raw_model_stream_event nests response data under .data (e.g. data.response.usage).
-    const usage = extractUsage(rawEvent) ?? (eventData ? extractUsage(eventData) : undefined);
+    // raw_model_stream_event may nest provider payloads under .data or .data.event.
+    const usage = extractUsage(rawEvent) ?? extractUsage(eventData) ?? extractUsage(modelEvent);
     if (usage) {
-      acc.latestUsage = usage;
+      const mergedUsage = mergeUsage(usage, acc.latestUsage) ?? usage;
+      acc.latestUsage = mergedUsage;
       logger.debug('Usage extracted from stream event', {
         sessionId,
         source: 'stream_event',
         eventType: eventType ?? getString(eventData, 'type') ?? 'unknown',
-        usage,
+        usage: mergedUsage,
       });
-      yield { type: 'usage_update', usage };
+      yield { type: 'usage_update', usage: mergedUsage };
     }
 
     const delta1 = extractTextDelta(rawEvent);
@@ -214,7 +216,7 @@ export async function* processStreamEvents(
   }
   const finalUsage = extractUsage(completedResult) || extractUsage(stream) || usageFromRawResponses;
   if (finalUsage) {
-    acc.latestUsage = finalUsage;
+    acc.latestUsage = mergeUsage(finalUsage, acc.latestUsage) ?? finalUsage;
     const usageSource = extractUsage(completedResult)
       ? 'completed_result'
       : extractUsage(stream)
@@ -224,7 +226,7 @@ export async function* processStreamEvents(
       sessionId,
       source: 'stream_completed',
       usageSource,
-      usage: finalUsage,
+      usage: acc.latestUsage,
     });
   } else {
     const completedResultRecord =

@@ -1048,7 +1048,6 @@ export function createSearchReplaceToolDefinition(deps: {
 
             let nextContent = content;
             let changed = false;
-            let failed = false;
 
             for (const { operation, index } of group) {
               if (!fileExists) {
@@ -1065,25 +1064,23 @@ export function createSearchReplaceToolDefinition(deps: {
                   continue;
                 }
 
-                failed = true;
                 output[index] = {
                   success: false,
                   error: `File not found: ${operation.path}`,
                 };
-                break;
+                continue;
               }
 
               const result = await applyToContent(operation, nextContent);
               output[index] = result.output;
               if (!result.output.success) {
-                failed = true;
-                break;
+                continue;
               }
               nextContent = result.newContent!;
               changed = true;
             }
 
-            if (!failed && changed) {
+            if (changed) {
               await writeFileFn(targetPath, nextContent);
             }
           });

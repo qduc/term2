@@ -322,12 +322,12 @@ test.serial('execute applies batched replacements to one file with a single resu
   });
 });
 
-test.serial('execute does not write a batched file when one replacement fails', async (t) => {
+test.serial('execute keeps successful batched replacements when another replacement fails', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'batch-failure.txt';
     const absPath = path.join(dir, filePath);
-    const originalContent = 'alpha\nbeta\n';
+    const originalContent = 'alpha\nbeta\ngamma\n';
     await fs.writeFile(absPath, originalContent);
 
     const result = await tool.execute({
@@ -344,15 +344,22 @@ test.serial('execute does not write a batched file when one replacement fails', 
           replace_content: 'MISSING',
           replace_all: false,
         },
+        {
+          path: filePath,
+          search_content: 'gamma',
+          replace_content: 'GAMMA',
+          replace_all: false,
+        },
       ],
     });
 
     const parsed = JSON.parse(result);
     t.true(parsed.output[0].success);
     t.false(parsed.output[1].success);
+    t.true(parsed.output[2].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, originalContent);
+    t.is(updated, 'ALPHA\nbeta\nGAMMA\n');
   });
 });
 

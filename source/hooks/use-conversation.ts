@@ -93,7 +93,7 @@ export const useConversation = ({
   }, []);
 
   const applyServiceResult = useCallback(
-    (result: ConversationTerminal | null, textWasFlushed: boolean) => {
+    (result: ConversationTerminal | null, textWasFlushed: boolean, latestStreamedUsage?: NormalizedUsage | null) => {
       if (!result) {
         return;
       }
@@ -101,7 +101,7 @@ export const useConversation = ({
       if (result.type === 'approval_required') {
         if (result.usage) {
           usageAccumulator?.add(result.usage);
-          setLastUsage(result.usage);
+          setLastUsage(latestStreamedUsage ?? result.usage);
         }
         // Don't also show the transient pending/running command message.
         setMessages((prev) => trimMessages(filterPendingCommandMessagesForApproval(prev, result.approval)));
@@ -139,7 +139,7 @@ export const useConversation = ({
       setPendingApproval(null);
       if (result.usage) {
         usageAccumulator?.add(result.usage);
-        setLastUsage(result.usage);
+        setLastUsage(latestStreamedUsage ?? result.usage);
       }
     },
     [annotateCommandMessage, trimMessages, usageAccumulator],
@@ -180,7 +180,7 @@ export const useConversation = ({
         });
 
         applyConversationEvent({ type: 'final', finalText: '' } as any);
-        applyServiceResult(result, streamingState.textWasFlushed);
+        applyServiceResult(result, streamingState.textWasFlushed, streamingState.latestUsage);
       } catch (error) {
         loggingService.error('Error in sendUserMessage', {
           error: error instanceof Error ? error.message : String(error),
@@ -284,7 +284,7 @@ export const useConversation = ({
           });
 
           applyConversationEvent({ type: 'final', finalText: '' } as any);
-          applyServiceResult(result, streamingState.textWasFlushed);
+          applyServiceResult(result, streamingState.textWasFlushed, streamingState.latestUsage);
         } catch (error) {
           loggingService.error('Error in continuation after max turns', {
             error: error instanceof Error ? error.message : String(error),
@@ -337,7 +337,7 @@ export const useConversation = ({
           onEvent: applyConversationEvent,
         });
         applyConversationEvent({ type: 'final', finalText: '' } as any);
-        applyServiceResult(result, streamingState.textWasFlushed);
+        applyServiceResult(result, streamingState.textWasFlushed, streamingState.latestUsage);
       } catch (error) {
         loggingService.error('Error in handleApprovalDecision', {
           error: error instanceof Error ? error.message : String(error),

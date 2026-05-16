@@ -66,6 +66,89 @@ test('collectTerminalResult preserves usage on approval_required', async (t) => 
   }
 });
 
+test('collectTerminalResult carries usage_update usage into approval_required result', async (t) => {
+  const result = await collectTerminalResult(
+    asAsyncIterable([
+      {
+        type: 'usage_update',
+        usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 },
+      },
+      {
+        type: 'approval_required',
+        approval: {
+          agentName: 'CLI Agent',
+          toolName: 'shell',
+          argumentsText: 'ls source',
+        },
+      },
+    ]),
+  );
+
+  t.is(result.type, 'approval_required');
+  if (result.type === 'approval_required') {
+    t.deepEqual(result.usage, { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 });
+  }
+});
+
+test('collectTerminalResult adds final usage after a tool boundary to previous turn usage', async (t) => {
+  const result = await collectTerminalResult(
+    asAsyncIterable([
+      {
+        type: 'usage_update',
+        usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 },
+      },
+      {
+        type: 'tool_started',
+        toolCallId: 'call-1',
+        toolName: 'shell',
+        arguments: { command: 'ls source' },
+      },
+      {
+        type: 'final',
+        finalText: 'Done.',
+        usage: { prompt_tokens: 200, completion_tokens: 20, total_tokens: 220 },
+      },
+    ]),
+  );
+
+  t.is(result.type, 'response');
+  if (result.type === 'response') {
+    t.deepEqual(result.usage, { prompt_tokens: 300, completion_tokens: 30, total_tokens: 330 });
+  }
+});
+
+test('collectTerminalResult does not double count a final event that already includes previous tool turns', async (t) => {
+  const result = await collectTerminalResult(
+    asAsyncIterable([
+      {
+        type: 'usage_update',
+        usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 },
+      },
+      {
+        type: 'tool_started',
+        toolCallId: 'call-1',
+        toolName: 'shell',
+        arguments: { command: 'ls source' },
+      },
+      {
+        type: 'final',
+        finalText: 'Done.',
+        usage: { prompt_tokens: 200, completion_tokens: 20, total_tokens: 220 },
+      },
+      {
+        type: 'final',
+        finalText: 'Done.',
+        usage: { prompt_tokens: 300, completion_tokens: 30, total_tokens: 330 },
+      },
+    ]),
+  );
+
+  t.is(result.type, 'response');
+  if (result.type === 'response') {
+    t.deepEqual(result.usage, { prompt_tokens: 300, completion_tokens: 30, total_tokens: 330 });
+  }
+});
+
 test('collectTerminalResult accumulates streamed callbacks and returns final response payload', async (t) => {
   const seenText: string[] = [];
   const seenReasoning: string[] = [];

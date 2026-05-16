@@ -47,6 +47,7 @@ test('createStreamingSession wires state and logs final usage', (t) => {
           flushedReasoningLength: 0,
           textWasFlushed: false,
           currentReasoningMessageId: null,
+          latestUsage: null,
         };
         calls.streamingState = state;
         return state;
@@ -69,6 +70,7 @@ test('createStreamingSession wires state and logs final usage', (t) => {
   session.applyConversationEvent(finalEvent);
 
   t.is(calls.lastUsage, usage);
+  t.is(session.streamingState.latestUsage, usage);
   t.is(calls.debugMessages[0]?.message, 'UI received final usage (sendUserMessage)');
   t.deepEqual(calls.debugMessages[0]?.meta, { usage });
   t.deepEqual(calls.eventHandlerEvents, [finalEvent]);

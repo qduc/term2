@@ -16,6 +16,7 @@ export interface StreamingState {
   flushedReasoningLength: number;
   textWasFlushed: boolean;
   currentReasoningMessageId: string | null;
+  latestUsage: import('./token-usage.js').NormalizedUsage | null;
 }
 
 /**
@@ -94,6 +95,7 @@ export function createStreamingState(): StreamingState {
     flushedReasoningLength: 0,
     textWasFlushed: false,
     currentReasoningMessageId: null,
+    latestUsage: null,
   };
 }
 

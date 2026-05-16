@@ -120,10 +120,12 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
     if (event.type === 'usage_update') {
       // Emit usage updates in real-time during streaming
       deps.loggingService.debug(`UI received streaming usage (${label})`, { usage: event.usage });
+      streamingState.latestUsage = event.usage;
       deps.setLastUsage(event.usage);
     } else if (event.type === 'final') {
       if (event.usage) {
         deps.loggingService.debug(`UI received final usage (${label})`, { usage: event.usage });
+        streamingState.latestUsage = event.usage;
         deps.setLastUsage(event.usage);
       } else {
         deps.loggingService.debug(`UI final event has no usage (${label})`);

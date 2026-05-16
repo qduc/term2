@@ -114,6 +114,7 @@ export const getAgentDefinition = (
   // Code-context tools operate on the local filesystem only; disable them for
   // remote (SSH) execution where the workspace lives on another host.
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
+  const isGpt5 = !liteMode && shouldPreferPatchEditingModel(resolvedModel);
   const promptPath = getPromptPath({ basePromptDir: BASE_PROMPT_PATH, model: resolvedModel, liteMode });
   let prompt = resolvePrompt(promptPath);
 
@@ -127,6 +128,16 @@ export const getAgentDefinition = (
     }
   }
 
+  const codeContextDoc = codeContextEnabled
+    ? liteMode
+      ? '### Code Context Tools\n\n- `read_code_outline`: inspect file structure.\n- `code_context_search`: find related files or symbol declarations. Use `read_file` before editing.'
+      : '### Code Context Tools\n\n- Use `read_code_outline` for a compact file outline.\n- Use `code_context_search` for related files or symbol declarations.\n- Use `read_file` before editing.'
+    : '';
+
+  if (codeContextDoc) {
+    prompt = `${prompt}\n\n${codeContextDoc}`;
+  }
+
   if (searchViaShell) {
     try {
       const addendum = getSearchViaShellAddendum({ executionContext });
@@ -135,16 +146,10 @@ export const getAgentDefinition = (
       loggingService.error(`Failed to load search-via-shell addendum: ${e}`);
     }
   } else {
-    const isGpt5 = !liteMode && shouldPreferPatchEditingModel(resolvedModel);
     if (!isGpt5) {
-      const codeContextLine = codeContextEnabled
-        ? liteMode
-          ? '\n- `read_code_outline`: inspect file structure; `code_context_search`: find related files or symbol declarations. Use `read_file` before editing.'
-          : '\n- Use `read_code_outline` for a compact file outline and `code_context_search` for related files or symbol declarations. Use `read_file` before editing.'
-        : '';
       const searchToolsDoc = liteMode
-        ? `### Search Tools\n\n- \`find_files\`: locate files by name or glob.\n- \`grep\`: search file contents.${codeContextLine}`
-        : `### Search Tools\n\n- Prefer \`find_files\` for locating files by name or glob.\n- Prefer \`grep\` for searching code content or symbols.${codeContextLine}`;
+        ? '### Search Tools\n\n- `find_files`: locate files by name or glob.\n- `grep`: search file contents.'
+        : '### Search Tools\n\n- Prefer `find_files` for locating files by name or glob.\n- Prefer `grep` for searching code content or symbols.';
       prompt = `${prompt}\n\n${searchToolsDoc}`;
     }
   }
@@ -190,8 +195,6 @@ export const getAgentDefinition = (
     );
   } else {
     // Full mode: all tools based on model
-    const isGpt5 = shouldPreferPatchEditingModel(resolvedModel);
-
     if (isGpt5) {
       tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext }));
     } else {

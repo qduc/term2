@@ -24,12 +24,15 @@ test('getPromptPath selects codex prompt for gpt-5 codex', (t) => {
   t.is(getPromptPath({ basePromptDir, model: 'gpt-5.3-codex', liteMode: false }), path.join(basePromptDir, 'codex.md'));
 });
 
-test('getPromptPath selects legacy gpt-5 prompt for gpt-5 and gpt-5.1', (t) => {
-  t.is(getPromptPath({ basePromptDir, model: ' GPT-5 ', liteMode: false }), path.join(basePromptDir, 'gpt-5.md'));
-  t.is(getPromptPath({ basePromptDir, model: 'gpt-5.1', liteMode: false }), path.join(basePromptDir, 'gpt-5.md'));
-});
-
-test('getPromptPath selects modern gpt-5 prompt for gpt-5.2 and newer', (t) => {
+test('getPromptPath selects modern gpt-5 prompt for all non-codex gpt-5 models', (t) => {
+  t.is(
+    getPromptPath({ basePromptDir, model: ' GPT-5 ', liteMode: false }),
+    path.join(basePromptDir, 'gpt-5-modern.md'),
+  );
+  t.is(
+    getPromptPath({ basePromptDir, model: 'gpt-5.1', liteMode: false }),
+    path.join(basePromptDir, 'gpt-5-modern.md'),
+  );
   t.is(
     getPromptPath({ basePromptDir, model: 'gpt-5.2', liteMode: false }),
     path.join(basePromptDir, 'gpt-5-modern.md'),

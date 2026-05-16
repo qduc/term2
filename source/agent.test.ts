@@ -155,6 +155,37 @@ test('getAgentDefinition dynamically includes dedicated search tool references w
   t.true(definition.instructions.includes('Use `read_file` before editing'));
 });
 
+test('getAgentDefinition dynamically includes code-context tool references when available', (t) => {
+  const settingsService = createMockSettingsService({
+    'app.searchViaShell': true,
+    'agent.model': 'gpt-4o',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+  });
+
+  t.true(definition.instructions.includes('read_code_outline'));
+  t.true(definition.instructions.includes('code_context_search'));
+  t.true(definition.instructions.includes('Use `read_file` before editing'));
+});
+
+test('getAgentDefinition dynamically includes code-context tool references for gpt-5 models', (t) => {
+  const settingsService = createMockSettingsService({
+    'app.searchViaShell': false,
+    'agent.model': 'gpt-5',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+  });
+
+  t.true(definition.instructions.includes('read_code_outline'));
+  t.true(definition.instructions.includes('code_context_search'));
+});
+
 test('getAgentDefinition uses fallback search prompt for remote execution', (t) => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': true,

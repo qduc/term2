@@ -56,7 +56,7 @@ const loadWorkspaceEntries = async (): Promise<PathEntry[]> => {
   const matcher = await ensureIgnoreMatcher();
   const results = (await fg('**/*', {
     cwd: workspaceRoot,
-    dot: false,
+    dot: true,
     ignore: DEFAULT_IGNORES,
     onlyFiles: false,
     unique: true,

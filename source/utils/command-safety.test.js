@@ -7,6 +7,10 @@ test('throws on empty command', (t) => {
   });
 });
 
+test('malformed trailing syntax is yellow (approval required)', (t) => {
+  t.true(validateCommandSafety('git log ('));
+});
+
 test('flags dangerous direct command', (t) => {
   t.true(validateCommandSafety('rm -rf /'));
 });

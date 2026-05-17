@@ -4,7 +4,7 @@ import path from 'path';
 import { createHash } from 'crypto';
 import { spawnSync } from 'child_process';
 import envPaths from 'env-paths';
-import parse from 'bash-parser';
+import { parse } from 'unbash';
 import type { ILoggingService } from './service-interfaces.js';
 
 export const RTK_VERSION = 'v0.40.0';
@@ -68,26 +68,35 @@ const RTK_COMMANDS = new Set([
 // next segment's stdin, so altering any of them corrupts the consumer's
 // input. A command is eligible only if its name is allowlisted, it is not
 // backgrounded, and it has no redirection (rtk yields no benefit there).
+function hasUnparsedTrailingInput(command: string, ast: { commands?: unknown[] }): boolean {
+  if (!Array.isArray(ast.commands) || ast.commands.length === 0) return false;
+  const lastCommandEnd = ast.commands.reduce<number>((end, node: any) => Math.max(end, node?.end ?? 0), 0);
+  const tail = command.slice(lastCommandEnd);
+  return !/^\s*;?\s*(#.*)?$/.test(tail);
+}
+
 function collectRtkWrapOffsets(command: string): number[] | null {
-  let ast: { commands?: unknown[] };
+  let ast: { commands?: unknown[]; errors?: { message: string }[] };
   try {
-    ast = parse(command, { mode: 'bash', insertLOC: true }) as { commands?: unknown[] };
+    ast = parse(command) as { commands?: unknown[]; errors?: { message: string }[] };
   } catch {
     return null;
   }
+  if (ast.errors && ast.errors.length > 0) {
+    return null;
+  }
   if (!ast || !Array.isArray(ast.commands)) return null;
+  if (hasUnparsedTrailingInput(command, ast)) return null;
 
   const offsets: number[] = [];
   let bail = false;
 
   function hasRedirect(node: any): boolean {
-    const parts: any[] = [...(node.prefix ?? []), ...(node.suffix ?? [])];
-    return parts.some((p) => p?.type === 'Redirect');
+    return node.redirects?.length > 0;
   }
 
   function isEligible(node: any): boolean {
     if (!node || node.type !== 'Command') return false;
-    if (node.async === true) return false;
     const name: string | undefined = node.name?.text;
     if (!name || !RTK_COMMANDS.has(name)) return false;
     if (hasRedirect(node)) return false;
@@ -97,9 +106,15 @@ function collectRtkWrapOffsets(command: string): number[] | null {
   function visit(node: any): void {
     if (bail || !node || typeof node !== 'object') return;
     switch (node.type) {
+      case 'Statement': {
+        if (node.background === true) return;
+        if (node.redirects?.length > 0) return;
+        visit(node.command);
+        return;
+      }
       case 'Command': {
         if (!isEligible(node)) return;
-        const offset = node.name?.loc?.start?.char;
+        const offset = node.name?.pos;
         if (typeof offset !== 'number' || offset < 0 || offset > command.length) {
           // Never guess an insertion point — abandon wrapping entirely.
           bail = true;
@@ -108,9 +123,8 @@ function collectRtkWrapOffsets(command: string): number[] | null {
         offsets.push(offset);
         return;
       }
-      case 'LogicalExpression':
-        visit(node.left);
-        visit(node.right);
+      case 'AndOr':
+        node.commands?.forEach(visit);
         return;
       case 'Pipeline':
         // Never wrap inside a pipeline: each command's stdout is the next

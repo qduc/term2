@@ -16,12 +16,15 @@ export const sedHandler: CommandHandler = {
 
     let hasOutputRedirect = false;
     let hasInPlaceEdit = false;
+    const suffix = node.suffix ?? [];
+    const redirects = node.redirects ?? [];
+    const args = [...suffix, ...redirects];
 
     // First pass: detect dangerous sed patterns
-    for (const arg of node.suffix) {
-      if (arg?.type === 'Redirect') {
+    for (const arg of args) {
+      if (arg?.type === 'Redirect' || arg?.operator) {
         // Check if it's an output redirect (>, >>)
-        const op = arg.op?.text || arg.op;
+        const op = arg.operator || arg.op?.text || arg.op;
         if (op === '>' || op === '>>') {
           hasOutputRedirect = true;
         }
@@ -36,11 +39,11 @@ export const sedHandler: CommandHandler = {
     }
 
     // Second pass: classify arguments
-    for (const arg of node.suffix) {
+    for (const arg of args) {
       // Redirects: analyze path risk. For `sed`, only mark output redirects as YELLOW
-      if (arg?.type === 'Redirect') {
-        const fileText = extractWordText(arg.file ?? arg);
-        const op = arg.op?.text || arg.op;
+      if (arg?.type === 'Redirect' || arg?.operator) {
+        const fileText = extractWordText(arg.target ?? arg.file ?? arg);
+        const op = arg.operator || arg.op?.text || arg.op;
 
         if (op === '>' || op === '>>') {
           status = SafetyStatus.YELLOW;

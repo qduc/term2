@@ -5,6 +5,7 @@ import { createSearchReplaceToolDefinition } from './tools/search-replace.js';
 import { createApplyPatchToolDefinition } from './tools/apply-patch.js';
 import { createShellToolDefinition } from './tools/shell.js';
 import { createAskMentorToolDefinition } from './tools/ask-mentor.js';
+import { createRunSubagentToolDefinition } from './tools/run-subagent.js';
 import { createWebSearchToolDefinition } from './tools/web-search.js';
 import { createWebFetchToolDefinition } from './tools/web-fetch.js';
 import { createCreateFileToolDefinition } from './tools/create-file.js';
@@ -99,10 +100,11 @@ export const getAgentDefinition = (
     loggingService: ILoggingService;
     executionContext?: ExecutionContext;
     askMentor?: (question: string) => Promise<string>;
+    runSubagent?: (params: { role: string; task: string; writeBoundary?: string[] }) => Promise<any>;
   },
   model?: string,
 ): AgentDefinition => {
-  const { settingsService, loggingService, executionContext, askMentor } = deps;
+  const { settingsService, loggingService, executionContext, askMentor, runSubagent } = deps;
   const defaultModel = settingsService.get<string>('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
 
@@ -220,6 +222,11 @@ export const getAgentDefinition = (
     const mentorModel = settingsService.get<string>('agent.mentorModel');
     if (mentorModel && askMentor) {
       tools.push(createAskMentorToolDefinition(askMentor));
+    }
+
+    // Add run_subagent tool (not in lite mode)
+    if (runSubagent) {
+      tools.push(createRunSubagentToolDefinition(runSubagent));
     }
   }
 

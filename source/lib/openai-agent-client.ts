@@ -2,102 +2,17 @@ import { Agent, run, tool as createTool, applyPatchTool, type Tool, type AgentIn
 import { getProvider } from '../providers/index.js';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
-import { getAgentDefinition, getEnvInfo, getAgentsInstructions } from '../agent.js';
+import { getAgentDefinition } from '../agent.js';
 import { normalizeToolInput, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { createEditorImpl } from './editor-impl.js';
-import { ConversationStore } from '../services/conversation-store.js';
 import { trimToolOutput } from '../utils/trim-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 import { executeWithRetry } from './retry-executor.js';
 import { shouldUseNativePatchTool, shouldUseStrictToolSchema } from './tool-selection-policy.js';
 import { isFlexServiceTierTimeout } from '../utils/flex-service-tier.js';
-
-class MentorSession {
-  #provider: string | null = null;
-  #runner: Runner | null = null;
-  #agent: Agent | null = null;
-  #store: ConversationStore | null = null;
-  #previousResponseId: string | null = null;
-
-  get provider(): string | null {
-    return this.#provider;
-  }
-
-  get runner(): Runner | null {
-    return this.#runner;
-  }
-
-  get agent(): Agent | null {
-    return this.#agent;
-  }
-
-  get previousResponseId(): string | null {
-    return this.#previousResponseId;
-  }
-
-  reset(): void {
-    if (this.#store) {
-      this.#store.clear();
-    }
-    this.#previousResponseId = null;
-    this.#store = null;
-    this.#runner = null;
-    this.#provider = null;
-    this.#agent = null;
-  }
-
-  switchProvider(provider: string): void {
-    if (this.#provider !== provider) {
-      this.#agent = null;
-      this.#store = null;
-      this.#previousResponseId = null;
-      this.#runner = null;
-      this.#provider = provider;
-    }
-  }
-
-  ensureRunner(provider: string, createRunner: (providerId: string) => Runner | null): Runner | null {
-    if (!this.#runner && provider !== 'openai') {
-      this.#runner = createRunner(provider);
-    }
-    return this.#runner;
-  }
-
-  ensureAgent(createAgent: () => Agent): Agent {
-    if (!this.#agent) {
-      this.#agent = createAgent();
-      this.#store = new ConversationStore();
-    }
-    return this.#agent;
-  }
-
-  addUserMessage(message: string): void {
-    this.#store!.addUserMessage(message);
-  }
-
-  getInput(question: string, supportsConversationChaining: boolean): any {
-    return supportsConversationChaining ? question : this.#store!.getHistory();
-  }
-
-  getRunOptions(supportsConversationChaining: boolean): Record<string, any> {
-    return {
-      stream: false,
-      maxTurns: 1,
-      ...(supportsConversationChaining && this.#previousResponseId
-        ? { previousResponseId: this.#previousResponseId }
-        : {}),
-    };
-  }
-
-  updateFromResult(result: any): void {
-    this.#store!.updateFromResult(result);
-    if (result.responseId) {
-      this.#previousResponseId = result.responseId;
-    }
-  }
-}
+import { SubagentManager } from '../services/subagents/subagent-manager.js';
 
 /**
  * Wraps a tool definition's needsApproval so that structurally invalid params
@@ -156,10 +71,10 @@ export class OpenAIAgentClient {
   #settings: ISettingsService;
   #executionContext?: ExecutionContext;
   #editor: ReturnType<typeof createEditorImpl>;
-  #mentorSession: MentorSession;
+  #subagentManager: SubagentManager;
 
   #resetMentorState(): void {
-    this.#mentorSession.reset();
+    this.#subagentManager.resetMentorSession();
   }
 
   constructor({
@@ -182,7 +97,11 @@ export class OpenAIAgentClient {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#executionContext = deps.executionContext;
-    this.#mentorSession = new MentorSession();
+    this.#subagentManager = new SubagentManager({
+      logger: deps.logger,
+      settings: deps.settings,
+      executionContext: deps.executionContext,
+    });
     this.#editor = createEditorImpl({
       loggingService: this.#logger,
       settingsService: this.#settings,
@@ -609,86 +528,22 @@ export class OpenAIAgentClient {
   }
 
   #createMentor = async (question: string): Promise<string> => {
-    const mentorModel = this.#settings.get<string>('agent.mentorModel');
-    if (!mentorModel) {
-      throw new Error('Mentor model is not configured');
-    }
-
-    const mentorProvider = this.#settings.get<string>('agent.mentorProvider') ?? this.#provider;
-
-    const mentorMode = this.#settings.get<boolean>('app.mentorMode');
-
-    // Different instructions based on mode
-    let baseInstructions = mentorMode
-      ? 'You are a senior architect acting as a peer reviewer. You have no codebase access—you rely on what the user reports.\n\n' +
-        'Your role is adversarial review, not rubber-stamping:\n' +
-        '- Challenge assumptions, even when reasoning sounds solid\n' +
-        '- Probe for gaps: what did they not check? What could go wrong?\n' +
-        '- Suggest alternatives they may have dismissed too quickly\n' +
-        '- Ask for evidence when confidence seems misplaced\n\n' +
-        'When satisfied, give clear approval with specific next steps. When not, say exactly what needs more investigation.\n\n' +
-        "Be concise. Push back hard, but don't block unnecessarily."
-      : 'You are a helpful mentor assistant. Provide advice and guidance on technical problems. Be concise and actionable.';
-
-    // Add environment info and AGENTS.md context
-    const envInfo = getEnvInfo(this.#settings, this.#executionContext);
-    const cwd = this.#executionContext?.getCwd() ?? process.cwd();
-    const agentsInstructions = this.#executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
-    const instructions = `${baseInstructions}\n\nEnvironment: ${envInfo}${agentsInstructions}`;
-
-    // If mentor provider changed, reset mentor state to avoid mixing stores/prev ids across providers
-    this.#mentorSession.switchProvider(mentorProvider);
-
-    const mentorRunner = this.#mentorSession.ensureRunner(mentorProvider, (providerId) =>
-      this.#createRunner(providerId),
-    );
-    const mentorAgent = this.#mentorSession.ensureAgent(() => {
-      const reasoningEffort = this.#settings.get<string>('agent.mentorReasoningEffort');
-      const modelSettings: any = {};
-
-      if (reasoningEffort && reasoningEffort !== 'default') {
-        modelSettings.reasoning = {
-          effort: reasoningEffort,
-          summary: 'auto',
-        };
-      }
-
-      return new Agent({
-        name: 'Mentor',
-        model: mentorModel,
-        ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
-        instructions,
-      });
-    });
-
     try {
-      // Add user message to conversation history
-      this.#mentorSession.addUserMessage(question);
-
-      // Determine input based on provider
-      // OpenAI uses previousResponseId for server-side history
-      // Others need full conversation history from store
-      const { supportsConversationChaining } = this.#getProviderCapabilities(mentorProvider);
-      const input = this.#mentorSession.getInput(question, supportsConversationChaining);
-
-      const result = await this.#runAgentWithProvider(
-        mentorProvider,
-        mentorRunner,
-        mentorAgent,
-        input,
-        this.#mentorSession.getRunOptions(supportsConversationChaining),
-      );
-
-      // Update conversation store with result
-      this.#mentorSession.updateFromResult(result);
-
-      return this.#extractResponse(result);
+      const result = await this.#subagentManager.run({ role: 'mentor', task: question });
+      if (result.status === 'failed') {
+        throw new Error(result.error || 'Mentor consultation failed');
+      }
+      return result.finalText;
     } catch (error) {
       this.#logger.error('Mentor consultation failed', {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
+  };
+
+  #runSubagent = async (params: { role: string; task: string; writeBoundary?: string[] }): Promise<any> => {
+    return this.#subagentManager.run(params);
   };
 
   #createAgent({
@@ -712,8 +567,8 @@ export class OpenAIAgentClient {
         settingsService: this.#settings,
         loggingService: this.#logger,
         executionContext: this.#executionContext,
-        // @ts-ignore - Definition update coming next
         askMentor: this.#createMentor,
+        runSubagent: this.#runSubagent,
       },
       resolvedModel,
     );

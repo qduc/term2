@@ -1,6 +1,7 @@
 import type { CommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 import type { ApprovalDescriptor, LLMAdvisory } from '../contracts/conversation.js';
+import type { SubagentResult } from './subagents/types.js';
 
 export type ConversationEvent =
   | TextDeltaEvent
@@ -11,7 +12,11 @@ export type ConversationEvent =
   | UsageUpdateEvent
   | FinalResponseEvent
   | ErrorEvent
-  | RetryEvent;
+  | RetryEvent
+  | SubagentStartedEvent
+  | SubagentToolStartedEvent
+  | SubagentCommandMessageEvent
+  | SubagentCompletedEvent;
 
 export interface RetryEvent {
   type: 'retry';
@@ -91,4 +96,30 @@ export interface ErrorEvent {
   type: 'error';
   message: string;
   kind?: string;
+}
+
+export interface SubagentStartedEvent {
+  type: 'subagent_started';
+  agentId: string;
+  role: string;
+  task: string;
+}
+
+export interface SubagentToolStartedEvent {
+  type: 'subagent_tool_started';
+  agentId: string;
+  role: string;
+  toolName: string;
+}
+
+export interface SubagentCommandMessageEvent {
+  type: 'subagent_command_message';
+  agentId: string;
+  role: string;
+  message: CommandMessage;
+}
+
+export interface SubagentCompletedEvent {
+  type: 'subagent_completed';
+  result: SubagentResult;
 }

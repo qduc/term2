@@ -1,8 +1,27 @@
 import test from 'ava';
 import path from 'path';
-import { mkdir, writeFile, readFile, rm } from 'fs/promises';
+import os from 'node:os';
+import { writeFile, readFile, rm, mkdtemp } from 'fs/promises';
 import { createEditorImpl } from './editor-impl.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+
+// Helper to create a temp dir
+async function withTempDir(run: (dir: string) => Promise<void>) {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'term2-editor-test-'));
+  try {
+    await run(tempDir);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+function createMockExecutionContext(cwd: string) {
+  return {
+    getCwd: () => cwd,
+    isRemote: () => false,
+    getSSHService: () => undefined,
+  };
+}
 
 // Helper to create a mock logging service
 function createMockLogger(): ILoggingService {
@@ -75,19 +94,20 @@ test('deleteFile rejects path outside workspace', async (t) => {
 // ========== createFile tests ==========
 
 test('createFile creates a new file with valid diff', async (t) => {
-  const logger = createMockLogger();
-  const settings = createMockSettings({ 'tools.logFileOperations': true });
-  const editor = createEditorImpl({ loggingService: logger, settingsService: settings });
+  await withTempDir(async (dir) => {
+    const logger = createMockLogger();
+    const settings = createMockSettings({ 'tools.logFileOperations': true });
+    const editor = createEditorImpl({
+      loggingService: logger,
+      settingsService: settings,
+      executionContext: createMockExecutionContext(dir) as any,
+    });
 
-  const testDir = path.join(process.cwd(), 'test-tmp-editor');
-  const testFile = path.join(testDir, 'new-file.txt');
-
-  try {
-    await mkdir(testDir, { recursive: true });
+    const testFile = path.join(dir, 'new-file.txt');
 
     const result = await editor.createFile({
       type: 'create_file',
-      path: path.relative(process.cwd(), testFile),
+      path: 'new-file.txt',
       diff: '@@ -0,0 +1 @@\n+hello world',
     });
 
@@ -96,9 +116,7 @@ test('createFile creates a new file with valid diff', async (t) => {
 
     const content = await readFile(testFile, 'utf8');
     t.is(content, 'hello world\n');
-  } finally {
-    await rm(testDir, { recursive: true, force: true });
-  }
+  });
 });
 
 test('createFile returns failed status for invalid diff', async (t) => {
@@ -119,21 +137,22 @@ test('createFile returns failed status for invalid diff', async (t) => {
 // ========== updateFile tests ==========
 
 test('updateFile updates existing file with valid diff', async (t) => {
-  const logger = createMockLogger();
-  const settings = createMockSettings({ 'tools.logFileOperations': true });
-  const editor = createEditorImpl({ loggingService: logger, settingsService: settings });
+  await withTempDir(async (dir) => {
+    const logger = createMockLogger();
+    const settings = createMockSettings({ 'tools.logFileOperations': true });
+    const editor = createEditorImpl({
+      loggingService: logger,
+      settingsService: settings,
+      executionContext: createMockExecutionContext(dir) as any,
+    });
 
-  const testDir = path.join(process.cwd(), 'test-tmp-editor-update');
-  const testFile = path.join(testDir, 'existing.txt');
+    const testFile = path.join(dir, 'existing.txt');
 
-  try {
-    await mkdir(testDir, { recursive: true });
     await writeFile(testFile, 'line1\nline2\nline3\n', 'utf8');
 
-    const relativePath = path.relative(process.cwd(), testFile);
     const result = await editor.updateFile({
       type: 'update_file',
-      path: relativePath,
+      path: 'existing.txt',
       diff: '@@ -1,3 +1,3 @@\n line1\n-line2\n+modified line2\n line3',
     });
 
@@ -142,9 +161,7 @@ test('updateFile updates existing file with valid diff', async (t) => {
 
     const content = await readFile(testFile, 'utf8');
     t.true(content.includes('modified line2'));
-  } finally {
-    await rm(testDir, { recursive: true, force: true });
-  }
+  });
 });
 
 test('updateFile returns failed status for missing file', async (t) => {
@@ -163,47 +180,49 @@ test('updateFile returns failed status for missing file', async (t) => {
 });
 
 test('updateFile returns failed status for invalid diff', async (t) => {
-  const logger = createMockLogger();
-  const settings = createMockSettings({ 'tools.logFileOperations': false });
-  const editor = createEditorImpl({ loggingService: logger, settingsService: settings });
+  await withTempDir(async (dir) => {
+    const logger = createMockLogger();
+    const settings = createMockSettings({ 'tools.logFileOperations': false });
+    const editor = createEditorImpl({
+      loggingService: logger,
+      settingsService: settings,
+      executionContext: createMockExecutionContext(dir) as any,
+    });
 
-  const testDir = path.join(process.cwd(), 'test-tmp-editor-invalid');
-  const testFile = path.join(testDir, 'existing.txt');
+    const testFile = path.join(dir, 'existing.txt');
 
-  try {
-    await mkdir(testDir, { recursive: true });
     await writeFile(testFile, 'original content\n', 'utf8');
 
     const result = await editor.updateFile({
       type: 'update_file',
-      path: path.relative(process.cwd(), testFile),
+      path: 'existing.txt',
       diff: 'not a valid diff',
     });
 
     t.is(result.status, 'failed');
     t.true(result.output?.includes('Invalid patch'));
-  } finally {
-    await rm(testDir, { recursive: true, force: true });
-  }
+  });
 });
 
 // ========== deleteFile tests ==========
 
 test('deleteFile deletes existing file', async (t) => {
-  const logger = createMockLogger();
-  const settings = createMockSettings({ 'tools.logFileOperations': true });
-  const editor = createEditorImpl({ loggingService: logger, settingsService: settings });
+  await withTempDir(async (dir) => {
+    const logger = createMockLogger();
+    const settings = createMockSettings({ 'tools.logFileOperations': true });
+    const editor = createEditorImpl({
+      loggingService: logger,
+      settingsService: settings,
+      executionContext: createMockExecutionContext(dir) as any,
+    });
 
-  const testDir = path.join(process.cwd(), 'test-tmp-editor-delete');
-  const testFile = path.join(testDir, 'to-delete.txt');
+    const testFile = path.join(dir, 'to-delete.txt');
 
-  try {
-    await mkdir(testDir, { recursive: true });
     await writeFile(testFile, 'delete me\n', 'utf8');
 
     const result = await editor.deleteFile({
       type: 'delete_file',
-      path: path.relative(process.cwd(), testFile),
+      path: 'to-delete.txt',
     });
 
     t.is(result.status, 'completed');
@@ -211,9 +230,7 @@ test('deleteFile deletes existing file', async (t) => {
 
     // Verify file is gone
     await t.throwsAsync(readFile(testFile, 'utf8'), { code: 'ENOENT' });
-  } finally {
-    await rm(testDir, { recursive: true, force: true });
-  }
+  });
 });
 
 test('deleteFile succeeds even when file does not exist (force: true)', async (t) => {

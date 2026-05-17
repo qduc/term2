@@ -32,3 +32,23 @@ test('resolveWorkspacePath: handles regular relative paths', (t) => {
   const resolved = resolveWorkspacePath('src/main.ts', workspace);
   t.is(resolved, path.join(workspace, 'src/main.ts'));
 });
+
+test('resolveWorkspacePath: allows paths under /tmp or /private/tmp even when outside workspace', (t) => {
+  const workspace = '/Users/test/workspace';
+
+  // Test /tmp path
+  const resolvedTmp = resolveWorkspacePath('/tmp/test-file.txt', workspace);
+  t.is(resolvedTmp, path.normalize('/tmp/test-file.txt'));
+
+  // Test /private/tmp path
+  const resolvedPrivateTmp = resolveWorkspacePath('/private/tmp/sub/file.txt', workspace);
+  t.is(resolvedPrivateTmp, path.normalize('/private/tmp/sub/file.txt'));
+
+  // Test that /opt or other outside paths still throw
+  t.throws(
+    () => {
+      resolveWorkspacePath('/opt/app.log', workspace);
+    },
+    { message: /Operation outside workspace/ },
+  );
+});

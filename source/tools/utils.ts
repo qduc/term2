@@ -32,7 +32,20 @@ export function resolveWorkspacePath(
 
   // Ensure either exact match or within base directory (prefix with separator to avoid /foo/bar2 matching /foo/bar)
   const basePrefix = normalizedBaseDir.endsWith(path.sep) ? normalizedBaseDir : normalizedBaseDir + path.sep;
-  const isInside = normalizedResolved === normalizedBaseDir || normalizedResolved.startsWith(basePrefix);
+  let isInside = normalizedResolved === normalizedBaseDir || normalizedResolved.startsWith(basePrefix);
+
+  if (!isInside) {
+    // Check if the path is in a safe temporary directory
+    const isTempDir =
+      normalizedResolved === '/tmp' ||
+      normalizedResolved.startsWith('/tmp' + path.sep) ||
+      normalizedResolved === '/private/tmp' ||
+      normalizedResolved.startsWith('/private/tmp' + path.sep);
+
+    if (isTempDir) {
+      isInside = true;
+    }
+  }
 
   if (!isInside) {
     throw new Error(`Operation outside workspace: ${relativePath}`);

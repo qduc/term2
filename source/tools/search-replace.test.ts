@@ -974,6 +974,57 @@ test.serial('execute gap match fails when tail is not found after head', async (
   });
 });
 
+test.serial(
+  'execute does not invoke healing for a failed gap pattern and reports a head-anchor diagnostic',
+  async (t) => {
+    await withTempDir(async (dir) => {
+      let healingCalls = 0;
+      const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': true }), async (params) => {
+        healingCalls++;
+        return { params, wasModified: false, confidence: 0 };
+      });
+      const filePath = 'content.txt';
+      await fs.writeFile(path.join(dir, filePath), 'line1\nline2\nline3');
+
+      const result = await tool.execute({
+        path: filePath,
+        search_content: 'nonexistent\n<...>\nline3',
+        replace_content: 'replaced',
+        replace_all: false,
+      });
+
+      const parsed = JSON.parse(result);
+      t.false(parsed.output[0].success);
+      t.is(healingCalls, 0);
+      t.regex(parsed.output[0].error, /head anchor/i);
+      t.regex(parsed.output[0].error, /not auto-healed/i);
+    });
+  },
+);
+
+test.serial('execute gap diagnostic identifies the anchor that failed after the head matched', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': true }), async (params) => ({
+      params,
+      wasModified: false,
+      confidence: 0,
+    }));
+    const filePath = 'content.txt';
+    await fs.writeFile(path.join(dir, filePath), 'line1\nline2\nline3');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'line1\n<...>\nnonexistent',
+      replace_content: 'replaced',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+    t.regex(parsed.output[0].error, /not found after/i);
+  });
+});
+
 test.serial('execute gap match rejects multiple matches when replace_all is false', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));

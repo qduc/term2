@@ -84,7 +84,7 @@ const searchReplaceOperationSchema = z.object({
   search_content: z
     .string()
     .describe(
-      'The exact content to search for. Use <...> on its own line to skip unchanged middle content (gap matching).',
+      'The exact content to search for. Put <...> on its own line to match (and replace) everything between a head anchor and a tail anchor — lets you edit or delete a large block without reproducing it. The whole span between anchors is replaced, so use distinctive multi-line anchors (never a single generic line) to avoid deleting the wrong region. Omit the anchors from replace_content to delete them too.',
     ),
   replace_content: z.string().describe('The content to replace it with'),
   replace_all: z
@@ -100,7 +100,7 @@ const searchReplaceParametersSchema = z
     search_content: z
       .string()
       .describe(
-        'The exact content to search for. Use <...> on its own line to skip unchanged middle content (gap matching).',
+        'The exact content to search for. Put <...> on its own line to match (and replace) everything between a head anchor and a tail anchor — lets you edit or delete a large block without reproducing it. The whole span between anchors is replaced, so use distinctive multi-line anchors (never a single generic line) to avoid deleting the wrong region. Omit the anchors from replace_content to delete them too.',
       )
       .optional(),
     replace_content: z.string().describe('The content to replace it with').optional(),
@@ -206,6 +206,7 @@ interface GapMatchInfo {
  */
 interface NoMatchInfo {
   type: 'none';
+  diagnostic?: string;
 }
 
 type MatchInfo = ExactMatchInfo | RelaxedMatchInfo | NormalizedMatchInfo | GapMatchInfo | NoMatchInfo;
@@ -363,11 +364,18 @@ function findGapMatches(content: string, searchContent: string): GapMatchInfo | 
 
   // Validate: all segments must have at least one non-empty line
   if (segmentLineSets.some((lines) => lines.length === 0)) {
-    return { type: 'none' };
+    return {
+      type: 'none',
+      diagnostic:
+        'Gap pattern has an empty segment — every part separated by <...> must contain at least one non-blank line.',
+    };
   }
 
   const lineInfos = parseFileLines(content);
   const allMatches: { startIndex: number; endIndex: number }[] = [];
+
+  let headEverMatched = false;
+  let maxSegmentsMatched = 0; // best run: count of leading segments matched consecutively
 
   // Try every possible starting position for the first segment
   let searchFrom = 0;
@@ -375,9 +383,11 @@ function findGapMatches(content: string, searchContent: string): GapMatchInfo | 
     // Find the first segment
     const firstMatch = findSegmentInLines(lineInfos, segmentLineSets[0], searchFrom);
     if (!firstMatch) break;
+    headEverMatched = true;
 
     // Try to match remaining segments sequentially after the first
     let valid = true;
+    let segmentsMatched = 1;
     let lastEndLineIdx = firstMatch.endLineIdx;
     for (let s = 1; s < segmentLineSets.length; s++) {
       const nextMatch = findSegmentInLines(lineInfos, segmentLineSets[s], lastEndLineIdx);
@@ -385,8 +395,10 @@ function findGapMatches(content: string, searchContent: string): GapMatchInfo | 
         valid = false;
         break;
       }
+      segmentsMatched++;
       lastEndLineIdx = nextMatch.endLineIdx;
     }
+    maxSegmentsMatched = Math.max(maxSegmentsMatched, segmentsMatched);
 
     if (valid) {
       allMatches.push({
@@ -403,7 +415,22 @@ function findGapMatches(content: string, searchContent: string): GapMatchInfo | 
     return { type: 'gap', count: allMatches.length, matches: allMatches };
   }
 
-  return { type: 'none' };
+  if (!headEverMatched) {
+    return {
+      type: 'none',
+      diagnostic: `Gap pattern did not match: the head anchor (starting ${JSON.stringify(
+        segmentLineSets[0][0],
+      )}) was not found in the file. Recheck the first anchor's exact text.`,
+    };
+  }
+
+  const failedSegmentFirstLine = segmentLineSets[maxSegmentsMatched]?.[0] ?? '';
+  return {
+    type: 'none',
+    diagnostic: `Gap pattern did not match: the head anchor matched, but the next anchor (starting ${JSON.stringify(
+      failedSegmentFirstLine,
+    )}) was not found after it. Recheck that anchor's text and that anchors appear in order.`,
+  };
 }
 
 /**
@@ -672,7 +699,7 @@ export function createSearchReplaceToolDefinition(deps: {
     description:
       'Replace text in a file using exact or relaxed matching.\n' +
       'Set replace_all to true to replace all occurrences instead of requiring a unique match.\n' +
-      'Use <...> on its own line in search_content to skip unchanged middle content (gap matching) to save tokens.\n' +
+      'Gap matching: put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span (both anchors plus everything between them) is what gets replaced, so a mis-placed anchor silently deletes a large region. Choose anchors that are distinctive and unambiguous — prefer a few lines of real, unique code; never anchor on a single generic line like "}", "return", or a blank line. Use this to edit or DELETE a large block without reproducing it. To delete the block including the anchors, omit them from replace_content; to delete only the middle, repeat the anchors in replace_content.\n' +
       'Use this tool for precise edits where you know the content to be replaced.',
     parameters: searchReplaceParametersSchema,
     approvalPresentation: getApprovalPresentationCapability('search_replace'),
@@ -909,6 +936,16 @@ export function createSearchReplaceToolDefinition(deps: {
         }
 
         if (matchInfo.type === 'none') {
+          if (containsGapMarker(search_content)) {
+            return {
+              output: {
+                success: false,
+                error:
+                  (matchInfo.diagnostic ?? 'Gap pattern did not match. Recheck the head and tail anchor lines.') +
+                  ' Gap (<...>) edits are not auto-healed — fix the anchors and retry.',
+              },
+            };
+          }
           const enableEditHealing = settingsService.get<boolean>('tools.enableEditHealing') ?? true;
           if (enableEditHealing) {
             healingAttempted = true;

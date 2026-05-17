@@ -13,6 +13,7 @@ import { executeWithRetry } from './retry-executor.js';
 import { shouldUseNativePatchTool, shouldUseStrictToolSchema } from './tool-selection-policy.js';
 import { isFlexServiceTierTimeout } from '../utils/flex-service-tier.js';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
+import type { ConversationEvent } from '../services/conversation-events.js';
 
 /**
  * Wraps a tool definition's needsApproval so that structurally invalid params
@@ -72,6 +73,16 @@ export class OpenAIAgentClient {
   #executionContext?: ExecutionContext;
   #editor: ReturnType<typeof createEditorImpl>;
   #subagentManager: SubagentManager;
+  #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
+
+  /**
+   * Forward real-time subagent activity events to the active conversation
+   * turn. The session sets this for the duration of a send and clears it
+   * afterwards so events reach the UI's onEvent callback.
+   */
+  setSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void {
+    this.#subagentEventSink = sink;
+  }
 
   #resetMentorState(): void {
     this.#subagentManager.resetMentorSession();
@@ -101,6 +112,7 @@ export class OpenAIAgentClient {
       logger: deps.logger,
       settings: deps.settings,
       executionContext: deps.executionContext,
+      onEvent: (event) => this.#subagentEventSink?.(event),
     });
     this.#editor = createEditorImpl({
       loggingService: this.#logger,

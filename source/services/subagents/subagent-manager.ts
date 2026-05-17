@@ -7,6 +7,7 @@ import { ExecutionContext } from '../execution-context.js';
 import { getProvider } from '../../providers/index.js';
 import { SubagentSession } from './subagent-session.js';
 import type { SubagentRequest, SubagentResult, SubagentDefinition, SubagentRole } from './types.js';
+import type { ConversationEvent } from '../conversation-events.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import { wrapNeedsApproval } from '../../lib/openai-agent-client.js';
@@ -45,7 +46,15 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, any>; 
     const colonIdx = line.indexOf(':');
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
-    const raw = line.slice(colonIdx + 1).trim();
+    let raw = line.slice(colonIdx + 1).trim();
+
+    const quoted =
+      raw.length >= 2 && ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'")));
+    if (quoted) {
+      frontmatter[key] = raw.slice(1, -1);
+      continue;
+    }
+
     if (raw === 'true') {
       frontmatter[key] = true;
     } else if (raw === 'false') {
@@ -151,25 +160,49 @@ function runWithProvider(providerId: string, runner: any, agent: Agent, input: a
   return runner ? runner.run(agent, input, effectiveOptions) : run(agent, input, effectiveOptions);
 }
 
+function isToolHistoryItem(raw: any): boolean {
+  const type = typeof raw?.type === 'string' ? raw.type : '';
+  if (raw?.role === 'tool') return true;
+  return /tool|function_call/i.test(type);
+}
+
+function assistantText(raw: any): string | null {
+  if (raw?.role !== 'assistant') return null;
+  const content = raw?.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c: any) => typeof c?.text === 'string')
+      .map((c: any) => c.text)
+      .join('');
+  }
+  return null;
+}
+
+/**
+ * Returns only the subagent's final answer. When the run used tools, the
+ * answer is the last assistant message that appears strictly after the last
+ * tool item, so intermediate narration emitted between tool calls does not
+ * leak into the parent agent context.
+ */
 function extractFinalText(result: any): string {
   if (typeof result.finalOutput === 'string' && result.finalOutput) {
     return result.finalOutput;
   }
 
   if (Array.isArray(result.history)) {
-    for (let i = result.history.length - 1; i >= 0; i--) {
-      const item: any = result.history[i];
-      const raw = item?.rawItem ?? item;
-      if (raw?.role === 'assistant') {
-        const content = raw?.content;
-        if (typeof content === 'string') return content;
-        if (Array.isArray(content)) {
-          return content
-            .filter((c: any) => typeof c?.text === 'string')
-            .map((c: any) => c.text)
-            .join('');
-        }
+    const history = result.history;
+    let lastToolIndex = -1;
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (isToolHistoryItem(history[i]?.rawItem ?? history[i])) {
+        lastToolIndex = i;
+        break;
       }
+    }
+
+    for (let i = history.length - 1; i > lastToolIndex; i--) {
+      const text = assistantText(history[i]?.rawItem ?? history[i]);
+      if (text !== null) return text;
     }
   }
 
@@ -184,13 +217,28 @@ export class SubagentManager {
   #logger: ILoggingService;
   #settings: ISettingsService;
   #executionContext?: ExecutionContext;
+  #onEvent?: (event: ConversationEvent) => void;
   #mentorSession: SubagentSession;
 
-  constructor(deps: { logger: ILoggingService; settings: ISettingsService; executionContext?: ExecutionContext }) {
+  constructor(deps: {
+    logger: ILoggingService;
+    settings: ISettingsService;
+    executionContext?: ExecutionContext;
+    onEvent?: (event: ConversationEvent) => void;
+  }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#executionContext = deps.executionContext;
+    this.#onEvent = deps.onEvent;
     this.#mentorSession = new SubagentSession(randomUUID(), 'mentor');
+  }
+
+  #emit(event: ConversationEvent): void {
+    try {
+      this.#onEvent?.(event);
+    } catch (error: any) {
+      this.#logger.debug('Subagent event emit failed', { error: error?.message });
+    }
   }
 
   resetMentorSession(): void {
@@ -201,17 +249,18 @@ export class SubagentManager {
     const agentId = randomUUID();
 
     this.#logger.debug('SubagentManager.run', { agentId, role: request.role, taskLength: request.task.length });
+    this.#emit({ type: 'subagent_started', agentId, role: request.role, task: request.task });
 
     try {
-      if (request.role === 'mentor') {
-        return await this.#runMentor(agentId, request.task);
-      }
-
-      const definition = loadRoleDefinition(request.role, this.#settings);
-      return await this.#runSubagent(agentId, request, definition);
+      const result =
+        request.role === 'mentor'
+          ? await this.#runMentor(agentId, request.task)
+          : await this.#runSubagent(agentId, request, loadRoleDefinition(request.role, this.#settings));
+      this.#emit({ type: 'subagent_completed', result });
+      return result;
     } catch (error: any) {
       this.#logger.error('Subagent run failed', { agentId, role: request.role, error: error?.message });
-      return {
+      const result: SubagentResult = {
         agentId,
         role: request.role,
         status: 'failed',
@@ -220,6 +269,8 @@ export class SubagentManager {
         toolsUsed: [],
         error: error?.message || String(error),
       };
+      this.#emit({ type: 'subagent_completed', result });
+      return result;
     }
   }
 
@@ -233,6 +284,10 @@ export class SubagentManager {
       this.#settings.get<string>('agent.mentorProvider') ?? this.#settings.get<string>('agent.provider') ?? 'openai';
     const mentorMode = this.#settings.get<boolean>('app.mentorMode');
 
+    // model/provider/reasoning stay on the mentor-specific settings (compat
+    // bridge); the prompt body and maxTurns come from the mentor role markdown.
+    const definition = loadRoleDefinition('mentor', this.#settings);
+
     const baseInstructions = mentorMode
       ? 'You are a senior architect acting as a peer reviewer. You have no codebase access—you rely on what the user reports.\n\n' +
         'Your role is adversarial review, not rubber-stamping:\n' +
@@ -242,7 +297,7 @@ export class SubagentManager {
         '- Ask for evidence when confidence seems misplaced\n\n' +
         'When satisfied, give clear approval with specific next steps. When not, say exactly what needs more investigation.\n\n' +
         "Be concise. Push back hard, but don't block unnecessarily."
-      : 'You are a helpful mentor assistant. Provide advice and guidance on technical problems. Be concise and actionable.';
+      : definition.instructions;
 
     const envInfo = getEnvInfo(this.#settings, this.#executionContext);
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
@@ -264,7 +319,7 @@ export class SubagentManager {
       }
 
       return new Agent({
-        name: 'Mentor',
+        name: definition.name,
         model: mentorModel,
         ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
         instructions,
@@ -276,7 +331,7 @@ export class SubagentManager {
     const providerDef = getProvider(mentorProvider);
     const supportsChaining = providerDef?.capabilities?.supportsConversationChaining ?? false;
     const input = this.#mentorSession.getInput(task, supportsChaining);
-    const runOptions = this.#mentorSession.getRunOptions(supportsChaining, 1);
+    const runOptions = this.#mentorSession.getRunOptions(supportsChaining, definition.maxTurns);
 
     const result = await runWithProvider(mentorProvider, mentorRunner, mentorAgent, input, runOptions);
     this.#mentorSession.updateFromResult(result);
@@ -308,6 +363,12 @@ export class SubagentManager {
       settings: this.#settings,
       onToolStart: (name) => {
         toolCounts.set(name, (toolCounts.get(name) ?? 0) + 1);
+        this.#emit({
+          type: 'subagent_tool_started',
+          agentId,
+          role: request.role,
+          toolName: name,
+        });
       },
     });
 
@@ -488,11 +549,14 @@ export class SubagentManager {
     };
   }
 
+  // An explicit writeBoundary narrows where a worker may write. When omitted it
+  // defaults to the workspace root, so writes outside the workspace are always
+  // rejected even without an explicit boundary.
   #isWithinWriteBoundary(filePath: string, writeBoundary: string[] | undefined, cwd: string): boolean {
-    if (!writeBoundary?.length) return true;
+    const boundaries = writeBoundary?.length ? writeBoundary : [cwd];
 
     const resolved = path.resolve(cwd, filePath);
-    return writeBoundary.some((boundary) => {
+    return boundaries.some((boundary) => {
       const resolvedBoundary = path.resolve(cwd, boundary);
       return resolved === resolvedBoundary || resolved.startsWith(resolvedBoundary + path.sep);
     });
@@ -509,14 +573,12 @@ export class SubagentManager {
 
     return {
       ...definition,
-      needsApproval: (params: any, context?: unknown) => {
-        const paths = extractPaths(params);
-        const outsideBoundary = paths.some((filePath) => !this.#isWithinWriteBoundary(filePath, writeBoundary, cwd));
-        if (outsideBoundary) {
-          return false;
-        }
-        return definition.needsApproval(params, context);
-      },
+      // The writeBoundary is the worker's permission grant: in-boundary writes
+      // are auto-approved (there is no foreground approval channel for a
+      // subagent running inside a blocked parent tool call), and out-of-boundary
+      // writes are rejected deterministically by execute() below. Either way no
+      // interactive approval is required, so this never returns true.
+      needsApproval: () => false,
       execute: async (params: any, context?: unknown) => {
         const paths = extractPaths(params);
 

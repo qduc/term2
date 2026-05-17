@@ -468,20 +468,29 @@ export class ConversationSession {
       hallucinationRetryCount?: number;
     } = {},
   ): Promise<ConversationResult> {
-    const result = await collectTerminalResult(this.run(input, { hallucinationRetryCount }), {
-      onTextChunk,
-      onReasoningChunk,
-      onCommandMessage,
-      onEvent,
-      getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
-      onFinalEvent: (event) => {
-        this.logger.debug('sendMessage received final event', {
-          sessionId: this.id,
-          hasUsage: Boolean(event.usage),
-          usage: event.usage,
-        });
-      },
-    });
+    getMethod<[((event: ConversationEvent) => void) | null], void>(
+      this.agentClient,
+      'setSubagentEventSink',
+    )?.(onEvent ?? null);
+    let result: ConversationResult;
+    try {
+      result = await collectTerminalResult(this.run(input, { hallucinationRetryCount }), {
+        onTextChunk,
+        onReasoningChunk,
+        onCommandMessage,
+        onEvent,
+        getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
+        onFinalEvent: (event) => {
+          this.logger.debug('sendMessage received final event', {
+            sessionId: this.id,
+            hasUsage: Boolean(event.usage),
+            usage: event.usage,
+          });
+        },
+      });
+    } finally {
+      getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.(null);
+    }
 
     if (result.type === 'response') {
       this.logger.debug('sendMessage returning response', {
@@ -513,20 +522,29 @@ export class ConversationSession {
       return null;
     }
 
-    const result = await collectTerminalResult(this['continue']({ answer, rejectionReason }), {
-      onTextChunk,
-      onReasoningChunk,
-      onCommandMessage,
-      onEvent,
-      getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
-      onFinalEvent: (event) => {
-        this.logger.debug('handleApprovalDecision received final event', {
-          sessionId: this.id,
-          hasUsage: Boolean(event.usage),
-          usage: event.usage,
-        });
-      },
-    });
+    getMethod<[((event: ConversationEvent) => void) | null], void>(
+      this.agentClient,
+      'setSubagentEventSink',
+    )?.(onEvent ?? null);
+    let result: ConversationResult | null;
+    try {
+      result = await collectTerminalResult(this['continue']({ answer, rejectionReason }), {
+        onTextChunk,
+        onReasoningChunk,
+        onCommandMessage,
+        onEvent,
+        getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
+        onFinalEvent: (event) => {
+          this.logger.debug('handleApprovalDecision received final event', {
+            sessionId: this.id,
+            hasUsage: Boolean(event.usage),
+            usage: event.usage,
+          });
+        },
+      });
+    } finally {
+      getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.(null);
+    }
 
     if (result.type === 'response') {
       this.logger.debug('handleApprovalDecision returning response', {

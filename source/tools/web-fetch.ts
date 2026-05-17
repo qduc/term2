@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { fetchWebPage } from '@qduc/web-fetch';
-import type { ToolDefinition, CommandMessage } from './types.js';
+import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from './format-helpers.js';
 import type { ISettingsService, ILoggingService } from '../services/service-interfaces.js';
 
@@ -32,11 +32,7 @@ export type WebFetchParams = z.infer<typeof webFetchSchema>;
 /**
  * Format command message for display in the terminal
  */
-export const formatWebFetchCommandMessage = (
-  item: any,
-  index: number,
-  toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatWebFetchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

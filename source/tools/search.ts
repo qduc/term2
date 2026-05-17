@@ -9,7 +9,7 @@ import {
   DEFAULT_TRIM_CONFIG,
   type OutputTrimConfig,
 } from '../utils/output-trim.js';
-import type { ToolDefinition, CommandMessage } from './types.js';
+import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
 
 const execPromise = util.promisify(exec);
@@ -45,11 +45,7 @@ async function checkRgAvailability(): Promise<boolean> {
   return hasRg;
 }
 
-const formatSearchCommandMessage = (
-  item: any,
-  index: number,
-  _toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+const formatSearchCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
   const args = normalizeToolArguments(normalizedArgs) ?? {};
   const pattern = args?.pattern ?? '';

@@ -4,7 +4,7 @@ import path from 'path';
 import { execFile } from 'child_process';
 import util from 'util';
 import { resolveWorkspacePath, relaxedNumber } from './utils.js';
-import type { CommandMessage, ToolDefinition } from './types.js';
+import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from './format-helpers.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import {
@@ -192,11 +192,7 @@ export const createCodeContextSearchToolDefinition = (
   };
 };
 
-export const formatReadCodeOutlineCommandMessage = (
-  item: any,
-  index: number,
-  toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatReadCodeOutlineCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const args = getFormatterArgs(item, toolCallArgumentsById);
   const filePath = args?.path ?? 'unknown';
   const output = getOutputText(item) || 'No output';
@@ -212,11 +208,7 @@ export const formatReadCodeOutlineCommandMessage = (
   ];
 };
 
-export const formatCodeContextSearchCommandMessage = (
-  item: any,
-  index: number,
-  toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatCodeContextSearchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const args = getFormatterArgs(item, toolCallArgumentsById);
   const output = getOutputText(item) || 'No output';
   const command =

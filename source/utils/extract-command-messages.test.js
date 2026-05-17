@@ -1,5 +1,15 @@
 import test from 'ava';
 import { clearApprovalRejectionMarkers, extractCommandMessages } from '../../dist/utils/extract-command-messages.js';
+import { clearToolFormatters, registerToolFormatters } from '../../dist/tools/command-message-formatters.js';
+import { formatApplyPatchCommandMessage } from '../../dist/tools/apply-patch.js';
+import { formatAskMentorCommandMessage } from '../../dist/tools/ask-mentor.js';
+import {
+  formatCodeContextSearchCommandMessage,
+  formatReadCodeOutlineCommandMessage,
+} from '../../dist/tools/code-context.js';
+import { formatGrepCommandMessage } from '../../dist/tools/grep.js';
+import { formatReadFileCommandMessage } from '../../dist/tools/read-file.js';
+import { formatShellCommandMessage } from '../../dist/tools/shell.js';
 
 const withStubbedNow = (value) => {
   const realNow = Date.now;
@@ -11,6 +21,21 @@ const withStubbedNow = (value) => {
 
 test.beforeEach(() => {
   clearApprovalRejectionMarkers();
+  clearToolFormatters();
+  registerToolFormatters([
+    { name: 'apply_patch', formatCommandMessage: formatApplyPatchCommandMessage },
+    { name: 'ask_mentor', formatCommandMessage: formatAskMentorCommandMessage },
+    { name: 'code_context_search', formatCommandMessage: formatCodeContextSearchCommandMessage },
+    { name: 'grep', formatCommandMessage: formatGrepCommandMessage },
+    { name: 'read_code_outline', formatCommandMessage: formatReadCodeOutlineCommandMessage },
+    { name: 'read_file', formatCommandMessage: formatReadFileCommandMessage },
+    { name: 'shell', formatCommandMessage: formatShellCommandMessage },
+  ]);
+});
+
+test.afterEach(() => {
+  clearApprovalRejectionMarkers();
+  clearToolFormatters();
 });
 
 test('extracts failure reason from shell command outcome', (t) => {

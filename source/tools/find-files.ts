@@ -3,7 +3,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import path from 'path';
 import { resolveWorkspacePath, relaxedNumber } from './utils.js';
-import type { ToolDefinition, CommandMessage } from './types.js';
+import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from './format-helpers.js';
 
 const execPromise = util.promisify(exec);
@@ -65,11 +65,7 @@ async function checkFdAvailability(executionContext?: ExecutionContext): Promise
   }
 }
 
-export const formatFindFilesCommandMessage = (
-  item: any,
-  index: number,
-  toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatFindFilesCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

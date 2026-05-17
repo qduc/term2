@@ -25,6 +25,7 @@ import { createWebFetchToolDefinition } from '../../tools/web-fetch.js';
 import { createApplyPatchToolDefinition } from '../../tools/apply-patch.js';
 import { createSearchReplaceToolDefinition } from '../../tools/search-replace.js';
 import { createCreateFileToolDefinition } from '../../tools/create-file.js';
+import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { trimToolOutput } from '../../utils/trim-tool-output.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { tryAcquireFileLock } from '../../tools/file-locks.js';
@@ -489,6 +490,8 @@ export class SubagentManager {
         ),
       );
     }
+
+    registerToolFormatters(tools);
 
     return tools;
   }

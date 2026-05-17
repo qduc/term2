@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import type { ToolDefinition, CommandMessage } from './types.js';
+import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from './format-helpers.js';
 import { getConfiguredWebSearchProvider, type WebSearchResponse } from '../providers/web-search/index.js';
 import type { ISettingsService, ILoggingService } from '../services/service-interfaces.js';
@@ -51,11 +51,7 @@ export function formatResultsAsMarkdown(response: WebSearchResponse): string {
 /**
  * Format command message for display in the terminal
  */
-export const formatWebSearchCommandMessage = (
-  item: any,
-  index: number,
-  toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatWebSearchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

@@ -10,6 +10,7 @@ import { createWebSearchToolDefinition } from './tools/web-search.js';
 import { createWebFetchToolDefinition } from './tools/web-fetch.js';
 import { createCreateFileToolDefinition } from './tools/create-file.js';
 import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './tools/code-context.js';
+import { registerToolFormatters } from './tools/command-message-formatters.js';
 import type { ToolDefinition } from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
@@ -229,6 +230,8 @@ export const getAgentDefinition = (
       tools.push(createRunSubagentToolDefinition(runSubagent));
     }
   }
+
+  registerToolFormatters(tools);
 
   // In lite mode, skip AGENTS.md loading.
   // In remote mode, we also skip because we can't synchronously read from remote disk.

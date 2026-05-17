@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { resolveWorkspacePath } from './utils.js';
-import type { ToolDefinition, CommandMessage } from './types.js';
+import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import { TOOL_NAME_CREATE_FILE } from './tool-names.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
@@ -15,11 +15,7 @@ const createFileParametersSchema = z.object({
 
 export type CreateFileToolParams = z.infer<typeof createFileParametersSchema>;
 
-export const formatCreateFileCommandMessage = (
-  item: any,
-  index: number,
-  _toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatCreateFileCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
   const parsedOutput = safeJsonParse(getOutputText(item));
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
   const args = normalizeToolArguments(normalizedArgs) ?? {};

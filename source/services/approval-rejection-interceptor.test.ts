@@ -3,14 +3,19 @@ import {
   installApprovalRejectionInterceptor,
   tryInstallApprovalRejectionInterceptor,
 } from './approval-rejection-interceptor.js';
+import { clearToolFormatters, registerToolFormatters } from '../tools/command-message-formatters.js';
+import { formatShellCommandMessage } from '../tools/shell.js';
 import { clearApprovalRejectionMarkers, extractCommandMessages } from '../utils/extract-command-messages.js';
 
 test.beforeEach(() => {
   clearApprovalRejectionMarkers();
+  clearToolFormatters();
+  registerToolFormatters([{ name: 'shell', formatCommandMessage: formatShellCommandMessage }]);
 });
 
 test.afterEach(() => {
   clearApprovalRejectionMarkers();
+  clearToolFormatters();
 });
 
 test('installApprovalRejectionInterceptor intercepts matching tool call and marks approval rejection', async (t) => {

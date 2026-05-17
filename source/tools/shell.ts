@@ -13,7 +13,7 @@ import {
   DEFAULT_TRIM_CONFIG,
   type OutputTrimConfig,
 } from '../utils/output-trim.js';
-import type { ToolDefinition, CommandMessage } from './types.js';
+import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import {
   coerceToText,
@@ -89,11 +89,7 @@ const coerceCommandText = (value: unknown): string => {
   return coerceToText(value);
 };
 
-export const formatShellCommandMessage = (
-  item: any,
-  index: number,
-  toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatShellCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

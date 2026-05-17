@@ -15,6 +15,12 @@ export interface CommandMessage {
   callId?: string;
 }
 
+export type FormatCommandMessage = (
+  item: any,
+  index: number,
+  toolCallArgumentsById: Map<string, unknown>,
+) => CommandMessage[];
+
 export interface ToolDefinition<Params = any> {
   name: string;
   description: string;
@@ -29,5 +35,5 @@ export interface ToolDefinition<Params = any> {
    * @param toolCallArgumentsById - Map of call IDs to their arguments for fallback lookup
    * @returns Array of CommandMessage objects to display to the user
    */
-  formatCommandMessage: (item: unknown, index: number, toolCallArgumentsById: Map<string, unknown>) => CommandMessage[];
+  formatCommandMessage: FormatCommandMessage;
 }

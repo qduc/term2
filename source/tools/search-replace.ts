@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { resolveWorkspacePath } from './utils.js';
-import type { ToolDefinition, CommandMessage } from './types.js';
+import type { ToolDefinition, CommandMessage, FormatCommandMessage } from './types.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
 import { healSearchReplaceParams } from './edit-healing.js';
@@ -614,11 +614,7 @@ function executeReplacement(
   };
 }
 
-export const formatSearchReplaceCommandMessage = (
-  item: any,
-  index: number,
-  _toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
   const parsedOutput = safeJsonParse(getOutputText(item));
   const replaceOutputItems = parsedOutput?.output ?? [];
 

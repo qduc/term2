@@ -8,7 +8,7 @@ import {
   DEFAULT_TRIM_CONFIG,
   type OutputTrimConfig,
 } from '../utils/output-trim.js';
-import type { ToolDefinition, CommandMessage } from './types.js';
+import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import {
   getOutputText,
   safeJsonParse,
@@ -152,11 +152,7 @@ export const createGrepToolDefinition = (
   };
 };
 
-export const formatGrepCommandMessage = (
-  item: any,
-  index: number,
-  toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatGrepCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const parsedOutput = safeJsonParse(getOutputText(item));
   const rawItem = item?.rawItem ?? item;
   const lookupCallId = rawItem?.callId ?? rawItem?.id ?? item?.callId ?? item?.id ?? getCallIdFromItem(item);

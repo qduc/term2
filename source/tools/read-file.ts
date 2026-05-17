@@ -2,7 +2,7 @@ import { z } from 'zod';
 import * as fs from 'fs/promises';
 import { resolveWorkspacePath, relaxedNumber } from './utils.js';
 import { trimOutput } from '../utils/output-trim.js';
-import type { ToolDefinition, CommandMessage } from './types.js';
+import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from './format-helpers.js';
 
 const readFileParametersSchema = z.object({
@@ -21,11 +21,7 @@ const readFileParametersSchema = z.object({
 
 export type ReadFileToolParams = z.infer<typeof readFileParametersSchema>;
 
-export const formatReadFileCommandMessage = (
-  item: any,
-  index: number,
-  toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatReadFileCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;

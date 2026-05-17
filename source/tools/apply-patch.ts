@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { applyDiff } from '@openai/agents';
 import { resolveWorkspacePath } from './utils.js';
-import type { ToolDefinition, CommandMessage } from './types.js';
+import type { ToolDefinition, CommandMessage, FormatCommandMessage } from './types.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
 import { ExecutionContext } from '../services/execution-context.js';
@@ -76,11 +76,7 @@ function getApplyPatchOperations(params: ApplyPatchToolParams): ApplyPatchOperat
   ];
 }
 
-export const formatApplyPatchCommandMessage = (
-  item: any,
-  index: number,
-  _toolCallArgumentsById: Map<string, unknown>,
-): CommandMessage[] => {
+export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
   const parsedOutput = safeJsonParse(getOutputText(item));
   const patchOutputItems = parsedOutput?.output ?? [];
 

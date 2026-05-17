@@ -4,6 +4,7 @@ import path from 'path';
 import { createHash } from 'crypto';
 import { spawnSync } from 'child_process';
 import envPaths from 'env-paths';
+import parse from 'bash-parser';
 import type { ILoggingService } from './service-interfaces.js';
 
 export const RTK_VERSION = 'v0.40.0';
@@ -55,7 +56,79 @@ const RTK_COMMANDS = new Set([
   'docker',
 ]);
 
-const SHELL_COMPOSITION = /[|><;&`]|\$\(/;
+// Returns the char offsets where an rtk prefix should be inserted (sorted
+// descending so splicing right-to-left keeps earlier offsets valid), or null
+// when the command must not be wrapped at all.
+//
+// We only walk the *top-level* composition (logical operators, sequencing).
+// We deliberately do NOT descend into subshells, compound lists,
+// loops/conditionals, functions, or command substitution: rewriting those
+// risks changing execution semantics, which is never worth a little token
+// saving. Pipelines are skipped wholesale — every segment's stdout is the
+// next segment's stdin, so altering any of them corrupts the consumer's
+// input. A command is eligible only if its name is allowlisted, it is not
+// backgrounded, and it has no redirection (rtk yields no benefit there).
+function collectRtkWrapOffsets(command: string): number[] | null {
+  let ast: { commands?: unknown[] };
+  try {
+    ast = parse(command, { mode: 'bash', insertLOC: true }) as { commands?: unknown[] };
+  } catch {
+    return null;
+  }
+  if (!ast || !Array.isArray(ast.commands)) return null;
+
+  const offsets: number[] = [];
+  let bail = false;
+
+  function hasRedirect(node: any): boolean {
+    const parts: any[] = [...(node.prefix ?? []), ...(node.suffix ?? [])];
+    return parts.some((p) => p?.type === 'Redirect');
+  }
+
+  function isEligible(node: any): boolean {
+    if (!node || node.type !== 'Command') return false;
+    if (node.async === true) return false;
+    const name: string | undefined = node.name?.text;
+    if (!name || !RTK_COMMANDS.has(name)) return false;
+    if (hasRedirect(node)) return false;
+    return true;
+  }
+
+  function visit(node: any): void {
+    if (bail || !node || typeof node !== 'object') return;
+    switch (node.type) {
+      case 'Command': {
+        if (!isEligible(node)) return;
+        const offset = node.name?.loc?.start?.char;
+        if (typeof offset !== 'number' || offset < 0 || offset > command.length) {
+          // Never guess an insertion point — abandon wrapping entirely.
+          bail = true;
+          return;
+        }
+        offsets.push(offset);
+        return;
+      }
+      case 'LogicalExpression':
+        visit(node.left);
+        visit(node.right);
+        return;
+      case 'Pipeline':
+        // Never wrap inside a pipeline: each command's stdout is the next
+        // command's stdin, so altering any segment's output changes the
+        // consumer's input. Leave the whole pipeline untouched.
+        return;
+      default:
+        // Subshell / CompoundList / If / For / While / Function / etc.
+        // Leave the original text untouched.
+        return;
+    }
+  }
+
+  for (const node of ast.commands) visit(node);
+
+  if (bail || offsets.length === 0) return null;
+  return offsets.sort((a, b) => b - a);
+}
 
 export interface RtkServiceDeps {
   loggingService: ILoggingService;
@@ -81,15 +154,18 @@ export function getRtkBinaryPath(opts?: { cacheDir?: string }): string {
 }
 
 export function isRtkSupportedCommand(command: string): boolean {
-  const trimmed = command.trim();
-  if (!trimmed) return false;
-  if (SHELL_COMPOSITION.test(trimmed)) return false;
-  const firstToken = trimmed.split(/\s+/)[0] ?? '';
-  return RTK_COMMANDS.has(firstToken);
+  return collectRtkWrapOffsets(command) !== null;
 }
 
 export function wrapWithRtk(command: string, rtkPath: string): string {
-  return `"${rtkPath}" ${command}`;
+  const offsets = collectRtkWrapOffsets(command);
+  if (!offsets) return command;
+  const prefix = `"${rtkPath}" `;
+  let result = command;
+  for (const offset of offsets) {
+    result = result.slice(0, offset) + prefix + result.slice(offset);
+  }
+  return result;
 }
 
 function defaultExtract(tarPath: string, destDir: string): { status: number | null } {

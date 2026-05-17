@@ -116,32 +116,28 @@ test('isRtkSupportedCommand: non-allowlisted command is rejected', (t) => {
   t.false(isRtkSupportedCommand('printf hello'));
 });
 
-test('isRtkSupportedCommand: rejects commands with pipe |', (t) => {
-  t.false(isRtkSupportedCommand('git log | grep foo'));
+test('isRtkSupportedCommand: supported when at least one top-level command is eligible', (t) => {
+  t.true(isRtkSupportedCommand('git status && git log'));
+  t.true(isRtkSupportedCommand('npm test || cat error.log'));
+  t.true(isRtkSupportedCommand('git status; git log'));
+  t.true(isRtkSupportedCommand('git log $(date)'));
 });
 
-test('isRtkSupportedCommand: rejects commands with redirection >', (t) => {
+test('isRtkSupportedCommand: supported when a chain mixes eligible and ineligible commands', (t) => {
+  t.true(isRtkSupportedCommand('curl https://x && git log'));
+  t.true(isRtkSupportedCommand('npm run dev & npm test'));
+});
+
+test('isRtkSupportedCommand: rejected when no top-level command is eligible', (t) => {
+  t.false(isRtkSupportedCommand('curl https://example.com'));
   t.false(isRtkSupportedCommand('git status > out.txt'));
-});
-
-test('isRtkSupportedCommand: rejects commands with redirection <', (t) => {
+  t.false(isRtkSupportedCommand('git log 2>&1'));
   t.false(isRtkSupportedCommand('grep pattern < file.txt'));
-});
-
-test('isRtkSupportedCommand: rejects commands with semicolon ;', (t) => {
-  t.false(isRtkSupportedCommand('git status; ls'));
-});
-
-test('isRtkSupportedCommand: rejects commands with & (background)', (t) => {
   t.false(isRtkSupportedCommand('npm install &'));
 });
 
-test('isRtkSupportedCommand: rejects commands with backtick', (t) => {
-  t.false(isRtkSupportedCommand('git log `date`'));
-});
-
-test('isRtkSupportedCommand: rejects commands with $( substitution', (t) => {
-  t.false(isRtkSupportedCommand('git log $(date)'));
+test('isRtkSupportedCommand: does not descend into subshells', (t) => {
+  t.false(isRtkSupportedCommand('(cd src && git log)'));
 });
 
 test('isRtkSupportedCommand: empty command is rejected', (t) => {
@@ -149,16 +145,60 @@ test('isRtkSupportedCommand: empty command is rejected', (t) => {
   t.false(isRtkSupportedCommand('   '));
 });
 
+test('isRtkSupportedCommand: malformed command does not throw and is rejected', (t) => {
+  t.notThrows(() => isRtkSupportedCommand('git log ('));
+  t.false(isRtkSupportedCommand('git log ('));
+});
+
 // ── wrapWithRtk ───────────────────────────────────────────────────────────────
 
-test('wrapWithRtk prefixes command with quoted rtkPath', (t) => {
-  const result = wrapWithRtk('git status', '/path/to/rtk');
-  t.is(result, '"/path/to/rtk" git status');
+test('wrapWithRtk prefixes a single command with quoted rtkPath', (t) => {
+  t.is(wrapWithRtk('git status', '/path/to/rtk'), '"/path/to/rtk" git status');
 });
 
 test('wrapWithRtk handles path with spaces via quoting', (t) => {
-  const result = wrapWithRtk('ls -la', '/path with spaces/rtk');
-  t.is(result, '"/path with spaces/rtk" ls -la');
+  t.is(wrapWithRtk('ls -la', '/path with spaces/rtk'), '"/path with spaces/rtk" ls -la');
+});
+
+test('wrapWithRtk wraps every eligible command in a logical/sequence chain', (t) => {
+  t.is(wrapWithRtk('npm run build && npm test', '/r'), '"/r" npm run build && "/r" npm test');
+  t.is(wrapWithRtk('git status; git log', '/r'), '"/r" git status; "/r" git log');
+});
+
+test('wrapWithRtk never wraps any command in a pipeline', (t) => {
+  // The producer's stdout is the next command's stdin; altering it would
+  // change the consumer's input. The whole pipeline is left untouched.
+  t.is(wrapWithRtk('git log | grep foo', '/r'), 'git log | grep foo');
+  t.is(wrapWithRtk('git log | grep x | head', '/r'), 'git log | grep x | head');
+  t.is(wrapWithRtk('git log | tee out.txt', '/r'), 'git log | tee out.txt');
+  t.is(wrapWithRtk('git log | grep x > out.txt', '/r'), 'git log | grep x > out.txt');
+});
+
+test('wrapWithRtk wraps eligible commands around a pipeline but not within it', (t) => {
+  t.is(wrapWithRtk('git status && git log | grep x', '/r'), '"/r" git status && git log | grep x');
+});
+
+test('isRtkSupportedCommand rejects standalone pipelines', (t) => {
+  t.false(isRtkSupportedCommand('git log | grep foo'));
+  t.false(isRtkSupportedCommand('git log | tee out.txt'));
+  t.false(isRtkSupportedCommand('git log | grep x > out.txt'));
+});
+
+test('wrapWithRtk leaves ineligible commands in a chain untouched', (t) => {
+  t.is(wrapWithRtk('curl https://x && git log', '/r'), 'curl https://x && "/r" git log');
+  t.is(wrapWithRtk('npm run dev & npm test', '/r'), 'npm run dev & "/r" npm test');
+  // A redirect on one branch must not block wrapping a sibling branch.
+  t.is(wrapWithRtk('git diff > f && git log', '/r'), 'git diff > f && "/r" git log');
+});
+
+test('wrapWithRtk does not descend into command substitution or subshells', (t) => {
+  t.is(wrapWithRtk('git log $(date)', '/r'), '"/r" git log $(date)');
+  t.is(wrapWithRtk('(cd src && git log)', '/r'), '(cd src && git log)');
+});
+
+test('wrapWithRtk returns the command unchanged when nothing is eligible', (t) => {
+  t.is(wrapWithRtk('git status > out.txt', '/r'), 'git status > out.txt');
+  t.is(wrapWithRtk('git log (', '/r'), 'git log (');
 });
 
 // ── ensureRtkInstalled ────────────────────────────────────────────────────────

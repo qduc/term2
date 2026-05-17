@@ -1,7 +1,39 @@
 import test from 'ava';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { createShellToolDefinition } from './shell.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
-import type { ILoggingService } from '../services/service-interfaces.js';
+import { ExecutionContext } from '../services/execution-context.js';
+import type { ILoggingService, ISSHService } from '../services/service-interfaces.js';
+
+function createNoopLogger(overrides: Partial<ILoggingService> = {}): ILoggingService {
+  return {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+    security: () => {},
+    setCorrelationId: () => {},
+    getCorrelationId: () => undefined,
+    clearCorrelationId: () => {},
+    ...overrides,
+  };
+}
+
+function createTmpDir(t: any): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-shell-test-'));
+  t.teardown(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+function createFakeRtk(t: any): string {
+  const dir = createTmpDir(t);
+  const rtkPath = path.join(dir, 'rtk');
+  fs.writeFileSync(rtkPath, '#!/bin/sh\nexec "$@"\n');
+  fs.chmodSync(rtkPath, 0o755);
+  return rtkPath;
+}
 
 test.serial('shell execute restores previous correlation id after command execution', async (t) => {
   let clearCorrelationCalls = 0;
@@ -77,19 +109,8 @@ test.serial('shell execute clears correlation id when no previous correlation ex
 test.serial('shell execute does not install RTK for unsupported commands', async (t) => {
   let installCalled = false;
 
-  const loggingService: ILoggingService = {
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-    debug: () => {},
-    security: () => {},
-    setCorrelationId: () => {},
-    getCorrelationId: () => undefined,
-    clearCorrelationId: () => {},
-  };
-
   const tool = createShellToolDefinition({
-    loggingService,
+    loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
     rtkInstaller: async () => {
       installCalled = true;
@@ -104,5 +125,128 @@ test.serial('shell execute does not install RTK for unsupported commands', async
   });
 
   t.true(output.includes('exit 0'));
+  t.false(installCalled);
+});
+
+test.serial('shell execute wraps eligible RTK commands', async (t) => {
+  let installCalled = false;
+  let wrappedCommand: string | undefined;
+  const rtkPath = createFakeRtk(t);
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger({
+      debug: (message: string, meta?: any) => {
+        if (message === 'Wrapped command with rtk') {
+          wrappedCommand = meta?.original;
+        }
+      },
+    }),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    rtkInstaller: async () => {
+      installCalled = true;
+      return rtkPath;
+    },
+  });
+
+  const output = await tool.execute({
+    command: 'ls package.json',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(output.includes('package.json'));
+  t.true(installCalled);
+  t.is(wrappedCommand, 'ls package.json');
+});
+
+test.serial('shell execute does not install RTK for allowlisted commands in a pipeline', async (t) => {
+  let installCalled = false;
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    rtkInstaller: async () => {
+      installCalled = true;
+      return createFakeRtk(t);
+    },
+  });
+
+  const output = await tool.execute({
+    command: 'cat package.json | head -n 1',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(output.includes('exit 0'));
+  t.false(installCalled);
+});
+
+test.serial('shell execute does not install RTK for allowlisted commands redirected to files', async (t) => {
+  let installCalled = false;
+  const dir = createTmpDir(t);
+  const stdoutPath = path.join(dir, 'stdout.txt');
+  const stderrPath = path.join(dir, 'stderr.txt');
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    rtkInstaller: async () => {
+      installCalled = true;
+      return createFakeRtk(t);
+    },
+  });
+
+  const stdoutRedirect = await tool.execute({
+    command: `cat package.json > ${stdoutPath}`,
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+  const stderrRedirect = await tool.execute({
+    command: `ls ${path.join(dir, 'missing')} 2> ${stderrPath}`,
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(stdoutRedirect.includes('exit 0'));
+  t.true(stderrRedirect.includes('exit 1'));
+  t.true(fs.existsSync(stdoutPath));
+  t.true(fs.existsSync(stderrPath));
+  t.false(installCalled);
+});
+
+test.serial('shell execute bypasses RTK for SSH commands', async (t) => {
+  let installCalled = false;
+  let executedCommand: string | undefined;
+  const sshService: ISSHService = {
+    connect: async () => {},
+    disconnect: async () => {},
+    isConnected: () => true,
+    executeCommand: async (cmd: string) => {
+      executedCommand = cmd;
+      return { stdout: 'remote\n', stderr: '', exitCode: 0, timedOut: false };
+    },
+    readFile: async () => '',
+    writeFile: async () => {},
+    mkdir: async () => {},
+  };
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    executionContext: new ExecutionContext(sshService, '/remote/workspace'),
+    rtkInstaller: async () => {
+      installCalled = true;
+      return createFakeRtk(t);
+    },
+  });
+
+  const output = await tool.execute({
+    command: 'ls package.json',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(output.includes('remote'));
+  t.is(executedCommand, 'ls package.json');
   t.false(installCalled);
 });

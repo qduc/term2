@@ -1,5 +1,6 @@
 ---
 name: Researcher
+description: web search + read-only workspace. Use for looking up external docs or current information.
 model: inherit
 provider: inherit
 reasoningEffort: inherit

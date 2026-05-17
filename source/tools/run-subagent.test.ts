@@ -1,5 +1,5 @@
 import test from 'ava';
-import { createRunSubagentToolDefinition } from './run-subagent.js';
+import { createRunSubagentToolDefinition, getSubagentsRolesSection } from './run-subagent.js';
 import type { SubagentResult } from '../services/subagents/types.js';
 
 function makeResult(overrides: Partial<SubagentResult> = {}): SubagentResult {
@@ -154,4 +154,30 @@ test('formatCommandMessage includes files changed summary for worker', (t) => {
   const messages = tool.formatCommandMessage(item, 0, new Map());
   t.true(messages[0].output.includes('src/foo.ts'));
   t.true(messages[0].output.includes('src/bar.ts'));
+});
+
+test('getSubagentsRolesSection extracts descriptions from markdown files', (t) => {
+  const section = getSubagentsRolesSection();
+
+  t.true(section.includes('## Roles'));
+  t.true(section.includes('`explorer`'));
+  t.true(section.includes('read-only workspace access. Use for locating files and answering codebase questions.'));
+  t.true(section.includes('`mentor`'));
+  t.true(section.includes('advisory only, no workspace access. Use for technical advice.'));
+  t.true(section.includes('`researcher`'));
+  t.true(
+    section.includes('web search + read-only workspace. Use for looking up external docs or current information.'),
+  );
+  t.true(section.includes('`worker`'));
+  t.true(section.includes('read + write access. Use for implementing bounded file changes.'));
+});
+
+test('createRunSubagentToolDefinition includes dynamic roles description', (t) => {
+  const tool = createRunSubagentToolDefinition(async () => makeResult());
+
+  t.true(tool.description.includes('## Roles'));
+  t.true(tool.description.includes('`explorer`'));
+  t.true(
+    tool.description.includes('read-only workspace access. Use for locating files and answering codebase questions.'),
+  );
 });

@@ -1,5 +1,6 @@
 ---
 name: Worker
+description: read + write access. Use for implementing bounded file changes.
 model: inherit
 provider: inherit
 reasoningEffort: inherit

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { ToolDefinition, CommandMessage } from './types.js';
 import {
   getOutputText,
@@ -75,17 +77,93 @@ export const formatRunSubagentCommandMessage = (
   ];
 };
 
+export function getSubagentsRolesSection(): string {
+  let promptsDir = path.join(import.meta.dirname, '../prompts/subagents');
+  if (!fs.existsSync(promptsDir)) {
+    const altDir = path.join(import.meta.dirname, '../../source/prompts/subagents');
+    if (fs.existsSync(altDir)) {
+      promptsDir = altDir;
+    }
+  }
+
+  if (!fs.existsSync(promptsDir)) {
+    return (
+      '## Roles\n' +
+      '- `explorer`: read-only workspace access. Use for locating files and answering codebase questions.\n' +
+      '- `researcher`: web search + read-only workspace. Use for looking up external docs or current information.\n' +
+      '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
+      '- `worker`: read + write access. Use for implementing bounded file changes.\n\n'
+    );
+  }
+
+  try {
+    const files = fs
+      .readdirSync(promptsDir)
+      .filter((file) => file.endsWith('.md'))
+      .sort();
+    const roles: string[] = [];
+
+    for (const file of files) {
+      const roleName = path.basename(file, '.md');
+      const content = fs.readFileSync(path.join(promptsDir, file), 'utf-8');
+      const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+      let description = '';
+      if (match) {
+        const frontmatterText = match[1];
+        for (const line of frontmatterText.split('\n')) {
+          const colonIdx = line.indexOf(':');
+          if (colonIdx !== -1) {
+            const key = line.slice(0, colonIdx).trim();
+            if (key === 'description') {
+              let val = line.slice(colonIdx + 1).trim();
+              if (
+                val.length >= 2 &&
+                ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'")))
+              ) {
+                val = val.slice(1, -1);
+              }
+              description = val;
+              break;
+            }
+          }
+        }
+      }
+      if (description) {
+        roles.push(`- \`${roleName}\`: ${description}`);
+      }
+    }
+
+    if (roles.length > 0) {
+      return '## Roles\n' + roles.join('\n') + '\n\n';
+    }
+  } catch (error) {
+    // Fallback on error
+  }
+
+  return (
+    '## Roles\n' +
+    '- `explorer`: read-only workspace access. Use for locating files and answering codebase questions.\n' +
+    '- `researcher`: web search + read-only workspace. Use for looking up external docs or current information.\n' +
+    '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
+    '- `worker`: read + write access. Use for implementing bounded file changes.\n\n'
+  );
+}
+
 export const createRunSubagentToolDefinition = (
   runSubagent: (params: RunSubagentParams) => Promise<SubagentResult>,
 ): ToolDefinition<RunSubagentParams> => ({
   name: 'run_subagent',
   description:
     'Delegate a bounded task to a specialized subagent. The subagent runs synchronously and returns a structured result.\n\n' +
-    '## Roles\n' +
-    '- `explorer`: read-only workspace access. Use for locating files and answering codebase questions.\n' +
-    '- `researcher`: web search + read-only workspace. Use for looking up external docs or current information.\n' +
-    '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
-    '- `worker`: read + write access. Use for implementing bounded file changes.\n\n' +
+    '## When to Use\n' +
+    'Prefer a subagent when you care about the **result** but not the **intermediate steps**. ' +
+    'Good fits: long exploration across many files, multi-step research, or implementation work that ' +
+    'would otherwise fill your context with tool calls, file contents, and dead ends. ' +
+    'The subagent absorbs that noise and returns only a summary, preserving your context for ' +
+    'higher-level reasoning and decisions.\n\n' +
+    'Avoid delegating: trivial single-file reads, tasks requiring back-and-forth with the user, ' +
+    'or work where you need to observe progress to course-correct.\n\n' +
+    getSubagentsRolesSection() +
     '## Task Requirements\n' +
     'The task must be fully self-contained. Include all context, constraints, and the expected output format. ' +
     'The subagent has no access to your conversation history or reasoning.\n\n' +

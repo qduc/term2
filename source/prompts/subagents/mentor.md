@@ -1,5 +1,6 @@
 ---
 name: Mentor
+description: advisory only, no workspace access. Use for technical advice.
 model: inherit
 provider: inherit
 reasoningEffort: inherit

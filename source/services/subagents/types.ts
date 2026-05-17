@@ -20,6 +20,7 @@ export interface SubagentDefinition {
   model: string;
   provider: string;
   reasoningEffort: string;
+  description?: string;
 }
 
 export interface SubagentResult {

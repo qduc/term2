@@ -468,10 +468,10 @@ export class ConversationSession {
       hallucinationRetryCount?: number;
     } = {},
   ): Promise<ConversationResult> {
-    getMethod<[((event: ConversationEvent) => void) | null], void>(
+    getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
       this.agentClient,
-      'setSubagentEventSink',
-    )?.(onEvent ?? null);
+      onEvent ?? null,
+    );
     let result: ConversationResult;
     try {
       result = await collectTerminalResult(this.run(input, { hallucinationRetryCount }), {
@@ -489,7 +489,10 @@ export class ConversationSession {
         },
       });
     } finally {
-      getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.(null);
+      getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
+        this.agentClient,
+        null,
+      );
     }
 
     if (result.type === 'response') {
@@ -522,10 +525,10 @@ export class ConversationSession {
       return null;
     }
 
-    getMethod<[((event: ConversationEvent) => void) | null], void>(
+    getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
       this.agentClient,
-      'setSubagentEventSink',
-    )?.(onEvent ?? null);
+      onEvent ?? null,
+    );
     let result: ConversationResult | null;
     try {
       result = await collectTerminalResult(this['continue']({ answer, rejectionReason }), {
@@ -543,7 +546,10 @@ export class ConversationSession {
         },
       });
     } finally {
-      getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.(null);
+      getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
+        this.agentClient,
+        null,
+      );
     }
 
     if (result.type === 'response') {

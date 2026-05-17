@@ -98,6 +98,7 @@ function loadRoleDefinition(role: SubagentRole, settings: ISettingsService): Sub
     model: resolve(frontmatter.model, 'agent.model', 'gpt-4o'),
     provider: resolve(frontmatter.provider, 'agent.provider', 'openai'),
     reasoningEffort: resolve(frontmatter.reasoningEffort, 'agent.reasoningEffort', 'default'),
+    description: frontmatter.description ?? '',
   };
 }
 

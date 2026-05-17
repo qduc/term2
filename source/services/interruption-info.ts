@@ -14,7 +14,7 @@ export const getMethod = <TArgs extends unknown[], TResult>(
 ): ((...args: TArgs) => TResult) | null => {
   const record = asRecord(target);
   const candidate = record?.[key];
-  return typeof candidate === 'function' ? (candidate as (...args: TArgs) => TResult) : null;
+  return typeof candidate === 'function' ? (candidate.bind(record) as (...args: TArgs) => TResult) : null;
 };
 
 export const getCallIdFromObject = (value: unknown): string | undefined => {

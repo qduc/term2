@@ -36,6 +36,19 @@ test('getMethod returns callable function or null', (t) => {
   t.is(getMethod(undefined, 'fn'), null);
 });
 
+test('getMethod returns bound function preserving target context', (t) => {
+  class TestClass {
+    public value = 42;
+    getValue() {
+      return this.value;
+    }
+  }
+  const instance = new TestClass();
+  const getValue = getMethod<[], number>(instance, 'getValue');
+  t.truthy(getValue);
+  t.is(getValue?.(), 42);
+});
+
 test('getCallIdFromObject reads canonical id keys at top level', (t) => {
   t.is(getCallIdFromObject({ callId: 'a' }), 'a');
   t.is(getCallIdFromObject({ call_id: 'b' }), 'b');

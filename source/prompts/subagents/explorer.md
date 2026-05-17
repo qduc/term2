@@ -1,5 +1,6 @@
 ---
 name: Explorer
+description: read-only workspace access. Use for locating files and answering codebase questions.
 model: inherit
 provider: inherit
 reasoningEffort: inherit

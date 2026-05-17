@@ -30,6 +30,32 @@ const runSubagentSchema = z.object({
 
 export type RunSubagentParams = z.infer<typeof runSubagentSchema>;
 
+function formatSubagentResult(result: SubagentResult): string {
+  const lines: string[] = [];
+  lines.push(`Status: ${result.status}`);
+
+  if (result.error) {
+    lines.push(`Error: ${result.error}`);
+  }
+
+  if (result.finalText) {
+    lines.push('');
+    lines.push(result.finalText);
+  }
+
+  if (result.toolsUsed && result.toolsUsed.length > 0) {
+    lines.push('');
+    lines.push(`Tools used: ${result.toolsUsed.map((t) => `${t.toolName}(${t.count})`).join(', ')}`);
+  }
+
+  if (result.filesChanged && result.filesChanged.length > 0) {
+    lines.push('');
+    lines.push(`Files changed: ${result.filesChanged.join(', ')}`);
+  }
+
+  return lines.join('\n') || `Status: ${result.status}`;
+}
+
 export const formatRunSubagentCommandMessage = (
   item: any,
   index: number,
@@ -64,6 +90,11 @@ export const formatRunSubagentCommandMessage = (
     if (parsed.error) {
       command = `run_subagent [${role}] — failed`;
     }
+  } else if (rawOutput?.includes('Status: failed')) {
+    success = false;
+    command = `run_subagent [${role}] — failed`;
+  } else if (rawOutput?.includes('Status: cancelled')) {
+    success = false;
   }
 
   return [
@@ -174,7 +205,7 @@ export const createRunSubagentToolDefinition = (
   execute: async (params) => {
     try {
       const result = await runSubagent(params);
-      return JSON.stringify(result);
+      return formatSubagentResult(result);
     } catch (error: any) {
       const errorResult: SubagentResult = {
         agentId: 'error',
@@ -185,7 +216,7 @@ export const createRunSubagentToolDefinition = (
         toolsUsed: [],
         error: error?.message || String(error),
       };
-      return JSON.stringify(errorResult);
+      return formatSubagentResult(errorResult);
     }
   },
   formatCommandMessage: formatRunSubagentCommandMessage,

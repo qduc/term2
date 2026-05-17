@@ -43,28 +43,27 @@ test('schema allows optional writeBoundary', (t) => {
   t.true(tool.parameters.safeParse({ role: 'worker', task: 'edit files' }).success);
 });
 
-test('execute returns JSON-serialized SubagentResult', async (t) => {
+test('execute returns plain-text SubagentResult', async (t) => {
   const expected = makeResult({ finalText: 'Answer here.' });
   const tool = createRunSubagentToolDefinition(async () => expected);
 
   const raw = await tool.execute({ role: 'explorer', task: 'find files' });
-  const parsed = JSON.parse(raw);
 
-  t.is(parsed.status, 'completed');
-  t.is(parsed.role, 'explorer');
-  t.is(parsed.finalText, 'Answer here.');
+  t.true(raw.includes('Status: completed'));
+  t.true(raw.includes('Answer here.'));
+  t.false(raw.startsWith('{'));
 });
 
-test('execute returns failed result on error', async (t) => {
+test('execute returns failed result as plain text on error', async (t) => {
   const tool = createRunSubagentToolDefinition(async () => {
     throw new Error('Connection failed');
   });
 
   const raw = await tool.execute({ role: 'explorer', task: 'find files' });
-  const parsed = JSON.parse(raw);
 
-  t.is(parsed.status, 'failed');
-  t.is(parsed.error, 'Connection failed');
+  t.true(raw.includes('Status: failed'));
+  t.true(raw.includes('Error: Connection failed'));
+  t.false(raw.startsWith('{'));
 });
 
 test('execute passes writeBoundary to subagent runner', async (t) => {
@@ -89,7 +88,7 @@ test('formatCommandMessage renders completed result', (t) => {
   const item = {
     rawItem: {
       arguments: JSON.stringify({ role: 'explorer', task: 'find files' }),
-      output: JSON.stringify(result),
+      output: 'Status: completed\n\nFound 3 relevant files.\n\nTools used: read_file(3)',
     },
   };
 
@@ -107,7 +106,7 @@ test('formatCommandMessage renders failed result', (t) => {
   const item = {
     rawItem: {
       arguments: JSON.stringify({ role: 'bad-role', task: 'do stuff' }),
-      output: JSON.stringify(result),
+      output: 'Status: failed\nError: Role not found',
     },
   };
 
@@ -128,7 +127,7 @@ test('formatCommandMessage includes tool usage summary', (t) => {
   const item = {
     rawItem: {
       arguments: JSON.stringify({ role: 'explorer', task: 'search codebase' }),
-      output: JSON.stringify(result),
+      output: 'Status: completed\n\nResult text.\n\nTools used: read_file(5), grep(2)',
     },
   };
 
@@ -147,7 +146,7 @@ test('formatCommandMessage includes files changed summary for worker', (t) => {
   const item = {
     rawItem: {
       arguments: JSON.stringify({ role: 'worker', task: 'update code' }),
-      output: JSON.stringify(result),
+      output: 'Status: completed\n\nDone.\n\nFiles changed: src/foo.ts, src/bar.ts',
     },
   };
 

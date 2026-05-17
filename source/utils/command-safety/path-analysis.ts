@@ -115,8 +115,14 @@ export function analyzePathRisk(inputPath: string | undefined, loggingService?: 
       return SafetyStatus.RED;
     }
 
-    // Check if absolute path is within current project directory
-    if (!isWithinProject) {
+    // Check if absolute path is within current project directory or in a safe temporary directory
+    const isTempDir =
+      normalizedCandidate === '/tmp' ||
+      normalizedCandidate.startsWith('/tmp' + path.sep) ||
+      normalizedCandidate === '/private/tmp' ||
+      normalizedCandidate.startsWith('/private/tmp' + path.sep);
+
+    if (!isWithinProject && !isTempDir) {
       // Absolute paths outside project are suspicious -> audit
       logger.security('Path risk: absolute non-system path', {
         path: candidate,

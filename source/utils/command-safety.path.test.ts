@@ -376,11 +376,29 @@ test('Path risk - absolute paths within project (YELLOW for sensitive extensions
 });
 
 test('Path risk - absolute paths outside project (YELLOW)', (t) => {
-  const paths = ['/tmp/test.txt', '/opt/app.log', '/home/other/file.txt'];
+  const paths = ['/opt/app.log', '/home/other/file.txt'];
 
   for (const path of paths) {
     const result = analyzePathRisk(path);
     t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (outside project)`);
+  }
+});
+
+test('Path risk - absolute paths under temporary directory (GREEN for safe files)', (t) => {
+  const paths = ['/tmp/test.txt', '/private/tmp/test.txt', '/tmp/sub/dir/file.log'];
+
+  for (const path of paths) {
+    const result = analyzePathRisk(path);
+    t.is(result, SafetyStatus.GREEN, `"${path}" should be GREEN (temporary directory)`);
+  }
+});
+
+test('Path risk - absolute paths under temporary directory (YELLOW for hidden/sensitive files)', (t) => {
+  const paths = ['/tmp/.env', '/tmp/secret.pem', '/tmp/.hidden'];
+
+  for (const path of paths) {
+    const result = analyzePathRisk(path);
+    t.is(result, SafetyStatus.YELLOW, `"${path}" should be YELLOW (hidden/sensitive file under temporary directory)`);
   }
 });
 

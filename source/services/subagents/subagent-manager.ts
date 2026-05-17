@@ -26,6 +26,7 @@ import { createSearchReplaceToolDefinition } from '../../tools/search-replace.js
 import { createCreateFileToolDefinition } from '../../tools/create-file.js';
 import { trimToolOutput } from '../../utils/trim-tool-output.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
+import { tryAcquireFileLock } from '../../tools/file-locks.js';
 
 const PROMPTS_DIR = path.join(import.meta.dirname, '../../prompts/subagents');
 const ROLE_MAX_TURNS_DEFAULT = 20;
@@ -411,7 +412,7 @@ export class SubagentManager {
           writeBoundary,
           cwd,
           filesChanged,
-          (params: any) => (params?.path ? [params.path] : []),
+          (params: any) => this.#extractPathsFromSearchReplace(params),
         ),
         this.#wrapWriteTool(
           createCreateFileToolDefinition({
@@ -437,6 +438,66 @@ export class SubagentManager {
     return params?.path ? [params.path] : [];
   }
 
+  #extractPathsFromSearchReplace(params: any): string[] {
+    if (Array.isArray(params?.replacements)) {
+      return params.replacements.map((replacement: any) => replacement?.path).filter(Boolean);
+    }
+    return params?.path ? [params.path] : [];
+  }
+
+  #extractSuccessfulWritePaths(result: unknown): string[] {
+    if (typeof result !== 'string') return [];
+
+    try {
+      const parsed = JSON.parse(result);
+      if (Array.isArray(parsed?.output)) {
+        return parsed.output
+          .filter((item: any) => item?.success === true && typeof item?.path === 'string')
+          .map((item: any) => item.path);
+      }
+
+      if (parsed?.success === true && typeof parsed?.path === 'string') {
+        return [parsed.path];
+      }
+    } catch {
+      return [];
+    }
+
+    return [];
+  }
+
+  #tryAcquireWorkerWriteLocks(paths: string[], cwd: string): (() => void) | null {
+    const uniqueResolvedPaths = [...new Set(paths.map((filePath) => path.resolve(cwd, filePath)))];
+    const releases: Array<() => void> = [];
+
+    for (const resolvedPath of uniqueResolvedPaths) {
+      const release = tryAcquireFileLock(resolvedPath);
+      if (!release) {
+        for (const unlock of releases.reverse()) {
+          unlock();
+        }
+        return null;
+      }
+      releases.push(release);
+    }
+
+    return () => {
+      for (const unlock of releases.reverse()) {
+        unlock();
+      }
+    };
+  }
+
+  #isWithinWriteBoundary(filePath: string, writeBoundary: string[] | undefined, cwd: string): boolean {
+    if (!writeBoundary?.length) return true;
+
+    const resolved = path.resolve(cwd, filePath);
+    return writeBoundary.some((boundary) => {
+      const resolvedBoundary = path.resolve(cwd, boundary);
+      return resolved === resolvedBoundary || resolved.startsWith(resolvedBoundary + path.sep);
+    });
+  }
+
   #wrapWriteTool(
     definition: ToolDefinition,
     writeBoundary: string[] | undefined,
@@ -448,37 +509,51 @@ export class SubagentManager {
 
     return {
       ...definition,
-      needsApproval: () => false,
+      needsApproval: (params: any, context?: unknown) => {
+        const paths = extractPaths(params);
+        const outsideBoundary = paths.some((filePath) => !this.#isWithinWriteBoundary(filePath, writeBoundary, cwd));
+        if (outsideBoundary) {
+          return false;
+        }
+        return definition.needsApproval(params, context);
+      },
       execute: async (params: any, context?: unknown) => {
-        if (writeBoundary?.length) {
-          const paths = extractPaths(params);
-          for (const filePath of paths) {
-            const resolved = path.resolve(cwd, filePath);
-            const withinBoundary = writeBoundary.some((boundary) => {
-              const resolvedBoundary = path.resolve(cwd, boundary);
-              return resolved === resolvedBoundary || resolved.startsWith(resolvedBoundary + path.sep);
+        const paths = extractPaths(params);
+
+        for (const filePath of paths) {
+          if (!this.#isWithinWriteBoundary(filePath, writeBoundary, cwd)) {
+            return JSON.stringify({
+              output: [
+                {
+                  success: false,
+                  error: `Write rejected: path "${filePath}" is outside the allowed write boundary.`,
+                },
+              ],
             });
-            if (!withinBoundary) {
-              return JSON.stringify({
-                output: [
-                  {
-                    success: false,
-                    error: `Write rejected: path "${filePath}" is outside the allowed write boundary.`,
-                  },
-                ],
-              });
-            }
           }
         }
 
-        const result = await originalExecute(params, context);
-
-        const paths = extractPaths(params);
-        for (const p of paths) {
-          filesChanged.push(p);
+        const releaseWorkerLocks = this.#tryAcquireWorkerWriteLocks(paths, cwd);
+        if (!releaseWorkerLocks) {
+          return JSON.stringify({
+            output: [
+              {
+                success: false,
+                error: 'Write rejected: one or more target files are already being modified by another worker.',
+              },
+            ],
+          });
         }
 
-        return result;
+        try {
+          const result = await originalExecute(params, context);
+          for (const successfulPath of this.#extractSuccessfulWritePaths(result)) {
+            filesChanged.push(successfulPath);
+          }
+          return result;
+        } finally {
+          releaseWorkerLocks();
+        }
       },
     };
   }

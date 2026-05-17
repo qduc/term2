@@ -1,6 +1,9 @@
 import test from 'ava';
+import fs from 'node:fs';
+import path from 'node:path';
 import { SubagentManager } from './subagent-manager.js';
 import { registerProvider } from '../../providers/registry.js';
+import { ExecutionContext } from '../execution-context.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 
 // ========== Mock Utilities ==========
@@ -388,29 +391,44 @@ test.beforeEach(() => {
 });
 
 test.serial('worker write tool rejects paths outside writeBoundary', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-boundary-'));
+  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const mockExecutionContext = {
+    getCwd: () => tmpDir,
+    isRemote: () => false,
+    getSSHService: () => undefined,
+  } as unknown as ExecutionContext;
+
   const settings = createMockSettings({
     'agent.model': 'mock-model',
     'agent.provider': 'mock-boundary-worker',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    executionContext: mockExecutionContext,
+  });
 
   await manager.run({
     role: 'worker',
     task: 'update a file',
-    writeBoundary: ['src/'],
+    writeBoundary: ['.'],
   });
 
   t.is(boundaryWorkerCalls.length, 1);
   const agent = boundaryWorkerCalls[0].agent;
   const applyPatch = agent.tools.find((t: any) => t.name === 'apply_patch');
+  const searchReplace = agent.tools.find((t: any) => t.name === 'search_replace');
   t.truthy(applyPatch);
+  t.truthy(searchReplace);
 
   // Call with a path inside the boundary — should NOT be rejected for boundary violation
   const insideResult = await applyPatch.invoke(
     {},
     JSON.stringify({
       type: 'create_file',
-      path: 'src/newfile.ts',
+      path: 'newfile.ts',
       diff: '+hello\n',
     }),
     {},
@@ -424,7 +442,7 @@ test.serial('worker write tool rejects paths outside writeBoundary', async (t) =
     {},
     JSON.stringify({
       type: 'create_file',
-      path: 'other/file.ts',
+      path: '../outside/file.ts',
       diff: '+hello\n',
     }),
     {},
@@ -432,6 +450,212 @@ test.serial('worker write tool rejects paths outside writeBoundary', async (t) =
   const outsideParsed = JSON.parse(outsideResult);
   t.true(outsideParsed?.output?.[0]?.error?.includes('outside the allowed write boundary'));
   t.false(outsideParsed?.output?.[0]?.success ?? true);
+
+  const outsideNeedsApproval = await applyPatch.needsApproval(
+    {},
+    {
+      type: 'create_file',
+      path: '../outside/file.ts',
+      diff: '+hello\n',
+    },
+  );
+  t.is(outsideNeedsApproval, false);
+
+  // Batch search_replace: all replacement paths must be boundary-checked
+  const batchOutsideResult = await searchReplace.invoke(
+    {},
+    JSON.stringify({
+      replacements: [
+        {
+          path: 'inside.ts',
+          search_content: '',
+          replace_content: 'ok',
+        },
+        {
+          path: '../outside.ts',
+          search_content: '',
+          replace_content: 'no',
+        },
+      ],
+    }),
+    {},
+  );
+  const batchOutsideParsed = JSON.parse(batchOutsideResult);
+  t.true(batchOutsideParsed?.output?.[0]?.error?.includes('outside the allowed write boundary'));
+  t.false(batchOutsideParsed?.output?.[0]?.success ?? true);
+});
+
+test.serial('worker write tool preserves underlying needsApproval behavior', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-worker-approval-'));
+  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const mockExecutionContext = {
+    getCwd: () => tmpDir,
+    isRemote: () => false,
+    getSSHService: () => undefined,
+  } as unknown as ExecutionContext;
+
+  const settings = createMockSettings({
+    'agent.model': 'mock-model',
+    'agent.provider': 'mock-boundary-worker',
+    'app.editMode': false,
+  });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    executionContext: mockExecutionContext,
+  });
+
+  await manager.run({
+    role: 'worker',
+    task: 'update files',
+    writeBoundary: ['.'],
+  });
+
+  t.is(boundaryWorkerCalls.length, 1);
+  const agent = boundaryWorkerCalls[0].agent;
+  const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
+  t.truthy(createFile);
+
+  const needsApproval = await createFile.needsApproval(
+    {},
+    {
+      path: 'a.ts',
+      content: 'x',
+    },
+  );
+
+  t.is(needsApproval, true);
+});
+
+test.serial('worker filesChanged tracks only successful writes for batch operations', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-worker-files-changed-'));
+  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  registerProvider({
+    id: 'mock-worker-files-changed-provider',
+    label: 'Mock Worker Files Changed Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          const applyPatch = agent.tools.find((tool: any) => tool.name === 'apply_patch');
+          const searchReplace = agent.tools.find((tool: any) => tool.name === 'search_replace');
+
+          await applyPatch.invoke(
+            {},
+            JSON.stringify({
+              operations: [
+                { type: 'create_file', path: 'a.txt', diff: '+hello\n' },
+                { type: 'update_file', path: 'missing.txt', diff: '-x\n+y\n' },
+              ],
+            }),
+            {},
+          );
+
+          await searchReplace.invoke(
+            {},
+            JSON.stringify({
+              replacements: [
+                { path: 'b.txt', search_content: '', replace_content: 'created' },
+                { path: 'missing2.txt', search_content: 'x', replace_content: 'y' },
+              ],
+            }),
+            {},
+          );
+
+          return {
+            status: 'completed',
+            finalOutput: 'Done.',
+            history: [],
+            messages: [],
+          };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-worker-files-changed-provider',
+    }),
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+  });
+
+  const result = await manager.run({ role: 'worker', task: 'do mixed writes' });
+
+  t.deepEqual(new Set(result.filesChanged), new Set(['a.txt', 'b.txt']));
+});
+
+test.serial('worker write lock rejects concurrent create_file for same path without waiting', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-worker-lock-'));
+  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  registerProvider({
+    id: 'mock-worker-lock-provider',
+    label: 'Mock Worker Lock Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
+
+          const [first, second] = await Promise.all([
+            createFile.invoke(
+              {},
+              JSON.stringify({
+                path: 'locked.txt',
+                content: 'one',
+              }),
+              {},
+            ),
+            createFile.invoke(
+              {},
+              JSON.stringify({
+                path: 'locked.txt',
+                content: 'two',
+              }),
+              {},
+            ),
+          ]);
+
+          return {
+            status: 'completed',
+            finalOutput: JSON.stringify({ first, second }),
+            history: [],
+            messages: [],
+          };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-worker-lock-provider',
+    }),
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+  });
+
+  const result = await manager.run({ role: 'worker', task: 'concurrent writes' });
+  const parsed = JSON.parse(result.finalText);
+  const first = JSON.parse(parsed.first);
+  const second = JSON.parse(parsed.second);
+
+  const allErrors = [first?.error, second?.error, first?.output?.[0]?.error, second?.output?.[0]?.error]
+    .filter(Boolean)
+    .join(' ');
+  t.true(allErrors.includes('already being modified'));
 });
 
 // ========== Session isolation ==========

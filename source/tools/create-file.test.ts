@@ -153,3 +153,17 @@ test.serial('formatCommandMessage returns correct base message structure', async
   t.is(messages[0].toolName, 'create_file');
   t.deepEqual(messages[0].toolArgs, callArgs);
 });
+
+test.serial('needsApproval requires approval and handles error when path is outside workspace', async (t) => {
+  await withTempDir(async () => {
+    const tool = createTool(createMockSettingsService({ app: { editMode: true } }));
+    const filePath = '../outside-file.txt';
+
+    const result = await tool.needsApproval({
+      path: filePath,
+      content: 'initial content',
+    });
+
+    t.true(result);
+  });
+});

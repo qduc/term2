@@ -307,3 +307,12 @@ test('wrapNeedsApproval delegates when optional fields arrive as null (OpenAI st
   t.true(called); // must reach the tool's needsApproval (not short-circuited)
   t.true(result); // must respect its decision (true = needs approval)
 });
+
+test('wrapNeedsApproval catches unhandled errors and fails safe to true', async (t) => {
+  const definition = makeDefinition(async () => {
+    throw new Error('Test error');
+  });
+  const wrapped = wrapNeedsApproval(definition);
+
+  t.true(await wrapped(null, { command: 'ls' }));
+});

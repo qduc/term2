@@ -52,17 +52,22 @@ export function createCreateFileToolDefinition(deps: {
     description: 'Create a new file with the specified content. Fails if the file already exists.',
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {
-      const editMode = settingsService.get<boolean>('app.editMode');
-      const { path: filePath } = params;
-      const cwd = executionContext?.getCwd() || process.cwd();
-      const targetPath = resolveWorkspacePath(filePath, cwd);
-      const insideCwd = targetPath.startsWith(cwd + path.sep);
+      try {
+        const editMode = settingsService.get<boolean>('app.editMode');
+        const { path: filePath } = params;
+        const cwd = executionContext?.getCwd() || process.cwd();
+        const targetPath = resolveWorkspacePath(filePath, cwd);
+        const insideCwd = targetPath.startsWith(cwd + path.sep);
 
-      // In edit mode, we auto-approve file creation within the workspace
-      if (editMode && insideCwd) {
-        return false;
+        // In edit mode, we auto-approve file creation within the workspace
+        if (editMode && insideCwd) {
+          return false;
+        }
+        return true;
+      } catch (error) {
+        // Outside workspace or other error => require approval
+        return true;
       }
-      return true;
     },
     execute: async (params) => {
       const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');

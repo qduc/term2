@@ -124,7 +124,12 @@ export function wrapNeedsApproval(definition: {
     if (!definition.parameters.safeParse(normalized).success) {
       return false;
     }
-    return definition.needsApproval(normalized, context);
+    try {
+      return await definition.needsApproval(normalized, context);
+    } catch (error) {
+      // If needsApproval throws, fail-safe to requiring approval
+      return true;
+    }
   };
 }
 

@@ -169,7 +169,7 @@ test('modelSettings.reasoning.effort is forwarded as reasoning_effort', async (t
 test('assistant reasoning_content is passed back with the following tool call', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);
-  const model = await provider.getModel('provider-model');
+  const model = await provider.getModel('claude-model');
 
   await runUnderTrace(() =>
     model.getResponse({

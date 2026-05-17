@@ -13,7 +13,7 @@ function createOpenRouterCacheControlFetch(fetchImpl: FetchLike): FetchLike {
       try {
         const body = JSON.parse(init.body);
         if (Array.isArray(body?.messages)) {
-          addCacheControlToLastTwoMessages(body.messages);
+          addCacheControlToLastTwoMessages(body.messages, body.model);
           return fetchImpl(input, { ...init, body: JSON.stringify(body) });
         }
       } catch {

@@ -147,21 +147,49 @@ function hasAssistantPayload(message: any): boolean {
   return message.content !== null && message.content !== undefined && message.content !== '';
 }
 
-export function addCacheControlToLastTwoMessages(messages: any[]): void {
-  let count = 0;
-  for (let i = messages.length - 1; i >= 0 && count < 2; i--) {
-    const msg = messages[i];
-    if (typeof msg.content === 'string') {
-      msg.content = [{ type: 'text', text: msg.content, cache_control: { type: 'ephemeral' } }];
-    } else if (Array.isArray(msg.content) && msg.content.length > 0) {
-      for (let j = msg.content.length - 1; j >= 0; j--) {
-        if (msg.content[j].type === 'text') {
-          msg.content[j] = { ...msg.content[j], cache_control: { type: 'ephemeral' } };
-          break;
-        }
+function applyCacheControlToMessage(msg: any): void {
+  if (!msg) return;
+  if (typeof msg.content === 'string') {
+    msg.content = [{ type: 'text', text: msg.content, cache_control: { type: 'ephemeral' } }];
+  } else if (Array.isArray(msg.content) && msg.content.length > 0) {
+    for (let j = msg.content.length - 1; j >= 0; j--) {
+      if (msg.content[j].type === 'text') {
+        msg.content[j] = { ...msg.content[j], cache_control: { type: 'ephemeral' } };
+        break;
       }
     }
-    count++;
+  }
+}
+
+export function addCacheControlToLastTwoMessages(messages: any[], modelId?: string): void {
+  if (modelId) {
+    const lowerModelId = modelId.toLowerCase();
+    if (!lowerModelId.includes('anthropic') && !lowerModelId.includes('claude') && !lowerModelId.includes('qwen')) {
+      return;
+    }
+  }
+
+  // 1. Add cache control to all system messages (role == 'system')
+  for (const msg of messages) {
+    if (msg.role === 'system') {
+      applyCacheControlToMessage(msg);
+    }
+  }
+
+  // 2. Add cache control to last message that has role == 'user'
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      applyCacheControlToMessage(messages[i]);
+      break;
+    }
+  }
+
+  // 3. Add cache control to last message that has role == 'tool'
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'tool') {
+      applyCacheControlToMessage(messages[i]);
+      break;
+    }
   }
 }
 
@@ -311,8 +339,8 @@ export function buildMessagesFromRequest(req: ModelRequest, modelId?: string, lo
     }
   }
 
-  if (modelId && isAnthropicModel(modelId)) {
-    addCacheControlToLastTwoMessages(messages);
+  if (modelId && (isAnthropicModel(modelId) || modelId.toLowerCase().includes('qwen'))) {
+    addCacheControlToLastTwoMessages(messages, modelId);
   }
 
   return messages.filter(hasAssistantPayload);

@@ -202,7 +202,7 @@ function createOpenAICompatibleFetch(
           body.messages = sanitizeOpenAICompatibleMessages(
             preserveReasoningContentForOpenAICompatibleMessages(mergeAssistantMessages(body.messages)),
           );
-          addCacheControlToLastTwoMessages(body.messages);
+          addCacheControlToLastTwoMessages(body.messages, body.model);
           changed = true;
         }
 
@@ -294,7 +294,7 @@ function createCacheControlFetch(fetchImpl: typeof fetch | undefined): typeof fe
       try {
         const body = JSON.parse(init.body);
         if (Array.isArray(body?.messages)) {
-          addCacheControlToLastTwoMessages(body.messages);
+          addCacheControlToLastTwoMessages(body.messages, body.model);
           return fetchImpl(input, { ...init, body: JSON.stringify(body) });
         }
       } catch {

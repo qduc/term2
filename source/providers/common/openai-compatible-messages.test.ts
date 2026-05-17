@@ -57,16 +57,18 @@ test('buildMessagesFromRequest() concatenates mixed output_text and text content
   t.deepEqual(messages, [{ role: 'assistant', content: 'Part one. Part two.' }]);
 });
 
-test('addCacheControlToLastTwoMessages() converts string content to array with cache_control on last 2 messages', (t) => {
+test('addCacheControlToLastTwoMessages() adds cache control to system, last user, and last tool messages', (t) => {
   const messages = [
-    { role: 'user', content: 'first' },
-    { role: 'assistant', content: 'second' },
-    { role: 'user', content: 'third' },
+    { role: 'system', content: 'sys1' },
+    { role: 'user', content: 'user1' },
+    { role: 'tool', content: 'tool1' },
+    { role: 'user', content: 'user2' },
   ];
   addCacheControlToLastTwoMessages(messages);
-  t.deepEqual(messages[0].content, 'first');
-  t.deepEqual(messages[1].content, [{ type: 'text', text: 'second', cache_control: { type: 'ephemeral' } }]);
-  t.deepEqual(messages[2].content, [{ type: 'text', text: 'third', cache_control: { type: 'ephemeral' } }]);
+  t.deepEqual(messages[0].content, [{ type: 'text', text: 'sys1', cache_control: { type: 'ephemeral' } }]);
+  t.deepEqual(messages[1].content, 'user1'); // not last user
+  t.deepEqual(messages[2].content, [{ type: 'text', text: 'tool1', cache_control: { type: 'ephemeral' } }]); // last tool
+  t.deepEqual(messages[3].content, [{ type: 'text', text: 'user2', cache_control: { type: 'ephemeral' } }]); // last user
 });
 
 test('addCacheControlToLastTwoMessages() adds cache_control to last text block in array content', (t) => {
@@ -75,22 +77,22 @@ test('addCacheControlToLastTwoMessages() adds cache_control to last text block i
     { role: 'user', content: [{ type: 'text', text: 'world' }] },
   ];
   addCacheControlToLastTwoMessages(messages);
-  t.deepEqual(messages[0].content, [{ type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } }]);
-  t.deepEqual(messages[1].content, [{ type: 'text', text: 'world', cache_control: { type: 'ephemeral' } }]);
+  t.deepEqual(messages[0].content, [{ type: 'text', text: 'hello' }]); // not last user
+  t.deepEqual(messages[1].content, [{ type: 'text', text: 'world', cache_control: { type: 'ephemeral' } }]); // last user
 });
 
-test('addCacheControlToLastTwoMessages() leaves earlier messages untouched', (t) => {
+test('addCacheControlToLastTwoMessages() leaves other messages untouched', (t) => {
   const messages = [
     { role: 'user', content: 'untouched' },
     { role: 'user', content: 'untouched2' },
-    { role: 'assistant', content: 'marked1' },
-    { role: 'user', content: 'marked2' },
+    { role: 'assistant', content: 'assistant' },
+    { role: 'user', content: 'marked' },
   ];
   addCacheControlToLastTwoMessages(messages);
   t.is(messages[0].content, 'untouched');
   t.is(messages[1].content, 'untouched2');
-  t.deepEqual(messages[2].content, [{ type: 'text', text: 'marked1', cache_control: { type: 'ephemeral' } }]);
-  t.deepEqual(messages[3].content, [{ type: 'text', text: 'marked2', cache_control: { type: 'ephemeral' } }]);
+  t.is(messages[2].content, 'assistant');
+  t.deepEqual(messages[3].content, [{ type: 'text', text: 'marked', cache_control: { type: 'ephemeral' } }]);
 });
 
 test('addCacheControlToLastTwoMessages() does nothing on empty array', (t) => {
@@ -127,4 +129,49 @@ test('buildMessagesFromRequest() omits assistant messages without content or too
     { role: 'user', content: 'read package json' },
     { role: 'user', content: 'retry after failed hallucinated tool call' },
   ]);
+});
+
+test('addCacheControlToLastTwoMessages() filters by modelId correctly', (t) => {
+  const testCases = [
+    { modelId: 'anthropic/claude-3-5-sonnet', shouldCache: true },
+    { modelId: 'claude-3-5-haiku', shouldCache: true },
+    { modelId: 'qwen/qwen-2.5-coder-32b', shouldCache: true },
+    { modelId: 'gpt-4o', shouldCache: false },
+    { modelId: 'meta-llama/llama-3.1-405b', shouldCache: false },
+    { modelId: 'gemini-1.5-pro', shouldCache: false },
+  ];
+
+  for (const { modelId, shouldCache } of testCases) {
+    const messages = [
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'world' },
+    ];
+    addCacheControlToLastTwoMessages(messages, modelId);
+    if (shouldCache) {
+      t.deepEqual(messages[0].content, [{ type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } }]);
+      t.deepEqual(messages[1].content, 'world'); // assistant does not get cache control under new rules
+    } else {
+      t.deepEqual(messages[0].content, 'hello');
+      t.deepEqual(messages[1].content, 'world');
+    }
+  }
+});
+
+test('buildMessagesFromRequest() adds cache control for Qwen models', (t) => {
+  const messages = buildMessagesFromRequest(
+    {
+      input: [
+        { role: 'user', type: 'message', content: 'hello' },
+        {
+          role: 'assistant',
+          type: 'message',
+          content: [{ type: 'text', text: 'hi' }],
+        },
+      ],
+    } as any,
+    'qwen/qwen-2.5-coder',
+  );
+
+  t.deepEqual(messages[0].content, [{ type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } }]);
+  t.is(messages[1].content, 'hi');
 });

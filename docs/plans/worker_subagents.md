@@ -16,7 +16,7 @@ Worker subagents need a stronger execution model: independent agent sessions, ex
 ## Goals
 
 - Let the parent agent delegate bounded work to specialized subagents.
-- Support read-only explorer/reviewer subagents and edit-capable worker subagents.
+- Support read-only explorer/mentor/researcher subagents and edit-capable worker subagents.
 - Keep subagent permissions explicit and auditable.
 - Reuse existing provider, runner, tool, approval, logging, and conversation infrastructure where practical.
 - Preserve user control over risky operations such as shell commands and file writes.
@@ -57,8 +57,9 @@ Initial built-in roles:
 | `explorer` | read-only workspace tools | Locate relevant files, summarize structure, answer codebase questions. |
 | `worker` | scoped read/write tools | Implement a bounded change in assigned files or directories. |
 | `researcher` | web tools, optionally read-only workspace tools | Look up external docs or current information. |
+| `mentor` | read-only advisory tools, or no tools initially | Backward-compatible preset for the existing `ask_mentor` behavior. |
 
-The role controls default instructions and default tool scope. A parent tool call may further restrict the scope, but should not broaden beyond the role default unless explicitly allowed by settings.
+The role controls default instructions and default tool scope. A parent tool call may further restrict the scope, but should not broaden beyond the role definition.
 
 ## User-Facing Tool API
 
@@ -68,8 +69,9 @@ Start with one blocking tool. The parent agent calls it and waits for completion
 
 ```typescript
 run_subagent({
-  role: 'explorer' | 'worker' | 'researcher' | string,
+  role: 'explorer' | 'worker' | 'researcher' | 'mentor' | string,
   task: string,
+  writeBoundary?: string[],
 })
 ```
 
@@ -86,7 +88,7 @@ Behavior:
 Once the synchronous version works, split lifecycle control into separate tools:
 
 ```typescript
-spawn_subagent({ role, task, context, allowedTools, writeScope })
+spawn_subagent({ role, task, writeBoundary })
 wait_subagent({ agentId, timeoutMs? })
 send_subagent({ agentId, message })
 abort_subagent({ agentId })
@@ -102,10 +104,21 @@ export interface SubagentResult {
   role: string;
   status: 'completed' | 'failed' | 'cancelled';
   finalText: string;
+  filesChanged: string[];
+  toolsUsed: Array<{
+    toolName: string;
+    count: number;
+  }>;
   usage?: NormalizedUsage;
   error?: string;
 }
 ```
+
+`task` is the full prompt passed from the parent to the subagent. It should include any relevant context, constraints, and expected output format.
+
+`finalText` is the subagent's final answer only. It must exclude intermediate assistant text emitted before or between tool calls, reasoning summaries, and tool transcripts. If the subagent used tools, `finalText` should be taken from the assistant output after the last tool result/tool-call continuation. This prevents in-progress narration from polluting the parent agent context.
+
+`SubagentResult` should stay compact because it is returned to the parent agent and may enter the parent model context. It should not include every tool call transcript. Detailed tool activity belongs in real-time subagent events for the UI/logging layer.
 
 ## Architecture
 
@@ -114,19 +127,21 @@ export interface SubagentResult {
 Add `source/services/subagents/types.ts`:
 
 ```typescript
-export type SubagentRole = 'explorer' | 'worker' | 'researcher' | string;
+export type SubagentRole = 'explorer' | 'worker' | 'researcher' | 'mentor' | string;
 
 export interface SubagentRequest {
   role: SubagentRole;
   task: string;
+  writeBoundary?: string[];
 }
 
 export interface SubagentDefinition {
   role: SubagentRole;
   name: string;
   instructions: string;
-  defaultAllowedTools: string[];
+  canRead: boolean;
   canWrite: boolean;
+  canSearchWeb: boolean;
   canRunShell: boolean;
 }
 ```
@@ -142,7 +157,7 @@ Responsibilities:
 - Build scoped tool definitions.
 - Create `Agent` instances with the selected provider/model/reasoning settings.
 - Run subagents through the provider runner.
-- Collect stream output, command messages, files changed, and usage.
+- Collect final output, tool activity metadata, files changed, and usage.
 - Route cancellation and approval state.
 
 Suggested interface:
@@ -175,13 +190,46 @@ class SubagentSession {
 
 Each subagent session owns its own `ConversationStore` and `previousResponseId`. Histories must not be shared between subagents or with the parent.
 
+## Provider Run Mode
+
+Subagent provider calls should default to non-streaming runs:
+
+```typescript
+{
+  stream: false,
+  maxTurns: request.maxTurns ?? roleDefaultMaxTurns
+}
+```
+
+The UI does not need to render subagent model text token-by-token. The subagent's final written response is returned through `SubagentResult.finalText` after completion.
+
+When extracting `finalText`, discard assistant text that occurred before the final tool-call cycle completed. Only the final assistant message after the last tool result should be returned to the parent. If the run completed without tool calls, use the final assistant output normally.
+
+Real-time UI updates for tools should not depend on model text streaming. Instead, the subagent tool wrapper should emit lifecycle events before and after each tool executes:
+
+- `subagent_tool_started`
+- `subagent_command_message`
+
+Use streaming subagent runs only if a future UI explicitly wants live subagent text or if an SDK/provider limitation requires streaming to surface approval interruptions correctly.
+
 ## Tool Scoping
 
 Subagent tools should be constructed from existing tool factories, but filtered and wrapped by a subagent policy.
 
+Role frontmatter should describe capabilities, not concrete tool names. The manager maps capabilities to the current concrete tools:
+
+| Capability | Concrete tools |
+| --- | --- |
+| `canRead` | `read_file`, `grep`, `find_files`, `read_code_outline`, `code_context_search` |
+| `canWrite` | `apply_patch`, `search_replace`, `create_file` |
+| `canSearchWeb` | `web_search`, `web_fetch` |
+| `canRunShell` | `shell` |
+
+This keeps role definitions stable if the tool implementation changes.
+
 ### Read-Only Tools
 
-Useful for `explorer` and `researcher`:
+Useful for `explorer`, `mentor`, and optionally `researcher`:
 
 - `read_file`
 - `grep`
@@ -193,17 +241,28 @@ Useful for `explorer` and `researcher`:
 
 ### Edit Tools
 
-Only for `worker` and only inside `writeScope`:
+Only for `worker`, and only inside the allowed workspace/write boundary:
 
 - `apply_patch`
 - `search_replace`
 - `create_file`
 
-The write policy should reject edits outside the explicit scope before the underlying tool runs.
+The write policy should reject edits outside the workspace and outside any explicit `writeBoundary` before the underlying tool runs. `writeBoundary` is a permission boundary, not a concurrency contract.
 
 ### Shell Tool
 
-Follow the same shell approval policy as the main agent.
+Follow the same shell approval policy as the main agent, but only for roles whose definitions explicitly allow shell access.
+
+Default shell policy by role:
+
+| Role | Shell access |
+| --- | --- |
+| `explorer` | No shell by default. |
+| `worker` | No shell by default. Workers edit through scoped edit tools. |
+| `researcher` | No shell by default. |
+| `mentor` | No shell. |
+
+Custom role definitions may enable shell access. Shell-capable subagents may use the same shell auto-approval policy as the main agent.
 
 ## Approval Model
 
@@ -241,19 +300,29 @@ The UI then needs to show which subagent is asking and route the decision back t
 
 ## Edit Isolation
 
-Subagents can conflict with the parent agent or with each other. The minimum safe policy:
+Subagents can conflict with the parent agent or with each other. Directory-level scopes are too coarse to solve this: real tasks often span multiple folders, and two workers may touch different files inside overlapping folders without actually conflicting.
 
-- Every edit-capable subagent must declare `writeScope`.
-- Edit tools must verify target paths are inside `writeScope`.
-- Use file locks for write tools so two sessions cannot modify the same file concurrently.
+Use two separate concepts:
+
+- `writeBoundary`: optional permission boundary that limits where a worker may write. Defaults to the workspace root for edit-capable workers.
+- File claim/lock: dynamic, concrete file-level ownership acquired immediately before a write operation.
+
+Minimum safe policy:
+
+- Edit tools must verify target paths are inside the workspace and any explicit `writeBoundary`.
+- Edit tools must acquire a file-level lock before modifying a file.
+- If another session already holds the file lock, the write is rejected with a conflict result instead of waiting indefinitely.
+- Workers may touch files across multiple folders as long as each file passes the boundary check and lock acquisition.
 - The parent prompt should tell workers not to revert changes made by others.
-- Worker final output must list changed files.
+- Worker final output and `SubagentResult.filesChanged` must list changed files.
+
+For async/parallel workers, the parent should still try to assign non-overlapping responsibilities, but correctness should rely on file-level conflict detection, not folder-level disjointness.
 
 Potential later improvement: run each worker in a separate git worktree or branch and merge patches after review. That is safer for parallel edits but heavier to implement.
 
 ## Conversation Events
 
-Add subagent-aware stream events in `source/services/conversation-events.ts`:
+Add subagent-aware events in `source/services/conversation-events.ts`:
 
 ```typescript
 export interface SubagentStartedEvent {
@@ -261,14 +330,6 @@ export interface SubagentStartedEvent {
   agentId: string;
   role: string;
   task: string;
-}
-
-export interface SubagentTextDeltaEvent {
-  type: 'subagent_text_delta';
-  agentId: string;
-  role: string;
-  delta: string;
-  fullText?: string;
 }
 
 export interface SubagentToolStartedEvent {
@@ -293,34 +354,49 @@ export interface SubagentCompletedEvent {
 }
 ```
 
-The MVP may collect these internally and show a compact command message for `run_subagent`. The UI should eventually render subagent activity as collapsible nested output.
+Subagent tool activity should be emitted in real time through events such as `subagent_tool_started` and `subagent_command_message`. The terminal UI can render these as nested or collapsible subagent activity without waiting for the final result.
 
-## Settings
+The parent agent should receive only the compact `SubagentResult`, not the full event stream. If the parent needs details, the subagent should include only task-relevant conclusions in the final post-tool `finalText`.
 
-Add general subagent settings while preserving mentor settings for compatibility.
+## Role Definitions
 
-```typescript
-subagents: {
-  enabled: boolean;
-  defaultModel?: string;
-  defaultProvider?: string;
-  defaultReasoningEffort: 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-  maxConcurrent: number;
-  roles: Record<string, {
-    model?: string;
-    provider?: string;
-    reasoningEffort?: string;
-    allowedTools?: string[];
-    instructions?: string;
-  }>;
-}
+Do not add a new persistent subagent settings tree for the initial implementation. Most subagent behavior should live in role definition markdown files with frontmatter, for example `source/prompts/subagents/worker.md`.
+
+Example:
+
+```markdown
+---
+name: Worker
+model: inherit
+provider: inherit
+reasoningEffort: inherit
+canRead: true
+canWrite: true
+canSearchWeb: false
+canRunShell: false
+maxTurns: 20
+---
+
+You are a worker subagent...
 ```
+
+Resolution rules:
+
+Recommended precedence, highest to lowest:
+
+1. Runtime request restrictions, such as `writeBoundary`, may only narrow permissions.
+2. Role markdown frontmatter defines model/provider/reasoning, capability booleans, and max turns.
+3. Main agent settings are inherited when a frontmatter value is `inherit` or omitted.
+
+Frontmatter can define maximum permissions, but task-specific write boundaries should come from the parent request when narrower boundaries are known. Actual overlap between workers should be handled through file-level locks and changed-file reporting, because folder boundaries are often too imprecise.
 
 Compatibility path:
 
 - Keep `agent.mentorModel`, `agent.mentorProvider`, and `agent.mentorReasoningEffort`.
-- Implement `ask_mentor` as a thin alias over `run_subagent({ role: 'worker', ... })`.
+- Implement `ask_mentor` as a thin alias over `run_subagent({ role: 'mentor', ... })`.
 - Keep `/mentor` behavior initially, but internally route through the subagent infrastructure.
+
+The existing mentor settings are a compatibility bridge, not a pattern for adding new subagent settings. New roles should be configured through role markdown files.
 
 ## Prompting
 
@@ -330,6 +406,7 @@ Add role prompt files under `source/prompts/subagents/`:
 source/prompts/subagents/explorer.md
 source/prompts/subagents/worker.md
 source/prompts/subagents/researcher.md
+source/prompts/subagents/mentor.md
 ```
 
 Every subagent prompt should include:
@@ -338,7 +415,7 @@ Every subagent prompt should include:
 - Available tools.
 - Explicit task.
 - Context supplied by the parent.
-- Workspace/write scope.
+- Workspace/write boundary.
 - Final report format.
 - Instruction not to assume access to hidden parent reasoning.
 - Instruction not to revert unrelated or external changes.
@@ -366,17 +443,25 @@ Worker prompt requirements:
 - Support `explorer` and `researcher`.
 - Give them only read-only and/or web tools.
 - Return `SubagentResult`.
-- Add command-message formatting for subagent runs.
+- Emit real-time subagent events for tool activity.
+- Keep the final `SubagentResult` compact so it does not bloat parent context.
 
 ### Phase 3: Add Edit-Capable Worker
 
 - Add `worker` role.
+- Allow direct edits inside the workspace and any explicit `writeBoundary`.
+- Wrap edit tools with workspace/boundary validation.
+- Acquire file-level locks before each write.
+- Track changed files and return them in `SubagentResult.filesChanged`.
+- Use file locks around edit operations.
+- Add tests for allowed and rejected write paths.
 
 ### Phase 4: Async and Parallel Subagents (postponed)
 
 - Add `spawn_subagent`, `wait_subagent`, `send_subagent`, and `abort_subagent`.
 - Add `maxConcurrent`.
-- Prevent overlapping write scopes unless explicitly serialized.
+- Prevent simultaneous writes to the same file through file locks.
+- Report file conflicts back to the parent so it can retry, serialize, or reassign work.
 - Add subagent lifecycle UI events.
 
 ## Testing Strategy
@@ -388,6 +473,9 @@ High-value test cases:
 - `run_subagent` rejects unknown roles when custom roles are disabled.
 - Subagent receives only tools allowed by role and request.
 - Read-only roles cannot access edit tools.
+- Worker edit outside the workspace or explicit `writeBoundary` is rejected before the tool executes.
+- Concurrent writes to the same file are rejected through file locks.
+- Changed files are reported in `SubagentResult.filesChanged`.
 - Subagent history is isolated between sessions.
 - Provider/model changes do not leak old subagent state.
 - `ask_mentor` remains backward compatible.
@@ -407,11 +495,11 @@ Focused test locations:
 ## Open Decisions
 
 - Whether the first edit worker should apply patches directly or return patch proposals for the parent to apply. -> directly
-- Whether subagents should use the main model by default or require an explicit `subagents.defaultModel`. -> each subagent will have its definition in an md file with frontmatter format. The model will be specify there, default to 'inherit' if ommitted.
-- Whether `/mentor` should remain a distinct mode or become a preset over `worker` subagents. -> `/mentor` will be a preset subagents.
+- Whether subagents should use the main model by default or require an explicit subagent setting. -> no new setting. Each subagent has a markdown role definition with frontmatter. Model/provider/reasoning default to `inherit` when omitted.
+- Whether `/mentor` should remain a distinct mode or become a preset over subagents. -> `/mentor` will be a `mentor` preset subagent.
 - Whether async subagents should be visible as collapsible nested UI output or summarized as command messages until completion. -> keep it simple for now.
-- Whether shell-capable subagents should be allowed to use the shell auto-approval policy by default. -> yes.
-- Whether parallel workers should require disjoint `writeScope` declarations up front. -> The main agent is responsible for ensuring that the write scope is disjoint when prompting subagents. (phase 4)
+- Whether shell-capable subagents should be allowed to use the shell auto-approval policy by default. -> yes, but only for roles that explicitly allow shell.
+- Whether parallel workers should require disjoint write boundaries up front. -> no. The main agent should assign non-overlapping responsibilities when possible, but enforcement should happen through file-level locks and conflict reporting. (phase 4)
 
 ## Recommended MVP
 
@@ -420,7 +508,7 @@ Build the synchronous path first:
 1. Generalize `MentorSession` into `SubagentSession`.
 2. Add `SubagentManager.run`.
 3. Reimplement `ask_mentor` on top of `SubagentManager`.
-4. Add `run_subagent` for read-only `explorer` and `reviewer`.
-5. Add `worker` only after write-scope validation and changed-file reporting are in place.
+4. Add `run_subagent` for read-only `explorer`, `researcher`, and `mentor`.
+5. Add `worker` only after workspace/boundary validation, file locking, and changed-file reporting are in place.
 
 This delivers useful worker delegation without forcing the UI and approval system to handle multiple active agents immediately.

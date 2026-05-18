@@ -1,3 +1,23 @@
+## [0.5.0] - 2026-05-18
+
+### Features
+- **Subagents**: Added subagent support with real-time activity rendering, token usage tracking, and dynamic role descriptions
+- **Clipboard command**: Added `/clipboard` command with async support
+- **Reasoning cancellation**: Added cancellation and finalize handling for reasoning deltas
+
+### Bug Fixes
+- Fixed blank lines being stranded mid-history during chunked reasoning
+- Fixed markdown heading depths and spacing being lost in streaming/continuation messages
+- Fixed double-counting in token usage tracking for multi-turn tasks
+- Fixed token usage counting across streamed turns
+
+### Improvements
+- Improved search-replace tool to reject identical search and replace content
+- Improved command safety: external paths now require approval; temporary directories handled safely
+- Replaced `bash-parser` with `unbash` for more reliable command parsing and safety
+- Improved prompt cache control targeting for compatible models
+- Token usage now merged across auto-approved and continuation events
+
 ## [0.4.0] - 2026-05-16
 
 ### Features

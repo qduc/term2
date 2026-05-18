@@ -101,10 +101,13 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
   const seenBannerIdsRef = useRef<Set<string>>(new Set(bannerItems));
   const committedMessageSignaturesRef = useRef<Map<string, string>>(new Map());
   const candidateMessageSignaturesRef = useRef<Map<string, string>>(new Map());
+  const previousActiveMessageIdsRef = useRef<Set<string>>(new Set());
 
   const { staticItems, deferredHistory } = useMemo(() => {
     const additions: StaticItem[] = [];
     const deferred: MessageLike[] = [];
+    const hasActiveMessages = active.length > 0;
+    const previousActiveMessageIds = previousActiveMessageIdsRef.current;
 
     for (const bannerId of bannerItems) {
       if (seenBannerIdsRef.current.has(bannerId)) {
@@ -136,22 +139,26 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
         continue;
       }
 
-      if (candidateMessageSignaturesRef.current.get(message.id) === signature) {
-        committedMessageSignaturesRef.current.set(message.id, signature);
-        additions.push({ kind: 'message', id: message.id, message });
+      const shouldCommitImmediately = hasActiveMessages || previousActiveMessageIds.has(message.id);
+      if (!shouldCommitImmediately && candidateMessageSignaturesRef.current.get(message.id) !== signature) {
+        candidateMessageSignaturesRef.current.set(message.id, signature);
+        deferred.push(message);
         continue;
       }
 
-      candidateMessageSignaturesRef.current.set(message.id, signature);
-      deferred.push(message);
+      committedMessageSignaturesRef.current.set(message.id, signature);
+      candidateMessageSignaturesRef.current.delete(message.id);
+      additions.push({ kind: 'message', id: message.id, message });
     }
 
     if (additions.length > 0) {
       staticItemsRef.current = [...staticItemsRef.current, ...additions];
     }
 
+    previousActiveMessageIdsRef.current = new Set(active.map((message) => message.id));
+
     return { staticItems: staticItemsRef.current, deferredHistory: deferred };
-  }, [bannerItems, history]);
+  }, [active, bannerItems, history]);
 
   const dynamicItems = useMemo(() => [...deferredHistory, ...active], [deferredHistory, active]);
 

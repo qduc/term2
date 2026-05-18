@@ -116,6 +116,27 @@ test('MessageList moves a message from active to static without duplicating it',
   t.is(countOccurrences(output, 'npm test'), 1);
 });
 
+test('MessageList moves a completed command before active reasoning directly into static history', (t) => {
+  const renderer = render(
+    <MessageList
+      messages={[{ id: 'running-command', sender: 'command', status: 'running', command: 'npm test', output: '' }]}
+    />,
+  );
+
+  renderer.rerender(
+    <MessageList
+      messages={[
+        { id: 'running-command', sender: 'command', status: 'completed', command: 'npm test', output: 'passed' },
+        { id: 'active-reasoning', sender: 'reasoning', text: 'thinking' },
+      ]}
+    />,
+  );
+
+  const output = renderer.lastFrame() ?? '';
+  t.is(countOccurrences(output, 'npm test'), 1);
+  t.is(countOccurrences(output, 'thinking'), 1);
+});
+
 test('MessageList preserves spaces in bot text immediately before a command message', (t) => {
   const messages = [
     {

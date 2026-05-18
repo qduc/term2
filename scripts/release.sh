@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -o pipefail
 
 # Colors
 GREEN='\033[0;32m'
@@ -219,13 +220,17 @@ else
         - ...
         "
 
-        # Call Claude and filter out markdown code blocks or stray comments
-        CHANGELOG_ENTRY=$(echo "$PROMPT" | claude --model haiku | sed -E '/^ *```/d' | sed -E 's/<\!--.*-->//g')
+        # Call Claude and fail fast if it does not run successfully
+        if ! CHANGELOG_ENTRY=$(echo "$PROMPT" | claude --model sonnet --effort low | sed -E '/^ *```/d' | sed -E 's/<\!--.*-->//g'); then
+            echo -e "${RED}Error: Failed to generate changelog with Claude.${NC}"
+            exit 1
+        fi
 
         echo -e "${BLUE}Generated Changelog:${NC}"
         echo "$CHANGELOG_ENTRY"
         echo "--------------------------------"
         read -p "Press Enter to accept and continue, or Ctrl+C to abort..."
+
     fi
 
     # 5. Apply changes - Generate new CHANGELOG.md

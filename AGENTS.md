@@ -89,8 +89,9 @@ After making code changes, you MUST run tests appropriate to the scope of the ta
 
 ```bash
 npm test              # Run all tests
-npm test:verbose -- dist/<path to JS test file>  # Run test for a single file, compiled JS only
-npx prettier --check . # Format check
+npm test:verbose -- <source/*.test.ts>           # Run a single .ts source test
+npm test:verbose -- dist/<path to compiled JS test file>  # Use for .tsx tests; dist paths omit the leading source/
+npx prettier --write <file1, file2, file3> # Fix formatting issues in files you changed
 ```
 
 ### Unit Test Guidelines
@@ -150,7 +151,7 @@ npx prettier --check . # Format check
 - **Diff generation?** → `source/utils/diff.ts`
 - **Modifying configuration?** → Edit `~/Library/Logs/term2-nodejs/settings.json` (macOS) or `~/.local/state/term2-nodejs/settings.json` (Linux), or use environment variables / CLI flags
 - **Web search configuration?** → `source/services/settings-service.ts` (webSearch settings), `source/providers/web-search/registry.ts` (provider lookup), environment variable `TAVILY_API_KEY`
-- **Testing?** → See `test/` directory for test utilities, test files are co-located with source files. **Note**: `npm test` does not support file arguments due to output filtering. Use `npm run test:verbose -- <file>` or `npx ava <file>` to run specific tests.
+- **Testing?** → See `test/` directory for test utilities, test files are co-located with source files. **Note**: `npm test` does not support file arguments due to output filtering. Use `npm run test:verbose -- <file>` or `npx ava <file>` to run specific tests. `.ts` source tests can be run directly. `.tsx` source tests should be run via compiled files in `dist/`, where the leading `source/` segment is stripped.
 - **SSH mode?** → `source/services/ssh-service.ts` (SSH connection and operations), `source/services/execution-context.ts` (local/remote abstraction)
 
 ## Resources

@@ -6,6 +6,7 @@ import {
   extractUsage,
   formatFooterUsage,
   formatSessionTokenUsage,
+  formatSessionUsageBreakdown,
   normalizeUsage,
 } from './token-usage.js';
 
@@ -227,4 +228,45 @@ test('formatSessionTokenUsage matches slash command output', (t) => {
 
   t.is(formatSessionTokenUsage({ prompt_tokens: 100, completion_tokens: 20 }), 'Token usage: 100 input, 20 output');
   t.is(formatSessionTokenUsage(null), 'Token usage: 0 input, 0 output');
+});
+
+test('formatSessionUsageBreakdown shows breakdown when subagent usage exists', (t) => {
+  const main: any = { prompt_tokens: 6827, completion_tokens: 268, cache_read_tokens: 6656 };
+  const sub: any = { prompt_tokens: 1000, completion_tokens: 50, cache_read_tokens: 500 };
+
+  const result = formatSessionUsageBreakdown(main, sub);
+  const lines = result.split('\n');
+
+  t.is(lines.length, 3);
+  t.is(lines[0], 'Main: 6,827 input (6,656 cached), 268 output');
+  t.is(lines[1], 'Subagents: 1,000 input (500 cached), 50 output');
+  t.is(lines[2], 'Total: 7,827 input (7,156 cached), 318 output');
+});
+
+test('formatSessionUsageBreakdown falls back to single line when no subagent usage', (t) => {
+  const main: any = { prompt_tokens: 6827, completion_tokens: 268, cache_read_tokens: 6656 };
+
+  t.is(formatSessionUsageBreakdown(main, null), 'Token usage: 6,827 input (6,656 cached), 268 output');
+  t.is(formatSessionUsageBreakdown(main, undefined), 'Token usage: 6,827 input (6,656 cached), 268 output');
+  t.is(formatSessionUsageBreakdown(main, {}), 'Token usage: 6,827 input (6,656 cached), 268 output');
+});
+
+test('formatSessionUsageBreakdown single-line fallback when subagent usage is all zeros', (t) => {
+  const main: any = { prompt_tokens: 100, completion_tokens: 20 };
+  const sub: any = { prompt_tokens: 0, completion_tokens: 0 };
+
+  t.is(formatSessionUsageBreakdown(main, sub), 'Token usage: 100 input, 20 output');
+});
+
+test('formatSessionUsageBreakdown always shows three lines when subagent has non-zero usage', (t) => {
+  const main: any = { prompt_tokens: 100, completion_tokens: 20 };
+  const sub: any = { prompt_tokens: 0, completion_tokens: 5 };
+
+  const result = formatSessionUsageBreakdown(main, sub);
+  const lines = result.split('\n');
+
+  t.is(lines.length, 3);
+  t.is(lines[0], 'Main: 100 input, 20 output');
+  t.is(lines[1], 'Subagents: 0 input, 5 output');
+  t.is(lines[2], 'Total: 100 input, 25 output');
 });

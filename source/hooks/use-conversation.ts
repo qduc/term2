@@ -71,10 +71,12 @@ export const useConversation = ({
   conversationService,
   loggingService,
   usageAccumulator,
+  subagentUsageAccumulator,
 }: {
   conversationService: ConversationService;
   loggingService: ILoggingService;
   usageAccumulator?: UsageAccumulator;
+  subagentUsageAccumulator?: UsageAccumulator;
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [waitingForApproval, setWaitingForApproval] = useState<boolean>(false);
@@ -107,6 +109,18 @@ export const useConversation = ({
 
     return approvedMessage;
   }, []);
+
+  const createOnEventWithSubagentTracking = useCallback(
+    (baseOnEvent: (event: any) => void) => {
+      return (event: any) => {
+        baseOnEvent(event);
+        if (subagentUsageAccumulator && event?.type === 'subagent_completed' && event?.result?.usage) {
+          subagentUsageAccumulator.add(event.result.usage);
+        }
+      };
+    },
+    [subagentUsageAccumulator],
+  );
 
   const applyServiceResult = useCallback(
     (result: ConversationTerminal | null, textWasFlushed: boolean, latestStreamedUsage?: NormalizedUsage | null) => {
@@ -192,7 +206,7 @@ export const useConversation = ({
 
       try {
         const result = await conversationService.sendMessage(turn, {
-          onEvent: applyConversationEvent,
+          onEvent: createOnEventWithSubagentTracking(applyConversationEvent),
         });
 
         applyConversationEvent({ type: 'final', finalText: '' } as any);
@@ -246,7 +260,14 @@ export const useConversation = ({
         // and should only be cleared by handleApprovalDecision or stopProcessing
       }
     },
-    [conversationService, applyServiceResult, appendMessages, trimMessages, loggingService],
+    [
+      conversationService,
+      applyServiceResult,
+      appendMessages,
+      trimMessages,
+      loggingService,
+      createOnEventWithSubagentTracking,
+    ],
   );
 
   const handleApprovalDecision = useCallback(
@@ -296,7 +317,7 @@ export const useConversation = ({
           // Send a continuation message to resume work
           const continuationMessage = 'Please continue with your previous task.';
           const result = await conversationService.sendMessage(continuationMessage, {
-            onEvent: applyConversationEvent,
+            onEvent: createOnEventWithSubagentTracking(applyConversationEvent),
           });
 
           applyConversationEvent({ type: 'final', finalText: '' } as any);
@@ -350,7 +371,7 @@ export const useConversation = ({
 
       try {
         const result = await conversationService.handleApprovalDecision(answer, rejectionReason, {
-          onEvent: applyConversationEvent,
+          onEvent: createOnEventWithSubagentTracking(applyConversationEvent),
         });
         applyConversationEvent({ type: 'final', finalText: '' } as any);
         applyServiceResult(result, streamingState.textWasFlushed, streamingState.latestUsage);
@@ -396,6 +417,7 @@ export const useConversation = ({
       appendMessages,
       trimMessages,
       loggingService,
+      createOnEventWithSubagentTracking,
     ],
   );
 
@@ -409,7 +431,8 @@ export const useConversation = ({
     setIsProcessing(false);
     setLastUsage(null);
     usageAccumulator?.reset();
-  }, [conversationService, usageAccumulator]);
+    subagentUsageAccumulator?.reset();
+  }, [conversationService, usageAccumulator, subagentUsageAccumulator]);
 
   const stopProcessing = useCallback(() => {
     conversationService.abort();
@@ -481,6 +504,8 @@ export const useConversation = ({
     [appendMessages],
   );
 
+  const getSubagentUsage = useCallback(() => subagentUsageAccumulator?.get() ?? null, [subagentUsageAccumulator]);
+
   return {
     messages,
     lastUsage,
@@ -498,5 +523,6 @@ export const useConversation = ({
     setTemperature,
     addSystemMessage,
     addShellMessage,
+    getSubagentUsage,
   };
 };

@@ -27,6 +27,7 @@ import { createSearchReplaceToolDefinition } from '../../tools/search-replace.js
 import { createCreateFileToolDefinition } from '../../tools/create-file.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { trimToolOutput } from '../../utils/trim-tool-output.js';
+import { extractUsage } from '../../utils/token-usage.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { tryAcquireFileLock } from '../../tools/file-locks.js';
 
@@ -388,6 +389,7 @@ export class SubagentManager {
       finalText: extractFinalText(result),
       filesChanged: [],
       toolsUsed: [],
+      usage: extractUsage(result),
     };
   }
 
@@ -463,6 +465,7 @@ export class SubagentManager {
       finalText: extractFinalText(result),
       filesChanged: [...new Set(filesChanged)],
       toolsUsed: aggregateToolUsage(toolCounts),
+      usage: extractUsage(result),
     };
   }
 

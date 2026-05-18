@@ -293,3 +293,34 @@ export function formatSessionTokenUsage(usage: NormalizedUsage | null | undefine
   const cachedPart = cachedTokens > 0 ? ` (${cachedTokens.toLocaleString()} cached)` : '';
   return `Token usage: ${promptTokens.toLocaleString()} input${cachedPart}, ${completionTokens.toLocaleString()} output`;
 }
+
+function formatUsageLine(label: string, usage: NormalizedUsage | null | undefined): string {
+  const promptTokens = usage?.prompt_tokens ?? 0;
+  const completionTokens = usage?.completion_tokens ?? 0;
+  const cachedTokens = usage?.cache_read_tokens ?? 0;
+
+  const cachedPart = cachedTokens > 0 ? ` (${cachedTokens.toLocaleString()} cached)` : '';
+  return `${label}: ${promptTokens.toLocaleString()} input${cachedPart}, ${completionTokens.toLocaleString()} output`;
+}
+
+/**
+ * Format session usage with a breakdown of main vs subagent token usage.
+ * Falls back to the legacy single-line format when there is no subagent usage.
+ */
+export function formatSessionUsageBreakdown(
+  main: NormalizedUsage | null | undefined,
+  sub: NormalizedUsage | null | undefined,
+): string {
+  const hasSubUsage = sub && Object.keys(sub).length > 0 && (sub.prompt_tokens ?? 0) + (sub.completion_tokens ?? 0) > 0;
+
+  if (!hasSubUsage) {
+    return formatSessionTokenUsage(main);
+  }
+
+  const mainLine = formatUsageLine('Main', main);
+  const subLine = formatUsageLine('Subagents', sub);
+  const total = addTokenUsage(main, sub);
+  const totalLine = formatUsageLine('Total', total);
+
+  return `${mainLine}\n${subLine}\n${totalLine}`;
+}

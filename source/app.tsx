@@ -17,7 +17,7 @@ import { useRuntimeSettings } from './hooks/use-runtime-settings.js';
 import { useShellMode, SSHInfo } from './hooks/use-shell-mode.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
-import { createUsageAccumulator, formatSessionTokenUsage, type UsageAccumulator } from './utils/token-usage.js';
+import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/token-usage.js';
 
 interface AppProps {
   conversationService: ConversationService;
@@ -49,6 +49,7 @@ const App: FC<AppProps> = ({
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
+  const subagentUsage = useMemo(() => createUsageAccumulator(), []);
 
   const {
     messages,
@@ -67,7 +68,13 @@ const App: FC<AppProps> = ({
     addSystemMessage,
     setTemperature,
     addShellMessage,
-  } = useConversation({ conversationService, loggingService, usageAccumulator: sessionUsage });
+    getSubagentUsage,
+  } = useConversation({
+    conversationService,
+    loggingService,
+    usageAccumulator: sessionUsage,
+    subagentUsageAccumulator: subagentUsage,
+  });
 
   useEffect(() => {
     conversationService.setRetryCallback(() => addSystemMessage('Retrying due to upstream error...'));
@@ -101,7 +108,10 @@ const App: FC<AppProps> = ({
     refreshStartupBanner();
   }, [clearConversation, onPrintUsage, refreshStartupBanner]);
 
-  const getSessionUsage = useCallback(() => formatSessionTokenUsage(sessionUsage.get()), [sessionUsage]);
+  const getSessionUsage = useCallback(
+    () => formatSessionUsageBreakdown(sessionUsage.get(), getSubagentUsage()),
+    [sessionUsage, getSubagentUsage],
+  );
 
   const exitWithUsage = useCallback(() => {
     onExitUsage?.();

@@ -1,7 +1,6 @@
 import test from 'ava';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
 import { createFindFilesToolDefinition } from './find-files.js';
 import { ExecutionContext } from '../services/execution-context.js';
 
@@ -16,7 +15,7 @@ const findFilesToolDefinitionFindFallback = createFindFilesToolDefinition({
 // Helper to create a temp dir and change cwd to it
 async function withTempDir(run: (dir: string) => Promise<void>) {
   const originalCwd = process.cwd;
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-test-'));
+  const rootDir = await fs.mkdtemp(path.join(process.cwd(), '.term2-test-'));
   const workspaceDir = path.join(rootDir, 'workspace');
   await fs.mkdir(workspaceDir, { recursive: true });
 

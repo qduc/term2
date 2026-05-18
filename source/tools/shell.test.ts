@@ -208,7 +208,7 @@ test.serial('shell execute does not install RTK for allowlisted commands redirec
   });
 
   t.true(stdoutRedirect.includes('exit 0'));
-  t.true(stderrRedirect.includes('exit 1'));
+  t.true(stderrRedirect.includes('exit 1') || stderrRedirect.includes('exit 2')); // Different variants of ls can return either exit 1 or exit 2
   t.true(fs.existsSync(stdoutPath));
   t.true(fs.existsSync(stderrPath));
   t.false(installCalled);

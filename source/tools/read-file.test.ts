@@ -1,7 +1,6 @@
 import test from 'ava';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
 import { createReadFileToolDefinition } from './read-file.js';
 
 const readFileToolDefinition = createReadFileToolDefinition();
@@ -12,7 +11,7 @@ const readFileToolDefinitionAllowOutside = createReadFileToolDefinition({
 // Helper to create a temp dir and change cwd to it
 async function withTempDir(run: (dir: string) => Promise<void>) {
   const originalCwd = process.cwd;
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-test-'));
+  const rootDir = await fs.mkdtemp(path.join(process.cwd(), '.term2-test-'));
   const workspaceDir = path.join(rootDir, 'workspace');
   await fs.mkdir(workspaceDir, { recursive: true });
 
@@ -137,7 +136,7 @@ test.serial('execute: in allowOutsideWorkspace mode, can read outside workspace'
 test.serial('execute: expands ~ to home directory in allowOutsideWorkspace mode', async (t) => {
   await withTempDir(async () => {
     // We try to read ~/.ssh/config or something likely to exist,
-    // but better to just mock os.homedir if we could.
+    // but better to just mock homedir if we could.
     // Given the constraints, we can at least verify it doesn't throw a malformed path error
     // even if the file doesn't exist.
     const result = await readFileToolDefinitionAllowOutside.execute({

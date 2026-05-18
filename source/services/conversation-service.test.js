@@ -4,6 +4,8 @@ import {
   clearApprovalRejectionMarkers,
   markToolCallAsApprovalRejection,
 } from '../../dist/utils/extract-command-messages.js';
+import { registerToolFormatters, clearToolFormatters } from '../../dist/tools/command-message-formatters.js';
+import { formatShellCommandMessage } from '../../dist/tools/shell.js';
 
 const mockLogger = {
   info: () => {},
@@ -34,6 +36,10 @@ class MockStream {
     }
   }
 }
+
+test.before(() => {
+  registerToolFormatters([{ name: 'shell', formatCommandMessage: formatShellCommandMessage }]);
+});
 
 test.beforeEach(() => {
   clearApprovalRejectionMarkers();

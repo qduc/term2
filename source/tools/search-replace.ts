@@ -717,7 +717,7 @@ export function createSearchReplaceToolDefinition(deps: {
         }
 
         const operation = operations[0];
-        const { path: filePath, search_content, replace_all = false } = operation;
+        const { path: filePath, search_content, replace_content, replace_all = false } = operation;
         const targetPath = resolveWorkspacePath(filePath, cwd);
         const workspaceRoot = cwd;
         const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
@@ -755,6 +755,14 @@ export function createSearchReplaceToolDefinition(deps: {
             path: filePath,
           });
           return true;
+        }
+
+        if (search_content === replace_content) {
+          loggingService.warn('search_replace validation: search_content and replace_content are identical', {
+            path: filePath,
+          });
+          // Auto-approve - execute will handle the error gracefully
+          return false;
         }
 
         // Check for summarization markers
@@ -896,6 +904,15 @@ export function createSearchReplaceToolDefinition(deps: {
               success: false,
               error:
                 'search_content must not be empty when editing an existing file. Provide search text or create a new file with an empty search.',
+            },
+          };
+        }
+
+        if (search_content === replace_content) {
+          return {
+            output: {
+              success: false,
+              error: 'search_content and replace_content are identical.',
             },
           };
         }

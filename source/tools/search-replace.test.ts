@@ -838,6 +838,49 @@ test.serial('execute rejects search content with // ... marker', async (t) => {
 });
 
 // ============================================================================
+// Search and Replace Equality Validation Tests
+// ============================================================================
+
+test.serial('execute rejects search content when search and replace content are identical', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'hello world');
+
+    const result = await tool.execute({
+      path: filePath,
+      search_content: 'hello',
+      replace_content: 'hello',
+      replace_all: false,
+    });
+
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+    t.regex(parsed.output[0].error, /identical/i);
+  });
+});
+
+test.serial('needsApproval auto-approves when search and replace content are identical', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'hello world');
+
+    const result = await tool.needsApproval({
+      path: filePath,
+      search_content: 'hello',
+      replace_content: 'hello',
+      replace_all: false,
+    });
+
+    // Should auto-approve so execute can return the error gracefully
+    t.false(result);
+  });
+});
+
+// ============================================================================
 // Gap Matching Tests (<...> marker)
 // ============================================================================
 

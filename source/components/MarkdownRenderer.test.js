@@ -77,10 +77,33 @@ test('renders H2 heading', (t) => {
   t.true(frame.includes('## Subtitle'));
 });
 
-test('renders H3+ headings', (t) => {
-  const { lastFrame } = render(React.createElement(MarkdownRenderer, null, '### Section'));
-  const frame = stripAnsi(lastFrame());
-  t.true(frame.includes('## Section'));
+test('renders H3+ headings with exact depths', (t) => {
+  const { lastFrame: lf3 } = render(React.createElement(MarkdownRenderer, null, '### Section'));
+  t.true(stripAnsi(lf3()).includes('### Section'));
+
+  const { lastFrame: lf4 } = render(React.createElement(MarkdownRenderer, null, '#### Detail'));
+  t.true(stripAnsi(lf4()).includes('#### Detail'));
+});
+
+test('preserves spacing and trailing blank lines for swallowed heading/table newlines', (t) => {
+  const { lastFrame: lfHeading } = render(
+    React.createElement(
+      MarkdownRenderer,
+      null,
+      '## Detailed Review\n\n#### MessageList.tsx change\n\nIn the renderStaticItem function',
+    ),
+  );
+  const frameHeading = stripAnsi(lfHeading());
+  t.true(
+    frameHeading.includes('## Detailed Review\n\n#### MessageList.tsx change\n\nIn the renderStaticItem function'),
+  );
+
+  const { lastFrame: lfTable } = render(
+    React.createElement(MarkdownRenderer, null, '| col1 |\n| --- |\n| val1 |\n\nParagraph'),
+  );
+  const frameTable = stripAnsi(lfTable());
+  t.true(frameTable.includes('val1'));
+  t.true(frameTable.includes('\n\nParagraph'));
 });
 
 // --- Paragraphs ---

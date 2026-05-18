@@ -168,13 +168,46 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
   const dynamicItems = useMemo(() => [...deferredHistory, ...active], [deferredHistory, active]);
 
   const renderMessage = (msg: any, idx: number, collection: any[], maxWidth?: number) => {
+    // Helper to get previous message safely from either StaticItem[] or MessageLike[]
+    const getPreviousMessage = () => {
+      if (idx <= 0) return null;
+      const prev = collection[idx - 1];
+      if (!prev) return null;
+      if ('sender' in prev) {
+        return prev;
+      }
+      if ('kind' in prev && prev.kind === 'message') {
+        return prev.message;
+      }
+      return null;
+    };
+
+    // Helper to peek at the last static item when this is the first dynamic message.
+    // Streaming splits flush earlier finalized chunks to static while the tail stays
+    // dynamic, so continuation detection must cross the static/dynamic boundary.
+    const getCrossBoundaryPreviousMessage = () => {
+      if (collection !== dynamicItems) return null;
+      if (idx !== 0) return null;
+      if (staticItems.length === 0) return null;
+      const lastStatic = staticItems[staticItems.length - 1];
+      if (lastStatic.kind === 'message') {
+        return lastStatic.message;
+      }
+      return null;
+    };
+
     // Use consistent marginTop to prevent layout reflow.
     // This ensures stable spacing regardless of message order or streaming updates.
     // The first message in each collection has no top margin to avoid extra space.
+    // Consecutive split bot response messages (continuation messages) also have no top margin
+    // because their inner markdown renderer already provides correct spacing/newlines.
+    const prevMsg = getPreviousMessage() ?? getCrossBoundaryPreviousMessage();
+    const isContinuation = prevMsg && prevMsg.sender === 'bot' && msg.sender === 'bot';
     const isFirst = idx === 0 && collection === dynamicItems && staticItems.length === 0;
+    const marginTop = isFirst || isContinuation ? 0 : 1;
 
     return (
-      <Box key={msg.id} marginTop={isFirst ? 0 : 1} width={maxWidth}>
+      <Box key={msg.id} marginTop={marginTop} width={maxWidth}>
         {msg.sender === 'command' ? (
           <CommandMessage
             command={msg.command}
@@ -206,7 +239,10 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
     }
 
     const isLast = idx === staticItems.length - 1;
-    if (isLast) {
+    // Only add trailing blank line when there is no active/dynamic content below.
+    // When dynamic items exist, spacing is handled by the first dynamic message's
+    // marginTop (or omitted for continuations), preventing double blank lines.
+    if (isLast && dynamicItems.length === 0) {
       return (
         <Box key={item.id} flexDirection="column">
           {renderMessage(item.message, idx, staticItems, contentWidth)}

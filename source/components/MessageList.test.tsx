@@ -390,6 +390,51 @@ test('splitStaticHistory moves finalized reasoning messages to static history', 
   t.is(active.length, 0);
 });
 
+test('MessageList continuation across static-dynamic boundary has correct spacing', (t) => {
+  const messages = [
+    { id: 'chunk-1', sender: 'bot', status: 'finalized', text: '## Heading\n\n' },
+    { id: 'chunk-2', sender: 'bot', status: 'streaming', text: 'Paragraph' },
+  ];
+  const { lastFrame } = render(<MessageList messages={messages} />);
+  const lines = renderedLines(lastFrame() ?? '');
+  const headingIndex = lines.findIndex((line) => line.includes('## Heading'));
+  const paragraphIndex = lines.findIndex((line) => line.includes('Paragraph'));
+  t.true(headingIndex !== -1);
+  t.true(paragraphIndex !== -1);
+  // Exactly one blank line between heading and paragraph (markdown spacing only)
+  t.is(paragraphIndex - headingIndex, 2);
+});
+
+test('MessageList continuation within dynamic items has correct spacing', (t) => {
+  const messages = [
+    { id: 'chunk-1', sender: 'bot', status: 'streaming', text: '## Heading\n\n' },
+    { id: 'chunk-2', sender: 'bot', status: 'streaming', text: 'Paragraph' },
+  ];
+  const { lastFrame } = render(<MessageList messages={messages} />);
+  const lines = renderedLines(lastFrame() ?? '');
+  const headingIndex = lines.findIndex((line) => line.includes('## Heading'));
+  const paragraphIndex = lines.findIndex((line) => line.includes('Paragraph'));
+  t.true(headingIndex !== -1);
+  t.true(paragraphIndex !== -1);
+  // Exactly one blank line between heading and paragraph (markdown spacing only)
+  t.is(paragraphIndex - headingIndex, 2);
+});
+
+test('MessageList non-continuation across static-dynamic boundary has correct spacing', (t) => {
+  const messages = [
+    { id: 'user-msg', sender: 'user', text: 'hello', status: 'finalized' },
+    { id: 'bot-msg', sender: 'bot', text: 'Paragraph', status: 'streaming' },
+  ];
+  const { lastFrame } = render(<MessageList messages={messages} />);
+  const lines = renderedLines(lastFrame() ?? '');
+  const userIndex = lines.findIndex((line) => line.includes('❯ hello'));
+  const botIndex = lines.findIndex((line) => line.includes('Paragraph'));
+  t.true(userIndex !== -1);
+  t.true(botIndex !== -1);
+  // Exactly one blank line between user and bot (marginTop spacing only)
+  t.is(botIndex - userIndex, 2);
+});
+
 test('MessageList outputs a blank line after the final message in Static', (t) => {
   const messages = [{ id: 'static-msg', sender: 'bot', status: 'finalized', text: 'final static message' }];
   const { lastFrame } = render(<MessageList messages={messages} />);

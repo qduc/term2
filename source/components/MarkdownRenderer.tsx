@@ -448,16 +448,19 @@ const BlockRenderer = ({
   maxWidth?: number;
 }) => {
   switch (token.type) {
-    case 'heading':
+    case 'heading': {
       const isMain = token.depth === 1;
+      const hasTrailingBlankLine = token.raw && token.raw.endsWith('\n\n');
       return (
         <Box flexDirection="column">
           <Text bold underline={isMain} color={isMain ? 'green' : 'cyan'} dimColor={options.dimColor}>
-            {isMain ? '# ' : '## '}
+            {'#'.repeat(token.depth) + ' '}
             <InlineContent tokens={token.tokens} options={options} />
           </Text>
+          {hasTrailingBlankLine && <Box height={1} />}
         </Box>
       );
+    }
 
     case 'paragraph':
       return (
@@ -533,7 +536,7 @@ const BlockRenderer = ({
       );
 
     case 'space':
-      return null;
+      return <Box height={1} />;
 
     case 'hr':
       return (
@@ -544,8 +547,15 @@ const BlockRenderer = ({
         </Box>
       );
 
-    case 'table':
-      return <TableRenderer token={token} options={options} maxWidth={maxWidth} />;
+    case 'table': {
+      const hasTableTrailingBlankLine = token.raw && token.raw.endsWith('\n\n');
+      return (
+        <Box flexDirection="column">
+          <TableRenderer token={token} options={options} maxWidth={maxWidth} />
+          {hasTableTrailingBlankLine && <Box height={1} />}
+        </Box>
+      );
+    }
 
     default:
       // Fallback for unknown blocks

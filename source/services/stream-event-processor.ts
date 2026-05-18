@@ -1,6 +1,6 @@
 import type { ConversationEvent } from './conversation-events.js';
 import type { ILoggingService } from './service-interfaces.js';
-import { extractUsage, mergeUsage, type NormalizedUsage } from '../utils/token-usage.js';
+import { extractUsage, mergeUsage, normalizeAgentRunUsage, type NormalizedUsage } from '../utils/token-usage.js';
 import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.js';
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
 import { createInvalidToolCallDiagnostic } from './logging-contract.js';
@@ -214,10 +214,23 @@ export async function* processStreamEvents(
       break;
     }
   }
-  const finalUsage = extractUsage(completedResult) || extractUsage(stream) || usageFromRawResponses;
+
+  // The Agents SDK keeps an authoritative, already-cumulative usage accumulator on
+  // the run state (RunContext.usage), spanning every model turn in the run -
+  // including turns resumed after an approval, since continuations reuse the same
+  // live RunState. Trust it as the run total instead of re-summing per-turn
+  // streamed snapshots (which double-counts on long, multi-turn tasks). Fall back
+  // to per-response extraction for providers/runners that don't populate it.
+  const runStateUsage = normalizeAgentRunUsage((stream as { state?: { usage?: unknown } })?.state?.usage);
+
+  const finalUsage = runStateUsage || extractUsage(completedResult) || extractUsage(stream) || usageFromRawResponses;
   if (finalUsage) {
-    acc.latestUsage = mergeUsage(finalUsage, acc.latestUsage) ?? finalUsage;
-    const usageSource = extractUsage(completedResult)
+    // The run-state accumulator is the whole-run total, so it must replace (not
+    // merge with) the latest per-turn snapshot to avoid inflating the count.
+    acc.latestUsage = runStateUsage ? finalUsage : mergeUsage(finalUsage, acc.latestUsage) ?? finalUsage;
+    const usageSource = runStateUsage
+      ? 'run_state_usage'
+      : extractUsage(completedResult)
       ? 'completed_result'
       : extractUsage(stream)
       ? 'stream_object'

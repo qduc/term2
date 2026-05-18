@@ -7,6 +7,7 @@ import {
   formatFooterUsage,
   formatSessionTokenUsage,
   formatSessionUsageBreakdown,
+  normalizeAgentRunUsage,
   normalizeUsage,
 } from './token-usage.js';
 
@@ -58,6 +59,44 @@ test('normalizeUsage handles multiple formats', (t) => {
     prompt_tokens: 100,
     total_tokens: 100,
   });
+});
+
+test('normalizeAgentRunUsage reads the SDK run-state accumulator and sums per-request detail arrays', (t) => {
+  // Shape mirrors @openai/agents-core Usage: cumulative scalar totals plus
+  // per-request detail arrays for cache/reasoning.
+  t.deepEqual(
+    normalizeAgentRunUsage({
+      requests: 3,
+      inputTokens: 6000,
+      outputTokens: 280,
+      totalTokens: 6280,
+      inputTokensDetails: [{ cached_tokens: 500 }, { cached_tokens: 1000 }, { cached_tokens: 0 }],
+      outputTokensDetails: [{ reasoning_tokens: 40 }, { reasoning_tokens: 60 }, {}],
+    }),
+    {
+      prompt_tokens: 6000,
+      completion_tokens: 280,
+      total_tokens: 6280,
+      cache_read_tokens: 1500,
+      reasoning_tokens: 100,
+    },
+  );
+});
+
+test('normalizeAgentRunUsage treats an all-zero accumulator as absent', (t) => {
+  t.is(
+    normalizeAgentRunUsage({
+      requests: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      inputTokensDetails: [],
+      outputTokensDetails: [],
+    }),
+    undefined,
+  );
+  t.is(normalizeAgentRunUsage(undefined), undefined);
+  t.is(normalizeAgentRunUsage(null), undefined);
 });
 
 test('extractUsage finds usage in nested locations', (t) => {

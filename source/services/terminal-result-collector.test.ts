@@ -90,62 +90,76 @@ test('collectTerminalResult carries usage_update usage into approval_required re
   }
 });
 
-test('collectTerminalResult adds final usage after a tool boundary to previous turn usage', async (t) => {
+test('collectTerminalResult trusts the final run-cumulative usage and does not re-sum per-turn snapshots', async (t) => {
+  // Long-horizon regression: a multi-turn run streams a per-turn `usage_update`
+  // before each tool call. The terminal `final` event carries the authoritative
+  // run-cumulative usage from the SDK. The collector must report that cumulative
+  // verbatim - NOT the cumulative plus its own re-summed per-turn snapshots
+  // (the old behavior, which doubled the count and got worse with each turn).
   const result = await collectTerminalResult(
     asAsyncIterable([
-      {
-        type: 'usage_update',
-        usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 },
-      },
-      {
-        type: 'tool_started',
-        toolCallId: 'call-1',
-        toolName: 'shell',
-        arguments: { command: 'ls source' },
-      },
+      { type: 'usage_update', usage: { prompt_tokens: 1000, completion_tokens: 50, total_tokens: 1050 } },
+      { type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: { command: 'ls' } },
+      { type: 'usage_update', usage: { prompt_tokens: 2000, completion_tokens: 90, total_tokens: 2090 } },
+      { type: 'tool_started', toolCallId: 'call-2', toolName: 'shell', arguments: { command: 'cat a' } },
+      { type: 'usage_update', usage: { prompt_tokens: 3000, completion_tokens: 120, total_tokens: 3120 } },
+      { type: 'tool_started', toolCallId: 'call-3', toolName: 'shell', arguments: { command: 'cat b' } },
       {
         type: 'final',
         finalText: 'Done.',
-        usage: { prompt_tokens: 200, completion_tokens: 20, total_tokens: 220 },
+        // SDK run-state accumulator: cumulative across all turns, including
+        // cache details streamed snapshots didn't carry.
+        usage: {
+          prompt_tokens: 6000,
+          completion_tokens: 280,
+          total_tokens: 6280,
+          cache_read_tokens: 1500,
+        },
       },
     ]),
   );
 
   t.is(result.type, 'response');
   if (result.type === 'response') {
-    t.deepEqual(result.usage, { prompt_tokens: 300, completion_tokens: 30, total_tokens: 330 });
+    t.deepEqual(result.usage, {
+      prompt_tokens: 6000,
+      completion_tokens: 280,
+      total_tokens: 6280,
+      cache_read_tokens: 1500,
+    });
   }
 });
 
-test('collectTerminalResult does not double count a final event that already includes previous tool turns', async (t) => {
+test('collectTerminalResult lets a later final supersede an earlier one (auto-approved continuation)', async (t) => {
+  // The auto-approve path emits a `final` for the first turn, then another
+  // `final` after the continuation. Because the SDK accumulator keeps growing
+  // on the same run state, the later `final` is the whole-run cumulative and
+  // must replace - not add to - the earlier one.
   const result = await collectTerminalResult(
     asAsyncIterable([
-      {
-        type: 'usage_update',
-        usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 },
-      },
-      {
-        type: 'tool_started',
-        toolCallId: 'call-1',
-        toolName: 'shell',
-        arguments: { command: 'ls source' },
-      },
-      {
-        type: 'final',
-        finalText: 'Done.',
-        usage: { prompt_tokens: 200, completion_tokens: 20, total_tokens: 220 },
-      },
-      {
-        type: 'final',
-        finalText: 'Done.',
-        usage: { prompt_tokens: 300, completion_tokens: 30, total_tokens: 330 },
-      },
+      { type: 'final', finalText: 'partial', usage: { prompt_tokens: 200, completion_tokens: 20, total_tokens: 220 } },
+      { type: 'final', finalText: 'Done.', usage: { prompt_tokens: 500, completion_tokens: 60, total_tokens: 560 } },
     ]),
   );
 
   t.is(result.type, 'response');
   if (result.type === 'response') {
-    t.deepEqual(result.usage, { prompt_tokens: 300, completion_tokens: 30, total_tokens: 330 });
+    t.deepEqual(result.usage, { prompt_tokens: 500, completion_tokens: 60, total_tokens: 560 });
+  }
+});
+
+test('collectTerminalResult falls back to the latest streamed usage when no final usage is present', async (t) => {
+  const result = await collectTerminalResult(
+    asAsyncIterable([
+      { type: 'usage_update', usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 } },
+      { type: 'usage_update', usage: { prompt_tokens: 175, completion_tokens: 18, total_tokens: 193 } },
+      { type: 'final', finalText: 'Done.' },
+    ]),
+  );
+
+  t.is(result.type, 'response');
+  if (result.type === 'response') {
+    t.deepEqual(result.usage, { prompt_tokens: 175, completion_tokens: 18, total_tokens: 193 });
   }
 });
 

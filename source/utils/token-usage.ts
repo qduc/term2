@@ -192,6 +192,73 @@ export function extractUsage(payload: unknown): NormalizedUsage | undefined {
   return normalizeUsage(merged);
 }
 
+function sumDetailField(details: unknown, keys: string[]): number | undefined {
+  if (!Array.isArray(details)) {
+    // The SDK may surface a single detail record instead of a per-request array.
+    const single = asUsageContainer(details);
+    if (!single) return undefined;
+    return coalesceNumber(...keys.map((key) => single[key]));
+  }
+
+  let total = 0;
+  let found = false;
+  for (const entry of details) {
+    const record = asUsageContainer(entry);
+    if (!record) continue;
+    const value = coalesceNumber(...keys.map((key) => record[key]));
+    if (value == null) continue;
+    total += value;
+    found = true;
+  }
+  return found ? total : undefined;
+}
+
+/**
+ * Normalize the Agents SDK run-level Usage accumulator (`runState.usage`) into
+ * NormalizedUsage. This is the authoritative, already-cumulative usage for an
+ * entire run (all model turns, including resumed approval continuations, since
+ * the SDK keeps accumulating onto the same RunContext.usage). Cache and
+ * reasoning details are exposed as per-request arrays, so they are summed here.
+ */
+export function normalizeAgentRunUsage(stateUsage: any): NormalizedUsage | undefined {
+  const usage = asUsageContainer(stateUsage);
+  if (!usage) return undefined;
+
+  const promptTokens = coalesceNumber(usage.inputTokens, usage.input_tokens);
+  const completionTokens = coalesceNumber(usage.outputTokens, usage.output_tokens);
+  const totalTokens =
+    coalesceNumber(usage.totalTokens, usage.total_tokens) ?? sumNumbers(promptTokens, completionTokens);
+
+  const cacheReadTokens = sumDetailField(usage.inputTokensDetails ?? usage.input_tokens_details, [
+    'cached_tokens',
+    'cachedTokens',
+    'cache_read_tokens',
+    'cacheReadTokens',
+  ]);
+  const cacheCreationTokens = sumDetailField(usage.inputTokensDetails ?? usage.input_tokens_details, [
+    'cache_creation_tokens',
+    'cacheCreationTokens',
+    'cache_creation_input_tokens',
+  ]);
+  const reasoningTokens = sumDetailField(usage.outputTokensDetails ?? usage.output_tokens_details, [
+    'reasoning_tokens',
+    'reasoningTokens',
+  ]);
+
+  const mapped: NormalizedUsage = {};
+  if (promptTokens != null) mapped.prompt_tokens = promptTokens;
+  if (completionTokens != null) mapped.completion_tokens = completionTokens;
+  if (totalTokens != null) mapped.total_tokens = totalTokens;
+  if (reasoningTokens != null) mapped.reasoning_tokens = reasoningTokens;
+  if (cacheReadTokens != null) mapped.cache_read_tokens = cacheReadTokens;
+  if (cacheCreationTokens != null) mapped.cache_creation_tokens = cacheCreationTokens;
+
+  // An all-zero accumulator means the provider never reported usage; treat as absent
+  // so callers can fall back to other extraction paths.
+  const hasSignal = (mapped.prompt_tokens ?? 0) + (mapped.completion_tokens ?? 0) + (mapped.total_tokens ?? 0) > 0;
+  return hasSignal ? mapped : undefined;
+}
+
 export function mergeUsage(
   preferred: NormalizedUsage | undefined,
   fallback: NormalizedUsage | undefined,

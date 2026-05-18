@@ -130,7 +130,11 @@ export const useConversation = ({
 
       if (result.type === 'approval_required') {
         if (result.usage) {
-          usageAccumulator?.add(result.usage);
+          // result.usage here is the run-cumulative usage *so far* for a run
+          // that is still in progress (paused for approval). The terminal
+          // `response` result will carry the full run-cumulative usage once
+          // the run completes, so accumulating here would double-count the
+          // pre-approval turns. Only update the live footer.
           setLastUsage(latestStreamedUsage ?? result.usage);
         }
         // Don't also show the transient pending/running command message.

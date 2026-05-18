@@ -735,10 +735,12 @@ test('auto mode: response usage includes the auto-approved first turn, not just 
   const initialStream = createInterruptedStream([
     createShellInterruption({ callId: 'call-usage-1', command: 'ls source' }),
   ]);
-  (initialStream as any).usage = { input_tokens: 100, output_tokens: 20 };
+  (initialStream.state as any).usage = { inputTokens: 100, outputTokens: 20, totalTokens: 120 };
 
+  // The continuation reuses the same live RunState, so its run-state usage
+  // accumulator is already cumulative for the whole run (first turn included).
   const finalStream = createFinalStream('Files listed.');
-  (finalStream as any).usage = { input_tokens: 200, output_tokens: 30 };
+  (finalStream.state as any).usage = { inputTokens: 300, outputTokens: 50, totalTokens: 350 };
 
   const { session } = createSessionHarness({
     settingsOverrides: { 'shell.autoApproveMode': 'auto' },
@@ -752,7 +754,9 @@ test('auto mode: response usage includes the auto-approved first turn, not just 
 
   const result = getResponseResult(t, await session.sendMessage('list the source files'));
 
-  // First turn (100 in / 20 out) must be combined with the continuation (200 in / 30 out).
+  // The auto-approved first turn must be reflected in the reported usage. The
+  // SDK run-state accumulator already includes it (300 in / 50 out cumulative);
+  // it must be reported verbatim, not added on top of the first turn again.
   t.is(result.usage?.prompt_tokens, 300);
   t.is(result.usage?.completion_tokens, 50);
 });
@@ -762,10 +766,12 @@ test('auto mode: approval_required usage includes the auto-approved first turn',
   const second = createShellInterruption({ callId: 'call-usage-batch-2', command: 'git log --all --format="%H"' });
 
   const initialStream = createInterruptedStream([first, second]);
-  (initialStream as any).usage = { input_tokens: 100, output_tokens: 20 };
+  (initialStream.state as any).usage = { inputTokens: 100, outputTokens: 20, totalTokens: 120 };
 
+  // Continuation reuses the same RunState; its accumulator is cumulative and
+  // already includes the auto-approved first turn (300 in / 50 out).
   const continuationAfterFirst = createInterruptedStream([second]);
-  (continuationAfterFirst as any).usage = { input_tokens: 200, output_tokens: 30 };
+  (continuationAfterFirst.state as any).usage = { inputTokens: 300, outputTokens: 50, totalTokens: 350 };
 
   const { session } = createSessionHarness({
     settingsOverrides: { 'shell.autoApproveMode': 'auto' },

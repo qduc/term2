@@ -1,26 +1,9 @@
 import type { ConversationEvent, FinalResponseEvent } from './conversation-events.js';
 import type { ConversationResult } from './conversation-session.js';
 import type { CommandMessage } from '../tools/types.js';
-import { addTokenUsage, mergeUsage, type NormalizedUsage } from '../utils/token-usage.js';
-
-const USAGE_FIELDS: Array<keyof NormalizedUsage> = [
-  'prompt_tokens',
-  'completion_tokens',
-  'total_tokens',
-  'reasoning_tokens',
-  'cache_read_tokens',
-  'cache_creation_tokens',
-  'prompt_ms',
-  'completion_ms',
-];
+import { type NormalizedUsage } from '../utils/token-usage.js';
 
 const isEmptyUsage = (usage: NormalizedUsage | undefined): boolean => !usage || Object.keys(usage).length === 0;
-
-const sameUsage = (left: NormalizedUsage | undefined, right: NormalizedUsage | undefined): boolean => {
-  if (isEmptyUsage(left) && isEmptyUsage(right)) return true;
-  if (!left || !right) return false;
-  return USAGE_FIELDS.every((field) => left[field] === right[field]);
-};
 
 export async function collectTerminalResult(
   events: AsyncIterable<ConversationEvent>,
@@ -43,21 +26,22 @@ export async function collectTerminalResult(
   let finalText = '';
   let reasoningText = '';
   const commandMessages: CommandMessage[] = [];
-  let completedUsage: NormalizedUsage | undefined;
-  let currentTurnUsage: NormalizedUsage | undefined;
 
-  const totalUsage = (): NormalizedUsage | undefined => {
-    const combined = addTokenUsage(completedUsage, currentTurnUsage);
-    return isEmptyUsage(combined) ? undefined : combined;
-  };
+  // Token usage is sourced from a single authoritative value: the Agents SDK
+  // run-state accumulator, which is already cumulative for the entire run
+  // (every model turn, including turns resumed after an approval - the
+  // continuation reuses the same live RunState so its accumulator already
+  // includes the pre-approval turns). It arrives on `final` /
+  // `approval_required` events. We therefore do NOT re-sum per-turn
+  // `usage_update` snapshots here; doing so double-counted on long,
+  // multi-turn tasks. `usage_update` is tracked only as a live/fallback
+  // value for display when a terminal usage figure is unavailable.
+  let runUsage: NormalizedUsage | undefined;
+  let latestStreamedUsage: NormalizedUsage | undefined;
 
-  const rollCurrentTurnUsageIntoCompleted = () => {
-    if (!currentTurnUsage) {
-      return;
-    }
-
-    completedUsage = addTokenUsage(completedUsage, currentTurnUsage);
-    currentTurnUsage = undefined;
+  const resolvedUsage = (): NormalizedUsage | undefined => {
+    const usage = !isEmptyUsage(runUsage) ? runUsage : latestStreamedUsage;
+    return isEmptyUsage(usage) ? undefined : usage;
   };
 
   for await (const event of events) {
@@ -75,12 +59,11 @@ export async function collectTerminalResult(
         break;
       }
       case 'command_message': {
-        rollCurrentTurnUsageIntoCompleted();
         onCommandMessage?.(event.message);
         break;
       }
       case 'approval_required': {
-        const usage = event.usage ?? totalUsage();
+        const usage = event.usage ?? resolvedUsage();
         return {
           type: 'approval_required',
           approval: {
@@ -95,11 +78,7 @@ export async function collectTerminalResult(
         };
       }
       case 'usage_update': {
-        currentTurnUsage = mergeUsage(event.usage, currentTurnUsage) ?? event.usage;
-        break;
-      }
-      case 'tool_started': {
-        rollCurrentTurnUsageIntoCompleted();
+        latestStreamedUsage = event.usage;
         break;
       }
       case 'final': {
@@ -107,13 +86,11 @@ export async function collectTerminalResult(
         finalText = event.finalText;
         reasoningText = event.reasoningText ?? '';
         if (event.usage) {
-          const combinedUsage = totalUsage();
-          if (sameUsage(event.usage, combinedUsage)) {
-            completedUsage = undefined;
-            currentTurnUsage = event.usage;
-          } else {
-            currentTurnUsage = mergeUsage(event.usage, currentTurnUsage) ?? event.usage;
-          }
+          // Each `final` carries the run-cumulative usage as of that point.
+          // A later `final` (e.g. after an auto-approved continuation)
+          // supersedes an earlier one because the SDK accumulator keeps
+          // growing on the same run state.
+          runUsage = event.usage;
         }
         if (event.commandMessages?.length) {
           for (const msg of event.commandMessages) {
@@ -131,11 +108,12 @@ export async function collectTerminalResult(
     }
   }
 
+  const usage = resolvedUsage();
   return {
     type: 'response',
     commandMessages,
     finalText: finalText || 'Done.',
     ...(reasoningText ? { reasoningText } : {}),
-    ...(totalUsage() ? { usage: totalUsage() } : {}),
+    ...(usage ? { usage } : {}),
   };
 }

@@ -4,7 +4,7 @@ import { ConversationStore } from './conversation-store.js';
 import { decideRetry, MAX_HALLUCINATION_RETRIES } from './conversation-retry-policy.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../tools/types.js';
-import { addTokenUsage, type NormalizedUsage } from '../utils/token-usage.js';
+import { type NormalizedUsage } from '../utils/token-usage.js';
 import { getProvider } from '../providers/index.js';
 import { ApprovalState } from './approval-state.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
@@ -601,13 +601,15 @@ export class ConversationSession {
     for await (const event of this['continue']({ answer: 'y' })) {
       if (event.type === 'approval_required') {
         continuationApprovalUsage = event.usage;
-        const mergedUsage =
-          usage || continuationApprovalUsage ? addTokenUsage(usage, continuationApprovalUsage) : undefined;
+        // The continuation resumes the same live RunState, so its usage
+        // accumulator is already cumulative for the whole run (it includes the
+        // first, auto-approved turn). Prefer it directly; only fall back to the
+        // first turn's usage if the continuation didn't report any.
+        const mergedUsage = continuationApprovalUsage ?? usage;
         const usagePatch = mergedUsage && Object.keys(mergedUsage).length > 0 ? { usage: mergedUsage } : {};
 
-        // Merge the first (auto-approved) turn's usage onto the event itself.
-        // collectTerminalResult returns on the first approval_required event, so an
-        // unmerged event here would drop the auto-approved turn from the accumulator.
+        // collectTerminalResult returns on the first approval_required event, so
+        // attach the run-cumulative usage onto the event itself.
         yield { ...event, ...usagePatch };
 
         approvalRequiredResult = {
@@ -635,7 +637,11 @@ export class ConversationSession {
       return approvalRequiredResult;
     }
 
-    const combinedUsage = usage || finalUsage ? addTokenUsage(usage, finalUsage) : undefined;
+    // finalUsage comes from the continuation, which reused the same live
+    // RunState and therefore already accumulated the first (auto-approved)
+    // turn. Prefer it; fall back to the first turn's usage only when the
+    // continuation produced none.
+    const combinedUsage = finalUsage ?? usage;
     return {
       type: 'response',
       commandMessages,

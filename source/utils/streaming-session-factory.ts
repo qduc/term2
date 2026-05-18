@@ -123,10 +123,22 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
       streamingState.latestUsage = event.usage;
       deps.setLastUsage(event.usage);
     } else if (event.type === 'final') {
-      if (event.usage) {
+      if (event.usage && !streamingState.latestUsage) {
+        // No per-turn usage was streamed (e.g. a non-streaming provider). Fall
+        // back to the final event's usage so the footer still shows something.
         deps.loggingService.debug(`UI received final usage (${label})`, { usage: event.usage });
         streamingState.latestUsage = event.usage;
         deps.setLastUsage(event.usage);
+      } else if (event.usage) {
+        // The final event carries the run-cumulative total (the sum of every
+        // model turn in the run). The footer is a per-turn indicator, so keep
+        // the last streamed turn's usage rather than overwriting it with the
+        // run total. The run-cumulative still reaches the session accumulator
+        // via result.usage in applyServiceResult.
+        deps.loggingService.debug(`UI keeping last streamed turn usage; final carries run total (${label})`, {
+          finalUsage: event.usage,
+          shownUsage: streamingState.latestUsage,
+        });
       } else {
         deps.loggingService.debug(`UI final event has no usage (${label})`);
       }

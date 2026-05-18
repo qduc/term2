@@ -723,3 +723,151 @@ test('run() emits usage_update when usage is at top level of event', async (t) =
   t.is(usageEvents[0].usage.completion_tokens, 50);
   t.is(usageEvents[0].usage.total_tokens, 150);
 });
+
+test('undoLastUserTurn() returns { text, imageCount: 0 } after a completed run', async (t) => {
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply' }]);
+  stream.finalOutput = 'Reply';
+  stream.history = [
+    { role: 'user', type: 'message', content: 'hello' },
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Reply' }] },
+  ];
+
+  const mockClient = {
+    async startStream() {
+      return stream;
+    },
+    getProvider() {
+      return 'openrouter';
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  for await (const _ of session.run('hello')) {
+    // consume
+  }
+
+  const result = session.undoLastUserTurn();
+  t.deepEqual(result, { text: 'hello', imageCount: 0 });
+});
+
+test('undoLastUserTurn() returns null when no genuine user turn exists', async (t) => {
+  const mockClient = {
+    async startStream() {
+      return new MockStream([]);
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const result = session.undoLastUserTurn();
+  t.is(result, null);
+});
+
+test('generation guard: gated run updateFromResult is skipped after undoLastUserTurn', async (t) => {
+  // Turn 1: run to completion so the store has msg1's history.
+  const stream1 = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply1' }]);
+  stream1.finalOutput = 'Reply1';
+  stream1.history = [
+    { role: 'user', type: 'message', content: 'msg1' },
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Reply1' }] },
+  ];
+
+  // Turn 2 (gated): a stream that yields one event then waits for a gate promise before "finishing".
+  // We implement this by resolving a deferred to control when the async iterator returns.
+  let gateResolve;
+  const gate = new Promise((resolve) => {
+    gateResolve = resolve;
+  });
+
+  class GatedStream {
+    constructor() {
+      this.lastResponseId = 'resp_gated';
+      this.interruptions = [];
+      this.state = {};
+      this.newItems = [];
+      this.history = [
+        { role: 'user', type: 'message', content: 'msg2' },
+        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Reply2' }] },
+      ];
+      this.finalOutput = 'Reply2';
+    }
+
+    async *[Symbol.asyncIterator]() {
+      yield { type: 'response.output_text.delta', delta: 'Reply2' };
+      await gate;
+    }
+  }
+
+  // Turn 3: capture the input so we can assert the history array.
+  let msg3Input;
+  const stream3 = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply3' }]);
+  stream3.finalOutput = 'Reply3';
+  stream3.history = [
+    { role: 'user', type: 'message', content: 'msg1' },
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Reply1' }] },
+    { role: 'user', type: 'message', content: 'msg3' },
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Reply3' }] },
+  ];
+
+  let callCount = 0;
+  const mockClient = {
+    async startStream(input) {
+      callCount++;
+      if (callCount === 1) return stream1;
+      if (callCount === 2) return new GatedStream();
+      msg3Input = input;
+      return stream3;
+    },
+    getProvider() {
+      return 'openrouter';
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  // (a) Run msg1 to completion — store now has msg1 + Reply1.
+  for await (const _ of session.run('msg1')) {
+    // consume
+  }
+
+  // (b) Begin msg2 in a background IIFE — it will block on the gate.
+  const msg2Done = (async () => {
+    const events = [];
+    for await (const ev of session.run('msg2')) {
+      events.push(ev);
+    }
+    return events;
+  })();
+
+  // Give the IIFE a chance to start and reach the gate (one microtask tick is enough).
+  await Promise.resolve();
+
+  // (c) While msg2 is gated, undo it — bumps generation.
+  const undone = session.undoLastUserTurn();
+  t.deepEqual(undone, { text: 'msg2', imageCount: 0 });
+
+  // (d) Resolve the gate so the gated run completes (but its updateFromResult should be skipped).
+  gateResolve();
+  await msg2Done;
+
+  // (e) Issue msg3 and capture the input passed to startStream.
+  for await (const _ of session.run('msg3')) {
+    // consume
+  }
+
+  // The input to startStream for msg3 must contain msg1 but NOT msg2.
+  t.true(Array.isArray(msg3Input), 'msg3 should receive history array');
+  const contents = msg3Input.map((item) => item.content);
+  t.true(contents.includes('msg1'), 'history should contain msg1');
+  t.false(contents.includes('msg2'), 'history must NOT contain msg2 (generation guard worked)');
+});

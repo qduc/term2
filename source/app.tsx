@@ -63,6 +63,7 @@ const App: FC<AppProps> = ({
     handleApprovalDecision,
     clearConversation,
     stopProcessing,
+    undoLastUserMessage,
     setModel,
     setReasoningEffort,
     addSystemMessage,
@@ -128,6 +129,7 @@ const App: FC<AppProps> = ({
     exit: exitWithUsage,
     messages,
     setModel,
+    undoLastUserMessage,
   });
 
   const hasConversationHistory = useMemo(() => messages.some((msg) => msg.sender !== 'system'), [messages]);

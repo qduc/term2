@@ -1,6 +1,11 @@
 import test from 'ava';
 import type { Message } from './use-conversation.js';
-import { createCopySlashCommand, createUsageSlashCommand, getLastFinalAssistantText } from './use-app-commands.js';
+import {
+  createCopySlashCommand,
+  createUndoSlashCommand,
+  createUsageSlashCommand,
+  getLastFinalAssistantText,
+} from './use-app-commands.js';
 import { parseModelProviderArg } from '../utils/model-provider-arg.js';
 
 async function flushMicrotasks(): Promise<void> {
@@ -104,4 +109,33 @@ test('createCopySlashCommand reports clipboard failures asynchronously', async (
   await flushMicrotasks();
 
   t.deepEqual(systemMessages, ['Failed to copy to clipboard: clipboard unavailable']);
+});
+
+test('createUndoSlashCommand restores last user message to input and returns false', (t) => {
+  let input = '';
+  const command = createUndoSlashCommand({
+    undoLastUserMessage: () => 'Previous message',
+    setInput: (value) => {
+      input = value;
+    },
+    addSystemMessage: () => {},
+  });
+
+  t.is(command.name, 'undo');
+  const result = command.action();
+  t.is(result, false);
+  t.is(input, 'Previous message');
+});
+
+test('createUndoSlashCommand shows system message when nothing to undo', (t) => {
+  const systemMessages: string[] = [];
+  const command = createUndoSlashCommand({
+    undoLastUserMessage: () => null,
+    setInput: () => {},
+    addSystemMessage: (text) => systemMessages.push(text),
+  });
+
+  const result = command.action();
+  t.is(result, true);
+  t.deepEqual(systemMessages, ['Nothing to undo.']);
 });

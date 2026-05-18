@@ -37,6 +37,7 @@ export class ConversationSession {
   private emittedInvalidToolCallPackets = new Set<string>();
   private shellAutoApproval: ShellAutoApprovalResolver;
   private approvalFlow: ApprovalFlowCoordinator;
+  private generation = 0;
 
   private settingsService?: ISettingsService;
 
@@ -66,7 +67,12 @@ export class ConversationSession {
     });
   }
 
+  #isCurrentGeneration(gen: number): boolean {
+    return gen === this.generation;
+  }
+
   reset(): void {
+    this.generation++;
     this.previousResponseId = null;
     this.conversationStore.clear();
     this.approvalState.clearPending();
@@ -75,6 +81,18 @@ export class ConversationSession {
     this.shellAutoApproval.clearCache();
     const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
     clearConversations?.call(this.agentClient);
+  }
+
+  undoLastUserTurn(): { text: string; imageCount: number } | null {
+    const removed = this.conversationStore.removeLastUserTurn();
+    if (removed === null) return null;
+    this.generation++;
+    this.previousResponseId = null;
+    this.approvalState.clearPending();
+    this.approvalState.consumeAborted();
+    this.toolCallArgumentsById.clear();
+    this.shellAutoApproval.clearCache();
+    return removed;
   }
 
   setModel(model: string): void {
@@ -128,6 +146,7 @@ export class ConversationSession {
       skipUserMessage?: boolean;
     } = {},
   ): AsyncIterable<ConversationEvent> {
+    const gen = this.generation;
     let stream: AgentStream | null = null;
     const turn = normalizeUserTurn(input);
     const text = turn.text;
@@ -182,8 +201,10 @@ export class ConversationSession {
             { logger: this.logger, sessionId: this.id },
           );
 
-          this.previousResponseId = continuedStream.lastResponseId ?? null;
-          this.conversationStore.updateFromResult(continuedStream);
+          if (this.#isCurrentGeneration(gen)) {
+            this.previousResponseId = continuedStream.lastResponseId ?? null;
+            this.conversationStore.updateFromResult(continuedStream);
+          }
 
           // Check if another interruption occurred
           if (continuedStream.interruptions && continuedStream.interruptions.length > 0) {
@@ -248,8 +269,10 @@ export class ConversationSession {
         { logger: this.logger, sessionId: this.id },
       );
 
-      this.previousResponseId = stream.lastResponseId ?? null;
-      this.conversationStore.updateFromResult(stream);
+      if (this.#isCurrentGeneration(gen)) {
+        this.previousResponseId = stream.lastResponseId ?? null;
+        this.conversationStore.updateFromResult(stream);
+      }
 
       const resolvedResult = yield* this.#buildAndResolve(
         stream,
@@ -330,6 +353,8 @@ export class ConversationSession {
 
         yield decision.retryEvent;
 
+        if (!this.#isCurrentGeneration(gen)) return;
+
         if (decision.hadStream && stream) {
           this.conversationStore.updateFromResult(stream);
           if (decision.shouldInjectErrorContext) {
@@ -371,6 +396,7 @@ export class ConversationSession {
     answer: string;
     rejectionReason?: string;
   }): AsyncIterable<ConversationEvent> {
+    const gen = this.generation;
     const plan = this.approvalFlow.prepareContinuation(answer, rejectionReason);
     if (!plan) {
       return;
@@ -411,8 +437,10 @@ export class ConversationSession {
         { logger: this.logger, sessionId: this.id },
       );
 
-      this.previousResponseId = stream.lastResponseId ?? null;
-      this.conversationStore.updateFromResult(stream);
+      if (this.#isCurrentGeneration(gen)) {
+        this.previousResponseId = stream.lastResponseId ?? null;
+        this.conversationStore.updateFromResult(stream);
+      }
 
       // Merge previously emitted command IDs with newly emitted ones
       // This prevents duplicates when result.history contains commands from the initial stream

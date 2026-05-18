@@ -447,6 +447,45 @@ export const useConversation = ({
     setIsProcessing(false);
   }, [conversationService]);
 
+  const undoLastUserMessage = useCallback(() => {
+    let lastUserIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].sender === 'user') {
+        lastUserIndex = i;
+        break;
+      }
+    }
+    if (lastUserIndex === -1) {
+      return null;
+    }
+
+    const lastUserMessage = messages[lastUserIndex];
+    const uiText = lastUserMessage.sender === 'user' ? lastUserMessage.text : '';
+    conversationService.abort();
+    const removed = conversationService.undoLastUserTurn();
+    const restored = removed?.text ?? uiText;
+    setMessages((prev) => prev.slice(0, lastUserIndex));
+    setWaitingForApproval(false);
+    setWaitingForRejectionReason(false);
+    setPendingApproval(null);
+    approvedContextRef.current = null;
+    setIsProcessing(false);
+
+    if (removed && removed.imageCount > 0) {
+      appendMessages([
+        {
+          id: createMessageId(),
+          sender: 'system',
+          text: `Note: ${removed.imageCount} attached image${
+            removed.imageCount === 1 ? '' : 's'
+          } could not be restored to the input.`,
+        },
+      ]);
+    }
+
+    return restored;
+  }, [messages, conversationService, appendMessages]);
+
   const setModel = useCallback(
     (model: string) => {
       conversationService.setModel(model);
@@ -522,6 +561,7 @@ export const useConversation = ({
     handleApprovalDecision,
     clearConversation,
     stopProcessing,
+    undoLastUserMessage,
     setModel,
     setReasoningEffort,
     setTemperature,

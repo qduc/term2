@@ -34,6 +34,10 @@ export class ConversationService {
     this.#session.reset();
   }
 
+  undoLastUserTurn(): { text: string; imageCount: number } | null {
+    return this.#session.undoLastUserTurn();
+  }
+
   setModel(model: string): void {
     this.#session.setModel(model);
   }

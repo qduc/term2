@@ -1,6 +1,6 @@
 import test from 'ava';
 import type { AgentInputItem } from '@openai/agents';
-import { ConversationStore } from './conversation-store.js';
+import { ConversationStore, SHELL_CONTEXT_PREFIX } from './conversation-store.js';
 
 test('addUserMessage() appends a user message item', (t) => {
   const store = new ConversationStore();
@@ -240,4 +240,123 @@ test('addShellContext() appends shell history as user message', (t) => {
   t.is(item.role, 'user');
   t.is(item.type, 'message');
   t.is(item.content, historyText);
+});
+
+test('removeLastUserTurn() removes the last user message and everything after it', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'First' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
+    ] satisfies AgentInputItem[],
+  });
+  store.addUserMessage('Second');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'Second' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 2' }] },
+    ] satisfies AgentInputItem[],
+  });
+
+  t.is(store.getHistory().length, 4);
+
+  const result = store.removeLastUserTurn();
+
+  t.deepEqual(result, { text: 'Second', imageCount: 0 });
+  const history = store.getHistory();
+  t.is(history.length, 2);
+  t.is((history[0] as any).content, 'First');
+  t.is((history[1] as any).content[0].text, 'Reply 1');
+});
+
+test('removeLastUserTurn() returns null when no user message exists', (t) => {
+  const store = new ConversationStore();
+  store.updateFromResult({
+    history: [
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hi' }] },
+    ] satisfies AgentInputItem[],
+  });
+
+  const result = store.removeLastUserTurn();
+
+  t.is(result, null);
+  t.is(store.getHistory().length, 1);
+});
+
+test('removeLastUserTurn() clears history when only one user message exists', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('Only');
+
+  const result = store.removeLastUserTurn();
+
+  t.deepEqual(result, { text: 'Only', imageCount: 0 });
+  t.is(store.getHistory().length, 0);
+  t.is(store.getLastUserMessage(), '');
+});
+
+test('removeLastUserTurn() returns { text, imageCount: 0 } and removes turn + everything after it', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('hello');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'hello' },
+      {
+        role: 'assistant',
+        type: 'message',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'world' }],
+      },
+    ] satisfies AgentInputItem[],
+  });
+
+  const result = store.removeLastUserTurn();
+
+  t.deepEqual(result, { text: 'hello', imageCount: 0 });
+  t.is(store.getHistory().length, 0);
+});
+
+test('removeLastUserTurn() skips trailing shell-context item and removes genuine user turn', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('A');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'A' },
+      {
+        role: 'assistant',
+        type: 'message',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'reply' }],
+      },
+    ] satisfies AgentInputItem[],
+  });
+  store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
+
+  const result = store.removeLastUserTurn();
+
+  t.deepEqual(result, { text: 'A', imageCount: 0 });
+  t.is(store.getHistory().length, 0);
+});
+
+test('removeLastUserTurn() returns imageCount > 0 for multimodal turn', (t) => {
+  const store = new ConversationStore();
+  store.addUserTurn({
+    text: 'hi',
+    images: [{ id: 'img-1', data: 'AAAA', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
+  });
+
+  const result = store.removeLastUserTurn();
+
+  t.deepEqual(result, { text: 'hi', imageCount: 1 });
+  t.is(store.getHistory().length, 0);
+});
+
+test('removeLastUserTurn() returns null when only a shell-context item is present', (t) => {
+  const store = new ConversationStore();
+  store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
+
+  const result = store.removeLastUserTurn();
+
+  t.is(result, null);
+  t.is(store.getHistory().length, 1);
 });

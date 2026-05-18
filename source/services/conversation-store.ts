@@ -1,6 +1,8 @@
 import type { AgentInputItem } from '@openai/agents';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 
+export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
+
 /**
  * ConversationStore maintains the canonical conversation history for the app.
  *
@@ -152,6 +154,48 @@ export class ConversationStore {
         return;
       }
     }
+  }
+
+  /**
+   * Remove the last genuine user turn and everything after it.
+   * Skips shell-context items (identified by SHELL_CONTEXT_PREFIX).
+   * Used by /undo to rewind to before the last user turn.
+   * Returns { text, imageCount } of the removed item, or null if none found.
+   */
+  removeLastUserTurn(): { text: string; imageCount: number } | null {
+    const extractText = (raw: any): string => {
+      const content = raw?.content;
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) {
+        return content
+          .filter((c: any) => (c?.type === 'input_text' || c?.type === 'output_text') && typeof c?.text === 'string')
+          .map((c: any) => c.text)
+          .join('');
+      }
+      return '';
+    };
+
+    let anchor = -1;
+    for (let i = this.#history.length - 1; i >= 0; i--) {
+      const item: any = this.#history[i];
+      const raw = item?.rawItem ?? item;
+      if (raw?.role !== 'user') continue;
+      const text = extractText(raw);
+      if (text.startsWith(SHELL_CONTEXT_PREFIX)) continue;
+      anchor = i;
+      break;
+    }
+
+    if (anchor === -1) return null;
+
+    const item: any = this.#history[anchor];
+    const raw = item?.rawItem ?? item;
+    const text = extractText(raw);
+    const content = raw?.content;
+    const imageCount = Array.isArray(content) ? content.filter((c: any) => c?.type === 'input_image').length : 0;
+
+    this.#history.splice(anchor);
+    return { text, imageCount };
   }
 
   /**

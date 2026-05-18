@@ -19,12 +19,19 @@ interface UseAppCommandsProps {
   exit: () => void;
   messages: Message[];
   setModel: (model: string) => void;
+  undoLastUserMessage: () => string | null;
 }
 
 interface CreateCopySlashCommandOptions {
   messages: Message[];
   addSystemMessage: (text: string) => void;
   copy?: (text: string) => Promise<void>;
+}
+
+interface CreateUndoSlashCommandOptions {
+  undoLastUserMessage: () => string | null;
+  setInput: (input: string) => void;
+  addSystemMessage: (text: string) => void;
 }
 
 export function getLastFinalAssistantText(messages: Message[]): string | null {
@@ -99,6 +106,26 @@ export function createCopySlashCommand({
   };
 }
 
+export function createUndoSlashCommand({
+  undoLastUserMessage,
+  setInput,
+  addSystemMessage,
+}: CreateUndoSlashCommandOptions): SlashCommand {
+  return {
+    name: 'undo',
+    description: 'Remove the last user message and restore it to the input box',
+    action: () => {
+      const text = undoLastUserMessage();
+      if (text !== null) {
+        setInput(text);
+        return false;
+      }
+      addSystemMessage('Nothing to undo.');
+      return true;
+    },
+  };
+}
+
 export const useAppCommands = ({
   settingsService,
   addSystemMessage,
@@ -109,6 +136,7 @@ export const useAppCommands = ({
   exit,
   messages,
   setModel,
+  undoLastUserMessage,
 }: UseAppCommandsProps) => {
   const toggleEditMode = useCallback(() => {
     const currentValue = settingsService.get<boolean>('app.editMode');
@@ -182,6 +210,7 @@ export const useAppCommands = ({
           addSystemMessage('Welcome to term²! Type a message to start chatting.');
         },
       },
+      createUndoSlashCommand({ undoLastUserMessage, setInput, addSystemMessage }),
       {
         name: 'quit',
         description: 'Exit the application',
@@ -346,6 +375,7 @@ export const useAppCommands = ({
     setModel,
     setInput,
     settingsService,
+    undoLastUserMessage,
   ]);
 
   return {

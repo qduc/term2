@@ -4,6 +4,7 @@ import type { SettingsService } from '../services/settings-service.js';
 import { ISSHService } from '../services/service-interfaces.js';
 import { executeShellCommand } from '../utils/execute-shell.js';
 import { trimOutput } from '../utils/output-trim.js';
+import { SHELL_CONTEXT_PREFIX } from '../services/conversation-store.js';
 
 const SHELL_MAX_BUFFER = 1024 * 1024;
 
@@ -57,7 +58,7 @@ export const useShellMode = ({
       return lines.join('\n');
     });
 
-    return ['[Previous Shell Session]', ...blocks].join('\n\n');
+    return [SHELL_CONTEXT_PREFIX, ...blocks].join('\n\n');
   }, []);
 
   const flushShellHistory = useCallback(() => {

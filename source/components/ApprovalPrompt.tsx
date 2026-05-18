@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import type { ApprovalDescriptor } from '../contracts/conversation.js';
 import { generateDiff } from '../utils/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
+import { COLOR_TOOL_OUTPUT } from './theme.js';
 
 type Props = {
   approval: ApprovalDescriptor;
@@ -58,12 +59,12 @@ const DiffView: FC<{ diff: string }> = ({ diff }) => {
           }
 
           return (
-            <Text key={i} color={color || '#64748b'}>
+            <Text key={i} color={color || COLOR_TOOL_OUTPUT}>
               {line}
             </Text>
           );
         })}
-        {truncated && <Text color="#64748b">... ({lines.length - maxLines} more lines)</Text>}
+        {truncated && <Text color={COLOR_TOOL_OUTPUT}>... ({lines.length - maxLines} more lines)</Text>}
       </Box>
     );
   } catch (error) {

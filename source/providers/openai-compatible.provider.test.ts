@@ -339,6 +339,43 @@ test('reasoning field is stripped and preserved only as reasoning_content in out
   t.false('reasoning' in assistantMsg, 'reasoning field must not be sent to strict Chat Completions providers');
 });
 
+test('stray top-level index from replayed tool-call providerData is stripped from outgoing messages', async (t) => {
+  const captured: CapturedRequest[] = [];
+  const provider = buildProvider(captured, successResponse);
+  const model = await provider.getModel('provider-model');
+
+  await runUnderTrace(() =>
+    model.getResponse({
+      ...baseRequest,
+      input: [
+        { role: 'user', type: 'message', content: 'hello' },
+        {
+          type: 'function_call',
+          callId: 'shell:0',
+          name: 'shell',
+          arguments: '{"command":"date"}',
+          providerData: { index: 0 },
+        },
+        {
+          type: 'function_call_result',
+          callId: 'shell:0',
+          output: 'Mon Jan 01 00:00:00 UTC 2024',
+        },
+        { role: 'user', type: 'message', content: 'thanks' },
+      ] as any,
+      modelSettings: {},
+    } as any),
+  );
+
+  t.is(captured.length, 1);
+  for (const message of captured[0].body.messages) {
+    t.false(
+      'index' in message,
+      "top-level 'index' must not be sent to strict Chat Completions providers (Extra inputs are not permitted)",
+    );
+  }
+});
+
 test('llama.cpp maps high reasoning effort to chat template kwargs', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'llama.cpp');

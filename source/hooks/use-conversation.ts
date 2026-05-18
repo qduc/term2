@@ -72,13 +72,17 @@ export const useConversation = ({
   loggingService,
   usageAccumulator,
   subagentUsageAccumulator,
+  initialMessages = [],
 }: {
   conversationService: ConversationService;
   loggingService: ILoggingService;
   usageAccumulator?: UsageAccumulator;
   subagentUsageAccumulator?: UsageAccumulator;
+  initialMessages?: Message[];
 }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() =>
+    appendMessagesCapped([], initialMessages, MAX_MESSAGE_COUNT),
+  );
   const [waitingForApproval, setWaitingForApproval] = useState<boolean>(false);
   const [waitingForRejectionReason, setWaitingForRejectionReason] = useState<boolean>(false);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);

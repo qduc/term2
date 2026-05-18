@@ -11,6 +11,7 @@ type Props = {
 };
 
 const MAX_TOOL_LENGTH = 96;
+const MAX_TASK_LENGTH = 80;
 
 const truncate = (value: string, maxLength: number) => {
   if (value.length <= maxLength) {
@@ -20,11 +21,19 @@ const truncate = (value: string, maxLength: number) => {
   return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 };
 
+const buildTitle = (role: string | undefined, task: string | undefined): string => {
+  const roleLabel = role ? `[${role}]` : '';
+  const taskPreview = task ? truncate(task.replace(/\s+/g, ' ').trim(), MAX_TASK_LENGTH) : '';
+  return ['run_subagent', roleLabel, taskPreview].filter(Boolean).join(' ');
+};
+
 const SubagentActivityMessage: FC<Props> = ({ msg }) => {
   const tools = Array.isArray(msg.tools) ? msg.tools.slice(-3) : [];
+  const title = buildTitle(msg.role, msg.task);
 
   return (
     <Box flexDirection="column">
+      <Text color="yellow">$ {title}</Text>
       {tools.map((tool, index) => (
         <Text key={`${tool}-${index}`} color="#64748b">
           {truncate(tool, MAX_TOOL_LENGTH)}

@@ -583,6 +583,21 @@ test('tool_started: formats grep command correctly', (t) => {
   t.is(cmdMsg.command, 'grep "TODO" src/');
 });
 
+test('tool_started: skips pending message for run_subagent (SubagentActivityMessage handles display)', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-sa-1',
+    toolName: 'run_subagent',
+    arguments: { role: 'worker', task: 'fix the bug' },
+  } as ConversationEvent);
+
+  t.is(deps.calls.appendedMessages.length, 0);
+});
+
 test('tool_started: does not append duplicate running message for the same callId', (t) => {
   const deps = createMockDeps();
   const state = createStreamingState();

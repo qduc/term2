@@ -119,6 +119,25 @@ export class ConversationSession {
     }
   }
 
+  exportState(): {
+    history: unknown[];
+    previousResponseId: string | null;
+  } {
+    return {
+      history: this.conversationStore.getHistory(),
+      previousResponseId: this.previousResponseId,
+    };
+  }
+
+  importState(state: { history: unknown[]; previousResponseId: string | null }): void {
+    this.conversationStore.clear();
+    for (const item of state.history as import('@openai/agents').AgentInputItem[]) {
+      this.conversationStore.addImportedItem(item);
+    }
+    this.previousResponseId = state.previousResponseId;
+    this.generation++;
+  }
+
   addShellContext(historyText: string): void {
     this.conversationStore.addShellContext(historyText);
   }

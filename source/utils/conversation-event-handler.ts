@@ -341,6 +341,11 @@ export function createConversationEventHandler<
           activeRunningToolCallIds.add(toolCallId);
         }
 
+        // run_subagent shows its own title via SubagentActivityMessage
+        if (toolName === 'run_subagent') {
+          return;
+        }
+
         appendMessages([pendingMessage as unknown as MessageT]);
         return;
       }

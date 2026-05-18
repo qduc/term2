@@ -54,6 +54,16 @@ export class ConversationStore {
     this.#history.push(item);
   }
 
+  /**
+   * Add an item that was deserialized from a saved conversation.
+   * Unlike addUserMessage, this preserves the original item structure
+   * (role, type, content, callId, etc.) so that tool calls, function results,
+   * and other non-user items are restored faithfully.
+   */
+  addImportedItem(item: AgentInputItem): void {
+    this.#history.push(item);
+  }
+
   addShellContext(historyText: string): void {
     const trimmed = historyText ?? '';
     if (!trimmed.trim()) {

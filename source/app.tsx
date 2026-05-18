@@ -18,6 +18,7 @@ import { useShellMode, SSHInfo } from './hooks/use-shell-mode.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/token-usage.js';
+import type { Message } from './hooks/use-conversation.js';
 
 interface AppProps {
   conversationService: ConversationService;
@@ -29,6 +30,10 @@ interface AppProps {
   usageAccumulator?: UsageAccumulator;
   onPrintUsage?: () => void;
   onExitUsage?: () => void;
+  sessionId: string;
+  initialMessages?: Message[];
+  onSaveConversation: (messages: Message[]) => Promise<void>;
+  onMessagesChange: (messages: Message[]) => void;
 }
 
 export const appendStartupBannerId = (ids: string[]): string[] => [...ids, `startup-banner-${ids.length}`];
@@ -43,6 +48,10 @@ const App: FC<AppProps> = ({
   usageAccumulator,
   onPrintUsage,
   onExitUsage,
+  sessionId: _sessionId,
+  initialMessages = [],
+  onSaveConversation,
+  onMessagesChange,
 }) => {
   const { exit } = useApp();
   const { setInput } = useInputActions();
@@ -75,7 +84,13 @@ const App: FC<AppProps> = ({
     loggingService,
     usageAccumulator: sessionUsage,
     subagentUsageAccumulator: subagentUsage,
+    initialMessages,
   });
+
+  // Sync messages to parent for SIGINT save-on-exit
+  useEffect(() => {
+    onMessagesChange(messages);
+  }, [messages, onMessagesChange]);
 
   useEffect(() => {
     conversationService.setRetryCallback(() => addSystemMessage('Retrying due to upstream error...'));
@@ -114,10 +129,11 @@ const App: FC<AppProps> = ({
     [sessionUsage, getSubagentUsage],
   );
 
-  const exitWithUsage = useCallback(() => {
+  const exitWithUsage = useCallback(async () => {
+    await onSaveConversation(messages);
     onExitUsage?.();
     exit();
-  }, [exit, onExitUsage]);
+  }, [exit, onExitUsage, onSaveConversation, messages]);
 
   const { slashCommands, toggleEditMode } = useAppCommands({
     settingsService,

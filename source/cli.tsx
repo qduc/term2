@@ -17,9 +17,19 @@ import { ExecutionContext } from './services/execution-context.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { resolveSSHHost } from './utils/ssh-config-parser.js';
 import { createUsageAccumulator, formatSessionTokenUsage } from './utils/token-usage.js';
+import {
+  generateId,
+  getResumeCommand,
+  loadConversation,
+  loadLastConversation,
+  saveConversation,
+  type SavedConversation,
+  type SavedMessage,
+} from './services/conversation-persistence.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import type { Message } from './hooks/use-conversation.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 let usagePrinted = false;
@@ -32,9 +42,17 @@ const printUsageOnce = () => {
   printUsage();
 };
 
+// Shared ref for saving conversation on exit (populated by App component)
+let pendingMessages: Message[] = [];
+let saveConversationOnExit: ((messages: Message[]) => Promise<void>) | null = null;
+
 // Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
-process.on('SIGINT', () => {
-  printUsageOnce();
+process.on('SIGINT', async () => {
+  if (saveConversationOnExit) {
+    await saveConversationOnExit(pendingMessages);
+  } else {
+    printUsageOnce();
+  }
   process.exit(0);
 });
 
@@ -53,12 +71,15 @@ const cli = meow(
           --ssh             Enable SSH mode (user@host)
           --remote-dir      Required remote working directory for SSH mode
           --ssh-port        Optional SSH port (default: 22)
+          -R, --resume      Resume a conversation (optionally provide UUID)
 
         Examples
           $ term2 -m gpt-4o
           $ term2 --lite
                     $ term2 "explain this function"
                     $ term2 --auto-approve "list files in current dir"
+          $ term2 --resume          # Resume last conversation
+          $ term2 --resume <uuid>   # Resume specific conversation
     `,
   {
     importMeta: import.meta,
@@ -90,15 +111,28 @@ const cli = meow(
         type: 'number',
         default: 22,
       },
+      resume: {
+        type: 'boolean',
+        alias: 'R',
+        default: false,
+      },
     },
   },
 );
 
-const positionalPrompt = cli.input.join(' ').trim();
+const resumeRequested = Boolean(cli.flags.resume);
+const resumeTarget = resumeRequested ? cli.input[0]?.trim() : undefined;
+
+if (resumeRequested && cli.input.length > 1) {
+  console.error('Error: --resume accepts at most one conversation id.');
+  process.exit(1);
+}
+
+const positionalPrompt = resumeRequested ? '' : cli.input.join(' ').trim();
 const hasPositionalPrompt = positionalPrompt.length > 0;
 
 // If the user passed an explicit empty prompt (e.g. `term2 ""`), show help.
-if (cli.input.length > 0 && !hasPositionalPrompt) {
+if (!resumeRequested && cli.input.length > 0 && !hasPositionalPrompt) {
   cli.showHelp(0);
 }
 
@@ -116,10 +150,33 @@ const validatedReasoningEffort: ModelSettingsReasoningEffort | undefined =
     ? (reasoningEffort as ModelSettingsReasoningEffort)
     : undefined;
 
+let resumedConversation: SavedConversation | null = null;
+if (resumeRequested) {
+  resumedConversation = resumeTarget ? loadConversation(resumeTarget) : loadLastConversation();
+}
+
 // Apply CLI overrides to settings service
 const cliOverrides: any = {};
+
+if (resumedConversation) {
+  cliOverrides.agent = {};
+  if (resumedConversation.model && !modelFlag) {
+    cliOverrides.agent.model = resumedConversation.model;
+  }
+  if (resumedConversation.provider) {
+    cliOverrides.agent.provider = resumedConversation.provider;
+  }
+  if (
+    resumedConversation.reasoningEffort &&
+    !validatedReasoningEffort &&
+    validReasoningEfforts.includes(resumedConversation.reasoningEffort as any)
+  ) {
+    cliOverrides.agent.reasoningEffort = resumedConversation.reasoningEffort;
+  }
+}
+
 if (modelFlag) {
-  cliOverrides.agent = { model: modelFlag };
+  cliOverrides.agent = { ...cliOverrides.agent, model: modelFlag };
 }
 
 if (validatedReasoningEffort) {
@@ -303,6 +360,33 @@ const conversationService = new ConversationService({
   },
 });
 
+// Generate session UUID and handle resume
+let effectiveSessionId = generateId();
+let effectiveCreatedAt = new Date().toISOString();
+let initialMessages: Message[] = [];
+
+if (resumedConversation) {
+  const savedProviderMatches =
+    !resumedConversation.provider || resumedConversation.provider === settings.get('agent.provider');
+  const savedModelMatches = !resumedConversation.model || resumedConversation.model === settings.get('agent.model');
+  const previousResponseId = savedProviderMatches && savedModelMatches ? resumedConversation.previousResponseId : null;
+
+  // Restore agent conversation history.
+  conversationService.importState({
+    history: resumedConversation.history,
+    previousResponseId,
+  });
+  // Use the original conversation ID for saving updates.
+  console.log(`Resumed conversation: ${resumedConversation.id}`);
+  effectiveSessionId = resumedConversation.id;
+  effectiveCreatedAt = resumedConversation.createdAt;
+  initialMessages = resumedConversation.messages as Message[];
+  pendingMessages = initialMessages;
+} else if (resumeRequested) {
+  const target = resumeTarget ?? 'last';
+  console.warn(`No conversation found to resume (${target}). Starting new conversation.`);
+}
+
 import { InputProvider } from './context/InputContext.js';
 import { patchStdoutForSynchronizedOutput } from './utils/synchronized-output.js';
 
@@ -310,6 +394,39 @@ import { patchStdoutForSynchronizedOutput } from './utils/synchronized-output.js
 // This wraps every stdout.write() in begin/end markers so the terminal
 // buffers the entire Ink render frame and paints it atomically.
 patchStdoutForSynchronizedOutput(process.stdout);
+
+// Save conversation on exit and print resume command
+let conversationSavedForExit = false;
+const saveAndPrintResume = async (messages: Message[]) => {
+  if (conversationSavedForExit) {
+    return;
+  }
+  conversationSavedForExit = true;
+
+  const state = conversationService.exportState();
+  const model = settings.get('agent.model');
+  const provider = settings.get('agent.provider');
+  const reasoningEffortVal = settings.get('agent.reasoningEffort');
+
+  saveConversation({
+    id: effectiveSessionId,
+    createdAt: effectiveCreatedAt,
+    updatedAt: new Date().toISOString(),
+    model,
+    provider,
+    reasoningEffort: reasoningEffortVal ?? undefined,
+    previousResponseId: state.previousResponseId,
+    history: state.history as import('@openai/agents').AgentInputItem[],
+    messages: messages as SavedMessage[],
+  });
+
+  const resumeCmd = getResumeCommand(effectiveSessionId);
+  printUsageOnce();
+  console.log(`\nTo resume this conversation: ${resumeCmd}`);
+};
+
+// Register the save callback for SIGINT handling
+saveConversationOnExit = saveAndPrintResume;
 
 const { waitUntilExit } = render(
   (
@@ -324,6 +441,12 @@ const { waitUntilExit } = render(
         usageAccumulator={sessionUsageAccumulator}
         onPrintUsage={printUsage}
         onExitUsage={printUsageOnce}
+        sessionId={effectiveSessionId}
+        initialMessages={initialMessages}
+        onSaveConversation={saveAndPrintResume}
+        onMessagesChange={(msgs) => {
+          pendingMessages = msgs;
+        }}
       />
     </InputProvider>
   ) as ReactNode,
@@ -331,5 +454,5 @@ const { waitUntilExit } = render(
 );
 
 await waitUntilExit();
-printUsageOnce();
+await saveAndPrintResume(pendingMessages);
 process.exit(0);

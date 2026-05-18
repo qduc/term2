@@ -75,4 +75,15 @@ export class ConversationService {
   ): Promise<ConversationTerminal | null> {
     return this.#session.handleApprovalDecision(...args);
   }
+
+  exportState(): {
+    history: unknown[];
+    previousResponseId: string | null;
+  } {
+    return this.#session.exportState();
+  }
+
+  importState(state: { history: unknown[]; previousResponseId: string | null }): void {
+    this.#session.importState(state);
+  }
 }

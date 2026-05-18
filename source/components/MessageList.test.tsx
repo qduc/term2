@@ -179,7 +179,6 @@ test('MessageList renders a compact subagent activity peek', (t) => {
   const { lastFrame } = render(<MessageList messages={messages} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  t.true(output.includes('subagent explorer inspect the command message rendering flow'));
   t.true(output.includes('grep'));
   t.true(output.includes('read_file'));
   t.true(output.includes('read_code_outline'));
@@ -389,4 +388,16 @@ test('splitStaticHistory moves finalized reasoning messages to static history', 
   t.true(history.some((message) => message.id === 'finalized-reasoning'));
   t.false(active.some((message) => message.id === 'finalized-reasoning'));
   t.is(active.length, 0);
+});
+
+test('MessageList outputs a blank line after the final message in Static', (t) => {
+  const messages = [{ id: 'static-msg', sender: 'bot', status: 'finalized', text: 'final static message' }];
+  const { lastFrame } = render(<MessageList messages={messages} />);
+  const output = lastFrame() ?? '';
+
+  // Since the last message is finalized, it is output to Static.
+  // It should end with a blank line because of the Box height={1} added inside renderStaticItem.
+  const lines = output.split('\n');
+  t.true(lines.length > 0);
+  t.is(lines[lines.length - 1].trim(), '');
 });

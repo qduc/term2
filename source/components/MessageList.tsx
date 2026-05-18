@@ -205,6 +205,16 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
       );
     }
 
+    const isLast = idx === staticItems.length - 1;
+    if (isLast) {
+      return (
+        <Box key={item.id} flexDirection="column">
+          {renderMessage(item.message, idx, staticItems, contentWidth)}
+          <Box height={1} />
+        </Box>
+      );
+    }
+
     return renderMessage(item.message, idx, staticItems, contentWidth);
   };
 

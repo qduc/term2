@@ -1,5 +1,9 @@
 import test from 'ava';
-import { createConversationEventHandler, type ConversationEventHandlerDeps } from './conversation-event-handler.js';
+import {
+  createConversationEventHandler,
+  findLastSafeBoundary,
+  type ConversationEventHandlerDeps,
+} from './conversation-event-handler.js';
 import { createStreamingState } from './conversation-utils.js';
 import type { ConversationEvent } from '../services/conversation-events.js';
 
@@ -72,8 +76,57 @@ function createMockDeps(): MockDeps & {
 }
 
 // =============================================================================
+// findLastSafeBoundary tests
+// =============================================================================
+
+test('findLastSafeBoundary: splits on paragraph boundary', (t) => {
+  const text = 'Paragraph 1\n\nParagraph 2';
+  t.is(findLastSafeBoundary(text, 0), 13);
+});
+
+test('findLastSafeBoundary: ignores paragraph boundaries inside code blocks', (t) => {
+  const text = '```javascript\nconst a = 1;\n\nconst b = 2;\n```\nMore text';
+  const expectedBoundary = text.indexOf('```\nMore text') + 4; // after \n```\n
+  t.is(findLastSafeBoundary(text, 0), expectedBoundary);
+});
+
+test('findLastSafeBoundary: splits at closing code blocks', (t) => {
+  const text = 'Here is code:\n```javascript\ncode\n```\nTail';
+  const expectedBoundary = text.indexOf('```\nTail') + 4;
+  t.is(findLastSafeBoundary(text, 0), expectedBoundary);
+});
+
+test('findLastSafeBoundary: splits before headings', (t) => {
+  const text = 'Paragraph 1\n# Heading 1';
+  const expectedBoundary = text.indexOf('#'); // Split right before #
+  t.is(findLastSafeBoundary(text, 0), expectedBoundary);
+});
+
+test('findLastSafeBoundary: splits on thematic breaks', (t) => {
+  const text = 'Paragraph 1\n---\nParagraph 2';
+  const expectedBoundary = text.indexOf('Paragraph 2'); // after \n---\n
+  t.is(findLastSafeBoundary(text, 0), expectedBoundary);
+});
+
+// =============================================================================
 // text_delta tests
 // =============================================================================
+
+test('text_delta: avoids splitting inside a code block and splits after it closes', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'text_delta',
+    delta: 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\nTail',
+  } as ConversationEvent);
+
+  t.is(deps.calls.appendedMessages.length, 1);
+  t.is(deps.calls.appendedMessages[0][0].text, 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\n');
+  t.is(state.accumulatedText, 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\nTail');
+  t.is(state.flushedTextLength, 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\n'.length);
+});
 
 test('text_delta: accumulates text and pushes to live response', (t) => {
   const deps = createMockDeps();

@@ -8,6 +8,51 @@ import type { CommandMessage } from '../tools/types.js';
 import { parseToolArguments, formatToolCommand, type StreamingState } from './conversation-utils.js';
 
 /**
+ * Finds the last safe Markdown block boundary in the text after the search start index.
+ * A safe boundary occurs at paragraph endings, closed code blocks, headings, or thematic breaks,
+ * while strictly avoiding breaking inside an open code block.
+ */
+export function findLastSafeBoundary(fullText: string, searchStartIndex: number): number {
+  const boundaryRegex = /\n\n|\n```(?:\n|$)|\n(?:---|[*]{3})(?:\n|$)|\n#{1,6} /g;
+  boundaryRegex.lastIndex = searchStartIndex;
+
+  let match;
+  let lastSafeIndex = -1;
+
+  while ((match = boundaryRegex.exec(fullText)) !== null) {
+    const isCodeBlock = match[0].startsWith('\n```');
+
+    let codeBlockCount = 0;
+    const codeBlockRegex = /(?:^|\n)```/g;
+    let cbMatch;
+    while ((cbMatch = codeBlockRegex.exec(fullText)) !== null) {
+      if (cbMatch.index < match.index) {
+        codeBlockCount++;
+      } else {
+        break;
+      }
+    }
+    const insideCodeBlock = codeBlockCount % 2 !== 0;
+
+    if (isCodeBlock) {
+      if (insideCodeBlock) {
+        lastSafeIndex = match.index + match[0].length;
+      }
+    } else {
+      if (!insideCodeBlock) {
+        if (match[0].startsWith('\n#')) {
+          lastSafeIndex = match.index + 1;
+        } else {
+          lastSafeIndex = match.index + match[0].length;
+        }
+      }
+    }
+  }
+
+  return lastSafeIndex;
+}
+
+/**
  * Message types used by the event handler.
  */
 export interface BotMessage {
@@ -183,10 +228,10 @@ export function createConversationEventHandler<
 
         let newBotText = state.accumulatedText.slice(state.flushedTextLength);
 
-        const lastParagraphBoundary = newBotText.lastIndexOf('\n\n');
-        if (lastParagraphBoundary !== -1) {
-          const finalizedText = newBotText.slice(0, lastParagraphBoundary + 2);
-          newBotText = newBotText.slice(lastParagraphBoundary + 2);
+        const lastBoundaryIndex = findLastSafeBoundary(state.accumulatedText, state.flushedTextLength);
+        if (lastBoundaryIndex !== -1) {
+          const finalizedText = state.accumulatedText.slice(state.flushedTextLength, lastBoundaryIndex);
+          newBotText = state.accumulatedText.slice(lastBoundaryIndex);
 
           if (finalizedText.trim()) {
             botResponseUpdater.cancel();
@@ -231,10 +276,10 @@ export function createConversationEventHandler<
         // Only show reasoning text after what was already flushed
         let newReasoningText = fullReasoningText.slice(state.flushedReasoningLength);
 
-        const lastParagraphBoundary = newReasoningText.lastIndexOf('\n\n');
-        if (lastParagraphBoundary !== -1) {
-          const finalizedText = newReasoningText.slice(0, lastParagraphBoundary + 2);
-          newReasoningText = newReasoningText.slice(lastParagraphBoundary + 2);
+        const lastBoundaryIndex = findLastSafeBoundary(fullReasoningText, state.flushedReasoningLength);
+        if (lastBoundaryIndex !== -1) {
+          const finalizedText = fullReasoningText.slice(state.flushedReasoningLength, lastBoundaryIndex);
+          newReasoningText = fullReasoningText.slice(lastBoundaryIndex);
 
           if (finalizedText.trim()) {
             reasoningUpdater.cancel();

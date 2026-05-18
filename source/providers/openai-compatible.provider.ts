@@ -136,6 +136,13 @@ function sanitizeOpenAICompatibleMessages(messages: any[]): any[] {
   return messages.map((message) => {
     if (!message || typeof message !== 'object') return message;
 
+    // `index` is a choice-level field in Chat Completions responses, never a
+    // valid message field. The OpenAI Agents SDK leaks it onto replayed
+    // assistant messages when a provider echoes it on tool_calls, which strict
+    // (extra=forbid) providers reject with "Extra inputs are not permitted".
+    const { index: _strayIndex, ...message_ } = message;
+    message = message_;
+
     let newContent = message.content;
     if (Array.isArray(message.content)) {
       // Check if it's exclusively text parts

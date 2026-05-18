@@ -163,6 +163,28 @@ test('MessageList preserves spaces in bot text immediately before a command mess
   t.false(output.includes('read thisfile:'));
 });
 
+test('MessageList renders a compact subagent activity peek', (t) => {
+  const messages = [
+    {
+      id: 'subagent-agent-1',
+      sender: 'subagent',
+      status: 'running',
+      agentId: 'agent-1',
+      role: 'explorer',
+      task: 'inspect the command message rendering flow and report findings that are quite long',
+      tools: ['grep', 'read_file', 'read_code_outline'],
+    },
+  ];
+
+  const { lastFrame } = render(<MessageList messages={messages} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('subagent explorer inspect the command message rendering flow'));
+  t.true(output.includes('grep'));
+  t.true(output.includes('read_file'));
+  t.true(output.includes('read_code_outline'));
+});
+
 test('MessageList renders active and static markdown tables with the same padded width', (t) => {
   const markdown = `| File | Change |
 | --- | --- |

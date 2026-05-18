@@ -30,6 +30,25 @@ const runSubagentSchema = z.object({
 
 export type RunSubagentParams = z.infer<typeof runSubagentSchema>;
 
+const MAX_TASK_PREVIEW_LENGTH = 80;
+
+function truncateTaskPreview(task: unknown): string {
+  if (typeof task !== 'string') {
+    return '';
+  }
+
+  const normalized = task.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  if (normalized.length <= MAX_TASK_PREVIEW_LENGTH) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, MAX_TASK_PREVIEW_LENGTH - 3)}...`;
+}
+
 function formatSubagentResult(result: SubagentResult): string {
   const lines: string[] = [];
   lines.push(`Status: ${result.status}`);
@@ -66,7 +85,8 @@ export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, inde
   const rawOutput = getOutputText(item);
   const parsed = safeJsonParse(rawOutput) as SubagentResult | null;
 
-  let command = `run_subagent [${role}]`;
+  const taskPreview = truncateTaskPreview(args?.task);
+  let command = taskPreview ? `run_subagent [${role}] ${taskPreview}` : `run_subagent [${role}]`;
   let output = rawOutput || 'No response';
   let success = true;
 
@@ -84,11 +104,11 @@ export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, inde
     output = parts.filter(Boolean).join('\n');
 
     if (parsed.error) {
-      command = `run_subagent [${role}] — failed`;
+      command = taskPreview ? `run_subagent [${role}] ${taskPreview} — failed` : `run_subagent [${role}] — failed`;
     }
   } else if (rawOutput?.includes('Status: failed')) {
     success = false;
-    command = `run_subagent [${role}] — failed`;
+    command = taskPreview ? `run_subagent [${role}] ${taskPreview} — failed` : `run_subagent [${role}] — failed`;
   } else if (rawOutput?.includes('Status: cancelled')) {
     success = false;
   }

@@ -46,7 +46,23 @@ export interface ReasoningMessage {
   text: string;
 }
 
-export type Message = UserMessage | BotMessage | CommandMessage | SystemMessage | ReasoningMessage;
+export interface SubagentActivityMessage {
+  id: string;
+  sender: 'subagent';
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  agentId: string;
+  role: string;
+  task: string;
+  tools: string[];
+}
+
+export type Message =
+  | UserMessage
+  | BotMessage
+  | CommandMessage
+  | SystemMessage
+  | ReasoningMessage
+  | SubagentActivityMessage;
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 const MAX_MESSAGE_COUNT = 300;

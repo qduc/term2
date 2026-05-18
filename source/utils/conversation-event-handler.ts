@@ -30,6 +30,16 @@ export interface ReasoningMessage {
   status?: 'finalized';
 }
 
+export interface SubagentActivityMessage {
+  id: string;
+  sender: 'subagent';
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  agentId: string;
+  role: string;
+  task: string;
+  tools: string[];
+}
+
 export type UIMessage = {
   id: string | number;
   sender: string;
@@ -320,6 +330,67 @@ export function createConversationEventHandler<
           }
 
           return trimMessages([...prev, annotated as unknown as MessageT]);
+        });
+        return;
+      }
+
+      case 'subagent_started': {
+        appendMessages([
+          {
+            id: `subagent-${event.agentId}`,
+            sender: 'subagent',
+            status: 'running',
+            agentId: event.agentId,
+            role: event.role,
+            task: event.task,
+            tools: [],
+          } as unknown as MessageT,
+        ]);
+        return;
+      }
+
+      case 'subagent_tool_started': {
+        setMessages((prev) => {
+          const index = prev.findIndex((msg) => msg.sender === 'subagent' && (msg as any).agentId === event.agentId);
+          const toolLabels =
+            event.commandMessages
+              ?.map((message) => message.command)
+              .filter((command): command is string => Boolean(command)) ?? [];
+          const newTools = toolLabels.length > 0 ? toolLabels : [event.toolName];
+          const appendTool = (message: any) => ({
+            ...message,
+            status: 'running',
+            role: message.role ?? event.role,
+            tools: [...(Array.isArray(message.tools) ? message.tools : []), ...newTools].slice(-3),
+          });
+
+          if (index === -1) {
+            return trimMessages([
+              ...prev,
+              {
+                id: `subagent-${event.agentId}`,
+                sender: 'subagent',
+                status: 'running',
+                agentId: event.agentId,
+                role: event.role,
+                task: '',
+                tools: newTools.slice(-3),
+              } as unknown as MessageT,
+            ]);
+          }
+
+          const next = [...prev];
+          next[index] = appendTool(next[index]) as unknown as MessageT;
+          return trimMessages(next);
+        });
+        return;
+      }
+
+      case 'subagent_completed': {
+        setMessages((prev) => {
+          return trimMessages(
+            prev.filter((msg) => !(msg.sender === 'subagent' && (msg as any).agentId === event.result.agentId)),
+          );
         });
         return;
       }

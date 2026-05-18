@@ -3,6 +3,7 @@ import { Box, Static, useStdout } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import ChatMessage from './ChatMessage.js';
 import Banner from './Banner.js';
+import SubagentActivityMessage from './SubagentActivityMessage.js';
 import type { SettingsService } from '../services/settings-service.js';
 
 type Props = {
@@ -40,6 +41,10 @@ const canRenderStatically = (message: MessageLike) => {
 
   if (message.sender === 'command') {
     return message.status !== 'pending' && message.status !== 'running';
+  }
+
+  if (message.sender === 'subagent') {
+    return message.status !== 'running';
   }
 
   if (message.sender === 'bot') {
@@ -182,6 +187,8 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
             isApprovalRejection={msg.isApprovalRejection}
             hadApproval={msg.hadApproval}
           />
+        ) : msg.sender === 'subagent' ? (
+          <SubagentActivityMessage msg={msg} />
         ) : (
           <ChatMessage msg={msg} maxWidth={maxWidth} />
         )}

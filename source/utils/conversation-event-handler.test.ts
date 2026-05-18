@@ -636,6 +636,125 @@ test('command_message: flushes accumulated text before adding', (t) => {
 });
 
 // =============================================================================
+// subagent activity tests
+// =============================================================================
+
+test('subagent events: maintains a live peek with the last three tools', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'inspect the command message rendering flow and report findings',
+  } as ConversationEvent);
+
+  t.deepEqual(deps.calls.appendedMessages[0], [
+    {
+      id: 'subagent-agent-1',
+      sender: 'subagent',
+      status: 'running',
+      agentId: 'agent-1',
+      role: 'explorer',
+      task: 'inspect the command message rendering flow and report findings',
+      tools: [],
+    },
+  ]);
+
+  handler({
+    type: 'subagent_tool_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    toolName: 'find_files',
+    commandMessages: [{ id: 'find', sender: 'command', status: 'running', command: 'find_files "*.ts"', output: '' }],
+  } as any);
+  handler({
+    type: 'subagent_tool_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    toolName: 'grep',
+    commandMessages: [
+      { id: 'grep', sender: 'command', status: 'running', command: 'grep "needle" "source"', output: '' },
+    ],
+  } as any);
+  handler({
+    type: 'subagent_tool_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    toolName: 'read_file',
+    commandMessages: [
+      { id: 'read', sender: 'command', status: 'running', command: 'read_file "source/app.tsx"', output: '' },
+    ],
+  } as any);
+  handler({
+    type: 'subagent_tool_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    toolName: 'read_code_outline',
+    commandMessages: [
+      {
+        id: 'outline',
+        sender: 'command',
+        status: 'running',
+        command: 'read_code_outline "source/app.tsx"',
+        output: '',
+      },
+    ],
+  } as any);
+
+  let messages = deps.calls.appendedMessages[0];
+  for (const update of deps.calls.setMessagesCalls) {
+    messages = update(messages);
+  }
+
+  t.deepEqual(messages, [
+    {
+      id: 'subagent-agent-1',
+      sender: 'subagent',
+      status: 'running',
+      agentId: 'agent-1',
+      role: 'explorer',
+      task: 'inspect the command message rendering flow and report findings',
+      tools: ['grep "needle" "source"', 'read_file "source/app.tsx"', 'read_code_outline "source/app.tsx"'],
+    },
+  ]);
+});
+
+test('subagent_completed removes the live peek', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_completed',
+    result: {
+      agentId: 'agent-1',
+      role: 'worker',
+      status: 'completed',
+      finalText: 'done',
+      filesChanged: [],
+      toolsUsed: [],
+    },
+  } as ConversationEvent);
+
+  const result = deps.calls.setMessagesCalls[0]([
+    {
+      id: 'subagent-agent-1',
+      sender: 'subagent',
+      status: 'running',
+      agentId: 'agent-1',
+      role: 'worker',
+      task: 'make the change',
+      tools: ['apply_patch'],
+    },
+  ]);
+
+  t.deepEqual(result, []);
+});
+
+// =============================================================================
 // retry tests
 // =============================================================================
 

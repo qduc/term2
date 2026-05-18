@@ -765,6 +765,7 @@ test.serial('run() emits started, tool_started and completed events', async (t) 
   t.truthy(toolStarted);
   t.is(toolStarted.toolName, 'read_file');
   t.is(toolStarted.agentId, result.agentId);
+  t.is(toolStarted.commandMessages?.[0]?.command, 'read_file "/nonexistent-subagent-event-test"');
 
   const completed = events.find((e) => e.type === 'subagent_completed');
   t.truthy(completed);

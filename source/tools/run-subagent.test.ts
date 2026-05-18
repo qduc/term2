@@ -95,8 +95,27 @@ test('formatCommandMessage renders completed result', (t) => {
   const messages = tool.formatCommandMessage(item, 0, new Map());
   t.is(messages.length, 1);
   t.true(messages[0].command.includes('explorer'));
+  t.true(messages[0].command.includes('find files'));
   t.true(messages[0].output.includes('Found 3 relevant files.'));
   t.true(messages[0].success ?? true);
+});
+
+test('formatCommandMessage truncates long task in command', (t) => {
+  const tool = createRunSubagentToolDefinition(async () => makeResult());
+  const longTask =
+    'read and explain how rendering works in source/components/MessageList.tsx with enough detail to exceed the command preview limit';
+
+  const item = {
+    rawItem: {
+      arguments: JSON.stringify({ role: 'explorer', task: longTask }),
+      output: 'Status: completed\n\nDone.',
+    },
+  };
+
+  const messages = tool.formatCommandMessage(item, 0, new Map());
+  t.true(messages[0].command.startsWith('run_subagent [explorer] read and explain'));
+  t.true(messages[0].command.endsWith('...'));
+  t.true(messages[0].command.length < longTask.length + 'run_subagent [explorer] '.length);
 });
 
 test('formatCommandMessage renders failed result', (t) => {

@@ -110,6 +110,7 @@ export interface SubagentToolStartedEvent {
   agentId: string;
   role: string;
   toolName: string;
+  commandMessages?: CommandMessage[];
 }
 
 export interface SubagentCommandMessageEvent {

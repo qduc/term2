@@ -8,7 +8,7 @@ import { getProvider } from '../../providers/index.js';
 import { SubagentSession } from './subagent-session.js';
 import type { SubagentRequest, SubagentResult, SubagentDefinition, SubagentRole } from './types.js';
 import type { ConversationEvent } from '../conversation-events.js';
-import type { ToolDefinition } from '../../tools/types.js';
+import type { CommandMessage, ToolDefinition } from '../../tools/types.js';
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import { wrapNeedsApproval } from '../../lib/openai-agent-client.js';
 import { toOpenAIStrictToolSchema } from '../../lib/openai-strict-tool-schema.js';
@@ -109,7 +109,7 @@ function buildAgentTools(
     providerId: string;
     logger: ILoggingService;
     settings: ISettingsService;
-    onToolStart?: (toolName: string) => void;
+    onToolStart?: (toolName: string, params: unknown, commandMessages: CommandMessage[]) => void;
     onToolComplete?: (toolName: string) => void;
   },
 ): Tool[] {
@@ -132,7 +132,7 @@ function buildAgentTools(
         parameters: useStrictSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
         needsApproval: wrapNeedsApproval(definition),
         execute: async (params, _context) => {
-          options.onToolStart?.(definition.name);
+          options.onToolStart?.(definition.name, params, formatRunningCommandMessages(definition, params));
           const maxOutputLength = options.settings.get<number | undefined>('shell.maxOutputChars');
           const result = await definition.execute(params, _context);
           options.onToolComplete?.(definition.name);
@@ -141,6 +141,49 @@ function buildAgentTools(
       }),
     ),
   );
+}
+
+function formatRunningCommandMessages(definition: ToolDefinition, params: unknown): CommandMessage[] {
+  const callId = `subagent-tool-${randomUUID()}`;
+  const item = {
+    id: callId,
+    rawItem: {
+      id: callId,
+      callId,
+      arguments: params,
+      output: '',
+    },
+  };
+
+  try {
+    const messages = definition.formatCommandMessage(item, 0, new Map());
+    if (messages.length > 0) {
+      return messages.map((message, index) => ({
+        ...message,
+        id: `${callId}-${index}`,
+        status: 'running',
+        output: '',
+        success: undefined,
+        failureReason: undefined,
+        toolName: message.toolName ?? definition.name,
+        toolArgs: message.toolArgs ?? params,
+      }));
+    }
+  } catch {
+    // Fall back to the tool name if a formatter cannot handle an in-flight item.
+  }
+
+  return [
+    {
+      id: `${callId}-0`,
+      sender: 'command',
+      status: 'running',
+      command: definition.name,
+      output: '',
+      toolName: definition.name,
+      toolArgs: params,
+    },
+  ];
 }
 
 function runWithProvider(providerId: string, runner: any, agent: Agent, input: any, options: any): Promise<any> {
@@ -363,13 +406,14 @@ export class SubagentManager {
       providerId,
       logger: this.#logger,
       settings: this.#settings,
-      onToolStart: (name) => {
+      onToolStart: (name, _params, commandMessages) => {
         toolCounts.set(name, (toolCounts.get(name) ?? 0) + 1);
         this.#emit({
           type: 'subagent_tool_started',
           agentId,
           role: request.role,
           toolName: name,
+          commandMessages,
         });
       },
     });

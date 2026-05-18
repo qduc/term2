@@ -435,6 +435,55 @@ test('MessageList non-continuation across static-dynamic boundary has correct sp
   t.is(botIndex - userIndex, 2);
 });
 
+test('MessageList does not strand blank lines mid-history when reasoning streams in chunks', (t) => {
+  // Reproduces the chunked-reasoning trigger: a finalized chunk is briefly the
+  // last item with no dynamic tail (a safe boundary landed at the end of the
+  // buffer, so no live tail was pushed), then reasoning resumes and more
+  // chunks are appended. The trailing spacer must not get frozen into the
+  // write-once static buffer between the two chunks.
+  const renderer = render(
+    <MessageList
+      messages={[
+        { id: 'chunk-a', sender: 'reasoning', status: 'finalized', text: 'alpha reasoning chunk' },
+        { id: 'tail', sender: 'reasoning', status: 'streaming', text: 'live tail' },
+      ]}
+    />,
+  );
+
+  // Boundary at end of buffer: the tail is finalized in place, no new tail.
+  renderer.rerender(
+    <MessageList
+      messages={[
+        { id: 'chunk-a', sender: 'reasoning', status: 'finalized', text: 'alpha reasoning chunk' },
+        { id: 'tail', sender: 'reasoning', status: 'finalized', text: 'bravo reasoning chunk' },
+      ]}
+    />,
+  );
+
+  // Reasoning resumes and appends another chunk below the now-static history.
+  renderer.rerender(
+    <MessageList
+      messages={[
+        { id: 'chunk-a', sender: 'reasoning', status: 'finalized', text: 'alpha reasoning chunk' },
+        { id: 'tail', sender: 'reasoning', status: 'finalized', text: 'bravo reasoning chunk' },
+        { id: 'chunk-c', sender: 'reasoning', status: 'finalized', text: 'charlie reasoning chunk' },
+        { id: 'tail-2', sender: 'reasoning', status: 'streaming', text: 'live tail two' },
+      ]}
+    />,
+  );
+
+  const lines = renderedLines(renderer.lastFrame() ?? '');
+  const bravoIndex = lines.findIndex((line) => line.includes('bravo reasoning chunk'));
+  const charlieIndex = lines.findIndex((line) => line.includes('charlie reasoning chunk'));
+
+  t.true(bravoIndex !== -1);
+  t.true(charlieIndex !== -1);
+  // Exactly one blank line (non-continuation marginTop) between the two
+  // reasoning chunks. The pre-fix bug baked an extra spacer Box below the
+  // transiently-last 'bravo' chunk, producing a gap of 3.
+  t.is(charlieIndex - bravoIndex, 2);
+});
+
 test('MessageList outputs a blank line after the final message in Static', (t) => {
   const messages = [{ id: 'static-msg', sender: 'bot', status: 'finalized', text: 'final static message' }];
   const { lastFrame } = render(<MessageList messages={messages} />);

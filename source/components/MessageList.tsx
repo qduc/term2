@@ -238,19 +238,11 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
       );
     }
 
-    const isLast = idx === staticItems.length - 1;
-    // Only add trailing blank line when there is no active/dynamic content below.
-    // When dynamic items exist, spacing is handled by the first dynamic message's
-    // marginTop (or omitted for continuations), preventing double blank lines.
-    if (isLast && dynamicItems.length === 0) {
-      return (
-        <Box key={item.id} flexDirection="column">
-          {renderMessage(item.message, idx, staticItems, contentWidth)}
-          <Box height={1} />
-        </Box>
-      );
-    }
-
+    // The trailing blank line is rendered outside <Static> (see below). It must
+    // not be committed here: <Static> writes each item exactly once, so an
+    // "is this the last item?" decision made at commit time gets frozen and
+    // strands stray blank lines mid-history when more items are appended later
+    // (e.g. during chunked reasoning streaming).
     return renderMessage(item.message, idx, staticItems, contentWidth);
   };
 
@@ -262,6 +254,12 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
       >
         {renderStaticItem}
       </Static>
+
+      {/* Trailing spacer for the static block. Rendered here (not inside
+          <Static>) so it is recomputed every render: it appears only while
+          there is genuinely no dynamic content below, and is never baked into
+          the write-once static buffer. */}
+      {staticItems.length > 0 && dynamicItems.length === 0 && <Box height={1} />}
 
       <Box flexDirection="column" paddingX={MESSAGE_HORIZONTAL_PADDING}>
         {dynamicItems.map((msg, idx) => renderMessage(msg, idx, dynamicItems, contentWidth))}

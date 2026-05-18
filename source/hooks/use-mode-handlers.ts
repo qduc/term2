@@ -11,6 +11,7 @@ export type ModeHandler = {
   moveRight?: () => void;
   onTab?: () => void;
   onSubmit?: (submittedValue: string) => SubmitResult;
+  onReset?: () => void;
 };
 
 type Movable = { moveUp: () => void; moveDown: () => void };
@@ -26,6 +27,7 @@ type Options = {
   insertSelectedPath: (appendTrailingSpace: boolean) => boolean;
   insertSelectedSetting: () => boolean;
   insertSelectedSettingValue: (submitAfterInsert: boolean) => boolean;
+  resetSettingValue: () => void;
   insertSelectedModel: (submitAfterInsert: boolean) => boolean;
   onSubmit: (value: string) => void;
   onSlashCommandRemount: () => void;
@@ -40,6 +42,7 @@ export const useModeHandlers = ({
   insertSelectedPath,
   insertSelectedSetting,
   insertSelectedSettingValue,
+  resetSettingValue,
   insertSelectedModel,
   onSubmit,
   onSlashCommandRemount,
@@ -95,6 +98,7 @@ export const useModeHandlers = ({
           onSubmit(submittedValue);
           return 'handled';
         },
+        onReset: resetSettingValue,
       },
       model_selection: {
         moveUp: models.moveUp,
@@ -120,6 +124,7 @@ export const useModeHandlers = ({
       insertSelectedPath,
       insertSelectedSetting,
       insertSelectedSettingValue,
+      resetSettingValue,
       insertSelectedModel,
       onSubmit,
       onSlashCommandRemount,

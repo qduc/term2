@@ -220,6 +220,7 @@ const InputBox: FC<Props> = ({
     insertSelectedPath,
     insertSelectedSetting,
     insertSelectedSettingValue,
+    resetSettingValue: settingsValue.resetCurrentSetting,
     insertSelectedModel,
     onSubmit: submitTextOnly,
     onSlashCommandRemount: remountInput,
@@ -337,6 +338,10 @@ const InputBox: FC<Props> = ({
     }
     if (key.return) {
       currentHandlers[currentMode].onSubmit?.(currentValue);
+      return;
+    }
+    if (key.ctrl && _input === 'd' && currentHandlers[currentMode].onReset) {
+      currentHandlers[currentMode].onReset?.();
       return;
     }
     if (key.backspace) {

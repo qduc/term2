@@ -33,6 +33,24 @@ export const MODEL_SETTING_CONFIGS: ModelSettingConfig[] = [
     providerKey: SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
     fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
   },
+  {
+    modelKey: SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
+    trigger: '/settings agent.subagentExplorerModel ',
+    providerKey: SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_PROVIDER,
+    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+  {
+    modelKey: SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL,
+    trigger: '/settings agent.subagentWorkerModel ',
+    providerKey: SETTING_KEYS.AGENT_SUBAGENT_WORKER_PROVIDER,
+    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
+  {
+    modelKey: SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_MODEL,
+    trigger: '/settings agent.subagentResearcherModel ',
+    providerKey: SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_PROVIDER,
+    fallbackProviderKey: SETTING_KEYS.AGENT_PROVIDER,
+  },
 ];
 
 export const MODEL_SETTING_TRIGGERS = MODEL_SETTING_CONFIGS.map((config) => config.trigger);

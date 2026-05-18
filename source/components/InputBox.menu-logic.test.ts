@@ -7,6 +7,9 @@ import {
   MENTOR_TRIGGER,
   AUTO_APPROVE_MODEL_TRIGGER,
   EDIT_HEALING_MODEL_TRIGGER,
+  SUBAGENT_EXPLORER_MODEL_TRIGGER,
+  SUBAGENT_WORKER_MODEL_TRIGGER,
+  SUBAGENT_RESEARCHER_MODEL_TRIGGER,
 } from '../hooks/use-model-selection.js';
 
 const commandMetadata: SlashCommand[] = [
@@ -61,6 +64,21 @@ test('determineActiveMenu - model triggers (priority 0)', (t) => {
       input: '/settings tools.editHealingModel gpt-4o-mini',
       cursor: '/settings tools.editHealingModel gpt-4o-mini'.length,
       expected: { type: 'model', startIndex: EDIT_HEALING_MODEL_TRIGGER.length },
+    },
+    {
+      input: '/settings agent.subagentExplorerModel gpt-4o',
+      cursor: '/settings agent.subagentExplorerModel gpt-4o'.length,
+      expected: { type: 'model', startIndex: SUBAGENT_EXPLORER_MODEL_TRIGGER.length },
+    },
+    {
+      input: '/settings agent.subagentWorkerModel gpt-4o',
+      cursor: '/settings agent.subagentWorkerModel gpt-4o'.length,
+      expected: { type: 'model', startIndex: SUBAGENT_WORKER_MODEL_TRIGGER.length },
+    },
+    {
+      input: '/settings agent.subagentResearcherModel gpt-4o',
+      cursor: '/settings agent.subagentResearcherModel gpt-4o'.length,
+      expected: { type: 'model', startIndex: SUBAGENT_RESEARCHER_MODEL_TRIGGER.length },
     },
   ];
 

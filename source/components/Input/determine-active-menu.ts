@@ -3,6 +3,9 @@ import {
   MENTOR_TRIGGER,
   AUTO_APPROVE_MODEL_TRIGGER,
   EDIT_HEALING_MODEL_TRIGGER,
+  SUBAGENT_EXPLORER_MODEL_TRIGGER,
+  SUBAGENT_WORKER_MODEL_TRIGGER,
+  SUBAGENT_RESEARCHER_MODEL_TRIGGER,
 } from '../../hooks/use-model-selection.js';
 import type { SlashCommand, SlashCommandCompletion } from '../../slash-commands.js';
 import { findPathTrigger } from './triggers.js';
@@ -12,6 +15,9 @@ const MODEL_SETTING_TRIGGERS = [
   MENTOR_TRIGGER,
   AUTO_APPROVE_MODEL_TRIGGER,
   EDIT_HEALING_MODEL_TRIGGER,
+  SUBAGENT_EXPLORER_MODEL_TRIGGER,
+  SUBAGENT_WORKER_MODEL_TRIGGER,
+  SUBAGENT_RESEARCHER_MODEL_TRIGGER,
 ] as const;
 
 export type ActiveMenu =

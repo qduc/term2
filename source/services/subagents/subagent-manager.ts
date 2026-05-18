@@ -81,9 +81,12 @@ function loadRoleDefinition(role: SubagentRole, settings: ISettingsService): Sub
   const content = fs.readFileSync(filePath, 'utf-8');
   const { frontmatter, body } = parseFrontmatter(content);
 
-  const resolve = (value: any, settingKey: string, defaultValue: any): any => {
+  const subagentPrefix =
+    role === 'mentor' ? 'agent.mentor' : `agent.subagent${role.charAt(0).toUpperCase() + role.slice(1)}`;
+
+  const resolve = (value: any, subagentKey: string, fallbackKey: string, defaultValue: any): any => {
     if (value === 'inherit' || value === undefined || value === null || value === '') {
-      return settings.get(settingKey) ?? defaultValue;
+      return settings.get(subagentKey) ?? settings.get(fallbackKey) ?? defaultValue;
     }
     return value;
   };
@@ -97,9 +100,14 @@ function loadRoleDefinition(role: SubagentRole, settings: ISettingsService): Sub
     canSearchWeb: frontmatter.canSearchWeb ?? false,
     canRunShell: frontmatter.canRunShell ?? false,
     maxTurns: frontmatter.maxTurns ?? ROLE_MAX_TURNS_DEFAULT,
-    model: resolve(frontmatter.model, 'agent.model', 'gpt-4o'),
-    provider: resolve(frontmatter.provider, 'agent.provider', 'openai'),
-    reasoningEffort: resolve(frontmatter.reasoningEffort, 'agent.reasoningEffort', 'default'),
+    model: resolve(frontmatter.model, `${subagentPrefix}Model`, 'agent.model', 'gpt-4o'),
+    provider: resolve(frontmatter.provider, `${subagentPrefix}Provider`, 'agent.provider', 'openai'),
+    reasoningEffort: resolve(
+      frontmatter.reasoningEffort,
+      `${subagentPrefix}ReasoningEffort`,
+      'agent.reasoningEffort',
+      'default',
+    ),
     description: frontmatter.description ?? '',
   };
 }

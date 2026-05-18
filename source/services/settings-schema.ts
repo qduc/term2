@@ -53,6 +53,48 @@ export const AgentSettingsSchema = z.object({
     .min(1)
     .optional()
     .describe('Provider to use for the auto-approval model (defaults to agent.provider when unset)'),
+  subagentExplorerModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Model override for the explorer subagent. Falls back to agent.model when unset.'),
+  subagentExplorerProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Provider override for the explorer subagent. Falls back to agent.provider when unset.'),
+  subagentExplorerReasoningEffort: z
+    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+    .optional()
+    .describe('Reasoning effort override for the explorer subagent. Falls back to agent.reasoningEffort when unset.'),
+  subagentWorkerModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Model override for the worker subagent. Falls back to agent.model when unset.'),
+  subagentWorkerProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Provider override for the worker subagent. Falls back to agent.provider when unset.'),
+  subagentWorkerReasoningEffort: z
+    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+    .optional()
+    .describe('Reasoning effort override for the worker subagent. Falls back to agent.reasoningEffort when unset.'),
+  subagentResearcherModel: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Model override for the researcher subagent. Falls back to agent.model when unset.'),
+  subagentResearcherProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Provider override for the researcher subagent. Falls back to agent.provider when unset.'),
+  subagentResearcherReasoningEffort: z
+    .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+    .optional()
+    .describe('Reasoning effort override for the researcher subagent. Falls back to agent.reasoningEffort when unset.'),
 });
 
 export const ShellSettingsSchema = z.object({
@@ -248,6 +290,15 @@ export interface SettingsWithSources {
     useFlexServiceTier: SettingWithSource<boolean>;
     autoApproveModel: SettingWithSource<string>;
     autoApproveProvider: SettingWithSource<string | undefined>;
+    subagentExplorerModel: SettingWithSource<string | undefined>;
+    subagentExplorerProvider: SettingWithSource<string | undefined>;
+    subagentExplorerReasoningEffort: SettingWithSource<string | undefined>;
+    subagentWorkerModel: SettingWithSource<string | undefined>;
+    subagentWorkerProvider: SettingWithSource<string | undefined>;
+    subagentWorkerReasoningEffort: SettingWithSource<string | undefined>;
+    subagentResearcherModel: SettingWithSource<string | undefined>;
+    subagentResearcherProvider: SettingWithSource<string | undefined>;
+    subagentResearcherReasoningEffort: SettingWithSource<string | undefined>;
   };
   shell: {
     timeout: SettingWithSource<number>;
@@ -325,6 +376,15 @@ export const SETTING_KEYS = {
   SHELL_USE_RTK_COMPRESSION: 'shell.useRtkCompression',
   AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
   AGENT_AUTO_APPROVE_PROVIDER: 'agent.autoApproveProvider',
+  AGENT_SUBAGENT_EXPLORER_MODEL: 'agent.subagentExplorerModel',
+  AGENT_SUBAGENT_EXPLORER_PROVIDER: 'agent.subagentExplorerProvider',
+  AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT: 'agent.subagentExplorerReasoningEffort',
+  AGENT_SUBAGENT_WORKER_MODEL: 'agent.subagentWorkerModel',
+  AGENT_SUBAGENT_WORKER_PROVIDER: 'agent.subagentWorkerProvider',
+  AGENT_SUBAGENT_WORKER_REASONING_EFFORT: 'agent.subagentWorkerReasoningEffort',
+  AGENT_SUBAGENT_RESEARCHER_MODEL: 'agent.subagentResearcherModel',
+  AGENT_SUBAGENT_RESEARCHER_PROVIDER: 'agent.subagentResearcherProvider',
+  AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT: 'agent.subagentResearcherReasoningEffort',
   UI_HISTORY_SIZE: 'ui.historySize',
   UI_PASTE_THRESHOLD: 'ui.pasteThreshold',
   LOGGING_LOG_LEVEL: 'logging.logLevel',
@@ -376,6 +436,15 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.UI_PASTE_THRESHOLD,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
   SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
+  SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
+  SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_PROVIDER,
+  SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT,
+  SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL,
+  SETTING_KEYS.AGENT_SUBAGENT_WORKER_PROVIDER,
+  SETTING_KEYS.AGENT_SUBAGENT_WORKER_REASONING_EFFORT,
+  SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_MODEL,
+  SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_PROVIDER,
+  SETTING_KEYS.AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT,
   SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
   SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
   SETTING_KEYS.WEB_SEARCH_PROVIDER,
@@ -403,6 +472,15 @@ export const DEFAULT_SETTINGS: SettingsData = {
     useFlexServiceTier: false,
     autoApproveModel: 'gpt-4o-mini',
     autoApproveProvider: undefined,
+    subagentExplorerModel: undefined,
+    subagentExplorerProvider: undefined,
+    subagentExplorerReasoningEffort: undefined,
+    subagentWorkerModel: undefined,
+    subagentWorkerProvider: undefined,
+    subagentWorkerReasoningEffort: undefined,
+    subagentResearcherModel: undefined,
+    subagentResearcherProvider: undefined,
+    subagentResearcherReasoningEffort: undefined,
   },
   shell: {
     timeout: 120000,

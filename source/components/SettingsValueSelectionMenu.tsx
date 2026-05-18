@@ -98,7 +98,8 @@ const SettingsValueSelectionMenu: FC<Props> = ({ settingKey, items, selectedInde
         borderColor="gray"
       >
         <Text color="gray" dimColor>
-          <Text bold>Enter</Text> confirm · <Text bold>Esc</Text> cancel · <Text bold>↑↓</Text> navigate
+          <Text bold>Enter</Text> confirm · <Text bold>Esc</Text> cancel · <Text bold>↑↓</Text> navigate ·{' '}
+          <Text bold>Ctrl+D</Text> reset to default
         </Text>
       </Box>
     </Box>

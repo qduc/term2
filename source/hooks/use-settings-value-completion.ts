@@ -22,6 +22,16 @@ const NUMBER_SETTING_KEYS = new Set([
   'ssh.port',
 ]);
 
+const REASONING_EFFORT_VALUE_SUGGESTIONS: SettingValueSuggestion[] = [
+  { value: 'none', description: 'No reasoning (fastest)' },
+  { value: 'minimal', description: 'Very low reasoning' },
+  { value: 'low', description: 'Low reasoning' },
+  { value: 'medium', description: 'Balanced' },
+  { value: 'high', description: 'High reasoning' },
+  { value: 'xhigh', description: 'Maximum reasoning' },
+  { value: 'default', description: 'Model default' },
+];
+
 const PROVIDER_VALUE_SUGGESTIONS: SettingValueSuggestion[] = [
   { value: 'openai', description: 'OpenAI official API' },
   { value: 'openrouter', description: 'OpenRouter.ai' },
@@ -34,25 +44,15 @@ const PROVIDER_VALUE_SUGGESTIONS: SettingValueSuggestion[] = [
 // This is intentionally conservative: it's better to suggest a few helpful values
 // than to pretend we can enumerate every possible value.
 const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
-  'agent.reasoningEffort': [
-    { value: 'none', description: 'No reasoning (fastest)' },
-    { value: 'minimal', description: 'Very low reasoning' },
-    { value: 'low', description: 'Low reasoning' },
-    { value: 'medium', description: 'Balanced' },
-    { value: 'high', description: 'High reasoning' },
-    { value: 'xhigh', description: 'Maximum reasoning' },
-    { value: 'default', description: 'Model default' },
-  ],
-  'agent.mentorReasoningEffort': [
-    { value: 'none', description: 'No reasoning (fastest)' },
-    { value: 'minimal', description: 'Very low reasoning' },
-    { value: 'low', description: 'Low reasoning' },
-    { value: 'medium', description: 'Balanced' },
-    { value: 'high', description: 'High reasoning' },
-    { value: 'xhigh', description: 'Maximum reasoning' },
-    { value: 'default', description: 'Model default' },
-  ],
+  'agent.reasoningEffort': REASONING_EFFORT_VALUE_SUGGESTIONS,
+  'agent.mentorReasoningEffort': REASONING_EFFORT_VALUE_SUGGESTIONS,
+  'agent.subagentExplorerReasoningEffort': REASONING_EFFORT_VALUE_SUGGESTIONS,
+  'agent.subagentWorkerReasoningEffort': REASONING_EFFORT_VALUE_SUGGESTIONS,
+  'agent.subagentResearcherReasoningEffort': REASONING_EFFORT_VALUE_SUGGESTIONS,
   'agent.mentorProvider': PROVIDER_VALUE_SUGGESTIONS,
+  'agent.subagentExplorerProvider': PROVIDER_VALUE_SUGGESTIONS,
+  'agent.subagentWorkerProvider': PROVIDER_VALUE_SUGGESTIONS,
+  'agent.subagentResearcherProvider': PROVIDER_VALUE_SUGGESTIONS,
   'agent.autoApproveProvider': PROVIDER_VALUE_SUGGESTIONS,
   'tools.editHealingProvider': PROVIDER_VALUE_SUGGESTIONS,
   'logging.logLevel': [{ value: 'debug' }, { value: 'info' }, { value: 'warn' }, { value: 'error' }],
@@ -231,6 +231,13 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     }
   }, [mode, setMode, setTriggerIndex]);
 
+  const resetCurrentSetting = useCallback(() => {
+    if (settingKey) {
+      settingsService.reset(settingKey);
+    }
+    close();
+  }, [settingKey, settingsService, close]);
+
   const isNumericSettings = useMemo(() => {
     return settingKey ? NUMBER_SETTING_KEYS.has(settingKey) : false;
   }, [settingKey]);
@@ -244,6 +251,7 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     selectedIndex,
     open,
     close,
+    resetCurrentSetting,
     moveUp,
     moveDown,
     getSelectedItem,

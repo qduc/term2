@@ -1,4 +1,4 @@
-import { spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 
 export interface ClipboardCommandCandidate {
   command: string;
@@ -13,7 +13,7 @@ export interface ClipboardRunResult {
 export interface CopyToClipboardOptions {
   platform?: NodeJS.Platform;
   env?: NodeJS.ProcessEnv;
-  runCommand?: (command: string, args: string[], input: string) => ClipboardRunResult;
+  runCommand?: (command: string, args: string[], input: string) => ClipboardRunResult | Promise<ClipboardRunResult>;
 }
 
 export function getClipboardCommandCandidates(
@@ -37,33 +37,76 @@ export function getClipboardCommandCandidates(
   return env.WAYLAND_DISPLAY ? [...waylandFirst, ...x11Fallbacks] : [...x11Fallbacks, ...waylandFirst];
 }
 
-function defaultRunClipboardCommand(command: string, args: string[], input: string): ClipboardRunResult {
-  const result = spawnSync(command, args, {
-    input,
-    stdio: ['pipe', 'ignore', 'pipe'],
-    encoding: 'utf8',
-    windowsHide: true,
-  });
+function defaultRunClipboardCommand(command: string, args: string[], input: string): Promise<ClipboardRunResult> {
+  return new Promise((resolve) => {
+    let stderr = '';
+    let settled = false;
+    let successTimer: NodeJS.Timeout | undefined;
 
-  if (result.status === 0) {
-    return { success: true };
-  }
+    const finish = (result: ClipboardRunResult) => {
+      if (settled) {
+        return;
+      }
 
-  if (result.error) {
-    return {
-      success: false,
-      errorMessage: result.error.message,
+      settled = true;
+      if (successTimer) {
+        clearTimeout(successTimer);
+      }
+
+      resolve(result);
     };
-  }
 
-  const stderr = typeof result.stderr === 'string' ? result.stderr.trim() : '';
-  return {
-    success: false,
-    errorMessage: stderr || `Command exited with status ${result.status ?? 'unknown'}`,
-  };
+    const child = spawn(command, args, {
+      stdio: ['pipe', 'ignore', 'pipe'],
+      windowsHide: true,
+    });
+
+    child.on('error', (error) => {
+      finish({
+        success: false,
+        errorMessage: error.message,
+      });
+    });
+
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk: string) => {
+      stderr += chunk;
+      if (stderr.length > 4000) {
+        stderr = stderr.slice(-4000);
+      }
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        finish({ success: true });
+        return;
+      }
+
+      const errorMessage = stderr.trim() || `Command exited with status ${code ?? 'unknown'}`;
+      finish({
+        success: false,
+        errorMessage,
+      });
+    });
+
+    child.stdin.on('error', () => {
+      // Ignore pipe shutdown races once the child has finished reading input.
+    });
+
+    child.stdin.end(input, 'utf8', () => {
+      // Some Linux clipboard tools stay alive to own the clipboard selection.
+      // Treat that as success after a short grace period instead of blocking the UI.
+      successTimer = setTimeout(() => {
+        child.stderr?.destroy();
+        child.unref();
+        finish({ success: true });
+      }, 100);
+      successTimer.unref?.();
+    });
+  });
 }
 
-export function copyToClipboard(text: string, options: CopyToClipboardOptions = {}): void {
+export async function copyToClipboard(text: string, options: CopyToClipboardOptions = {}): Promise<void> {
   const platform = options.platform ?? process.platform;
   const env = options.env ?? process.env;
   const runCommand = options.runCommand ?? defaultRunClipboardCommand;
@@ -72,7 +115,7 @@ export function copyToClipboard(text: string, options: CopyToClipboardOptions = 
   let lastError = '';
 
   for (const candidate of candidates) {
-    const result = runCommand(candidate.command, candidate.args, text);
+    const result = await runCommand(candidate.command, candidate.args, text);
     if (result.success) {
       return;
     }

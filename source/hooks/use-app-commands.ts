@@ -21,6 +21,12 @@ interface UseAppCommandsProps {
   setModel: (model: string) => void;
 }
 
+interface CreateCopySlashCommandOptions {
+  messages: Message[];
+  addSystemMessage: (text: string) => void;
+  copy?: (text: string) => Promise<void>;
+}
+
 export function getLastFinalAssistantText(messages: Message[]): string | null {
   let lastBotIndex = -1;
   for (let index = messages.length - 1; index >= 0; index--) {
@@ -59,6 +65,35 @@ export function createUsageSlashCommand(
     description: 'Show token usage for the current session',
     action: () => {
       addSystemMessage(getSessionUsage());
+      return true;
+    },
+  };
+}
+
+export function createCopySlashCommand({
+  messages,
+  addSystemMessage,
+  copy = copyToClipboard,
+}: CreateCopySlashCommandOptions): SlashCommand {
+  return {
+    name: 'copy',
+    description: 'Copy the latest final assistant response',
+    action: () => {
+      const lastAssistantText = getLastFinalAssistantText(messages);
+      if (!lastAssistantText) {
+        addSystemMessage('No assistant response is available to copy yet.');
+        return true;
+      }
+
+      void copy(lastAssistantText)
+        .then(() => {
+          addSystemMessage('Copied the latest assistant response to the clipboard.');
+        })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          addSystemMessage(`Failed to copy to clipboard: ${message}`);
+        });
+
       return true;
     },
   };
@@ -137,27 +172,7 @@ export const useAppCommands = ({
     };
 
     return [
-      {
-        name: 'copy',
-        description: 'Copy the latest final assistant response',
-        action: () => {
-          const lastAssistantText = getLastFinalAssistantText(messages);
-          if (!lastAssistantText) {
-            addSystemMessage('No assistant response is available to copy yet.');
-            return true;
-          }
-
-          try {
-            copyToClipboard(lastAssistantText);
-            addSystemMessage('Copied the latest assistant response to the clipboard.');
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            addSystemMessage(`Failed to copy to clipboard: ${message}`);
-          }
-
-          return true;
-        },
-      },
+      createCopySlashCommand({ messages, addSystemMessage }),
       createUsageSlashCommand(addSystemMessage, getSessionUsage),
       {
         name: 'clear',

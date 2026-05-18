@@ -1,7 +1,12 @@
 import test from 'ava';
 import type { Message } from './use-conversation.js';
-import { createUsageSlashCommand, getLastFinalAssistantText } from './use-app-commands.js';
+import { createCopySlashCommand, createUsageSlashCommand, getLastFinalAssistantText } from './use-app-commands.js';
 import { parseModelProviderArg } from '../utils/model-provider-arg.js';
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 test('getLastFinalAssistantText returns the response from the latest assistant turn', (t) => {
   const messages: Message[] = [
@@ -62,4 +67,41 @@ test('createUsageSlashCommand shows current session usage', (t) => {
   t.is(command.name, 'usage');
   t.is(command.action(), true);
   t.deepEqual(messages, ['Token usage: 20,000 input (1,000,000 cached), 20,000 output']);
+});
+
+test('createCopySlashCommand returns immediately and reports success after async clipboard copy', async (t) => {
+  const systemMessages: string[] = [];
+  let resolveCopy: (() => void) | undefined;
+  const command = createCopySlashCommand({
+    messages: [{ id: '1', sender: 'bot', text: 'hello' }],
+    addSystemMessage: (text) => systemMessages.push(text),
+    copy: () =>
+      new Promise<void>((resolve) => {
+        resolveCopy = resolve;
+      }),
+  });
+
+  t.is(command.action(), true);
+  t.deepEqual(systemMessages, []);
+
+  resolveCopy?.();
+  await flushMicrotasks();
+
+  t.deepEqual(systemMessages, ['Copied the latest assistant response to the clipboard.']);
+});
+
+test('createCopySlashCommand reports clipboard failures asynchronously', async (t) => {
+  const systemMessages: string[] = [];
+  const command = createCopySlashCommand({
+    messages: [{ id: '1', sender: 'bot', text: 'hello' }],
+    addSystemMessage: (text) => systemMessages.push(text),
+    copy: async () => {
+      throw new Error('clipboard unavailable');
+    },
+  });
+
+  t.is(command.action(), true);
+  await flushMicrotasks();
+
+  t.deepEqual(systemMessages, ['Failed to copy to clipboard: clipboard unavailable']);
 });

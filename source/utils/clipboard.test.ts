@@ -25,10 +25,10 @@ test('getClipboardCommandCandidates prefers X11 tools when Wayland is not presen
   ]);
 });
 
-test('copyToClipboard uses the first successful command', (t) => {
+test('copyToClipboard uses the first successful command', async (t) => {
   const calls: Array<{ command: string; args: string[]; input: string }> = [];
 
-  copyToClipboard('hello', {
+  await copyToClipboard('hello', {
     platform: 'darwin',
     env: {},
     runCommand: (command, args, input) => {
@@ -40,10 +40,10 @@ test('copyToClipboard uses the first successful command', (t) => {
   t.deepEqual(calls, [{ command: 'pbcopy', args: [], input: 'hello' }]);
 });
 
-test('copyToClipboard falls back when a command is unavailable', (t) => {
+test('copyToClipboard falls back when a command is unavailable', async (t) => {
   const calls: string[] = [];
 
-  copyToClipboard('hello', {
+  await copyToClipboard('hello', {
     platform: 'linux',
     env: { WAYLAND_DISPLAY: 'wayland-0' },
     runCommand: (command) => {
@@ -59,8 +59,8 @@ test('copyToClipboard falls back when a command is unavailable', (t) => {
   t.deepEqual(calls, ['wl-copy', 'xclip']);
 });
 
-test('copyToClipboard throws when no clipboard command succeeds', (t) => {
-  const error = t.throws(() =>
+test('copyToClipboard throws when no clipboard command succeeds', async (t) => {
+  const error = await t.throwsAsync(
     copyToClipboard('hello', {
       platform: 'linux',
       env: {},
@@ -70,4 +70,27 @@ test('copyToClipboard throws when no clipboard command succeeds', (t) => {
 
   t.regex(error.message, /Clipboard is unavailable/i);
   t.regex(error.message, /xclip, xsel, wl-copy/i);
+});
+
+test('copyToClipboard awaits asynchronous command results', async (t) => {
+  const calls: string[] = [];
+
+  await copyToClipboard('hello', {
+    platform: 'linux',
+    env: {},
+    runCommand: async (command) => {
+      calls.push(command);
+      if (command === 'xclip') {
+        return { success: false, errorMessage: 'temporarily unavailable' };
+      }
+
+      return new Promise<{ success: true }>((resolve) => {
+        setTimeout(() => {
+          resolve({ success: true });
+        }, 10);
+      });
+    },
+  });
+
+  t.deepEqual(calls, ['xclip', 'xsel']);
 });

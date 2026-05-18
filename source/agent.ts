@@ -20,6 +20,7 @@ import { ExecutionContext } from './services/execution-context.js';
 import { getPromptPath } from './prompts/prompt-selector.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { getSearchViaShellAddendum } from './prompts/search-via-shell.js';
+import { getSubagentDelegationAddendum } from './prompts/subagent-delegation.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 
@@ -155,6 +156,12 @@ export const getAgentDefinition = (
         : '### Search Tools\n\n- Prefer `find_files` for locating files by name or glob.\n- Prefer `grep` for searching code content or symbols.';
       prompt = `${prompt}\n\n${searchToolsDoc}`;
     }
+  }
+
+  // Delegation guidance is injected under the same condition that registers
+  // the run_subagent tool (full mode + runSubagent dependency available).
+  if (!liteMode && runSubagent) {
+    prompt = `${prompt}\n\n${getSubagentDelegationAddendum()}`;
   }
 
   const envInfo = getEnvInfo(settingsService, executionContext, liteMode);

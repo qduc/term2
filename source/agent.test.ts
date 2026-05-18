@@ -30,6 +30,51 @@ test('getAgentDefinition includes grep and find_files when searchViaShell is fal
   t.true(toolNames.includes('code_context_search'));
 });
 
+test('getAgentDefinition injects delegation guidance when runSubagent is provided', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+    runSubagent: async () => ({} as any),
+  });
+
+  t.true(definition.tools.map((tool) => tool.name).includes('run_subagent'));
+  t.true(definition.instructions.includes('### Delegating to subagents'));
+});
+
+test('getAgentDefinition omits delegation guidance when runSubagent is absent', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+  });
+
+  t.false(definition.tools.map((tool) => tool.name).includes('run_subagent'));
+  t.false(definition.instructions.includes('### Delegating to subagents'));
+});
+
+test('getAgentDefinition omits delegation guidance in lite mode', (t) => {
+  const settingsService = createMockSettingsService({
+    'app.liteMode': true,
+    'agent.model': 'gpt-4o',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+    runSubagent: async () => ({} as any),
+  });
+
+  t.false(definition.tools.map((tool) => tool.name).includes('run_subagent'));
+  t.false(definition.instructions.includes('### Delegating to subagents'));
+});
+
 test('getAgentDefinition excludes grep and find_files when searchViaShell is true', (t) => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': true,

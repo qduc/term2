@@ -201,15 +201,9 @@ export const createRunSubagentToolDefinition = (
 ): ToolDefinition<RunSubagentParams> => ({
   name: 'run_subagent',
   description:
-    'Delegate a bounded task to a specialized subagent. The subagent runs synchronously and returns a structured result.\n\n' +
-    '## When to Use\n' +
-    'Prefer a subagent when you care about the **result** but not the **intermediate steps**. ' +
-    'Good fits: long exploration across many files, multi-step research, or implementation work that ' +
-    'would otherwise fill your context with tool calls, file contents, and dead ends. ' +
-    'The subagent absorbs that noise and returns only a summary, preserving your context for ' +
-    'higher-level reasoning and decisions.\n\n' +
-    'Avoid delegating: trivial single-file reads, tasks requiring back-and-forth with the user, ' +
-    'or work where you need to observe progress to course-correct.\n\n' +
+    'Delegate a bounded task to a specialized subagent. The subagent runs synchronously and returns a structured result. ' +
+    'The subagent runs in its own context and returns only a summary, preserving your context. ' +
+    '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
     getSubagentsRolesSection() +
     '## Task Requirements\n' +
     'The task must be fully self-contained. Include all context, constraints, and the expected output format. ' +

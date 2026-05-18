@@ -24,6 +24,7 @@ function createMockDeps(): MockDeps & {
     botResponseFlushed: boolean;
     reasoningPushes: string[];
     reasoningFlushed: boolean;
+    reasoningCancelled: boolean;
     appendedMessages: any[][];
     setMessagesCalls: Array<(prev: any[]) => any[]>;
   };
@@ -34,6 +35,7 @@ function createMockDeps(): MockDeps & {
     botResponseFlushed: false,
     reasoningPushes: [] as string[],
     reasoningFlushed: false,
+    reasoningCancelled: false,
     appendedMessages: [] as any[][],
     setMessagesCalls: [] as Array<(prev: any[]) => any[]>,
   };
@@ -55,7 +57,9 @@ function createMockDeps(): MockDeps & {
     },
     reasoningUpdater: {
       push: (text: string) => calls.reasoningPushes.push(text),
-      cancel: () => {},
+      cancel: () => {
+        calls.reasoningCancelled = true;
+      },
       flush: () => {
         calls.reasoningFlushed = true;
       },
@@ -322,6 +326,42 @@ test('reasoning_delta: finalizes an existing live reasoning message in place bef
   t.is(state.flushedReasoningLength, 'Old tail now complete.\n\n'.length);
   t.is(state.accumulatedReasoningText, 'New tail');
   t.deepEqual(deps.calls.reasoningPushes, ['New tail']);
+  t.true(deps.calls.reasoningCancelled);
+});
+
+test('reasoning_delta: cancels pending live reasoning update when paragraph boundary leaves no tail', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  state.currentReasoningMessageId = 'active-reasoning';
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'reasoning_delta',
+    delta: '\n\n',
+    fullText: 'Finished reasoning paragraph.\n\n',
+  } as ConversationEvent);
+
+  t.is(deps.calls.setMessagesCalls.length, 1);
+  const next = deps.calls.setMessagesCalls[0]([
+    {
+      id: 'active-reasoning',
+      sender: 'reasoning',
+      text: 'Finished reasoning paragraph.',
+    },
+  ]);
+
+  t.deepEqual(next, [
+    {
+      id: 'active-reasoning',
+      sender: 'reasoning',
+      status: 'finalized',
+      text: 'Finished reasoning paragraph.\n\n',
+    },
+  ]);
+  t.true(deps.calls.reasoningCancelled);
+  t.deepEqual(deps.calls.reasoningPushes, []);
+  t.is(state.accumulatedReasoningText, '');
+  t.true(state.currentReasoningMessageId === null);
 });
 
 // =============================================================================

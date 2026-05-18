@@ -227,6 +227,7 @@ export function createConversationEventHandler<
           newReasoningText = newReasoningText.slice(lastParagraphBoundary + 2);
 
           if (finalizedText.trim()) {
+            reasoningUpdater.cancel();
             if (state.currentReasoningMessageId) {
               state.accumulatedReasoningText = finalizedText;
               markCurrentReasoningFinalized();

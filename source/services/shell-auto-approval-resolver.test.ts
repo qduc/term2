@@ -121,5 +121,5 @@ test('interruption without callId uses inline __single__ evaluation', async (t) 
   t.truthy(advisory);
   t.is(advisory?.approved, true);
   t.is(chatCount, 1);
-  t.true(promptSeen.includes('__single__'));
+  t.true(promptSeen.includes('ls'));
 });

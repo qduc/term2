@@ -236,7 +236,6 @@ test('RED-classified shell command includes LLM rationale but remains a system r
   const { session, chatCalls } = createSessionHarness({
     startStreams: [initialStream],
     chatImpl: async (prompt) => {
-      t.true(prompt.includes('call-red'));
       t.true(prompt.includes('rm -rf /'));
       return JSON.stringify({
         results: [
@@ -291,7 +290,6 @@ test('single safe shell command calls the LLM once and attaches its advisory', a
     source: 'llm',
   });
   t.is(chatCalls.length, 1);
-  t.true(chatCalls[0].prompt.includes('call-safe-1'));
   t.true(chatCalls[0].prompt.includes('ls source'));
   t.true(chatCalls[0].prompt.includes('inspect the source tree'));
   t.is(chatCalls[0].options.model, 'test-auto-model');
@@ -365,9 +363,7 @@ test('mixed RED and non-RED batch evaluates both while RED remains system reject
     startStreams: [initialStream],
     continuationStreams: [continuationStream],
     chatImpl: async (prompt) => {
-      t.true(prompt.includes('call-mixed-red'));
       t.true(prompt.includes('rm -rf /'));
-      t.true(prompt.includes('call-mixed-safe'));
       t.true(prompt.includes('ls source'));
       return JSON.stringify({
         results: [
@@ -409,19 +405,19 @@ test('mixed RED and non-RED batch evaluates both while RED remains system reject
 for (const scenario of [
   {
     llmResponse: 'not valid json at all',
-    expectedReasoning: 'LLM did not provide a valid evaluation for this command.',
+    expectedReasoning: 'LLM did not provide a valid ordered evaluation for this command.',
   },
   {
     llmResponse: JSON.stringify({ results: {} }),
-    expectedReasoning: 'LLM did not provide a valid evaluation for this command.',
+    expectedReasoning: 'LLM did not provide a valid ordered evaluation for this command.',
   },
   {
     llmResponse: JSON.stringify({ results: [{ id: 'call-safe', reasoning: 'Missing approved field' }] }),
-    expectedReasoning: 'LLM did not provide a valid evaluation for this command.',
+    expectedReasoning: 'LLM did not provide a valid ordered evaluation for this command.',
   },
   {
-    llmResponse: JSON.stringify({ results: [{ id: 'spoofed-id', reasoning: 'Approve me', approved: true }] }),
-    expectedReasoning: 'LLM did not provide a valid evaluation for this command.',
+    llmResponse: JSON.stringify({ results: [] }),
+    expectedReasoning: 'LLM did not provide a valid ordered evaluation for this command.',
   },
 ]) {
   test(malformedResponseMacro, scenario);

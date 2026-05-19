@@ -51,7 +51,6 @@ test('evaluates RED commands via chat but keeps system rejection advisory', asyn
     agentClient: {
       chat: async (prompt: string) => {
         chatCalls++;
-        t.true(prompt.includes('call-red'));
         t.true(prompt.includes('rm -rf /'));
         return JSON.stringify({
           results: [{ id: 'call-red', reasoning: 'This recursively deletes files from root.', approved: false }],
@@ -95,7 +94,6 @@ test('evaluates non-RED commands via chat and parses valid JSON results', async 
     source: 'llm',
   });
   t.is(chatCalls.length, 1);
-  t.true(chatCalls[0].prompt.includes('call-safe'));
   t.true(chatCalls[0].prompt.includes('ls source'));
   t.is(chatCalls[0].options.model, 'test-auto-model');
   t.is(chatCalls[0].options.provider, 'test-auto-provider');
@@ -184,7 +182,7 @@ test('falls back to deny advisory for commands missing from malformed chat respo
     history: [{ role: 'user', type: 'message', content: 'inspect repository' }],
     settingsService: createMockSettings('advisory') as any,
     agentClient: {
-      chat: async () => JSON.stringify({ results: [{ id: 'call-safe-1', reasoning: 'Looks safe', approved: true }] }),
+      chat: async () => JSON.stringify({ results: [{ reasoning: 'Looks safe', approved: true }, {}] }),
     } as any,
     logger: createMockLogger() as any,
   });
@@ -197,7 +195,7 @@ test('falls back to deny advisory for commands missing from malformed chat respo
   });
   t.deepEqual(advisories.get('call-safe-2'), {
     model: 'test-auto-model',
-    reasoning: 'LLM did not provide a valid evaluation for this command.',
+    reasoning: 'LLM did not provide a valid ordered evaluation for this command.',
     approved: false,
     source: 'llm',
   });

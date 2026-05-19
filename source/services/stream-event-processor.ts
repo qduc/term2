@@ -205,6 +205,11 @@ export async function* processStreamEvents(
   }
 
   const completedResult = await stream.completed;
+  if (stream.cancelled) {
+    const abortError = new Error('The user aborted a request.');
+    abortError.name = 'AbortError';
+    throw abortError;
+  }
   const rawResponses = Array.isArray(stream?.rawResponses) ? stream.rawResponses : [];
   let usageFromRawResponses: NormalizedUsage | undefined;
   for (let i = rawResponses.length - 1; i >= 0; i--) {

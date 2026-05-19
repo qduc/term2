@@ -871,3 +871,28 @@ test('generation guard: gated run updateFromResult is skipped after undoLastUser
   t.true(contents.includes('msg1'), 'history should contain msg1');
   t.false(contents.includes('msg2'), 'history must NOT contain msg2 (generation guard worked)');
 });
+
+test('run() throws AbortError when the stream is cancelled/aborted', async (t) => {
+  const stream = new MockStream([]);
+  stream.cancelled = true;
+
+  const mockClient = {
+    async startStream() {
+      return stream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  await t.throwsAsync(
+    async () => {
+      for await (const _ of session.run('hi')) {
+        void _;
+      }
+    },
+    { name: 'AbortError' },
+  );
+});

@@ -48,6 +48,23 @@ test('emits text_delta events with accumulated fullText', async (t) => {
   t.is(acc.textDeltaCount, 2);
 });
 
+test('preserves newline between code fence language and first code line across text deltas', async (t) => {
+  const stream = makeStream([
+    { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: '```typescript' } },
+    { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: '\n' } },
+    { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: 'if (enabled) {\n' } },
+    { type: 'raw_model_stream_event', data: { type: 'output_text_delta', delta: '  run();\n}\n```' } },
+  ]);
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+
+  t.is(acc.finalOutput, '```typescript\nif (enabled) {\n  run();\n}\n```');
+  t.true(events.some((e) => e.type === 'text_delta' && e.fullText === '```typescript\nif (enabled) {\n'));
+});
+
 test('emits reasoning_delta events with accumulated fullText', async (t) => {
   const stream = makeStream([
     { data: { type: 'model', event: { choices: [{ delta: { reasoning_content: 'think' } }] } } },
@@ -225,4 +242,20 @@ test('end-of-stream usage preserves cache counters from streaming events when co
     total_tokens: 120,
     cache_read_tokens: 60,
   });
+});
+
+test('throws AbortError if stream is cancelled', async (t) => {
+  const stream = makeStream([], {
+    completed: Promise.resolve(null),
+    cancelled: true,
+  });
+  const acc = createStreamAccumulator();
+  await t.throwsAsync(
+    async () => {
+      for await (const _ of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+        void _;
+      }
+    },
+    { name: 'AbortError', message: 'The user aborted a request.' },
+  );
 });

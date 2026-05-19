@@ -7,4 +7,5 @@ export type AgentStream = AsyncIterable<unknown> & {
   newItems?: unknown[];
   history?: unknown[];
   finalOutput?: string;
+  cancelled?: boolean;
 };

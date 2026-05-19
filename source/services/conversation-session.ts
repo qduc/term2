@@ -185,6 +185,7 @@ export class ConversationSession {
     let stream: AgentStream | null = null;
     const turn = normalizeUserTurn(input);
     const text = turn.text;
+    let addedUserMessage = false;
     try {
       this.logger.debug('Conversation stream start', {
         eventType: 'stream.started',
@@ -199,6 +200,7 @@ export class ConversationSession {
       // Maintain canonical local history regardless of provider.
       if (shouldAddUserMessage) {
         this.conversationStore.addUserTurn(turn);
+        addedUserMessage = true;
       }
 
       // If there's an aborted approval, we need to resolve it first.
@@ -407,6 +409,9 @@ export class ConversationSession {
         type: 'error',
         message: error instanceof Error ? error.message : String(error),
       };
+      if (addedUserMessage && !stream && this.#isCurrentGeneration(gen)) {
+        this.conversationStore.removeLastUserMessage();
+      }
       this.logger.error('Conversation stream error', {
         eventType: 'stream.failed',
         category: 'stream',

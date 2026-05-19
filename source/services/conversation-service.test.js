@@ -1022,3 +1022,48 @@ test('does not retry on non-hallucination ModelBehaviorError', async (t) => {
     t.is(callCount, 1);
   }
 });
+
+test('removes failed user turn after non-retryable provider error before next history request', async (t) => {
+  const startCalls = [];
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    async startStream(input) {
+      startCalls.push(input);
+      if (startCalls.length === 1) {
+        throw new Error('400 Error from provider: bad request');
+      }
+
+      const stream = new MockStream([
+        {
+          type: 'response.output_text.delta',
+          delta: 'ok',
+        },
+      ]);
+      stream.finalOutput = 'ok';
+      return stream;
+    },
+  };
+
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  await t.throwsAsync(() => service.sendMessage('first failed message'), {
+    message: '400 Error from provider: bad request',
+  });
+
+  const result = await service.sendMessage('second message');
+
+  t.is(result.type, 'response');
+  t.is(startCalls.length, 2);
+  t.deepEqual(startCalls[1], [
+    {
+      role: 'user',
+      type: 'message',
+      content: 'second message',
+    },
+  ]);
+});

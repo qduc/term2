@@ -196,8 +196,67 @@ test('queueModeNotice inserts notice into stream input (non-chaining provider)',
   t.is(startCalls.length, 1);
   const passedHistory = startCalls[0].text;
   t.true(Array.isArray(passedHistory));
-  // non-chaining passes full history. The history should be: [SystemNotice, UserTurn]
+  // non-chaining passes full history with the notice appended at the tail:
+  // [UserTurn, SystemNotice]. It is appended (never spliced mid-history) so
+  // the previously cached prefix stays byte-identical.
   t.is(passedHistory.length, 2);
-  t.deepEqual(passedHistory[0], { role: 'system', type: 'message', content: 'Mode change notice non-chaining' });
-  t.is(passedHistory[1].content, 'User msg');
+  t.is(passedHistory[0].content, 'User msg');
+  t.deepEqual(passedHistory[1], { role: 'system', type: 'message', content: 'Mode change notice non-chaining' });
+
+  // The notice is persisted into the conversation store so it stays in history
+  // on subsequent turns (a transient notice would break the prompt cache).
+  const persisted = session.exportState().history;
+  t.true(
+    persisted.some(
+      (item) =>
+        (item.rawItem ?? item).role === 'system' &&
+        (item.rawItem ?? item).content === 'Mode change notice non-chaining',
+    ),
+  );
+});
+
+test('queueModeNotice persists append-only so the cached prefix only grows (non-chaining)', async (t) => {
+  const startCalls = [];
+
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    async startStream(text, options) {
+      startCalls.push({ text, options });
+      const stream = new MockStream([]);
+      stream.lastResponseId = `resp-${startCalls.length}`;
+      stream.finalOutput = `Reply ${startCalls.length}`;
+      return stream;
+    },
+  };
+
+  const session = new ConversationSession('notice-prefix-stability', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  // Turn 1: establish a conversation prefix with no notice.
+  await session.sendMessage('First question');
+  const turn1Input = startCalls[0].text;
+
+  // Turn 2: switch modes mid-session, then send another message.
+  session.queueModeNotice('Plan Mode toggled OFF');
+  await session.sendMessage('Second question');
+  const turn2Input = startCalls[1].text;
+
+  // Turn 3: a normal message with no notice.
+  await session.sendMessage('Third question');
+  const turn3Input = startCalls[2].text;
+
+  // Turn 2's input is turn 1's prefix grown by the new user turn + the notice;
+  // turn 3's input is turn 2's input grown by the next user turn. Nothing is
+  // reordered or removed, so the prompt cache prefix only ever grows.
+  t.deepEqual(turn2Input.slice(0, turn1Input.length), turn1Input);
+  t.deepEqual(turn3Input.slice(0, turn2Input.length), turn2Input);
+
+  // The notice stays in history at a stable position across later turns.
+  const noticeIdx = turn3Input.findIndex((i) => (i.rawItem ?? i).role === 'system');
+  t.true(noticeIdx >= 0);
+  t.is((turn3Input[noticeIdx].rawItem ?? turn3Input[noticeIdx]).content, 'Plan Mode toggled OFF');
 });

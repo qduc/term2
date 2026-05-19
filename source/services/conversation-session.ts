@@ -313,7 +313,14 @@ export class ConversationSession {
           const noticeItem: AgentInputItem = { role: 'system', type: 'message', content: notice };
           streamInput = [noticeItem, userItem];
         } else {
-          this.conversationStore.insertSystemMessageBeforeLastUserTurn(notice);
+          // Persist the notice at the tail (append-only) rather than splicing
+          // it before the last user turn or sending it as a one-shot item.
+          // Mid-history insertion adds a stray ephemeral cache breakpoint (see
+          // addCacheControlToLastTwoMessages) and a transient item makes
+          // consecutive requests diverge at the tail — both break the
+          // Claude/Qwen prompt cache. Appending keeps the cached prefix
+          // byte-identical and only growing.
+          this.conversationStore.addModeNotice(notice);
           streamInput = this.conversationStore.getHistory();
         }
       } else {

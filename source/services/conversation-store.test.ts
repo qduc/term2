@@ -584,44 +584,36 @@ test('removeNLastUserTurns() skips shell context items', (t) => {
   t.is(history.length, 0);
 });
 
-test('insertSystemMessageBeforeLastUserTurn() places system message before final user message', (t) => {
+test('addModeNotice() appends a persisted system message at the tail', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.addModeNotice('Plan Mode ON');
+
+  const history = store.getHistory();
+  t.is(history.length, 2);
+  t.is((history[0] as any).content, 'First');
+  t.is((history[1] as any).role, 'system');
+  t.is((history[1] as any).content, 'Plan Mode ON');
+});
+
+test('addModeNotice() preserves the existing prefix (append-only, never mid-history)', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('First');
   store.addUserMessage('Second');
+  const prefix = store.getHistory();
 
-  store.insertSystemMessageBeforeLastUserTurn('System Notice');
+  store.addModeNotice('Plan Mode OFF');
 
   const history = store.getHistory();
-  t.is(history.length, 3);
-  t.is((history[0] as any).content, 'First');
-  t.is((history[1] as any).content, 'System Notice');
-  t.is((history[1] as any).role, 'system');
-  t.is((history[2] as any).content, 'Second');
+  t.deepEqual(history.slice(0, prefix.length), prefix);
+  t.is(history.length, prefix.length + 1);
+  t.is((history[history.length - 1] as any).content, 'Plan Mode OFF');
 });
 
-test('insertSystemMessageBeforeLastUserTurn() inserts before genuine user turn, skipping trailing shell context', (t) => {
+test('addModeNotice() ignores blank text', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('First');
-  store.addUserMessage('Second');
-  store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
+  store.addModeNotice('   ');
 
-  store.insertSystemMessageBeforeLastUserTurn('System Notice');
-
-  const history = store.getHistory();
-  t.is(history.length, 4);
-  t.is((history[0] as any).content, 'First');
-  t.is((history[1] as any).content, 'System Notice');
-  t.is((history[1] as any).role, 'system');
-  t.is((history[2] as any).content, 'Second');
-  t.true((history[3] as any).content.startsWith(SHELL_CONTEXT_PREFIX));
-});
-
-test('insertSystemMessageBeforeLastUserTurn() appends to end if history is empty', (t) => {
-  const store = new ConversationStore();
-  store.insertSystemMessageBeforeLastUserTurn('System Notice');
-
-  const history = store.getHistory();
-  t.is(history.length, 1);
-  t.is((history[0] as any).content, 'System Notice');
-  t.is((history[0] as any).role, 'system');
+  t.is(store.getHistory().length, 1);
 });

@@ -71,6 +71,33 @@ test('addCacheControlToLastTwoMessages() adds cache control to system, last user
   t.deepEqual(messages[3].content, [{ type: 'text', text: 'user2', cache_control: { type: 'ephemeral' } }]); // last user
 });
 
+test('addCacheControlToLastTwoMessages() marks only the last system message when several exist', (t) => {
+  const messages = [
+    { role: 'system', content: 'system prompt' },
+    { role: 'user', content: 'u1' },
+    { role: 'assistant', content: 'a1' },
+    { role: 'system', content: 'Plan Mode ON' },
+    { role: 'user', content: 'u2' },
+    { role: 'assistant', content: 'a2' },
+    { role: 'system', content: 'Plan Mode OFF' },
+    { role: 'user', content: 'u3' },
+  ];
+  addCacheControlToLastTwoMessages(messages);
+
+  // Only the last system message carries a breakpoint (not every one).
+  t.is(messages[0].content, 'system prompt');
+  t.is(messages[3].content, 'Plan Mode ON');
+  t.deepEqual(messages[6].content, [{ type: 'text', text: 'Plan Mode OFF', cache_control: { type: 'ephemeral' } }]);
+
+  // Plus the rolling last-user breakpoint. Total breakpoints stay within the
+  // provider cap regardless of how many mode notices accumulate.
+  t.deepEqual(messages[7].content, [{ type: 'text', text: 'u3', cache_control: { type: 'ephemeral' } }]);
+  const breakpoints = messages.filter(
+    (m) => Array.isArray(m.content) && m.content.some((c: any) => c.cache_control),
+  ).length;
+  t.is(breakpoints, 2);
+});
+
 test('addCacheControlToLastTwoMessages() adds cache_control to last text block in array content', (t) => {
   const messages = [
     { role: 'user', content: [{ type: 'text', text: 'hello' }] },

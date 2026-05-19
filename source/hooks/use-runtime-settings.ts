@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { ConversationService } from '../services/conversation-service.js';
 import type { SettingsService } from '../services/settings-service.js';
 import { setTrimConfig } from '../utils/output-trim.js';
+import { planModeNotice } from '../services/mode-notices.js';
 
 interface UseRuntimeSettingsProps {
   setModel: (model: string) => void;
@@ -79,13 +80,7 @@ export const useRuntimeSettings = ({
       }
 
       if (key === 'app.planMode') {
-        conversationService.queueModeNotice(
-          `Plan Mode was manually toggled ${value ? 'ON' : 'OFF'} by the user. ${
-            value
-              ? 'DO NOT attempt file edits or system state changes. Recommend an implementation plan.'
-              : 'You may now execute mutating changes (create files, edits, subagents, shell commands).'
-          }`,
-        );
+        conversationService.queueModeNotice(planModeNotice(Boolean(value)));
         return;
       }
 

@@ -169,10 +169,16 @@ export function addCacheControlToLastTwoMessages(messages: any[], modelId?: stri
     }
   }
 
-  // 1. Add cache control to all system messages (role == 'system')
-  for (const msg of messages) {
-    if (msg.role === 'system') {
-      applyCacheControlToMessage(msg);
+  // 1. Add cache control to the *last* system message only. A breakpoint
+  // caches everything up to and including its position, so marking the last
+  // system message covers the system prompt + all prior turns in a single
+  // breakpoint. Marking every system message instead wastes breakpoints and,
+  // once mode-change notices accumulate in history, can exceed the provider's
+  // 4-breakpoint cap.
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'system') {
+      applyCacheControlToMessage(messages[i]);
+      break;
     }
   }
 

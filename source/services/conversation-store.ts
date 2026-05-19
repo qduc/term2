@@ -77,6 +77,24 @@ export class ConversationStore {
     this.#history.push(item);
   }
 
+  /**
+   * Append a mode-change notice as a persisted system message at the tail of
+   * the history. Append-only (never spliced mid-history) so the previously
+   * cached prefix stays byte-identical and only grows.
+   */
+  addModeNotice(text: string): void {
+    const trimmed = text ?? '';
+    if (!trimmed.trim()) {
+      return;
+    }
+    const item: AgentInputItem = {
+      role: 'system',
+      type: 'message',
+      content: trimmed,
+    };
+    this.#history.push(item);
+  }
+
   updateFromResult(result: any): void {
     const incoming = result?.history;
     if (!Array.isArray(incoming) || incoming.length === 0) {
@@ -289,31 +307,6 @@ export class ConversationStore {
       content: errorMessage,
     };
     this.#history.push(item);
-  }
-
-  insertSystemMessageBeforeLastUserTurn(text: string): void {
-    const item: AgentInputItem = {
-      role: 'system',
-      type: 'message',
-      content: text,
-    };
-    // Insert before the last *genuine* user turn, skipping trailing
-    // shell-context items (which are also role:'user') so the notice lands
-    // immediately before the user's message rather than after it.
-    let anchor = -1;
-    for (let i = this.#history.length - 1; i >= 0; i--) {
-      const raw = (this.#history[i] as any)?.rawItem ?? this.#history[i];
-      if (raw?.role !== 'user') continue;
-      if (ConversationStore.#extractText(raw).startsWith(SHELL_CONTEXT_PREFIX)) continue;
-      anchor = i;
-      break;
-    }
-
-    if (anchor === -1) {
-      this.#history.push(item);
-    } else {
-      this.#history.splice(anchor, 0, item);
-    }
   }
 
   #cloneHistory(items: AgentInputItem[]): AgentInputItem[] {

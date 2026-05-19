@@ -1,7 +1,11 @@
 import test from 'ava';
 import { OpenAIProvider, OpenAIChatCompletionsModel, OpenAIResponsesModel } from '@openai/agents-openai';
 
-import { createCustomProviderModelProvider, type CustomProviderConfig } from './openai-compatible.provider.js';
+import {
+  createCustomProviderModelProvider,
+  sanitizeResponsesApiBody,
+  type CustomProviderConfig,
+} from './openai-compatible.provider.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
 
@@ -37,6 +41,30 @@ test('createCustomProviderModelProvider uses native responses OpenAIProvider for
   t.true(provider instanceof OpenAIProvider);
   const model = await (provider as OpenAIProvider).getModel('model-a');
   t.true(model instanceof OpenAIResponsesModel, 'openai type must use the Responses API');
+});
+
+test('sanitizeResponsesApiBody removes empty replayed response messages', (t) => {
+  const body = sanitizeResponsesApiBody({
+    input: [
+      { role: 'user', type: 'message', content: 'start' },
+      {
+        role: 'assistant',
+        type: 'message',
+        content: [],
+        provider_data: {
+          reasoning_content: 'Thinking only item from provider replay.',
+        },
+      },
+      { type: 'function_call', call_id: 'call_1', name: 'shell', arguments: '{}' },
+      { role: 'user', type: 'message', content: [{ type: 'input_text', text: 'continue' }] },
+    ],
+  });
+
+  t.deepEqual(body.input, [
+    { role: 'user', type: 'message', content: 'start' },
+    { type: 'function_call', call_id: 'call_1', name: 'shell', arguments: '{}' },
+    { role: 'user', type: 'message', content: [{ type: 'input_text', text: 'continue' }] },
+  ]);
 });
 
 test('createCustomProviderModelProvider uses Anthropic adapter for anthropic type', (t) => {

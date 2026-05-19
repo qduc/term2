@@ -312,6 +312,52 @@ function createCacheControlFetch(fetchImpl: typeof fetch | undefined): typeof fe
   }) as typeof fetch;
 }
 
+export function sanitizeResponsesApiBody(body: any): any {
+  if (!body || typeof body !== 'object' || !Array.isArray(body.input)) {
+    return body;
+  }
+
+  const sanitizedInput = body.input.filter((item: any) => {
+    const rawItem = item?.rawItem ?? item;
+    if (!rawItem || typeof rawItem !== 'object') {
+      return true;
+    }
+
+    const isMessage = rawItem.type === 'message' || (rawItem.role && rawItem.content !== undefined);
+    if (!isMessage) {
+      return true;
+    }
+
+    return !Array.isArray(rawItem.content) || rawItem.content.length > 0;
+  });
+
+  if (sanitizedInput.length === body.input.length) {
+    return body;
+  }
+
+  return {
+    ...body,
+    input: sanitizedInput,
+  };
+}
+
+function createOpenAIResponsesFetch(fetchImpl: typeof fetch | undefined): typeof fetch | undefined {
+  if (!fetchImpl) return undefined;
+
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (typeof init?.body === 'string') {
+      try {
+        const body = sanitizeResponsesApiBody(JSON.parse(init.body));
+        return fetchImpl(input, { ...init, body: JSON.stringify(body) });
+      } catch {
+        return fetchImpl(input, init);
+      }
+    }
+
+    return fetchImpl(input, init);
+  }) as typeof fetch;
+}
+
 export function createCustomProviderModelProvider(
   config: CustomProviderConfig,
   deps: CustomProviderRuntimeDeps,
@@ -325,11 +371,17 @@ export function createCustomProviderModelProvider(
   });
 
   switch (providerType) {
-    case 'openai':
-      return new OpenAIProvider({
+    case 'openai': {
+      const openAIClient = new OpenAI({
         apiKey: config.apiKey,
         baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
+        fetch: createOpenAIResponsesFetch(deps.fetch) as any,
       });
+      return new OpenAIProvider({
+        openAIClient: openAIClient as any,
+        useResponses: true,
+      });
+    }
     case 'anthropic':
       return new AiSdkAnthropicProvider({
         defaultModel: deps.defaultModel,

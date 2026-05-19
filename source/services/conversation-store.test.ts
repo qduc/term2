@@ -144,6 +144,48 @@ test('updateFromResult() replaces history when incoming history is a superset', 
   t.is(last.content[0].text, 'Ack2');
 });
 
+test('updateFromResult() collapses SDK replayed history prefixes', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('Investigate upgrade');
+
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'Investigate upgrade' },
+      { type: 'function_call', callId: 'call-search', name: 'web_search', arguments: '{}' },
+      { type: 'function_call_result', callId: 'call-search', name: 'web_search', output: { text: 'search results' } },
+      { role: 'user', type: 'message', content: 'Investigate upgrade' },
+      { type: 'function_call', callId: 'call-search', name: 'web_search', arguments: '{}' },
+      { type: 'function_call_result', callId: 'call-search', name: 'web_search', output: { text: 'search results' } },
+      { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
+      { type: 'function_call_result', callId: 'call-read', name: 'read_file', output: { text: 'file contents' } },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Done' }] },
+    ] as any,
+  });
+
+  const history = store.getHistory() as any[];
+  t.is(history.length, 6);
+  t.is(history.filter((item) => (item.rawItem ?? item).callId === 'call-search').length, 2);
+  t.is(history.filter((item) => (item.rawItem ?? item).callId === 'call-read').length, 2);
+  t.is((history[0].rawItem ?? history[0]).content, 'Investigate upgrade');
+  t.is((history[5].rawItem ?? history[5]).role, 'assistant');
+});
+
+test('updateFromResult() keeps repeated user text when it is not a tool replay', (t) => {
+  const store = new ConversationStore();
+
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'again' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'first' }] },
+      { role: 'user', type: 'message', content: 'again' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'second' }] },
+    ] satisfies AgentInputItem[],
+  });
+
+  const history = store.getHistory();
+  t.is(history.length, 4);
+});
+
 test('updateFromResult() preserves reasoning_details across overlap merges', (t) => {
   const store = new ConversationStore();
 

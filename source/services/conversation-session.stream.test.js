@@ -1,4 +1,5 @@
 import test from 'ava';
+import { ModelBehaviorError } from '@openai/agents';
 import { ConversationSession } from '../../dist/services/conversation-session.js';
 
 const mockLogger = {
@@ -109,6 +110,118 @@ test('run() falls back to standard service tier after flex timeout', async (t) =
   t.is(emitted[0].retryType, 'flex_service_tier');
   t.is(emitted[0].toolName, 'service_tier');
   t.deepEqual(calls, ['hi', 'fallback', 'hi']);
+});
+
+test('run() retries streamed recoverable errors without committing failed stream history', async (t) => {
+  class FailingStream extends MockStream {
+    constructor() {
+      super([]);
+      this.history = [
+        { role: 'user', type: 'message', content: 'retry me' },
+        { type: 'function_call', callId: 'failed-call', name: 'fake_tool', arguments: '{}' },
+        {
+          type: 'function_call_result',
+          callId: 'failed-call',
+          name: 'fake_tool',
+          output: { type: 'text', text: 'partial failed output' },
+        },
+      ];
+    }
+
+    async *[Symbol.asyncIterator]() {
+      yield { type: 'response.output_text.delta', delta: 'partial' };
+      throw new ModelBehaviorError('Tool fake_tool not found in agent Terminal Assistant.');
+    }
+  }
+
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  successStream.finalOutput = 'Recovered';
+  successStream.history = [
+    { role: 'user', type: 'message', content: 'retry me' },
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Recovered' }] },
+  ];
+
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    async startStream(input) {
+      calls.push(input);
+      return calls.length === 1 ? new FailingStream() : successStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('retry me')) {
+    emitted.push(ev);
+  }
+
+  t.deepEqual(
+    emitted.map((event) => event.type),
+    ['text_delta', 'retry', 'text_delta', 'final'],
+  );
+  t.is(calls.length, 2);
+  t.is(calls[0].length, 1);
+  t.deepEqual(calls[1], [{ role: 'user', type: 'message', content: 'retry me' }]);
+});
+
+test('run() blocks abrupt outbound message-count surge before provider call', async (t) => {
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'ok' }]);
+  firstStream.finalOutput = 'ok';
+  firstStream.history = Array.from({ length: 863 }, (_, index) => ({
+    role: index % 2 === 0 ? 'user' : 'assistant',
+    type: 'message',
+    content: `history-${index}`,
+    ...(index % 2 === 1 ? { status: 'completed' } : {}),
+  }));
+
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'opencode';
+    },
+    async startStream(input) {
+      calls.push(input);
+      return firstStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  session.importState({
+    previousResponseId: null,
+    history: Array.from({ length: 65 }, (_, index) => ({ role: 'user', type: 'message', content: `seed-${index}` })),
+  });
+
+  const first = [];
+  for await (const ev of session.run('first')) {
+    first.push(ev);
+  }
+
+  const second = [];
+  for await (const ev of session.run('second')) {
+    second.push(ev);
+  }
+
+  t.is(calls.length, 1);
+  t.is(calls[0].length, 66);
+  t.deepEqual(second, [
+    {
+      type: 'error',
+      kind: 'input_surge_guard',
+      message:
+        'Outgoing message count jumped from 66 to 930. Request blocked to prevent runaway context growth. Try /undo or /clear, or compact the conversation history.',
+    },
+  ]);
 });
 
 test('continue() streams events after approval decision', async (t) => {

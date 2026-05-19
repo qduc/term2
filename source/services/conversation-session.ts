@@ -18,6 +18,7 @@ import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { buildConversationResult, toTerminalEvent } from './conversation-result-builder.js';
 import type { AgentStream } from './agent-stream.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
+import { InputSurgeGuard } from './input-surge-guard.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -38,6 +39,7 @@ export class ConversationSession {
   private emittedInvalidToolCallPackets = new Set<string>();
   private shellAutoApproval: ShellAutoApprovalResolver;
   private approvalFlow: ApprovalFlowCoordinator;
+  private inputSurgeGuard = new InputSurgeGuard();
   private generation = 0;
 
   private settingsService?: ISettingsService;
@@ -81,6 +83,7 @@ export class ConversationSession {
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
     this.shellAutoApproval.clearCache();
+    this.inputSurgeGuard.reset();
     const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
     clearConversations?.call(this.agentClient);
   }
@@ -94,6 +97,7 @@ export class ConversationSession {
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
     this.shellAutoApproval.clearCache();
+    this.inputSurgeGuard.reset();
     return removed;
   }
 
@@ -110,6 +114,7 @@ export class ConversationSession {
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
     this.shellAutoApproval.clearCache();
+    this.inputSurgeGuard.reset();
     return removed;
   }
 
@@ -153,6 +158,7 @@ export class ConversationSession {
       this.conversationStore.addImportedItem(item);
     }
     this.previousResponseId = state.previousResponseId;
+    this.inputSurgeGuard.reset();
     this.generation++;
   }
 
@@ -317,6 +323,31 @@ export class ConversationSession {
         streamInput = supportsChaining ? chainedInput : history;
       }
 
+      const surgeDecision = this.inputSurgeGuard.inspect(streamInput);
+      if (surgeDecision.action === 'block') {
+        if (addedUserMessage && this.#isCurrentGeneration(gen)) {
+          this.conversationStore.removeLastUserMessage();
+        }
+
+        this.logger.warn('Input surge guard blocked provider request', {
+          eventType: 'input_surge.blocked',
+          category: 'provider',
+          phase: 'request_start',
+          sessionId: this.id,
+          traceId: this.logger.getCorrelationId(),
+          reason: surgeDecision.reason,
+          stats: surgeDecision.stats,
+          previousStats: surgeDecision.previousStats,
+        });
+
+        yield {
+          type: 'error',
+          kind: 'input_surge_guard',
+          message: `${surgeDecision.reason} Request blocked to prevent runaway context growth. Try /undo or /clear, or compact the conversation history.`,
+        };
+        return;
+      }
+
       stream = (await this.agentClient.startStream(streamInput, {
         previousResponseId: this.previousResponseId,
       })) as AgentStream;
@@ -345,6 +376,8 @@ export class ConversationSession {
         acc.emittedCommandIds,
         acc.latestUsage,
       );
+
+      this.inputSurgeGuard.recordSuccessfulInput(streamInput);
 
       if (resolvedResult.type === 'approval_required') {
         this.logger.debug('Tool approval required', {
@@ -420,7 +453,6 @@ export class ConversationSession {
         if (!this.#isCurrentGeneration(gen)) return;
 
         if (decision.hadStream && stream) {
-          this.conversationStore.updateFromResult(stream);
           if (decision.shouldInjectErrorContext) {
             this.conversationStore.addErrorContext(decision.errorContextMessage);
           }

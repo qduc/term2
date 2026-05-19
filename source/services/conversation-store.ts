@@ -83,7 +83,7 @@ export class ConversationStore {
       return;
     }
 
-    const next = this.#cloneHistory(incoming as AgentInputItem[]);
+    const next = this.#collapseReplayedHistoryPrefixes(this.#cloneHistory(incoming as AgentInputItem[]));
 
     if (this.#history.length === 0) {
       this.#history = next;
@@ -324,6 +324,59 @@ export class ConversationStore {
     } catch {
       return items.slice();
     }
+  }
+
+  #collapseReplayedHistoryPrefixes(items: AgentInputItem[]): AgentInputItem[] {
+    let collapsed = items;
+
+    while (collapsed.length > 1) {
+      const firstSignature = this.#signature(collapsed[0]);
+      let replayStart = -1;
+
+      for (let i = collapsed.length - 1; i > 0; i--) {
+        if (this.#signature(collapsed[i]) !== firstSignature) {
+          continue;
+        }
+
+        const prefixCallSignatures = this.#collectCallSignatures(collapsed.slice(0, i));
+        if (prefixCallSignatures.size === 0) {
+          continue;
+        }
+
+        const suffixCallSignatures = this.#collectCallSignatures(collapsed.slice(i));
+        let allPrefixCallsReplayed = true;
+        for (const signature of prefixCallSignatures) {
+          if (!suffixCallSignatures.has(signature)) {
+            allPrefixCallsReplayed = false;
+            break;
+          }
+        }
+
+        if (allPrefixCallsReplayed) {
+          replayStart = i;
+          break;
+        }
+      }
+
+      if (replayStart === -1) {
+        return collapsed;
+      }
+
+      collapsed = collapsed.slice(replayStart);
+    }
+
+    return collapsed;
+  }
+
+  #collectCallSignatures(items: AgentInputItem[]): Set<string> {
+    const signatures = new Set<string>();
+    for (const item of items) {
+      const signature = this.#signature(item);
+      if (signature.startsWith('call:')) {
+        signatures.add(signature);
+      }
+    }
+    return signatures;
   }
 
   #preferIncomingItem(existing: AgentInputItem, incoming: AgentInputItem): AgentInputItem {

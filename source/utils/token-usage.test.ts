@@ -309,3 +309,38 @@ test('formatSessionUsageBreakdown always shows three lines when subagent has non
   t.is(lines[1], 'Subagents: 0 input, 5 output');
   t.is(lines[2], 'Total: 100 input, 25 output');
 });
+
+test('extractUsage does NOT find usage from RunResult.state.usage shape', (t) => {
+  // The SDK's RunResult stores usage in state.usage (Usage class with
+  // inputTokens/outputTokens). extractUsage doesn't check state.usage,
+  // so this should return undefined, confirming the bug.
+  const runResult = {
+    state: {
+      usage: {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+      },
+    },
+    rawResponses: [],
+    newItems: [],
+  };
+
+  t.is(extractUsage(runResult), undefined, 'extractUsage should miss RunResult.state.usage');
+});
+
+test('normalizeAgentRunUsage extracts usage from SDK Usage shape with inputTokens/outputTokens', (t) => {
+  // This is the fix path: normalizeAgentRunUsage understands the SDK's
+  // Usage class shape and converts it to NormalizedUsage.
+  const sdkUsage = {
+    inputTokens: 100,
+    outputTokens: 50,
+    totalTokens: 150,
+  };
+
+  t.deepEqual(normalizeAgentRunUsage(sdkUsage), {
+    prompt_tokens: 100,
+    completion_tokens: 50,
+    total_tokens: 150,
+  });
+});

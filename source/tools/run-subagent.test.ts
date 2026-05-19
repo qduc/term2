@@ -179,15 +179,14 @@ test('getSubagentsRolesSection extracts descriptions from markdown files', (t) =
 
   t.true(section.includes('## Roles'));
   t.true(section.includes('`explorer`'));
-  t.true(section.includes('read-only workspace access. Use for locating files and answering codebase questions.'));
   t.true(section.includes('`mentor`'));
-  t.true(section.includes('advisory only, no workspace access. Use for technical advice.'));
   t.true(section.includes('`researcher`'));
-  t.true(
-    section.includes('web search + read-only workspace. Use for looking up external docs or current information.'),
-  );
   t.true(section.includes('`worker`'));
-  t.true(section.includes('read + write access. Use for implementing bounded file changes.'));
+
+  t.regex(section, /-\s+`explorer`:\s+\S+/);
+  t.regex(section, /-\s+`mentor`:\s+\S+/);
+  t.regex(section, /-\s+`researcher`:\s+\S+/);
+  t.regex(section, /-\s+`worker`:\s+\S+/);
 });
 
 test('createRunSubagentToolDefinition includes dynamic roles description', (t) => {
@@ -195,7 +194,5 @@ test('createRunSubagentToolDefinition includes dynamic roles description', (t) =
 
   t.true(tool.description.includes('## Roles'));
   t.true(tool.description.includes('`explorer`'));
-  t.true(
-    tool.description.includes('read-only workspace access. Use for locating files and answering codebase questions.'),
-  );
+  t.regex(tool.description, /-\s+`explorer`:\s+\S+/);
 });

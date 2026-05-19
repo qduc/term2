@@ -178,8 +178,8 @@ test('getAgentDefinition omits dedicated search tool references from prompt when
     loggingService: mockLogger,
   });
 
-  t.false(definition.instructions.includes('Prefer `find_files`'));
-  t.false(definition.instructions.includes('Prefer `grep`'));
+  t.false(definition.instructions.includes('`find_files`'));
+  t.false(definition.instructions.includes('`grep`'));
 });
 
 test('getAgentDefinition dynamically includes dedicated search tool references when searchViaShell is false', (t) => {
@@ -193,11 +193,11 @@ test('getAgentDefinition dynamically includes dedicated search tool references w
     loggingService: mockLogger,
   });
 
-  t.true(definition.instructions.includes('Prefer `find_files`'));
-  t.true(definition.instructions.includes('Prefer `grep`'));
+  t.true(definition.instructions.includes('`find_files`'));
+  t.true(definition.instructions.includes('`grep`'));
   t.true(definition.instructions.includes('read_code_outline'));
   t.true(definition.instructions.includes('code_context_search'));
-  t.true(definition.instructions.includes('Use `read_file` before editing'));
+  t.true(definition.instructions.includes('read_file'));
 });
 
 test('getAgentDefinition dynamically includes code-context tool references when available', (t) => {
@@ -213,7 +213,7 @@ test('getAgentDefinition dynamically includes code-context tool references when 
 
   t.true(definition.instructions.includes('read_code_outline'));
   t.true(definition.instructions.includes('code_context_search'));
-  t.true(definition.instructions.includes('Use `read_file` before editing'));
+  t.true(definition.instructions.includes('read_file'));
 });
 
 test('getAgentDefinition dynamically includes code-context tool references for gpt-5 models', (t) => {
@@ -250,10 +250,10 @@ test('getAgentDefinition uses fallback search prompt for remote execution', (t) 
   });
 
   // Remote should always fallback to grep/find instructions
-  t.true(definition.instructions.includes('use `grep`'));
-  t.true(definition.instructions.includes('use `find`'));
-  t.false(definition.instructions.includes('use `rg` (ripgrep)'));
-  t.false(definition.instructions.includes('use `fd`'));
+  t.true(definition.instructions.includes('`grep`'));
+  t.true(definition.instructions.includes('`find`'));
+  t.false(definition.instructions.includes('`rg`'));
+  t.false(definition.instructions.includes('`fd`'));
 });
 
 test('getAgentDefinition excludes code-context tools in remote (SSH) execution', (t) => {

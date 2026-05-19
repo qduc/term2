@@ -805,9 +805,14 @@ test.serial('mentor base instructions come from the mentor role markdown', async
 
   t.is(mentorManagerRunnerCalls.length, 1);
   const instructions: string = mentorManagerRunnerCalls[0].agent.instructions;
-  // Body text defined in source/prompts/subagents/mentor.md
-  t.true(instructions.includes('helpful mentor assistant'));
-  t.true(instructions.includes('no direct workspace access'));
+
+  // Dynamically load the mentor role markdown to verify integration without brittle hardcoding
+  const mentorPath = path.join(import.meta.dirname, '../../../source/prompts/subagents/mentor.md');
+  const mentorContent = fs.readFileSync(mentorPath, 'utf-8');
+  const parts = mentorContent.split('---');
+  const expectedBody = parts[parts.length - 1].trim();
+
+  t.true(instructions.includes(expectedBody), 'Agent instructions should include the parsed body of mentor.md');
 });
 
 // ========== finalText excludes pre-tool narration ==========

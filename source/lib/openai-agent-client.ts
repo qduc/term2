@@ -26,11 +26,29 @@ import type { ConversationEvent } from '../services/conversation-events.js';
  * The original Zod schema uses .optional() which rejects null, so without this
  * normalization valid strict-schema calls would incorrectly bypass approval.
  */
-export function wrapNeedsApproval(definition: {
-  parameters: { safeParse: (v: unknown) => { success: boolean } };
-  needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean;
-}): (context: unknown, params: unknown) => Promise<boolean> {
+export function wrapNeedsApproval(
+  definition: {
+    parameters: { safeParse: (v: unknown) => { success: boolean } };
+    needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean;
+  },
+  options?: {
+    // When an interceptor (e.g. plan mode) would reject this call, the approval
+    // prompt must be suppressed — execute() returns the rejection to the model.
+    checkInterceptors?: (params: unknown) => Promise<string | null>;
+  },
+): (context: unknown, params: unknown) => Promise<boolean> {
   return async (context, params) => {
+    if (options?.checkInterceptors) {
+      try {
+        const rejectionMessage = await options.checkInterceptors(params);
+        if (rejectionMessage) {
+          return false;
+        }
+      } catch {
+        // If the interceptor check throws, fall through to normal approval
+        // logic rather than silently skipping the prompt.
+      }
+    }
     const normalized =
       params !== null && typeof params === 'object' && !Array.isArray(params)
         ? Object.fromEntries(
@@ -653,7 +671,9 @@ export class OpenAIAgentClient {
             name: definition.name,
             description: definition.description,
             parameters: useStrictToolSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
-            needsApproval: wrapNeedsApproval(definition),
+            needsApproval: wrapNeedsApproval(definition, {
+              checkInterceptors: (params) => this.#checkToolInterceptors(definition.name, params),
+            }),
             execute: async (params, _context, details) => {
               const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');
               // Extract tool call ID from details if available

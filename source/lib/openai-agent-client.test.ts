@@ -316,3 +316,30 @@ test('wrapNeedsApproval catches unhandled errors and fails safe to true', async 
 
   t.true(await wrapped(null, { command: 'ls' }));
 });
+
+test('wrapNeedsApproval skips approval when an interceptor rejects the call', async (t) => {
+  // Plan mode (and any interceptor) rejects via #checkToolInterceptors, which
+  // runs in execute(). Without consulting it here, the approval prompt fires
+  // before the guardrail. needsApproval must return false so no prompt shows;
+  // execute() then returns the rejection message to the model.
+  let toolNeedsApprovalCalled = false;
+  const definition = makeDefinition(async () => {
+    toolNeedsApprovalCalled = true;
+    return true;
+  });
+  const wrapped = wrapNeedsApproval(definition, {
+    checkInterceptors: async () => 'Plan mode is active (read-only).',
+  });
+
+  t.false(await wrapped(null, { command: 'ls' }));
+  t.false(toolNeedsApprovalCalled); // short-circuited before the tool decides
+});
+
+test('wrapNeedsApproval delegates to the tool when no interceptor rejects', async (t) => {
+  const definition = makeDefinition(async () => true);
+  const wrapped = wrapNeedsApproval(definition, {
+    checkInterceptors: async () => null,
+  });
+
+  t.true(await wrapped(null, { command: 'ls' }));
+});

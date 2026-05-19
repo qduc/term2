@@ -39,6 +39,27 @@ interface AppProps {
 
 export const appendStartupBannerId = (ids: string[]): string[] => [...ids, `startup-banner-${ids.length}`];
 
+export const hasConversationContent = (messages: Message[]): boolean => messages.some((msg) => msg.sender !== 'system');
+
+type ScheduleCallback = (callback: () => void, delay: number) => unknown;
+
+export const scheduleExitSideEffects = (
+  messages: Message[],
+  onSaveConversation: (messages: Message[]) => Promise<void>,
+  onExitUsage?: () => void,
+  schedule: ScheduleCallback = setTimeout,
+): void => {
+  schedule(() => {
+    if (hasConversationContent(messages)) {
+      void onSaveConversation(messages).finally(() => {
+        onExitUsage?.();
+      });
+    } else {
+      onExitUsage?.();
+    }
+  }, 0);
+};
+
 const App: FC<AppProps> = ({
   conversationService,
   settingsService,
@@ -133,10 +154,9 @@ const App: FC<AppProps> = ({
     [sessionUsage, getSubagentUsage],
   );
 
-  const exitWithUsage = useCallback(async () => {
-    await onSaveConversation(messages);
-    onExitUsage?.();
+  const exitWithUsage = useCallback(() => {
     exit();
+    scheduleExitSideEffects(messages, onSaveConversation, onExitUsage);
   }, [exit, onExitUsage, onSaveConversation, messages]);
 
   const { slashCommands, toggleEditMode } = useAppCommands({
@@ -172,7 +192,7 @@ const App: FC<AppProps> = ({
     [undoToUserMessage, setInput],
   );
 
-  const hasConversationHistory = useMemo(() => messages.some((msg) => msg.sender !== 'system'), [messages]);
+  const hasConversationHistory = useMemo(() => hasConversationContent(messages), [messages]);
 
   // Handle Ctrl+C to exit immediately
   useInput((_input: string, key) => {

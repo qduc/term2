@@ -4,7 +4,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { render } from 'ink';
 import meow from 'meow';
-import App from './app.js';
+import App, { hasConversationContent } from './app.js';
 import { SSHInfo } from './hooks/use-shell-mode.js';
 import { getInkRenderOptions } from './utils/ink-render-options.js';
 import { OpenAIAgentClient } from './lib/openai-agent-client.js';
@@ -402,6 +402,11 @@ const saveAndPrintResume = async (messages: Message[]) => {
     return;
   }
   conversationSavedForExit = true;
+
+  if (!hasConversationContent(messages)) {
+    printUsageOnce();
+    return;
+  }
 
   const state = conversationService.exportState();
   const model = settings.get('agent.model');

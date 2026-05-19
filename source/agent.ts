@@ -21,6 +21,7 @@ import { getPromptPath } from './prompts/prompt-selector.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { getSearchViaShellAddendum } from './prompts/search-via-shell.js';
 import { getSubagentDelegationAddendum } from './prompts/subagent-delegation.js';
+import { getReasoningEfficiencyAddendum } from './prompts/reasoning-efficiency.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 
@@ -169,6 +170,14 @@ export const getAgentDefinition = (
     prompt = `${prompt}\n\n${resolvePrompt(planModeInfoPath)}`;
   } catch (e) {
     loggingService.error(`Failed to load plan-mode-info: ${e}`);
+  }
+
+  const isOverThinkingModels = ['kimi', 'deepseek', 'glm', 'qwen', 'minimax', 'mimo'].some((key) =>
+    resolvedModel.toLowerCase().includes(key),
+  );
+
+  if (isOverThinkingModels) {
+    prompt += `\n\n${getReasoningEfficiencyAddendum()}`;
   }
 
   const envInfo = getEnvInfo(settingsService, executionContext, liteMode);

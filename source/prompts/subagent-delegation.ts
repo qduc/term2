@@ -3,30 +3,30 @@ import { getSubagentsRolesSection } from '../tools/run-subagent.js';
 /**
  * Single source of truth for the agent-facing delegation guidance.
  *
- * This is injected into the main system prompt whenever the `run_subagent`
- * tool is available. The `run_subagent` tool description deliberately only
- * documents mechanics (parameters, task self-containment); the *behavioral*
- * guidance — when to reach for delegation — lives here so it can be tuned in
- * one place.
+ * Injected into the main system prompt whenever `run_subagent` is available.
+ * The tool description covers mechanics; behavioral guidance lives here.
  */
 export function getSubagentDelegationAddendum(): string {
   const header = `### Delegating to subagents
 
-You have a \`run_subagent\` tool. Treat delegation as a first-class strategy, not a last resort. A subagent runs in its own context and returns only a summary, so use it to keep your own context focused on high-level reasoning and decisions.`;
+You have a \`run_subagent\` tool. A subagent runs in its own context and returns only a summary — use it to keep your own context focused on high-level reasoning.`;
 
-  const triggers = `**Default to delegating when any of these hold:**
-- The task is a "find / locate / where is / how does X work" question that likely spans more than ~2 files. Send an \`explorer\` instead of running a chain of \`grep\`/\`read_file\` calls yourself.
-- You expect to read 5+ files or run several searches before you can act. Delegate the exploration; act on the summary.
-- The work needs information outside the repo — library docs, API references, current best practices, version-specific behavior, or anything where your training data may be stale. Send a \`researcher\` instead of guessing or relying on memory.
-- You're about to commit to a non-trivial plan, design choice, or tricky debugging direction and want it pressure-tested before you act. Send a \`mentor\` for a second opinion — cheaper than executing the wrong plan.
-- You have a scoped, verifiable unit of work — a bug fix, a refactor in a known area, adding a feature behind a clear interface, migrating a pattern across files, writing tests for a module. Send a \`worker\` with a \`writeBoundary\` and a clear "done" condition (tests pass, types check, behavior X holds). The worker will read what it needs, make the edits, and verify — you don't have to pre-specify the diff. Note: if you don't yet know *where* the change goes, send an \`explorer\` first.
+  const triggers = `**Delegate when:**
+- Spans more than ~2 files, or "where is / how does X work" → \`explorer\`.
+- Needs out-of-repo info (library docs, current best practices, version-specific behavior) → \`researcher\`.
+- About to commit to a non-trivial plan or tricky debugging direction and want it pressure-tested → \`mentor\`.
+- Scoped, verifiable unit of work (bug fix, refactor, feature behind a clear interface, migration, tests) with a checkable done condition → \`worker\` with a \`writeBoundary\`. If you don't yet know *where* the change goes, send an \`explorer\` first.
 
-**Do it yourself when:**
-- It is a single targeted read or a one-off command.
-- You need to observe progress to course-correct mid-task, or the task needs back-and-forth with the user.
-- The "done" condition is fuzzy or requires judgment you can't articulate up front — delegation works best when success is checkable.
-- The task is the user's actual deliverable and they expect to watch you work through it.
-- The question is small enough that a researcher/mentor round-trip costs more than just answering from what you already know confidently.`;
+Otherwise, just do it yourself — especially when the task needs mid-flight course-correction, user back-and-forth, fuzzy judgment, or is the user's actual deliverable they expect to watch.`;
 
-  return `${header}\n\n${triggers}\n\n${getSubagentsRolesSection()}`;
+  const planningStep = `**Before any \`run_subagent\` call, plan silently:**
+1. Restate the user's objective in one sentence.
+2. Decompose into sub-objectives (one item, or zero, are both valid).
+3. For each delegated sub-objective specify: **role**, **scoped task** (written for the subagent, not the user), **context to embed** (paths, symbols, prior findings, constraints, things ruled out), **done condition**, and **writeBoundary** for workers.
+
+"No delegation needed" is a legitimate conclusion. Don't delegate to justify having planned.
+
+**Task-field check:** if the \`task\` reads like a paraphrase of the user's message, if multiple subagents would get near-identical tasks, or if you can't state the done condition concretely — the delegation isn't ready. Rewrite, re-decompose, or investigate first.`;
+
+  return `${header}\n\n${triggers}\n\n${planningStep}\n\n${getSubagentsRolesSection()}`;
 }

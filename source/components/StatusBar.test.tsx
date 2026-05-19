@@ -39,3 +39,18 @@ test('StatusBar renders cache usage in the footer', (t) => {
 
   t.true(output.includes('Tok: 1,200 in (900 cached, 120 cache write) / 350 out'));
 });
+
+test('StatusBar renders Plan mode badge', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+    'app.planMode': true,
+  });
+
+  const { lastFrame } = render(<StatusBar settingsService={settingsService} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('Plan'));
+  t.false(output.includes('Default'));
+});

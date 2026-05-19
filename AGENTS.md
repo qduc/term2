@@ -69,7 +69,7 @@ High-level architecture and design decisions (concise):
 - **Upstream retry logic**: configurable retry attempts (default: 2) with exponential backoff for OpenRouter and other providers to handle transient upstream failures.
 - **Dependency injection and testability**: services accept interfaces (logging, settings) and a `SettingsService` mock exists to simplify unit tests and avoid I/O in tests.
 - **Session & streaming model**: conversation sessions stream deltas, capture reasoning separately for O1/O3 models, and surface tool calls for explicit approval; retry and failure-tracking behavior is configurable.
-- **App mode support**: default, lite, mentor, and edit modes are supported. Lite mode is minimal-context and can use direct shell mode (Shift+Tab); edit mode auto-approves apply_patch operations within workspace for faster file editing workflows.
+- **App mode support**: default, lite, mentor, edit, and plan modes are supported. Lite mode is minimal-context and can use direct shell mode (Shift+Tab); edit mode auto-approves apply_patch operations within workspace for faster file editing workflows; plan mode is a cache-stable read-only mode for researching and proposing step-by-step implementation plans.
 - **Reasoning effort control**: supports reasoning effort levels (none, minimal, low, medium, high, default) for O1/O3 models with dynamic configuration.
 - **Decentralized tool message formatting**: Tool command message formatting is co-located with tool implementations to ensure self-contained tool definitions and prevent extraction logic drift.
 - **Web search provider registry**: Pluggable web search architecture allows swapping between providers (Tavily, Serper, Brave, etc.) via settings without code changes. Providers implement `IWebSearchProvider` interface and register via registry.
@@ -131,7 +131,7 @@ npx prettier --write <file1, file2, file3> # Fix formatting issues in files you 
 - **Provider Registry**: Pluggable provider support (OpenAI, OpenRouter, OpenAI-compatible) with dependency injection
 - **Conversation Store**: Client-side history for providers without server-side state management
 - **Reasoning Effort**: Configurable reasoning levels for O1/O3 models (none, minimal, low, medium, high, default)
-- **App Modes**: Default, Lite, Mentor, and Edit modes with mutual-exclusion rules enforced at runtime
+- **App Modes**: Default, Lite, Mentor, Edit, and Plan modes with mutual-exclusion rules enforced at runtime
 - **Web Search Providers**: Pluggable architecture for search providers (Tavily default); implement `IWebSearchProvider` interface to add custom providers; registry enables runtime provider selection via settings
 - **SSH Mode**: Remote execution over SSH via `--ssh user@host --remote-dir /path` flags; uses `ExecutionContext` to abstract local vs remote execution; compatible with lite mode for lightweight remote assistance
 - **Execution Context**: Abstraction layer that tools query via `isRemote()` to branch between local and SSH execution paths

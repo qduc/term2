@@ -541,3 +541,45 @@ test('removeNLastUserTurns() skips shell context items', (t) => {
   const history = store.getHistory();
   t.is(history.length, 0);
 });
+
+test('insertSystemMessageBeforeLastUserTurn() places system message before final user message', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.addUserMessage('Second');
+
+  store.insertSystemMessageBeforeLastUserTurn('System Notice');
+
+  const history = store.getHistory();
+  t.is(history.length, 3);
+  t.is((history[0] as any).content, 'First');
+  t.is((history[1] as any).content, 'System Notice');
+  t.is((history[1] as any).role, 'system');
+  t.is((history[2] as any).content, 'Second');
+});
+
+test('insertSystemMessageBeforeLastUserTurn() inserts before genuine user turn, skipping trailing shell context', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.addUserMessage('Second');
+  store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
+
+  store.insertSystemMessageBeforeLastUserTurn('System Notice');
+
+  const history = store.getHistory();
+  t.is(history.length, 4);
+  t.is((history[0] as any).content, 'First');
+  t.is((history[1] as any).content, 'System Notice');
+  t.is((history[1] as any).role, 'system');
+  t.is((history[2] as any).content, 'Second');
+  t.true((history[3] as any).content.startsWith(SHELL_CONTEXT_PREFIX));
+});
+
+test('insertSystemMessageBeforeLastUserTurn() appends to end if history is empty', (t) => {
+  const store = new ConversationStore();
+  store.insertSystemMessageBeforeLastUserTurn('System Notice');
+
+  const history = store.getHistory();
+  t.is(history.length, 1);
+  t.is((history[0] as any).content, 'System Notice');
+  t.is((history[0] as any).role, 'system');
+});

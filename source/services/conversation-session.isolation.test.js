@@ -134,3 +134,70 @@ test('sessions do not share pending approval context', async (t) => {
   t.is(aFinal.type, 'response');
   t.is(aFinal.finalText, 'Approved');
 });
+
+test('queueModeNotice inserts notice into stream input (chaining provider)', async (t) => {
+  const startCalls = [];
+  const mockStream = new MockStream([]);
+  mockStream.lastResponseId = 'resp-notice';
+  mockStream.finalOutput = 'Ack';
+
+  let currentProvider = 'openai';
+
+  const mockClient = {
+    getProvider() {
+      return currentProvider;
+    },
+    async startStream(text, options) {
+      startCalls.push({ text, options });
+      return mockStream;
+    },
+  };
+
+  const session = new ConversationSession('notice-test-chaining', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  session.queueModeNotice('Mode change notice chaining');
+  await session.sendMessage('User msg');
+
+  t.is(startCalls.length, 1);
+  const passedHistory = startCalls[0].text;
+  t.true(Array.isArray(passedHistory));
+  t.is(passedHistory.length, 2);
+  t.deepEqual(passedHistory[0], { role: 'system', type: 'message', content: 'Mode change notice chaining' });
+  t.deepEqual(passedHistory[1], { role: 'user', type: 'message', content: 'User msg' });
+});
+
+test('queueModeNotice inserts notice into stream input (non-chaining provider)', async (t) => {
+  const startCalls = [];
+  const mockStream = new MockStream([]);
+  mockStream.lastResponseId = 'resp-notice';
+  mockStream.finalOutput = 'Ack';
+
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    async startStream(text, options) {
+      startCalls.push({ text, options });
+      return mockStream;
+    },
+  };
+
+  const session = new ConversationSession('notice-test-non-chaining', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  session.queueModeNotice('Mode change notice non-chaining');
+  await session.sendMessage('User msg');
+
+  t.is(startCalls.length, 1);
+  const passedHistory = startCalls[0].text;
+  t.true(Array.isArray(passedHistory));
+  // non-chaining passes full history. The history should be: [SystemNotice, UserTurn]
+  t.is(passedHistory.length, 2);
+  t.deepEqual(passedHistory[0], { role: 'system', type: 'message', content: 'Mode change notice non-chaining' });
+  t.is(passedHistory[1].content, 'User msg');
+});

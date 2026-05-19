@@ -160,7 +160,7 @@ const App: FC<AppProps> = ({
     scheduleExitSideEffects(messages, onSaveConversation, onExitUsage);
   }, [exit, onExitUsage, onSaveConversation, messages]);
 
-  const { slashCommands, toggleEditMode } = useAppCommands({
+  const { slashCommands, cycleAppModes } = useAppCommands({
     settingsService,
     addSystemMessage,
     applyRuntimeSetting,
@@ -236,7 +236,7 @@ const App: FC<AppProps> = ({
       return;
     }
 
-    toggleEditMode();
+    cycleAppModes();
   });
 
   const handleSubmit = async (turn: UserTurn): Promise<void> => {

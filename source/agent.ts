@@ -164,6 +164,13 @@ export const getAgentDefinition = (
     prompt = `${prompt}\n\n${getSubagentDelegationAddendum()}`;
   }
 
+  try {
+    const planModeInfoPath = path.join(BASE_PROMPT_PATH, 'plan-mode-info.md');
+    prompt = `${prompt}\n\n${resolvePrompt(planModeInfoPath)}`;
+  } catch (e) {
+    loggingService.error(`Failed to load plan-mode-info: ${e}`);
+  }
+
   const envInfo = getEnvInfo(settingsService, executionContext, liteMode);
   const cwd = executionContext?.getCwd() || process.cwd();
 

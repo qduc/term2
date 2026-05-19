@@ -1,10 +1,13 @@
 import test from 'ava';
+import React from 'react';
+import { render } from 'ink-testing-library';
 import type { Message } from './use-conversation.js';
 import {
   createCopySlashCommand,
   createUndoSlashCommand,
   createUsageSlashCommand,
   getLastFinalAssistantText,
+  useAppCommands,
 } from './use-app-commands.js';
 import { parseModelProviderArg } from '../utils/model-provider-arg.js';
 
@@ -156,4 +159,111 @@ test('createUndoSlashCommand shows system message via undoLastUserMessage when n
   const result = command.action('last');
   t.is(result, true);
   t.deepEqual(systemMessages, ['Nothing to undo.']);
+});
+
+const TestHookWrapper = ({
+  settings,
+  onHookResult,
+  onApply,
+}: {
+  settings: Map<string, any>;
+  onHookResult: (res: any) => void;
+  onApply?: (key: string, value: any) => void;
+}) => {
+  const settingsService = {
+    get: (key: string) => settings.get(key) ?? false,
+    set: (key: string, value: any) => settings.set(key, value),
+  } as any;
+
+  const hookResult = useAppCommands({
+    settingsService,
+    addSystemMessage: () => {},
+    applyRuntimeSetting: (key: string, value: any) => onApply?.(key, value),
+    setInput: () => {},
+    clearConversation: () => {},
+    getSessionUsage: () => '',
+    exit: () => {},
+    messages: [],
+    setModel: () => {},
+    undoLastUserMessage: () => null,
+    openUndoMenu: () => {},
+  });
+
+  onHookResult(hookResult);
+  return null;
+};
+
+test('useAppCommands togglePlanMode handles mutual exclusion', (t) => {
+  const settings = new Map<string, any>();
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  // Set editMode to true initially
+  settings.set('app.editMode', true);
+
+  // Toggle planMode ON
+  hookResult.togglePlanMode();
+
+  t.true(settings.get('app.planMode'));
+  t.false(settings.get('app.editMode')); // editMode should be toggled off due to mutual exclusion
+});
+
+test('useAppCommands cycleAppModes cycles Default -> Edit -> Plan -> Default', (t) => {
+  const settings = new Map<string, any>();
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  // Default -> Edit
+  hookResult.cycleAppModes();
+  t.true(settings.get('app.editMode'));
+  t.falsy(settings.get('app.planMode'));
+
+  // Edit -> Plan
+  hookResult.cycleAppModes();
+  t.falsy(settings.get('app.editMode'));
+  t.true(settings.get('app.planMode'));
+
+  // Plan -> Default
+  hookResult.cycleAppModes();
+  t.falsy(settings.get('app.editMode'));
+  t.falsy(settings.get('app.planMode'));
+});
+
+test('useAppCommands cycleAppModes Default -> Edit does not apply app.planMode', (t) => {
+  const settings = new Map<string, any>();
+  const applied: string[] = [];
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+      onApply: (key: string) => applied.push(key),
+    }),
+  );
+
+  // Default -> Edit: plan mode never changes, so no plan-mode notice should be queued
+  hookResult.cycleAppModes();
+
+  t.true(settings.get('app.editMode'));
+  t.false(applied.includes('app.planMode'));
+  t.true(applied.includes('app.editMode'));
 });

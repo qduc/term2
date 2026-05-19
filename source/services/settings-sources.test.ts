@@ -36,4 +36,6 @@ test('buildSettingsWithSources maps nested values and sources including optional
   t.is(result.webSearch.tavily.value, undefined);
   t.is(result.webSearch.tavily.source, 'env');
   t.deepEqual(result.webSearch.provider.value, settings.webSearch.provider);
+  t.is(result.app.planMode.value, settings.app.planMode);
+  t.is(result.app.planMode.source, 'default');
 });

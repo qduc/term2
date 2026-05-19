@@ -26,6 +26,7 @@ import {
   type SavedConversation,
   type SavedMessage,
 } from './services/conversation-persistence.js';
+import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -205,6 +206,20 @@ const settings = new SettingsService({
   loggingService: logger,
 });
 
+// Normalize settings at startup to resolve mutual exclusions
+const startupEditMode = settings.get<boolean>('app.editMode');
+const startupPlanMode = settings.get<boolean>('app.planMode');
+const startupLiteMode = settings.get<boolean>('app.liteMode');
+
+if (startupEditMode && startupPlanMode) {
+  // If both are true, disable editMode to prioritize planMode/default safety
+  settings.set('app.editMode', false);
+}
+if (startupLiteMode) {
+  if (startupEditMode) settings.set('app.editMode', false);
+  if (startupPlanMode) settings.set('app.planMode', false);
+}
+
 // SSH Handling
 const sshFlag = cli.flags.ssh;
 const remoteDirFlag = cli.flags.remoteDir;
@@ -340,6 +355,8 @@ const agentClient = new OpenAIAgentClient({
     executionContext: executionContext,
   },
 });
+
+installPlanModeInterceptor(agentClient, { settingsService: settings });
 
 if (hasPositionalPrompt) {
   const { runNonInteractive } = await import('./non-interactive.js');

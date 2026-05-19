@@ -78,6 +78,17 @@ export const useRuntimeSettings = ({
         return;
       }
 
+      if (key === 'app.planMode') {
+        conversationService.queueModeNotice(
+          `Plan Mode was manually toggled ${value ? 'ON' : 'OFF'} by the user. ${
+            value
+              ? 'DO NOT attempt file edits or system state changes. Recommend an implementation plan.'
+              : 'You may now execute mutating changes (create files, edits, subagents, shell commands).'
+          }`,
+        );
+        return;
+      }
+
       if (key === 'shell.autoApproveMode') {
         // No runtime changes needed, session reads from settingsService
         return;

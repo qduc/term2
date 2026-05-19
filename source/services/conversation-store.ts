@@ -291,6 +291,31 @@ export class ConversationStore {
     this.#history.push(item);
   }
 
+  insertSystemMessageBeforeLastUserTurn(text: string): void {
+    const item: AgentInputItem = {
+      role: 'system',
+      type: 'message',
+      content: text,
+    };
+    // Insert before the last *genuine* user turn, skipping trailing
+    // shell-context items (which are also role:'user') so the notice lands
+    // immediately before the user's message rather than after it.
+    let anchor = -1;
+    for (let i = this.#history.length - 1; i >= 0; i--) {
+      const raw = (this.#history[i] as any)?.rawItem ?? this.#history[i];
+      if (raw?.role !== 'user') continue;
+      if (ConversationStore.#extractText(raw).startsWith(SHELL_CONTEXT_PREFIX)) continue;
+      anchor = i;
+      break;
+    }
+
+    if (anchor === -1) {
+      this.#history.push(item);
+    } else {
+      this.#history.splice(anchor, 0, item);
+    }
+  }
+
   #cloneHistory(items: AgentInputItem[]): AgentInputItem[] {
     // Avoid leaking references to external callers.
     // structuredClone is available in modern Node; fall back to a shallow copy.

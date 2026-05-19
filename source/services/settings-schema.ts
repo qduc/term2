@@ -135,6 +135,7 @@ export const AppSettingsSchema = z.object({
   mentorMode: z.boolean().optional().default(false),
   editMode: z.boolean().optional().default(false),
   liteMode: z.boolean().optional().default(false),
+  planMode: z.boolean().optional().default(false),
   searchViaShell: z.boolean().optional().default(false),
 });
 
@@ -325,6 +326,7 @@ export interface SettingsWithSources {
     mentorMode: SettingWithSource<boolean>;
     editMode: SettingWithSource<boolean>;
     liteMode: SettingWithSource<boolean>;
+    planMode: SettingWithSource<boolean>;
     searchViaShell: SettingWithSource<boolean>;
   };
   tools: {
@@ -396,6 +398,7 @@ export const SETTING_KEYS = {
   APP_MENTOR_MODE: 'app.mentorMode',
   APP_EDIT_MODE: 'app.editMode',
   APP_LITE_MODE: 'app.liteMode',
+  APP_PLAN_MODE: 'app.planMode',
   APP_SEARCH_VIA_SHELL: 'app.searchViaShell',
   TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
   TOOLS_ENABLE_EDIT_HEALING: 'tools.enableEditHealing',
@@ -430,6 +433,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_MENTOR_MODE,
   SETTING_KEYS.APP_EDIT_MODE,
   SETTING_KEYS.APP_LITE_MODE,
+  SETTING_KEYS.APP_PLAN_MODE,
   SETTING_KEYS.APP_SEARCH_VIA_SHELL,
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
   SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
@@ -507,6 +511,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     mentorMode: false,
     editMode: false,
     liteMode: false,
+    planMode: false,
     searchViaShell: false,
   },
   tools: {

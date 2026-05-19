@@ -1,6 +1,13 @@
 import test from 'ava';
 
-import { CustomProviderSchema, KNOWN_CUSTOM_PROVIDER_TYPES, isKnownCustomProviderType } from './settings-schema.js';
+import {
+  CustomProviderSchema,
+  KNOWN_CUSTOM_PROVIDER_TYPES,
+  isKnownCustomProviderType,
+  SettingsSchema,
+  RUNTIME_MODIFIABLE_SETTINGS,
+  SETTING_KEYS,
+} from './settings-schema.js';
 
 test('CustomProviderSchema defaults provider type for legacy configs', (t) => {
   const parsed = CustomProviderSchema.parse({
@@ -100,4 +107,14 @@ test('CustomProviderSchema rejects openai type without baseUrl', (t) => {
   );
 
   t.truthy(error);
+});
+
+test('SettingsSchema includes app.planMode, which defaults to false and is modifiable at runtime', (t) => {
+  const parsed = SettingsSchema.parse({ app: {} });
+  t.is(parsed.app?.planMode, false);
+
+  const parsedTrue = SettingsSchema.parse({ app: { planMode: true } });
+  t.is(parsedTrue.app?.planMode, true);
+
+  t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.APP_PLAN_MODE));
 });

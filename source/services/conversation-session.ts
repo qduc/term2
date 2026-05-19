@@ -1,6 +1,7 @@
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import type { ILoggingService } from './service-interfaces.js';
 import { ConversationStore } from './conversation-store.js';
+import type { AgentInputItem } from '@openai/agents';
 import { decideRetry, MAX_HALLUCINATION_RETRIES } from './conversation-retry-policy.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../tools/types.js';
@@ -40,6 +41,7 @@ export class ConversationSession {
   private generation = 0;
 
   private settingsService?: ISettingsService;
+  private pendingModeNotice: string | null = null;
 
   constructor(
     id: string,
@@ -156,6 +158,9 @@ export class ConversationSession {
 
   addShellContext(historyText: string): void {
     this.conversationStore.addShellContext(historyText);
+  }
+  queueModeNotice(text: string): void {
+    this.pendingModeNotice = text;
   }
   /**
    * Abort the current running operation
@@ -287,10 +292,32 @@ export class ConversationSession {
 
       const supportsChaining = supportsConversationChaining(provider);
 
-      const history = this.conversationStore.getHistory();
-      const latestInput = history[history.length - 1] ?? text;
-      const chainedInput = turn.images?.length ? latestInput : text;
-      stream = (await this.agentClient.startStream(supportsChaining ? chainedInput : history, {
+      let streamInput: string | AgentInputItem | AgentInputItem[];
+
+      if (this.pendingModeNotice) {
+        const notice = this.pendingModeNotice;
+        this.pendingModeNotice = null;
+
+        if (supportsChaining) {
+          const history = this.conversationStore.getHistory();
+          const latestInput = history[history.length - 1] ?? text;
+          const chainedInput = turn.images?.length ? latestInput : text;
+          const userItem: AgentInputItem =
+            typeof chainedInput === 'string' ? { role: 'user', type: 'message', content: chainedInput } : chainedInput;
+          const noticeItem: AgentInputItem = { role: 'system', type: 'message', content: notice };
+          streamInput = [noticeItem, userItem];
+        } else {
+          this.conversationStore.insertSystemMessageBeforeLastUserTurn(notice);
+          streamInput = this.conversationStore.getHistory();
+        }
+      } else {
+        const history = this.conversationStore.getHistory();
+        const latestInput = history[history.length - 1] ?? text;
+        const chainedInput = turn.images?.length ? latestInput : text;
+        streamInput = supportsChaining ? chainedInput : history;
+      }
+
+      stream = (await this.agentClient.startStream(streamInput, {
         previousResponseId: this.previousResponseId,
       })) as AgentStream;
 

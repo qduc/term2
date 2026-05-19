@@ -65,6 +65,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   'app.mentorMode': [{ value: 'true' }, { value: 'false' }],
   'app.editMode': [{ value: 'true' }, { value: 'false' }],
   'app.liteMode': [{ value: 'true' }, { value: 'false' }],
+  'app.planMode': [{ value: 'true' }, { value: 'false' }],
   'agent.provider': PROVIDER_VALUE_SUGGESTIONS,
   'agent.autoApproveModel': [
     { value: 'gpt-4o-mini', description: 'OpenAI fast model' },

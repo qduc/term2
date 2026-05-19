@@ -74,6 +74,10 @@ function stripRedundantCd(command: string, cwd: string): string {
   return command;
 }
 
+function isMutatingCommand(command: string, cwd: string, log: ILoggingService): boolean {
+  return validateCommandSafety(stripRedundantCd(command, cwd), log); // true = YELLOW/RED
+}
+
 const coerceCommandText = (value: unknown): string => {
   if (typeof value === 'string') {
     return value;
@@ -195,13 +199,12 @@ export function createShellToolDefinition(deps: {
     needsApproval: async (params) => {
       try {
         const cwd = executionContext?.getCwd() || process.cwd();
-        const optimizedCommand = stripRedundantCd(params.command, cwd);
-        const isDangerous = validateCommandSafety(optimizedCommand, loggingService);
+        const isDangerous = isMutatingCommand(params.command, cwd, loggingService);
 
         // Log security event for all shell commands with dangerous flag
         loggingService.security('Shell tool needsApproval check', {
           commands: [params.command.substring(0, 100)], // Truncate for safety
-          optimizedCommand: optimizedCommand.substring(0, 100),
+          optimizedCommand: stripRedundantCd(params.command, cwd).substring(0, 100),
           isDangerous,
         });
 
@@ -218,6 +221,9 @@ export function createShellToolDefinition(deps: {
     },
     execute: async ({ command, timeout_ms, max_output_length }) => {
       const cwd = executionContext?.getCwd() || process.cwd();
+      if (settingsService.get<boolean>('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {
+        return `Error: plan mode is read-only. Command not executed: ${command}`;
+      }
       const sshService = executionContext?.getSSHService();
       const previousCorrelationId = loggingService.getCorrelationId();
       const correlationId = randomUUID();

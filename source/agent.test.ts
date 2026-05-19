@@ -279,3 +279,35 @@ test('getAgentDefinition excludes code-context tools in remote (SSH) execution',
   t.false(toolNames.includes('code_context_search'));
   t.false(definition.instructions.includes('read_code_outline'));
 });
+
+test('getAgentDefinition unconditionally includes plan mode instructions and does not filter tools based on planMode setting', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'app.planMode': true,
+  });
+
+  const definitionWithPlan = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+  });
+
+  t.true(definitionWithPlan.instructions.includes('Plan Mode'));
+  const toolsWithPlan = definitionWithPlan.tools.map((tool) => tool.name);
+  t.true(toolsWithPlan.includes('create_file'));
+  t.true(toolsWithPlan.includes('search_replace'));
+
+  const settingsServiceWithoutPlan = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'app.planMode': false,
+  });
+
+  const definitionWithoutPlan = getAgentDefinition({
+    settingsService: settingsServiceWithoutPlan,
+    loggingService: mockLogger,
+  });
+
+  t.true(definitionWithoutPlan.instructions.includes('Plan Mode'));
+  const toolsWithoutPlan = definitionWithoutPlan.tools.map((tool) => tool.name);
+  t.true(toolsWithoutPlan.includes('create_file'));
+  t.true(toolsWithoutPlan.includes('search_replace'));
+});

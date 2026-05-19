@@ -250,3 +250,48 @@ test.serial('shell execute bypasses RTK for SSH commands', async (t) => {
   t.is(executedCommand, 'ls package.json');
   t.false(installCalled);
 });
+
+test.serial('shell execute in plan mode blocks mutating commands but runs green commands', async (t) => {
+  const settingsService = createMockSettingsService({
+    'app.planMode': true,
+  });
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService,
+  });
+
+  // Mutating command: touch (normally returns error directly without running)
+  const outputMutating = await tool.execute({
+    command: 'touch /tmp/somefile_plan_mode_test',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(outputMutating.includes('plan mode is read-only'));
+  t.true(outputMutating.includes('Command not executed'));
+
+  // Green command: echo hello
+  const outputGreen = await tool.execute({
+    command: 'echo hello_plan_mode_test',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(outputGreen.includes('hello_plan_mode_test'));
+  t.true(outputGreen.includes('exit 0'));
+});
+
+test.serial('shell needsApproval classifications in planMode false', async (t) => {
+  const settingsService = createMockSettingsService({
+    'app.planMode': false,
+  });
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService,
+  });
+
+  t.true(await tool.needsApproval({ command: 'touch /tmp/somefile_test' }));
+  t.false(await tool.needsApproval({ command: 'ls' }));
+});

@@ -155,12 +155,17 @@ export const useAppCommands = ({
     const currentValue = settingsService.get<boolean>('app.editMode');
     const newValue = !currentValue;
 
-    // Edit mode is mutually exclusive with lite mode
+    // Edit mode is mutually exclusive with lite mode and plan mode
     if (newValue) {
       const liteMode = settingsService.get<boolean>('app.liteMode');
+      const planMode = settingsService.get<boolean>('app.planMode');
       if (liteMode) {
         settingsService.set('app.liteMode', false);
         applyRuntimeSetting('app.liteMode', false);
+      }
+      if (planMode) {
+        settingsService.set('app.planMode', false);
+        applyRuntimeSetting('app.planMode', false);
       }
     }
 
@@ -172,6 +177,77 @@ export const useAppCommands = ({
         newValue ? ' - auto-approving file patches within workspace' : ''
       }`,
     );
+  }, [settingsService, applyRuntimeSetting, addSystemMessage]);
+
+  const togglePlanMode = useCallback(() => {
+    const currentValue = settingsService.get<boolean>('app.planMode');
+    const newValue = !currentValue;
+
+    // Plan mode is mutually exclusive with edit mode and lite mode
+    if (newValue) {
+      const editMode = settingsService.get<boolean>('app.editMode');
+      const liteMode = settingsService.get<boolean>('app.liteMode');
+      if (editMode) {
+        settingsService.set('app.editMode', false);
+        applyRuntimeSetting('app.editMode', false);
+      }
+      if (liteMode) {
+        settingsService.set('app.liteMode', false);
+        applyRuntimeSetting('app.liteMode', false);
+      }
+    }
+
+    settingsService.set('app.planMode', newValue);
+    applyRuntimeSetting('app.planMode', newValue);
+
+    addSystemMessage(
+      `Plan mode ${newValue ? 'enabled' : 'disabled'}${newValue ? ' - read-only research/planning mode' : ''}`,
+    );
+  }, [settingsService, applyRuntimeSetting, addSystemMessage]);
+
+  const cycleAppModes = useCallback(() => {
+    const editMode = settingsService.get<boolean>('app.editMode');
+    const planMode = settingsService.get<boolean>('app.planMode');
+
+    let nextEditMode = false;
+    let nextPlanMode = false;
+    let modeName = 'Default';
+    let detail = '';
+
+    if (!editMode && !planMode) {
+      // Default -> Edit
+      nextEditMode = true;
+      nextPlanMode = false;
+      modeName = 'Edit';
+      detail = ' - auto-approving file patches within workspace';
+    } else if (editMode) {
+      // Edit -> Plan
+      nextEditMode = false;
+      nextPlanMode = true;
+      modeName = 'Plan';
+      detail = ' - read-only research/planning mode';
+    } else {
+      // Plan -> Default
+      nextEditMode = false;
+      nextPlanMode = false;
+      modeName = 'Default';
+      detail = '';
+    }
+
+    const applyIfChanged = (key: 'app.editMode' | 'app.planMode', current: boolean, next: boolean) => {
+      if (current === next) return;
+      settingsService.set(key, next);
+      applyRuntimeSetting(key, next);
+    };
+
+    // Apply disables before enables so the two modes are never simultaneously true.
+    // Only emit a change (and its runtime mode notice) when the value actually flips.
+    if (!nextEditMode) applyIfChanged('app.editMode', editMode, false);
+    if (!nextPlanMode) applyIfChanged('app.planMode', planMode, false);
+    if (nextEditMode) applyIfChanged('app.editMode', editMode, true);
+    if (nextPlanMode) applyIfChanged('app.planMode', planMode, true);
+
+    addSystemMessage(`Switched to ${modeName} mode${detail}`);
   }, [settingsService, applyRuntimeSetting, addSystemMessage]);
 
   const slashCommands: SlashCommand[] = useMemo(() => {
@@ -376,6 +452,14 @@ export const useAppCommands = ({
           return true;
         },
       },
+      {
+        name: 'plan',
+        description: 'Toggle plan mode (read-only research/planning mode)',
+        action: () => {
+          togglePlanMode();
+          return true;
+        },
+      },
       settingsCommand,
     ];
   }, [
@@ -390,10 +474,13 @@ export const useAppCommands = ({
     settingsService,
     undoLastUserMessage,
     openUndoMenu,
+    togglePlanMode,
   ]);
 
   return {
     slashCommands,
     toggleEditMode,
+    togglePlanMode,
+    cycleAppModes,
   };
 };

@@ -3,7 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import type { ApprovalDescriptor } from '../contracts/conversation.js';
 import { generateDiff } from '../utils/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
-import { COLOR_TOOL_OUTPUT } from './theme.js';
+import DiffView from './DiffView.js';
 
 type Props = {
   approval: ApprovalDescriptor;
@@ -37,43 +37,6 @@ const operationLabels: Record<string, { label: string; color: string }> = {
   create_file: { label: 'CREATE', color: 'green' },
   update_file: { label: 'UPDATE', color: 'yellow' },
   delete_file: { label: 'DELETE', color: 'red' },
-};
-
-const DiffView: FC<{ diff: string }> = ({ diff }) => {
-  try {
-    const lines = diff.split('\n');
-    const maxLines = 30;
-    const truncated = lines.length > maxLines;
-    const displayLines = truncated ? lines.slice(0, maxLines) : lines;
-
-    return (
-      <Box flexDirection="column" marginLeft={2}>
-        {displayLines.map((line, i) => {
-          let color: string | undefined;
-          if (line.startsWith('+')) {
-            color = 'green';
-          } else if (line.startsWith('-')) {
-            color = 'red';
-          } else if (line.startsWith('@@')) {
-            color = 'cyan';
-          }
-
-          return (
-            <Text key={i} color={color || COLOR_TOOL_OUTPUT}>
-              {line}
-            </Text>
-          );
-        })}
-        {truncated && <Text color={COLOR_TOOL_OUTPUT}>... ({lines.length - maxLines} more lines)</Text>}
-      </Box>
-    );
-  } catch (error) {
-    return (
-      <Box marginLeft={2}>
-        <Text color="red">[Failed to render diff preview]</Text>
-      </Box>
-    );
-  }
 };
 
 const ApplyPatchPrompt: FC<{ args: ApplyPatchArgs }> = ({ args }) => {

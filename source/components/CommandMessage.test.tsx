@@ -148,3 +148,84 @@ test('CommandMessage renders create_file failure in red', async (t) => {
   t.true(output.includes('[CREATE]'), `Expected "[CREATE]" in output: ${output}`);
   t.true(output.includes('Error'), `Expected error message in output: ${output}`);
 });
+
+test('CommandMessage truncates output and shows the last line when output is longer than 4 lines', async (t) => {
+  const props = {
+    command: 'shell: echo',
+    toolName: 'shell',
+    toolArgs: { command: 'echo' },
+    status: 'completed' as const,
+    success: true,
+    output: 'line 1\nline 2\nline 3\nline 4\nline 5\nline 6',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('line 1'), `Expected "line 1" in output: ${output}`);
+  t.true(output.includes('line 2'), `Expected "line 2" in output: ${output}`);
+  t.true(output.includes('line 3'), `Expected "line 3" in output: ${output}`);
+  t.false(output.includes('line 4'), `Expected "line 4" to be truncated: ${output}`);
+  t.false(output.includes('line 5'), `Expected "line 5" to be truncated: ${output}`);
+  t.true(output.includes('line 6'), `Expected "line 6" (the last line) in output: ${output}`);
+  t.true(output.includes('... (2 more lines)'), `Expected truncation count of 2: ${output}`);
+});
+
+test('CommandMessage does not truncate output and shows all lines when output is exactly 4 lines', async (t) => {
+  const props = {
+    command: 'shell: echo',
+    toolName: 'shell',
+    toolArgs: { command: 'echo' },
+    status: 'completed' as const,
+    success: true,
+    output: 'line 1\nline 2\nline 3\nline 4',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('line 1'));
+  t.true(output.includes('line 2'));
+  t.true(output.includes('line 3'));
+  t.true(output.includes('line 4'));
+  t.false(output.includes('more lines'));
+});
+
+test('CommandMessage does not truncate output when output is 3 lines', async (t) => {
+  const props = {
+    command: 'shell: echo',
+    toolName: 'shell',
+    toolArgs: { command: 'echo' },
+    status: 'completed' as const,
+    success: true,
+    output: 'line 1\nline 2\nline 3',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('line 1'));
+  t.true(output.includes('line 2'));
+  t.true(output.includes('line 3'));
+  t.false(output.includes('more lines'));
+});
+
+test('CommandMessage trims trailing newlines when checking for truncation', async (t) => {
+  const props = {
+    command: 'shell: echo',
+    toolName: 'shell',
+    toolArgs: { command: 'echo' },
+    status: 'completed' as const,
+    success: true,
+    output: 'line 1\nline 2\nline 3\nline 4\n\n\n',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('line 1'));
+  t.true(output.includes('line 2'));
+  t.true(output.includes('line 3'));
+  t.true(output.includes('line 4'));
+  t.false(output.includes('more lines'));
+});

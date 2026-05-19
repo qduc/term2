@@ -1,4 +1,5 @@
 import test from 'ava';
+import * as fs from 'fs/promises';
 import { createWebFetchToolDefinition } from './web-fetch.js';
 import { ISettingsService, ILoggingService } from '../services/service-interfaces.js';
 
@@ -97,4 +98,78 @@ test.serial('execute: converts github blob links to raw links', async (t) => {
   } finally {
     global.fetch = originalFetch;
   }
+});
+
+test.serial('execute: saves full content to temp file when content exceeds max_chars', async (t) => {
+  const originalFetch = global.fetch;
+
+  // Generate enough HTML to produce > 200 chars of markdown
+  const longText =
+    'This is a long paragraph that generates enough markdown to exceed the max_chars limit and trigger the temp file creation behavior in the web fetch tool. '.repeat(
+      10,
+    );
+  const html = `<html><body><h1>Long Page</h1><p>${longText}</p></body></html>`;
+
+  global.fetch = async () => {
+    return {
+      ok: true,
+      status: 200,
+      headers: new Map([['content-type', 'text/html']]),
+      text: async () => html,
+    } as any;
+  };
+
+  let tempFile: string | null = null;
+  try {
+    const result = await webFetchTool.execute({ url: 'https://example.com/long', max_chars: 200 });
+
+    t.true(result.includes('Content truncated at 200 characters'));
+    t.true(result.includes('Full content saved to temp file:'));
+
+    // Extract the temp file path from the output and clean up
+    const match = result.match(/`([^`]+\.md)`/);
+    if (match) {
+      tempFile = match[1];
+    }
+  } finally {
+    global.fetch = originalFetch;
+    if (tempFile) {
+      await fs.rm(tempFile, { force: true });
+    }
+  }
+});
+
+test.serial('execute: does not save temp file when content fits within max_chars', async (t) => {
+  const originalFetch = global.fetch;
+  const shortHtml = '<html><body><h1>Short Page</h1><p>Small content.</p></body></html>';
+
+  global.fetch = async () => {
+    return {
+      ok: true,
+      status: 200,
+      headers: new Map([['content-type', 'text/html']]),
+      text: async () => shortHtml,
+    } as any;
+  };
+
+  try {
+    const result = await webFetchTool.execute({ url: 'https://example.com/short' });
+    t.false(result.includes('Full content saved to temp file:'));
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test.serial('execute: does not save temp file on continuation request', async (t) => {
+  // Continuation requests should skip the temp file logic entirely,
+  // even if a valid result were returned.
+  const result = await webFetchTool.execute({
+    url: 'https://example.com/page',
+    max_chars: 200,
+    continuation_token: 'nonexistent-token',
+  });
+  // The call will error because the token doesn't exist in the cache,
+  // but it should never try to save a temp file.
+  t.true(result.startsWith('Error:'));
+  t.false(result.includes('Full content saved to temp file:'));
 });

@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { fetchWebPage } from '@qduc/web-fetch';
+import { writeFile } from 'fs/promises';
+import os from 'os';
+import path from 'path';
 import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from './format-helpers.js';
 import type { ISettingsService, ILoggingService } from '../services/service-interfaces.js';
@@ -63,28 +66,54 @@ export const createWebFetchToolDefinition = (deps: {
   return {
     name: 'web_fetch',
     description:
-      'Fetch a web page and convert its HTML content to Markdown format with intelligent content extraction.',
+      'Fetch a web page and convert its HTML content to Markdown format with intelligent content extraction. When content exceeds max_chars, the full content is saved to a temporary file for searching.',
     parameters: webFetchSchema,
     needsApproval: () => false,
     execute: async (params) => {
       const { url, max_chars = DEFAULT_MAX_CHARS, heading: targetHeadings, continuation_token } = params;
 
       try {
+        // For initial fetches, get as much content as the library can return.
+        // For continuation requests, pass the user's max_chars through unchanged.
+        const isContinuation = !!continuation_token;
         const result = await fetchWebPage({
           url,
-          maxChars: max_chars,
+          maxChars: isContinuation ? max_chars : MAX_CHARS_LIMIT,
           headings: targetHeadings,
           continuationToken: continuation_token ?? undefined,
         });
+
+        let displayMarkdown = result.markdown;
+        let tempFilePath: string | null = null;
+
+        // For initial fetches, if content exceeds the user's requested max, save full to temp file
+        if (!isContinuation && result.markdown.length > max_chars) {
+          const safeName = (url ?? 'unknown').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
+          const timestamp = Date.now();
+          const rand = Math.random().toString(36).slice(2, 8);
+          const tmpDir = os.tmpdir();
+          tempFilePath = path.join(tmpDir, `term2-web-fetch-${safeName}-${timestamp}-${rand}.md`);
+          await writeFile(tempFilePath, result.markdown, 'utf-8');
+
+          // Truncate the displayed markdown at a clean boundary near max_chars
+          const truncated = result.markdown.slice(0, max_chars);
+          const lastNewline = truncated.lastIndexOf('\n');
+          displayMarkdown = lastNewline > max_chars * 0.8 ? truncated.slice(0, lastNewline) : truncated;
+          displayMarkdown += `\n\n[... Content truncated at ${max_chars} characters for display ...]`;
+        }
 
         let output = `Title: ${result.title}\nURL: ${result.url}\n\n`;
         if (result.toc) {
           output += `## Table of Contents\n\n${result.toc}\n\n---\n\n`;
         }
-        output += result.markdown;
+        output += displayMarkdown;
 
         if (result.continuationToken) {
-          output += `\n\n**Note: Content truncated. Use continuation_token: "${result.continuationToken}" to fetch more.**`;
+          output += `\n\n**Note: Content still truncated. Use continuation_token: "${result.continuationToken}" to fetch more.**`;
+        }
+
+        if (tempFilePath) {
+          output += `\n\n**Full content saved to temp file: \`${tempFilePath}\`**\nThe full content has been saved for reference. You can use grep, read_file (with limited line range) on this file to find specific information.`;
         }
 
         return output;

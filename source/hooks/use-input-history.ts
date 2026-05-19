@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { HistoryService } from '../services/history-service.js';
+import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 
 /**
  * Hook for managing input history navigation with up/down arrows.
@@ -11,14 +12,16 @@ import { HistoryService } from '../services/history-service.js';
  */
 export const useInputHistory = (historyService: HistoryService) => {
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  const [currentInput, setCurrentInput] = useState<string>('');
+  const [currentInput, setCurrentInput] = useState<UserTurn>({ text: '' });
+
+  const normalizeDraft = useCallback((value: string | UserTurn): UserTurn => normalizeUserTurn(value), []);
 
   /**
    * Navigate to previous message in history (up arrow)
    */
   const navigateUp = useCallback(
-    (currentValue: string): string | null => {
-      const messages = historyService.getMessages();
+    (currentValue: string | UserTurn): UserTurn | null => {
+      const messages = historyService.getTurns();
 
       if (messages.length === 0) {
         return null;
@@ -26,7 +29,7 @@ export const useInputHistory = (historyService: HistoryService) => {
 
       // If we're at the bottom (editing current input), save it
       if (historyIndex === -1) {
-        setCurrentInput(currentValue);
+        setCurrentInput(normalizeDraft(currentValue));
       }
 
       // Calculate new index
@@ -35,14 +38,14 @@ export const useInputHistory = (historyService: HistoryService) => {
       setHistoryIndex(newIndex);
       return messages[newIndex] ?? null;
     },
-    [historyIndex],
+    [historyIndex, historyService, normalizeDraft],
   );
 
   /**
    * Navigate to next message in history (down arrow)
    */
-  const navigateDown = useCallback((): string | null => {
-    const messages = historyService.getMessages();
+  const navigateDown = useCallback((): UserTurn | null => {
+    const messages = historyService.getTurns();
 
     if (historyIndex === -1) {
       // Already at the bottom
@@ -59,25 +62,25 @@ export const useInputHistory = (historyService: HistoryService) => {
 
     setHistoryIndex(newIndex);
     return messages[newIndex] ?? null;
-  }, [historyIndex, currentInput]);
+  }, [historyIndex, currentInput, historyService]);
 
   /**
    * Reset history navigation (call when input is submitted or cleared)
    */
   const reset = useCallback(() => {
     setHistoryIndex(-1);
-    setCurrentInput('');
+    setCurrentInput({ text: '' });
   }, []);
 
   /**
    * Add a message to history
    */
   const addToHistory = useCallback(
-    (message: string) => {
+    (message: string | UserTurn) => {
       historyService.addMessage(message);
       reset();
     },
-    [reset],
+    [historyService, reset],
   );
 
   return {

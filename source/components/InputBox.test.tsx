@@ -31,6 +31,7 @@ const defaultProps = {
   } as any,
   historyService: {
     getMessages: () => [],
+    getTurns: () => [],
     addMessage: () => {},
     clear: () => {},
   } as any,

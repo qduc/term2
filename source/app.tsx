@@ -286,9 +286,7 @@ const App: FC<AppProps> = ({
 
       case 'message':
         // Regular message, send to AI agent
-        if (value.trim()) {
-          historyService.addMessage(value);
-        }
+        historyService.addMessage(turn);
         setInput('');
         await sendUserMessage(turn);
         return;

@@ -419,13 +419,14 @@ const InputBox: FC<Props> = ({
       }
 
       // In text mode, arrows traverse input history.
-      const next = direction === 'up' ? navigateUp(value) : navigateDown();
+      const next = direction === 'up' ? navigateUp({ text: value, images }) : navigateDown();
       if (next !== null) {
-        onChange(next);
+        onChange(next.text);
+        setImages((prevImages) => (areImagesEqual(prevImages, next.images ?? []) ? prevImages : next.images ?? []));
         remountInput();
       }
     },
-    [mode, modeHandlers, navigateUp, navigateDown, value, onChange, remountInput],
+    [mode, modeHandlers, navigateUp, navigateDown, value, images, onChange, remountInput],
   );
 
   const handleWrapperSubmit = useCallback(

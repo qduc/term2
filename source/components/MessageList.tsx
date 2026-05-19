@@ -62,11 +62,13 @@ export const splitStaticHistory = <T extends MessageLike>(messages: T[]) => {
 
   const firstActiveMessage = messages[activeStart];
   const previousMessage = activeStart > 0 ? messages[activeStart - 1] : undefined;
+  const previousMessageIsToolLeadIn =
+    previousMessage?.status === 'finalized' &&
+    (previousMessage.sender === 'bot' || previousMessage.sender === 'reasoning');
   const activeStartWithToolLeadIn =
     firstActiveMessage?.sender === 'command' &&
     (firstActiveMessage.status === 'pending' || firstActiveMessage.status === 'running') &&
-    previousMessage?.sender === 'bot' &&
-    previousMessage.status === 'finalized'
+    previousMessageIsToolLeadIn
       ? activeStart - 1
       : activeStart;
 

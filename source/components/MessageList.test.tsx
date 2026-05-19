@@ -270,6 +270,31 @@ test('splitStaticHistory keeps bot text before a running command active', (t) =>
   );
 });
 
+test('splitStaticHistory keeps reasoning before a running command active', (t) => {
+  const messages = [
+    { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },
+    { id: 'before-tool', sender: 'reasoning', text: 'I need to inspect the file.', status: 'finalized' },
+    {
+      id: 'running-command',
+      sender: 'command',
+      status: 'running',
+      command: 'read_file "source/components/MessageList.tsx"',
+      output: '',
+    },
+  ];
+
+  const { history, active } = splitStaticHistory(messages);
+
+  t.deepEqual(
+    history.map((message) => message.id),
+    ['older'],
+  );
+  t.deepEqual(
+    active.map((message) => message.id),
+    ['before-tool', 'running-command'],
+  );
+});
+
 test('splitStaticHistory keeps unfinalized reasoning messages and following messages active', (t) => {
   const messages = [
     ...Array.from({ length: 25 }, (_, index) => ({

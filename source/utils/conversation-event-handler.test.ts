@@ -140,6 +140,19 @@ test('text_delta: accumulates text and pushes to live response', (t) => {
   t.deepEqual(deps.calls.botResponsePushes, ['Hello ', 'Hello world!']);
 });
 
+test('text_delta: preserves newline between code fence language and first code line', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({ type: 'text_delta', delta: '```typescript' } as ConversationEvent);
+  handler({ type: 'text_delta', delta: '\n' } as ConversationEvent);
+  handler({ type: 'text_delta', delta: 'if (enabled) {\n' } as ConversationEvent);
+
+  t.is(state.accumulatedText, '```typescript\nif (enabled) {\n');
+  t.true(deps.calls.botResponsePushes.includes('```typescript\nif (enabled) {\n'));
+});
+
 test('text_delta: finalizes stable paragraphs and streams only the unfinished tail', (t) => {
   const deps = createMockDeps();
   const state = createStreamingState();

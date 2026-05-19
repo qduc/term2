@@ -7,6 +7,65 @@ type MarkdownRenderOptions = {
   dimColor?: boolean;
 };
 
+const CODE_FENCE_LANGUAGES = [
+  'typescript',
+  'javascript',
+  'tsx',
+  'jsx',
+  'python',
+  'bash',
+  'shell',
+  'sh',
+  'zsh',
+  'json',
+  'yaml',
+  'yml',
+  'html',
+  'css',
+  'scss',
+  'sql',
+  'rust',
+  'go',
+  'java',
+  'kotlin',
+  'swift',
+  'csharp',
+  'cs',
+  'cpp',
+  'c',
+  'php',
+  'ruby',
+  'rb',
+  'md',
+  'markdown',
+].sort((a, b) => b.length - a.length);
+
+const CODE_LINE_START_PATTERN =
+  /^(?:if|for|while|switch|try|catch|else|const|let|var|function|class|interface|type|enum|import|export|return|throw|await|async|def|from|public|private|protected|static|final|package|func|fn|impl|use|echo|cd|npm|npx|yarn|pnpm|sudo|curl|git|<|[{([/@#*$])/;
+
+const normalizeJoinedFenceCodeLines = (markdown: string): string => {
+  return markdown.replaceAll(/(^|\n)(`{3,}|~{3,})([^\n]*)/g, (match, linePrefix, fence, info) => {
+    if (!info || /^\s/.test(info)) {
+      return match;
+    }
+
+    for (const language of CODE_FENCE_LANGUAGES) {
+      if (!info.startsWith(language) || info.length === language.length) {
+        continue;
+      }
+
+      const joinedCode = info.slice(language.length);
+      if (!CODE_LINE_START_PATTERN.test(joinedCode)) {
+        continue;
+      }
+
+      return `${linePrefix}${fence}${language}\n${joinedCode}`;
+    }
+
+    return match;
+  });
+};
+
 // --- Table Rendering Utilities ---
 
 interface TableCell {
@@ -612,7 +671,10 @@ const getTokenKey = (token: any, index: number): string => {
 
 const MarkdownRenderer = ({ children, tokens, defaultColor, dimColor, maxWidth }: MarkdownRendererProps) => {
   // Allow passing raw text (which we parse) OR pre-parsed tokens
-  const ast = useMemo(() => tokens || marked.lexer(String(children || '')), [tokens, children]);
+  const ast = useMemo(
+    () => tokens || marked.lexer(normalizeJoinedFenceCodeLines(String(children || ''))),
+    [tokens, children],
+  );
   const options = useMemo(() => ({ defaultColor, dimColor }), [defaultColor, dimColor]);
 
   return (

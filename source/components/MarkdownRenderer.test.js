@@ -165,6 +165,15 @@ test('renders code block with language', (t) => {
   t.true(frame.includes('function test() {}'));
 });
 
+test('renders first code line when it is accidentally joined to the fence language', (t) => {
+  const markdown = '```typescriptif (enabled) {\n  run();\n}\n```';
+  const { lastFrame } = render(React.createElement(MarkdownRenderer, null, markdown));
+  const frame = stripAnsi(lastFrame());
+
+  t.true(frame.includes('if (enabled) {'));
+  t.true(frame.includes('run();'));
+});
+
 test('renders indented code block', (t) => {
   const { lastFrame } = render(React.createElement(MarkdownRenderer, null, '    const x = 1;\n    const y = 2;'));
   const frame = stripAnsi(lastFrame());

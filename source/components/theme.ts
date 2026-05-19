@@ -16,10 +16,7 @@
 // export const COLOR_TOOL_OUTPUT = '#a5b4fc';
 
 // Option 4: High-Contrast Silver (Neutral Crisp Light Gray) - Clean, minimalist
-export const COLOR_TOOL_OUTPUT = '#cbd5e1';
-
-// Option 5: Default Slate (Original color - same as reasoning)
-// export const COLOR_TOOL_OUTPUT = '#64748b';
+export const COLOR_TOOL_OUTPUT = '#94a3b8';
 
 // --- OTHER SYSTEM COLORS ---
 

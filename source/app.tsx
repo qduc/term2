@@ -20,6 +20,7 @@ import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/token-usage.js';
 import type { Message } from './hooks/use-conversation.js';
 import type { UndoItem } from './hooks/use-undo-selection.js';
+import { resolveSlashCommand } from './slash-commands.js';
 
 interface AppProps {
   conversationService: ConversationService;
@@ -268,7 +269,7 @@ const App: FC<AppProps> = ({
           break;
         }
         // Find matching command
-        const command = slashCommands.find((cmd) => cmd.name === parsed.commandName);
+        const command = resolveSlashCommand(slashCommands, parsed.commandName);
         if (command) {
           // Execute the command
           const shouldClearInput = command.action(parsed.args || undefined);

@@ -20,7 +20,7 @@ import { createUsageAccumulator, formatSessionTokenUsage } from './utils/token-u
 import {
   generateId,
   getResumeCommand,
-  loadConversation,
+  loadConversationForProject,
   loadLastConversation,
   saveConversation,
   type SavedConversation,
@@ -151,9 +151,26 @@ const validatedReasoningEffort: ModelSettingsReasoningEffort | undefined =
     ? (reasoningEffort as ModelSettingsReasoningEffort)
     : undefined;
 
+const resumeProjectPath = cli.flags.ssh ? cli.flags.remoteDir?.trim() || undefined : process.cwd();
 let resumedConversation: SavedConversation | null = null;
 if (resumeRequested) {
-  resumedConversation = resumeTarget ? loadConversation(resumeTarget) : loadLastConversation();
+  if (resumeTarget) {
+    const result = resumeProjectPath
+      ? loadConversationForProject(resumeTarget, resumeProjectPath)
+      : { status: 'not_found' as const };
+    if (result.status === 'project_mismatch') {
+      console.error(
+        `Error: Conversation ${resumeTarget} belongs to a different project path (${
+          result.conversation.projectPath ?? 'unknown'
+        }).`,
+      );
+      console.error(`Current project path: ${resumeProjectPath ?? 'unknown'}`);
+      process.exit(1);
+    }
+    resumedConversation = result.status === 'loaded' ? result.conversation : null;
+  } else {
+    resumedConversation = loadLastConversation(resumeProjectPath);
+  }
 }
 
 // Apply CLI overrides to settings service
@@ -174,6 +191,15 @@ if (resumedConversation) {
   ) {
     cliOverrides.agent.reasoningEffort = resumedConversation.reasoningEffort;
   }
+  if (resumedConversation.appMode) {
+    cliOverrides.app = {
+      ...cliOverrides.app,
+      mentorMode: resumedConversation.appMode.mentorMode,
+      editMode: resumedConversation.appMode.editMode,
+      liteMode: resumedConversation.appMode.liteMode,
+      planMode: resumedConversation.appMode.planMode,
+    };
+  }
 }
 
 if (modelFlag) {
@@ -187,12 +213,14 @@ if (validatedReasoningEffort) {
   };
 }
 
-// Always set liteMode based on CLI flag (true if --lite passed, false otherwise)
-// This ensures users can always get back to codebase mode by running without --lite
+// Fresh sessions honor --lite/non-interactive defaults. Resumed sessions keep
+// the saved mode profile so prompt/tool behavior matches the conversation.
 cliOverrides.app = {
   ...cliOverrides.app,
   // Non-interactive mode defaults to lite mode unless explicitly auto-approved.
-  liteMode: Boolean(cli.flags.lite || (hasPositionalPrompt && !cli.flags.autoApprove)),
+  liteMode: resumedConversation
+    ? cliOverrides.app?.liteMode ?? false
+    : Boolean(cli.flags.lite || (hasPositionalPrompt && !cli.flags.autoApprove)),
 };
 
 // Create LoggingService instance
@@ -434,6 +462,13 @@ const saveAndPrintResume = async (messages: Message[]) => {
     id: effectiveSessionId,
     createdAt: effectiveCreatedAt,
     updatedAt: new Date().toISOString(),
+    projectPath: executionContext.getCwd(),
+    appMode: {
+      mentorMode: settings.get<boolean>('app.mentorMode') ?? false,
+      editMode: settings.get<boolean>('app.editMode') ?? false,
+      liteMode: settings.get<boolean>('app.liteMode') ?? false,
+      planMode: settings.get<boolean>('app.planMode') ?? false,
+    },
     model,
     provider,
     reasoningEffort: reasoningEffortVal ?? undefined,

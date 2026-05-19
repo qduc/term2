@@ -14,10 +14,19 @@ export interface SavedMessage {
   [key: string]: unknown;
 }
 
+export interface SavedAppMode {
+  mentorMode: boolean;
+  editMode: boolean;
+  liteMode: boolean;
+  planMode: boolean;
+}
+
 export interface SavedConversation {
   id: string;
   createdAt: string;
   updatedAt: string;
+  projectPath?: string;
+  appMode?: SavedAppMode;
   model?: string;
   provider?: string;
   reasoningEffort?: string;
@@ -25,6 +34,11 @@ export interface SavedConversation {
   history: unknown[];
   messages: SavedMessage[];
 }
+
+export type LoadConversationForProjectResult =
+  | { status: 'loaded'; conversation: SavedConversation }
+  | { status: 'not_found' }
+  | { status: 'project_mismatch'; conversation: SavedConversation };
 
 function getConversationsDir(): string {
   return conversationsDirOverride ?? CONVERSATIONS_DIR;
@@ -55,6 +69,21 @@ function getConversationPath(id: string): string {
 
 function getLastConversationPath(): string {
   return path.join(getConversationsDir(), 'last.json');
+}
+
+function normalizeProjectPath(projectPath: string): string {
+  const normalized = path.normalize(projectPath);
+  return normalized.endsWith(path.sep) && normalized !== path.sep ? normalized.slice(0, -1) : normalized;
+}
+
+function conversationMatchesProject(conversation: SavedConversation, expectedProjectPath?: string): boolean {
+  if (!expectedProjectPath) {
+    return true;
+  }
+  if (!conversation.projectPath) {
+    return false;
+  }
+  return normalizeProjectPath(conversation.projectPath) === normalizeProjectPath(expectedProjectPath);
 }
 
 export function generateId(): string {
@@ -91,7 +120,7 @@ export function saveConversation(conversation: SavedConversation): string {
   return filePath;
 }
 
-export function loadConversation(id: string): SavedConversation | null {
+export function loadConversation(id: string, expectedProjectPath?: string): SavedConversation | null {
   const filePath = getConversationPath(id);
   try {
     if (!fs.existsSync(filePath)) {
@@ -99,13 +128,35 @@ export function loadConversation(id: string): SavedConversation | null {
     }
     const content = fs.readFileSync(filePath, 'utf-8');
     const data = JSON.parse(content) as SavedConversation;
+    if (!conversationMatchesProject(data, expectedProjectPath)) {
+      return null;
+    }
     return data;
   } catch {
     return null;
   }
 }
 
-export function loadLastConversation(): SavedConversation | null {
+export function loadConversationForProject(id: string, expectedProjectPath: string): LoadConversationForProjectResult {
+  const conversation = loadConversation(id);
+  if (!conversation) {
+    return { status: 'not_found' };
+  }
+  if (!conversationMatchesProject(conversation, expectedProjectPath)) {
+    return { status: 'project_mismatch', conversation };
+  }
+  return { status: 'loaded', conversation };
+}
+
+export function loadLastConversation(expectedProjectPath?: string): SavedConversation | null {
+  if (expectedProjectPath) {
+    return (
+      listConversations()
+        .map(({ id }) => loadConversation(id, expectedProjectPath))
+        .find((conversation): conversation is SavedConversation => conversation !== null) ?? null
+    );
+  }
+
   const lastPath = getLastConversationPath();
   try {
     if (!fs.existsSync(lastPath)) {

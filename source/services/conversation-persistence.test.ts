@@ -14,6 +14,13 @@ function cleanupAll() {
   }
 }
 
+function waitForDistinctTimestamp() {
+  const start = Date.now();
+  while (Date.now() - start < 10) {
+    // busy wait for 10ms
+  }
+}
+
 test.beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-conversations-test-'));
   persistenceModule.setConversationsDirForTest(testDir);
@@ -24,24 +31,24 @@ test.afterEach.always(() => {
   testDir = '';
 });
 
-test('generateId: returns a valid UUID', (t) => {
+test.serial('generateId: returns a valid UUID', (t) => {
   const id = persistenceModule.generateId();
   t.regex(id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 });
 
-test('generateId: returns unique IDs', (t) => {
+test.serial('generateId: returns unique IDs', (t) => {
   const id1 = persistenceModule.generateId();
   const id2 = persistenceModule.generateId();
   t.not(id1, id2);
 });
 
-test('getResumeCommand: returns correct format', (t) => {
+test.serial('getResumeCommand: returns correct format', (t) => {
   const id = 'test-uuid-123';
   const cmd = persistenceModule.getResumeCommand(id);
   t.is(cmd, 'term2 --resume test-uuid-123');
 });
 
-test('saveConversation: creates file and last.json pointer', (t) => {
+test.serial('saveConversation: creates file and last.json pointer', (t) => {
   const id = persistenceModule.generateId();
   const conversation: persistenceModule.SavedConversation = {
     id,
@@ -70,11 +77,11 @@ test('saveConversation: creates file and last.json pointer', (t) => {
   fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
 });
 
-test('getConversationsDirForTest: uses isolated test override', (t) => {
+test.serial('getConversationsDirForTest: uses isolated test override', (t) => {
   t.is(persistenceModule.getConversationsDirForTest(), testDir);
 });
 
-test('saveConversation: normalizes streaming bot messages to finalized', (t) => {
+test.serial('saveConversation: normalizes streaming bot messages to finalized', (t) => {
   const id = persistenceModule.generateId();
   const conversation: persistenceModule.SavedConversation = {
     id,
@@ -96,7 +103,7 @@ test('saveConversation: normalizes streaming bot messages to finalized', (t) => 
   fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
 });
 
-test('saveConversation: normalizes pending command messages to completed', (t) => {
+test.serial('saveConversation: normalizes pending command messages to completed', (t) => {
   const id = persistenceModule.generateId();
   const conversation: persistenceModule.SavedConversation = {
     id,
@@ -116,12 +123,12 @@ test('saveConversation: normalizes pending command messages to completed', (t) =
   fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
 });
 
-test('loadConversation: returns null for non-existent id', (t) => {
+test.serial('loadConversation: returns null for non-existent id', (t) => {
   const result = persistenceModule.loadConversation('non-existent-id');
   t.is(result, null);
 });
 
-test('loadConversation: returns saved conversation', (t) => {
+test.serial('loadConversation: returns saved conversation', (t) => {
   const id = persistenceModule.generateId();
   const conversation: persistenceModule.SavedConversation = {
     id,
@@ -147,12 +154,125 @@ test('loadConversation: returns saved conversation', (t) => {
   fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
 });
 
-test('loadLastConversation: returns null when no last.json exists', (t) => {
+test.serial('loadConversation: preserves saved app mode settings', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    appMode: {
+      editMode: false,
+      liteMode: false,
+      mentorMode: true,
+      planMode: true,
+    },
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const loaded = persistenceModule.loadConversation(id);
+
+  t.deepEqual(loaded?.appMode, {
+    editMode: false,
+    liteMode: false,
+    mentorMode: true,
+    planMode: true,
+  });
+});
+
+test.serial('loadConversation: returns null when saved project path differs from expected path', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const loaded = persistenceModule.loadConversation(id, '/workspace/beta');
+
+  t.is(loaded, null);
+});
+
+test.serial('loadConversationForProject: reports project mismatch for existing conversation in another path', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const result = persistenceModule.loadConversationForProject(id, '/workspace/beta');
+
+  t.is(result.status, 'project_mismatch');
+  if (result.status !== 'project_mismatch') {
+    t.fail('expected project_mismatch');
+    return;
+  }
+  t.is(result.conversation.id, id);
+});
+
+test.serial('loadConversationForProject: reports not_found for missing conversation', (t) => {
+  const result = persistenceModule.loadConversationForProject('missing-id', '/workspace/beta');
+
+  t.is(result.status, 'not_found');
+});
+
+test.serial('loadConversation: returns saved conversation when expected project path matches', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const loaded = persistenceModule.loadConversation(id, '/workspace/alpha');
+
+  t.truthy(loaded);
+  t.is(loaded!.id, id);
+});
+
+test.serial('loadConversation: unscoped loads keep backward-compatible behavior', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const loaded = persistenceModule.loadConversation(id);
+
+  t.truthy(loaded);
+  t.is(loaded!.id, id);
+});
+
+test.serial('loadLastConversation: returns null when no last.json exists', (t) => {
   const result = persistenceModule.loadLastConversation();
   t.is(result, null);
 });
 
-test('loadLastConversation: returns the last saved conversation', (t) => {
+test.serial('loadLastConversation: returns the last saved conversation', (t) => {
   const id1 = persistenceModule.generateId();
   const id2 = persistenceModule.generateId();
 
@@ -185,7 +305,64 @@ test('loadLastConversation: returns the last saved conversation', (t) => {
   fs.rmSync(persistenceModule.getConversationsDirForTest(), { recursive: true, force: true });
 });
 
-test('deleteConversation: removes the conversation file', (t) => {
+test.serial('loadLastConversation: returns most recent conversation for expected project path', (t) => {
+  const projectAOlder = persistenceModule.generateId();
+  const projectANewer = persistenceModule.generateId();
+  const projectBNewer = persistenceModule.generateId();
+
+  persistenceModule.saveConversation({
+    id: projectAOlder,
+    createdAt: '2024-01-01T00:00:00.000Z',
+    updatedAt: '2024-01-01T00:00:00.000Z',
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'alpha older' }],
+  });
+  waitForDistinctTimestamp();
+  persistenceModule.saveConversation({
+    id: projectANewer,
+    createdAt: '2024-01-02T00:00:00.000Z',
+    updatedAt: '2024-01-02T00:00:00.000Z',
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-2', sender: 'user', text: 'alpha newer' }],
+  });
+  waitForDistinctTimestamp();
+  persistenceModule.saveConversation({
+    id: projectBNewer,
+    createdAt: '2024-01-03T00:00:00.000Z',
+    updatedAt: '2024-01-03T00:00:00.000Z',
+    projectPath: '/workspace/beta',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-3', sender: 'user', text: 'beta newer' }],
+  });
+
+  const last = persistenceModule.loadLastConversation('/workspace/alpha');
+
+  t.truthy(last);
+  t.is(last!.id, projectANewer);
+});
+
+test.serial('loadLastConversation: returns null when no conversation matches expected project path', (t) => {
+  persistenceModule.saveConversation({
+    id: persistenceModule.generateId(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'alpha' }],
+  });
+
+  const last = persistenceModule.loadLastConversation('/workspace/beta');
+
+  t.is(last, null);
+});
+
+test.serial('deleteConversation: removes the conversation file', (t) => {
   const id = persistenceModule.generateId();
   const conversation: persistenceModule.SavedConversation = {
     id,
@@ -206,12 +383,12 @@ test('deleteConversation: removes the conversation file', (t) => {
   fs.rmSync(persistenceModule.getConversationsDirForTest(), { recursive: true, force: true });
 });
 
-test('deleteConversation: returns false for non-existent id', (t) => {
+test.serial('deleteConversation: returns false for non-existent id', (t) => {
   const result = persistenceModule.deleteConversation('non-existent');
   t.false(result);
 });
 
-test('listConversations: returns empty array when no conversations exist', (t) => {
+test.serial('listConversations: returns empty array when no conversations exist', (t) => {
   // Ensure dir exists but is empty
   const dir = persistenceModule.getConversationsDirForTest();
   if (fs.existsSync(dir)) {
@@ -221,7 +398,7 @@ test('listConversations: returns empty array when no conversations exist', (t) =
   t.deepEqual(list, []);
 });
 
-test('listConversations: returns conversations sorted by updatedAt descending', (t) => {
+test.serial('listConversations: returns conversations sorted by updatedAt descending', (t) => {
   const id1 = persistenceModule.generateId();
   const id2 = persistenceModule.generateId();
 
@@ -247,10 +424,7 @@ test('listConversations: returns conversations sorted by updatedAt descending', 
   persistenceModule.saveConversation(conv1);
 
   // Wait a moment so updatedAt differs
-  const start = Date.now();
-  while (Date.now() - start < 10) {
-    // busy wait for 10ms
-  }
+  waitForDistinctTimestamp();
 
   // Save conv2 second (should have later updatedAt)
   persistenceModule.saveConversation(conv2);

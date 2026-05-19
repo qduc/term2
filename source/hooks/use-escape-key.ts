@@ -1,7 +1,7 @@
 import { MutableRefObject, useEffect, useRef, useState } from 'react';
 import { useInput } from 'ink';
 import type { InputMode } from '../context/InputContext.js';
-import { SETTINGS_TRIGGER, AUTO_APPROVE_TRIGGER } from '../components/Input/triggers.js';
+import { SETTINGS_TRIGGER } from '../components/Input/triggers.js';
 
 const ESC_HINT_TIMEOUT_MS = 2000;
 
@@ -66,16 +66,6 @@ export const useEscapeKey = ({
         return;
       }
 
-      if (
-        currentMode === 'slash_commands' ||
-        currentMode === 'path_completion' ||
-        currentMode === 'settings_completion'
-      ) {
-        onChange('');
-        setMode('text');
-        return;
-      }
-
       if (currentMode === 'settings_value_completion' && currentSettingsValue.settingKey) {
         if (currentValue.startsWith(SETTINGS_TRIGGER)) {
           const prefix = SETTINGS_TRIGGER;
@@ -87,13 +77,17 @@ export const useEscapeKey = ({
           settings.open(prefix.length, previousKey);
           return;
         }
+      }
 
-        if (currentValue.startsWith(AUTO_APPROVE_TRIGGER)) {
-          onChange(AUTO_APPROVE_TRIGGER);
-          setCursorOverride(AUTO_APPROVE_TRIGGER.length);
-          currentSettingsValue.close();
-          return;
-        }
+      if (
+        currentMode === 'slash_commands' ||
+        currentMode === 'path_completion' ||
+        currentMode === 'settings_completion' ||
+        currentMode === 'settings_value_completion'
+      ) {
+        onChange('');
+        setMode('text');
+        return;
       }
 
       setMode('text');

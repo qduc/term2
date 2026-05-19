@@ -74,10 +74,12 @@ export function executeSlashCommandSelection({
   }
 
   const args = extractCommandArgs(filter, command.name);
+  // Close slash menu first. Mode-changing actions (e.g. /undo opening undo_selection)
+  // can then take effect; later setMode calls win, and we avoid post-action override.
+  close();
   const shouldClose = command.action(args || undefined);
   if (shouldClose !== false) {
     setInput('');
-    close();
   }
 }
 
@@ -119,6 +121,13 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
     });
   }, [getSelectedItem, close, filter, setInput]);
 
+  const completeSelected = useCallback(() => {
+    const command = getSelectedItem();
+    if (command) {
+      setInput(`/${command.name} `);
+    }
+  }, [getSelectedItem, setInput]);
+
   return {
     isOpen,
     filter,
@@ -131,5 +140,6 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
     moveDown,
     getSelectedItem,
     executeSelected,
+    completeSelected,
   };
 };

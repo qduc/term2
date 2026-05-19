@@ -15,7 +15,7 @@ export type ModeHandler = {
 };
 
 type Movable = { moveUp: () => void; moveDown: () => void };
-type Slash = Movable & { executeSelected: () => void };
+type Slash = Movable & { executeSelected: () => void; completeSelected: () => void };
 type Models = Movable & { canSwitchProvider: boolean; toggleProvider: (direction?: 'next' | 'prev') => void };
 type Undo = Movable & {
   confirmSelection: (onSelect: (item: import('../hooks/use-undo-selection.js').UndoItem) => void) => void;
@@ -63,6 +63,11 @@ export const useModeHandlers = ({
       slash_commands: {
         moveUp: slash.moveUp,
         moveDown: slash.moveDown,
+        onTab: () => {
+          slash.completeSelected();
+          onSlashCommandRemount();
+          return 'handled';
+        },
         onSubmit: () => {
           slash.executeSelected();
           onSlashCommandRemount();

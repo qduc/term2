@@ -11,6 +11,7 @@ import type { SSHInfo } from '../hooks/use-shell-mode.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 import type { PendingApproval } from '../contracts/conversation.js';
 import type { UserTurn } from '../types/user-turn.js';
+import type { UndoItem } from '../hooks/use-undo-selection.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -28,6 +29,8 @@ export type BottomAreaProps = {
   onApprove: () => void;
   onReject: () => void;
   sshInfo?: SSHInfo;
+  undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
+  onUndoSelect?: (item: UndoItem) => void;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -46,6 +49,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   onReject,
   sshInfo,
   lastUsage,
+  undoMenuRef,
+  onUndoSelect,
 }) => {
   const [dotCount, setDotCount] = useState(1);
 
@@ -82,6 +87,8 @@ const BottomArea: FC<BottomAreaProps> = ({
             settingsService={settingsService}
             loggingService={loggingService}
             historyService={historyService}
+            undoMenuRef={undoMenuRef}
+            onUndoSelect={onUndoSelect}
           />
         ) : null}
       </Box>

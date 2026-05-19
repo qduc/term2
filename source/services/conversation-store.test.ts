@@ -360,3 +360,184 @@ test('removeLastUserTurn() returns null when only a shell-context item is presen
   t.is(result, null);
   t.is(store.getHistory().length, 1);
 });
+
+// listUserTurns tests
+
+test('listUserTurns() returns all genuine user turns with index and text', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'First' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
+    ] satisfies AgentInputItem[],
+  });
+  store.addUserMessage('Second');
+
+  const turns = store.listUserTurns();
+
+  t.is(turns.length, 2);
+  t.is(turns[0].text, 'First');
+  t.is(turns[1].text, 'Second');
+});
+
+test('listUserTurns() excludes shell context items', (t) => {
+  const store = new ConversationStore();
+  store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
+  store.addUserMessage('Hello');
+
+  const turns = store.listUserTurns();
+
+  t.is(turns.length, 1);
+  t.is(turns[0].text, 'Hello');
+});
+
+test('listUserTurns() returns empty array when no user turns', (t) => {
+  const store = new ConversationStore();
+  store.updateFromResult({
+    history: [
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hi' }] },
+    ] satisfies AgentInputItem[],
+  });
+
+  const turns = store.listUserTurns();
+
+  t.is(turns.length, 0);
+});
+
+test('listUserTurns() includes imageCount for multimodal turns', (t) => {
+  const store = new ConversationStore();
+  store.addUserTurn({
+    text: 'Describe this',
+    images: [{ id: 'img-1', data: 'abc', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
+  });
+
+  const turns = store.listUserTurns();
+
+  t.is(turns.length, 1);
+  t.is(turns[0].imageCount, 1);
+  t.is(turns[0].text, 'Describe this');
+});
+
+// removeNLastUserTurns tests
+
+test('removeNLastUserTurns(1) behaves the same as removeLastUserTurn()', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'First' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
+    ] satisfies AgentInputItem[],
+  });
+  store.addUserMessage('Second');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'Second' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 2' }] },
+    ] satisfies AgentInputItem[],
+  });
+
+  const result = store.removeNLastUserTurns(1);
+
+  t.deepEqual(result, { text: 'Second', imageCount: 0 });
+  const history = store.getHistory();
+  t.is(history.length, 2);
+  t.is((history[0] as any).content, 'First');
+  t.is((history[1] as any).content[0].text, 'Reply 1');
+});
+
+test('removeNLastUserTurns(2) removes last 2 user turns and their responses', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'First' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
+    ] satisfies AgentInputItem[],
+  });
+  store.addUserMessage('Second');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'Second' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 2' }] },
+    ] satisfies AgentInputItem[],
+  });
+  store.addUserMessage('Third');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'Third' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 3' }] },
+    ] satisfies AgentInputItem[],
+  });
+
+  const result = store.removeNLastUserTurns(2);
+
+  t.deepEqual(result, { text: 'Second', imageCount: 0 });
+  const history = store.getHistory();
+  t.is(history.length, 2);
+  t.is((history[0] as any).content, 'First');
+  t.is((history[1] as any).content[0].text, 'Reply 1');
+});
+
+test('removeNLastUserTurns(3) removes all when fewer than n turns exist', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('Only');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'Only' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply' }] },
+    ] satisfies AgentInputItem[],
+  });
+
+  const result = store.removeNLastUserTurns(3);
+
+  t.deepEqual(result, { text: 'Only', imageCount: 0 });
+  t.is(store.getHistory().length, 0);
+});
+
+test('removeNLastUserTurns(0) returns null', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('Hello');
+
+  const result = store.removeNLastUserTurns(0);
+
+  t.is(result, null);
+  t.is(store.getHistory().length, 1);
+});
+
+test('removeNLastUserTurns() returns null when no user turns exist', (t) => {
+  const store = new ConversationStore();
+
+  const result = store.removeNLastUserTurns(1);
+
+  t.is(result, null);
+});
+
+test('removeNLastUserTurns() skips shell context items', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('A');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'A' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'reply' }] },
+    ] satisfies AgentInputItem[],
+  });
+  store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
+  store.addUserMessage('B');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'B' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'reply2' }] },
+    ] satisfies AgentInputItem[],
+  });
+
+  // Remove both user turns (skipping shell context)
+  const result = store.removeNLastUserTurns(2);
+
+  t.deepEqual(result, { text: 'A', imageCount: 0 });
+  // Only the shell context item should remain
+  // (it's before the first user turn anchor, but the anchor is at user turn A, so everything from A onward is removed)
+  const history = store.getHistory();
+  t.is(history.length, 0);
+});

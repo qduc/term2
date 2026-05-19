@@ -95,6 +95,22 @@ export class ConversationSession {
     return removed;
   }
 
+  listUserTurns(): { index: number; text: string; imageCount: number }[] {
+    return this.conversationStore.listUserTurns();
+  }
+
+  undoNUserTurns(n: number): { text: string; imageCount: number } | null {
+    const removed = this.conversationStore.removeNLastUserTurns(n);
+    if (removed === null) return null;
+    this.generation++;
+    this.previousResponseId = null;
+    this.approvalState.clearPending();
+    this.approvalState.consumeAborted();
+    this.toolCallArgumentsById.clear();
+    this.shellAutoApproval.clearCache();
+    return removed;
+  }
+
   setModel(model: string): void {
     this.agentClient.setModel(model);
   }

@@ -6,7 +6,8 @@ export type InputMode =
   | 'path_completion'
   | 'settings_completion'
   | 'settings_value_completion'
-  | 'model_selection';
+  | 'model_selection'
+  | 'undo_selection';
 
 interface InputState {
   input: string;

@@ -10,6 +10,7 @@ import { usePathCompletion } from '../hooks/use-path-completion.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { useSettingsValueCompletion } from '../hooks/use-settings-value-completion.js';
 import { useModelSelection } from '../hooks/use-model-selection.js';
+import { useUndoSelection } from '../hooks/use-undo-selection.js';
 import { PopupManager } from './Input/PopupManager.js';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings-service.js';
@@ -28,6 +29,7 @@ import { getPopupNavigationCursor } from './Input/popup-key-navigation.js';
 import { useModeHandlers } from '../hooks/use-mode-handlers.js';
 import { toPopupProps } from './Input/popup-props.js';
 import type { UserTurn } from '../types/user-turn.js';
+import type { UndoItem } from '../hooks/use-undo-selection.js';
 
 export { calculateInputWidth };
 
@@ -57,6 +59,8 @@ type Props = {
   settingsService: SettingsService;
   loggingService: LoggingService;
   historyService: HistoryService;
+  onUndoSelect?: (item: UndoItem) => void;
+  undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
 };
 
 const InputBox: FC<Props> = ({
@@ -68,6 +72,8 @@ const InputBox: FC<Props> = ({
   waitingForRejectionReason = false,
   isShellMode = false,
   historyService,
+  onUndoSelect,
+  undoMenuRef,
 }) => {
   const { input: value, setInput: onChange, mode, setMode, cursorOffset, setCursorOffset } = useInputContext();
   const [images, setImages] = useState<ImageRef[]>([]);
@@ -96,6 +102,19 @@ const InputBox: FC<Props> = ({
     },
     hasConversationHistory,
   );
+  const undo = useUndoSelection();
+
+  // Wire up the undo menu ref so app.tsx can open the menu
+  useEffect(() => {
+    if (undoMenuRef) {
+      undoMenuRef.current = { open: undo.open };
+    }
+    return () => {
+      if (undoMenuRef) {
+        undoMenuRef.current = null;
+      }
+    };
+  }, [undo.open, undoMenuRef]);
 
   const { navigateUp, navigateDown } = useInputHistory(historyService);
 
@@ -217,6 +236,7 @@ const InputBox: FC<Props> = ({
     settings,
     settingsValue,
     models,
+    undo,
     insertSelectedPath,
     insertSelectedSetting,
     insertSelectedSettingValue,
@@ -224,6 +244,7 @@ const InputBox: FC<Props> = ({
     insertSelectedModel,
     onSubmit: submitTextOnly,
     onSlashCommandRemount: remountInput,
+    onUndoSelect,
   });
 
   const stateRef = useRef({
@@ -345,6 +366,7 @@ const InputBox: FC<Props> = ({
       return;
     }
     if (key.backspace) {
+      if (currentMode === 'undo_selection') return;
       if (currentCursor <= 0) return;
       const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
       const nextCursor = currentCursor - 1;
@@ -355,6 +377,7 @@ const InputBox: FC<Props> = ({
       return;
     }
     if (key.delete) {
+      if (currentMode === 'undo_selection') return;
       if (currentCursor >= currentValue.length) return;
       const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
       changeInput(nextValue);
@@ -373,6 +396,8 @@ const InputBox: FC<Props> = ({
       !key.leftArrow &&
       !key.rightArrow
     ) {
+      // Ignore character input in undo_selection mode
+      if (currentMode === 'undo_selection') return;
       const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
       const nextCursor = currentCursor + _input.length;
       changeInput(nextValue);
@@ -424,7 +449,7 @@ const InputBox: FC<Props> = ({
   return (
     <Box flexDirection="column">
       <PopupManager
-        {...toPopupProps({ slash, path, settings, settingsValue, models })}
+        {...toPopupProps({ slash, path, settings, settingsValue, models, undo })}
         settingsService={settingsService}
       />
       <Box>

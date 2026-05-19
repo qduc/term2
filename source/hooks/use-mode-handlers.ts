@@ -17,6 +17,9 @@ export type ModeHandler = {
 type Movable = { moveUp: () => void; moveDown: () => void };
 type Slash = Movable & { executeSelected: () => void };
 type Models = Movable & { canSwitchProvider: boolean; toggleProvider: (direction?: 'next' | 'prev') => void };
+type Undo = Movable & {
+  confirmSelection: (onSelect: (item: import('../hooks/use-undo-selection.js').UndoItem) => void) => void;
+};
 
 type Options = {
   slash: Slash;
@@ -24,6 +27,7 @@ type Options = {
   settings: Movable;
   settingsValue: Movable;
   models: Models;
+  undo: Undo;
   insertSelectedPath: (appendTrailingSpace: boolean) => boolean;
   insertSelectedSetting: () => boolean;
   insertSelectedSettingValue: (submitAfterInsert: boolean) => boolean;
@@ -31,6 +35,7 @@ type Options = {
   insertSelectedModel: (submitAfterInsert: boolean) => boolean;
   onSubmit: (value: string) => void;
   onSlashCommandRemount: () => void;
+  onUndoSelect?: (item: import('../hooks/use-undo-selection.js').UndoItem) => void;
 };
 
 export const useModeHandlers = ({
@@ -39,6 +44,7 @@ export const useModeHandlers = ({
   settings,
   settingsValue,
   models,
+  undo,
   insertSelectedPath,
   insertSelectedSetting,
   insertSelectedSettingValue,
@@ -46,6 +52,7 @@ export const useModeHandlers = ({
   insertSelectedModel,
   onSubmit,
   onSlashCommandRemount,
+  onUndoSelect,
 }: Options): Record<InputMode, ModeHandler> => {
   return useMemo(
     () => ({
@@ -114,6 +121,16 @@ export const useModeHandlers = ({
         },
         onSubmit: () => (insertSelectedModel(true) ? 'handled' : 'fallthrough'),
       },
+      undo_selection: {
+        moveUp: undo.moveUp,
+        moveDown: undo.moveDown,
+        onSubmit: () => {
+          if (onUndoSelect) {
+            undo.confirmSelection(onUndoSelect);
+          }
+          return 'handled';
+        },
+      },
     }),
     [
       slash,
@@ -121,6 +138,7 @@ export const useModeHandlers = ({
       settings,
       settingsValue,
       models,
+      undo,
       insertSelectedPath,
       insertSelectedSetting,
       insertSelectedSettingValue,
@@ -128,6 +146,7 @@ export const useModeHandlers = ({
       insertSelectedModel,
       onSubmit,
       onSlashCommandRemount,
+      onUndoSelect,
     ],
   );
 };

@@ -111,7 +111,23 @@ test('createCopySlashCommand reports clipboard failures asynchronously', async (
   t.deepEqual(systemMessages, ['Failed to copy to clipboard: clipboard unavailable']);
 });
 
-test('createUndoSlashCommand restores last user message to input and returns false', (t) => {
+test('createUndoSlashCommand opens undo menu when no args', (t) => {
+  let menuOpened = false;
+  const command = createUndoSlashCommand({
+    undoLastUserMessage: () => 'Previous message',
+    setInput: () => {},
+    addSystemMessage: () => {},
+    openUndoMenu: () => {
+      menuOpened = true;
+    },
+  });
+
+  const result = command.action();
+  t.is(result, true);
+  t.true(menuOpened);
+});
+
+test('createUndoSlashCommand with "last" arg restores last user message to input and returns false', (t) => {
   let input = '';
   const command = createUndoSlashCommand({
     undoLastUserMessage: () => 'Previous message',
@@ -119,23 +135,25 @@ test('createUndoSlashCommand restores last user message to input and returns fal
       input = value;
     },
     addSystemMessage: () => {},
+    openUndoMenu: () => {},
   });
 
   t.is(command.name, 'undo');
-  const result = command.action();
+  const result = command.action('last');
   t.is(result, false);
   t.is(input, 'Previous message');
 });
 
-test('createUndoSlashCommand shows system message when nothing to undo', (t) => {
+test('createUndoSlashCommand shows system message via undoLastUserMessage when nothing to undo with "last" arg', (t) => {
   const systemMessages: string[] = [];
   const command = createUndoSlashCommand({
     undoLastUserMessage: () => null,
     setInput: () => {},
     addSystemMessage: (text) => systemMessages.push(text),
+    openUndoMenu: () => {},
   });
 
-  const result = command.action();
+  const result = command.action('last');
   t.is(result, true);
   t.deepEqual(systemMessages, ['Nothing to undo.']);
 });

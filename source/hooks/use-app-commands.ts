@@ -20,6 +20,7 @@ interface UseAppCommandsProps {
   messages: Message[];
   setModel: (model: string) => void;
   undoLastUserMessage: () => string | null;
+  openUndoMenu: () => void;
 }
 
 interface CreateCopySlashCommandOptions {
@@ -32,6 +33,7 @@ interface CreateUndoSlashCommandOptions {
   undoLastUserMessage: () => string | null;
   setInput: (input: string) => void;
   addSystemMessage: (text: string) => void;
+  openUndoMenu: () => void;
 }
 
 export function getLastFinalAssistantText(messages: Message[]): string | null {
@@ -110,17 +112,27 @@ export function createUndoSlashCommand({
   undoLastUserMessage,
   setInput,
   addSystemMessage,
+  openUndoMenu,
 }: CreateUndoSlashCommandOptions): SlashCommand {
   return {
     name: 'undo',
-    description: 'Remove the last user message and restore it to the input box',
-    action: () => {
-      const text = undoLastUserMessage();
-      if (text !== null) {
-        setInput(text);
-        return false;
+    description: 'Select a previous message to undo back to',
+    action: (args?: string) => {
+      // /undo with no args: open the selection menu
+      if (!args || args.trim() === '') {
+        openUndoMenu();
+        return true; // clear input
       }
-      addSystemMessage('Nothing to undo.');
+      // /undo last — immediate undo of last message
+      if (args.trim() === 'last') {
+        const text = undoLastUserMessage();
+        if (text !== null) {
+          setInput(text);
+          return false;
+        }
+        addSystemMessage('Nothing to undo.');
+        return true;
+      }
       return true;
     },
   };
@@ -137,6 +149,7 @@ export const useAppCommands = ({
   messages,
   setModel,
   undoLastUserMessage,
+  openUndoMenu,
 }: UseAppCommandsProps) => {
   const toggleEditMode = useCallback(() => {
     const currentValue = settingsService.get<boolean>('app.editMode');
@@ -210,7 +223,7 @@ export const useAppCommands = ({
           addSystemMessage('Welcome to term²! Type a message to start chatting.');
         },
       },
-      createUndoSlashCommand({ undoLastUserMessage, setInput, addSystemMessage }),
+      createUndoSlashCommand({ undoLastUserMessage, setInput, addSystemMessage, openUndoMenu }),
       {
         name: 'quit',
         description: 'Exit the application',
@@ -376,6 +389,7 @@ export const useAppCommands = ({
     setInput,
     settingsService,
     undoLastUserMessage,
+    openUndoMenu,
   ]);
 
   return {

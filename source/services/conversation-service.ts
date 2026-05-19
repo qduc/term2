@@ -38,6 +38,14 @@ export class ConversationService {
     return this.#session.undoLastUserTurn();
   }
 
+  listUserTurns(): { index: number; text: string; imageCount: number }[] {
+    return this.#session.listUserTurns();
+  }
+
+  undoNUserTurns(n: number): { text: string; imageCount: number } | null {
+    return this.#session.undoNUserTurns(n);
+  }
+
   setModel(model: string): void {
     this.#session.setModel(model);
   }

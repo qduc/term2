@@ -166,6 +166,41 @@ export class ConversationStore {
     }
   }
 
+  static #extractText(raw: any): string {
+    const content = raw?.content;
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((c: any) => (c?.type === 'input_text' || c?.type === 'output_text') && typeof c?.text === 'string')
+        .map((c: any) => c.text)
+        .join('');
+    }
+    return '';
+  }
+
+  static #extractImageCount(raw: any): number {
+    const content = raw?.content;
+    return Array.isArray(content) ? content.filter((c: any) => c?.type === 'input_image').length : 0;
+  }
+
+  /**
+   * Returns a list of genuine user turns (excluding shell context items),
+   * each with their index in the history array, text, and image count.
+   */
+  listUserTurns(): { index: number; text: string; imageCount: number }[] {
+    const turns: { index: number; text: string; imageCount: number }[] = [];
+    for (let i = 0; i < this.#history.length; i++) {
+      const item: any = this.#history[i];
+      const raw = item?.rawItem ?? item;
+      if (raw?.role !== 'user') continue;
+      const text = ConversationStore.#extractText(raw);
+      if (text.startsWith(SHELL_CONTEXT_PREFIX)) continue;
+      const imageCount = ConversationStore.#extractImageCount(raw);
+      turns.push({ index: i, text, imageCount });
+    }
+    return turns;
+  }
+
   /**
    * Remove the last genuine user turn and everything after it.
    * Skips shell-context items (identified by SHELL_CONTEXT_PREFIX).
@@ -173,24 +208,12 @@ export class ConversationStore {
    * Returns { text, imageCount } of the removed item, or null if none found.
    */
   removeLastUserTurn(): { text: string; imageCount: number } | null {
-    const extractText = (raw: any): string => {
-      const content = raw?.content;
-      if (typeof content === 'string') return content;
-      if (Array.isArray(content)) {
-        return content
-          .filter((c: any) => (c?.type === 'input_text' || c?.type === 'output_text') && typeof c?.text === 'string')
-          .map((c: any) => c.text)
-          .join('');
-      }
-      return '';
-    };
-
     let anchor = -1;
     for (let i = this.#history.length - 1; i >= 0; i--) {
       const item: any = this.#history[i];
       const raw = item?.rawItem ?? item;
       if (raw?.role !== 'user') continue;
-      const text = extractText(raw);
+      const text = ConversationStore.#extractText(raw);
       if (text.startsWith(SHELL_CONTEXT_PREFIX)) continue;
       anchor = i;
       break;
@@ -200,9 +223,55 @@ export class ConversationStore {
 
     const item: any = this.#history[anchor];
     const raw = item?.rawItem ?? item;
-    const text = extractText(raw);
-    const content = raw?.content;
-    const imageCount = Array.isArray(content) ? content.filter((c: any) => c?.type === 'input_image').length : 0;
+    const text = ConversationStore.#extractText(raw);
+    const imageCount = ConversationStore.#extractImageCount(raw);
+
+    this.#history.splice(anchor);
+    return { text, imageCount };
+  }
+
+  /**
+   * Removes the last n genuine user turns (and everything after the earliest
+   * one's anchor). Returns info from the earliest removed turn, or null if
+   * no genuine turns found.
+   */
+  removeNLastUserTurns(n: number): { text: string; imageCount: number } | null {
+    if (n <= 0) return null;
+
+    // Walk backwards to find the nth-from-last genuine user turn
+    let count = 0;
+    let anchor = -1;
+    for (let i = this.#history.length - 1; i >= 0; i--) {
+      const item: any = this.#history[i];
+      const raw = item?.rawItem ?? item;
+      if (raw?.role !== 'user') continue;
+      const text = ConversationStore.#extractText(raw);
+      if (text.startsWith(SHELL_CONTEXT_PREFIX)) continue;
+      count++;
+      if (count === n) {
+        anchor = i;
+        break;
+      }
+    }
+
+    if (anchor === -1) {
+      // Fewer than n genuine user turns exist; remove all from the first one
+      for (let i = 0; i < this.#history.length; i++) {
+        const item: any = this.#history[i];
+        const raw = item?.rawItem ?? item;
+        if (raw?.role !== 'user') continue;
+        const text = ConversationStore.#extractText(raw);
+        if (text.startsWith(SHELL_CONTEXT_PREFIX)) continue;
+        anchor = i;
+        break;
+      }
+      if (anchor === -1) return null;
+    }
+
+    const item: any = this.#history[anchor];
+    const raw = item?.rawItem ?? item;
+    const text = ConversationStore.#extractText(raw);
+    const imageCount = ConversationStore.#extractImageCount(raw);
 
     this.#history.splice(anchor);
     return { text, imageCount };

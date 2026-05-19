@@ -5,6 +5,7 @@ import type { usePathCompletion } from '../../hooks/use-path-completion.js';
 import type { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
 import type { useSettingsValueCompletion } from '../../hooks/use-settings-value-completion.js';
 import type { useModelSelection } from '../../hooks/use-model-selection.js';
+import type { useUndoSelection } from '../../hooks/use-undo-selection.js';
 
 type PopupProps = ComponentProps<typeof PopupManager>;
 
@@ -14,6 +15,7 @@ type Sources = {
   settings: ReturnType<typeof useSettingsCompletion>;
   settingsValue: ReturnType<typeof useSettingsValueCompletion>;
   models: ReturnType<typeof useModelSelection>;
+  undo: ReturnType<typeof useUndoSelection>;
 };
 
 export const toPopupProps = ({
@@ -22,6 +24,7 @@ export const toPopupProps = ({
   settings,
   settingsValue,
   models,
+  undo,
 }: Sources): Omit<PopupProps, 'settingsService'> => ({
   slash: {
     isOpen: slash.isOpen,
@@ -63,5 +66,11 @@ export const toPopupProps = ({
     selectedIndex: settingsValue.selectedIndex,
     query: settingsValue.query,
     isNumericSettings: settingsValue.isNumericSettings,
+  },
+  undo: {
+    isOpen: undo.isOpen,
+    items: undo.items,
+    selectedIndex: undo.selectedIndex,
+    scrollOffset: undo.scrollOffset,
   },
 });

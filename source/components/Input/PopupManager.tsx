@@ -5,11 +5,13 @@ import PathSelectionMenu from '../PathSelectionMenu.js';
 import SettingsSelectionMenu from '../SettingsSelectionMenu.js';
 import SettingsValueSelectionMenu from '../SettingsValueSelectionMenu.js';
 import ModelSelectionMenu from '../ModelSelectionMenu.js';
+import UndoSelectionMenu from '../UndoSelectionMenu.js';
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
 import type { SettingCompletionItem } from '../../hooks/use-settings-completion.js';
 import type { SettingValueSuggestion } from '../../hooks/use-settings-value-completion.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import type { SettingsService } from '../../services/settings-service.js';
+import type { UndoItem } from '../../hooks/use-undo-selection.js';
 
 interface PopupManagerProps {
   slash: {
@@ -54,6 +56,12 @@ interface PopupManagerProps {
     query: string;
     isNumericSettings?: boolean;
   };
+  undo: {
+    isOpen: boolean;
+    items: UndoItem[];
+    selectedIndex: number;
+    scrollOffset?: number;
+  };
   settingsService: SettingsService;
 }
 
@@ -63,6 +71,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
   models,
   settings,
   settingsValue,
+  undo,
   settingsService,
 }) => {
   return (
@@ -109,6 +118,9 @@ export const PopupManager: FC<PopupManagerProps> = ({
           query={settingsValue.query}
           isNumericSettings={settingsValue.isNumericSettings}
         />
+      )}
+      {undo.isOpen && (
+        <UndoSelectionMenu items={undo.items} selectedIndex={undo.selectedIndex} scrollOffset={undo.scrollOffset} />
       )}
     </>
   );

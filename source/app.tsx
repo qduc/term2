@@ -1,4 +1,4 @@
-import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInputActions } from './context/InputContext.js';
 
 import { Box, useApp, useInput } from 'ink';
@@ -19,6 +19,7 @@ import { useAppCommands } from './hooks/use-app-commands.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/token-usage.js';
 import type { Message } from './hooks/use-conversation.js';
+import type { UndoItem } from './hooks/use-undo-selection.js';
 
 interface AppProps {
   conversationService: ConversationService;
@@ -55,6 +56,7 @@ const App: FC<AppProps> = ({
 }) => {
   const { exit } = useApp();
   const { setInput } = useInputActions();
+  const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
@@ -73,6 +75,8 @@ const App: FC<AppProps> = ({
     clearConversation,
     stopProcessing,
     undoLastUserMessage,
+    getUserMessages,
+    undoToUserMessage,
     setModel,
     setReasoningEffort,
     addSystemMessage,
@@ -146,7 +150,27 @@ const App: FC<AppProps> = ({
     messages,
     setModel,
     undoLastUserMessage,
+    openUndoMenu: () => {
+      const userMessages = getUserMessages().map((m) => ({ uiIndex: m.uiIndex, text: m.text }));
+      if (userMessages.length === 0) {
+        addSystemMessage('Nothing to undo.');
+        return;
+      }
+      if (undoMenuRef.current) {
+        undoMenuRef.current.open(userMessages);
+      }
+    },
   });
+
+  const handleUndoSelect = useCallback(
+    (item: UndoItem) => {
+      const text = undoToUserMessage(item.uiIndex);
+      if (text !== null) {
+        setInput(text);
+      }
+    },
+    [undoToUserMessage, setInput],
+  );
 
   const hasConversationHistory = useMemo(() => messages.some((msg) => msg.sender !== 'system'), [messages]);
 
@@ -285,6 +309,8 @@ const App: FC<AppProps> = ({
             onApprove={handleApprove}
             onReject={handleReject}
             sshInfo={sshInfo}
+            undoMenuRef={undoMenuRef}
+            onUndoSelect={handleUndoSelect}
           />
         </Box>
       </Box>

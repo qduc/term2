@@ -490,6 +490,59 @@ export const useConversation = ({
     return restored;
   }, [messages, conversationService, appendMessages]);
 
+  const getUserMessages = useCallback((): { uiIndex: number; text: string }[] => {
+    const result: { uiIndex: number; text: string }[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i].sender === 'user') {
+        result.push({ uiIndex: i, text: (messages[i] as UserMessage).text });
+      }
+    }
+    return result;
+  }, [messages]);
+
+  const undoToUserMessage = useCallback(
+    (uiIndex: number): string | null => {
+      // Count how many user messages are at or after this index
+      let undoCount = 0;
+      for (let i = uiIndex; i < messages.length; i++) {
+        if (messages[i].sender === 'user') {
+          undoCount++;
+        }
+      }
+
+      if (undoCount === 0) return null;
+
+      const selectedMessage = messages[uiIndex] as UserMessage;
+      const uiText = selectedMessage?.text ?? '';
+
+      conversationService.abort();
+      const removed = conversationService.undoNUserTurns(undoCount);
+      const restored = removed?.text ?? uiText;
+
+      setMessages((prev) => prev.slice(0, uiIndex));
+      setWaitingForApproval(false);
+      setWaitingForRejectionReason(false);
+      setPendingApproval(null);
+      approvedContextRef.current = null;
+      setIsProcessing(false);
+
+      if (removed && removed.imageCount > 0) {
+        appendMessages([
+          {
+            id: createMessageId(),
+            sender: 'system',
+            text: `Note: ${removed.imageCount} attached image${
+              removed.imageCount === 1 ? '' : 's'
+            } could not be restored to the input.`,
+          },
+        ]);
+      }
+
+      return restored;
+    },
+    [messages, conversationService, appendMessages],
+  );
+
   const setModel = useCallback(
     (model: string) => {
       conversationService.setModel(model);
@@ -566,6 +619,8 @@ export const useConversation = ({
     clearConversation,
     stopProcessing,
     undoLastUserMessage,
+    getUserMessages,
+    undoToUserMessage,
     setModel,
     setReasoningEffort,
     setTemperature,

@@ -3,11 +3,11 @@ import React, { useState } from 'react';
 import { render } from 'ink-testing-library';
 import { useEscapeKey } from './use-escape-key.js';
 import type { InputMode } from '../context/InputContext.js';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 
-const TestComponent = ({ initialValue = 'some text' }) => {
+const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as InputMode }) => {
   const [value, onChange] = useState(initialValue);
-  const [mode, setMode] = useState<InputMode>('text');
+  const [mode, setMode] = useState<InputMode>(initialMode);
   const escPressedRef = { current: false };
   const [, setCursorOverride] = useState<number | null>(null);
 
@@ -24,6 +24,7 @@ const TestComponent = ({ initialValue = 'some text' }) => {
 
   return (
     <Box flexDirection="column">
+      <Text>Mode: {mode}</Text>
       <Text>Value: {value}</Text>
       {escHintVisible && <Text>HINT</Text>}
     </Box>
@@ -56,6 +57,194 @@ test('pressing ESC once shows hint, second time clears input', async (t) => {
   const finalFrame = lastFrame()!;
   // console.log('Final frame:', JSON.stringify(finalFrame));
   t.false(finalFrame.includes('HINT'), 'Hint should be hidden after second ESC');
+  t.true(finalFrame.includes('Mode: text'), 'Mode should still be text');
   t.true(finalFrame.includes('Value:'), 'Label should be present');
-  t.is(finalFrame.trim(), 'Value:', 'Value should be cleared');
+  t.false(finalFrame.includes('some text'), 'Value should be cleared');
+});
+
+test('useInput fires ESC in non-text mode', async (t) => {
+  // Minimal test: verify useInput fires ESC when mode starts as model_selection
+  let inputFired = false;
+  const MinimalComponent = () => {
+    useInput((_input, key) => {
+      if (key.escape) inputFired = true;
+    });
+    return <Text>test</Text>;
+  };
+
+  const { stdin } = render(<MinimalComponent />);
+  stdin.write('\u001B');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  t.true(inputFired, 'useInput should fire on ESC');
+});
+
+test('pressing ESC in model_selection mode clears input and switches to text mode', async (t) => {
+  let modes: InputMode[] = [];
+  let values: string[] = [];
+
+  const ModelSelectionTestComponent = () => {
+    const [value, onChange] = useState('/model ');
+    const [mode, setMode] = useState<InputMode>('model_selection');
+    const escPressedRef = { current: false };
+    const [, setCursorOverride] = useState<number | null>(null);
+
+    modes.push(mode);
+    values.push(value);
+
+    useEscapeKey({
+      mode,
+      setMode,
+      value,
+      onChange,
+      settings: { open: () => {} } as any,
+      settingsValue: { settingKey: null, close: () => {} } as any,
+      setCursorOverride,
+      escPressedRef,
+    });
+
+    return (
+      <Box flexDirection="column">
+        <Text>Mode: {mode}</Text>
+        <Text>Value: {value}</Text>
+      </Box>
+    );
+  };
+
+  const { lastFrame, stdin } = render(<ModelSelectionTestComponent />);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const initialFrame = lastFrame()!;
+  t.log('Initial frame:', JSON.stringify(initialFrame));
+  t.log('Initial modes:', modes.join(', '));
+  t.log('Initial values:', values.join(', '));
+  t.true(initialFrame.includes('Mode: model_selection'), 'Initial mode should be model_selection');
+  t.true(initialFrame.includes('Value: /model'), 'Initial value should contain trigger');
+
+  // Press ESC
+  stdin.write('\u001B');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const frame = lastFrame()!;
+  t.log('Modes seen:', modes.join(', '));
+  t.log('Values seen:', values.join(', '));
+  t.log('Frame after ESC:', frame);
+  t.true(frame.includes('Mode: text'), 'Mode should switch to text');
+  t.false(frame.includes('/model'), 'Input trigger text should be cleared');
+});
+
+test('pressing ESC in slash_commands mode clears input and switches to text mode', async (t) => {
+  const SlashTestComponent = () => {
+    const [value, onChange] = useState('/cle');
+    const [mode, setMode] = useState<InputMode>('slash_commands');
+    const escPressedRef = { current: false };
+    const [, setCursorOverride] = useState<number | null>(null);
+
+    useEscapeKey({
+      mode,
+      setMode,
+      value,
+      onChange,
+      settings: { open: () => {} } as any,
+      settingsValue: { settingKey: null, close: () => {} } as any,
+      setCursorOverride,
+      escPressedRef,
+    });
+
+    return (
+      <Box flexDirection="column">
+        <Text>Mode: {mode}</Text>
+        <Text>Value: {value}</Text>
+      </Box>
+    );
+  };
+
+  const { lastFrame, stdin } = render(<SlashTestComponent />);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  t.true(lastFrame()!.includes('Mode: slash_commands'), 'Initial mode should be slash_commands');
+
+  stdin.write('\u001B');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const frame = lastFrame()!;
+  t.true(frame.includes('Mode: text'), 'Mode should switch to text');
+  t.false(frame.includes('/cle'), 'Input trigger text should be cleared');
+});
+
+test('pressing ESC in path_completion mode clears input and switches to text mode', async (t) => {
+  const PathTestComponent = () => {
+    const [value, onChange] = useState('@src/foo');
+    const [mode, setMode] = useState<InputMode>('path_completion');
+    const escPressedRef = { current: false };
+    const [, setCursorOverride] = useState<number | null>(null);
+
+    useEscapeKey({
+      mode,
+      setMode,
+      value,
+      onChange,
+      settings: { open: () => {} } as any,
+      settingsValue: { settingKey: null, close: () => {} } as any,
+      setCursorOverride,
+      escPressedRef,
+    });
+
+    return (
+      <Box flexDirection="column">
+        <Text>Mode: {mode}</Text>
+        <Text>Value: {value}</Text>
+      </Box>
+    );
+  };
+
+  const { lastFrame, stdin } = render(<PathTestComponent />);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  t.true(lastFrame()!.includes('Mode: path_completion'), 'Initial mode should be path_completion');
+
+  stdin.write('\u001B');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const frame = lastFrame()!;
+  t.true(frame.includes('Mode: text'), 'Mode should switch to text');
+  t.false(frame.includes('@src/foo'), 'Input trigger text should be cleared');
+});
+
+test('pressing ESC in settings_completion mode clears input and switches to text mode', async (t) => {
+  const SettingsTestComponent = () => {
+    const [value, onChange] = useState('/settings ');
+    const [mode, setMode] = useState<InputMode>('settings_completion');
+    const escPressedRef = { current: false };
+    const [, setCursorOverride] = useState<number | null>(null);
+
+    useEscapeKey({
+      mode,
+      setMode,
+      value,
+      onChange,
+      settings: { open: () => {} } as any,
+      settingsValue: { settingKey: null, close: () => {} } as any,
+      setCursorOverride,
+      escPressedRef,
+    });
+
+    return (
+      <Box flexDirection="column">
+        <Text>Mode: {mode}</Text>
+        <Text>Value: {value}</Text>
+      </Box>
+    );
+  };
+
+  const { lastFrame, stdin } = render(<SettingsTestComponent />);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  t.true(lastFrame()!.includes('Mode: settings_completion'), 'Initial mode should be settings_completion');
+
+  stdin.write('\u001B');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const frame = lastFrame()!;
+  t.true(frame.includes('Mode: text'), 'Mode should switch to text');
+  t.false(frame.includes('/settings'), 'Input trigger text should be cleared');
 });

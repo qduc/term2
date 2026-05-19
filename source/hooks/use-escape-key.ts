@@ -60,6 +60,22 @@ export const useEscapeKey = ({
     escPressedRef.current = true;
 
     if (currentMode !== 'text') {
+      if (currentMode === 'model_selection') {
+        onChange('');
+        setMode('text');
+        return;
+      }
+
+      if (
+        currentMode === 'slash_commands' ||
+        currentMode === 'path_completion' ||
+        currentMode === 'settings_completion'
+      ) {
+        onChange('');
+        setMode('text');
+        return;
+      }
+
       if (currentMode === 'settings_value_completion' && currentSettingsValue.settingKey) {
         if (currentValue.startsWith(SETTINGS_TRIGGER)) {
           const prefix = SETTINGS_TRIGGER;

@@ -13,12 +13,15 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 
 ## Features
 
-- 🎭 **Three Operating Modes** - Default (full-power), Lite (fast & safe), and Mentor (get help from a smarter model on complex problems)
+- 🎭 **Four Operating Modes** - Default (full-power), Lite (fast & safe), Mentor (expert model advice), and Plan (read-only research/implementation drafting)
 - 🌍 **Open Source** - MIT licensed, hackable, auditable, community-driven
 - 🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, OpenAI-compatible APIs, and Vercel AI SDK providers
 - 🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
-- 🛠️ **Advanced Tools** - Shell execution, file patching, search/replace (with `<...>` gap matching), grep, find files, file reading, file creation, web search, and mentor consultation
-- 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite`, `/copy`, `/auto-approve` for easy control
+- 🛠️ **Advanced Tools** - Shell execution, file patching, search/replace (with `<...>` gap matching), grep, find files, file reading, file creation, web search, web fetching, code outline & context search, mentor consultation, and subagent invocation
+- 👥 **Subagent Delegation** - Spawn specialized, synchronous subagents (`explorer`, `worker`, `researcher`, `mentor`) to perform sub-tasks in parallel while conserving your main context
+- ⏪ **Conversation Undo & Rewind** - Undo the last turn or select any past user message to rewind the conversation state back to that point
+- 💾 **Conversation Resumption** - Saved conversations are persisted and can be resumed later using the `--resume` flag
+- 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite`, `/copy`, `/auto-approve`, `/plan`, `/undo`, `/usage`, and `/effort` for easy control
 - 📝 **Smart Context** - The assistant understands your environment and provides relevant help
 - 🎯 **Streaming Responses** - See the AI's thoughts and reasoning in real-time
 - 🧠 **Reasoning Effort Control** - Configurable reasoning levels (minimal to high) for O1/O3 models
@@ -28,20 +31,21 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 - 🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
 - 🤖 **Non-Interactive Mode** - Run commands from the CLI without starting the full UI
 - ✏️ **Edit Mode** - Press `Shift+Tab` to auto-approve file edits in your workspace for faster development
-- 🤖 **Auto-Approval** - Optional LLM-based safety evaluation can automatically approve safe shell commands
+- 🛡️ **Smart Shell Auto-Approval** - A hybrid local-heuristic + LLM-based safety evaluator that auto-approves safe commands, eliminating prompt fatigue while strictly blocking risky ones (with detailed reasoning explanations)
 - 🖼️ **Image Pasting** - Paste images from your clipboard directly into the terminal for vision-model analysis
 - 📈 **Real-time Token Usage** - Live token consumption displayed during streaming
 
+
 ## Why term2 vs Alternatives?
 
-|                   |               **term2**               |  Claude Code   |         Warp         |
-| ----------------- | :-----------------------------------: | :------------: | :------------------: |
-| **Open Source**   |                ✅ MIT                 | ❌ Proprietary |    ❌ Proprietary    |
-| **Cost**          |              Pay-per-use              |   $20-200/mo   |       Freemium       |
-| **AI Providers**  | Any (OpenAI, OpenRouter, local, etc.) | Anthropic only | selected models only |
-| **SSH Remote**    |               ✅ Native               |     ❌ No      |        ✅ Yes        |
-| **Mentor Mode**   |              ✅ Built-in              |     ❌ No      |        ❌ No         |
-| **Self-Hostable** |                  ✅                   |       ❌       |          ❌          |
+|  | **term2** | **Claude Code** | **Warp** |
+| --- | --- | --- | --- |
+| **Open Source** | ✅ MIT | ❌ Proprietary | ✅ Open Source |
+| **Cost** | Pay-per-use API | $20 - $200/mo (or API) | Freemium / Paid tiers |
+| **AI Providers** | Any (OpenAI, OpenRouter, local) | Anthropic only | Selected models / BYOLLM |
+| **SSH / Remote** | ✅ Native | ✅ Yes (Remote Control/SSH) | ✅ Yes |
+| **Mentor Mode** | ✅ Built-in | ❌ No | ❌ No |
+| **Self-Hostable** | ✅ Yes | ❌ No (Requires Anthropic) | ❌ Cloud elements (Oz) |
 
 **term2 gives you:**
 
@@ -119,8 +123,12 @@ term2 --model gpt-5-mini      # Use GPT-5 mini for faster/cheaper responses
 term2 -r high                  # Set reasoning effort to high (for GPT-5 models)
 term2 --reasoning medium       # Set reasoning effort to medium
 
-# Operating modes (see "Operating Modes" section above for details)
+# Operating modes (see "Operating Modes" section below for details)
 term2 --lite                   # Start in lite mode for general terminal work (no codebase)
+
+# Resuming past conversations
+term2 --resume                 # Resume the last conversation session
+term2 -R <conversation-uuid>   # Resume a specific conversation by ID
 
 # SSH Mode - execute on remote servers
 term2 --ssh user@host --remote-dir /path/to/project
@@ -141,23 +149,50 @@ While in the chat, you can use these commands:
 - `/clear` - Clear the conversation history
 - `/quit` - Exit the application
 - `/model [model-name]` - Switch to a different model
-- `/mentor` - Toggle mentor mode (see "Operating Modes" section for details)
-- `/lite` - Toggle lite mode (see "Operating Modes" section for details)
-- `/copy` - Copy the latest assistant response
+- `/mentor` - Toggle mentor mode
+- `/lite` - Toggle lite mode (requires `/clear` first if a session is active)
+- `/plan` - Toggle plan mode (read-only research/planning mode)
+- `/undo [last]` - Open the conversation rewind menu, or revert the last turn immediately if `last` is specified
+- `/usage` - Show token usage breakdown for the current session (includes subagent usage)
+- `/effort [level]` - Set reasoning effort for O1/O3 models (e.g. none, minimal, low, medium, high)
+- `/copy` - Copy the latest assistant response to the clipboard
 - `/auto-approve [off|advisory|auto]` - Set or cycle shell auto-approval mode
 - `/settings [key] [value]` - Modify runtime settings (e.g., `/settings agent.temperature 0.7`)
 
+
 ## Operating Modes
 
-term2 offers three modes tailored to different workflows. Choose the mode that matches your current task.
+term2 offers multiple operating modes tailored to different workflows.
 
 ### Quick Reference
 
-| Mode        | Start with     | Best for                             | Tools Available   | Context       |
-| ----------- | -------------- | ------------------------------------ | ----------------- | ------------- |
-| **Default** | `term2`        | Codebase work & development          | All editing tools | Full codebase |
-| **Lite**    | `term2 --lite` | General terminal tasks (no codebase) | Read-only         | None          |
-| **Mentor**  | Use `/mentor`  | Complex codebase problems            | All + mentor      | Full codebase |
+| Mode        | Toggle / Start with | Best for                             | Tools Available      | Context       |
+| ----------- | ------------------- | ------------------------------------ | -------------------- | ------------- |
+| **Default** | `term2`             | Codebase work & development          | All editing tools    | Full codebase |
+| **Edit**    | `Shift+Tab`         | Rapid file editing and scripting     | Auto-approves patches| Full codebase |
+| **Plan**    | `/plan`             | Researching and designing plans      | Read-only tools      | Full codebase |
+| **Lite**    | `term2 --lite`      | General terminal tasks (no codebase) | Read-only tools      | None          |
+| **Mentor**  | `/mentor`           | Complex codebase problems            | All + mentor tool    | Full codebase |
+
+### Edit Mode - Rapid Development
+
+**The problem it solves:** Prompting for approval on every single file modification can slow down fast-paced development.
+
+Edit Mode automatically approves `apply_patch` operations within the workspace, allowing the assistant to write and edit code at high speed. Destructive operations (like out-of-workspace writes or terminal shell commands) still require explicit confirmation for safety.
+
+- ⚡ **High velocity** - Speeds up iterative coding cycles
+- 🛠️ **Workspace bounded** - Only auto-approves changes inside the active directory
+- 🔄 **Easy cycle** - Cycle in/out of Edit Mode by pressing `Shift+Tab`
+
+### Plan Mode - Read-only Research & Strategy
+
+**The problem it solves:** You want the assistant to research a complex issue and propose an implementation plan without modifying the workspace or executing mutating shell commands.
+
+Plan Mode enforces a strict **read-only** safety boundary. Any state-changing commands or writing tools are blocked by the system. The assistant focuses entirely on exploring the codebase, running read-only checks, and proposing a step-by-step implementation plan.
+
+- 🔒 **Zero-risk exploration** - Securely analyze files and run logs
+- 📝 **Structured plans** - Grounded in current codebase files and symbols
+- 🔄 **Toggleable** - Switch with the `/plan` command or cycle with `Shift+Tab`
 
 ### Lite Mode - Everyday Terminal Assistant
 
@@ -171,7 +206,7 @@ Lite mode is designed for general terminal work: system administration, file man
 - 🔧 **General terminal tools** - Shell commands, grep, read files, find files (no code editing)
 - 🌐 **Perfect for SSH** - Ideal for remote server management and investigation
 - 🔄 **Toggleable** - Switch on/off mid-session with `/lite` command
-- 🐚 **Shell mode** - Press Shift+Tab to toggle direct shell command execution
+- 🐚 **Shell mode** - Press `Shift+Tab` to toggle direct shell command execution
 
 **When to use Lite mode:**
 
@@ -216,7 +251,7 @@ Mentor mode gives you two AI minds working together on your codebase. Your prima
 4. Mentor challenges assumptions and provides strategic guidance
 5. AI implements the solution based on the guidance
 
-**Important:** The mentor model doesn't have direct access to your codebase. Your primary AI must share all relevant information (code snippets, file paths, findings) when consulting the mentor. This forces clear problem articulation and save cost on the more expensive mentor model.
+**Important:** The mentor model doesn't have direct access to your codebase. Your primary AI must share all relevant information (code snippets, file paths, findings) when consulting the mentor. This forces clear problem articulation and saves cost on the more expensive mentor model.
 
 **When to use Mentor mode:**
 
@@ -257,13 +292,14 @@ AI: [Does additional checks based on mentor's questions]
 
 ### Switching Modes
 
-Modes are mutually exclusive—each represents a different working style matched to your task. You can switch modes mid-session:
+Modes represent different working styles matched to your task. You can switch modes mid-session:
 
-- `/lite` - Toggle lite mode (requires clearing history first if session is active)
+- `/lite` - Toggle lite mode (requires clearing history first with `/clear` if session is active)
 - `/mentor` - Toggle mentor mode
-- `Shift+Tab` - Toggle edit mode (auto-approves file edits in workspace)
-- Switching to lite mode automatically disables edit/mentor modes
-- Enabling lite mode disables edit and mentor modes
+- `/plan` - Toggle plan mode
+- `Shift+Tab` - Cycles through `Default -> Edit -> Plan -> Default` (or toggles Shell Mode in Lite Mode)
+- Switch triggers handle mutual exclusions automatically (e.g. enabling Plan Mode disables Edit/Lite modes)
+
 
 ## SSH Mode
 
@@ -364,6 +400,71 @@ echo "The answer is: $ANSWER"
 
 You can always override this by passing `--lite` or running in a directory without a codebase.
 
+## Shell Auto-Approval
+
+One of the most powerful and unique safety features of `term2` is its **Smart Shell Auto-Approval** system.
+
+Instead of forcing you to manually approve every single trivial command (like `git status` or `ls`), or exposing you to the security risks of completely unchecked execution, `term2` uses a **hybrid local-heuristic + LLM-based safety evaluation engine**. This system effectively minimizes "prompt fatigue" while maintaining strong, robust safety boundaries.
+
+### The Problem: Prompt Fatigue vs. Security Risks
+When using terminal-based AI assistants, you are typically forced into one of two extremes:
+1. **Manual Confirmation of Everything:** The assistant halts and prompts you to approve every single read-only or diagnostic command. This breaks your flow and leads to "prompt fatigue"—where you start blindly approving everything.
+2. **Full Auto-Run:** The assistant runs commands automatically. While fast, this poses severe security risks if the AI decides to run a destructive command, deletes data, or executes untrusted code.
+
+### The Solution: Hybrid Safety Architecture
+`term2` solves this by introducing a dual-layer safety check before any shell command executes:
+
+```mermaid
+graph TD
+    A[Shell Command Execution Request] --> B[Layer 1: Local Heuristic Check]
+    B -->|Risky / Red Pattern| C[Reject Auto-Approval]
+    B -->|Safe Heuristics| D[Layer 2: LLM Task Context Check]
+    D -->|Blocked / Unaligned / Risky| C
+    D -->|Approved as Safe| E{Auto-Approval Mode}
+    E -->|off| F[Prompt user for confirmation]
+    E -->|advisory| G[Show LLM reasoning + prompt user]
+    E -->|auto| H[Execute command automatically]
+    C --> I[Show safety reasoning + prompt user]
+```
+
+1. **Layer 1: Local Heuristics (Safety Classification)**
+   Before any command is sent to the LLM, a fast local analyzer checks it against known risky pattern sets. Any destructive flags, deletions (`rm`), state resets, database cleaning, network exfiltration patterns, credential access, or process termination are immediately classified as **RED**. If classified as RED, the command is blocked from auto-approval and must be manually confirmed by the user.
+
+2. **Layer 2: LLM Task Context Check**
+   If the command passes the local safety heuristics, it is sent to a fast, cost-efficient secondary LLM (default: `gpt-5.4-mini` or similar). The LLM is provided with:
+   - The current **task context** (the last few turns of the active conversation).
+   - The precise commands to evaluate.
+
+   The LLM checks if the command is task-aligned, non-destructive, and low-risk. Commands that do not align with what you asked the AI to do are blocked, preventing accidental execution of out-of-context commands.
+
+3. **Layer 3: Explanation & Reasoning**
+   For every evaluated command, the auto-approval engine generates a concise reasoning sentence explaining what the command does, whether it aligns with the task, and why it was approved or blocked.
+
+### Auto-Approval Modes
+You can toggle between three auto-approval modes mid-session using the `/auto-approve` command, the `/settings` command, or via runtime settings:
+
+*   **`off` (Default):** Every command requires manual confirmation. No background LLM safety checks are performed.
+*   **`advisory`:** Commands still require manual confirmation, but the UI displays the LLM's safety reasoning alongside the prompt. This is incredibly useful for reviewing complex or unfamiliar shell scripts before you approve them.
+*   **`auto`:** Safe, task-aligned, and non-destructive commands are executed automatically without interrupting your flow. High-risk, destructive, or task-unaligned commands are held for manual confirmation and shown with the LLM's explanation.
+
+### Configuration
+You can configure the auto-approval mode and customize which provider/model is used for safety evaluation in your `settings.json`:
+
+```json
+{
+  "shell": {
+    "autoApproveMode": "auto"
+  },
+  "agent": {
+    "autoApproveProvider": "openai",
+    "autoApproveModel": "gpt-5.4-mini"
+  }
+}
+```
+
+> [!TIP]
+> Use a fast, lightweight model (like `gpt-5.4-mini` or `haiku`) as your `autoApproveModel` to ensure safety checks complete in milliseconds without adding noticeable latency to your terminal flow.
+
 ## Configuration
 
 term2 stores its configuration in:
@@ -411,8 +512,7 @@ You can easily switch between providers by editing `settings.json`.
 {
   "agent": {
     "provider": "openai",
-    "model": "gpt-5.1",
-    "temperature": 0.7
+    "model": "gpt-5.5"
   }
 }
 ```
@@ -424,7 +524,7 @@ Access a wide range of models.
 {
   "agent": {
     "provider": "openrouter",
-    "model": "anthropic/claude-4.5-sonnet"
+    "model": "anthropic/claude-sonnet-4.6"
   }
 }
 ```
@@ -439,12 +539,13 @@ _Llama.cpp Example:_
   "providers": [
     {
       "name": "llama.cpp",
+      "type": "llama.cpp",
       "baseUrl": "http://127.0.0.1:8080/v1"
     }
   ],
   "agent": {
     "provider": "llama.cpp",
-    "model": "qwen3-coder"
+    "model": "qwen3.6-35b-a3b"
   }
 }
 ```
@@ -456,6 +557,7 @@ _LM Studio Example:_
   "providers": [
     {
       "name": "lm-studio",
+      "type": "openai-compatible",
       "baseUrl": "http://localhost:1234/v1"
     }
   ],
@@ -466,20 +568,122 @@ _LM Studio Example:_
 }
 ```
 
-### General Settings
+**4. Other Custom Providers**
+You can also define custom providers for direct API integrations (which use their default base URLs if omitted) or generic OpenAI-compatible endpoints:
+
+_Anthropic Direct Example:_
+(Note: Ensure your `ANTHROPIC_API_KEY` is set in your environment.)
 
 ```json
 {
-  "shell": {
-    "timeout": 120000,
-    "maxOutputLines": 1000
-  },
+  "providers": [
+    {
+      "name": "anthropic-direct",
+      "type": "anthropic"
+    }
+  ],
   "agent": {
-    "reasoningEffort": "medium",
-    "mentorModel": "gpt-5.2"
+    "provider": "anthropic-direct",
+    "model": "claude-sonnet-4-6"
   }
 }
 ```
+
+_Google Gemini Direct Example:_
+(Note: Ensure your `GOOGLE_GENERATIVE_AI_API_KEY` is set in your environment.)
+
+```json
+{
+  "providers": [
+    {
+      "name": "google-direct",
+      "type": "google"
+    }
+  ],
+  "agent": {
+    "provider": "google-direct",
+    "model": "gemini-3.5-flash"
+  }
+}
+```
+
+_OpenCode Direct Example:_
+(Note: Ensure your `OPENCODE_API_KEY` is set in your environment.)
+
+```json
+{
+  "providers": [
+    {
+      "name": "opencode-direct",
+      "type": "opencode"
+    }
+  ],
+  "agent": {
+    "provider": "opencode-direct",
+    "model": "opencode-model"
+  }
+}
+```
+
+_Custom OpenAI Endpoint Example (using the OpenAI Responses API):_
+
+```json
+{
+  "providers": [
+    {
+      "name": "custom-openai",
+      "type": "openai",
+      "baseUrl": "https://api.custom-openai-proxy.com/v1",
+      "apiKey": "your-api-key-here"
+    }
+  ],
+  "agent": {
+    "provider": "custom-openai",
+    "model": "custom-model-name"
+  }
+}
+```
+
+### General Settings
+
+Here is a comprehensive example demonstrating the most useful settings keys you can configure in `settings.json`:
+
+```json
+{
+  "agent": {
+    "model": "gpt-5.4",
+    "provider": "openai",
+    "reasoningEffort": "default",
+    "temperature": 1,
+    "mentorModel": "gpt-5.5",
+    "mentorProvider": "openai",
+    "mentorReasoningEffort": "high",
+
+    // Subagent model overrides (defaults to agent.model/agent.provider if unset)
+    "subagentExplorerModel": "gpt-5.4-mini",
+    "subagentWorkerModel": "gpt-5.3-codex",
+    "subagentResearcherModel": "gpt-5.4-mini"
+  },
+  "shell": {
+    "timeout": 120000,
+    "maxOutputLines": 1000,
+    "maxOutputChars": 10000,
+    "autoApproveMode": "off",
+    "useRtkCompression": false
+  },
+  "webSearch": {
+    "provider": "tavily"
+  },
+  "app": {
+    "searchViaShell": false,
+    "editMode": false,
+    "planMode": false,
+    "mentorMode": false,
+    "liteMode": false
+  }
+}
+```
+
 
 ## Supported Models
 
@@ -511,6 +715,30 @@ term2 can connect to any OpenAI-compatible API. This allows you to use:
 - **Local Models**: Run private models locally via Ollama, LM Studio, vLLM, or llama.cpp.
 - **Self-Hosted**: Connect to private deployments of models.
 - **Other Providers**: Any service offering an OpenAI-compatible endpoint (e.g., Groq, Together AI).
+
+## Subagents
+
+For complex, multi-step tasks, the primary assistant can delegate work to specialized, synchronous **Subagents** using the `run_subagent` tool. This allows the main assistant to offload research, file modification, or exploration tasks to a separate agent context, preventing context-window bloat in the main session.
+
+Each subagent runs with its own tailored prompt and can perform operations based on its designated role:
+
+- **Explorer (`explorer`)**: Specialized in scanning files, mapping structures, and reading codebase outline.
+- **Worker (`worker`)**: Specialized in executing modifications, writing scripts, and running tests.
+- **Researcher (`researcher`)**: Specialized in web search, reading documentation, and gathering information.
+- **Mentor (`mentor`)**: Specialized in providing strategic guidance and high-level architectural feedback.
+
+Subagent logs and outputs stream in real-time within the terminal, allowing you to track their progress. You can configure model, provider, and reasoning effort overrides specifically for subagents in settings (e.g. `agent.subagentWorkerModel`).
+
+## Conversation Resumption & Persistence
+
+term2 automatically saves your conversation history, settings, and provider state at the end of each session. This allows you to resume any past chat exactly where you left off.
+
+- **Auto-save**: Every active chat session is saved on exit or interrupt to your system's log directory:
+  - **Linux**: `~/.local/state/term2/log/conversations/`
+  - **macOS**: `~/Library/Logs/term2/conversations/`
+- **Resume Last Session**: Run `term2 --resume` to reload the most recent conversation.
+- **Resume Specific Session**: Use `term2 --resume <session-uuid>` to load a specific conversation history.
+- **Listing Sessions**: You can inspect saved sessions and their UUIDs in the log or state files.
 
 ## Safety Features
 

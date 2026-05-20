@@ -51,8 +51,8 @@ export function getEnvInfo(
   const now = new Date().toISOString().slice(0, 10);
 
   if (lite) {
-    // Minimal env info for lite mode - no cwd listing
-    return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; date: ${now}`;
+    // Minimal env info for lite mode
+    return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd: ${cwd}; date: ${now}`;
   }
 
   // For remote sessions, we might not be able to list top-level entries efficiently or at all easily here synchronously

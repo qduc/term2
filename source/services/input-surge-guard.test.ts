@@ -18,6 +18,7 @@ test('collectInputSurgeStats counts messages and duplicated tool-call signatures
 
   t.deepEqual(stats, {
     messageCount: 6,
+    totalSerializedBytes: 281,
     duplicateToolCallSignatures: 2,
     maxDuplicateToolCallSignatureCount: 2,
   });
@@ -31,6 +32,16 @@ test('InputSurgeGuard blocks abrupt message-count growth from last successful in
 
   t.is(decision.action, 'block');
   t.true(decision.reason?.includes('65 to 863'));
+});
+
+test('InputSurgeGuard blocks abrupt serialized byte growth from last successful input', (t) => {
+  const guard = new InputSurgeGuard();
+  guard.recordSuccessfulInput([{ role: 'user', type: 'message', content: 'small' }]);
+
+  const decision = guard.inspect([{ type: 'function_call_result', callId: 'call-1', output: 'x'.repeat(150_000) }]);
+
+  t.is(decision.action, 'block');
+  t.true(decision.reason?.includes('input size jumped'));
 });
 
 test('InputSurgeGuard allows large absolute growth below the minimum surge threshold', (t) => {

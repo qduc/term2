@@ -37,6 +37,18 @@ test('trims output when exceeding character limit', (t) => {
   t.true(result.length < output.length);
 });
 
+test('trims few-line output with one very long line by character limit', (t) => {
+  const lines = Array.from({ length: 21 }, (_, index) =>
+    index === 18 ? `huge:${'a'.repeat(15000)}` : `line ${index + 1}`,
+  );
+  const output = lines.join('\n');
+  const result = trimOutput(output, 50, 1000);
+
+  t.true(result.includes('characters trimmed'));
+  t.true(result.length < 2000);
+  t.false(result.includes('a'.repeat(5000)));
+});
+
 test('respects maxLines override parameter', (t) => {
   const lines = [];
   for (let i = 1; i <= 100; i++) {

@@ -18,6 +18,15 @@ export const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
 /** Current trim configuration (can be modified at runtime) */
 let trimConfig: OutputTrimConfig = { ...DEFAULT_TRIM_CONFIG };
 
+function trimByCharacters(output: string, maxCharacters: number, note?: string): string {
+  const keepChars = Math.floor(maxCharacters * 0.4);
+  const head = output.slice(0, keepChars);
+  const tail = output.slice(-keepChars);
+  const trimmedChars = output.length - keepChars * 2;
+  const noteSuffix = note ? `; ${note}` : '';
+  return `${head}\n... [${trimmedChars} characters trimmed${noteSuffix}] ...\n${tail}`;
+}
+
 /**
  * Set the output trim configuration.
  */
@@ -58,11 +67,7 @@ export function trimOutput(output: string, maxLines?: number, maxCharacters?: nu
 
   // Special case: single very long line that exceeds character limit
   if (lines.length === 1 && exceedsCharacters) {
-    const keepChars = Math.floor(effectiveMaxCharacters * 0.4);
-    const head = output.slice(0, keepChars);
-    const tail = output.slice(-keepChars);
-    const trimmedChars = output.length - keepChars * 2;
-    return `${head}\n... [${trimmedChars} characters trimmed] ...\n${tail}`;
+    return trimByCharacters(output, effectiveMaxCharacters);
   }
 
   // Calculate how many lines to keep at beginning and end
@@ -92,5 +97,11 @@ export function trimOutput(output: string, maxLines?: number, maxCharacters?: nu
 
   const trimMessage = `\n... [${trimmedCount} lines trimmed] ...\n`;
 
-  return headLines.join('\n') + trimMessage + tailLines.join('\n');
+  const lineTrimmedOutput = headLines.join('\n') + trimMessage + tailLines.join('\n');
+
+  if (lineTrimmedOutput.length > effectiveMaxCharacters) {
+    return trimByCharacters(lineTrimmedOutput, effectiveMaxCharacters, `${trimmedCount} lines trimmed`);
+  }
+
+  return lineTrimmedOutput;
 }

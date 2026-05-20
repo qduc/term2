@@ -1,5 +1,6 @@
 export interface InputSurgeStats {
   messageCount: number;
+  totalSerializedBytes: number;
   duplicateToolCallSignatures: number;
   maxDuplicateToolCallSignatureCount: number;
 }
@@ -7,6 +8,8 @@ export interface InputSurgeStats {
 export interface InputSurgeGuardConfig {
   maxMessageGrowthRatio: number;
   minMessageGrowthForRatioBlock: number;
+  maxSerializedByteGrowthRatio: number;
+  minSerializedByteGrowthForRatioBlock: number;
   maxDuplicateToolCallSignatureCount: number;
   minDuplicateToolCallSignaturesForBlock: number;
 }
@@ -21,6 +24,8 @@ export interface InputSurgeDecision {
 export const DEFAULT_INPUT_SURGE_GUARD_CONFIG: InputSurgeGuardConfig = {
   maxMessageGrowthRatio: 3,
   minMessageGrowthForRatioBlock: 100,
+  maxSerializedByteGrowthRatio: 5,
+  minSerializedByteGrowthForRatioBlock: 100_000,
   maxDuplicateToolCallSignatureCount: 4,
   minDuplicateToolCallSignaturesForBlock: 20,
 };
@@ -44,6 +49,15 @@ const toolCallSignature = (item: unknown): string | null => {
   return `${type}:${callId}`;
 };
 
+const serializedBytes = (input: unknown): number => {
+  try {
+    const serialized = JSON.stringify(input);
+    return Buffer.byteLength(serialized ?? String(input));
+  } catch {
+    return Buffer.byteLength(String(input));
+  }
+};
+
 export const collectInputSurgeStats = (input: unknown): InputSurgeStats => {
   const items = Array.isArray(input) ? input : [input];
   const toolCallCounts = new Map<string, number>();
@@ -60,6 +74,7 @@ export const collectInputSurgeStats = (input: unknown): InputSurgeStats => {
 
   return {
     messageCount: items.length,
+    totalSerializedBytes: serializedBytes(input),
     duplicateToolCallSignatures: duplicateCounts.length,
     maxDuplicateToolCallSignatureCount: duplicateCounts.length > 0 ? Math.max(...duplicateCounts) : 0,
   };
@@ -89,6 +104,20 @@ export class InputSurgeGuard {
       return {
         action: 'block',
         reason: `Outgoing message count jumped from ${previousStats.messageCount} to ${stats.messageCount}.`,
+        stats,
+        previousStats,
+      };
+    }
+
+    if (
+      previousStats &&
+      stats.totalSerializedBytes - previousStats.totalSerializedBytes >=
+        this.#config.minSerializedByteGrowthForRatioBlock &&
+      stats.totalSerializedBytes > previousStats.totalSerializedBytes * this.#config.maxSerializedByteGrowthRatio
+    ) {
+      return {
+        action: 'block',
+        reason: `Outgoing input size jumped from ${previousStats.totalSerializedBytes} to ${stats.totalSerializedBytes} bytes.`,
         stats,
         previousStats,
       };

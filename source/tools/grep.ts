@@ -42,6 +42,78 @@ import { executeShellCommand } from '../utils/execute-shell.js';
 let hasRg: boolean | null = null;
 let hasRgRemote: boolean | null = null;
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
+}
+
+function globToRegExp(glob: string): RegExp {
+  let source = '';
+
+  for (let index = 0; index < glob.length; index += 1) {
+    const char = glob[index];
+    const next = glob[index + 1];
+
+    if (char === '*') {
+      if (next === '*') {
+        source += '.*';
+        index += 1;
+      } else {
+        source += '[^/]*';
+      }
+      continue;
+    }
+
+    if (char === '?') {
+      source += '[^/]';
+      continue;
+    }
+
+    source += escapeRegExp(char);
+  }
+
+  return new RegExp(`^${source}$`);
+}
+
+function matchesFilePattern(filePath: string, filePattern: string): boolean {
+  const normalizedPath = filePath.replace(/\\/g, '/').replace(/^\.\//, '');
+  const normalizedPattern = filePattern.replace(/\\/g, '/').replace(/^\.\//, '');
+  const patternMatcher = globToRegExp(normalizedPattern);
+
+  if (patternMatcher.test(normalizedPath)) {
+    return true;
+  }
+
+  if (!normalizedPattern.includes('/')) {
+    const basename = normalizedPath.split('/').pop() ?? normalizedPath;
+    return patternMatcher.test(basename);
+  }
+
+  return false;
+}
+
+function filterGrepOutputByFilePattern(output: string, filePattern?: string): string {
+  if (!filePattern) {
+    return output;
+  }
+
+  return output
+    .split('\n')
+    .filter((line) => {
+      const firstColon = line.indexOf(':');
+      if (firstColon === -1) {
+        return true;
+      }
+
+      const secondColon = line.indexOf(':', firstColon + 1);
+      if (secondColon === -1) {
+        return true;
+      }
+
+      return matchesFilePattern(line.slice(0, firstColon), filePattern);
+    })
+    .join('\n');
+}
+
 async function checkRgAvailability(executionContext?: ExecutionContext): Promise<boolean> {
   const isRemote = executionContext?.isRemote() ?? false;
 
@@ -99,7 +171,7 @@ export const createGrepToolDefinition = (
         const args = ['rg', '--line-number', '--no-heading', '--color=never'];
         if (!case_sensitive) args.push('--ignore-case');
         if (no_ignore) args.push('--no-ignore');
-        if (file_pattern) args.push('-g', `'${file_pattern}'`);
+        if (file_pattern && no_ignore) args.push('-g', `'${file_pattern}'`);
         if (exclude_pattern) args.push('-g', `'!${exclude_pattern}'`);
 
         // Escape pattern
@@ -138,7 +210,9 @@ export const createGrepToolDefinition = (
         throw new Error(`Search failed: ${result.stderr.trim() || `exit code ${result.exitCode}`}`);
       }
 
-      const trimmed = result.stdout.trim();
+      const filteredStdout =
+        useRg && !no_ignore ? filterGrepOutputByFilePattern(result.stdout, file_pattern) : result.stdout;
+      const trimmed = filteredStdout.trim();
       const lineCount = trimmed ? trimmed.split('\n').length : 0;
       const outputTrimmed = trimOutput(trimmed, limit);
 

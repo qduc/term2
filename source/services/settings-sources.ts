@@ -40,7 +40,6 @@ const SETTINGS_SOURCE_KEYS = {
   app: {
     shellPath: 'app.shellPath',
     mentorMode: 'app.mentorMode',
-    editMode: 'app.editMode',
     liteMode: 'app.liteMode',
     planMode: 'app.planMode',
   },

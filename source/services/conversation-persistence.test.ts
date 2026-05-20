@@ -161,7 +161,6 @@ test.serial('loadConversation: preserves saved app mode settings', (t) => {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     appMode: {
-      editMode: false,
       liteMode: false,
       mentorMode: true,
       planMode: true,
@@ -175,7 +174,6 @@ test.serial('loadConversation: preserves saved app mode settings', (t) => {
   const loaded = persistenceModule.loadConversation(id);
 
   t.deepEqual(loaded?.appMode, {
-    editMode: false,
     liteMode: false,
     mentorMode: true,
     planMode: true,

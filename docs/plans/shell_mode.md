@@ -9,7 +9,7 @@ AI context when switching back to Ask mode.
 Key Behaviors
 
 - Shift+Tab in Lite mode: Toggle Ask ↔ Shell mode
-- Shift+Tab outside Lite mode: Toggle Edit mode (existing behavior)
+- Shift+Tab outside Lite mode: Toggle Standard mode (existing behavior)
 - Shell mode: Input executed directly as shell commands via child_process.exec()
 - Context injection: When returning to Ask mode, shell history auto-injected into conversation context (no
   confirmation)
@@ -33,7 +33,7 @@ export async function executeShellCommand(command: string, options?: {...}): Pro
 - Add state: isShellMode (boolean), shellHistory (array of {command, output, exitCode})
 - Modify Shift+Tab handler (lines 354-359):
 - If liteMode: toggle isShellMode
-- Else: toggle Edit mode (existing)
+- Else: toggle Standard mode (existing)
 - Modify handleSubmit (line 361+):
 - If isShellMode && liteMode: execute command directly, add to shellHistory, display result
 - On mode switch to Ask: inject history into conversation store, clear history

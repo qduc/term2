@@ -48,7 +48,7 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 2. `use-conversation.ts` hook sends it to `conversation-service.ts`
     3. Service calls the agent via `openai-agent-client.ts`, which selects a provider through the Provider Registry
 4. Agent response streams back in real-time with text, reasoning, and tool requests
-5. Tool requests are validated and paused for user approval before execution (except in edit mode for patches)
+5. Tool requests are validated and paused for user approval before execution (except in standard mode for patches)
 6. User approves/rejects via approval prompts
 7. Service executes the tool or continues streaming
 8. Final response appears in the message list
@@ -59,7 +59,7 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
     - **Tool Interceptor and Approval Model**: Tools run through centralized validation and approval flow.
 - **Tool Hallucination Retry Logic**: Automatic retry with partial stream recovery when the agent hallucinates tool responses (MAX_HALLUCINATION_RETRIES = 2).
 - **Session & Streaming Model**: Conversation sessions stream deltas, capture reasoning separately, and surface tool calls.
-- **App Mode Support**: default, lite, mentor, edit, and plan modes are supported. Lite mode is minimal-context; edit mode auto-approves apply_patch operations within workspace; plan mode is a cache-stable read-only mode for researching and proposing step-by-step implementation plans.
+- **App Mode Support**: standard, lite, mentor, and plan modes are supported. Lite mode is minimal-context; standard mode auto-approves apply_patch operations within workspace; plan mode is a cache-stable read-only mode for researching and proposing step-by-step implementation plans.
 - **SSH Mode**: Execution of commands and file operations on remote servers over SSH.
 - **Subagent Manager**: Equips the agent with `run_subagent` to delegate tasks to specialized synchronous subagents (`explorer`, `worker`, `researcher`, `mentor`) to conserve context.
 - **Conversation State Persistence**: Automatic and manual session persistence, allowing resuming a conversation with `--resume`.
@@ -105,7 +105,7 @@ npx prettier --write <file1, file2, file3> # Fix formatting issues in files you 
 ## Key Concepts
 
 - **Tool Interceptors**: Centralized validation and approval flow.
-- **Tool Approval**: Pauses for user approval (unless in edit mode).
+- **Tool Approval**: Pauses for user approval (unless in standard mode).
 - **Subagents**: Synchronous workers (`explorer`, `worker`, `researcher`, `mentor`) to isolate task execution.
 - **Plan Mode**: Strict read-only mode that blocks file modifications and state-changing shell commands.
 - **Undo/Rewind**: State rewinding capability.

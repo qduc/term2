@@ -44,28 +44,25 @@ function createTool(
   });
 }
 
-test.serial(
-  'needsApproval auto-approves creation when search_content is empty and file is missing in edit mode',
-  async (t) => {
-    await withTempDir(async () => {
-      const tool = createTool(createMockSettingsService({ app: { editMode: true } }));
-      const filePath = 'new-file.txt';
+test.serial('needsApproval auto-approves creation when search_content is empty and file is missing', async (t) => {
+  await withTempDir(async () => {
+    const tool = createTool(createMockSettingsService());
+    const filePath = 'new-file.txt';
 
-      const result = await tool.needsApproval({
-        path: filePath,
-        search_content: '',
-        replace_content: 'initial content',
-        replace_all: false,
-      });
-
-      t.false(result);
+    const result = await tool.needsApproval({
+      path: filePath,
+      search_content: '',
+      replace_content: 'initial content',
+      replace_all: false,
     });
-  },
-);
 
-test.serial('needsApproval auto-approves a unique exact match in edit mode', async (t) => {
+    t.false(result);
+  });
+});
+
+test.serial('needsApproval auto-approves a unique exact match', async (t) => {
   await withTempDir(async (dir) => {
-    const tool = createTool(createMockSettingsService({ app: { editMode: true } }));
+    const tool = createTool(createMockSettingsService());
     const filePath = 'sample.txt';
     const absPath = path.join(dir, filePath);
     await fs.writeFile(absPath, 'hello world');
@@ -83,7 +80,7 @@ test.serial('needsApproval auto-approves a unique exact match in edit mode', asy
 
 test.serial('needsApproval requires approval when multiple exact matches and replace_all is false', async (t) => {
   await withTempDir(async (dir) => {
-    const tool = createTool(createMockSettingsService({ app: { editMode: true } }));
+    const tool = createTool(createMockSettingsService());
     const filePath = 'sample.txt';
     const absPath = path.join(dir, filePath);
     await fs.writeFile(absPath, 'hello world hello');
@@ -1132,9 +1129,9 @@ test.serial('execute gap match works with relaxed whitespace matching in segment
   });
 });
 
-test.serial('needsApproval handles gap match in edit mode', async (t) => {
+test.serial('needsApproval handles gap match', async (t) => {
   await withTempDir(async (dir) => {
-    const tool = createTool(createMockSettingsService({ app: { editMode: true } }));
+    const tool = createTool(createMockSettingsService());
     const filePath = 'content.txt';
     const absPath = path.join(dir, filePath);
     await fs.writeFile(absPath, 'start\nmiddle\nend\n');
@@ -1146,7 +1143,7 @@ test.serial('needsApproval handles gap match in edit mode', async (t) => {
       replace_all: false,
     });
 
-    // In edit mode with a unique gap match, should auto-approve
+    // In standard mode with a unique gap match, should auto-approve
     t.false(result);
   });
 });

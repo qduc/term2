@@ -16,7 +16,6 @@ export interface SavedMessage {
 
 export interface SavedAppMode {
   mentorMode: boolean;
-  editMode: boolean;
   liteMode: boolean;
   planMode: boolean;
 }

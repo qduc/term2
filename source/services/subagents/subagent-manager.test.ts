@@ -519,7 +519,7 @@ test.serial('worker in-boundary write is auto-approved (boundary is the grant)',
 
   // The writeBoundary is the worker's permission grant: an in-boundary write
   // requires no interactive approval (there is no foreground approval channel
-  // for a subagent running inside a blocked parent tool call). Edit mode is off
+  // for a subagent running inside a blocked parent tool call). Standard mode is off
   // but the write still does not need approval.
   const inBoundaryNeedsApproval = await createFile.needsApproval({}, { path: 'a.ts', content: 'x' });
   t.is(inBoundaryNeedsApproval, false);

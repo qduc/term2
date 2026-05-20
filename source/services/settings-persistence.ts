@@ -148,7 +148,7 @@ export function stripSensitiveSettings(settings: SettingsData): Partial<Settings
   // Remove sensitive app settings
   if (cleaned.app) {
     delete cleaned.app.shellPath;
-    // mentorMode and editMode are persisted so they survive across sessions
+    // mentorMode and planMode are persisted so they survive across sessions
   }
 
   return cleaned;

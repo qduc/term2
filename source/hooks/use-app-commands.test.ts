@@ -203,59 +203,7 @@ const TestHookWrapper = ({
   return null;
 };
 
-test('useAppCommands togglePlanMode handles mutual exclusion', (t) => {
-  const settings = new Map<string, any>();
-  let hookResult: any;
-
-  render(
-    React.createElement(TestHookWrapper, {
-      settings,
-      onHookResult: (res) => {
-        hookResult = res;
-      },
-    }),
-  );
-
-  // Set editMode to true initially
-  settings.set('app.editMode', true);
-
-  // Toggle planMode ON
-  hookResult.togglePlanMode();
-
-  t.true(settings.get('app.planMode'));
-  t.false(settings.get('app.editMode')); // editMode should be toggled off due to mutual exclusion
-});
-
-test('useAppCommands cycleAppModes cycles Default -> Edit -> Plan -> Default', (t) => {
-  const settings = new Map<string, any>();
-  let hookResult: any;
-
-  render(
-    React.createElement(TestHookWrapper, {
-      settings,
-      onHookResult: (res) => {
-        hookResult = res;
-      },
-    }),
-  );
-
-  // Default -> Edit
-  hookResult.cycleAppModes();
-  t.true(settings.get('app.editMode'));
-  t.falsy(settings.get('app.planMode'));
-
-  // Edit -> Plan
-  hookResult.cycleAppModes();
-  t.falsy(settings.get('app.editMode'));
-  t.true(settings.get('app.planMode'));
-
-  // Plan -> Default
-  hookResult.cycleAppModes();
-  t.falsy(settings.get('app.editMode'));
-  t.falsy(settings.get('app.planMode'));
-});
-
-test('useAppCommands cycleAppModes Default -> Edit does not apply app.planMode', (t) => {
+test('useAppCommands togglePlanMode toggles plan mode', (t) => {
   const settings = new Map<string, any>();
   const applied: string[] = [];
   let hookResult: any;
@@ -266,14 +214,49 @@ test('useAppCommands cycleAppModes Default -> Edit does not apply app.planMode',
       onHookResult: (res) => {
         hookResult = res;
       },
-      onApply: (key: string) => applied.push(key),
+      onApply: (key: string, value: any) => {
+        applied.push(key);
+        settings.set(key, value);
+      },
     }),
   );
 
-  // Default -> Edit: plan mode never changes, so no plan-mode notice should be queued
-  hookResult.cycleAppModes();
+  // Toggle planMode ON
+  hookResult.togglePlanMode();
+  t.true(settings.get('app.planMode'));
+  t.true(applied.includes('app.planMode'));
 
-  t.true(settings.get('app.editMode'));
-  t.false(applied.includes('app.planMode'));
-  t.true(applied.includes('app.editMode'));
+  // Toggle planMode OFF
+  hookResult.togglePlanMode();
+  t.false(settings.get('app.planMode'));
+});
+
+test('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard', (t) => {
+  const settings = new Map<string, any>();
+  const applied: string[] = [];
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+      onApply: (key: string, value: any) => {
+        applied.push(key);
+        settings.set(key, value);
+      },
+    }),
+  );
+
+  // Starts in Standard (planMode false)
+  t.falsy(settings.get('app.planMode'));
+
+  // Standard -> Plan
+  hookResult.cycleAppModes();
+  t.true(settings.get('app.planMode'));
+
+  // Plan -> Standard
+  hookResult.cycleAppModes();
+  t.false(settings.get('app.planMode'));
 });

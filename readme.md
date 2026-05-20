@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 
 ## Features
 
-- 🎭 **Four Operating Modes** - Default (full-power), Lite (fast & safe), Mentor (expert model advice), and Plan (read-only research/implementation drafting)
+- 🎭 **Four Operating Modes** - Standard (full-power, auto-approves patches), Lite (fast & safe), Mentor (expert model advice), and Plan (read-only research/implementation drafting)
 - 🌍 **Open Source** - MIT licensed, hackable, auditable, community-driven
 - 🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, OpenAI-compatible APIs, and Vercel AI SDK providers
 - 🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
@@ -30,7 +30,7 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 - 🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
 - 🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
 - 🤖 **Non-Interactive Mode** - Run commands from the CLI without starting the full UI
-- ✏️ **Edit Mode** - Press `Shift+Tab` to auto-approve file edits in your workspace for faster development
+- ✏️ **Standard Mode** - Auto-approves file edits in your workspace for faster development (active by default)
 - 🛡️ **Smart Shell Auto-Approval** - A hybrid local-heuristic + LLM-based safety evaluator that auto-approves safe commands, eliminating prompt fatigue while strictly blocking risky ones (with detailed reasoning explanations)
 - 🖼️ **Image Pasting** - Paste images from your clipboard directly into the terminal for vision-model analysis
 - 📈 **Real-time Token Usage** - Live token consumption displayed during streaming
@@ -79,7 +79,7 @@ export OPENAI_API_KEY="your-api-key-here"
 Start the assistant:
 
 ```bash
-term2              # Start in default mode (full capabilities)
+term2              # Start in standard mode (full capabilities, auto-approves patches)
 term2 --lite       # Start in lite mode (fast, read-only)
 ```
 
@@ -87,7 +87,7 @@ Then simply chat with the AI! Type your question or request, press Enter, and th
 
 **New to term2?**
 
-- Working on a codebase/project? Use default mode: `term2`
+- Working on a codebase/project? Use standard mode: `term2`
 - Just need general terminal help? Use lite mode: `term2 --lite`
 - Tackling a complex problem? Enable mentor mode with `/mentor` command
 
@@ -168,21 +168,20 @@ term2 offers multiple operating modes tailored to different workflows.
 
 | Mode        | Toggle / Start with | Best for                             | Tools Available      | Context       |
 | ----------- | ------------------- | ------------------------------------ | -------------------- | ------------- |
-| **Default** | `term2`             | Codebase work & development          | All editing tools    | Full codebase |
-| **Edit**    | `Shift+Tab`         | Rapid file editing and scripting     | Auto-approves patches| Full codebase |
+| **Standard**| `term2`             | Codebase work & development          | Auto-approves patches| Full codebase |
 | **Plan**    | `/plan`             | Researching and designing plans      | Read-only tools      | Full codebase |
 | **Lite**    | `term2 --lite`      | General terminal tasks (no codebase) | Read-only tools      | None          |
 | **Mentor**  | `/mentor`           | Complex codebase problems            | All + mentor tool    | Full codebase |
 
-### Edit Mode - Rapid Development
+### Standard Mode - Rapid Development
 
 **The problem it solves:** Prompting for approval on every single file modification can slow down fast-paced development.
 
-Edit Mode automatically approves `apply_patch` operations within the workspace, allowing the assistant to write and edit code at high speed. Destructive operations (like out-of-workspace writes or terminal shell commands) still require explicit confirmation for safety.
+Standard Mode automatically approves `apply_patch` operations within the workspace, allowing the assistant to write and edit code at high speed. Destructive operations (like out-of-workspace writes or terminal shell commands) still require explicit confirmation for safety.
 
 - ⚡ **High velocity** - Speeds up iterative coding cycles
 - 🛠️ **Workspace bounded** - Only auto-approves changes inside the active directory
-- 🔄 **Easy cycle** - Cycle in/out of Edit Mode by pressing `Shift+Tab`
+- 🔄 **Active by default** - Standard mode is the default mode when starting `term2` without flags; use `Shift+Tab` to cycle to Plan mode
 
 ### Plan Mode - Read-only Research & Strategy
 
@@ -393,9 +392,9 @@ ANSWER=$(term2 "is there any TODO in source/cli.tsx?")
 echo "The answer is: $ANSWER"
 ```
 
-### Default Mode vs Lite Mode
+### Standard Mode vs Lite Mode
 
-- When running **with** `--auto-approve`, term2 defaults to **Default Mode** (full codebase context).
+- When running **with** `--auto-approve`, term2 defaults to **Standard Mode** (full codebase context).
 - When running **without** `--auto-approve`, term2 defaults to **Lite Mode** (no codebase context, safe/fast).
 
 You can always override this by passing `--lite` or running in a directory without a codebase.
@@ -843,14 +842,14 @@ term2 --ssh user@host --lite
 
 ## Tips
 
-- **Choose the right mode** - Use lite mode for general terminal work (not codebase), default mode for codebase work, mentor mode for complex codebase problems (see "Operating Modes" section)
+- **Choose the right mode** - Use lite mode for general terminal work (not codebase), standard mode for codebase work, mentor mode for complex codebase problems (see "Operating Modes" section)
 - The assistant won't run dangerous commands without your approval
 - You can reject any command by choosing 'No' when prompted
 - Press Ctrl+C to exit the chat at any time
 - Use arrow keys to navigate through your command history
 - Be specific in your requests for better results
 - Use `/mentor` to get expert consultation on difficult architectural decisions
-- Use `Shift+Tab` to toggle edit mode for faster file editing workflows
+- Use `Shift+Tab` to toggle standard mode for faster file editing workflows
 - Use `/auto-approve` to enable LLM-based safety evaluation for faster shell command workflows
 - Paste images directly into the terminal when using vision-capable models
 - Use `--lite` flag when SSH'ing to servers for general system work without codebase context

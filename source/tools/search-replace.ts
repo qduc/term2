@@ -701,7 +701,6 @@ export function createSearchReplaceToolDefinition(deps: {
     approvalPresentation: getApprovalPresentationCapability('search_replace'),
     needsApproval: async (params) => {
       try {
-        const editMode = settingsService.get<boolean>('app.editMode');
         const operations = getSearchReplaceOperations(params);
         const cwd = executionContext?.getCwd() || process.cwd();
         if (operations.length > 1) {
@@ -713,7 +712,7 @@ export function createSearchReplaceToolDefinition(deps: {
               return false;
             }
           });
-          return !(editMode && allInsideCwd);
+          return !allInsideCwd;
         }
 
         const operation = operations[0];
@@ -738,7 +737,7 @@ export function createSearchReplaceToolDefinition(deps: {
             loggingService.debug('search_replace validation: creating new file because search_content is empty', {
               path: filePath,
             });
-            if (editMode && insideCwd) {
+            if (insideCwd) {
               return false;
             }
             return true;
@@ -799,7 +798,7 @@ export function createSearchReplaceToolDefinition(deps: {
             count: matchInfo.count,
             replace_all,
           });
-          if (editMode && insideCwd) {
+          if (insideCwd) {
             return false;
           }
           return true;
@@ -860,7 +859,7 @@ export function createSearchReplaceToolDefinition(deps: {
             count: matchInfo.count,
             replace_all,
           });
-          if (editMode && insideCwd) {
+          if (insideCwd) {
             return false;
           }
           return true;

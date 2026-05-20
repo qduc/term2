@@ -245,7 +245,7 @@ const App: FC<AppProps> = ({
     setWaitingForRejectionReason(true);
   }, [setWaitingForRejectionReason]);
 
-  // Toggle edit mode with Shift+Tab for quick approval profile switching
+  // Switch between Standard and Plan modes with Shift+Tab
   useInput((input: string, key) => {
     const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
     if (!isShiftTab) return;

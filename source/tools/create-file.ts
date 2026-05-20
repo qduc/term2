@@ -49,14 +49,13 @@ export function createCreateFileToolDefinition(deps: {
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {
       try {
-        const editMode = settingsService.get<boolean>('app.editMode');
         const { path: filePath } = params;
         const cwd = executionContext?.getCwd() || process.cwd();
         const targetPath = resolveWorkspacePath(filePath, cwd);
         const insideCwd = targetPath.startsWith(cwd + path.sep);
 
-        // In edit mode, we auto-approve file creation within the workspace
-        if (editMode && insideCwd) {
+        // We auto-approve file creation within the workspace by default
+        if (insideCwd) {
           return false;
         }
         return true;

@@ -40,9 +40,9 @@ function createTool(settingsService = createMockSettingsService()) {
   });
 }
 
-test.serial('needsApproval auto-approves creation in edit mode when inside workspace', async (t) => {
+test.serial('needsApproval auto-approves creation when inside workspace', async (t) => {
   await withTempDir(async () => {
-    const tool = createTool(createMockSettingsService({ app: { editMode: true } }));
+    const tool = createTool(createMockSettingsService());
     const filePath = 'new-file.txt';
 
     const result = await tool.needsApproval({
@@ -51,20 +51,6 @@ test.serial('needsApproval auto-approves creation in edit mode when inside works
     });
 
     t.false(result);
-  });
-});
-
-test.serial('needsApproval requires approval when not in edit mode', async (t) => {
-  await withTempDir(async () => {
-    const tool = createTool(createMockSettingsService({ app: { editMode: false } }));
-    const filePath = 'new-file.txt';
-
-    const result = await tool.needsApproval({
-      path: filePath,
-      content: 'initial content',
-    });
-
-    t.true(result);
   });
 });
 
@@ -156,7 +142,7 @@ test.serial('formatCommandMessage returns correct base message structure', async
 
 test.serial('needsApproval requires approval and handles error when path is outside workspace', async (t) => {
   await withTempDir(async () => {
-    const tool = createTool(createMockSettingsService({ app: { editMode: true } }));
+    const tool = createTool(createMockSettingsService());
     const filePath = '../outside-file.txt';
 
     const result = await tool.needsApproval({

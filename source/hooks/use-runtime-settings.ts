@@ -66,12 +66,6 @@ export const useRuntimeSettings = ({
         return;
       }
 
-      if (key === 'app.editMode') {
-        // Edit mode doesn't affect the agent, just the approval flow
-        // No need to re-initialize
-        return;
-      }
-
       if (key === 'app.liteMode') {
         // Re-initialize the agent to use the new mode's prompt and tools
         const currentModel = settingsService.get<string>('agent.model');

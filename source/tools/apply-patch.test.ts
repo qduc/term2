@@ -188,9 +188,9 @@ test.serial('needsApproval: requires approval for outside workspace', async (t) 
   });
 });
 
-test.serial('needsApproval: auto-approves in edit mode for create/update inside cwd', async (t) => {
+test.serial('needsApproval: auto-approves for create/update inside cwd', async (t) => {
   await withTempDir(async () => {
-    const tool = createTool(createMockSettingsService({ app: { editMode: true } }));
+    const tool = createTool(createMockSettingsService());
 
     const result = await tool.needsApproval({
       type: 'create_file',
@@ -198,19 +198,6 @@ test.serial('needsApproval: auto-approves in edit mode for create/update inside 
       diff: '@@ -0,0 +1 @@\n+content',
     });
     t.false(result);
-  });
-});
-
-test.serial('needsApproval: requires approval in default mode', async (t) => {
-  await withTempDir(async () => {
-    const tool = createTool(createMockSettingsService({ app: { mode: 'default' } }));
-
-    const result = await tool.needsApproval({
-      type: 'create_file',
-      path: 'inside.txt',
-      diff: '@@ -0,0 +1 @@\n+content',
-    });
-    t.true(result);
   });
 });
 

@@ -221,7 +221,6 @@ if (resumedConversation) {
     cliOverrides.app = {
       ...cliOverrides.app,
       mentorMode: resumedConversation.appMode.mentorMode,
-      editMode: resumedConversation.appMode.editMode,
       liteMode: resumedConversation.appMode.liteMode,
       planMode: resumedConversation.appMode.planMode,
     };
@@ -265,16 +264,10 @@ const settings = new SettingsService({
 });
 
 // Normalize settings at startup to resolve mutual exclusions
-const startupEditMode = settings.get<boolean>('app.editMode');
 const startupPlanMode = settings.get<boolean>('app.planMode');
 const startupLiteMode = settings.get<boolean>('app.liteMode');
 
-if (startupEditMode && startupPlanMode) {
-  // If both are true, disable editMode to prioritize planMode/default safety
-  settings.set('app.editMode', false);
-}
 if (startupLiteMode) {
-  if (startupEditMode) settings.set('app.editMode', false);
   if (startupPlanMode) settings.set('app.planMode', false);
 }
 
@@ -379,19 +372,13 @@ if (sshFlag) {
   executionContext = new ExecutionContext();
 }
 
-// Enforce mutual exclusion between lite mode and edit/mentor modes at startup
+// Enforce mutual exclusion between lite mode and mentor mode at startup
 const liteMode = settings.get<boolean>('app.liteMode');
-const editMode = settings.get<boolean>('app.editMode');
 const mentorMode = settings.get<boolean>('app.mentorMode');
 
-if (liteMode && (editMode || mentorMode)) {
-  // Lite mode takes precedence, disable edit/mentor modes
-  if (editMode) {
-    settings.set('app.editMode', false);
-  }
-  if (mentorMode) {
-    settings.set('app.mentorMode', false);
-  }
+if (liteMode && mentorMode) {
+  // Lite mode takes precedence, disable mentor mode
+  settings.set('app.mentorMode', false);
 }
 
 const history = new HistoryService({
@@ -496,7 +483,6 @@ const saveAndPrintResume = async (messages: Message[]) => {
     projectPath: executionContext.getCwd(),
     appMode: {
       mentorMode: settings.get<boolean>('app.mentorMode') ?? false,
-      editMode: settings.get<boolean>('app.editMode') ?? false,
       liteMode: settings.get<boolean>('app.liteMode') ?? false,
       planMode: settings.get<boolean>('app.planMode') ?? false,
     },

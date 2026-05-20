@@ -183,7 +183,6 @@ export function createApplyPatchToolDefinition(deps: {
     parameters: applyPatchParametersSchema,
     needsApproval: async (params) => {
       try {
-        const editMode = settingsService.get<boolean>('app.editMode');
         const workspaceRoot = executionContext?.getCwd() || process.cwd();
         const sshService = executionContext?.getSSHService();
         const isRemote = executionContext?.isRemote() && !!sshService;
@@ -198,7 +197,6 @@ export function createApplyPatchToolDefinition(deps: {
           } catch (e: any) {
             // Outside workspace => require approval
             loggingService.security('apply_patch needsApproval: outside workspace', {
-              editMode,
               type,
               path: filePath,
               error: e?.message || String(e),
@@ -269,9 +267,8 @@ export function createApplyPatchToolDefinition(deps: {
 
           const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
 
-          if (!editMode || !insideCwd || (type !== 'create_file' && type !== 'update_file')) {
+          if (!insideCwd || (type !== 'create_file' && type !== 'update_file')) {
             loggingService.security('apply_patch needsApproval: approval required', {
-              editMode,
               type,
               path: filePath,
               targetPath,
@@ -281,8 +278,7 @@ export function createApplyPatchToolDefinition(deps: {
           }
         }
 
-        loggingService.security('apply_patch needsApproval: auto-approved in edit mode', {
-          editMode,
+        loggingService.security('apply_patch needsApproval: auto-approved in standard mode', {
           operationCount: operations.length,
         });
         return false;

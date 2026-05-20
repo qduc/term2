@@ -15,7 +15,6 @@ interface StatusBarProps {
 
 const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, sshInfo, lastUsage }) => {
   const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
-  const editMode = useSetting<boolean>(settingsService, 'app.editMode') ?? false;
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const planMode = useSetting<boolean>(settingsService, 'app.planMode') ?? false;
   const model = useSetting<string>(settingsService, 'agent.model');
@@ -64,11 +63,6 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
                 </Text>
               </>
             )}
-            {editMode && (
-              <Text color={glow} bold>
-                Edit
-              </Text>
-            )}
             {mentorMode && (
               <Text color="#a78bfa" bold>
                 Mentor
@@ -79,7 +73,7 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
                 Plan
               </Text>
             )}
-            {!editMode && !mentorMode && !liteMode && !planMode && <Text color={slate}>Default</Text>}
+            {!mentorMode && !liteMode && !planMode && <Text color={slate}>Standard</Text>}
           </Box>
 
           {model && (

@@ -137,8 +137,6 @@ function createNormalizedReasoningStream(
               const msg = `[DEBUG_MALFORMED_RESPONSE] Intercepted malformed response chunk: ${chunkStr}`;
               if (loggingService) {
                 loggingService.warn(msg);
-              } else {
-                console.warn(msg);
               }
             }
 

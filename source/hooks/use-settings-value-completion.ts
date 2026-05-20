@@ -63,7 +63,6 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'false', description: 'Use standard service tier' },
   ],
   'app.mentorMode': [{ value: 'true' }, { value: 'false' }],
-  'app.editMode': [{ value: 'true' }, { value: 'false' }],
   'app.liteMode': [{ value: 'true' }, { value: 'false' }],
   'app.planMode': [{ value: 'true' }, { value: 'false' }],
   'agent.provider': PROVIDER_VALUE_SUGGESTIONS,

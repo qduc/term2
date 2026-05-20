@@ -11,7 +11,6 @@ interface BannerProps {
 
 const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
   const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
-  const editMode = useSetting<boolean>(settingsService, 'app.editMode') ?? false;
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const model = useSetting<string>(settingsService, 'agent.model');
   const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
@@ -58,22 +57,16 @@ const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
               </Text>
             )
           )}
-          {editMode && (
-            <Text backgroundColor="#1d4ed8" color="white" bold>
-              {' '}
-              EDIT{' '}
-            </Text>
-          )}
           {mentorMode && (
             <Text backgroundColor="#7c3aed" color="white" bold>
               {' '}
               MENTOR{' '}
             </Text>
           )}
-          {!editMode && !mentorMode && !liteMode && (
+          {!mentorMode && !liteMode && (
             <Text backgroundColor="#0f766e" color="white" bold>
               {' '}
-              DEFAULT{' '}
+              STANDARD{' '}
             </Text>
           )}
         </Box>

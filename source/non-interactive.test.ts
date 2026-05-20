@@ -43,7 +43,36 @@ test('streams text_delta events to stdout and appends newline', async (t) => {
 
   t.is(exitCode, 0);
   t.is(stdout.getOutput(), 'Hello world\n');
-  t.is(stderr.getOutput(), '');
+  t.is(stderr.getOutput(), 'Hello world\n');
+});
+
+test('streams reasoning_delta events to stderr only', async (t) => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+
+  const session: any = {
+    async sendMessage(_prompt: string, { onEvent }: any) {
+      onEvent?.({ type: 'reasoning_delta', delta: 'Thinking' });
+      onEvent?.({ type: 'reasoning_delta', delta: ' hard' });
+      onEvent?.({ type: 'text_delta', delta: 'OK' });
+      return { type: 'response', finalText: 'OK', commandMessages: [] };
+    },
+    async handleApprovalDecision() {
+      t.fail('handleApprovalDecision should not be called');
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'hi',
+    autoApprove: false,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  t.is(exitCode, 0);
+  t.is(stdout.getOutput(), 'OK\n');
+  t.is(stderr.getOutput(), 'Thinking hardOK\n');
 });
 
 test('returns exit code 1 on error event', async (t) => {
@@ -194,6 +223,7 @@ test('writes tool_started and command_message summaries to stderr only', async (
   t.true(err.includes('bash'));
   t.true(err.includes('command_message'));
   t.true(err.includes('ls'));
+  t.true(err.includes('OK\n'));
 });
 
 test('handles multiple consecutive approval rounds', async (t) => {

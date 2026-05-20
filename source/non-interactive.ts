@@ -66,6 +66,12 @@ export async function runWithSession(session: ConversationSessionLike, config: N
   const onEvent = (event: ConversationEvent) => {
     if (event.type === 'text_delta') {
       stdout.write(event.delta);
+      stderr.write(event.delta);
+      return;
+    }
+
+    if (event.type === 'reasoning_delta') {
+      stderr.write(event.delta);
       return;
     }
 
@@ -162,6 +168,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
 
     if (result?.type === 'response') {
       stdout.write('\n');
+      stderr.write('\n');
       return 0;
     }
 

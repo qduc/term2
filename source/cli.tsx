@@ -393,6 +393,7 @@ if (hasPositionalPrompt) {
     autoApprove: cli.flags.autoApprove,
     agentClient,
     logger,
+    settingsService: settings,
   });
   process.exit(exitCode);
 }

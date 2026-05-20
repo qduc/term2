@@ -239,3 +239,169 @@ test('handles multiple consecutive approval rounds', async (t) => {
   t.is(exitCode, 0);
   t.is(approvals, 2);
 });
+
+test('with autoApprove=true: auto-approves GREEN commands without LLM check', async (t) => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const calls: any[] = [];
+
+  const session: any = {
+    async sendMessage(_prompt: string) {
+      return {
+        type: 'approval_required',
+        approval: {
+          agentName: 'CLI Agent',
+          toolName: 'bash',
+          argumentsText: 'ls -la',
+        },
+      };
+    },
+    async handleApprovalDecision(answer: string, rejectionReason?: string) {
+      calls.push({ answer, rejectionReason });
+      return { type: 'response', finalText: 'done', commandMessages: [] };
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'run',
+    autoApprove: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  t.is(exitCode, 0);
+  t.deepEqual(calls, [{ answer: 'y', rejectionReason: undefined }]);
+});
+
+test('with autoApprove=true: strictly rejects RED commands', async (t) => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const calls: any[] = [];
+
+  const session: any = {
+    async sendMessage(_prompt: string) {
+      return {
+        type: 'approval_required',
+        approval: {
+          agentName: 'CLI Agent',
+          toolName: 'bash',
+          argumentsText: 'rm -rf /',
+        },
+      };
+    },
+    async handleApprovalDecision(answer: string, rejectionReason?: string) {
+      calls.push({ answer, rejectionReason });
+      return { type: 'response', finalText: 'done', commandMessages: [] };
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'run',
+    autoApprove: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  t.is(exitCode, 0);
+  t.is(calls.length, 1);
+  t.is(calls[0].answer, 'n');
+  t.regex(calls[0].rejectionReason ?? '', /RED/);
+});
+
+test('with autoApprove=true: rejects YELLOW command if no auto-approve model configured', async (t) => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const calls: any[] = [];
+
+  const session: any = {
+    async sendMessage(_prompt: string) {
+      return {
+        type: 'approval_required',
+        approval: {
+          agentName: 'CLI Agent',
+          toolName: 'bash',
+          argumentsText: 'npm install',
+        },
+      };
+    },
+    async handleApprovalDecision(answer: string, rejectionReason?: string) {
+      calls.push({ answer, rejectionReason });
+      return { type: 'response', finalText: 'done', commandMessages: [] };
+    },
+  };
+
+  const settingsService: any = {
+    get(key: string) {
+      if (key === 'agent.autoApproveModel') return undefined;
+      return undefined;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'run',
+    autoApprove: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    settingsService,
+  });
+
+  t.is(exitCode, 0);
+  t.is(calls.length, 1);
+  t.is(calls[0].answer, 'n');
+  t.regex(calls[0].rejectionReason ?? '', /YELLOW/);
+});
+
+test('with autoApprove=true: uses LLM to evaluate YELLOW commands', async (t) => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const calls: any[] = [];
+
+  const session: any = {
+    async sendMessage(_prompt: string) {
+      return {
+        type: 'approval_required',
+        approval: {
+          agentName: 'CLI Agent',
+          toolName: 'bash',
+          argumentsText: 'npm install',
+          callId: 'call-yellow-1',
+        },
+      };
+    },
+    async handleApprovalDecision(answer: string, rejectionReason?: string) {
+      calls.push({ answer, rejectionReason });
+      return { type: 'response', finalText: 'done', commandMessages: [] };
+    },
+    exportState() {
+      return { history: [] };
+    },
+  };
+
+  const settingsService: any = {
+    get(key: string) {
+      if (key === 'agent.autoApproveModel') return 'gpt-4o-mini';
+      return undefined;
+    },
+  };
+
+  let chatCalled = false;
+  const agentClient: any = {
+    async chat() {
+      chatCalled = true;
+      return '{ "results": [ { "approved": true, "reasoning": "Safe command" } ] }';
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'run',
+    autoApprove: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    settingsService,
+    agentClient,
+  });
+
+  t.is(exitCode, 0);
+  t.true(chatCalled);
+  t.deepEqual(calls, [{ answer: 'y', rejectionReason: undefined }]);
+});

@@ -10,6 +10,7 @@ import { getInkRenderOptions } from './utils/ink-render-options.js';
 import { OpenAIAgentClient } from './lib/openai-agent-client.js';
 import { ConversationService } from './services/conversation-service.js';
 import { SettingsService, buildEnvOverrides } from './services/settings-service.js';
+import { getAllProviders, getProviderIds } from './providers/index.js';
 import { LoggingService } from './services/logging-service.js';
 import { HistoryService } from './services/history-service.js';
 import { SSHService, SSHConfig } from './services/ssh-service.js';
@@ -67,6 +68,7 @@ const cli = meow(
         Options
           -m, --model       Override the default OpenAI model (e.g. gpt-4o)
           -r, --reasoning   Set the reasoning effort for reasoning models (e.g. medium, high)
+          -p, --provider    Override the default provider (e.g. openai, openrouter)
           -l, --lite        Start in lite mode (minimal context, session-only)
                     --auto-approve    Allow tool execution in non-interactive mode
           --ssh             Enable SSH mode (user@host)
@@ -88,6 +90,10 @@ const cli = meow(
       model: {
         type: 'string',
         alias: 'm',
+      },
+      provider: {
+        type: 'string',
+        alias: 'p',
       },
       reasoning: {
         type: 'string',
@@ -138,10 +144,30 @@ if (!resumeRequested && cli.input.length > 0 && !hasPositionalPrompt) {
 }
 
 const rawModelFlag = cli.flags.model;
+const rawProviderFlag = cli.flags.provider;
 const rawReasoningFlag = cli.flags.reasoning;
+
 const modelFlag = typeof rawModelFlag === 'string' && rawModelFlag.trim().length > 0 ? rawModelFlag.trim() : undefined;
+const providerFlag =
+  typeof rawProviderFlag === 'string' && rawProviderFlag.trim().length > 0 ? rawProviderFlag.trim() : undefined;
 const reasoningEffort =
   typeof rawReasoningFlag === 'string' && rawReasoningFlag.trim().length > 0 ? rawReasoningFlag.trim() : undefined;
+
+// Validate provider flag against available providers
+const validProviderIds = getProviderIds();
+const validatedProviderFlag: string | undefined =
+  providerFlag && validProviderIds.includes(providerFlag) ? providerFlag : undefined;
+
+if (providerFlag && !validatedProviderFlag) {
+  console.error(`Error: Unknown provider "${providerFlag}".`);
+  console.error('Available providers:');
+  const providers = getAllProviders();
+  for (const p of providers) {
+    console.error(`  - ${p.id}  (${p.label})`);
+  }
+  console.error('\nYou can configure custom providers in your settings.json file.');
+  process.exit(1);
+}
 
 const validReasoningEfforts = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', null] as const;
 type ModelSettingsReasoningEffort = (typeof validReasoningEfforts)[number];
@@ -204,6 +230,10 @@ if (resumedConversation) {
 
 if (modelFlag) {
   cliOverrides.agent = { ...cliOverrides.agent, model: modelFlag };
+}
+
+if (validatedProviderFlag) {
+  cliOverrides.agent = { ...cliOverrides.agent, provider: validatedProviderFlag };
 }
 
 if (validatedReasoningEffort) {

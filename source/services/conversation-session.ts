@@ -327,7 +327,7 @@ export class ConversationSession {
         const history = this.conversationStore.getHistory();
         const latestInput = history[history.length - 1] ?? text;
         const chainedInput = turn.images?.length ? latestInput : text;
-        streamInput = supportsChaining ? chainedInput : history;
+        streamInput = supportsChaining ? (typeof chainedInput === 'string' ? chainedInput : [chainedInput]) : history;
       }
 
       const surgeDecision = this.inputSurgeGuard.inspect(streamInput);

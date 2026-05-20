@@ -201,7 +201,7 @@ test('queueModeNotice inserts notice into stream input (non-chaining provider)',
   // the previously cached prefix stays byte-identical.
   t.is(passedHistory.length, 2);
   t.is(passedHistory[0].content, 'User msg');
-  t.deepEqual(passedHistory[1], { role: 'system', type: 'message', content: 'Mode change notice non-chaining' });
+  t.deepEqual(passedHistory[1], { role: 'user', type: 'message', content: 'Mode change notice non-chaining' });
 
   // The notice is persisted into the conversation store so it stays in history
   // on subsequent turns (a transient notice would break the prompt cache).
@@ -209,8 +209,7 @@ test('queueModeNotice inserts notice into stream input (non-chaining provider)',
   t.true(
     persisted.some(
       (item) =>
-        (item.rawItem ?? item).role === 'system' &&
-        (item.rawItem ?? item).content === 'Mode change notice non-chaining',
+        (item.rawItem ?? item).role === 'user' && (item.rawItem ?? item).content === 'Mode change notice non-chaining',
     ),
   );
 });
@@ -256,7 +255,9 @@ test('queueModeNotice persists append-only so the cached prefix only grows (non-
   t.deepEqual(turn3Input.slice(0, turn2Input.length), turn2Input);
 
   // The notice stays in history at a stable position across later turns.
-  const noticeIdx = turn3Input.findIndex((i) => (i.rawItem ?? i).role === 'system');
+  const noticeIdx = turn3Input.findIndex(
+    (i) => (i.rawItem ?? i).role === 'user' && (i.rawItem ?? i).content === 'Plan Mode toggled OFF',
+  );
   t.true(noticeIdx >= 0);
   t.is((turn3Input[noticeIdx].rawItem ?? turn3Input[noticeIdx]).content, 'Plan Mode toggled OFF');
 });

@@ -1009,3 +1009,51 @@ test('run() throws AbortError when the stream is cancelled/aborted', async (t) =
     { name: 'AbortError' },
   );
 });
+
+test('run() with image attachment does not throw when supportsChaining is true', async (t) => {
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply' }]);
+  stream.finalOutput = 'Reply';
+
+  let receivedInput;
+  const mockClient = {
+    async startStream(input) {
+      receivedInput = input;
+      return stream;
+    },
+    getProvider() {
+      return 'openai';
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const turn = {
+    text: 'describe this image',
+    images: [
+      {
+        id: 'img1',
+        data: 'base64data',
+        mimeType: 'image/png',
+        byteSize: 100,
+        displayNumber: 1,
+      },
+    ],
+  };
+
+  const emitted = [];
+  for await (const ev of session.run(turn)) {
+    emitted.push(ev);
+  }
+
+  // Under conversation chaining (supportsChaining is true), if it contains an image,
+  // it should send the input wrapped in an array, not as a single object, to avoid
+  // "originalInput is not iterable" when agents SDK processes it.
+  t.true(Array.isArray(receivedInput), 'Input should be wrapped in an array');
+  t.is(receivedInput.length, 1);
+  t.is(receivedInput[0].role, 'user');
+  t.is(receivedInput[0].content[0].type, 'input_text');
+  t.is(receivedInput[0].content[1].type, 'input_image');
+});

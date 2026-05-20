@@ -88,7 +88,7 @@ export class ConversationStore {
       return;
     }
     const item: AgentInputItem = {
-      role: 'system',
+      role: 'user',
       type: 'message',
       content: trimmed,
     };

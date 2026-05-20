@@ -592,7 +592,7 @@ test('addModeNotice() appends a persisted system message at the tail', (t) => {
   const history = store.getHistory();
   t.is(history.length, 2);
   t.is((history[0] as any).content, 'First');
-  t.is((history[1] as any).role, 'system');
+  t.is((history[1] as any).role, 'user');
   t.is((history[1] as any).content, 'Plan Mode ON');
 });
 

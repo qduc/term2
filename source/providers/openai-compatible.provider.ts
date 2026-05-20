@@ -2,7 +2,7 @@ import { Runner } from '@openai/agents';
 import { OpenAIProvider } from '@openai/agents-openai';
 import OpenAI from 'openai';
 import { randomBytes } from 'node:crypto';
-import type { ISettingsService } from '../services/service-interfaces.js';
+import type { ISettingsService, ILoggingService } from '../services/service-interfaces.js';
 import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
@@ -10,6 +10,7 @@ import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
 import { mergeAssistantMessages } from './ai-sdk-message-normalizer.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
 import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
+import { type ModelProvider, type Model } from '@openai/agents-core';
 
 export type CustomProviderConfig = {
   name: string;
@@ -33,6 +34,7 @@ const DEFAULT_ENV_API_KEYS: Record<string, string> = {
 export type CustomProviderRuntimeDeps = {
   defaultModel: string;
   fetch?: typeof fetch;
+  loggingService?: ILoggingService;
 };
 
 function applyLlamaCppReasoningControls(target: Record<string, any>, reasoningEffort: string | undefined): void {
@@ -88,7 +90,7 @@ function normalizeMessageField(target: any): void {
  * while many OpenAI-compatible providers return `reasoning_content` (the official
  * Chat Completions API field name).
  */
-function applyClientResponseNormalization(client: OpenAI): void {
+function applyClientResponseNormalization(client: OpenAI, loggingService?: ILoggingService): void {
   const originalCreate = client.chat.completions.create.bind(client.chat.completions) as (...args: any[]) => any;
 
   (client.chat.completions as any).create = async (...args: any[]) => {
@@ -106,14 +108,17 @@ function applyClientResponseNormalization(client: OpenAI): void {
 
     // Streaming (Stream<ChatCompletionChunk>)
     if (typeof result[Symbol.asyncIterator] === 'function') {
-      return createNormalizedReasoningStream(result);
+      return createNormalizedReasoningStream(result, loggingService);
     }
 
     return result;
   };
 }
 
-function createNormalizedReasoningStream(stream: AsyncIterable<any>): AsyncIterable<any> {
+function createNormalizedReasoningStream(
+  stream: AsyncIterable<any>,
+  loggingService?: ILoggingService,
+): AsyncIterable<any> {
   const iterator = stream[Symbol.asyncIterator]();
   return {
     [Symbol.asyncIterator]() {
@@ -121,7 +126,28 @@ function createNormalizedReasoningStream(stream: AsyncIterable<any>): AsyncItera
         async next() {
           const result = await iterator.next();
           if (!result.done && result.value?.choices) {
-            for (const choice of result.value.choices) {
+            const choices = result.value.choices;
+            const hasMultipleChoices = choices.length > 1;
+            const hasNonZeroOrMissingIndex = choices.some(
+              (choice: any) => choice.index === undefined || choice.index !== 0,
+            );
+
+            if (hasMultipleChoices || hasNonZeroOrMissingIndex) {
+              const chunkStr = JSON.stringify(result.value, null, 2);
+              const msg = `[DEBUG_MALFORMED_RESPONSE] Intercepted malformed response chunk: ${chunkStr}`;
+              if (loggingService) {
+                loggingService.warn(msg);
+              } else {
+                console.warn(msg);
+              }
+            }
+
+            // Normalize any non-zero or missing index to 0 for single-choice responses to avoid SDK errors/warnings
+            if (choices.length === 1 && choices[0].index !== 0) {
+              choices[0].index = 0;
+            }
+
+            for (const choice of choices) {
               normalizeMessageField(choice.delta);
             }
           }
@@ -358,10 +384,61 @@ function createOpenAIResponsesFetch(fetchImpl: typeof fetch | undefined): typeof
   }) as typeof fetch;
 }
 
+export class OpencodeMinimaxHybridProvider implements ModelProvider {
+  constructor(private readonly config: CustomProviderConfig, private readonly deps: CustomProviderRuntimeDeps) {}
+
+  getModel(modelName?: string): Promise<Model> | Model {
+    const resolvedModel = modelName || this.deps.defaultModel || '';
+    if (resolvedModel.toLowerCase().includes('minimax')) {
+      const isOpencode =
+        this.config.type === 'opencode' ||
+        this.config.name === 'opencode' ||
+        (typeof this.config.baseUrl === 'string' && this.config.baseUrl.toLowerCase().includes('opencode.ai'));
+
+      const effectiveBaseUrl = this.config.baseUrl ?? (isOpencode ? 'https://opencode.ai/v1' : '');
+      const effectiveApiKey = this.config.apiKey ?? (isOpencode ? process.env.OPENCODE_API_KEY : undefined);
+
+      const anthropicProvider = new AiSdkAnthropicProvider({
+        defaultModel: resolvedModel,
+        resolveConfig: () => ({
+          baseURL: effectiveBaseUrl ? normalizeBaseUrl(effectiveBaseUrl) : undefined,
+          apiKey: effectiveApiKey,
+          fetch: createCacheControlFetch(this.deps.fetch),
+          name: this.config.name,
+          headers: {
+            'anthropic-version': '2023-06-01',
+          },
+        }),
+      });
+      return anthropicProvider.getModel(resolvedModel);
+    }
+
+    const isOpencode =
+      this.config.type === 'opencode' ||
+      this.config.name === 'opencode' ||
+      (typeof this.config.baseUrl === 'string' && this.config.baseUrl.toLowerCase().includes('opencode.ai'));
+
+    const effectiveBaseUrl = this.config.baseUrl ?? (isOpencode ? 'https://opencode.ai/v1' : '');
+    const effectiveApiKey = this.config.apiKey ?? (isOpencode ? process.env.OPENCODE_API_KEY : undefined);
+
+    const openAIClient = new OpenAI({
+      baseURL: normalizeBaseUrl(effectiveBaseUrl),
+      apiKey: effectiveApiKey || 'no-key',
+      fetch: createOpenAICompatibleFetch(this.deps.fetch, this.config.type || 'opencode', effectiveBaseUrl) as any,
+    });
+    applyClientResponseNormalization(openAIClient, this.deps.loggingService);
+    const openaiProvider = new OpenAIProvider({
+      openAIClient: openAIClient as any,
+      useResponses: false,
+    });
+    return openaiProvider.getModel(resolvedModel);
+  }
+}
+
 export function createCustomProviderModelProvider(
   config: CustomProviderConfig,
   deps: CustomProviderRuntimeDeps,
-): OpenAIProvider | AiSdkAnthropicProvider | AiSdkGoogleProvider {
+): OpenAIProvider | AiSdkAnthropicProvider | AiSdkGoogleProvider | OpencodeMinimaxHybridProvider {
   const providerType = config.type || 'openai-compatible';
   const resolveConfig = () => ({
     baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
@@ -398,9 +475,10 @@ export function createCustomProviderModelProvider(
         defaultModel: deps.defaultModel,
         resolveConfig,
       });
+    case 'opencode':
+      return new OpencodeMinimaxHybridProvider(config, deps);
     case 'openai-compatible':
     case 'llama.cpp':
-    case 'opencode':
     default: {
       const isOpencode =
         providerType === 'opencode' ||
@@ -415,7 +493,7 @@ export function createCustomProviderModelProvider(
         apiKey: effectiveApiKey || 'no-key',
         fetch: createOpenAICompatibleFetch(deps.fetch, providerType, effectiveBaseUrl) as any,
       });
-      applyClientResponseNormalization(openAIClient);
+      applyClientResponseNormalization(openAIClient, deps.loggingService);
       return new OpenAIProvider({
         openAIClient: openAIClient as any,
         useResponses: false,
@@ -453,6 +531,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
               model: settingsService.get('agent.model') || '',
               loggingService,
             }),
+            loggingService,
           });
         })(),
       });

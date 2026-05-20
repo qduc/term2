@@ -5,6 +5,7 @@ import {
   createCustomProviderModelProvider,
   sanitizeResponsesApiBody,
   type CustomProviderConfig,
+  OpencodeMinimaxHybridProvider,
 } from './openai-compatible.provider.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
@@ -95,4 +96,27 @@ test('createCustomProviderModelProvider uses Google adapter for google type', (t
   );
 
   t.true(provider instanceof AiSdkGoogleProvider);
+});
+
+test('createCustomProviderModelProvider uses OpencodeMinimaxHybridProvider for opencode type', async (t) => {
+  const provider = createCustomProviderModelProvider(
+    {
+      ...baseConfig,
+      type: 'opencode',
+    },
+    {
+      defaultModel: 'some-model',
+      fetch: async () => new Response('{}'),
+    },
+  );
+
+  t.true(provider instanceof OpencodeMinimaxHybridProvider);
+
+  // When model name contains minimax (case-insensitive), it should return model not using OpenAIProvider
+  const minimaxModel = await provider.getModel('Minimax-3.5-Turbo');
+  t.false(minimaxModel instanceof OpenAIChatCompletionsModel, 'minimax model should use Anthropic provider');
+
+  // When model name does NOT contain minimax, it should return OpenAIChatCompletionsModel from OpenAIProvider
+  const otherModel = await provider.getModel('other-model-name');
+  t.true(otherModel instanceof OpenAIChatCompletionsModel, 'other model should use standard OpenAIProvider');
 });

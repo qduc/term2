@@ -301,6 +301,48 @@ test('assistant reasoning_content from provider stream is preserved as reasoning
   });
 });
 
+test('assistant choices with non-zero index in single-choice stream are normalized to 0', async (t) => {
+  const captured: CapturedRequest[] = [];
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder();
+      controller.enqueue(
+        encoder.encode(
+          [
+            'data: {"id":"chatcmpl-provider-test","choices":[{"index":1,"delta":{"content":"Hello! How can I help you today?"}}]}',
+            'data: {"id":"chatcmpl-provider-test","choices":[{"index":1,"delta":{},"finish_reason":"stop"}]}',
+            'data: [DONE]',
+            '',
+          ].join('\n\n'),
+        ),
+      );
+      controller.close();
+    },
+  });
+  const provider = buildProvider(
+    captured,
+    new Response(stream, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    }),
+  );
+  const model = await provider.getModel('provider-model');
+
+  const events: any[] = [];
+  for await (const event of model.getStreamedResponse({
+    ...baseRequest,
+    input: [{ role: 'user', content: 'hello' }] as any,
+    modelSettings: {},
+  } as any)) {
+    events.push(event);
+  }
+
+  const finalEvent = events.find((event: any) => event.type === 'response_done') as any;
+  t.is(finalEvent.response.output[0].type, 'message');
+  t.is(finalEvent.response.output[0].content[0].type, 'output_text');
+  t.is(finalEvent.response.output[0].content[0].text, 'Hello! How can I help you today?');
+});
+
 test('reasoning field is stripped and preserved only as reasoning_content in outgoing requests', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);

@@ -1,5 +1,11 @@
 import test from 'ava';
-import { appendStartupBannerId, hasConversationContent, scheduleExitSideEffects } from './app.js';
+import {
+  TERMINAL_REDRAW_CLEAR,
+  appendStartupBannerId,
+  clearTerminalForRedraw,
+  hasConversationContent,
+  scheduleExitSideEffects,
+} from './app.js';
 
 test('appendStartupBannerId appends a new stable id for each clear', (t) => {
   t.deepEqual(appendStartupBannerId(['startup-banner-0']), ['startup-banner-0', 'startup-banner-1']);
@@ -18,6 +24,18 @@ test('hasConversationContent ignores empty and system-only conversations', (t) =
 test('hasConversationContent detects real conversation messages', (t) => {
   t.true(hasConversationContent([{ id: 'user-message', sender: 'user', text: 'hello' }]));
   t.true(hasConversationContent([{ id: 'assistant-message', sender: 'bot', text: 'hello' }]));
+});
+
+test('clearTerminalForRedraw clears scrollback and moves cursor home', (t) => {
+  const writes: string[] = [];
+  clearTerminalForRedraw({
+    write: (value) => {
+      writes.push(value);
+      return true;
+    },
+  });
+
+  t.deepEqual(writes, [TERMINAL_REDRAW_CLEAR]);
 });
 
 test('scheduleExitSideEffects defers saving conversations until after exit scheduling', async (t) => {

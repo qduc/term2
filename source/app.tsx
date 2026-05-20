@@ -1,7 +1,7 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInputActions } from './context/InputContext.js';
 
-import { Box, useApp, useInput } from 'ink';
+import { Box, useApp, useInput, useStdout } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
 import MessageList, { MESSAGE_HORIZONTAL_PADDING } from './components/MessageList.js';
 import BottomArea from './components/BottomArea.js';
@@ -42,6 +42,16 @@ export const appendStartupBannerId = (ids: string[]): string[] => [...ids, `star
 
 export const hasConversationContent = (messages: Message[]): boolean => messages.some((msg) => msg.sender !== 'system');
 
+export const TERMINAL_REDRAW_CLEAR = '\u001B[2J\u001B[3J\u001B[H';
+
+type TerminalWriter = {
+  write: (value: string) => unknown;
+};
+
+export const clearTerminalForRedraw = (stdout: TerminalWriter): void => {
+  stdout.write(TERMINAL_REDRAW_CLEAR);
+};
+
 type ScheduleCallback = (callback: () => void, delay: number) => unknown;
 
 export const scheduleExitSideEffects = (
@@ -77,8 +87,10 @@ const App: FC<AppProps> = ({
   onMessagesChange,
 }) => {
   const { exit } = useApp();
+  const { stdout } = useStdout();
   const { setInput } = useInputActions();
   const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
+  const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
@@ -150,6 +162,11 @@ const App: FC<AppProps> = ({
     refreshStartupBanner();
   }, [clearConversation, onPrintUsage, refreshStartupBanner]);
 
+  const redrawMessageList = useCallback(() => {
+    clearTerminalForRedraw(stdout);
+    setMessageListEpoch((epoch) => epoch + 1);
+  }, [stdout]);
+
   const getSessionUsage = useCallback(
     () => formatSessionUsageBreakdown(sessionUsage.get(), getSubagentUsage()),
     [sessionUsage, getSubagentUsage],
@@ -171,6 +188,7 @@ const App: FC<AppProps> = ({
     messages,
     setModel,
     undoLastUserMessage,
+    onUndo: redrawMessageList,
     openUndoMenu: () => {
       const userMessages = getUserMessages().map((m) => ({ uiIndex: m.uiIndex, text: m.text }));
       if (userMessages.length === 0) {
@@ -187,10 +205,11 @@ const App: FC<AppProps> = ({
     (item: UndoItem) => {
       const text = undoToUserMessage(item.uiIndex);
       if (text !== null) {
+        redrawMessageList();
         setInput(text);
       }
     },
-    [undoToUserMessage, setInput],
+    [undoToUserMessage, redrawMessageList, setInput],
   );
 
   const hasConversationHistory = useMemo(() => hasConversationContent(messages), [messages]);
@@ -303,6 +322,7 @@ const App: FC<AppProps> = ({
         {/* Main content area grows to fill available vertical space */}
         <Box flexDirection="column" flexGrow={1}>
           <MessageList
+            key={messageListEpoch}
             messages={messages}
             bannerItems={startupBannerIds}
             settingsService={settingsService}

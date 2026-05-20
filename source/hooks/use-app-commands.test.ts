@@ -132,6 +132,7 @@ test('createUndoSlashCommand opens undo menu when no args', (t) => {
 
 test('createUndoSlashCommand with "last" arg restores last user message to input and returns false', (t) => {
   let input = '';
+  let undoRedraws = 0;
   const command = createUndoSlashCommand({
     undoLastUserMessage: () => 'Previous message',
     setInput: (value) => {
@@ -139,26 +140,35 @@ test('createUndoSlashCommand with "last" arg restores last user message to input
     },
     addSystemMessage: () => {},
     openUndoMenu: () => {},
+    onUndo: () => {
+      undoRedraws++;
+    },
   });
 
   t.is(command.name, 'undo');
   const result = command.action('last');
   t.is(result, false);
   t.is(input, 'Previous message');
+  t.is(undoRedraws, 1);
 });
 
 test('createUndoSlashCommand shows system message via undoLastUserMessage when nothing to undo with "last" arg', (t) => {
   const systemMessages: string[] = [];
+  let undoRedraws = 0;
   const command = createUndoSlashCommand({
     undoLastUserMessage: () => null,
     setInput: () => {},
     addSystemMessage: (text) => systemMessages.push(text),
     openUndoMenu: () => {},
+    onUndo: () => {
+      undoRedraws++;
+    },
   });
 
   const result = command.action('last');
   t.is(result, true);
   t.deepEqual(systemMessages, ['Nothing to undo.']);
+  t.is(undoRedraws, 0);
 });
 
 const TestHookWrapper = ({

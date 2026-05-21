@@ -191,7 +191,7 @@ test.serial('execute: rejects path outside workspace', async (t) => {
   await withTempDir(async () => {
     const result = await findFilesToolDefinition.execute({
       pattern: '*.ts',
-      path: '../outside',
+      path: '/etc/outside',
     });
 
     t.true(result.includes('Error'));

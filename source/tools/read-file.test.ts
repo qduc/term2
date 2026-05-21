@@ -110,7 +110,7 @@ test.serial('execute: reads file from start_line to end', async (t) => {
 test.serial('execute: rejects path outside workspace', async (t) => {
   await withTempDir(async () => {
     const result = await readFileToolDefinition.execute({
-      path: '../outside.txt',
+      path: '/etc/outside.txt',
     });
 
     t.true(result.includes('Error'));

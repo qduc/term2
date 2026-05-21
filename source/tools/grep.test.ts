@@ -2,7 +2,11 @@ import test from 'ava';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createGrepToolDefinition } from './grep.js';
+
+const execFileAsync = promisify(execFile);
 
 async function withTempDir(run: (dir: string) => Promise<void>) {
   const originalCwd = process.cwd;
@@ -22,6 +26,7 @@ async function withTempDir(run: (dir: string) => Promise<void>) {
 
 test.serial('execute: file_pattern does not include gitignored files', async (t) => {
   await withTempDir(async (dir) => {
+    await execFileAsync('git', ['init'], { cwd: dir });
     await fs.mkdir(path.join(dir, 'source'), { recursive: true });
     await fs.writeFile(path.join(dir, '.gitignore'), '*.tsbuildinfo\n');
     await fs.writeFile(path.join(dir, 'source', 'app.ts'), 'const value = "undo";\n');

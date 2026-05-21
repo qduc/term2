@@ -336,10 +336,10 @@ for (const symbolCase of symbolCases) {
 
 test.serial('execute: code_context_search rejects paths outside the workspace', async (t) => {
   await withTempWorkspace(async () => {
-    const outlineResult = await readCodeOutlineToolDefinition.execute({ path: '../outside.ts' });
+    const outlineResult = await readCodeOutlineToolDefinition.execute({ path: '/etc/outside.ts' });
     const relatedResult = await codeContextSearchToolDefinition.execute({
       query_type: 'related',
-      path: '../outside.ts',
+      path: '/etc/outside.ts',
     });
 
     t.true(outlineResult.includes('outside workspace'));

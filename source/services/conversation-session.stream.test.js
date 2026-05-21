@@ -1050,6 +1050,104 @@ test('run() throws AbortError when the stream is cancelled/aborted', async (t) =
   );
 });
 
+test('run() sends full history after undo on a chaining provider (Responses API)', async (t) => {
+  // Simulate a chaining provider (OpenAI) with a two-turn conversation, then undo.
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
+  firstStream.finalOutput = 'First reply';
+  firstStream.lastResponseId = 'resp-turn1';
+  firstStream.history = [
+    { role: 'user', type: 'message', content: 'First message' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'First reply' }],
+    },
+  ];
+
+  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Second reply' }]);
+  secondStream.finalOutput = 'Second reply';
+  secondStream.lastResponseId = 'resp-turn2';
+  secondStream.history = [
+    { role: 'user', type: 'message', content: 'First message' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'First reply' }],
+    },
+    { role: 'user', type: 'message', content: 'Second message' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Second reply' }],
+    },
+  ];
+
+  const afterUndoStream = new MockStream([{ type: 'response.output_text.delta', delta: 'After undo reply' }]);
+  afterUndoStream.finalOutput = 'After undo reply';
+  afterUndoStream.lastResponseId = 'resp-after-undo';
+  afterUndoStream.history = [
+    { role: 'user', type: 'message', content: 'First message' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'First reply' }],
+    },
+    { role: 'user', type: 'message', content: 'Retry message' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'After undo reply' }],
+    },
+  ];
+
+  const calls = [];
+  let callCount = 0;
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream(input, opts) {
+      callCount++;
+      calls.push({ input, opts });
+      if (callCount === 1) return firstStream;
+      if (callCount === 2) return secondStream;
+      return afterUndoStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  // Turn 1: chaining provider sends just the text string
+  for await (const _ of session.run('First message')) {
+  }
+  t.is(typeof calls[0].input, 'string', 'Turn 1: chaining sends just the text');
+  t.falsy(calls[0].opts.previousResponseId);
+
+  // Turn 2: chaining provider uses previousResponseId from turn 1
+  for await (const _ of session.run('Second message')) {
+  }
+  t.is(typeof calls[1].input, 'string', 'Turn 2: chaining sends just the text');
+
+  // Undo: removes second user turn, nullifies previousResponseId
+  session.undoLastUserTurn();
+
+  // Turn 3 (after undo): must send full history, NOT just the latest message
+  for await (const _ of session.run('Retry message')) {
+  }
+  const thirdCall = calls[2];
+  t.true(Array.isArray(thirdCall.input), 'Turn after undo must send full history array');
+  t.true(thirdCall.input.length >= 2, 'Full history includes prior turns');
+  t.falsy(thirdCall.opts.previousResponseId, 'No previousResponseId after undo');
+});
+
 test('run() with image attachment does not throw when supportsChaining is true', async (t) => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply' }]);
   stream.finalOutput = 'Reply';

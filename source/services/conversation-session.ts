@@ -297,6 +297,13 @@ export class ConversationSession {
       const provider = getProvider ? getProvider.call(this.agentClient) : 'openai';
 
       const supportsChaining = supportsConversationChaining(provider);
+      const history = this.conversationStore.getHistory();
+      // Use chaining mode only when the provider supports it AND either a valid
+      // chain exists (previousResponseId is set) or there is no prior history to
+      // resync (fresh start with just the current message). After undo the chain
+      // is severed (previousResponseId = null) while prior turns remain in the
+      // local store, so we fall back to full-history mode to re-establish context.
+      const useChaining = supportsChaining && (!!this.previousResponseId || history.length <= 1);
 
       let streamInput: string | AgentInputItem | AgentInputItem[];
 
@@ -304,8 +311,7 @@ export class ConversationSession {
         const notice = this.pendingModeNotice;
         this.pendingModeNotice = null;
 
-        if (supportsChaining) {
-          const history = this.conversationStore.getHistory();
+        if (useChaining) {
           const latestInput = history[history.length - 1] ?? text;
           const chainedInput = turn.images?.length ? latestInput : text;
           const userItem: AgentInputItem =
@@ -324,13 +330,12 @@ export class ConversationSession {
           streamInput = this.conversationStore.getHistory();
         }
       } else {
-        const history = this.conversationStore.getHistory();
         const latestInput = history[history.length - 1] ?? text;
         const chainedInput = turn.images?.length ? latestInput : text;
-        streamInput = supportsChaining ? (typeof chainedInput === 'string' ? chainedInput : [chainedInput]) : history;
+        streamInput = useChaining ? (typeof chainedInput === 'string' ? chainedInput : [chainedInput]) : history;
       }
 
-      const inputSurgeKind = supportsChaining ? 'delta' : 'full_history';
+      const inputSurgeKind = useChaining ? 'delta' : 'full_history';
       const surgeDecision = this.inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind });
       if (surgeDecision.action === 'block') {
         if (addedUserMessage && this.#isCurrentGeneration(gen)) {
@@ -385,7 +390,7 @@ export class ConversationSession {
         acc.latestUsage,
       );
 
-      if (supportsChaining) {
+      if (useChaining) {
         this.inputSurgeGuard.recordSuccessfulInput(streamInput, { kind: inputSurgeKind });
       } else {
         this.inputSurgeGuard.recordSuccessfulInput(this.conversationStore.getHistory(), {

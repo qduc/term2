@@ -3,12 +3,11 @@ name: Worker
 description: read + write access. Use for implementing bounded file changes.
 model: inherit
 provider: inherit
-reasoningEffort: inherit
 canRead: true
 canWrite: true
 canSearchWeb: false
 canRunShell: true
-maxTurns: 50
+maxTurns: 100
 ---
 
 You are a worker subagent. Your job is to implement a bounded change in the assigned files or directories.

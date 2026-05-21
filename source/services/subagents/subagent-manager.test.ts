@@ -318,7 +318,7 @@ test.beforeEach(() => {
   ensureWorkerProviderRegistered();
 });
 
-test.serial('run() with worker role includes write and shell tools', async (t) => {
+test.serial('run() with worker role includes write and shell tools for non-gpt model', async (t) => {
   const settings = createMockSettings({
     'agent.model': 'mock-model',
     'agent.provider': 'mock-worker-provider',
@@ -331,15 +331,39 @@ test.serial('run() with worker role includes write and shell tools', async (t) =
   const agent = workerRunnerCalls[0].agent;
   const toolNames: string[] = agent.tools.map((t: any) => t.name);
 
-  // Worker should have read AND write tools
+  // Worker should have read, non-gpt write tools, and shell
   t.true(toolNames.includes('read_file'));
-  t.true(toolNames.includes('apply_patch'));
   t.true(toolNames.includes('search_replace'));
   t.true(toolNames.includes('create_file'));
-
-  // Worker has shell access but not web tools
-  t.false(toolNames.includes('web_search'));
   t.true(toolNames.includes('shell'));
+
+  // Should NOT have apply_patch or web tools
+  t.false(toolNames.includes('apply_patch'));
+  t.false(toolNames.includes('web_search'));
+});
+
+test.serial('run() with worker role includes write and shell tools for gpt model', async (t) => {
+  const settings = createMockSettings({
+    'agent.model': 'gpt-5',
+    'agent.provider': 'mock-worker-provider',
+  });
+  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+
+  await manager.run({ role: 'worker', task: 'update the README.md file' });
+
+  t.is(workerRunnerCalls.length, 1);
+  const agent = workerRunnerCalls[0].agent;
+  const toolNames: string[] = agent.tools.map((t: any) => t.name);
+
+  // Worker should have read, gpt write tools (apply_patch), and shell
+  t.true(toolNames.includes('read_file'));
+  t.true(toolNames.includes('apply_patch'));
+  t.true(toolNames.includes('shell'));
+
+  // Should NOT have search_replace, create_file, or web tools
+  t.false(toolNames.includes('search_replace'));
+  t.false(toolNames.includes('create_file'));
+  t.false(toolNames.includes('web_search'));
 });
 
 test.serial('run() result contains agentId and correct role', async (t) => {
@@ -401,28 +425,28 @@ test.serial('worker write tool rejects paths outside writeBoundary', async (t) =
     getSSHService: () => undefined,
   } as unknown as ExecutionContext;
 
-  const settings = createMockSettings({
-    'agent.model': 'mock-model',
+  // 1. Test apply_patch tool under gpt-5 model
+  const settingsGpt = createMockSettings({
+    'agent.model': 'gpt-5',
     'agent.provider': 'mock-boundary-worker',
   });
-  const manager = new SubagentManager({
+  const managerGpt = new SubagentManager({
     logger: createMockLogger(),
-    settings,
+    settings: settingsGpt,
     executionContext: mockExecutionContext,
   });
 
-  await manager.run({
+  await managerGpt.run({
     role: 'worker',
     task: 'update a file',
     writeBoundary: ['.'],
   });
 
   t.is(boundaryWorkerCalls.length, 1);
-  const agent = boundaryWorkerCalls[0].agent;
-  const applyPatch = agent.tools.find((t: any) => t.name === 'apply_patch');
-  const searchReplace = agent.tools.find((t: any) => t.name === 'search_replace');
+  const agentGpt = boundaryWorkerCalls[0].agent;
+  const applyPatch = agentGpt.tools.find((t: any) => t.name === 'apply_patch');
   t.truthy(applyPatch);
-  t.truthy(searchReplace);
+  t.falsy(agentGpt.tools.find((t: any) => t.name === 'search_replace'));
 
   // Call with a path inside the boundary — should NOT be rejected for boundary violation
   const insideResult = await applyPatch.invoke(
@@ -461,6 +485,30 @@ test.serial('worker write tool rejects paths outside writeBoundary', async (t) =
     },
   );
   t.is(outsideNeedsApproval, false);
+
+  // 2. Test search_replace tool under non-gpt model
+  const settingsNonGpt = createMockSettings({
+    'agent.model': 'mock-model',
+    'agent.provider': 'mock-boundary-worker',
+  });
+  const managerNonGpt = new SubagentManager({
+    logger: createMockLogger(),
+    settings: settingsNonGpt,
+    executionContext: mockExecutionContext,
+  });
+
+  boundaryWorkerCalls = []; // reset calls
+  await managerNonGpt.run({
+    role: 'worker',
+    task: 'update a file',
+    writeBoundary: ['.'],
+  });
+
+  t.is(boundaryWorkerCalls.length, 1);
+  const agentNonGpt = boundaryWorkerCalls[0].agent;
+  const searchReplace = agentNonGpt.tools.find((t: any) => t.name === 'search_replace');
+  t.truthy(searchReplace);
+  t.falsy(agentNonGpt.tools.find((t: any) => t.name === 'apply_patch'));
 
   // Batch search_replace: all replacement paths must be boundary-checked
   const batchOutsideResult = await searchReplace.invoke(
@@ -577,27 +625,31 @@ test.serial('worker filesChanged tracks only successful writes for batch operati
           const applyPatch = agent.tools.find((tool: any) => tool.name === 'apply_patch');
           const searchReplace = agent.tools.find((tool: any) => tool.name === 'search_replace');
 
-          await applyPatch.invoke(
-            {},
-            JSON.stringify({
-              operations: [
-                { type: 'create_file', path: 'a.txt', diff: '+hello\n' },
-                { type: 'update_file', path: 'missing.txt', diff: '-x\n+y\n' },
-              ],
-            }),
-            {},
-          );
+          if (applyPatch) {
+            await applyPatch.invoke(
+              {},
+              JSON.stringify({
+                operations: [
+                  { type: 'create_file', path: 'a.txt', diff: '+hello\n' },
+                  { type: 'update_file', path: 'missing.txt', diff: '-x\n+y\n' },
+                ],
+              }),
+              {},
+            );
+          }
 
-          await searchReplace.invoke(
-            {},
-            JSON.stringify({
-              replacements: [
-                { path: 'b.txt', search_content: '', replace_content: 'created' },
-                { path: 'missing2.txt', search_content: 'x', replace_content: 'y' },
-              ],
-            }),
-            {},
-          );
+          if (searchReplace) {
+            await searchReplace.invoke(
+              {},
+              JSON.stringify({
+                replacements: [
+                  { path: 'b.txt', search_content: '', replace_content: 'created' },
+                  { path: 'missing2.txt', search_content: 'x', replace_content: 'y' },
+                ],
+              }),
+              {},
+            );
+          }
 
           return {
             status: 'completed',
@@ -610,7 +662,25 @@ test.serial('worker filesChanged tracks only successful writes for batch operati
     fetchModels: async () => [{ id: 'mock-model' }],
   });
 
-  const manager = new SubagentManager({
+  // 1. Test with GPT-5 model (using apply_patch)
+  const managerGpt = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-5',
+      'agent.provider': 'mock-worker-files-changed-provider',
+    }),
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+  });
+
+  const resultGpt = await managerGpt.run({ role: 'worker', task: 'do mixed writes' });
+  t.deepEqual(new Set(resultGpt.filesChanged), new Set(['a.txt']));
+
+  // 2. Test with non-GPT-5 model (using search_replace)
+  const managerNonGpt = new SubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
       'agent.model': 'mock-model',
@@ -623,9 +693,8 @@ test.serial('worker filesChanged tracks only successful writes for batch operati
     } as unknown as ExecutionContext,
   });
 
-  const result = await manager.run({ role: 'worker', task: 'do mixed writes' });
-
-  t.deepEqual(new Set(result.filesChanged), new Set(['a.txt', 'b.txt']));
+  const resultNonGpt = await managerNonGpt.run({ role: 'worker', task: 'do mixed writes' });
+  t.deepEqual(new Set(resultNonGpt.filesChanged), new Set(['b.txt']));
 });
 
 test.serial('worker write lock rejects concurrent create_file for same path without waiting', async (t) => {

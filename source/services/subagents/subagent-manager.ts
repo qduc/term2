@@ -12,7 +12,7 @@ import type { CommandMessage, ToolDefinition } from '../../tools/types.js';
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import { wrapNeedsApproval } from '../../lib/openai-agent-client.js';
 import { toOpenAIStrictToolSchema } from '../../lib/openai-strict-tool-schema.js';
-import { shouldUseStrictToolSchema } from '../../lib/tool-selection-policy.js';
+import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
 import { createReadFileToolDefinition } from '../../tools/read-file.js';
 import { createGrepToolDefinition } from '../../tools/grep.js';
 import { createFindFilesToolDefinition } from '../../tools/find-files.js';
@@ -86,9 +86,16 @@ function loadRoleDefinition(role: SubagentRole, settings: ISettingsService): Sub
   const subagentPrefix =
     role === 'mentor' ? 'agent.mentor' : `agent.subagent${role.charAt(0).toUpperCase() + role.slice(1)}`;
 
-  const resolve = (value: any, subagentKey: string, fallbackKey: string, defaultValue: any): any => {
+  const resolve = (value: any, subagentKey: string, fallbackKey: string | undefined, defaultValue: any): any => {
     if (value === 'inherit' || value === undefined || value === null || value === '') {
-      return settings.get(subagentKey) ?? settings.get(fallbackKey) ?? defaultValue;
+      const subagentVal = settings.get(subagentKey);
+      if (subagentVal !== undefined && subagentVal !== null) {
+        return subagentVal;
+      }
+      if (fallbackKey) {
+        return settings.get(fallbackKey) ?? defaultValue;
+      }
+      return defaultValue;
     }
     return value;
   };
@@ -104,12 +111,7 @@ function loadRoleDefinition(role: SubagentRole, settings: ISettingsService): Sub
     maxTurns: frontmatter.maxTurns ?? ROLE_MAX_TURNS_DEFAULT,
     model: resolve(frontmatter.model, `${subagentPrefix}Model`, 'agent.model', 'gpt-4o'),
     provider: resolve(frontmatter.provider, `${subagentPrefix}Provider`, 'agent.provider', 'openai'),
-    reasoningEffort: resolve(
-      frontmatter.reasoningEffort,
-      `${subagentPrefix}ReasoningEffort`,
-      'agent.reasoningEffort',
-      'default',
-    ),
+    reasoningEffort: resolve(frontmatter.reasoningEffort, `${subagentPrefix}ReasoningEffort`, undefined, 'default'),
     description: frontmatter.description ?? '',
   };
 }
@@ -559,41 +561,47 @@ export class SubagentManager {
     }
 
     if (definition.canWrite) {
-      tools.push(
-        this.#wrapWriteTool(
-          createApplyPatchToolDefinition({
-            settingsService: this.#settings,
-            loggingService: this.#logger,
-            executionContext: this.#executionContext,
-          }),
-          writeBoundary,
-          cwd,
-          filesChanged,
-          (params: any) => this.#extractPathsFromApplyPatch(params),
-        ),
-        this.#wrapWriteTool(
-          createSearchReplaceToolDefinition({
-            settingsService: this.#settings,
-            loggingService: this.#logger,
-            executionContext: this.#executionContext,
-          }),
-          writeBoundary,
-          cwd,
-          filesChanged,
-          (params: any) => this.#extractPathsFromSearchReplace(params),
-        ),
-        this.#wrapWriteTool(
-          createCreateFileToolDefinition({
-            settingsService: this.#settings,
-            loggingService: this.#logger,
-            executionContext: this.#executionContext,
-          }),
-          writeBoundary,
-          cwd,
-          filesChanged,
-          (params: any) => (params?.path ? [params.path] : []),
-        ),
-      );
+      const isGpt5 = shouldPreferPatchEditingModel(definition.model);
+      if (isGpt5) {
+        tools.push(
+          this.#wrapWriteTool(
+            createApplyPatchToolDefinition({
+              settingsService: this.#settings,
+              loggingService: this.#logger,
+              executionContext: this.#executionContext,
+            }),
+            writeBoundary,
+            cwd,
+            filesChanged,
+            (params: any) => this.#extractPathsFromApplyPatch(params),
+          ),
+        );
+      } else {
+        tools.push(
+          this.#wrapWriteTool(
+            createSearchReplaceToolDefinition({
+              settingsService: this.#settings,
+              loggingService: this.#logger,
+              executionContext: this.#executionContext,
+            }),
+            writeBoundary,
+            cwd,
+            filesChanged,
+            (params: any) => this.#extractPathsFromSearchReplace(params),
+          ),
+          this.#wrapWriteTool(
+            createCreateFileToolDefinition({
+              settingsService: this.#settings,
+              loggingService: this.#logger,
+              executionContext: this.#executionContext,
+            }),
+            writeBoundary,
+            cwd,
+            filesChanged,
+            (params: any) => (params?.path ? [params.path] : []),
+          ),
+        );
+      }
     }
 
     registerToolFormatters(tools);

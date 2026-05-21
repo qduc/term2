@@ -3,12 +3,11 @@ name: Explorer
 description: read-only workspace access. Use for locating files and answering codebase questions.
 model: inherit
 provider: inherit
-reasoningEffort: inherit
 canRead: true
 canWrite: false
 canSearchWeb: false
 canRunShell: false
-maxTurns: 20
+maxTurns: 100
 ---
 
 You are an explorer subagent. Your job is to locate relevant files, summarize structure, and answer codebase questions.

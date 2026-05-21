@@ -5,19 +5,25 @@ const ANTHROPIC_PROMPT = 'anthropic.md';
 const MODERN_GPT_PROMPT = 'gpt-5-modern.md';
 const CODEX_PROMPT = 'codex.md';
 const LITE_PROMPT = 'lite.md';
+const ORCHESTRATOR_PROMPT = 'orchestrator.md';
 
 type PromptSelectorOptions = {
   basePromptDir: string;
   model: string;
   liteMode: boolean;
+  orchestratorMode?: boolean;
 };
 
-export function getPromptPath({ basePromptDir, model, liteMode }: PromptSelectorOptions): string {
+export function getPromptPath({ basePromptDir, model, liteMode, orchestratorMode }: PromptSelectorOptions): string {
   const normalizedModel = model.trim().toLowerCase();
 
   // Lite mode takes precedence - minimal context for terminal assistance
   if (liteMode) {
     return path.join(basePromptDir, LITE_PROMPT);
+  }
+
+  if (orchestratorMode) {
+    return path.join(basePromptDir, ORCHESTRATOR_PROMPT);
   }
 
   if (normalizedModel.includes('sonnet') || normalizedModel.includes('haiku'))

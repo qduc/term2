@@ -25,11 +25,13 @@ import { createWebFetchToolDefinition } from '../../tools/web-fetch.js';
 import { createApplyPatchToolDefinition } from '../../tools/apply-patch.js';
 import { createSearchReplaceToolDefinition } from '../../tools/search-replace.js';
 import { createCreateFileToolDefinition } from '../../tools/create-file.js';
+import { createShellToolDefinition } from '../../tools/shell.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { trimToolOutput } from '../../utils/trim-tool-output.js';
 import { extractUsage, normalizeAgentRunUsage } from '../../utils/token-usage.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { tryAcquireFileLock } from '../../tools/file-locks.js';
+import { classifyCommand, SafetyStatus } from '../../utils/command-safety/index.js';
 
 const PROMPTS_DIR = path.join(import.meta.dirname, '../../prompts/subagents');
 const ROLE_MAX_TURNS_DEFAULT = 20;
@@ -238,6 +240,11 @@ function assistantText(raw: any): string | null {
  * answer is the last assistant message that appears strictly after the last
  * tool item, so intermediate narration emitted between tool calls does not
  * leak into the parent agent context.
+ *
+ * When the run ends with a tool call and no trailing narration, falls back to
+ * the last assistant message found anywhere in the history (which may precede
+ * the last tool call) to avoid returning an empty string for runs that
+ * completed successfully via write operations.
  */
 function extractFinalText(result: any): string {
   if (typeof result.finalOutput === 'string' && result.finalOutput) {
@@ -254,7 +261,16 @@ function extractFinalText(result: any): string {
       }
     }
 
+    // Look for an assistant message after the last tool item.
     for (let i = history.length - 1; i > lastToolIndex; i--) {
+      const text = assistantText(history[i]?.rawItem ?? history[i]);
+      if (text !== null) return text;
+    }
+
+    // Fallback: the run ended with a tool call and no narration. Return the
+    // last assistant message found anywhere so the caller gets a non-empty
+    // summary rather than an empty string.
+    for (let i = history.length - 1; i >= 0; i--) {
       const text = assistantText(history[i]?.rawItem ?? history[i]);
       if (text !== null) return text;
     }
@@ -461,6 +477,11 @@ export class SubagentManager {
       tools,
     });
 
+    // Workers run synchronously via runWithProvider({stream: false}). The SDK
+    // only populates resumeState in the Agent.asTool path, which run_subagent
+    // does not use (it is registered as a plain function tool). Wiring resume
+    // here would always be a no-op. Full interactive approval for workers would
+    // require Agent.asTool registration — tracked as future work.
     const result = await runWithProvider(providerId, runner, agent, request.task, {
       stream: false,
       maxTurns: definition.maxTurns,
@@ -474,6 +495,7 @@ export class SubagentManager {
       filesChanged: [...new Set(filesChanged)],
       toolsUsed: aggregateToolUsage(toolCounts),
       usage: normalizeAgentRunUsage(result?.state?.usage) ?? extractUsage(result),
+      nestedRunResult: result,
     };
   }
 
@@ -505,6 +527,18 @@ export class SubagentManager {
       tools.push(
         createWebSearchToolDefinition({ settingsService: this.#settings, loggingService: this.#logger }),
         createWebFetchToolDefinition({ settingsService: this.#settings, loggingService: this.#logger }),
+      );
+    }
+
+    if (definition.canRunShell) {
+      tools.push(
+        this.#wrapShellTool(
+          createShellToolDefinition({
+            settingsService: this.#settings,
+            loggingService: this.#logger,
+            executionContext: this.#executionContext,
+          }),
+        ),
       );
     }
 
@@ -605,6 +639,38 @@ export class SubagentManager {
       for (const unlock of releases.reverse()) {
         unlock();
       }
+    };
+  }
+
+  /**
+   * Wraps the shell tool for worker subagents:
+   * - Sets needsApproval to always return false. Workers run synchronously
+   *   inside a blocked parent tool call and have no foreground approval channel,
+   *   so SDK interruptions (triggered by needsApproval returning true) would
+   *   silently hang or fail.
+   * - Gates execution via command safety classification instead. Safe (GREEN)
+   *   commands execute normally; dangerous (YELLOW/RED) commands are blocked
+   *   and return an error string to the model without executing.
+   */
+  #wrapShellTool(definition: ToolDefinition): ToolDefinition {
+    const originalExecute = definition.execute.bind(definition);
+
+    return {
+      ...definition,
+      needsApproval: () => false,
+      execute: async (params: any, context?: unknown, details?: unknown) => {
+        const command: string = typeof params?.command === 'string' ? params.command : '';
+        if (!command) {
+          return originalExecute(params, context, details);
+        }
+
+        const status = classifyCommand(command, this.#logger);
+        if (status === SafetyStatus.YELLOW || status === SafetyStatus.RED) {
+          return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
+        }
+
+        return originalExecute(params, context, details);
+      },
     };
   }
 

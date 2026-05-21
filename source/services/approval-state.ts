@@ -4,6 +4,8 @@ export type PendingApprovalContext = {
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
   removeInterceptor?: () => void;
+  /** Nested agent-tool approvals must resume through SDK state, not parent tool interceptors. */
+  nestedSubagent?: boolean;
 };
 
 export type AbortedApprovalContext = {
@@ -11,6 +13,8 @@ export type AbortedApprovalContext = {
   interruption: unknown;
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
+  removeInterceptor?: () => void;
+  nestedSubagent?: boolean;
 };
 
 export class ApprovalState {
@@ -50,6 +54,8 @@ export class ApprovalState {
       interruption: this.pending.interruption,
       emittedCommandIds: this.pending.emittedCommandIds,
       toolCallArgumentsById: this.pending.toolCallArgumentsById,
+      removeInterceptor: this.pending.removeInterceptor,
+      nestedSubagent: this.pending.nestedSubagent,
     };
     this.pending = null;
     return true;

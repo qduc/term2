@@ -178,7 +178,7 @@ export class HistoryService {
  * It's only allowed in test files for backwards compatibility.
  */
 const _historyServiceInstance = new HistoryService({
-  loggingService: new LoggingService({ disableLogging: false }),
+  loggingService: new LoggingService(),
   settingsService: new (class MockSettingsService {
     get() {
       return 1000;

@@ -164,6 +164,7 @@ test.serial('loadConversation: preserves saved app mode settings', (t) => {
       liteMode: false,
       mentorMode: true,
       planMode: true,
+      orchestratorMode: false,
     },
     previousResponseId: null,
     history: [],
@@ -177,6 +178,7 @@ test.serial('loadConversation: preserves saved app mode settings', (t) => {
     liteMode: false,
     mentorMode: true,
     planMode: true,
+    orchestratorMode: false,
   });
 });
 
@@ -394,6 +396,61 @@ test.serial('listConversations: returns empty array when no conversations exist'
   }
   const list = persistenceModule.listConversations();
   t.deepEqual(list, []);
+});
+
+test.serial('loadConversation: old save without orchestratorMode — resolves to false, no error', (t) => {
+  const id = persistenceModule.generateId();
+  // Write a raw JSON file that looks like an old save (missing orchestratorMode)
+  const dir = persistenceModule.getConversationsDirForTest();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const rawData = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    appMode: {
+      mentorMode: false,
+      liteMode: false,
+      planMode: false,
+      // orchestratorMode is intentionally absent (old format)
+    },
+    previousResponseId: null,
+    history: [],
+    messages: [],
+  };
+  fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify(rawData, null, 2), 'utf-8');
+
+  // loadConversation should not throw — it returns null on error
+  const loaded = persistenceModule.loadConversation(id);
+  t.truthy(loaded);
+  // orchestratorMode should be absent or false-y, not throw
+  const orchestratorMode = loaded?.appMode?.orchestratorMode;
+  t.falsy(orchestratorMode, 'orchestratorMode missing from old save should not be truthy');
+});
+
+test.serial('loadConversation: save with orchestratorMode: true is correctly restored', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    appMode: {
+      mentorMode: false,
+      liteMode: false,
+      planMode: false,
+      orchestratorMode: true,
+    },
+    previousResponseId: null,
+    history: [],
+    messages: [],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const loaded = persistenceModule.loadConversation(id);
+
+  t.truthy(loaded);
+  t.is(loaded?.appMode?.orchestratorMode, true);
 });
 
 test.serial('listConversations: returns conversations sorted by updatedAt descending', (t) => {

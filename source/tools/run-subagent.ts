@@ -212,6 +212,10 @@ export const createRunSubagentToolDefinition = (
     'Use `writeBoundary` to restrict which paths the worker may modify. Omit to allow writes anywhere in the workspace.',
   parameters: runSubagentSchema,
   needsApproval: () => false,
+  // run_subagent is a plain function tool, not Agent.asTool. The SDK does not
+  // populate details.resumeState for function tools, so context/details are not
+  // forwarded. Full interactive approval for workers would require Agent.asTool
+  // registration — tracked as future work.
   execute: async (params) => {
     try {
       const result = await runSubagent(params);

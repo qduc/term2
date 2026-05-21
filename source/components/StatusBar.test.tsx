@@ -54,3 +54,18 @@ test('StatusBar renders Plan mode badge', (t) => {
   t.true(output.includes('Plan'));
   t.false(output.includes('Default'));
 });
+
+test('StatusBar renders Orchestrator mode badge instead of Standard', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+    'app.orchestratorMode': true,
+  });
+
+  const { lastFrame } = render(<StatusBar settingsService={settingsService} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('Orchestrator'));
+  t.false(output.includes('Standard'));
+});

@@ -35,4 +35,6 @@ export interface SubagentResult {
   }>;
   usage?: NormalizedUsage;
   error?: string;
+  /** SDK nested run result used to propagate/resume delegated approvals. */
+  nestedRunResult?: unknown;
 }

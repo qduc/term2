@@ -160,6 +160,102 @@ test('prepareContinuation rejection: without interceptor support, falls back to 
   t.true(rejected);
 });
 
+test('prepareContinuation rejection: nested subagent approval rejects without parent interceptor', (t) => {
+  let approved = false;
+  let rejected = false;
+  const state: any = {
+    approve: () => (approved = true),
+    reject: () => (rejected = true),
+  };
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state,
+    interruption: { name: 'shell', callId: 'worker-shell', arguments: { command: 'npm test' } },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+    nestedSubagent: true,
+  });
+
+  const { client, installs } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+  });
+
+  const plan = coord.prepareContinuation('n', 'do not run it');
+  t.truthy(plan);
+  t.false(approved);
+  t.true(rejected);
+  t.is(installs.length, 0);
+});
+
+test('prepareContinuation rejection: non-nested with no interceptor support falls back to reject (distinct from nested path)', (t) => {
+  // This test verifies that non-nested + no interceptor is handled via a distinct branch
+  // (not the same as nested subagent rejection). The observable outcome is:
+  //   - reject() is called (not approve())
+  //   - no interceptor is installed
+  let approved = false;
+  let rejected = false;
+  const state: any = {
+    approve: () => (approved = true),
+    reject: () => (rejected = true),
+  };
+  const interruption = { name: 'shell', callId: 'c1', arguments: { command: 'rm -rf /' } };
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state,
+    interruption,
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+    // nestedSubagent is NOT set — this is the non-nested path
+  });
+
+  // agentClient lacks addToolInterceptor — interceptor cannot be installed
+  const noInterceptorClient: any = {};
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: noInterceptorClient,
+    approvalState,
+    logger,
+    sessionId: 's1',
+  });
+
+  const plan = coord.prepareContinuation('n', undefined);
+  t.truthy(plan);
+  t.false(approved, 'approve should not be called when interceptor cannot be installed');
+  t.true(rejected, 'non-nested rejection without interceptor support falls back to reject');
+});
+
+test('prepareContinuation rejection: nested subagent where state.reject is undefined — does not throw', (t) => {
+  // state has no reject method — simulates SDK state that only has approve
+  const state: any = {
+    approve: () => undefined,
+    // reject is intentionally absent
+  };
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state,
+    interruption: { name: 'shell', callId: 'nested-c1', arguments: { command: 'ls' } },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+    nestedSubagent: true,
+  });
+
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+  });
+
+  // Should not throw — reject is optional-chained in the implementation
+  t.notThrows(() => {
+    coord.prepareContinuation('n', undefined);
+  });
+});
+
 test('prepareAbortResolution installs interceptor and approves', (t) => {
   let approved = false;
   const state: any = { approve: () => (approved = true) };

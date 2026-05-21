@@ -124,19 +124,35 @@ export class ApprovalFlowCoordinator {
         ? `Tool execution was not approved. User's reason: ${rejectionReason}`
         : 'Tool execution was not approved.';
 
-      const installedInterceptor = tryInstallApprovalRejectionInterceptor(this.deps.agentClient, {
-        toolName,
-        expectedCallId,
-        rejectionMessage,
-      });
-
-      if (installedInterceptor) {
-        const approve = getMethod<[unknown], void>(state, 'approve');
-        approve?.call(state, interruption);
-        this.deps.approvalState.setPendingRemoveInterceptor(installedInterceptor);
-      } else {
+      if (pendingApprovalContext.nestedSubagent) {
+        // Nested subagent: use SDK-native rejection path (no parent interceptor).
         const reject = getMethod<[unknown], void>(state, 'reject');
         reject?.call(state, interruption);
+      } else {
+        const installedInterceptor = tryInstallApprovalRejectionInterceptor(this.deps.agentClient, {
+          toolName,
+          expectedCallId,
+          rejectionMessage,
+        });
+
+        if (installedInterceptor) {
+          const approve = getMethod<[unknown], void>(state, 'approve');
+          approve?.call(state, interruption);
+          this.deps.approvalState.setPendingRemoveInterceptor(installedInterceptor);
+        } else {
+          this.deps.logger.warn(
+            'Approval rejection interceptor could not be installed — agent client lacks addToolInterceptor support. Falling back to SDK-native reject.',
+            {
+              eventType: 'approval.interceptor_missing',
+              category: 'approval',
+              phase: 'approval',
+              sessionId: this.deps.sessionId,
+              traceId: this.deps.logger.getCorrelationId(),
+            },
+          );
+          const reject = getMethod<[unknown], void>(state, 'reject');
+          reject?.call(state, interruption);
+        }
       }
 
       this.deps.logger.debug('Tool approval rejected', {

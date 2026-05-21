@@ -142,6 +142,10 @@ export function createUndoSlashCommand({
   };
 }
 
+/** All exclusive mode keys. */
+const EXCLUSIVE_MODE_KEYS = ['app.liteMode', 'app.orchestratorMode', 'app.planMode', 'app.mentorMode'] as const;
+type ExclusiveModeKey = (typeof EXCLUSIVE_MODE_KEYS)[number];
+
 export const useAppCommands = ({
   settingsService,
   addSystemMessage,
@@ -156,17 +160,30 @@ export const useAppCommands = ({
   openUndoMenu,
   onUndo,
 }: UseAppCommandsProps) => {
+  /**
+   * Disable all exclusive sibling modes except the one being enabled.
+   * This is the single source of exclusivity enforcement for slash-command
+   * handlers; use-runtime-settings.ts should NOT duplicate this logic.
+   */
+  const disableOtherModes = useCallback(
+    (except: ExclusiveModeKey) => {
+      for (const key of EXCLUSIVE_MODE_KEYS) {
+        if (key !== except && settingsService.get<boolean>(key)) {
+          settingsService.set(key, false);
+          applyRuntimeSetting(key, false);
+        }
+      }
+    },
+    [settingsService, applyRuntimeSetting],
+  );
+
   const togglePlanMode = useCallback(() => {
     const currentValue = settingsService.get<boolean>('app.planMode');
     const newValue = !currentValue;
 
-    // Plan mode is mutually exclusive with lite mode
+    // Plan mode is mutually exclusive with all other prompt/toolset modes.
     if (newValue) {
-      const liteMode = settingsService.get<boolean>('app.liteMode');
-      if (liteMode) {
-        settingsService.set('app.liteMode', false);
-        applyRuntimeSetting('app.liteMode', false);
-      }
+      disableOtherModes('app.planMode');
     }
 
     settingsService.set('app.planMode', newValue);
@@ -175,7 +192,7 @@ export const useAppCommands = ({
     addSystemMessage(
       `Plan mode ${newValue ? 'enabled' : 'disabled'}${newValue ? ' - read-only research/planning mode' : ''}`,
     );
-  }, [settingsService, applyRuntimeSetting, addSystemMessage]);
+  }, [settingsService, applyRuntimeSetting, addSystemMessage, disableOtherModes]);
 
   const cycleAppModes = useCallback(() => {
     const planMode = settingsService.get<boolean>('app.planMode');
@@ -183,11 +200,16 @@ export const useAppCommands = ({
     const modeName = nextPlanMode ? 'Plan' : 'Standard';
     const detail = nextPlanMode ? ' - read-only research/planning mode' : '';
 
+    // When entering plan mode, disable all sibling modes first.
+    if (nextPlanMode) {
+      disableOtherModes('app.planMode');
+    }
+
     settingsService.set('app.planMode', nextPlanMode);
     applyRuntimeSetting('app.planMode', nextPlanMode);
 
     addSystemMessage(`Switched to ${modeName} mode${detail}`);
-  }, [settingsService, applyRuntimeSetting, addSystemMessage]);
+  }, [settingsService, applyRuntimeSetting, addSystemMessage, disableOtherModes]);
 
   const slashCommands: SlashCommand[] = useMemo(() => {
     const settingsCommand = createSettingsCommand({
@@ -196,6 +218,22 @@ export const useAppCommands = ({
       applyRuntimeSetting,
       setInput,
     });
+    const guardedSettingsCommand: SlashCommand = {
+      ...settingsCommand,
+      action: (args?: string) => {
+        const settingParts = args?.trim().split(/\s+/) ?? [];
+        const settingKey = settingParts[0] === 'reset' ? settingParts[1] : settingParts[0];
+        const hasHistory = messages.some((msg) => msg.sender !== 'system');
+        if (settingKey === 'app.orchestratorMode' && hasHistory) {
+          addSystemMessage(
+            'Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first, then change orchestrator mode.',
+          );
+          return true;
+        }
+
+        return settingsCommand.action(args);
+      },
+    };
 
     const autoApproveAction = (args?: string) => {
       const validModes = ['off', 'advisory', 'auto'] as const;
@@ -289,13 +327,9 @@ export const useAppCommands = ({
           const currentValue = settingsService.get<boolean>('app.mentorMode');
           const newValue = !currentValue;
 
-          // Mentor mode is mutually exclusive with lite mode
+          // Mentor mode is mutually exclusive with all other prompt/toolset modes.
           if (newValue) {
-            const liteMode = settingsService.get<boolean>('app.liteMode');
-            if (liteMode) {
-              settingsService.set('app.liteMode', false);
-              applyRuntimeSetting('app.liteMode', false);
-            }
+            disableOtherModes('app.mentorMode');
           }
 
           settingsService.set('app.mentorMode', newValue);
@@ -326,14 +360,9 @@ export const useAppCommands = ({
           const currentValue = settingsService.get<boolean>('app.liteMode');
           const newValue = !currentValue;
 
-          // Lite mode is mutually exclusive with mentor mode
+          // Lite mode is mutually exclusive with all other prompt/toolset modes.
           if (newValue) {
-            const mentorMode = settingsService.get<boolean>('app.mentorMode');
-
-            if (mentorMode) {
-              settingsService.set('app.mentorMode', false);
-              applyRuntimeSetting('app.mentorMode', false);
-            }
+            disableOtherModes('app.liteMode');
           }
 
           settingsService.set('app.liteMode', newValue);
@@ -341,6 +370,31 @@ export const useAppCommands = ({
 
           addSystemMessage(
             `Lite mode ${newValue ? 'enabled - using minimal prompt, no codebase context' : 'disabled'}`,
+          );
+          return true;
+        },
+      },
+      {
+        name: 'orchestrator',
+        description: 'Toggle orchestrator mode (delegate all tool-backed work)',
+        action: () => {
+          const hasHistory = messages.some((msg) => msg.sender !== 'system');
+          if (hasHistory) {
+            addSystemMessage(
+              'Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first, then `/orchestrator`.',
+            );
+            return true;
+          }
+
+          const newValue = !settingsService.get<boolean>('app.orchestratorMode');
+          if (newValue) {
+            disableOtherModes('app.orchestratorMode');
+          }
+
+          settingsService.set('app.orchestratorMode', newValue);
+          applyRuntimeSetting('app.orchestratorMode', newValue);
+          addSystemMessage(
+            `Orchestrator mode ${newValue ? 'enabled - tool-backed work must use subagents' : 'disabled'}`,
           );
           return true;
         },
@@ -394,12 +448,13 @@ export const useAppCommands = ({
           return true;
         },
       },
-      settingsCommand,
+      guardedSettingsCommand,
     ];
   }, [
     addSystemMessage,
     applyRuntimeSetting,
     clearConversation,
+    disableOtherModes,
     exit,
     getSessionUsage,
     messages,

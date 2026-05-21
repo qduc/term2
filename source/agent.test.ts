@@ -75,6 +75,77 @@ test('getAgentDefinition omits delegation guidance in lite mode', (t) => {
   t.false(definition.instructions.includes('### Delegating to subagents'));
 });
 
+test('getAgentDefinition in orchestrator mode exposes only run_subagent', (t) => {
+  const settingsService = createMockSettingsService({
+    'app.orchestratorMode': true,
+    'agent.model': 'gpt-5',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+    runSubagent: async () => ({} as any),
+  });
+
+  t.deepEqual(
+    definition.tools.map((tool) => tool.name),
+    ['run_subagent'],
+  );
+});
+
+test('getAgentDefinition in orchestrator mode requires delegated tool work', (t) => {
+  const settingsService = createMockSettingsService({
+    'app.orchestratorMode': true,
+    'agent.model': 'gpt-5',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+    runSubagent: async () => ({} as any),
+  });
+
+  t.true(definition.instructions.includes('Orchestrator mode'));
+  t.true(definition.instructions.includes('must delegate'));
+  t.false(definition.instructions.includes('Use `read_code_outline`'));
+  // Verify non-orchestrator direct-tool guidance is absent from orchestrator instructions
+  t.false(definition.instructions.includes('Prefer `read_file` for reading file contents.'));
+});
+
+test('getAgentDefinition in orchestrator mode exposes only run_subagent for non-gpt-5 model', (t) => {
+  const settingsService = createMockSettingsService({
+    'app.orchestratorMode': true,
+    'agent.model': 'gpt-4o',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+    runSubagent: async () => ({} as any),
+  });
+
+  t.deepEqual(
+    definition.tools.map((tool) => tool.name),
+    ['run_subagent'],
+  );
+});
+
+test('getAgentDefinition throws if orchestratorMode is true and runSubagent is missing', (t) => {
+  const settingsService = createMockSettingsService({
+    'app.orchestratorMode': true,
+    'agent.model': 'gpt-4o',
+  });
+
+  t.throws(
+    () =>
+      getAgentDefinition({
+        settingsService,
+        loggingService: mockLogger,
+      }),
+    { instanceOf: Error, message: /orchestratorMode.*runSubagent|runSubagent.*orchestratorMode/i },
+  );
+});
+
 test('getAgentDefinition excludes grep and find_files when searchViaShell is true', (t) => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': true,

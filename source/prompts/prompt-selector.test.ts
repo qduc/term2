@@ -50,3 +50,21 @@ test('getPromptPath selects modern gpt-5 prompt for all non-codex gpt-5 models',
 test('getPromptPath falls back to simple prompt', (t) => {
   t.is(getPromptPath({ basePromptDir, model: 'gpt-4o', liteMode: false }), path.join(basePromptDir, 'simple.md'));
 });
+
+test('getPromptPath selects orchestrator prompt when orchestratorMode is true', (t) => {
+  t.is(
+    getPromptPath({ basePromptDir, model: 'gpt-4o', liteMode: false, orchestratorMode: true }),
+    path.join(basePromptDir, 'orchestrator.md'),
+  );
+  t.is(
+    getPromptPath({ basePromptDir, model: 'gpt-5', liteMode: false, orchestratorMode: true }),
+    path.join(basePromptDir, 'orchestrator.md'),
+  );
+});
+
+test('getPromptPath prefers lite over orchestrator when both are true', (t) => {
+  t.is(
+    getPromptPath({ basePromptDir, model: 'gpt-4o', liteMode: true, orchestratorMode: true }),
+    path.join(basePromptDir, 'lite.md'),
+  );
+});

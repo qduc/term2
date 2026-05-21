@@ -227,6 +227,7 @@ test.serial('run() with explorer role uses read-only tools only', async (t) => {
   // Explorer should NOT have web tools by default
   t.false(toolNames.includes('web_search'));
   t.false(toolNames.includes('web_fetch'));
+  t.false(toolNames.includes('shell'));
 });
 
 // ========== Researcher role ==========
@@ -317,7 +318,7 @@ test.beforeEach(() => {
   ensureWorkerProviderRegistered();
 });
 
-test.serial('run() with worker role includes write tools', async (t) => {
+test.serial('run() with worker role includes write and shell tools', async (t) => {
   const settings = createMockSettings({
     'agent.model': 'mock-model',
     'agent.provider': 'mock-worker-provider',
@@ -336,9 +337,9 @@ test.serial('run() with worker role includes write tools', async (t) => {
   t.true(toolNames.includes('search_replace'));
   t.true(toolNames.includes('create_file'));
 
-  // But not web or shell
+  // Worker has shell access but not web tools
   t.false(toolNames.includes('web_search'));
-  t.false(toolNames.includes('shell'));
+  t.true(toolNames.includes('shell'));
 });
 
 test.serial('run() result contains agentId and correct role', async (t) => {
@@ -856,4 +857,105 @@ test.serial('finalText is the assistant message after the last tool item', async
 
   t.is(result.finalText, 'Final answer: it is in foo.ts.');
   t.false(result.finalText.includes('Let me look into this first.'));
+});
+
+// ========== Worker shell tool — safety gating ==========
+
+test.serial('worker shell tool executes safe command without triggering approval UI', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(process.env['TMPDIR'] ?? '/tmp', 'term2-test-worker-shell-safe-'));
+  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  let shellResult: string | null = null;
+
+  registerProvider({
+    id: 'mock-worker-shell-safe-provider',
+    label: 'Mock Worker Shell Safe Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
+          // needsApproval must be false for safe commands — no approval UI in workers
+          const needsApproval = await shellTool.needsApproval({}, { command: 'ls .' });
+          t.is(needsApproval, false, 'worker shell tool must never require approval');
+
+          shellResult = await shellTool.invoke({}, JSON.stringify({ command: 'echo hello' }), {});
+          return {
+            status: 'completed',
+            finalOutput: 'done',
+            history: [],
+            messages: [],
+          };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-worker-shell-safe-provider',
+    }),
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+  });
+
+  await manager.run({ role: 'worker', task: 'list files' });
+
+  // The shell tool should have executed and returned output (not an error block)
+  t.truthy(shellResult);
+  t.false(shellResult!.includes('blocked for safety'), 'safe command should not be blocked');
+});
+
+test.serial('worker shell tool blocks dangerous/destructive commands and returns error string', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(process.env['TMPDIR'] ?? '/tmp', 'term2-test-worker-shell-dangerous-'));
+  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  let shellResult: string | null = null;
+
+  registerProvider({
+    id: 'mock-worker-shell-dangerous-provider',
+    label: 'Mock Worker Shell Dangerous Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
+          // needsApproval must always be false — dangerous commands are blocked by execute(), not approval
+          const needsApproval = await shellTool.needsApproval({}, { command: 'rm -rf /tmp/something' });
+          t.is(needsApproval, false, 'worker shell must never trigger approval UI even for dangerous commands');
+
+          shellResult = await shellTool.invoke({}, JSON.stringify({ command: 'rm -rf /tmp/something' }), {});
+          return {
+            status: 'completed',
+            finalOutput: 'done',
+            history: [],
+            messages: [],
+          };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-worker-shell-dangerous-provider',
+    }),
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+  });
+
+  await manager.run({ role: 'worker', task: 'delete stuff' });
+
+  // The shell tool should have returned a blocked-for-safety error string, not executed
+  t.truthy(shellResult);
+  t.true(shellResult!.includes('blocked for safety'), 'dangerous command must be blocked');
+  t.false(shellResult!.includes('exit 0'), 'dangerous command must not execute');
 });

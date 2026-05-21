@@ -28,6 +28,7 @@ import {
   type SavedMessage,
 } from './services/conversation-persistence.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
+import { normalizeAppModes } from './services/settings-schema.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -223,6 +224,7 @@ if (resumedConversation) {
       mentorMode: resumedConversation.appMode.mentorMode,
       liteMode: resumedConversation.appMode.liteMode,
       planMode: resumedConversation.appMode.planMode,
+      orchestratorMode: resumedConversation.appMode.orchestratorMode ?? false,
     };
   }
 }
@@ -242,34 +244,49 @@ if (validatedReasoningEffort) {
   };
 }
 
-// Fresh sessions honor --lite/non-interactive defaults. Resumed sessions keep
-// the saved mode profile so prompt/tool behavior matches the conversation.
-cliOverrides.app = {
-  ...cliOverrides.app,
-  // Non-interactive mode defaults to lite mode unless explicitly auto-approved.
-  liteMode: resumedConversation
-    ? cliOverrides.app?.liteMode ?? false
-    : Boolean(cli.flags.lite || (hasPositionalPrompt && !cli.flags.autoApprove)),
-};
-
 // Create LoggingService instance
 const logger = new LoggingService({
   disableLogging: false,
 });
 
+// Build settings with CLI overrides applied first so we can read persisted
+// exclusive modes before deciding the implicit lite default.
 const settings = new SettingsService({
   env: buildEnvOverrides(),
   cli: Object.keys(cliOverrides).length > 0 ? cliOverrides : undefined,
   loggingService: logger,
 });
 
-// Normalize settings at startup to resolve mutual exclusions
-const startupPlanMode = settings.get<boolean>('app.planMode');
-const startupLiteMode = settings.get<boolean>('app.liteMode');
-
-if (startupLiteMode) {
-  if (startupPlanMode) settings.set('app.planMode', false);
+// Fresh sessions honor --lite/non-interactive defaults. Resumed sessions keep
+// the saved mode profile so prompt/tool behavior matches the conversation.
+// IMPORTANT: only apply the implicit lite default when no other exclusive mode
+// is already active (orchestrator or mentor take precedence).
+{
+  let resolvedLiteMode: boolean;
+  if (resumedConversation) {
+    resolvedLiteMode = cliOverrides.app?.liteMode ?? false;
+  } else {
+    const implicitLite = Boolean(cli.flags.lite || (hasPositionalPrompt && !cli.flags.autoApprove));
+    const persistedOrchestrator = settings.get<boolean>('app.orchestratorMode');
+    const persistedMentor = settings.get<boolean>('app.mentorMode');
+    // Implicit lite must not override a higher-precedence mode already persisted.
+    resolvedLiteMode = implicitLite && !persistedOrchestrator && !persistedMentor;
+  }
+  settings.set('app.liteMode', resolvedLiteMode);
 }
+
+// Normalize all mode flags to enforce mutual exclusion with a consistent
+// precedence: orchestratorMode > liteMode > planMode > mentorMode.
+const normalized = normalizeAppModes({
+  orchestratorMode: settings.get<boolean>('app.orchestratorMode'),
+  liteMode: settings.get<boolean>('app.liteMode'),
+  planMode: settings.get<boolean>('app.planMode'),
+  mentorMode: settings.get<boolean>('app.mentorMode'),
+});
+settings.set('app.orchestratorMode', normalized.orchestratorMode);
+settings.set('app.liteMode', normalized.liteMode);
+settings.set('app.planMode', normalized.planMode);
+settings.set('app.mentorMode', normalized.mentorMode);
 
 // SSH Handling
 const sshFlag = cli.flags.ssh;
@@ -370,15 +387,6 @@ if (sshFlag) {
   executionContext = new ExecutionContext(sshService, remoteDir);
 } else {
   executionContext = new ExecutionContext();
-}
-
-// Enforce mutual exclusion between lite mode and mentor mode at startup
-const liteMode = settings.get<boolean>('app.liteMode');
-const mentorMode = settings.get<boolean>('app.mentorMode');
-
-if (liteMode && mentorMode) {
-  // Lite mode takes precedence, disable mentor mode
-  settings.set('app.mentorMode', false);
 }
 
 const history = new HistoryService({
@@ -485,6 +493,7 @@ const saveAndPrintResume = async (messages: Message[]) => {
       mentorMode: settings.get<boolean>('app.mentorMode') ?? false,
       liteMode: settings.get<boolean>('app.liteMode') ?? false,
       planMode: settings.get<boolean>('app.planMode') ?? false,
+      orchestratorMode: settings.get<boolean>('app.orchestratorMode') ?? false,
     },
     model,
     provider,

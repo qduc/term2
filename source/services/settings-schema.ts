@@ -132,10 +132,12 @@ export const AppSettingsSchema = z.object({
   // mentorMode: uses simplified mentor prompt and enables ask_mentor tool (if mentorModel configured)
   // liteMode: minimal context for general terminal assistance (no codebase tools/prompts)
   // planMode: when enabled, forces read-only operation (Plan mode)
+  // orchestratorMode: parent only delegates tool-backed work through run_subagent
   // Standard mode is the default (all flags false): full capabilities with auto-approve for apply_patch
   mentorMode: z.boolean().optional().default(false),
   liteMode: z.boolean().optional().default(false),
   planMode: z.boolean().optional().default(false),
+  orchestratorMode: z.boolean().optional().default(false),
   searchViaShell: z.boolean().optional().default(false),
 });
 
@@ -326,6 +328,7 @@ export interface SettingsWithSources {
     mentorMode: SettingWithSource<boolean>;
     liteMode: SettingWithSource<boolean>;
     planMode: SettingWithSource<boolean>;
+    orchestratorMode: SettingWithSource<boolean>;
     searchViaShell: SettingWithSource<boolean>;
   };
   tools: {
@@ -397,6 +400,7 @@ export const SETTING_KEYS = {
   APP_MENTOR_MODE: 'app.mentorMode',
   APP_LITE_MODE: 'app.liteMode',
   APP_PLAN_MODE: 'app.planMode',
+  APP_ORCHESTRATOR_MODE: 'app.orchestratorMode',
   APP_SEARCH_VIA_SHELL: 'app.searchViaShell',
   TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
   TOOLS_ENABLE_EDIT_HEALING: 'tools.enableEditHealing',
@@ -431,6 +435,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_MENTOR_MODE,
   SETTING_KEYS.APP_LITE_MODE,
   SETTING_KEYS.APP_PLAN_MODE,
+  SETTING_KEYS.APP_ORCHESTRATOR_MODE,
   SETTING_KEYS.APP_SEARCH_VIA_SHELL,
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
   SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
@@ -450,6 +455,37 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
   SETTING_KEYS.WEB_SEARCH_PROVIDER,
 ]);
+
+export interface AppModes {
+  orchestratorMode: boolean;
+  liteMode: boolean;
+  planMode: boolean;
+  mentorMode: boolean;
+}
+
+/**
+ * Normalize app mode flags to enforce mutual exclusion.
+ *
+ * Precedence (first one that is true wins; all others are disabled):
+ *   orchestratorMode > liteMode > planMode > mentorMode
+ *
+ * When none are true, all remain false (standard mode).
+ */
+export function normalizeAppModes(modes: AppModes): AppModes {
+  if (modes.orchestratorMode) {
+    return { orchestratorMode: true, liteMode: false, planMode: false, mentorMode: false };
+  }
+  if (modes.liteMode) {
+    return { orchestratorMode: false, liteMode: true, planMode: false, mentorMode: false };
+  }
+  if (modes.planMode) {
+    return { orchestratorMode: false, liteMode: false, planMode: true, mentorMode: false };
+  }
+  if (modes.mentorMode) {
+    return { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: true };
+  }
+  return { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: false };
+}
 
 // Some settings with default values are optional to persist
 export const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
@@ -508,6 +544,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     mentorMode: false,
     liteMode: false,
     planMode: false,
+    orchestratorMode: false,
     searchViaShell: false,
   },
   tools: {

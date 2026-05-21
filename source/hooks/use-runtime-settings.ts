@@ -60,21 +60,31 @@ export const useRuntimeSettings = ({
       }
 
       if (key === 'app.mentorMode') {
-        // Re-initialize the agent to use the new mode's prompt
+        // Exclusivity enforcement is owned by the slash-command handlers.
+        // Here we only apply the side-effect: re-initialize agent prompt/tools.
         const currentModel = settingsService.get<string>('agent.model');
         setModel(currentModel);
         return;
       }
 
       if (key === 'app.liteMode') {
-        // Re-initialize the agent to use the new mode's prompt and tools
+        // Exclusivity enforcement is owned by the slash-command handlers.
+        // Here we only apply the side-effect: re-initialize agent prompt/tools.
         const currentModel = settingsService.get<string>('agent.model');
         setModel(currentModel);
         return;
       }
 
       if (key === 'app.planMode') {
+        // Exclusivity enforcement is owned by the slash-command handlers.
         conversationService.queueModeNotice(planModeNotice(Boolean(value)));
+        return;
+      }
+
+      if (key === 'app.orchestratorMode') {
+        // Exclusivity enforcement is owned by the slash-command handlers.
+        const currentModel = settingsService.get<string>('agent.model');
+        setModel(currentModel);
         return;
       }
 

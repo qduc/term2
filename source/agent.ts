@@ -90,6 +90,10 @@ function resolvePrompt(promptPath: string): string {
   try {
     return fs.readFileSync(promptPath, 'utf-8').trim();
   } catch (e: any) {
+    const sourcePromptPath = path.join(import.meta.dirname, '../source/prompts', path.basename(promptPath));
+    if (sourcePromptPath !== promptPath && fs.existsSync(sourcePromptPath)) {
+      return fs.readFileSync(sourcePromptPath, 'utf-8').trim();
+    }
     throw new Error(`Failed to read prompt file at ${promptPath}: ${e.message}`);
   }
 }
@@ -115,12 +119,18 @@ export const getAgentDefinition = (
 
   const mentorMode = settingsService.get<boolean>('app.mentorMode');
   const liteMode = settingsService.get<boolean>('app.liteMode');
+  const orchestratorMode = settingsService.get<boolean>('app.orchestratorMode');
   const searchViaShell = settingsService.get<boolean>('app.searchViaShell');
   // Code-context tools operate on the local filesystem only; disable them for
   // remote (SSH) execution where the workspace lives on another host.
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const isGpt5 = !liteMode && shouldPreferPatchEditingModel(resolvedModel);
-  const promptPath = getPromptPath({ basePromptDir: BASE_PROMPT_PATH, model: resolvedModel, liteMode });
+  const promptPath = getPromptPath({
+    basePromptDir: BASE_PROMPT_PATH,
+    model: resolvedModel,
+    liteMode,
+    orchestratorMode,
+  });
   let prompt = resolvePrompt(promptPath);
 
   if (mentorMode && !liteMode) {
@@ -133,24 +143,25 @@ export const getAgentDefinition = (
     }
   }
 
-  const codeContextDoc = codeContextEnabled
-    ? liteMode
-      ? '### Code Context Tools\n\n- `read_code_outline`: inspect file structure.\n- `code_context_search`: find related files or symbol declarations. Use `read_file` before editing.'
-      : '### Code Context Tools\n\n- Use `read_code_outline` for a compact file outline.\n- Use `code_context_search` for related files or symbol declarations.\n- Use `read_file` before editing.'
-    : '';
+  const codeContextDoc =
+    !orchestratorMode && codeContextEnabled
+      ? liteMode
+        ? '### Code Context Tools\n\n- `read_code_outline`: inspect file structure.\n- `code_context_search`: find related files or symbol declarations. Use `read_file` before editing.'
+        : '### Code Context Tools\n\n- Use `read_code_outline` for a compact file outline.\n- Use `code_context_search` for related files or symbol declarations.\n- Use `read_file` before editing.'
+      : '';
 
   if (codeContextDoc) {
     prompt = `${prompt}\n\n${codeContextDoc}`;
   }
 
-  if (searchViaShell) {
+  if (!orchestratorMode && searchViaShell) {
     try {
       const addendum = getSearchViaShellAddendum({ executionContext });
       prompt = `${prompt}\n\n${addendum}`;
     } catch (e) {
       loggingService.error(`Failed to load search-via-shell addendum: ${e}`);
     }
-  } else {
+  } else if (!orchestratorMode) {
     if (!isGpt5) {
       const searchToolsDoc = liteMode
         ? '### Search Tools\n\n- `find_files`: locate files by name or glob.\n- `grep`: search file contents.'
@@ -162,7 +173,7 @@ export const getAgentDefinition = (
   // Delegation guidance is injected under the same condition that registers
   // the run_subagent tool (full mode + runSubagent dependency available).
   if (!liteMode && runSubagent) {
-    prompt = `${prompt}\n\n${getSubagentDelegationAddendum()}`;
+    prompt = `${prompt}\n\n${getSubagentDelegationAddendum({ orchestratorMode })}`;
   }
 
   try {
@@ -180,8 +191,25 @@ export const getAgentDefinition = (
     prompt += `\n\n${getReasoningEfficiencyAddendum()}`;
   }
 
-  const envInfo = getEnvInfo(settingsService, executionContext, liteMode);
+  const envInfo = getEnvInfo(settingsService, executionContext, liteMode || orchestratorMode);
   const cwd = executionContext?.getCwd() || process.cwd();
+
+  if (orchestratorMode) {
+    if (!runSubagent) {
+      throw new Error(
+        'orchestratorMode requires runSubagent: cannot build orchestrator agent without a runSubagent implementation.',
+      );
+    }
+    const tools = [createRunSubagentToolDefinition(runSubagent)];
+    registerToolFormatters(tools);
+
+    return {
+      name: 'Agent',
+      instructions: `${prompt}\n\nEnvironment: ${envInfo}`,
+      tools,
+      model: resolvedModel,
+    };
+  }
 
   const tools: ToolDefinition[] = [
     createShellToolDefinition({ settingsService, loggingService, executionContext }),

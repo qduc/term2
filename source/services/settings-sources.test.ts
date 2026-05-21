@@ -38,4 +38,6 @@ test('buildSettingsWithSources maps nested values and sources including optional
   t.deepEqual(result.webSearch.provider.value, settings.webSearch.provider);
   t.is(result.app.planMode.value, settings.app.planMode);
   t.is(result.app.planMode.source, 'default');
+  t.is(result.app.orchestratorMode.value, settings.app.orchestratorMode);
+  t.is(result.app.orchestratorMode.source, 'default');
 });

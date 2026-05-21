@@ -42,6 +42,7 @@ const SETTINGS_SOURCE_KEYS = {
     mentorMode: 'app.mentorMode',
     liteMode: 'app.liteMode',
     planMode: 'app.planMode',
+    orchestratorMode: 'app.orchestratorMode',
   },
   tools: {
     logFileOperations: 'tools.logFileOperations',

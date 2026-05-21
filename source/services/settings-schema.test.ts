@@ -7,6 +7,7 @@ import {
   SettingsSchema,
   RUNTIME_MODIFIABLE_SETTINGS,
   SETTING_KEYS,
+  normalizeAppModes,
 } from './settings-schema.js';
 
 test('CustomProviderSchema defaults provider type for legacy configs', (t) => {
@@ -117,4 +118,37 @@ test('SettingsSchema includes app.planMode, which defaults to false and is modif
   t.is(parsedTrue.app?.planMode, true);
 
   t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.APP_PLAN_MODE));
+});
+
+test('SettingsSchema includes app.orchestratorMode, which defaults to false and is modifiable at runtime', (t) => {
+  const parsed = SettingsSchema.parse({ app: {} });
+  t.is(parsed.app?.orchestratorMode, false);
+
+  const parsedTrue = SettingsSchema.parse({ app: { orchestratorMode: true } });
+  t.is(parsedTrue.app?.orchestratorMode, true);
+
+  t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.APP_ORCHESTRATOR_MODE));
+});
+
+test('startup normalization: persisted orchestratorMode=true with implicit lite (positional prompt) does not produce liteMode=true', (t) => {
+  // Simulate the cli.tsx startup logic:
+  // - persisted/resumed settings have orchestratorMode: true
+  // - a positional prompt is provided (hasPositionalPrompt=true, autoApprove=false)
+  //   which would naively set liteMode=true via the implicit default
+  // The normalizer must resolve this so orchestratorMode wins and liteMode stays false.
+  //
+  // Precedence: orchestratorMode > liteMode > planMode > mentorMode (first one wins).
+
+  // persisted orchestratorMode + implicit liteMode both true → orchestrator wins
+  const result = normalizeAppModes({
+    orchestratorMode: true,
+    liteMode: true, // implicit from positional prompt
+    planMode: false,
+    mentorMode: false,
+  });
+
+  t.true(result.orchestratorMode, 'orchestratorMode must remain true');
+  t.false(result.liteMode, 'liteMode must be false when orchestratorMode wins');
+  t.false(result.planMode);
+  t.false(result.mentorMode);
 });

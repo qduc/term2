@@ -69,3 +69,29 @@ test('consumeAborted() returns aborted context and clears it', (t) => {
   t.truthy(aborted);
   t.is(state.consumeAborted(), null);
 });
+
+test('abortPending carries forward removeInterceptor when set', (t) => {
+  const state = new ApprovalState();
+  let interceptorCalled = false;
+  const removeInterceptor = () => {
+    interceptorCalled = true;
+  };
+
+  state.setPending({
+    state: { id: 'state' },
+    interruption: { name: 'tool' },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+    removeInterceptor,
+  });
+
+  state.abortPending();
+
+  const aborted = state.consumeAborted();
+  t.truthy(aborted);
+  t.is(typeof aborted?.removeInterceptor, 'function', 'removeInterceptor should be carried to aborted context');
+
+  // Calling it should invoke the original cleanup
+  aborted?.removeInterceptor?.();
+  t.true(interceptorCalled, 'removeInterceptor should delegate to the original cleanup function');
+});

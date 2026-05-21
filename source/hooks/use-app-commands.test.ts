@@ -175,10 +175,14 @@ const TestHookWrapper = ({
   settings,
   onHookResult,
   onApply,
+  messages = [],
+  onSystemMessage,
 }: {
   settings: Map<string, any>;
   onHookResult: (res: any) => void;
   onApply?: (key: string, value: any) => void;
+  messages?: Message[];
+  onSystemMessage?: (text: string) => void;
 }) => {
   const settingsService = {
     get: (key: string) => settings.get(key) ?? false,
@@ -187,13 +191,13 @@ const TestHookWrapper = ({
 
   const hookResult = useAppCommands({
     settingsService,
-    addSystemMessage: () => {},
+    addSystemMessage: (text: string) => onSystemMessage?.(text),
     applyRuntimeSetting: (key: string, value: any) => onApply?.(key, value),
     setInput: () => {},
     clearConversation: () => {},
     getSessionUsage: () => '',
     exit: () => {},
-    messages: [],
+    messages,
     setModel: () => {},
     undoLastUserMessage: () => null,
     openUndoMenu: () => {},
@@ -259,4 +263,151 @@ test('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard', (t) => 
   // Plan -> Standard
   hookResult.cycleAppModes();
   t.false(settings.get('app.planMode'));
+});
+
+test('useAppCommands /orchestrator enables exclusive orchestrator mode', (t) => {
+  const settings = new Map<string, any>([
+    ['app.liteMode', true],
+    ['app.mentorMode', true],
+    ['app.planMode', true],
+  ]);
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+      onApply: (key: string, value: any) => settings.set(key, value),
+    }),
+  );
+
+  hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
+
+  t.true(settings.get('app.orchestratorMode'));
+  t.false(settings.get('app.liteMode'));
+  t.false(settings.get('app.mentorMode'));
+  t.false(settings.get('app.planMode'));
+});
+
+test('useAppCommands blocks /orchestrator when the session has non-system history', (t) => {
+  const settings = new Map<string, any>();
+  const systemMessages: string[] = [];
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
+      onSystemMessage: (text: string) => systemMessages.push(text),
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
+
+  t.falsy(settings.get('app.orchestratorMode'));
+  t.true(systemMessages.some((message) => message.includes('/clear')));
+});
+
+test('useAppCommands blocks orchestrator settings changes when the session has non-system history', (t) => {
+  const settings = new Map<string, any>();
+  const systemMessages: string[] = [];
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
+      onSystemMessage: (text: string) => systemMessages.push(text),
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  hookResult.slashCommands.find((command: any) => command.name === 'settings').action('app.orchestratorMode true');
+
+  t.falsy(settings.get('app.orchestratorMode'));
+  t.true(systemMessages.some((message) => message.includes('/clear')));
+});
+
+test('useAppCommands enabling orchestrator disables all of: lite, plan, mentor', (t) => {
+  const settings = new Map<string, any>([
+    ['app.liteMode', true],
+    ['app.planMode', true],
+    ['app.mentorMode', true],
+    ['app.orchestratorMode', false],
+  ]);
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+      onApply: (key: string, value: any) => settings.set(key, value),
+    }),
+  );
+
+  hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
+
+  t.true(settings.get('app.orchestratorMode'));
+  t.false(settings.get('app.liteMode'));
+  t.false(settings.get('app.planMode'));
+  t.false(settings.get('app.mentorMode'));
+});
+
+test('useAppCommands enabling plan disables all of: lite, orchestrator, mentor', (t) => {
+  const settings = new Map<string, any>([
+    ['app.liteMode', true],
+    ['app.orchestratorMode', true],
+    ['app.mentorMode', true],
+    ['app.planMode', false],
+  ]);
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+      onApply: (key: string, value: any) => settings.set(key, value),
+    }),
+  );
+
+  hookResult.slashCommands.find((command: any) => command.name === 'plan').action();
+
+  t.true(settings.get('app.planMode'));
+  t.false(settings.get('app.liteMode'));
+  t.false(settings.get('app.orchestratorMode'));
+  t.false(settings.get('app.mentorMode'));
+});
+
+test('useAppCommands cycleAppModes when in mentor mode switches to plan and disables mentor', (t) => {
+  const settings = new Map<string, any>([
+    ['app.mentorMode', true],
+    ['app.planMode', false],
+  ]);
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+      onApply: (key: string, value: any) => settings.set(key, value),
+    }),
+  );
+
+  hookResult.cycleAppModes();
+
+  t.true(settings.get('app.planMode'));
+  t.false(settings.get('app.mentorMode'));
 });

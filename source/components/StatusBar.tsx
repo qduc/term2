@@ -17,6 +17,7 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
   const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const planMode = useSetting<boolean>(settingsService, 'app.planMode') ?? false;
+  const orchestratorMode = useSetting<boolean>(settingsService, 'app.orchestratorMode') ?? false;
   const model = useSetting<string>(settingsService, 'agent.model');
   const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
   const providerKey = useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
@@ -73,7 +74,12 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
                 Plan
               </Text>
             )}
-            {!mentorMode && !liteMode && !planMode && <Text color={slate}>Standard</Text>}
+            {orchestratorMode && (
+              <Text color="#f59e0b" bold>
+                Orchestrator
+              </Text>
+            )}
+            {!mentorMode && !liteMode && !planMode && !orchestratorMode && <Text color={slate}>Standard</Text>}
           </Box>
 
           {model && (

@@ -27,7 +27,7 @@ export interface ToolDefinition<Params = any> {
   parameters: ZodObject<any, any>;
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval: (params: Params, context?: unknown) => Promise<boolean> | boolean;
-  execute: (params: Params, context?: unknown) => Promise<any> | any;
+  execute: (params: Params, context?: unknown, details?: unknown) => Promise<any> | any;
   /**
    * Formats tool execution results into command messages for display.
    * @param item - The raw tool execution item from the conversation

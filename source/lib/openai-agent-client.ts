@@ -573,6 +573,10 @@ export class OpenAIAgentClient {
   };
 
   #runSubagent = async (params: { role: string; task: string; writeBoundary?: string[] }): Promise<any> => {
+    // run_subagent is registered as a plain function tool, not Agent.asTool.
+    // The SDK only populates details.resumeState and reads saveAgentToolRunResult
+    // results in the Agent.asTool execute path. Both wiring points are dead for
+    // function tools and have been removed to avoid confusion.
     return this.#subagentManager.run(params);
   };
 
@@ -697,7 +701,7 @@ export class OpenAIAgentClient {
                 return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
               }
               // Normal execution
-              const result = await definition.execute(params, _context);
+              const result = await definition.execute(params, _context, details);
               return trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
             },
           }),

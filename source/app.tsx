@@ -350,6 +350,7 @@ const App: FC<AppProps> = ({
             sshInfo={sshInfo}
             undoMenuRef={undoMenuRef}
             onUndoSelect={handleUndoSelect}
+            onSettingChange={applyRuntimeSetting}
           />
         </Box>
       </Box>

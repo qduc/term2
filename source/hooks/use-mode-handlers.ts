@@ -30,7 +30,7 @@ type Options = {
   undo: Undo;
   insertSelectedPath: (appendTrailingSpace: boolean) => boolean;
   insertSelectedSetting: () => boolean;
-  insertSelectedSettingValue: (submitAfterInsert: boolean) => boolean;
+  insertSelectedSettingValue: (submitAfterInsert: boolean, typedValue?: string) => boolean;
   resetSettingValue: () => void;
   insertSelectedModel: (submitAfterInsert: boolean) => boolean;
   onSubmit: (value: string) => void;
@@ -105,7 +105,7 @@ export const useModeHandlers = ({
           insertSelectedSettingValue(false);
         },
         onSubmit: (submittedValue) => {
-          if (insertSelectedSettingValue(true)) return 'handled';
+          if (insertSelectedSettingValue(true, submittedValue)) return 'handled';
           // Fall back to submitting the literal value the user typed.
           onSubmit(submittedValue);
           return 'handled';

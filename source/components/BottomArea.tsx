@@ -31,6 +31,7 @@ export type BottomAreaProps = {
   sshInfo?: SSHInfo;
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
   onUndoSelect?: (item: UndoItem) => void;
+  onSettingChange?: (key: string, value: any) => void;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -51,6 +52,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   lastUsage,
   undoMenuRef,
   onUndoSelect,
+  onSettingChange,
 }) => {
   const [dotCount, setDotCount] = useState(1);
 
@@ -89,6 +91,7 @@ const BottomArea: FC<BottomAreaProps> = ({
             historyService={historyService}
             undoMenuRef={undoMenuRef}
             onUndoSelect={onUndoSelect}
+            onSettingChange={onSettingChange}
           />
         ) : null}
       </Box>

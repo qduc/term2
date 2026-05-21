@@ -25,6 +25,8 @@ import {
   computeSettingValueInsertion,
   computeModelInsertion,
 } from './Input/insertions.js';
+import { SETTINGS_TRIGGER } from './Input/triggers.js';
+import { parseSettingValue } from '../utils/settings-command.js';
 import { getPopupNavigationCursor } from './Input/popup-key-navigation.js';
 import { useModeHandlers } from '../hooks/use-mode-handlers.js';
 import { toPopupProps } from './Input/popup-props.js';
@@ -61,6 +63,7 @@ type Props = {
   historyService: HistoryService;
   onUndoSelect?: (item: UndoItem) => void;
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
+  onSettingChange?: (key: string, value: any) => void;
 };
 
 const InputBox: FC<Props> = ({
@@ -74,6 +77,7 @@ const InputBox: FC<Props> = ({
   historyService,
   onUndoSelect,
   undoMenuRef,
+  onSettingChange,
 }) => {
   const { input: value, setInput: onChange, mode, setMode, cursorOffset, setCursorOffset } = useInputContext();
   const [images, setImages] = useState<ImageRef[]>([]);
@@ -82,6 +86,7 @@ const InputBox: FC<Props> = ({
   const cursorOffsetRef = useRef(cursorOffset);
   const lockedCursorRef = useRef<number | null>(null);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
+  const settingsFilterRef = useRef('');
   const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode });
 
   // Hooks
@@ -180,6 +185,7 @@ const InputBox: FC<Props> = ({
   const insertSelectedSetting = useCallback((): boolean => {
     const result = computeSettingInsertion({ selection: settings.getSelectedItem(), value });
     if (!result) return false;
+    settingsFilterRef.current = settings.query;
     onChange(result.nextValue);
     setCursorOverride(result.nextCursor);
     settings.close();
@@ -187,7 +193,46 @@ const InputBox: FC<Props> = ({
   }, [settings, value, onChange]);
 
   const insertSelectedSettingValue = useCallback(
-    (submitAfterInsert: boolean): boolean => {
+    (submitAfterInsert: boolean, typedValue?: string): boolean => {
+      const key = settingsValue.settingKey;
+
+      if (submitAfterInsert && key) {
+        // Apply the setting directly
+        const suggestion = settingsValue.getSelectedItem();
+        let parsedValue: any;
+
+        if (suggestion) {
+          parsedValue = parseSettingValue(suggestion.value);
+        } else if (typedValue) {
+          // Extract value from the typed input (e.g., "/settings agent.model gpt-4o-mini")
+          const afterTrigger = typedValue.slice(SETTINGS_TRIGGER.length);
+          const parts = afterTrigger.split(/\s+/).filter(Boolean);
+          if (parts.length >= 2) {
+            parsedValue = parseSettingValue(parts.slice(1).join(' '));
+          }
+        }
+
+        if (parsedValue !== undefined) {
+          try {
+            settingsService.set(key, parsedValue);
+            onSettingChange?.(key, parsedValue);
+          } catch {
+            // Continue restoring the menu even if setting fails
+          }
+        }
+
+        // Close value menu
+        settingsValue.close();
+
+        // Restore the settings filter to reopen the settings completion menu
+        const filter = settingsFilterRef.current;
+        const restoredInput = SETTINGS_TRIGGER + filter;
+        onChange(restoredInput);
+        setCursorOverride(restoredInput.length);
+        return true;
+      }
+
+      // Non-submit (Tab) or missing key: existing insertion behavior
       const result = computeSettingValueInsertion({
         suggestion: settingsValue.getSelectedItem(),
         settingKey: settingsValue.settingKey,
@@ -199,13 +244,9 @@ const InputBox: FC<Props> = ({
       onChange(result.nextValue);
       setCursorOverride(result.nextCursor);
       settingsValue.close();
-      if (submitAfterInsert) {
-        setImages([]);
-        submitTextOnly(result.nextValue);
-      }
       return true;
     },
-    [settingsValue, value, onChange, cursorOffset, submitTextOnly],
+    [settingsValue, value, onChange, cursorOffset, settingsService, onSettingChange],
   );
 
   const insertSelectedModel = useCallback(

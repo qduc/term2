@@ -73,8 +73,8 @@ function ensureExplorerProviderRegistered() {
       label: 'Mock Explorer Provider',
       createRunner: () =>
         ({
-          run: async (_agent: any, input: any, _options: any) => {
-            explorerRunnerCalls.push({ input, agent: _agent });
+          run: async (_agent: any, input: any, options: any) => {
+            explorerRunnerCalls.push({ input, agent: _agent, options });
             return {
               status: 'completed',
               finalOutput: 'Found the relevant files.',
@@ -199,6 +199,61 @@ test.serial('run() with explorer role returns SubagentResult', async (t) => {
   t.truthy(result.agentId);
   t.is(result.filesChanged.length, 0);
   t.truthy(result.finalText);
+});
+
+test.serial('run() passes parent abort signal into the delegated provider run', async (t) => {
+  const settings = createMockSettings({
+    'agent.model': 'mock-model',
+    'agent.provider': 'mock-explorer-provider',
+  });
+  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const abortController = new AbortController();
+
+  await manager.run({
+    role: 'explorer',
+    task: 'find all TypeScript files',
+    signal: abortController.signal,
+  });
+
+  t.is(explorerRunnerCalls[0].options.signal, abortController.signal);
+});
+
+test.serial('run() cancels a delegated provider run when the parent signal aborts', async (t) => {
+  registerProvider({
+    id: 'mock-aborted-subagent-provider',
+    label: 'Mock Aborted Subagent Provider',
+    createRunner: () =>
+      ({
+        run: async (_agent: any, _input: any, options: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            const rejectAbort = () => reject(Object.assign(new Error('delegated run aborted'), { name: 'AbortError' }));
+            if (options.signal?.aborted) {
+              rejectAbort();
+              return;
+            }
+            options.signal?.addEventListener('abort', rejectAbort, { once: true });
+          }),
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const settings = createMockSettings({
+    'agent.model': 'mock-model',
+    'agent.provider': 'mock-aborted-subagent-provider',
+  });
+  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const abortController = new AbortController();
+  const resultPromise = manager.run({
+    role: 'explorer',
+    task: 'find all TypeScript files',
+    signal: abortController.signal,
+  });
+
+  queueMicrotask(() => abortController.abort());
+  const result = await resultPromise;
+
+  t.is(result.status, 'cancelled');
+  t.true(result.error?.includes('aborted') ?? false);
 });
 
 test.serial('run() with explorer role uses read-only tools only', async (t) => {

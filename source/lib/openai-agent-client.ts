@@ -618,8 +618,12 @@ export class OpenAIAgentClient {
     // Forward any resumeState from the SDK (populated in the Agent.asTool
     // path) to the subagent manager so it can restore the agent run state
     // for nested approval continuation.
-    const detailsRecord = details as { resumeState?: string; toolCall?: unknown } | undefined;
-    const request = detailsRecord?.resumeState ? { ...params, resumeState: detailsRecord.resumeState } : params;
+    const detailsRecord = details as { resumeState?: string; signal?: AbortSignal; toolCall?: unknown } | undefined;
+    const request = {
+      ...params,
+      ...(detailsRecord?.resumeState ? { resumeState: detailsRecord.resumeState } : {}),
+      ...(detailsRecord?.signal ? { signal: detailsRecord.signal } : {}),
+    };
 
     const result = await this.#subagentManager.run(request);
 

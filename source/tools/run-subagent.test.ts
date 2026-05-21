@@ -78,6 +78,20 @@ test('execute passes writeBoundary to subagent runner', async (t) => {
   t.deepEqual(capturedParams.writeBoundary, ['src/']);
 });
 
+test('execute passes tool invocation details to subagent runner', async (t) => {
+  let capturedDetails: unknown;
+  const tool = createRunSubagentToolDefinition(async (_params, _context, details) => {
+    capturedDetails = details;
+    return makeResult();
+  });
+  const abortController = new AbortController();
+  const details = { signal: abortController.signal };
+
+  await tool.execute({ role: 'explorer', task: 'find files' }, undefined, details);
+
+  t.is(capturedDetails, details);
+});
+
 test('formatCommandMessage renders completed result', (t) => {
   const result = makeResult({
     finalText: 'Found 3 relevant files.',
@@ -129,6 +143,37 @@ test('formatCommandMessage uses only the first paragraph', (t) => {
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
   t.is(messages[0].command, 'run_subagent [explorer] First paragraph content.');
+});
+
+test('formatCommandMessage truncates long output', (t) => {
+  const longOutput = 'b'.repeat(400);
+  const tool = createRunSubagentToolDefinition(async () => makeResult());
+
+  const item = {
+    rawItem: {
+      arguments: JSON.stringify({ role: 'explorer', task: 'find files' }),
+      output: JSON.stringify(makeResult({ finalText: longOutput })),
+    },
+  };
+
+  const messages = tool.formatCommandMessage(item, 0, new Map());
+  t.is(messages[0].output.split('\n')[0].length, 300);
+  t.true(messages[0].output.split('\n')[0].endsWith('...'));
+});
+
+test('formatCommandMessage uses only the first paragraph of output', (t) => {
+  const outputWithParagraphs = 'First output paragraph.\n\nSecond output paragraph.';
+  const tool = createRunSubagentToolDefinition(async () => makeResult());
+
+  const item = {
+    rawItem: {
+      arguments: JSON.stringify({ role: 'explorer', task: 'find files' }),
+      output: JSON.stringify(makeResult({ finalText: outputWithParagraphs })),
+    },
+  };
+
+  const messages = tool.formatCommandMessage(item, 0, new Map());
+  t.is(messages[0].output.split('\n')[0], 'First output paragraph.');
 });
 
 test('formatCommandMessage renders failed result', (t) => {

@@ -144,10 +144,10 @@ function buildAgentTools(
         description: definition.description,
         parameters: useStrictSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
         needsApproval: wrapNeedsApproval(definition),
-        execute: async (params, _context) => {
+        execute: async (params, _context, details) => {
           options.onToolStart?.(definition.name, params, formatRunningCommandMessages(definition, params));
           const maxOutputLength = options.settings.get<number | undefined>('shell.maxOutputChars');
-          const result = await definition.execute(params, _context);
+          const result = await definition.execute(params, _context, details);
           options.onToolComplete?.(definition.name);
           return trimToolOutput(result, undefined, maxOutputLength ?? undefined);
         },
@@ -326,7 +326,7 @@ export class SubagentManager {
     try {
       const result =
         request.role === 'mentor'
-          ? await this.#runMentor(agentId, request.task)
+          ? await this.#runMentor(agentId, request.task, request.signal)
           : await this.#runSubagent(agentId, request, loadRoleDefinition(request.role, this.#settings));
       this.#emit({ type: 'subagent_completed', result });
       return result;
@@ -356,7 +356,7 @@ export class SubagentManager {
     }
   }
 
-  async #runMentor(agentId: string, task: string): Promise<SubagentResult> {
+  async #runMentor(agentId: string, task: string, signal?: AbortSignal): Promise<SubagentResult> {
     const mentorModel = this.#settings.get<string>('agent.mentorModel');
     if (!mentorModel) {
       throw new Error('Mentor model is not configured');
@@ -413,7 +413,10 @@ export class SubagentManager {
     const providerDef = getProvider(mentorProvider);
     const supportsChaining = providerDef?.capabilities?.supportsConversationChaining ?? false;
     const input = this.#mentorSession.getInput(task, supportsChaining);
-    const runOptions = this.#mentorSession.getRunOptions(supportsChaining, definition.maxTurns);
+    const runOptions = {
+      ...this.#mentorSession.getRunOptions(supportsChaining, definition.maxTurns),
+      ...(signal ? { signal } : {}),
+    };
 
     const result = await runWithProvider(mentorProvider, mentorRunner, mentorAgent, input, runOptions);
     this.#mentorSession.updateFromResult(result);
@@ -500,6 +503,7 @@ export class SubagentManager {
     const result = await runWithProvider(providerId, runner, agent, runInput, {
       stream: false,
       maxTurns: definition.maxTurns,
+      ...(request.signal ? { signal: request.signal } : {}),
     });
 
     return {

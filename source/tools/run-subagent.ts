@@ -30,15 +30,15 @@ const runSubagentSchema = z.object({
 
 export type RunSubagentParams = z.infer<typeof runSubagentSchema>;
 
-const MAX_TASK_PREVIEW_LENGTH = 300;
+const MAX_PREVIEW_LENGTH = 300;
 
-function truncateTaskPreview(task: unknown): string {
-  if (typeof task !== 'string') {
+function truncatePreview(text: unknown): string {
+  if (typeof text !== 'string') {
     return '';
   }
 
   const firstParagraph =
-    task
+    text
       .split(/\n\s*\n/)[0]
       ?.replace(/\s+/g, ' ')
       .trim() || '';
@@ -46,11 +46,11 @@ function truncateTaskPreview(task: unknown): string {
     return '';
   }
 
-  if (firstParagraph.length <= MAX_TASK_PREVIEW_LENGTH) {
+  if (firstParagraph.length <= MAX_PREVIEW_LENGTH) {
     return firstParagraph;
   }
 
-  return `${firstParagraph.slice(0, MAX_TASK_PREVIEW_LENGTH - 3)}...`;
+  return `${firstParagraph.slice(0, MAX_PREVIEW_LENGTH - 3)}...`;
 }
 
 function formatSubagentResult(result: SubagentResult): string {
@@ -89,7 +89,7 @@ export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, inde
   const rawOutput = getOutputText(item);
   const parsed = safeJsonParse(rawOutput) as SubagentResult | null;
 
-  const taskPreview = truncateTaskPreview(args?.task);
+  const taskPreview = truncatePreview(args?.task);
   let command = taskPreview ? `run_subagent [${role}] ${taskPreview}` : `run_subagent [${role}]`;
   let output = rawOutput || 'No response';
   let success = true;
@@ -102,7 +102,8 @@ export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, inde
         : '';
     const filesSummary = parsed.filesChanged?.length > 0 ? `Files changed: ${parsed.filesChanged.join(', ')}` : '';
 
-    const parts = [parsed.finalText || parsed.error || 'No output'];
+    const outputPreview = truncatePreview(parsed.finalText || parsed.error || 'No output');
+    const parts = [outputPreview];
     if (toolsSummary) parts.push(toolsSummary);
     if (filesSummary) parts.push(filesSummary);
     output = parts.filter(Boolean).join('\n');
@@ -148,7 +149,7 @@ export function getSubagentsRolesSection(): string {
       '- `explorer`: read-only workspace access. Use for locating files and answering codebase questions.\n' +
       '- `researcher`: web search + read-only workspace. Use for looking up external docs or current information.\n' +
       '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
-      '- `worker`: read + write access. Use for implementing bounded file changes.\n\n'
+      '- `worker`: read + write + shell access. Use for implementing bounded file changes or general purpose works that does not fit any role above.\n\n'
     );
   }
 

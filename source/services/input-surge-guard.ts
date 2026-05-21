@@ -179,6 +179,7 @@ export class InputSurgeGuard {
     const stats = collectInputSurgeStats(input);
     const pendingBlock = this.#pendingBlocks.get(kind);
     if (pendingBlock) {
+      this.#pendingBlocks.delete(kind);
       return {
         action: 'block',
         reason: pendingBlock.reason,

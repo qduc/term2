@@ -134,3 +134,30 @@ test('InputSurgeGuard does not update baseline for blocked input', (t) => {
   t.is(stillComparedToOriginal.action, 'block');
   t.is(stillComparedToOriginal.previousStats?.messageCount, 65);
 });
+
+test('InputSurgeGuard pending block fires once then clears', (t) => {
+  const guard = new InputSurgeGuard();
+  const requestHistory = [{ role: 'user', type: 'message', content: 'first query' }];
+  const postRunHistory = [
+    ...requestHistory,
+    { type: 'function_call', callId: 'call-large' },
+    { type: 'function_call_result', callId: 'call-large', output: 'x'.repeat(150_000) },
+  ];
+
+  // Record the successful input with a large appended tool result — this sets a pending block.
+  guard.recordSuccessfulInput(postRunHistory, { kind: 'full_history', previousInput: requestHistory });
+
+  // First inspect after the large tool result: pending block fires.
+  const firstDecision = guard.inspect([...postRunHistory, { role: 'user', content: 'follow up' }], {
+    kind: 'full_history',
+  });
+  t.is(firstDecision.action, 'block');
+  t.true(firstDecision.reason?.includes('tool result'));
+
+  // Second inspect with same kind: pending block is gone, so only a real surge would block.
+  const secondDecision = guard.inspect([...postRunHistory, { role: 'user', content: 'another follow up' }], {
+    kind: 'full_history',
+  });
+  // The history is now ~4 messages, well within normal growth — so it should be allowed.
+  t.is(secondDecision.action, 'allow');
+});

@@ -1,11 +1,12 @@
 import test from 'ava';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './code-context.js';
 
 async function withTempWorkspace(run: (dir: string) => Promise<void>) {
   const originalCwd = process.cwd;
-  const rootDir = await fs.mkdtemp(path.join(process.cwd(), '.term2-code-context-'));
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-code-context-'));
   const workspaceDir = path.join(rootDir, 'workspace');
   await fs.mkdir(workspaceDir, { recursive: true });
 

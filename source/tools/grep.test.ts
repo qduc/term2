@@ -1,11 +1,12 @@
 import test from 'ava';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import { createGrepToolDefinition } from './grep.js';
 
 async function withTempDir(run: (dir: string) => Promise<void>) {
   const originalCwd = process.cwd;
-  const rootDir = await fs.mkdtemp(path.join(process.cwd(), '.term2-grep-test-'));
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-grep-test-'));
   const workspaceDir = path.join(rootDir, 'workspace');
   await fs.mkdir(workspaceDir, { recursive: true });
 

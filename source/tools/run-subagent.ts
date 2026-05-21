@@ -30,23 +30,27 @@ const runSubagentSchema = z.object({
 
 export type RunSubagentParams = z.infer<typeof runSubagentSchema>;
 
-const MAX_TASK_PREVIEW_LENGTH = 80;
+const MAX_TASK_PREVIEW_LENGTH = 300;
 
 function truncateTaskPreview(task: unknown): string {
   if (typeof task !== 'string') {
     return '';
   }
 
-  const normalized = task.replace(/\s+/g, ' ').trim();
-  if (!normalized) {
+  const firstParagraph =
+    task
+      .split(/\n\s*\n/)[0]
+      ?.replace(/\s+/g, ' ')
+      .trim() || '';
+  if (!firstParagraph) {
     return '';
   }
 
-  if (normalized.length <= MAX_TASK_PREVIEW_LENGTH) {
-    return normalized;
+  if (firstParagraph.length <= MAX_TASK_PREVIEW_LENGTH) {
+    return firstParagraph;
   }
 
-  return `${normalized.slice(0, MAX_TASK_PREVIEW_LENGTH - 3)}...`;
+  return `${firstParagraph.slice(0, MAX_TASK_PREVIEW_LENGTH - 3)}...`;
 }
 
 function formatSubagentResult(result: SubagentResult): string {

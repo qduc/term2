@@ -102,8 +102,7 @@ test('formatCommandMessage renders completed result', (t) => {
 
 test('formatCommandMessage truncates long task in command', (t) => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
-  const longTask =
-    'read and explain how rendering works in source/components/MessageList.tsx with enough detail to exceed the command preview limit';
+  const longTask = 'a'.repeat(400);
 
   const item = {
     rawItem: {
@@ -113,9 +112,23 @@ test('formatCommandMessage truncates long task in command', (t) => {
   };
 
   const messages = tool.formatCommandMessage(item, 0, new Map());
-  t.true(messages[0].command.startsWith('run_subagent [explorer] read and explain'));
+  t.is(messages[0].command.length, 'run_subagent [explorer] '.length + 300);
   t.true(messages[0].command.endsWith('...'));
-  t.true(messages[0].command.length < longTask.length + 'run_subagent [explorer] '.length);
+});
+
+test('formatCommandMessage uses only the first paragraph', (t) => {
+  const tool = createRunSubagentToolDefinition(async () => makeResult());
+  const taskWithParagraphs = 'First paragraph content.\n\nSecond paragraph content that should be ignored.';
+
+  const item = {
+    rawItem: {
+      arguments: JSON.stringify({ role: 'explorer', task: taskWithParagraphs }),
+      output: 'Status: completed\n\nDone.',
+    },
+  };
+
+  const messages = tool.formatCommandMessage(item, 0, new Map());
+  t.is(messages[0].command, 'run_subagent [explorer] First paragraph content.');
 });
 
 test('formatCommandMessage renders failed result', (t) => {

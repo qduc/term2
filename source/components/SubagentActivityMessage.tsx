@@ -11,7 +11,7 @@ type Props = {
 };
 
 const MAX_TOOL_LENGTH = 96;
-const MAX_TASK_LENGTH = 80;
+const MAX_TASK_LENGTH = 300;
 
 const truncate = (value: string, maxLength: number) => {
   if (value.length <= maxLength) {
@@ -23,7 +23,12 @@ const truncate = (value: string, maxLength: number) => {
 
 const buildTitle = (role: string | undefined, task: string | undefined): string => {
   const roleLabel = role ? `[${role}]` : '';
-  const taskPreview = task ? truncate(task.replace(/\s+/g, ' ').trim(), MAX_TASK_LENGTH) : '';
+  const firstParagraph =
+    task
+      ?.split(/\n\s*\n/)[0]
+      ?.replace(/\s+/g, ' ')
+      .trim() || '';
+  const taskPreview = truncate(firstParagraph, MAX_TASK_LENGTH);
   return ['run_subagent', roleLabel, taskPreview].filter(Boolean).join(' ');
 };
 

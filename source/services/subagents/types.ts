@@ -6,6 +6,8 @@ export interface SubagentRequest {
   role: SubagentRole;
   task: string;
   writeBoundary?: string[];
+  /** SDK serialized run state for resuming a delegated agent-tool run (nested approvals). */
+  resumeState?: string;
 }
 
 export interface SubagentDefinition {

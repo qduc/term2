@@ -11,7 +11,8 @@ export interface ILoggingService {
 
 export interface ISettingsService {
   get<T = any>(key: string): T;
-  set(key: string, value: any): void;
+  set(key: string, value: any, options?: { persist?: boolean }): void;
+  onChange?: (listener: (key?: string) => void) => () => void;
 }
 
 export interface ISSHService {

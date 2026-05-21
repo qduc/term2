@@ -144,6 +144,44 @@ export class OpenAIAgentClient {
     this.#retryAttempts = retryAttempts ?? 2;
     this.#agent = this.#createAgent({ model, reasoningEffort });
     this.#runner = this.#createRunner(this.#provider);
+
+    // Subscribe to settings changes that affect agent definition (prompt,
+    // tools, model, provider, modes) and rebuild the agent automatically.
+    this.#settings.onChange?.((changedKey) => {
+      if (!changedKey) return;
+      // Keys that require a full agent rebuild:
+      const rebuildKeys = [
+        'app.liteMode',
+        'app.orchestratorMode',
+        'app.planMode',
+        'app.mentorMode',
+        'app.searchViaShell',
+        'agent.model',
+        'agent.provider',
+        'agent.reasoningEffort',
+        'agent.temperature',
+        'agent.useFlexServiceTier',
+        'agent.mentorModel',
+        'agent.mentorProvider',
+        'agent.mentorReasoningEffort',
+        'agent.subagentExplorerModel',
+        'agent.subagentWorkerModel',
+        'agent.subagentResearcherModel',
+        'agent.subagentExplorerProvider',
+        'agent.subagentWorkerProvider',
+        'agent.subagentResearcherProvider',
+        'agent.subagentExplorerReasoningEffort',
+        'agent.subagentWorkerReasoningEffort',
+        'agent.subagentResearcherReasoningEffort',
+        'logging.logLevel',
+        'logging.suppressConsoleOutput',
+        'shell.useRtkCompression',
+      ];
+      if (rebuildKeys.includes(changedKey)) {
+        this.#refreshAgent();
+      }
+    });
+
     this.#logger.debug('OpenAI Agent Client initialized', {
       model: model || this.#settings.get<string>('agent.model'),
       reasoningEffort: reasoningEffort ?? 'default',
@@ -572,12 +610,26 @@ export class OpenAIAgentClient {
     }
   };
 
-  #runSubagent = async (params: { role: string; task: string; writeBoundary?: string[] }): Promise<any> => {
-    // run_subagent is registered as a plain function tool, not Agent.asTool.
-    // The SDK only populates details.resumeState and reads saveAgentToolRunResult
-    // results in the Agent.asTool execute path. Both wiring points are dead for
-    // function tools and have been removed to avoid confusion.
-    return this.#subagentManager.run(params);
+  #runSubagent = async (
+    params: { role: string; task: string; writeBoundary?: string[] },
+    _context?: unknown,
+    details?: unknown,
+  ): Promise<any> => {
+    // Forward any resumeState from the SDK (populated in the Agent.asTool
+    // path) to the subagent manager so it can restore the agent run state
+    // for nested approval continuation.
+    const detailsRecord = details as { resumeState?: string; toolCall?: unknown } | undefined;
+    const request = detailsRecord?.resumeState ? { ...params, resumeState: detailsRecord.resumeState } : params;
+
+    const result = await this.#subagentManager.run(request);
+
+    // saveAgentToolRunResult is not exported as a public API from
+    // @openai/agents-core, so we cannot call it here. The nestedRunResult
+    // is preserved on the SubagentResult for use by the caller and will
+    // be propagated back through the conversation result builder when the
+    // run_subagent is registered via Agent.asTool (future work).
+
+    return result;
   };
 
   #createAgent({

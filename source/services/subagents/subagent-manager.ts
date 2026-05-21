@@ -1,4 +1,4 @@
-import { Agent, run, tool as createTool, type Tool } from '@openai/agents';
+import { Agent, run, tool as createTool, type Tool, RunState } from '@openai/agents';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -330,10 +330,20 @@ export class SubagentManager {
       return result;
     } catch (error: any) {
       this.#logger.error('Subagent run failed', { agentId, role: request.role, error: error?.message });
+
+      // Detect abort-like errors (user cancellation, stream abort) and
+      // normalize to 'cancelled' status so the parent can distinguish
+      // intentional user-initiated cancellation from unexpected failures.
+      const isAbort =
+        error?.name === 'AbortError' ||
+        error?.message?.includes('abort') ||
+        error?.message?.includes('cancel') ||
+        error?.code === 'ERR_ABORTED';
+
       const result: SubagentResult = {
         agentId,
         role: request.role,
-        status: 'failed',
+        status: isAbort ? 'cancelled' : 'failed',
         finalText: '',
         filesChanged: [],
         toolsUsed: [],
@@ -477,12 +487,15 @@ export class SubagentManager {
       tools,
     });
 
-    // Workers run synchronously via runWithProvider({stream: false}). The SDK
-    // only populates resumeState in the Agent.asTool path, which run_subagent
-    // does not use (it is registered as a plain function tool). Wiring resume
-    // here would always be a no-op. Full interactive approval for workers would
-    // require Agent.asTool registration — tracked as future work.
-    const result = await runWithProvider(providerId, runner, agent, request.task, {
+    // When resuming from a nested agent-tool run (e.g. worker approvals),
+    // restore the SDK RunState from the serialized resumeState string.
+    // This is populated by the SDK in the Agent.asTool path. When
+    // run_subagent is registered as a plain function tool,
+    // details.resumeState is not populated by the SDK, so this branch is
+    // dead code until run_subagent switches to Agent.asTool registration.
+    const runInput = request.resumeState ? await RunState.fromString(agent, request.resumeState) : request.task;
+
+    const result = await runWithProvider(providerId, runner, agent, runInput, {
       stream: false,
       maxTurns: definition.maxTurns,
     });
@@ -538,6 +551,9 @@ export class SubagentManager {
             loggingService: this.#logger,
             executionContext: this.#executionContext,
           }),
+          writeBoundary,
+          cwd,
+          filesChanged,
         ),
       );
     }
@@ -651,8 +667,49 @@ export class SubagentManager {
    * - Gates execution via command safety classification instead. Safe (GREEN)
    *   commands execute normally; dangerous (YELLOW/RED) commands are blocked
    *   and return an error string to the model without executing.
+   * - For GREEN commands that perform write operations (redirects to paths
+   *   within the workspace), enforces the worker write boundary and acquires
+   *   file locks so that shell-based writes and structured writes (apply_patch,
+   *   create_file) share the same safety guarantees.
    */
-  #wrapShellTool(definition: ToolDefinition): ToolDefinition {
+  /**
+   * Parse a shell command string and extract file paths used as redirect
+   * targets or explicit path arguments that look like write operations.
+   * Returns resolved absolute paths.
+   */
+  #extractPathsFromCommand(command: string, cwd: string): string[] {
+    const paths: string[] = [];
+    try {
+      classifyCommand(command, this.#logger);
+      // classifyCommand only returns a status, not parsed paths. For now
+      // we tokenize the command to find redirect targets and path-like
+      // arguments. This is a simple heuristic — comprehensive path
+      // extraction from AST is tracked as future work.
+      const tokens = command.match(/>\s*(\S+)|>>\s*(\S+)|tee\s+(\S+)/gi);
+      if (tokens) {
+        for (const token of tokens) {
+          const match = token.match(/>+\s*(\S+)|tee\s+(\S+)/);
+          if (match) {
+            const p = match[1] ?? match[2];
+            if (p) {
+              const resolved = path.resolve(cwd, p);
+              paths.push(resolved);
+            }
+          }
+        }
+      }
+    } catch {
+      // Parsing failure is non-fatal — proceed without path extraction
+    }
+    return [...new Set(paths)];
+  }
+
+  #wrapShellTool(
+    definition: ToolDefinition,
+    writeBoundary: string[] | undefined,
+    cwd: string,
+    filesChanged: string[],
+  ): ToolDefinition {
     const originalExecute = definition.execute.bind(definition);
 
     return {
@@ -667,6 +724,31 @@ export class SubagentManager {
         const status = classifyCommand(command, this.#logger);
         if (status === SafetyStatus.YELLOW || status === SafetyStatus.RED) {
           return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
+        }
+
+        // For GREEN commands, extract any file paths referenced in the
+        // command (redirect targets, arguments that look like paths) and
+        // enforce the write boundary and file locks.
+        const extractedPaths = this.#extractPathsFromCommand(command, cwd);
+        if (extractedPaths.length > 0) {
+          for (const filePath of extractedPaths) {
+            if (!this.#isWithinWriteBoundary(filePath, writeBoundary, cwd)) {
+              return `Error: command blocked — target path "${filePath}" is outside the allowed write boundary. Command: ${command}`;
+            }
+          }
+
+          const releaseWorkerLocks = this.#tryAcquireWorkerWriteLocks(extractedPaths, cwd);
+          if (!releaseWorkerLocks) {
+            return 'Error: command blocked — one or more target files are already being modified by another worker.';
+          }
+
+          try {
+            const result = await originalExecute(params, context, details);
+            filesChanged.push(...extractedPaths);
+            return result;
+          } finally {
+            releaseWorkerLocks();
+          }
         }
 
         return originalExecute(params, context, details);

@@ -10,6 +10,7 @@ import {
   RUNTIME_MODIFIABLE_SETTINGS,
   SENSITIVE_SETTING_KEYS,
   SettingsSchema,
+  normalizeAppModes,
   type SettingSource,
   type SettingsData,
   type SettingsWithSources,
@@ -109,6 +110,19 @@ export class SettingsService {
       loggingService: this.loggingService,
     });
     this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, env, cli);
+
+    // Normalize exclusive app modes so conflicting persisted state is resolved
+    // on load, not lazily at first set() call.
+    {
+      const app = this.settings.app ?? {};
+      const normalized = normalizeAppModes({
+        orchestratorMode: app.orchestratorMode ?? false,
+        liteMode: app.liteMode ?? false,
+        planMode: app.planMode ?? false,
+        mentorMode: app.mentorMode ?? false,
+      });
+      this.settings.app = { ...app, ...normalized };
+    }
 
     // Register any runtime-defined providers from settings.json so they appear
     // in the model selection menu and can be selected as agent.provider.
@@ -267,7 +281,7 @@ export class SettingsService {
    * Only runtime-modifiable settings can be changed.
    * Sensitive settings cannot be modified (must come from environment).
    */
-  set(key: string, value: any): void {
+  set(key: string, value: any, options?: { persist?: boolean }): void {
     if (this.isSensitive(key)) {
       throw new Error(
         `Cannot modify '${key}' - it is a sensitive setting that can only be configured via environment variables.`,
@@ -297,6 +311,32 @@ export class SettingsService {
     // Track source as 'cli' for runtime-set values
     this.sources.set(key, 'cli');
 
+    // Enforce exclusive app mode invariants. When one mode is enabled, all
+    // sibling modes are cleared.  This is the single enforcement point so
+    // that neither slash-command handlers nor direct set() calls can bypass
+    // mutual exclusion.  (normalizeAppModes implements the precedence.)
+    if (
+      key.startsWith('app.') &&
+      (key === 'app.orchestratorMode' || key === 'app.liteMode' || key === 'app.planMode' || key === 'app.mentorMode')
+    ) {
+      if (value === true) {
+        const app = this.settings.app ?? {};
+        const normalized = normalizeAppModes({
+          orchestratorMode: key === 'app.orchestratorMode' ? true : app.orchestratorMode ?? false,
+          liteMode: key === 'app.liteMode' ? true : app.liteMode ?? false,
+          planMode: key === 'app.planMode' ? true : app.planMode ?? false,
+          mentorMode: key === 'app.mentorMode' ? true : app.mentorMode ?? false,
+        });
+        this.settings.app = { ...app, ...normalized };
+        // Update source entries for cleared sibling modes
+        for (const modeKey of ['app.orchestratorMode', 'app.liteMode', 'app.planMode', 'app.mentorMode'] as const) {
+          if (modeKey !== key) {
+            this.sources.set(modeKey, 'cli');
+          }
+        }
+      }
+    }
+
     // If we're changing the logging level, update the logging service runtime
     if (key === 'logging.logLevel') {
       try {
@@ -324,8 +364,9 @@ export class SettingsService {
       }
     }
 
-    // Persist to file
-    if (!this.disableFilePersistence) {
+    // Persist to file unless the caller explicitly opts out
+    const persist = options?.persist !== false;
+    if (persist && !this.disableFilePersistence) {
       this.saveToFile();
     }
 

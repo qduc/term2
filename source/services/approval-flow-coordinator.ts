@@ -61,6 +61,8 @@ export class ApprovalFlowCoordinator {
   /**
    * Drive an aborted-approval resolution: install rejection interceptor and approve the
    * interruption so the agent gets the rejection text via the interceptor.
+   * For nested subagent approvals, use SDK-native reject() instead of the
+   * parent interceptor path to avoid interceptor stacking issues.
    */
   prepareAbortResolution(abortedContext: AbortedApprovalContext, userText: string): AbortResolutionPlan {
     const interruptionRecord = asRecord(abortedContext.interruption);
@@ -68,14 +70,24 @@ export class ApprovalFlowCoordinator {
     const expectedCallId = getCallIdFromObject(abortedContext.interruption);
     const rejectionMessage = `Tool execution was not approved. User provided new input instead: ${userText}`;
 
-    const removeInterceptor = installApprovalRejectionInterceptor(this.deps.agentClient, {
-      toolName,
-      expectedCallId,
-      rejectionMessage,
-    });
+    const removeInterceptor: () => void = abortedContext.nestedSubagent
+      ? () => {
+          // no-op: nested path uses SDK-native reject() instead of
+          // a parent interceptor, so there is nothing to clean up.
+        }
+      : installApprovalRejectionInterceptor(this.deps.agentClient, {
+          toolName,
+          expectedCallId,
+          rejectionMessage,
+        });
 
-    const approve = getMethod<[unknown], void>(abortedContext.state, 'approve');
-    approve?.call(abortedContext.state, abortedContext.interruption);
+    if (abortedContext.nestedSubagent) {
+      const reject = getMethod<[unknown], void>(abortedContext.state, 'reject');
+      reject?.call(abortedContext.state, abortedContext.interruption);
+    } else {
+      const approve = getMethod<[unknown], void>(abortedContext.state, 'approve');
+      approve?.call(abortedContext.state, abortedContext.interruption);
+    }
 
     return { abortedContext, removeInterceptor };
   }

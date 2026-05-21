@@ -103,7 +103,11 @@ export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, inde
     if (filesSummary) parts.push(filesSummary);
     output = parts.filter(Boolean).join('\n');
 
-    if (parsed.error) {
+    if (parsed.status === 'cancelled') {
+      command = taskPreview
+        ? `run_subagent [${role}] ${taskPreview} — cancelled`
+        : `run_subagent [${role}] — cancelled`;
+    } else if (parsed.error) {
       command = taskPreview ? `run_subagent [${role}] ${taskPreview} — failed` : `run_subagent [${role}] — failed`;
     }
   } else if (rawOutput?.includes('Status: failed')) {
@@ -111,6 +115,7 @@ export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, inde
     command = taskPreview ? `run_subagent [${role}] ${taskPreview} — failed` : `run_subagent [${role}] — failed`;
   } else if (rawOutput?.includes('Status: cancelled')) {
     success = false;
+    command = taskPreview ? `run_subagent [${role}] ${taskPreview} — cancelled` : `run_subagent [${role}] — cancelled`;
   }
 
   return [
@@ -197,7 +202,7 @@ export function getSubagentsRolesSection(): string {
 }
 
 export const createRunSubagentToolDefinition = (
-  runSubagent: (params: RunSubagentParams) => Promise<SubagentResult>,
+  runSubagent: (params: RunSubagentParams, context?: unknown, details?: unknown) => Promise<SubagentResult>,
 ): ToolDefinition<RunSubagentParams> => ({
   name: 'run_subagent',
   description:
@@ -212,13 +217,9 @@ export const createRunSubagentToolDefinition = (
     'Use `writeBoundary` to restrict which paths the worker may modify. Omit to allow writes anywhere in the workspace.',
   parameters: runSubagentSchema,
   needsApproval: () => false,
-  // run_subagent is a plain function tool, not Agent.asTool. The SDK does not
-  // populate details.resumeState for function tools, so context/details are not
-  // forwarded. Full interactive approval for workers would require Agent.asTool
-  // registration — tracked as future work.
-  execute: async (params) => {
+  execute: async (params, context, details) => {
     try {
-      const result = await runSubagent(params);
+      const result = await runSubagent(params, context, details);
       return formatSubagentResult(result);
     } catch (error: any) {
       const errorResult: SubagentResult = {

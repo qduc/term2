@@ -272,7 +272,7 @@ const settings = new SettingsService({
     // Implicit lite must not override a higher-precedence mode already persisted.
     resolvedLiteMode = implicitLite && !persistedOrchestrator && !persistedMentor;
   }
-  settings.set('app.liteMode', resolvedLiteMode);
+  settings.set('app.liteMode', resolvedLiteMode, { persist: false });
 }
 
 // Normalize all mode flags to enforce mutual exclusion with a consistent
@@ -283,10 +283,10 @@ const normalized = normalizeAppModes({
   planMode: settings.get<boolean>('app.planMode'),
   mentorMode: settings.get<boolean>('app.mentorMode'),
 });
-settings.set('app.orchestratorMode', normalized.orchestratorMode);
-settings.set('app.liteMode', normalized.liteMode);
-settings.set('app.planMode', normalized.planMode);
-settings.set('app.mentorMode', normalized.mentorMode);
+settings.set('app.orchestratorMode', normalized.orchestratorMode, { persist: false });
+settings.set('app.liteMode', normalized.liteMode, { persist: false });
+settings.set('app.planMode', normalized.planMode, { persist: false });
+settings.set('app.mentorMode', normalized.mentorMode, { persist: false });
 
 // SSH Handling
 const sshFlag = cli.flags.ssh;

@@ -204,7 +204,11 @@ export const getAgentDefinition = (
         'orchestratorMode requires runSubagent: cannot build orchestrator agent without a runSubagent implementation.',
       );
     }
-    const tools = [createRunSubagentToolDefinition(runSubagent)];
+    const tools: ToolDefinition[] = [
+      createRunSubagentToolDefinition(runSubagent),
+      createReadFileToolDefinition({ executionContext, allowOutsideWorkspace: true, orchestratorMode: true }),
+      createGrepToolDefinition({ executionContext, orchestratorMode: true }),
+    ];
     registerToolFormatters(tools);
 
     return {

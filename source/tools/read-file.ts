@@ -58,12 +58,15 @@ export const createReadFileToolDefinition = (
   deps: {
     executionContext?: ExecutionContext;
     allowOutsideWorkspace?: boolean;
+    orchestratorMode?: boolean;
   } = {},
 ): ToolDefinition<ReadFileToolParams> => {
-  const { executionContext, allowOutsideWorkspace = false } = deps;
+  const { executionContext, allowOutsideWorkspace = false, orchestratorMode = false } = deps;
   return {
     name: 'read_file',
-    description: allowOutsideWorkspace
+    description: orchestratorMode
+      ? "Read file content to verify a specific claim about a known location (e.g., confirm a subagent's edit landed, check a referenced symbol). For exploring unfamiliar code or understanding files you have not seen, prefer delegating to an `explorer` subagent via `run_subagent`. Supports line ranges — read the smallest relevant range."
+      : allowOutsideWorkspace
       ? 'Read file content from the filesystem (like cat command). Supports reading specific line ranges.'
       : 'Read file content from the workspace (like cat command). Supports reading specific line ranges.',
     parameters: readFileParametersSchema,

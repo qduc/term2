@@ -75,7 +75,7 @@ test('getAgentDefinition omits delegation guidance in lite mode', (t) => {
   t.false(definition.instructions.includes('### Delegating to subagents'));
 });
 
-test('getAgentDefinition in orchestrator mode exposes only run_subagent', (t) => {
+test('getAgentDefinition in orchestrator mode exposes run_subagent, read_file, and grep', (t) => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-5',
@@ -89,7 +89,7 @@ test('getAgentDefinition in orchestrator mode exposes only run_subagent', (t) =>
 
   t.deepEqual(
     definition.tools.map((tool) => tool.name),
-    ['run_subagent'],
+    ['run_subagent', 'read_file', 'grep'],
   );
 });
 
@@ -112,7 +112,7 @@ test('getAgentDefinition in orchestrator mode requires delegated tool work', (t)
   t.false(definition.instructions.includes('Prefer `read_file` for reading file contents.'));
 });
 
-test('getAgentDefinition in orchestrator mode exposes only run_subagent for non-gpt-5 model', (t) => {
+test('getAgentDefinition in orchestrator mode exposes run_subagent, read_file, and grep for non-gpt-5 model', (t) => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-4o',
@@ -126,7 +126,7 @@ test('getAgentDefinition in orchestrator mode exposes only run_subagent for non-
 
   t.deepEqual(
     definition.tools.map((tool) => tool.name),
-    ['run_subagent'],
+    ['run_subagent', 'read_file', 'grep'],
   );
 });
 

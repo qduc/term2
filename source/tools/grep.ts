@@ -141,12 +141,14 @@ async function checkRgAvailability(executionContext?: ExecutionContext): Promise
 }
 
 export const createGrepToolDefinition = (
-  deps: { executionContext?: ExecutionContext } = {},
+  deps: { executionContext?: ExecutionContext; orchestratorMode?: boolean } = {},
 ): ToolDefinition<SearchToolParams> => {
-  const { executionContext } = deps;
+  const { executionContext, orchestratorMode = false } = deps;
   return {
     name: 'grep',
-    description: 'Search for text in the codebase. Useful for exploring code, finding usages, etc.',
+    description: orchestratorMode
+      ? 'Search for a known symbol or string when you already have a target in mind (e.g., confirm a subagent\'s reference, locate a specific identifier). For broad codebase exploration or "where is X used" investigations, prefer delegating to an `explorer` subagent via `run_subagent`.'
+      : 'Search for text in the codebase. Useful for exploring code, finding usages, etc.',
     parameters: searchParametersSchema,
     needsApproval: () => false, // Search is read-only and safe
     execute: async (params) => {

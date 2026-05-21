@@ -71,6 +71,32 @@ test('executeShellCommand closes child stdin immediately', async (t) => {
   t.is(result.exitCode, 0);
 });
 
+test('executeShellCommand stops the child process when execution is aborted', async (t) => {
+  const abortController = new AbortController();
+  let killCalls = 0;
+
+  const resultPromise = executeShellCommand('long-running', {
+    signal: abortController.signal,
+    execImpl: (_command, _options, callback) => {
+      const child = createFakeChildProcess();
+      child.kill = () => {
+        killCalls += 1;
+        const error = new Error('aborted') as Error & { signal: string };
+        error.signal = 'SIGTERM';
+        queueMicrotask(() => callback(error, '', ''));
+        return true;
+      };
+      return child;
+    },
+  });
+
+  abortController.abort();
+  const result = await resultPromise;
+
+  t.is(killCalls, 1);
+  t.true(result.timedOut);
+});
+
 function createFakeChildProcess(): ChildProcess {
   return {
     stdin: new PassThrough(),

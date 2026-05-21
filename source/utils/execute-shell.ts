@@ -5,7 +5,7 @@ type ExecCallback = (error: any, stdout: string | Buffer, stderr: string | Buffe
 
 type ExecImpl = (
   command: string,
-  options: { cwd?: string; timeout?: number; maxBuffer?: number },
+  options: { cwd?: string; timeout?: number; maxBuffer?: number; detached?: boolean },
   callback: ExecCallback,
 ) => ChildProcess;
 
@@ -24,15 +24,29 @@ export interface ExecuteShellOptions {
   cwd?: string;
   timeout?: number;
   maxBuffer?: number;
+  signal?: AbortSignal;
   sshService?: ISSHService;
   execImpl?: ExecImpl;
+}
+
+function stopChildProcess(child: ChildProcess): void {
+  if (process.platform !== 'win32' && child.pid) {
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+      return;
+    } catch {
+      // Fall back to killing the direct child when it has no usable process group.
+    }
+  }
+
+  child.kill('SIGTERM');
 }
 
 export async function executeShellCommand(
   command: string,
   options: ExecuteShellOptions = {},
 ): Promise<ShellExecutionResult> {
-  const { cwd = process.cwd(), timeout, maxBuffer, sshService, execImpl = defaultExecImpl } = options;
+  const { cwd = process.cwd(), timeout, maxBuffer, signal, sshService, execImpl = defaultExecImpl } = options;
 
   if (sshService) {
     return sshService.executeCommand(command, { cwd });
@@ -40,14 +54,19 @@ export async function executeShellCommand(
 
   try {
     const result = await new Promise<{ stdout?: string | Buffer; stderr?: string | Buffer }>((resolve, reject) => {
+      let stopChild: (() => void) | undefined;
       const child = execImpl(
         command,
         {
           cwd,
           timeout,
           maxBuffer,
+          detached: process.platform !== 'win32',
         },
         (error, stdout, stderr) => {
+          if (stopChild) {
+            signal?.removeEventListener('abort', stopChild);
+          }
           if (error) {
             error.stdout = stdout;
             error.stderr = stderr;
@@ -58,6 +77,13 @@ export async function executeShellCommand(
           resolve({ stdout, stderr });
         },
       );
+
+      stopChild = () => stopChildProcess(child);
+      if (signal?.aborted) {
+        stopChild();
+      } else {
+        signal?.addEventListener('abort', stopChild, { once: true });
+      }
 
       child.stdin?.end();
     });

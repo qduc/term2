@@ -185,16 +185,24 @@ export function createShellToolDefinition(deps: {
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
   rtkInstaller?: typeof ensureRtkInstalled;
+  orchestratorMode?: boolean;
 }): ToolDefinition<ShellToolParams> {
-  const { loggingService, settingsService, executionContext, rtkInstaller = ensureRtkInstalled } = deps;
+  const {
+    loggingService,
+    settingsService,
+    executionContext,
+    rtkInstaller = ensureRtkInstalled,
+    orchestratorMode = false,
+  } = deps;
 
   // Create command logger function with dependencies
   const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
 
   return {
     name: 'shell',
-    description:
-      'Execute a single shell command. Use this to run a terminal command. Assert the safety of the command; if it does not change system state or read sensitive data, set needsApproval to false. Otherwise set needsApproval to true and wait for user approval before executing.',
+    description: orchestratorMode
+      ? "Execute a single shell command to verify state (e.g., run tests, check git status, or verify a subagent's work). For performing complex operations or making changes, prefer delegating to a `worker` subagent via `run_subagent`."
+      : 'Execute a single shell command. Use this to run a terminal command.',
     parameters: shellParametersSchema,
     needsApproval: async (params) => {
       try {
@@ -219,7 +227,7 @@ export function createShellToolDefinition(deps: {
         return true; // fail-safe: require approval on validation errors
       }
     },
-    execute: async ({ command, timeout_ms, max_output_length }) => {
+    execute: async ({ command, timeout_ms, max_output_length }, _context, details) => {
       const cwd = executionContext?.getCwd() || process.cwd();
       if (settingsService.get<boolean>('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {
         return `Error: plan mode is read-only. Command not executed: ${command}`;
@@ -273,6 +281,7 @@ export function createShellToolDefinition(deps: {
           cwd,
           timeout,
           maxBuffer: 1024 * 1024, // 1MB max buffer
+          signal: (details as { signal?: AbortSignal } | undefined)?.signal,
           sshService,
         });
 

@@ -106,6 +106,30 @@ test.serial('shell execute clears correlation id when no previous correlation ex
   t.is(clearCorrelationCalls, 1);
 });
 
+test.serial('shell execute stops a running command when the tool invocation is aborted', async (t) => {
+  const abortController = new AbortController();
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+  });
+
+  const outputPromise = tool.execute(
+    {
+      command: 'sleep 1; printf finished',
+      timeout_ms: 60000,
+      max_output_length: 10000,
+    },
+    undefined,
+    { signal: abortController.signal },
+  );
+
+  queueMicrotask(() => abortController.abort());
+  const output = await outputPromise;
+
+  t.true(output.startsWith('timeout'));
+  t.false(output.includes('finished'));
+});
+
 test.serial('shell execute does not install RTK for unsupported commands', async (t) => {
   let installCalled = false;
 

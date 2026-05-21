@@ -1,3 +1,42 @@
+## [0.6.0] - 2026-05-21
+
+### Features
+- **Orchestrator mode**: New mode that delegates tasks to specialized subagents with shell access for complex multi-step work
+- **Plan mode**: Read-only mode for researching and proposing step-by-step implementation plans before making changes
+- **Undo / Rewind**: Select any past user message and rewind the conversation to that point
+- **Conversation persistence**: Automatically save and resume sessions with `--resume`; conversations are now project-aware
+- **Slash command completion**: Tab-complete slash commands from the input field
+- **Anthropic prompt caching**: Reduced latency and cost when using Anthropic providers
+- **Provider override**: Specify a provider directly via CLI flag with validation
+- **OpencodeMinimaxHybrid provider**: New provider option for hybrid routing
+- **Web-fetch improvements**: Large results saved to a temp file instead of being truncated in context
+- **Enhanced undo**: ESC key resets input and mode in contextual states; terminal redraws correctly after undo
+- **Settings menu**: Stays open after changing a setting so you can adjust multiple options without reopening
+- **Grep enhancements**: File pattern filtering and improved charset handling for binary-safe output
+- **Input surge guard**: Detects and blocks abrupt message growth or replayed tool-call histories to prevent runaway loops
+- **Subagent editing model**: Subagents can now prefer a dedicated editing model for file operations
+- **Task preview**: Longer previews with smarter truncation for subagent task descriptions
+
+### Bug Fixes
+- Fixed undo not working when using the Responses API (chaining provider)
+- Fixed history navigation (up-arrow) losing image attachments
+- Fixed plan mode incorrectly prompting for approval on edit tools
+- Fixed prompt cache breaking when exiting plan mode
+- Fixed errors from input surge guard not surfacing in the UI
+- Fixed failed user messages not being cleaned up on non-retryable provider errors
+- Fixed reasoning blocks being dropped before pending or running tool calls
+- Fixed stream cancellation not being handled correctly in the event processor
+- Fixed newline normalization between code fences and the first line of code
+- Fixed `cwd` missing from environment info in lite mode
+- Fixed strict providers rejecting messages with a stray `index` field
+
+### Improvements
+- Simplified file editing: standard mode now allows writing anywhere in the workspace by default, removing the separate "edit mode"
+- Subagents now respect abort signals so cancellation propagates cleanly through delegated runs
+- Non-interactive mode has stricter security defaults
+- Streaming reasoning and text deltas are logged to stderr for easier debugging
+- Reasoning-efficiency guidance added to prompts to reduce unnecessary thinking steps
+
 ## [0.5.0] - 2026-05-18
 
 ### Features

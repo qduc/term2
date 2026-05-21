@@ -80,7 +80,8 @@ is_published_on_npm() {
 if [[ "$RESUME_MODE" == "true" ]]; then
     echo -e "${YELLOW}Resume mode: Skipping clean working directory check${NC}"
 else
-    if [[ -n $(git status -s) ]]; then
+    # Allow untracked files so release can run in a worktree with local scratch files.
+    if [[ -n $(git status -s --untracked-files=no) ]]; then
         echo -e "${RED}Error: Working directory is not clean. Please commit or stash changes.${NC}"
         git status -s
         exit 1

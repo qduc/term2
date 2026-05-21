@@ -330,7 +330,8 @@ export class ConversationSession {
         streamInput = supportsChaining ? (typeof chainedInput === 'string' ? chainedInput : [chainedInput]) : history;
       }
 
-      const surgeDecision = this.inputSurgeGuard.inspect(streamInput);
+      const inputSurgeKind = supportsChaining ? 'delta' : 'full_history';
+      const surgeDecision = this.inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind });
       if (surgeDecision.action === 'block') {
         if (addedUserMessage && this.#isCurrentGeneration(gen)) {
           this.conversationStore.removeLastUserMessage();
@@ -384,7 +385,14 @@ export class ConversationSession {
         acc.latestUsage,
       );
 
-      this.inputSurgeGuard.recordSuccessfulInput(streamInput);
+      if (supportsChaining) {
+        this.inputSurgeGuard.recordSuccessfulInput(streamInput, { kind: inputSurgeKind });
+      } else {
+        this.inputSurgeGuard.recordSuccessfulInput(this.conversationStore.getHistory(), {
+          kind: inputSurgeKind,
+          previousInput: streamInput,
+        });
+      }
 
       if (resolvedResult.type === 'approval_required') {
         this.logger.debug('Tool approval required', {

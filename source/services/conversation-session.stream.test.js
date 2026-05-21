@@ -171,15 +171,17 @@ test('run() retries streamed recoverable errors without committing failed stream
   t.deepEqual(calls[1], [{ role: 'user', type: 'message', content: 'retry me' }]);
 });
 
-test('run() blocks abrupt outbound message-count surge before provider call', async (t) => {
-  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'ok' }]);
-  firstStream.finalOutput = 'ok';
-  firstStream.history = Array.from({ length: 863 }, (_, index) => ({
+test('run() allows a follow-up after a long non-chaining run expands full history', async (t) => {
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'first' }]);
+  firstStream.finalOutput = 'first';
+  firstStream.history = Array.from({ length: 212 }, (_, index) => ({
     role: index % 2 === 0 ? 'user' : 'assistant',
     type: 'message',
     content: `history-${index}`,
     ...(index % 2 === 1 ? { status: 'completed' } : {}),
   }));
+  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'second' }]);
+  secondStream.finalOutput = 'second';
 
   const calls = [];
   const mockClient = {
@@ -188,7 +190,7 @@ test('run() blocks abrupt outbound message-count surge before provider call', as
     },
     async startStream(input) {
       calls.push(input);
-      return firstStream;
+      return calls.length === 1 ? firstStream : secondStream;
     },
   };
 
@@ -199,7 +201,7 @@ test('run() blocks abrupt outbound message-count surge before provider call', as
 
   session.importState({
     previousResponseId: null,
-    history: Array.from({ length: 65 }, (_, index) => ({ role: 'user', type: 'message', content: `seed-${index}` })),
+    history: [{ role: 'user', type: 'message', content: 'seed' }],
   });
 
   const first = [];
@@ -212,16 +214,54 @@ test('run() blocks abrupt outbound message-count surge before provider call', as
     second.push(ev);
   }
 
-  t.is(calls.length, 1);
-  t.is(calls[0].length, 66);
-  t.deepEqual(second, [
-    {
-      type: 'error',
-      kind: 'input_surge_guard',
-      message:
-        'Outgoing message count jumped from 66 to 930. Request blocked to prevent runaway context growth. Try /undo or /clear, or compact the conversation history.',
+  t.is(calls.length, 2);
+  t.is(calls[0].length, 2);
+  t.true(calls[1].length > 212);
+  t.deepEqual(
+    second.map((event) => event.type),
+    ['text_delta', 'final'],
+  );
+});
+
+test('sendMessage() allows a follow-up after a long non-chaining run expands full history', async (t) => {
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'ok' }]);
+  firstStream.finalOutput = 'ok';
+  firstStream.history = Array.from({ length: 212 }, (_, index) => ({
+    role: index % 2 === 0 ? 'user' : 'assistant',
+    type: 'message',
+    content: `history-${index}`,
+    ...(index % 2 === 1 ? { status: 'completed' } : {}),
+  }));
+  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'next' }]);
+  secondStream.finalOutput = 'next';
+
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'opencode';
     },
-  ]);
+    async startStream(input) {
+      calls.push(input);
+      return calls.length === 1 ? firstStream : secondStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  session.importState({
+    previousResponseId: null,
+    history: [{ role: 'user', type: 'message', content: 'seed' }],
+  });
+
+  await session.sendMessage('first');
+  const second = await session.sendMessage('second');
+
+  t.is(second.type, 'response');
+  t.is(calls.length, 2);
+  t.true(calls[1].length > 212);
 });
 
 test('continue() streams events after approval decision', async (t) => {

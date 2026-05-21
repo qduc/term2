@@ -69,6 +69,58 @@ test('InputSurgeGuard blocks replayed tool-call signatures even without a baseli
   t.true(decision.reason?.includes('replayed tool-call history'));
 });
 
+test('InputSurgeGuard compares growth baselines only within the same input kind', (t) => {
+  const guard = new InputSurgeGuard();
+  guard.recordSuccessfulInput([{ role: 'user', type: 'message', content: 'small delta' }], { kind: 'delta' });
+
+  const decision = guard.inspect(
+    Array.from({ length: 212 }, (_, index) => ({ role: 'user', type: 'message', content: `history-${index}` })),
+    { kind: 'full_history' },
+  );
+
+  t.is(decision.action, 'allow');
+  t.is(decision.previousStats, undefined);
+});
+
+test('InputSurgeGuard blocks duplicate tool call and result pairs at two copies', (t) => {
+  const guard = new InputSurgeGuard();
+  const pair = (callId: string) => [
+    toolCall(callId),
+    { type: 'function_call_result', callId, output: { type: 'text', text: `result-${callId}` } },
+  ];
+
+  const decision = guard.inspect([
+    ...pair('call-1'),
+    ...pair('call-2'),
+    ...pair('call-3'),
+    ...pair('call-1'),
+    ...pair('call-2'),
+    ...pair('call-3'),
+  ]);
+
+  t.is(decision.action, 'block');
+  t.true(decision.reason?.includes('tool call/result pairs'));
+});
+
+test('InputSurgeGuard blocks a large tool result appended after a successful full-history request', (t) => {
+  const guard = new InputSurgeGuard();
+  const requestHistory = [{ role: 'user', type: 'message', content: 'inspect files' }];
+  const postRunHistory = [
+    ...requestHistory,
+    toolCall('call-large'),
+    { type: 'function_call_result', callId: 'call-large', output: 'x'.repeat(150_000) },
+  ];
+
+  guard.recordSuccessfulInput(postRunHistory, { kind: 'full_history', previousInput: requestHistory });
+
+  const decision = guard.inspect([...postRunHistory, { role: 'user', type: 'message', content: 'follow up' }], {
+    kind: 'full_history',
+  });
+
+  t.is(decision.action, 'block');
+  t.true(decision.reason?.includes('tool result'));
+});
+
 test('InputSurgeGuard does not update baseline for blocked input', (t) => {
   const guard = new InputSurgeGuard();
   guard.recordSuccessfulInput(Array.from({ length: 65 }, (_, index) => ({ role: 'user', content: `m${index}` })));

@@ -99,16 +99,29 @@ test('ask_mentor schema uses optional context instead of nullable', (t) => {
   t.false(tool.parameters.safeParse({ question: 'How?', context: null }).success);
 });
 
-test('search_replace schema uses optional replace_all default', (t) => {
+test('search_replace schema validates path and replacements array structure', (t) => {
   const tool = createSearchReplaceToolDefinition({
     loggingService,
     settingsService: createMockSettingsService(),
   });
 
-  t.true(tool.parameters.safeParse({ path: 'a.ts', search_content: 'old', replace_content: 'new' }).success);
+  t.true(
+    tool.parameters.safeParse({
+      path: 'a.ts',
+      replacements: [{ search_content: 'old', replace_content: 'new' }],
+    }).success,
+  );
   t.false(
-    tool.parameters.safeParse({ path: 'a.ts', search_content: 'old', replace_content: 'new', replace_all: null })
-      .success,
+    tool.parameters.safeParse({
+      path: 'a.ts',
+      replacements: [],
+    }).success,
+  );
+  t.false(
+    tool.parameters.safeParse({
+      path: 'a.ts',
+      replacements: [{ search_content: null, replace_content: 'new' }],
+    }).success,
   );
 });
 

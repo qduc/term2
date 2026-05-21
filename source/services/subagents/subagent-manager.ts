@@ -621,9 +621,6 @@ export class SubagentManager {
   }
 
   #extractPathsFromSearchReplace(params: any): string[] {
-    if (Array.isArray(params?.replacements)) {
-      return params.replacements.map((replacement: any) => replacement?.path).filter(Boolean);
-    }
     return params?.path ? [params.path] : [];
   }
 

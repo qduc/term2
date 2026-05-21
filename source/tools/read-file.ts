@@ -112,7 +112,7 @@ export const createReadFileToolDefinition = (
         }
 
         // Create header with file path, line count, and line range
-        const header = `File: ${filePath} (${totalLines} lines) [lines ${fromLine}-${toLine}]\n${'='.repeat(60)}\n`;
+        const header = `File: ${filePath} (${totalLines} lines) [lines ${fromLine}-${toLine}]\n${'='.repeat(3)}\n`;
 
         // Join and trim output
         const fileContent = filteredLines.join('\n');

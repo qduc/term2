@@ -1,13 +1,12 @@
 import test from 'ava';
-import type { SearchReplaceToolParams } from './search-replace.js';
+import type { SearchReplaceFullOperation } from './search-replace.js';
 // @ts-ignore - TS module resolution for new tool file
 import { healSearchReplaceParams } from './edit-healing.js';
 
-const baseParams: SearchReplaceToolParams = {
+const baseParams: SearchReplaceFullOperation = {
   path: 'file.txt',
   search_content: 'const foo = 2;\n',
   replace_content: 'const foo = 3;\n',
-  replace_all: false,
 };
 
 test('healSearchReplaceParams returns modified params when model finds a match', async (t) => {

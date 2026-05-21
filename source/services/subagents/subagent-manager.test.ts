@@ -565,18 +565,12 @@ test.serial('worker write tool rejects paths outside writeBoundary', async (t) =
   t.truthy(searchReplace);
   t.falsy(agentNonGpt.tools.find((t: any) => t.name === 'apply_patch'));
 
-  // Batch search_replace: all replacement paths must be boundary-checked
   const batchOutsideResult = await searchReplace.invoke(
     {},
     JSON.stringify({
+      path: '../outside.ts',
       replacements: [
         {
-          path: 'inside.ts',
-          search_content: '',
-          replace_content: 'ok',
-        },
-        {
-          path: '../outside.ts',
           search_content: '',
           replace_content: 'no',
         },
@@ -697,10 +691,16 @@ test.serial('worker filesChanged tracks only successful writes for batch operati
             await searchReplace.invoke(
               {},
               JSON.stringify({
-                replacements: [
-                  { path: 'b.txt', search_content: '', replace_content: 'created' },
-                  { path: 'missing2.txt', search_content: 'x', replace_content: 'y' },
-                ],
+                path: 'b.txt',
+                replacements: [{ search_content: '', replace_content: 'created' }],
+              }),
+              {},
+            );
+            await searchReplace.invoke(
+              {},
+              JSON.stringify({
+                path: 'missing2.txt',
+                replacements: [{ search_content: 'x', replace_content: 'y' }],
               }),
               {},
             );

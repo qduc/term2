@@ -51,9 +51,12 @@ test.serial('needsApproval auto-approves creation when search_content is empty a
 
     const result = await tool.needsApproval({
       path: filePath,
-      search_content: '',
-      replace_content: 'initial content',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: '',
+          replace_content: 'initial content',
+        },
+      ],
     });
 
     t.false(result);
@@ -69,16 +72,19 @@ test.serial('needsApproval auto-approves a unique exact match', async (t) => {
 
     const result = await tool.needsApproval({
       path: filePath,
-      search_content: 'hello',
-      replace_content: 'hi',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'hello',
+          replace_content: 'hi',
+        },
+      ],
     });
 
     t.false(result);
   });
 });
 
-test.serial('needsApproval requires approval when multiple exact matches and replace_all is false', async (t) => {
+test.serial('needsApproval auto-approves when multiple exact matches are found', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService());
     const filePath = 'sample.txt';
@@ -87,38 +93,44 @@ test.serial('needsApproval requires approval when multiple exact matches and rep
 
     const result = await tool.needsApproval({
       path: filePath,
-      search_content: 'hello',
-      replace_content: 'hi',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'hello',
+          replace_content: 'hi',
+        },
+      ],
     });
 
-    t.true(result);
+    t.false(result);
   });
 });
 
-test.serial('execute replaces only the first exact match when replace_all is false', async (t) => {
+test.serial('execute replaces only a unique exact match', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
     const absPath = path.join(dir, filePath);
-    await fs.writeFile(absPath, 'target before target after');
+    await fs.writeFile(absPath, 'target before unique after');
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'target',
-      replace_content: 'done',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'target',
+          replace_content: 'done',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'done before target after');
+    t.is(updated, 'done before unique after');
   });
 });
 
-test.serial('execute replaces all exact matches when replace_all is true', async (t) => {
+test.serial('execute fails when multiple exact matches are found', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -127,16 +139,20 @@ test.serial('execute replaces all exact matches when replace_all is true', async
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'foo',
-      replace_content: 'bar',
-      replace_all: true,
+      replacements: [
+        {
+          search_content: 'foo',
+          replace_content: 'bar',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
-    t.true(parsed.output[0].success);
+    t.false(parsed.output[0].success);
+    t.regex(parsed.output[0].error, /Found 3 exact matches/);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'bar bar bar');
+    t.is(updated, 'foo foo foo');
   });
 });
 
@@ -149,9 +165,12 @@ test.serial('execute performs relaxed match replacement when exact match is not 
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'line one\nline two',
-      replace_content: 'new block\n',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'line one\nline two',
+          replace_content: 'new block\n',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -162,29 +181,7 @@ test.serial('execute performs relaxed match replacement when exact match is not 
   });
 });
 
-test.serial('execute replaces first of multiple exact matches when replace_all is false', async (t) => {
-  await withTempDir(async (dir) => {
-    const tool = createTool();
-    const filePath = 'content.txt';
-    const absPath = path.join(dir, filePath);
-    await fs.writeFile(absPath, 'foo\nbar\n---\nfoo\nbar\n');
-
-    const result = await tool.execute({
-      path: filePath,
-      search_content: 'foo\nbar',
-      replace_content: 'replacement',
-      replace_all: false,
-    });
-
-    const parsed = JSON.parse(result);
-    t.true(parsed.output[0].success);
-
-    const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'replacement\n---\nfoo\nbar\n');
-  });
-});
-
-test.serial('execute rejects multiple relaxed matches when replace_all is false', async (t) => {
+test.serial('execute fails when multiple relaxed matches are found', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -193,40 +190,22 @@ test.serial('execute rejects multiple relaxed matches when replace_all is false'
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'foo\nbar',
-      replace_content: 'replacement',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'foo\nbar',
+          replace_content: 'replacement',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
     t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('relaxed matches'));
+    t.true(
+      parsed.output[0].error.includes('relaxed matches') || parsed.output[0].error.includes('Found 2 relaxed matches'),
+    );
 
     const unchanged = await fs.readFile(absPath, 'utf8');
     t.is(unchanged, '  foo  \n\tbar\n---\n  foo  \n\tbar\n');
-  });
-});
-
-test.serial('execute replaces all relaxed matches when replace_all is true', async (t) => {
-  await withTempDir(async (dir) => {
-    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
-    const filePath = 'content.txt';
-    const absPath = path.join(dir, filePath);
-    await fs.writeFile(absPath, '  foo  \n\tbar\n---\n  foo  \n\tbar\n');
-
-    const result = await tool.execute({
-      path: filePath,
-      search_content: 'foo\nbar',
-      replace_content: 'replacement',
-      replace_all: true,
-    });
-
-    const parsed = JSON.parse(result);
-    t.true(parsed.output[0].success);
-    t.true(parsed.output[0].message.includes('relaxed'));
-
-    const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'replacement---\nreplacement');
   });
 });
 
@@ -238,9 +217,12 @@ test.serial('execute creates a new file when search_content is empty and file is
 
     const result = await tool.execute({
       path: filePath,
-      search_content: '',
-      replace_content: 'new content',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: '',
+          replace_content: 'new content',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -256,16 +238,19 @@ test.serial('execute preserves parallel edits to different regions of the same f
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'parallel.txt';
     const absPath = path.join(dir, filePath);
-    const tokens = Array.from({ length: 20 }, (_, index) => `token_${index}`);
+    const tokens = Array.from({ length: 20 }, (_, index) => `token_${String(index).padStart(2, '0')}`);
     await fs.writeFile(absPath, tokens.join('\n'));
 
     const results = await Promise.all(
       tokens.map((token, index) =>
         tool.execute({
           path: filePath,
-          search_content: token,
-          replace_content: `done_${index}`,
-          replace_all: false,
+          replacements: [
+            {
+              search_content: token,
+              replace_content: `done_${index}`,
+            },
+          ],
         }),
       ),
     );
@@ -291,18 +276,15 @@ test.serial('execute applies batched replacements to one file with a single resu
     await fs.writeFile(absPath, 'alpha\nbeta\ngamma\n');
 
     const result = await tool.execute({
+      path: filePath,
       replacements: [
         {
-          path: filePath,
           search_content: 'alpha',
           replace_content: 'ALPHA',
-          replace_all: false,
         },
         {
-          path: filePath,
           search_content: 'gamma',
           replace_content: 'GAMMA',
-          replace_all: false,
         },
       ],
     });
@@ -328,24 +310,19 @@ test.serial('execute keeps successful batched replacements when another replacem
     await fs.writeFile(absPath, originalContent);
 
     const result = await tool.execute({
+      path: filePath,
       replacements: [
         {
-          path: filePath,
           search_content: 'alpha',
           replace_content: 'ALPHA',
-          replace_all: false,
         },
         {
-          path: filePath,
           search_content: 'missing',
           replace_content: 'MISSING',
-          replace_all: false,
         },
         {
-          path: filePath,
           search_content: 'gamma',
           replace_content: 'GAMMA',
-          replace_all: false,
         },
       ],
     });
@@ -370,9 +347,12 @@ test.serial('execute reports failure when search string is not found', async (t)
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'nonexistent',
-      replace_content: 'replacement',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'nonexistent',
+          replace_content: 'replacement',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -400,9 +380,12 @@ test.serial('execute heals search content when no match is found', async (t) => 
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'const foo = 2;\n',
-      replace_content: 'const foo = 3;\n',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'const foo = 2;\n',
+          replace_content: 'const foo = 3;\n',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -429,9 +412,12 @@ test.serial('execute includes auto-healing failure reason when healing does not 
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'const foo = 2;\n',
-      replace_content: 'const foo = 3;\n',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'const foo = 2;\n',
+          replace_content: 'const foo = 3;\n',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -451,9 +437,12 @@ test.serial('execute treats special regex characters literally', async (t) => {
 
     const result = await tool.execute({
       path: filePath,
-      search_content: '[1, 2, 3]',
-      replace_content: '[4, 5, 6]',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: '[1, 2, 3]',
+          replace_content: '[4, 5, 6]',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -473,9 +462,12 @@ test.serial('execute deletes content when replacement is empty string', async (t
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'DELETE_ME ',
-      replace_content: '',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'DELETE_ME ',
+          replace_content: '',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -495,9 +487,12 @@ test.serial('execute performs exact multi-line match without whitespace normaliz
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'line one\nline two',
-      replace_content: 'new content',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'line one\nline two',
+          replace_content: 'new content',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -517,9 +512,12 @@ test.serial('execute handles leading/trailing whitespace differences in relaxed 
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'foo\nbar',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'foo\nbar',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -539,9 +537,12 @@ test.serial('execute performs normalized whitespace match across line breaks', a
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'const foo = 1; const bar = 2;',
-      replace_content: 'const foo = 1;\nconst bar = 42;',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'const foo = 1; const bar = 2;',
+          replace_content: 'const foo = 1;\nconst bar = 42;',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -552,7 +553,7 @@ test.serial('execute performs normalized whitespace match across line breaks', a
   });
 });
 
-test.serial('execute rejects multiple normalized matches when replace_all is false', async (t) => {
+test.serial('execute rejects multiple normalized matches', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'normalized-multi.txt';
@@ -561,9 +562,12 @@ test.serial('execute rejects multiple normalized matches when replace_all is fal
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'const foo = 1; const bar = 2;',
-      replace_content: 'const foo = 9; const bar = 9;',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'const foo = 1; const bar = 2;',
+          replace_content: 'const foo = 9; const bar = 9;',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -583,14 +587,14 @@ test.serial('execute does not match substrings in relaxed mode', async (t) => {
     const originalContent = '  formatted text  ';
     await fs.writeFile(absPath, originalContent);
 
-    // Search for "format" with different whitespace to trigger relaxed mode
-    // Relaxed mode should NOT match because it compares entire trimmed lines,
-    // and "format" (trimmed) !== "formatted text" (trimmed)
     const result = await tool.execute({
       path: filePath,
-      search_content: '    format    ',
-      replace_content: 'replacement',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: '    format    ',
+          replace_content: 'replacement',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -601,24 +605,21 @@ test.serial('execute does not match substrings in relaxed mode', async (t) => {
   });
 });
 
-// ============================================================================
-// EOL Normalization Tests
-// ============================================================================
-
 test.serial('execute normalizes CRLF search content to match LF file', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'lf-file.txt';
     const absPath = path.join(dir, filePath);
-    // File has LF line endings
     await fs.writeFile(absPath, 'line one\nline two\nline three');
 
-    // Search content has CRLF line endings
     const result = await tool.execute({
       path: filePath,
-      search_content: 'line one\r\nline two',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'line one\r\nline two',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -634,22 +635,22 @@ test.serial('execute normalizes LF search content to match CRLF file', async (t)
     const tool = createTool();
     const filePath = 'crlf-file.txt';
     const absPath = path.join(dir, filePath);
-    // File has CRLF line endings
     await fs.writeFile(absPath, 'line one\r\nline two\r\nline three');
 
-    // Search content has LF line endings
     const result = await tool.execute({
       path: filePath,
-      search_content: 'line one\nline two',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'line one\nline two',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    // Result should preserve the file's CRLF style
     t.is(updated, 'replaced\r\nline three');
   });
 });
@@ -659,28 +660,25 @@ test.serial('execute preserves CRLF in replacement content when file uses CRLF',
     const tool = createTool();
     const filePath = 'crlf-file.txt';
     const absPath = path.join(dir, filePath);
-    // File has CRLF line endings
     await fs.writeFile(absPath, 'hello\r\nworld');
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'hello',
-      replace_content: 'new\nline', // LF in replacement
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'hello',
+          replace_content: 'new\nline',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    // Replacement should use file's CRLF style
     t.is(updated, 'new\r\nline\r\nworld');
   });
 });
-
-// ============================================================================
-// Leading Filepath Comment Stripping Tests
-// ============================================================================
 
 test.serial('execute strips leading filepath comment from search content', async (t) => {
   await withTempDir(async (dir) => {
@@ -689,12 +687,14 @@ test.serial('execute strips leading filepath comment from search content', async
     const absPath = path.join(dir, filePath);
     await fs.writeFile(absPath, 'const x = 1;\nconst y = 2;');
 
-    // Search content has a leading filepath comment (common model behavior)
     const result = await tool.execute({
       path: filePath,
-      search_content: '// sample.ts\nconst x = 1;',
-      replace_content: 'const x = 42;',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: '// sample.ts\nconst x = 1;',
+          replace_content: 'const x = 42;',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -714,9 +714,12 @@ test.serial('execute strips leading hash filepath comment from search content', 
 
     const result = await tool.execute({
       path: filePath,
-      search_content: '# script.py\nx = 1',
-      replace_content: 'x = 42',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: '# script.py\nx = 1',
+          replace_content: 'x = 42',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -734,12 +737,14 @@ test.serial('execute does not strip non-filepath leading comments', async (t) =>
     const absPath = path.join(dir, filePath);
     await fs.writeFile(absPath, '// TODO: fix this\nconst x = 1;');
 
-    // This comment is not a filepath, so it should NOT be stripped
     const result = await tool.execute({
       path: filePath,
-      search_content: '// TODO: fix this\nconst x = 1;',
-      replace_content: 'const x = 42;',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: '// TODO: fix this\nconst x = 1;',
+          replace_content: 'const x = 42;',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -750,10 +755,6 @@ test.serial('execute does not strip non-filepath leading comments', async (t) =>
   });
 });
 
-// ============================================================================
-// Summarization Marker Detection Tests
-// ============================================================================
-
 test.serial('execute rejects search content with "Lines X-Y omitted" marker', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool();
@@ -763,9 +764,12 @@ test.serial('execute rejects search content with "Lines X-Y omitted" marker', as
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'line 1\nLines 2-50 omitted\nline 3',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'line 1\nLines 2-50 omitted\nline 3',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -783,9 +787,12 @@ test.serial('execute rejects search content with ellipsis marker {…}', async (
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'function foo() {…}',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'function foo() {…}',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -803,9 +810,12 @@ test.serial('execute rejects search content with /*...*/ marker', async (t) => {
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'function foo() { /*...*/ }',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'function foo() { /*...*/ }',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -823,9 +833,12 @@ test.serial('execute rejects search content with // ... marker', async (t) => {
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'const a = 1;\n// ...\nconst c = 3;',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'const a = 1;\n// ...\nconst c = 3;',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -833,10 +846,6 @@ test.serial('execute rejects search content with // ... marker', async (t) => {
     t.true(parsed.output[0].error.includes('// ...'));
   });
 });
-
-// ============================================================================
-// Search and Replace Equality Validation Tests
-// ============================================================================
 
 test.serial('execute rejects search content when search and replace content are identical', async (t) => {
   await withTempDir(async (dir) => {
@@ -847,9 +856,12 @@ test.serial('execute rejects search content when search and replace content are 
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'hello',
-      replace_content: 'hello',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'hello',
+          replace_content: 'hello',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -867,19 +879,17 @@ test.serial('needsApproval auto-approves when search and replace content are ide
 
     const result = await tool.needsApproval({
       path: filePath,
-      search_content: 'hello',
-      replace_content: 'hello',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'hello',
+          replace_content: 'hello',
+        },
+      ],
     });
 
-    // Should auto-approve so execute can return the error gracefully
     t.false(result);
   });
 });
-
-// ============================================================================
-// Gap Matching Tests (<...> marker)
-// ============================================================================
 
 test.serial('execute performs gap match: head <...> tail replaces entire region', async (t) => {
   await withTempDir(async (dir) => {
@@ -893,9 +903,12 @@ test.serial('execute performs gap match: head <...> tail replaces entire region'
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'function foo() {\n  const x = 1;\n<...>\n  return x + y + z;\n}',
-      replace_content: 'function foo() {\n  return 6;\n}\n',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'function foo() {\n  const x = 1;\n<...>\n  return x + y + z;\n}',
+          replace_content: 'function foo() {\n  return 6;\n}\n',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -916,9 +929,12 @@ test.serial('execute performs gap match with single-line head and tail', async (
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'start\n<...>\nend',
-      replace_content: 'replaced\n',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'start\n<...>\nend',
+          replace_content: 'replaced\n',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -938,9 +954,12 @@ test.serial('execute performs gap match with adjacent head and tail (no actual g
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'line1\n<...>\nline2',
-      replace_content: 'replaced\n',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'line1\n<...>\nline2',
+          replace_content: 'replaced\n',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -963,9 +982,12 @@ test.serial('execute performs gap match with multiple <...> markers', async (t) 
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'function a() {\n<...>\nfunction b() {\n<...>\nfunction c() {\n  body3;\n}',
-      replace_content: 'function abc() {\n  combined;\n}\n',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'function a() {\n<...>\nfunction b() {\n<...>\nfunction c() {\n  body3;\n}',
+          replace_content: 'function abc() {\n  combined;\n}\n',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -985,9 +1007,12 @@ test.serial('execute gap match fails when head is not found', async (t) => {
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'nonexistent\n<...>\nline3',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'nonexistent\n<...>\nline3',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -1004,9 +1029,12 @@ test.serial('execute gap match fails when tail is not found after head', async (
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'line1\n<...>\nnonexistent',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'line1\n<...>\nnonexistent',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -1028,9 +1056,12 @@ test.serial(
 
       const result = await tool.execute({
         path: filePath,
-        search_content: 'nonexistent\n<...>\nline3',
-        replace_content: 'replaced',
-        replace_all: false,
+        replacements: [
+          {
+            search_content: 'nonexistent\n<...>\nline3',
+            replace_content: 'replaced',
+          },
+        ],
       });
 
       const parsed = JSON.parse(result);
@@ -1054,9 +1085,12 @@ test.serial('execute gap diagnostic identifies the anchor that failed after the 
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'line1\n<...>\nnonexistent',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'line1\n<...>\nnonexistent',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -1065,7 +1099,7 @@ test.serial('execute gap diagnostic identifies the anchor that failed after the 
   });
 });
 
-test.serial('execute gap match rejects multiple matches when replace_all is false', async (t) => {
+test.serial('execute gap match rejects multiple matches', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'content.txt';
@@ -1074,36 +1108,17 @@ test.serial('execute gap match rejects multiple matches when replace_all is fals
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'start\n<...>\nend',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'start\n<...>\nend',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('gap'));
-  });
-});
-
-test.serial('execute gap match replaces all when replace_all is true', async (t) => {
-  await withTempDir(async (dir) => {
-    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
-    const filePath = 'content.txt';
-    const absPath = path.join(dir, filePath);
-    await fs.writeFile(absPath, 'start\nmiddle1\nend\nstart\nmiddle2\nend\n');
-
-    const result = await tool.execute({
-      path: filePath,
-      search_content: 'start\n<...>\nend',
-      replace_content: 'replaced\n',
-      replace_all: true,
-    });
-
-    const parsed = JSON.parse(result);
-    t.true(parsed.output[0].success);
-
-    const updated = await fs.readFile(absPath, 'utf8');
-    t.is(updated, 'replaced\nreplaced\n');
   });
 });
 
@@ -1116,9 +1131,12 @@ test.serial('execute gap match works with relaxed whitespace matching in segment
 
     const result = await tool.execute({
       path: filePath,
-      search_content: 'function foo() {\n<...>\nreturn x;\n}',
-      replace_content: 'function foo() {\n  return 42;\n}\n',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'function foo() {\n<...>\nreturn x;\n}',
+          replace_content: 'function foo() {\n  return 42;\n}\n',
+        },
+      ],
     });
 
     const parsed = JSON.parse(result);
@@ -1138,12 +1156,14 @@ test.serial('needsApproval handles gap match', async (t) => {
 
     const result = await tool.needsApproval({
       path: filePath,
-      search_content: 'start\n<...>\nend',
-      replace_content: 'replaced',
-      replace_all: false,
+      replacements: [
+        {
+          search_content: 'start\n<...>\nend',
+          replace_content: 'replaced',
+        },
+      ],
     });
 
-    // In standard mode with a unique gap match, should auto-approve
     t.false(result);
   });
 });

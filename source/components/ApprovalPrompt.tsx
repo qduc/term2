@@ -23,9 +23,10 @@ type ShellArgs = {
 
 type SearchReplaceArgs = {
   path: string;
-  search_content: string;
-  replace_content: string;
-  replace_all?: boolean;
+  replacements: {
+    search_content: string;
+    replace_content: string;
+  }[];
 };
 
 type CreateFileArgs = {
@@ -79,8 +80,6 @@ const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
 };
 
 const SearchReplacePrompt: FC<{ args: SearchReplaceArgs }> = ({ args }) => {
-  const diff = generateDiff(args.search_content, args.replace_content);
-
   return (
     <Box flexDirection="column">
       <Box>
@@ -88,9 +87,16 @@ const SearchReplacePrompt: FC<{ args: SearchReplaceArgs }> = ({ args }) => {
           [SEARCH & REPLACE]
         </Text>
         <Text> {args.path}</Text>
-        {args.replace_all && <Text color="magenta"> (all occurrences)</Text>}
       </Box>
-      <DiffView diff={diff} />
+      {(args.replacements || []).map((rep, idx) => {
+        const diff = generateDiff(rep.search_content, rep.replace_content);
+        return (
+          <Box key={idx} flexDirection="column" marginTop={idx > 0 ? 1 : 0}>
+            {args.replacements.length > 1 && <Text color="gray">Replacement #{idx + 1}:</Text>}
+            <DiffView diff={diff} />
+          </Box>
+        );
+      })}
     </Box>
   );
 };

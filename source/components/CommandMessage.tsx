@@ -76,12 +76,23 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
       }
 
       case TOOL_NAME_SEARCH_REPLACE: {
-        const searchContent = normalizedArgs.search_content || '';
-        const replaceContent = normalizedArgs.replace_content || '';
         const path = normalizedArgs.path || 'unknown';
-        const search = searchContent.length > 30 ? `${searchContent.slice(0, 30)}...` : searchContent;
-        const replace = replaceContent.length > 30 ? `${replaceContent.slice(0, 30)}...` : replaceContent;
-        return `"${search}" → "${replace}" "${path}"`;
+        if (normalizedArgs.replacements) {
+          const replacements = normalizedArgs.replacements || [];
+          const firstRep = replacements[0] || {};
+          const searchContent = firstRep.search_content || '';
+          const replaceContent = firstRep.replace_content || '';
+          const search = searchContent.length > 30 ? `${searchContent.slice(0, 30)}...` : searchContent;
+          const replace = replaceContent.length > 30 ? `${replaceContent.slice(0, 30)}...` : replaceContent;
+          const countText = replacements.length > 1 ? ` (+ ${replacements.length - 1} more)` : '';
+          return `"${search}" → "${replace}" "${path}"${countText}`;
+        } else {
+          const searchContent = normalizedArgs.search_content || '';
+          const replaceContent = normalizedArgs.replace_content || '';
+          const search = searchContent.length > 30 ? `${searchContent.slice(0, 30)}...` : searchContent;
+          const replace = replaceContent.length > 30 ? `${replaceContent.slice(0, 30)}...` : replaceContent;
+          return `"${search}" → "${replace}" "${path}"`;
+        }
       }
 
       case TOOL_NAME_CREATE_FILE: {
@@ -129,13 +140,15 @@ const CommandMessage: FC<Props> = ({
   const isRunning = status === 'pending' || status === 'running';
   const [isVisible, setIsVisible] = useState(!isRunning);
 
-  const diff = useMemo(
-    () =>
-      toolName === TOOL_NAME_SEARCH_REPLACE && toolArgs
-        ? generateDiff(toolArgs.search_content, toolArgs.replace_content)
-        : '',
-    [toolName, toolArgs?.search_content, toolArgs?.replace_content],
-  );
+  const diff = useMemo(() => {
+    if (toolName !== TOOL_NAME_SEARCH_REPLACE || !toolArgs) return '';
+    if (toolArgs.replacements) {
+      return (toolArgs.replacements || [])
+        .map((rep: any) => generateDiff(rep.search_content, rep.replace_content))
+        .join('\n');
+    }
+    return generateDiff(toolArgs.search_content, toolArgs.replace_content);
+  }, [toolName, toolArgs?.search_content, toolArgs?.replace_content, toolArgs?.replacements]);
 
   const createFileDiffLines = useMemo(
     () =>
@@ -225,7 +238,6 @@ const CommandMessage: FC<Props> = ({
             [SEARCH & REPLACE]
           </Text>
           <Text> {toolArgs.path}</Text>
-          {toolArgs.replace_all && <Text color="magenta"> (all occurrences)</Text>}
         </Box>
         <DiffView diff={diff} />
         {failureReason && <Text color="red">Error: {failureReason}</Text>}

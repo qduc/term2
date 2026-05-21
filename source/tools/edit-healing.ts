@@ -1,10 +1,10 @@
 import { Agent, run, type Runner } from '@openai/agents';
-import type { SearchReplaceOperation } from './search-replace.js';
+import type { SearchReplaceFullOperation } from './search-replace.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { getProvider } from '../providers/index.js';
 
 export interface HealingResult {
-  params: SearchReplaceOperation;
+  params: SearchReplaceFullOperation;
   wasModified: boolean;
   confidence: number;
   failureReason?: string;
@@ -57,7 +57,7 @@ function buildHealingInstructions(delimiter: string): string {
   ].join('\n');
 }
 
-function buildUserData(originalParams: SearchReplaceOperation, fileContent: string, delimiter: string): string {
+function buildUserData(originalParams: SearchReplaceFullOperation, fileContent: string, delimiter: string): string {
   return [
     `PATH\n${originalParams.path}`,
     `SEARCH\n${originalParams.search_content}`,
@@ -215,7 +215,7 @@ async function runHealingPrompt(
 }
 
 export async function healSearchReplaceParams(
-  originalParams: SearchReplaceOperation,
+  originalParams: SearchReplaceFullOperation,
   fileContent: string,
   model: string,
   apiKey: string,

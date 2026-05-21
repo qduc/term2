@@ -100,8 +100,7 @@ export async function collectTerminalResult(
         break;
       }
       case 'error': {
-        // Preserve existing semantics: ignore here and let upstream behavior decide.
-        break;
+        throw new Error(event.message);
       }
       default:
         break;

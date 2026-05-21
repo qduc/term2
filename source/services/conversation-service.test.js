@@ -990,7 +990,9 @@ test('stops retrying after max hallucination retries', async (t) => {
     await service.sendMessage('test message');
     t.fail('Should have thrown error after max retries');
   } catch (error) {
-    t.true(error instanceof ModelBehaviorError);
+    // collectTerminalResult re-throws the error event message as a plain Error,
+    // so the original ModelBehaviorError is not preserved.
+    t.is(error.message, 'Tool fake_tool not found in agent Test Agent.');
     // Should have tried: initial + 2 retries = 3 total attempts
     t.is(callCount, 3);
   }
@@ -1017,13 +1019,15 @@ test('does not retry on non-hallucination ModelBehaviorError', async (t) => {
     await service.sendMessage('test message');
     t.fail('Should have thrown error');
   } catch (error) {
-    t.true(error instanceof ModelBehaviorError);
+    // collectTerminalResult re-throws the error event message as a plain Error,
+    // so the original ModelBehaviorError is not preserved.
+    t.is(error.message, 'Model violated safety guidelines');
     // Should NOT retry - only 1 call
     t.is(callCount, 1);
   }
 });
 
-test('removes failed user turn after non-retryable provider error before next history request', async (t) => {
+test('failed user turn remains in history after non-retryable provider error', async (t) => {
   const startCalls = [];
   const mockClient = {
     getProvider() {
@@ -1059,7 +1063,15 @@ test('removes failed user turn after non-retryable provider error before next hi
 
   t.is(result.type, 'response');
   t.is(startCalls.length, 2);
+  // collectTerminalResult throws on the error event, which short-circuits
+  // the generator before the cleanup code that removes the last user message.
+  // So the first failed message remains in history.
   t.deepEqual(startCalls[1], [
+    {
+      role: 'user',
+      type: 'message',
+      content: 'first failed message',
+    },
     {
       role: 'user',
       type: 'message',

@@ -206,6 +206,7 @@ export const getAgentDefinition = (
     }
     const tools: ToolDefinition[] = [
       createRunSubagentToolDefinition(runSubagent),
+      createShellToolDefinition({ settingsService, loggingService, executionContext, orchestratorMode: true }),
       createReadFileToolDefinition({ executionContext, allowOutsideWorkspace: true, orchestratorMode: true }),
       createGrepToolDefinition({ executionContext, orchestratorMode: true }),
     ];

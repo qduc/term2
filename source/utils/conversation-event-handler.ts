@@ -446,10 +446,20 @@ export function createConversationEventHandler<
       }
 
       case 'retry': {
-        const text =
-          event.retryType === 'flex_service_tier'
-            ? 'Flex service tier timed out. Falling back to standard service tier and retrying...'
-            : `Tool hallucination detected (${event.toolName}). Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
+        let text: string;
+        if (event.retryType === 'flex_service_tier') {
+          text = 'Flex service tier timed out. Falling back to standard service tier and retrying...';
+        } else if (event.retryType === 'upstream') {
+          text = `Upstream error or rate limit encountered. Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
+        } else if (event.retryType === 'parsing_error') {
+          text = `Model parsing error detected. Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
+        } else if (event.retryType === 'behavior') {
+          text = `Model behavior error detected. Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
+        } else if (event.retryType === 'hallucination') {
+          text = `Tool hallucination detected (${event.toolName}). Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
+        } else {
+          text = `Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
+        }
         const systemMessage: SystemMessage = {
           id: createMessageId(),
           sender: 'system',

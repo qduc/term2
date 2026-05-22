@@ -489,3 +489,259 @@ test.serial('listConversations: returns conversations sorted by updatedAt descen
   t.is(list[0].id, id2); // Most recently saved first
   t.is(list[1].id, id1);
 });
+
+test.serial('conversationMatchesProject: loadConversation with matching sshHost returns conversation', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sshHost: 'myhost.example.com',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const loaded = persistenceModule.loadConversation(id, undefined, 'myhost.example.com');
+
+  t.truthy(loaded);
+  t.is(loaded!.id, id);
+  t.is(loaded!.sshHost, 'myhost.example.com');
+});
+
+test.serial('conversationMatchesProject: loadConversation with mismatched sshHost returns null', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sshHost: 'myhost.example.com',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const loaded = persistenceModule.loadConversation(id, undefined, 'otherhost.example.com');
+
+  t.is(loaded, null);
+});
+
+test.serial(
+  'conversationMatchesProject: loading remote conversation from local session (no expectedSshHost) returns null',
+  (t) => {
+    const id = persistenceModule.generateId();
+    const conversation: persistenceModule.SavedConversation = {
+      id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      sshHost: 'remote.example.com',
+      projectPath: '/workspace/project',
+      previousResponseId: null,
+      history: [],
+      messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+    };
+
+    persistenceModule.saveConversation(conversation);
+    // Local session (expectedProjectPath given, but no expectedSshHost)
+    // should reject a remote conversation that has sshHost
+    const loaded = persistenceModule.loadConversation(id, '/workspace/project', undefined);
+
+    t.is(loaded, null);
+  },
+);
+
+test.serial(
+  'conversationMatchesProject: loading local conversation from remote session (no conversation.sshHost) returns null',
+  (t) => {
+    const id = persistenceModule.generateId();
+    const conversation: persistenceModule.SavedConversation = {
+      id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      // no sshHost — local conversation
+      projectPath: '/workspace/project',
+      previousResponseId: null,
+      history: [],
+      messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+    };
+
+    persistenceModule.saveConversation(conversation);
+    // Remote session (expectedSshHost given) should reject a local conversation
+    const loaded = persistenceModule.loadConversation(id, '/workspace/project', 'remote.example.com');
+
+    t.is(loaded, null);
+  },
+);
+
+test.serial('loadConversationForProject: returns project_mismatch for sshHost mismatch', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sshHost: 'myhost.example.com',
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const result = persistenceModule.loadConversationForProject(id, '/workspace/alpha', 'otherhost.example.com');
+
+  t.is(result.status, 'project_mismatch');
+  if (result.status === 'project_mismatch') {
+    t.is(result.conversation.id, id);
+    t.is(result.conversation.sshHost, 'myhost.example.com');
+  }
+});
+
+test.serial('loadConversationForProject: returns project_mismatch for project path mismatch with sshHost', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sshHost: 'myhost.example.com',
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const result = persistenceModule.loadConversationForProject(id, '/workspace/beta', 'myhost.example.com');
+
+  t.is(result.status, 'project_mismatch');
+  if (result.status === 'project_mismatch') {
+    t.is(result.conversation.id, id);
+  }
+});
+
+test.serial('loadConversationForProject: returns loaded when both sshHost and projectPath match', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sshHost: 'myhost.example.com',
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const result = persistenceModule.loadConversationForProject(id, '/workspace/alpha', 'myhost.example.com');
+
+  t.is(result.status, 'loaded');
+  if (result.status === 'loaded') {
+    t.is(result.conversation.id, id);
+    t.is(result.conversation.sshHost, 'myhost.example.com');
+  }
+});
+
+test.serial('loadConversationForProject: SSH host matching is case-insensitive', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sshHost: 'MyHost.EXAMPLE.COM',
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const result = persistenceModule.loadConversationForProject(id, '/workspace/alpha', 'myhost.example.com');
+
+  t.is(result.status, 'loaded');
+  if (result.status === 'loaded') {
+    t.is(result.conversation.id, id);
+  }
+});
+
+test.serial('loadLastConversation: filters by both expectedProjectPath and expectedSshHost', (t) => {
+  const matchingId = persistenceModule.generateId();
+  const wrongSshId = persistenceModule.generateId();
+  const wrongProjectId = persistenceModule.generateId();
+
+  persistenceModule.saveConversation({
+    id: matchingId,
+    createdAt: '2024-01-03T00:00:00.000Z',
+    updatedAt: '2024-01-03T00:00:00.000Z',
+    projectPath: '/workspace/alpha',
+    sshHost: 'myhost.example.com',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'matching' }],
+  });
+  persistenceModule.saveConversation({
+    id: wrongSshId,
+    createdAt: '2024-01-02T00:00:00.000Z',
+    updatedAt: '2024-01-02T00:00:00.000Z',
+    projectPath: '/workspace/alpha',
+    sshHost: 'other.example.com',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-2', sender: 'user', text: 'wrong ssh' }],
+  });
+  persistenceModule.saveConversation({
+    id: wrongProjectId,
+    createdAt: '2024-01-01T00:00:00.000Z',
+    updatedAt: '2024-01-01T00:00:00.000Z',
+    projectPath: '/workspace/beta',
+    sshHost: 'myhost.example.com',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-3', sender: 'user', text: 'wrong project' }],
+  });
+
+  const last = persistenceModule.loadLastConversation('/workspace/alpha', 'myhost.example.com');
+
+  t.truthy(last);
+  t.is(last!.id, matchingId);
+});
+
+test.serial('loadLastConversation: returns null when no conversation matches both project and ssh', (t) => {
+  persistenceModule.saveConversation({
+    id: persistenceModule.generateId(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    projectPath: '/workspace/alpha',
+    sshHost: 'myhost.example.com',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  });
+
+  const last = persistenceModule.loadLastConversation('/workspace/alpha', 'otherhost.example.com');
+
+  t.is(last, null);
+});
+
+test.serial('loadConversation: unscoped load (no filters) accepts conversation with sshHost', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sshHost: 'myhost.example.com',
+    projectPath: '/workspace/alpha',
+    previousResponseId: null,
+    history: [],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  // No filters at all — should pass through
+  const loaded = persistenceModule.loadConversation(id);
+
+  t.truthy(loaded);
+  t.is(loaded!.id, id);
+  t.is(loaded!.sshHost, 'myhost.example.com');
+});

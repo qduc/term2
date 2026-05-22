@@ -64,6 +64,7 @@ export interface RetryEventPayload {
   attempt: number;
   maxRetries: number;
   errorMessage: string;
+  retryType?: RetryType;
 }
 
 export interface RetryLogPayload {
@@ -117,6 +118,7 @@ export const decideRetry = (
       attempt,
       maxRetries: MAX_HALLUCINATION_RETRIES,
       errorMessage: message,
+      retryType,
     },
     logPayload: {
       toolName,

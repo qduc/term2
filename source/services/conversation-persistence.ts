@@ -27,6 +27,7 @@ export interface SavedConversation {
   createdAt: string;
   updatedAt: string;
   projectPath?: string;
+  sshHost?: string;
   appMode?: SavedAppMode;
   model?: string;
   provider?: string;
@@ -77,14 +78,45 @@ function normalizeProjectPath(projectPath: string): string {
   return normalized.endsWith(path.sep) && normalized !== path.sep ? normalized.slice(0, -1) : normalized;
 }
 
-function conversationMatchesProject(conversation: SavedConversation, expectedProjectPath?: string): boolean {
-  if (!expectedProjectPath) {
+function normalizeSshHost(host: string): string {
+  return host.trim().toLowerCase();
+}
+
+function conversationMatchesProject(
+  conversation: SavedConversation,
+  expectedProjectPath?: string,
+  expectedSshHost?: string,
+): boolean {
+  // If no expectations provided, skip all checks
+  if (expectedProjectPath === undefined && expectedSshHost === undefined) {
     return true;
   }
-  if (!conversation.projectPath) {
+
+  // Check project path
+  if (expectedProjectPath) {
+    if (!conversation.projectPath) {
+      return false;
+    }
+    if (normalizeProjectPath(conversation.projectPath) !== normalizeProjectPath(expectedProjectPath)) {
+      return false;
+    }
+  }
+
+  // Check SSH host: use normalized matching
+  if (expectedSshHost) {
+    if (!conversation.sshHost) {
+      return false;
+    }
+    return normalizeSshHost(conversation.sshHost) === normalizeSshHost(expectedSshHost);
+  }
+
+  // expectedSshHost is undefined/falsy but expectation exists (projectPath given)
+  // so conversation.sshHost must also be falsy
+  if (conversation.sshHost) {
     return false;
   }
-  return normalizeProjectPath(conversation.projectPath) === normalizeProjectPath(expectedProjectPath);
+
+  return true;
 }
 
 export function generateId(): string {
@@ -121,7 +153,11 @@ export function saveConversation(conversation: SavedConversation): string {
   return filePath;
 }
 
-export function loadConversation(id: string, expectedProjectPath?: string): SavedConversation | null {
+export function loadConversation(
+  id: string,
+  expectedProjectPath?: string,
+  expectedSshHost?: string,
+): SavedConversation | null {
   const filePath = getConversationPath(id);
   try {
     if (!fs.existsSync(filePath)) {
@@ -129,7 +165,7 @@ export function loadConversation(id: string, expectedProjectPath?: string): Save
     }
     const content = fs.readFileSync(filePath, 'utf-8');
     const data = JSON.parse(content) as SavedConversation;
-    if (!conversationMatchesProject(data, expectedProjectPath)) {
+    if (!conversationMatchesProject(data, expectedProjectPath, expectedSshHost)) {
       return null;
     }
     return data;
@@ -138,22 +174,28 @@ export function loadConversation(id: string, expectedProjectPath?: string): Save
   }
 }
 
-export function loadConversationForProject(id: string, expectedProjectPath: string): LoadConversationForProjectResult {
+export function loadConversationForProject(
+  id: string,
+  expectedProjectPath: string,
+  expectedSshHost?: string,
+): LoadConversationForProjectResult {
   const conversation = loadConversation(id);
   if (!conversation) {
     return { status: 'not_found' };
   }
-  if (!conversationMatchesProject(conversation, expectedProjectPath)) {
+  if (!conversationMatchesProject(conversation, expectedProjectPath, expectedSshHost)) {
     return { status: 'project_mismatch', conversation };
   }
   return { status: 'loaded', conversation };
 }
 
-export function loadLastConversation(expectedProjectPath?: string): SavedConversation | null {
-  if (expectedProjectPath) {
+export function loadLastConversation(expectedProjectPath?: string, expectedSshHost?: string): SavedConversation | null {
+  const hasFilters = !!expectedProjectPath || !!expectedSshHost;
+
+  if (hasFilters) {
     return (
       listConversations()
-        .map(({ id }) => loadConversation(id, expectedProjectPath))
+        .map(({ id }) => loadConversation(id, expectedProjectPath, expectedSshHost))
         .find((conversation): conversation is SavedConversation => conversation !== null) ?? null
     );
   }

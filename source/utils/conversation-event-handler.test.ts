@@ -850,6 +850,7 @@ test('retry: adds system message about hallucination retry', (t) => {
     attempt: 1,
     maxRetries: 2,
     errorMessage: 'Tool hallucination detected',
+    retryType: 'hallucination',
   } as ConversationEvent);
 
   t.is(deps.calls.setMessagesCalls.length, 1);
@@ -859,6 +860,26 @@ test('retry: adds system message about hallucination retry', (t) => {
   t.is(result[0].sender, 'system');
   t.true(result[0].text.includes('shell'));
   t.true(result[0].text.includes('1/2'));
+});
+
+test('retry: adds generic system message when retryType is undefined', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'retry',
+    toolName: 'shell',
+    attempt: 1,
+    maxRetries: 2,
+    errorMessage: 'Generic retry error',
+  } as ConversationEvent);
+
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const result = updater([]);
+  t.is(result.length, 1);
+  t.is(result[0].sender, 'system');
+  t.is(result[0].text, 'Retrying... (Attempt 1/2)');
 });
 
 test('retry: adds system message about flex service tier fallback', (t) => {
@@ -881,6 +902,69 @@ test('retry: adds system message about flex service tier fallback', (t) => {
   t.is(result[0].sender, 'system');
   t.true(result[0].text.includes('Flex service tier timed out'));
   t.true(result[0].text.includes('standard service tier'));
+});
+
+test('retry: adds system message about upstream retry', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'retry',
+    toolName: 'continuation',
+    attempt: 1,
+    maxRetries: 3,
+    errorMessage: 'Connection error',
+    retryType: 'upstream',
+  } as ConversationEvent);
+
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const result = updater([]);
+  t.is(result.length, 1);
+  t.is(result[0].sender, 'system');
+  t.is(result[0].text, 'Upstream error or rate limit encountered. Retrying... (Attempt 1/3)');
+});
+
+test('retry: adds system message about parsing error retry', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'retry',
+    toolName: 'model',
+    attempt: 1,
+    maxRetries: 2,
+    errorMessage: 'JSON parse error',
+    retryType: 'parsing_error',
+  } as ConversationEvent);
+
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const result = updater([]);
+  t.is(result.length, 1);
+  t.is(result[0].sender, 'system');
+  t.is(result[0].text, 'Model parsing error detected. Retrying... (Attempt 1/2)');
+});
+
+test('retry: adds system message about behavior error retry', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'retry',
+    toolName: 'model',
+    attempt: 2,
+    maxRetries: 2,
+    errorMessage: 'Did not produce final response',
+    retryType: 'behavior',
+  } as ConversationEvent);
+
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const result = updater([]);
+  t.is(result.length, 1);
+  t.is(result[0].sender, 'system');
+  t.is(result[0].text, 'Model behavior error detected. Retrying... (Attempt 2/2)');
 });
 
 // =============================================================================

@@ -179,11 +179,16 @@ const validatedReasoningEffort: ModelSettingsReasoningEffort | undefined =
     : undefined;
 
 const resumeProjectPath = cli.flags.ssh ? cli.flags.remoteDir?.trim() || undefined : process.cwd();
+const expectedSshHost = cli.flags.ssh
+  ? cli.flags.ssh.includes('@')
+    ? cli.flags.ssh.split('@')[1]
+    : cli.flags.ssh
+  : undefined;
 let resumedConversation: SavedConversation | null = null;
 if (resumeRequested) {
   if (resumeTarget) {
     const result = resumeProjectPath
-      ? loadConversationForProject(resumeTarget, resumeProjectPath)
+      ? loadConversationForProject(resumeTarget, resumeProjectPath, expectedSshHost)
       : { status: 'not_found' as const };
     if (result.status === 'project_mismatch') {
       console.error(
@@ -192,11 +197,15 @@ if (resumeRequested) {
         }).`,
       );
       console.error(`Current project path: ${resumeProjectPath ?? 'unknown'}`);
+      if (result.conversation.sshHost || expectedSshHost) {
+        console.error(`Conversation SSH Host: ${result.conversation.sshHost ?? 'none'}`);
+        console.error(`Current SSH Host: ${expectedSshHost ?? 'none'}`);
+      }
       process.exit(1);
     }
     resumedConversation = result.status === 'loaded' ? result.conversation : null;
   } else {
-    resumedConversation = loadLastConversation(resumeProjectPath);
+    resumedConversation = loadLastConversation(resumeProjectPath, expectedSshHost);
   }
 }
 
@@ -489,6 +498,7 @@ const saveAndPrintResume = async (messages: Message[]) => {
     createdAt: effectiveCreatedAt,
     updatedAt: new Date().toISOString(),
     projectPath: executionContext.getCwd(),
+    sshHost: sshInfo?.host,
     appMode: {
       mentorMode: settings.get<boolean>('app.mentorMode') ?? false,
       liteMode: settings.get<boolean>('app.liteMode') ?? false,

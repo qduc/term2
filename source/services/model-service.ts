@@ -74,6 +74,5 @@ export function filterModels(models: ModelInfo[], query: string): ModelInfo[] {
       return { model, score };
     })
     .filter(({ score }) => score !== -Infinity)
-    .sort((a, b) => b.score - a.score)
     .map(({ model }) => model);
 }

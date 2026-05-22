@@ -7,12 +7,31 @@ import { addCacheControlToLastTwoMessages } from './common/openai-compatible-mes
 
 type FetchLike = typeof fetch;
 
-function createOpenRouterCacheControlFetch(fetchImpl: FetchLike): FetchLike {
+function sanitizeOpenRouterReasoningDetails(messages: any[]): void {
+  const requiresSignature = new Set(['google-gemini-v1', 'anthropic-claude-v1']);
+  for (const message of messages) {
+    if (!Array.isArray(message?.reasoning_details)) {
+      continue;
+    }
+    message.reasoning_details = message.reasoning_details.filter((detail: any) => {
+      if (detail?.type !== 'reasoning.text') {
+        return true;
+      }
+      if (!requiresSignature.has(detail?.format)) {
+        return true;
+      }
+      return Boolean(detail?.signature);
+    });
+  }
+}
+
+export function createOpenRouterRequestPreprocessingFetch(fetchImpl: FetchLike): FetchLike {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof init?.body === 'string') {
       try {
         const body = JSON.parse(init.body);
         if (Array.isArray(body?.messages)) {
+          sanitizeOpenRouterReasoningDetails(body.messages);
           addCacheControlToLastTwoMessages(body.messages, body.model);
           return fetchImpl(input, { ...init, body: JSON.stringify(body) });
         }
@@ -85,7 +104,7 @@ registerProvider({
           },
           appUrl: settingsService.get('agent.openrouter.referrer') || 'http://localhost',
           appName: settingsService.get('agent.openrouter.title') || 'term2',
-          fetch: createOpenRouterCacheControlFetch(
+          fetch: createOpenRouterRequestPreprocessingFetch(
             createAiSdkLoggingFetch({
               provider: 'openrouter',
               model: settingsService.get('agent.model') || defaultModel,

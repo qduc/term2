@@ -328,6 +328,71 @@ test('continue() streams events after approval decision', async (t) => {
   t.is(cont[2].finalText, 'Approved run');
 });
 
+test('continue() retries on transient error during stream iteration', async (t) => {
+  const interruption = {
+    name: 'bash',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ command: 'echo hi' }),
+    callId: 'call-retry',
+  };
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = {
+    approve(arg) {},
+  };
+
+  const failingStream = {
+    lastResponseId: null,
+    interruptions: [],
+    state: {},
+    newItems: [],
+    history: [],
+    finalOutput: '',
+    async *[Symbol.asyncIterator]() {
+      throw new Error("We're currently processing too many requests — please try again later.");
+    },
+  };
+
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  successStream.finalOutput = 'Recovered';
+
+  let continueCalls = 0;
+  const mockClient = {
+    async startStream() {
+      return initialStream;
+    },
+    async continueRunStream() {
+      continueCalls++;
+      return continueCalls === 1 ? failingStream : successStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  // Trigger approval_required
+  const first = [];
+  for await (const ev of session.run('run command')) {
+    first.push(ev);
+  }
+  t.is(first[0].type, 'approval_required');
+
+  // Continue — first attempt fails, second succeeds
+  const cont = [];
+  for await (const ev of session.continue({ answer: 'y' })) {
+    cont.push(ev);
+  }
+
+  t.is(continueCalls, 2);
+  const types = cont.map((e) => e.type);
+  t.true(types.includes('retry'), 'should emit a retry event');
+  t.true(types.includes('final'), 'should emit a final event after retry');
+  t.is(cont[cont.length - 1].finalText, 'Recovered');
+});
+
 test('sendMessage() preserves callId on approval_required terminal result', async (t) => {
   const interruption = {
     name: 'shell',

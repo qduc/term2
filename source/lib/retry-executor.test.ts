@@ -197,3 +197,72 @@ test('does not retry retryable errors when retries are exhausted', async (t) => 
   t.is(thrown, error);
   t.is(attempts, 1);
 });
+
+test('retries generic errors with rate limit status or message', async (t) => {
+  let attempts = 0;
+  const logs: Record<string, any>[] = [];
+
+  const result = await executeWithRetry({
+    operation: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        const err = new Error("We're currently processing too many requests — please try again later.");
+        throw err;
+      }
+      if (attempts === 2) {
+        const err = new Error('Some error');
+        (err as any).statusCode = 429;
+        throw err;
+      }
+      if (attempts === 3) {
+        const err = new Error('Internal Server Error');
+        (err as any).status = 503;
+        throw err;
+      }
+      return 'ok';
+    },
+    retryAttempts: 3,
+    provider: 'generic',
+    model: 'generic-model',
+    logger: {
+      warn: (_message: string, meta?: Record<string, unknown>) => {
+        logs.push(meta ?? {});
+      },
+    },
+    sleep: async () => {},
+  });
+
+  t.is(result, 'ok');
+  t.is(attempts, 4);
+  t.is(logs.length, 3);
+  t.is(logs[0].errorMessage, "We're currently processing too many requests — please try again later.");
+  t.is(logs[1].status, 429);
+  t.is(logs[2].status, 503);
+});
+
+test('uses case-insensitive retry-after header from generic errors', async (t) => {
+  let attempts = 0;
+  const delays: number[] = [];
+
+  await executeWithRetry({
+    operation: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        const err = new Error('Rate limit');
+        (err as any).headers = { 'Retry-After': '12' };
+        throw err;
+      }
+      return 'ok';
+    },
+    retryAttempts: 1,
+    provider: 'generic',
+    model: 'generic-model',
+    logger: { warn: () => {} },
+    sleep: async (ms) => {
+      delays.push(ms);
+    },
+  });
+
+  t.is(attempts, 2);
+  t.deepEqual(delays, [12000]);
+});

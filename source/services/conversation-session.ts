@@ -2,7 +2,12 @@ import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import type { ILoggingService } from './service-interfaces.js';
 import { ConversationStore } from './conversation-store.js';
 import type { AgentInputItem } from '@openai/agents';
-import { decideRetry, MAX_HALLUCINATION_RETRIES } from './conversation-retry-policy.js';
+import {
+  decideRetry,
+  isTransientRetryableError,
+  MAX_HALLUCINATION_RETRIES,
+  MAX_TRANSIENT_RETRIES,
+} from './conversation-retry-policy.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../tools/types.js';
 import { type NormalizedUsage } from '../utils/token-usage.js';
@@ -540,53 +545,87 @@ export class ConversationSession {
     }
 
     try {
-      const stream = (await this.agentClient.continueRunStream(state, {
-        previousResponseId: this.previousResponseId,
-      })) as AgentStream;
+      let transientRetryCount = 0;
+      while (true) {
+        try {
+          const stream = (await this.agentClient.continueRunStream(state, {
+            previousResponseId: this.previousResponseId,
+          })) as AgentStream;
 
-      const acc = createStreamAccumulator();
-      yield* processStreamEvents(
-        stream,
-        acc,
-        {
-          toolCallArgumentsById: this.toolCallArgumentsById,
-          emittedInvalidToolCallPackets: this.emittedInvalidToolCallPackets,
-          preserveExistingToolArgs: true,
-        },
-        { logger: this.logger, sessionId: this.id },
-      );
+          const acc = createStreamAccumulator();
+          yield* processStreamEvents(
+            stream,
+            acc,
+            {
+              toolCallArgumentsById: this.toolCallArgumentsById,
+              emittedInvalidToolCallPackets: this.emittedInvalidToolCallPackets,
+              preserveExistingToolArgs: true,
+            },
+            { logger: this.logger, sessionId: this.id },
+          );
 
-      if (this.#isCurrentGeneration(gen)) {
-        this.previousResponseId = stream.lastResponseId ?? null;
-        this.conversationStore.updateFromResult(stream);
+          if (this.#isCurrentGeneration(gen)) {
+            this.previousResponseId = stream.lastResponseId ?? null;
+            this.conversationStore.updateFromResult(stream);
+          }
+
+          // Merge previously emitted command IDs with newly emitted ones
+          // This prevents duplicates when result.history contains commands from the initial stream
+          const allEmittedIds = new Set([...previouslyEmittedIds, ...acc.emittedCommandIds]);
+
+          const resolvedResult = yield* this.#buildAndResolve(
+            stream,
+            acc.finalOutput || undefined,
+            acc.reasoningOutput || undefined,
+            allEmittedIds,
+            acc.latestUsage,
+          );
+
+          if (resolvedResult.type === 'approval_required') {
+            this.logger.debug('Tool approval required', {
+              eventType: 'approval.required',
+              category: 'approval',
+              phase: 'approval',
+              sessionId: this.id,
+              traceId: this.logger.getCorrelationId(),
+              toolName: resolvedResult.approval.toolName,
+            });
+            yield toTerminalEvent(resolvedResult);
+            return;
+          }
+
+          yield toTerminalEvent(resolvedResult);
+          return;
+        } catch (error) {
+          if (isTransientRetryableError(error) && transientRetryCount < MAX_TRANSIENT_RETRIES) {
+            transientRetryCount++;
+            const delay = Math.min(500 * Math.pow(2, transientRetryCount - 1), 30000);
+            this.logger.warn('Transient error in continuation, retrying', {
+              eventType: 'retry.transient',
+              category: 'retry',
+              phase: 'retry',
+              retryType: 'upstream',
+              retryAttempt: transientRetryCount,
+              maxRetries: MAX_TRANSIENT_RETRIES,
+              sessionId: this.id,
+              traceId: this.logger.getCorrelationId(),
+              errorMessage: error instanceof Error ? error.message : String(error),
+              delayMs: delay,
+            });
+            yield {
+              type: 'retry',
+              toolName: 'continuation',
+              attempt: transientRetryCount,
+              maxRetries: MAX_TRANSIENT_RETRIES,
+              errorMessage: error instanceof Error ? error.message : String(error),
+              retryType: 'upstream',
+            };
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+          throw error;
+        }
       }
-
-      // Merge previously emitted command IDs with newly emitted ones
-      // This prevents duplicates when result.history contains commands from the initial stream
-      const allEmittedIds = new Set([...previouslyEmittedIds, ...acc.emittedCommandIds]);
-
-      const resolvedResult = yield* this.#buildAndResolve(
-        stream,
-        acc.finalOutput || undefined,
-        acc.reasoningOutput || undefined,
-        allEmittedIds,
-        acc.latestUsage,
-      );
-
-      if (resolvedResult.type === 'approval_required') {
-        this.logger.debug('Tool approval required', {
-          eventType: 'approval.required',
-          category: 'approval',
-          phase: 'approval',
-          sessionId: this.id,
-          traceId: this.logger.getCorrelationId(),
-          toolName: resolvedResult.approval.toolName,
-        });
-        yield toTerminalEvent(resolvedResult);
-        return;
-      }
-
-      yield toTerminalEvent(resolvedResult);
     } catch (error) {
       yield {
         type: 'error',

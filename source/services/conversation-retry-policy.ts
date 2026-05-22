@@ -1,6 +1,46 @@
 import { ModelBehaviorError } from '@openai/agents';
+import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
+import { OpenRouterError, OpenAICompatibleError } from '../providers/common/provider-errors.js';
 
 export const MAX_HALLUCINATION_RETRIES = 2;
+export const MAX_TRANSIENT_RETRIES = 3;
+
+/**
+ * Returns true when the error is a transient upstream failure (429 / 5xx /
+ * connection timeout) that is worth retrying automatically.
+ */
+export const isTransientRetryableError = (error: unknown): boolean => {
+  if (
+    error instanceof APIConnectionError ||
+    error instanceof APIConnectionTimeoutError ||
+    error instanceof InternalServerError ||
+    error instanceof RateLimitError
+  ) {
+    return true;
+  }
+
+  if (error instanceof OpenRouterError && (error.status === 429 || error.status >= 500)) {
+    return true;
+  }
+
+  if (error instanceof OpenAICompatibleError && (error.status === 429 || error.status >= 500)) {
+    return true;
+  }
+
+  if (error && typeof error === 'object') {
+    const statusRaw = (error as any).status ?? (error as any).statusCode;
+    const status = typeof statusRaw === 'number' ? statusRaw : parseInt(statusRaw, 10);
+    if (Number.isInteger(status) && (status === 429 || status >= 500)) {
+      return true;
+    }
+    const message = String((error as any).message || '').toLowerCase();
+    if (message.includes('rate limit') || message.includes('too many requests') || message.includes('rate_limit')) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 export const isRecoverableModelError = (error: unknown): boolean => {
   if (!(error instanceof ModelBehaviorError)) {

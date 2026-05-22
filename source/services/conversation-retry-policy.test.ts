@@ -1,6 +1,13 @@
 import test from 'ava';
 import { ModelBehaviorError } from '@openai/agents';
-import { decideRetry, isRecoverableModelError, MAX_HALLUCINATION_RETRIES } from './conversation-retry-policy.js';
+import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
+import { OpenRouterError, OpenAICompatibleError } from '../providers/common/provider-errors.js';
+import {
+  decideRetry,
+  isRecoverableModelError,
+  isTransientRetryableError,
+  MAX_HALLUCINATION_RETRIES,
+} from './conversation-retry-policy.js';
 
 test('isRecoverableModelError: non-ModelBehaviorError returns false', (t) => {
   t.false(isRecoverableModelError(new Error('boom')));
@@ -76,11 +83,61 @@ test('decideRetry: with stream and empty history sets shouldInjectErrorContext',
   t.true(decision.errorContextMessage.includes('Previous attempt failed'));
 });
 
-test('decideRetry: without stream returns retry with skipUserMessage=false', (t) => {
+test('decideRetry: without stream returns retry with skipUserMessage=false', async (t) => {
   const decision = decideRetry(new ModelBehaviorError('Tool x not found'), 0, false, 0);
   t.is(decision.kind, 'retry');
   if (decision.kind !== 'retry') return;
   t.false(decision.hadStream);
   t.false(decision.shouldInjectErrorContext);
   t.deepEqual(decision.nextRunOptions, { hallucinationRetryCount: 1, skipUserMessage: false });
+});
+
+function asInstanceOf<T extends object>(prototype: object, props: Partial<T>): T {
+  return Object.assign(Object.create(prototype), props) as T;
+}
+
+test('isTransientRetryableError: OpenAI SDK errors are retryable', (t) => {
+  t.true(isTransientRetryableError(asInstanceOf(APIConnectionError.prototype, { message: 'conn error' })));
+  t.true(isTransientRetryableError(asInstanceOf(APIConnectionTimeoutError.prototype, { message: 'timeout' })));
+  t.true(isTransientRetryableError(asInstanceOf(InternalServerError.prototype, { message: 'ise', status: 500 })));
+  t.true(isTransientRetryableError(asInstanceOf(RateLimitError.prototype, { message: 'rate limit', status: 429 })));
+});
+
+test('isTransientRetryableError: OpenRouter 429/5xx are retryable', (t) => {
+  t.true(isTransientRetryableError(new OpenRouterError('rate limited', 429, {})));
+  t.true(isTransientRetryableError(new OpenRouterError('server error', 500, {})));
+  t.true(isTransientRetryableError(new OpenRouterError('bad gateway', 502, {})));
+  t.false(isTransientRetryableError(new OpenRouterError('not found', 404, {})));
+});
+
+test('isTransientRetryableError: OpenAI-compatible 429/5xx are retryable', (t) => {
+  t.true(isTransientRetryableError(new OpenAICompatibleError('rate limited', 429, {})));
+  t.true(isTransientRetryableError(new OpenAICompatibleError('server error', 503, {})));
+  t.false(isTransientRetryableError(new OpenAICompatibleError('bad request', 400, {})));
+});
+
+test('isTransientRetryableError: generic errors with 429/5xx status are retryable', (t) => {
+  const err429 = new Error('too many requests');
+  (err429 as any).status = 429;
+  t.true(isTransientRetryableError(err429));
+
+  const err503 = new Error('service unavailable');
+  (err503 as any).statusCode = 503;
+  t.true(isTransientRetryableError(err503));
+});
+
+test('isTransientRetryableError: generic errors with rate-limit message are retryable', (t) => {
+  t.true(
+    isTransientRetryableError(new Error("We're currently processing too many requests — please try again later.")),
+  );
+  t.true(isTransientRetryableError(new Error('Rate limit exceeded')));
+  t.true(isTransientRetryableError(new Error('rate_limit retry after 10s')));
+});
+
+test('isTransientRetryableError: non-retryable errors return false', (t) => {
+  t.false(isTransientRetryableError(new Error('something else')));
+  t.false(isTransientRetryableError(new ModelBehaviorError('Tool x not found')));
+  t.false(isTransientRetryableError(null));
+  t.false(isTransientRetryableError('string error'));
+  t.false(isTransientRetryableError(42));
 });

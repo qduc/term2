@@ -1090,6 +1090,7 @@ test.serial('worker shell tool allows YELLOW command when auto-approval evaluato
 
   let shellResult: string | null = null;
   let chatCalls = 0;
+  let evaluatorPrompt = '';
 
   registerProvider({
     id: 'mock-worker-shell-yellow-approved-provider',
@@ -1120,8 +1121,9 @@ test.serial('worker shell tool allows YELLOW command when auto-approval evaluato
       'agent.autoApproveProvider': 'mock-worker-shell-yellow-approved-provider',
     }),
     agentClient: {
-      chat: async () => {
+      chat: async (message: string) => {
         chatCalls++;
+        evaluatorPrompt = message;
         return '{"results":[{"approved":true,"reasoning":"Looks related and low risk."}]}';
       },
     } as any,
@@ -1132,9 +1134,10 @@ test.serial('worker shell tool allows YELLOW command when auto-approval evaluato
     } as unknown as ExecutionContext,
   });
 
-  await manager.run({ role: 'worker', task: 'run help for tests' });
+  await manager.run({ role: 'worker', task: 'run help for tests in this repository' });
 
   t.is(chatCalls, 1);
+  t.true(evaluatorPrompt.includes('run help for tests in this repository'));
   t.truthy(shellResult);
   t.false(shellResult!.includes('blocked for safety'), 'approved YELLOW command should execute');
 });

@@ -445,7 +445,7 @@ export class SubagentManager {
     const toolCounts = new Map<string, number>();
     const filesChanged: string[] = [];
 
-    const toolDefinitions = this.#buildToolDefinitions(definition, request.writeBoundary, filesChanged);
+    const toolDefinitions = this.#buildToolDefinitions(definition, request.writeBoundary, filesChanged, request.task);
 
     const providerId = definition.provider;
     const tools = buildAgentTools(toolDefinitions, {
@@ -527,6 +527,7 @@ export class SubagentManager {
     definition: SubagentDefinition,
     writeBoundary: string[] | undefined,
     filesChanged: string[],
+    taskContext: string,
   ): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
@@ -565,6 +566,7 @@ export class SubagentManager {
           writeBoundary,
           cwd,
           filesChanged,
+          taskContext,
         ),
       );
     }
@@ -723,6 +725,7 @@ export class SubagentManager {
     writeBoundary: string[] | undefined,
     cwd: string,
     filesChanged: string[],
+    taskContext: string,
   ): ToolDefinition {
     const originalExecute = definition.execute.bind(definition);
 
@@ -740,7 +743,7 @@ export class SubagentManager {
           return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
         }
         if (status === SafetyStatus.YELLOW) {
-          const approved = await this.#isYellowCommandApproved(command, requestTaskContextFromDetails(details));
+          const approved = await this.#isYellowCommandApproved(command, taskContext);
           if (!approved) {
             return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
           }
@@ -869,9 +872,4 @@ export class SubagentManager {
       },
     };
   }
-}
-
-function requestTaskContextFromDetails(details: unknown): string {
-  const value = details as { context?: { task?: unknown } } | undefined;
-  return typeof value?.context?.task === 'string' ? value.context.task : '';
 }

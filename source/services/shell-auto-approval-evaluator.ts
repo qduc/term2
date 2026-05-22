@@ -79,7 +79,7 @@ const buildPrompt = (commands: ShellAutoApprovalCommand[], history: AgentInputIt
 
   const commandsToEvaluateText = commands.map((c, i) => `[Command ${i + 1}]\n${c.command}`).join('\n\n');
 
-  return `Task context (compact recent user and assistant messages; reasoning and tool items are omitted):
+  return `Task context:
 ${historyText}
 
 Commands to evaluate:

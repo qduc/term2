@@ -1,6 +1,6 @@
 import test from 'ava';
 import { Writable } from 'node:stream';
-import { runWithSession } from './non-interactive.js';
+import { runWithSession, createNonInteractiveSessionId } from './non-interactive.js';
 
 const createStringWritable = () => {
   let output = '';
@@ -336,6 +336,15 @@ test('with autoApprove=true: strictly rejects RED commands', async (t) => {
   t.is(calls.length, 1);
   t.is(calls[0].answer, 'n');
   t.regex(calls[0].rejectionReason ?? '', /RED/);
+});
+
+test('createNonInteractiveSessionId returns unique invocation-scoped ids', (t) => {
+  const first = createNonInteractiveSessionId();
+  const second = createNonInteractiveSessionId();
+
+  t.not(first, second);
+  t.true(first.startsWith('non-interactive-'));
+  t.true(second.startsWith('non-interactive-'));
 });
 
 test('with autoApprove=true: rejects YELLOW command if no auto-approve model configured', async (t) => {

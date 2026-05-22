@@ -1,12 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import type { ILoggingService } from '../services/service-interfaces.js';
-import { truncateLogText } from '../utils/log-truncation.js';
+import { summarizeReceivedTraffic } from '../services/provider-traffic.js';
 
 type FetchLike = typeof fetch;
 
 type CreateAiSdkLoggingFetchOptions = {
   provider: string;
   model: string;
-  loggingService: Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId'>;
+  loggingService: Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId' | 'getTrafficContext'>;
   fetchImpl?: FetchLike;
 };
 
@@ -45,38 +46,6 @@ const readRequestBody = async (input: RequestInfo | URL, init?: RequestInit): Pr
   return null;
 };
 
-const extractResponseText = (body: Record<string, unknown>): string | undefined => {
-  const outputText = body.output_text;
-  if (typeof outputText === 'string') {
-    return outputText;
-  }
-
-  const choices = body.choices;
-  if (Array.isArray(choices)) {
-    const firstChoice = toRecord(choices[0]);
-    const message = toRecord(firstChoice?.message);
-    if (typeof message?.content === 'string') {
-      return message.content;
-    }
-    if (typeof firstChoice?.text === 'string') {
-      return firstChoice.text;
-    }
-  }
-
-  return undefined;
-};
-
-const extractToolCalls = (body: Record<string, unknown>): unknown => {
-  const choices = body.choices;
-  if (!Array.isArray(choices)) {
-    return undefined;
-  }
-
-  const firstChoice = toRecord(choices[0]);
-  const message = toRecord(firstChoice?.message);
-  return message?.tool_calls;
-};
-
 export function createAiSdkLoggingFetch({
   provider,
   model,
@@ -87,18 +56,32 @@ export function createAiSdkLoggingFetch({
     const requestBody = await readRequestBody(input, init);
     const parsedRequest = requestBody ? parseJsonObject(requestBody) : null;
     const requestModel = typeof parsedRequest?.model === 'string' ? parsedRequest.model : model;
+    const requestId = randomUUID();
+    const trafficContext = loggingService.getTrafficContext?.() ?? null;
+    const baseMeta = {
+      requestId,
+      traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+      sessionId: trafficContext?.sessionId,
+      sessionStartedAt: trafficContext?.sessionStartedAt,
+      firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+      mode: trafficContext?.mode,
+      provider,
+      model: requestModel,
+    };
+
+    const isEvaluator = trafficContext?.evaluator === true;
+    const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
 
     loggingService.debug(`${provider} ai sdk request`, {
-      eventType: 'provider.request.started',
+      eventType: `${eventPrefix}.request.started`,
       category: 'provider',
       phase: 'request_start',
       direction: 'sent',
-      traceId: loggingService.getCorrelationId?.(),
-      provider,
-      model: requestModel,
+      ...baseMeta,
       messageCount: Array.isArray(parsedRequest?.messages) ? parsedRequest.messages.length : undefined,
       messages: parsedRequest?.messages,
       toolsCount: Array.isArray(parsedRequest?.tools) ? parsedRequest.tools.length : undefined,
+      payload: parsedRequest ?? undefined,
     });
 
     let response: Response;
@@ -109,32 +92,23 @@ export function createAiSdkLoggingFetch({
         eventType: 'provider.response.failed',
         category: 'provider',
         phase: 'provider_response',
-        traceId: loggingService.getCorrelationId?.(),
-        provider,
-        model: requestModel,
+        ...baseMeta,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
 
-    response
-      .clone()
-      .text()
-      .then((rawResponse) => {
-        const parsedResponse = rawResponse ? parseJsonObject(rawResponse) : null;
-        const responseText = parsedResponse ? extractResponseText(parsedResponse) : truncateLogText(rawResponse);
+    Promise.resolve()
+      .then(async () => {
+        const summary = await summarizeReceivedTraffic(response.clone());
         loggingService.debug(`${provider} ai sdk response`, {
-          eventType: 'provider.response.received',
+          eventType: `${eventPrefix}.response.received`,
           category: 'provider',
           phase: 'provider_response',
           direction: 'received',
-          traceId: loggingService.getCorrelationId?.(),
-          provider,
-          model: requestModel,
+          ...baseMeta,
           status: response.status,
-          text: responseText,
-          toolCalls: parsedResponse ? extractToolCalls(parsedResponse) : undefined,
-          payload: parsedResponse ?? { rawPreview: truncateLogText(rawResponse) },
+          payload: summary,
         });
       })
       .catch((error) => {
@@ -142,9 +116,7 @@ export function createAiSdkLoggingFetch({
           eventType: 'provider.response.log_failed',
           category: 'provider',
           phase: 'provider_response',
-          traceId: loggingService.getCorrelationId?.(),
-          provider,
-          model: requestModel,
+          ...baseMeta,
           error: error instanceof Error ? error.message : String(error),
         });
       });

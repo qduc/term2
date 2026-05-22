@@ -18,12 +18,14 @@ export class ConversationService {
     agentClient,
     deps,
     sessionId = 'default',
+    sessionStartedAt,
   }: {
     agentClient: OpenAIAgentClient;
     deps: { logger: ILoggingService; settingsService?: ISettingsService };
     sessionId?: string;
+    sessionStartedAt?: string;
   }) {
-    this.#session = new ConversationSession(sessionId, { agentClient, deps });
+    this.#session = new ConversationSession(sessionId, { agentClient, deps, sessionStartedAt });
   }
 
   get sessionId(): string {

@@ -94,6 +94,19 @@ npx prettier --write <file1, file2, file3> # Fix formatting issues in files you 
 - Add regression tests for bugs.
 - Maintain tests like production code: refactor or delete when they stop providing value.
 
+## Provider Traffic Log Files
+
+Traffic logs are stored as JSONL files and can be large. Log root by platform:
+- **Linux**: `~/.local/state/term2-nodejs/logs/provider-traffic/`
+- **macOS**: `~/Library/Logs/term2-nodejs/logs/provider-traffic/`
+
+When inspecting them, always use `jq` to query only the fields you need rather than reading the whole file. For example:
+
+```bash
+jq '.summary.unknownFrames' <file.jsonl>
+jq 'select(.direction == "received") | .summary.payload' <file.jsonl>
+```
+
 ## Shell Safety For Agents
 
 - Never run ad-hoc shell probes that contain command strings with executable payloads such as `rm`, `find -exec`, `sed -i`, redirections, command substitution, backticks, or shell metacharacters. Shell quoting mistakes can turn test fixtures into real commands.

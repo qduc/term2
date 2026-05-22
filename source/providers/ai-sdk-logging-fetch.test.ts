@@ -14,6 +14,12 @@ test('createAiSdkLoggingFetch logs request and response traffic around fetch', a
         logs.push({ message, meta });
       },
       getCorrelationId: () => 'trace-test',
+      getTrafficContext: () => ({
+        sessionId: 'session-123',
+        sessionStartedAt: '2026-05-22T09:14:31.125Z',
+        firstUserMessagePreview: 'hi',
+        mode: 'standard',
+      }),
     },
     fetchImpl: async () =>
       new Response(JSON.stringify({ choices: [{ message: { content: 'hello' } }] }), {
@@ -41,6 +47,7 @@ test('createAiSdkLoggingFetch logs request and response traffic around fetch', a
     meta: {
       eventType: 'provider.request.started',
       direction: 'sent',
+      sessionId: 'session-123',
       provider: 'openrouter',
       model: 'test-model',
       messageCount: 1,
@@ -53,12 +60,15 @@ test('createAiSdkLoggingFetch logs request and response traffic around fetch', a
     meta: {
       eventType: 'provider.response.received',
       direction: 'received',
+      sessionId: 'session-123',
       provider: 'openrouter',
       model: 'test-model',
       status: 200,
     },
   });
   t.is(logs[1].meta.text, 'hello');
+  t.truthy(logs[0].meta.requestId);
+  t.is(logs[0].meta.requestId, logs[1].meta.requestId);
 });
 
 test('createAiSdkLoggingFetch truncates raw streaming response text', async (t) => {
@@ -87,6 +97,12 @@ test('createAiSdkLoggingFetch truncates raw streaming response text', async (t) 
         logs.push({ message, meta });
       },
       getCorrelationId: () => 'trace-test',
+      getTrafficContext: () => ({
+        sessionId: 'session-123',
+        sessionStartedAt: '2026-05-22T09:14:31.125Z',
+        firstUserMessagePreview: 'hi',
+        mode: 'standard',
+      }),
     },
     fetchImpl: async () =>
       new Response(streamingBody, {
@@ -109,9 +125,50 @@ test('createAiSdkLoggingFetch truncates raw streaming response text', async (t) 
 
   t.is(logs.length, 2);
   t.true(typeof logs[1].meta.text === 'string');
-  t.true(logs[1].meta.text.length < streamingBody.length);
-  t.true(logs[1].meta.text.startsWith(': OPENROUTER PROCESSING'));
-  t.true(logs[1].meta.text.endsWith('data: {"tail":"preserved"}'));
-  t.true(typeof logs[1].meta.payload.rawPreview === 'string');
-  t.true(logs[1].meta.payload.rawPreview.length < streamingBody.length);
+  t.is(logs[0].meta.requestId, logs[1].meta.requestId);
+  t.is(logs[1].meta.text, 'Hello world');
+  t.truthy(logs[1].meta.payload);
+});
+
+test('createAiSdkLoggingFetch logs received error record when response body summarization fails', async (t) => {
+  const logs: Array<{ message: string; meta: any }> = [];
+  const wrapped = createAiSdkLoggingFetch({
+    provider: 'openrouter',
+    model: 'test-model',
+    loggingService: {
+      debug: (message: string, meta?: any) => {
+        logs.push({ message, meta });
+      },
+      error: (message: string, meta?: any) => {
+        logs.push({ message, meta });
+      },
+      getCorrelationId: () => 'trace-test',
+      getTrafficContext: () => ({
+        sessionId: 'session-123',
+        sessionStartedAt: '2026-05-22T09:14:31.125Z',
+        firstUserMessagePreview: 'hi',
+        mode: 'standard',
+      }),
+    },
+    fetchImpl: async () => {
+      const response = new Response('ok', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      response.clone = () => {
+        throw new Error('clone failed');
+      };
+      return response;
+    },
+  });
+
+  await wrapped('https://example.test/chat/completions', {
+    method: 'POST',
+    body: JSON.stringify({ model: 'test-model', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  t.is(logs.length, 2);
+  t.is(logs[1].meta.eventType, 'provider.response.log_failed');
+  t.is(logs[0].meta.requestId, logs[1].meta.requestId);
 });

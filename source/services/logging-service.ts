@@ -1,6 +1,7 @@
 import * as winston from 'winston';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import envPaths from 'env-paths';
 import DailyRotateFile from 'winston-daily-rotate-file';
 import {
@@ -13,10 +14,7 @@ import {
   type LogCategory,
 } from './logging-contract.js';
 import { truncateLogText, sanitizeLogMetadata } from '../utils/log-truncation.js';
-import {
-  extractProviderTrafficRecordFromRuntimeLog,
-  type ProviderTrafficRecord,
-} from '../utils/provider-traffic-extractor.js';
+import { ProviderTrafficArtifactStore, type SessionTrafficContext } from './provider-traffic.js';
 
 const LOG_LEVELS = {
   error: 0,
@@ -56,6 +54,7 @@ interface LoggingServiceConfig {
  * - Optional console output for development
  */
 export class LoggingService {
+  static readonly #trafficContextStorage = new AsyncLocalStorage<SessionTrafficContext>();
   private logger: winston.Logger;
   private correlationId: string | undefined;
   private debugLogging: boolean;
@@ -65,6 +64,7 @@ export class LoggingService {
   private enabledCategories: Set<LogCategory> | null;
   private verbosePayloads: boolean;
   private sampleRate: number;
+  private providerTrafficStore: ProviderTrafficArtifactStore;
 
   constructor(config: LoggingServiceConfig = {}) {
     const {
@@ -92,6 +92,7 @@ export class LoggingService {
     const finalLogDir = logDir || path.join(envPaths('term2').log, 'logs');
     this.providerTrafficDir = path.join(finalLogDir, 'provider-traffic');
     this.evaluatorTrafficDir = path.join(finalLogDir, 'evaluator-traffic');
+    this.providerTrafficStore = new ProviderTrafficArtifactStore({ rootDir: this.providerTrafficDir });
 
     // Create log directory if needed and logging is enabled
     if (!resolvedDisableLogging) {
@@ -261,6 +262,14 @@ export class LoggingService {
     return this.correlationId;
   }
 
+  runWithTrafficContext<T>(context: SessionTrafficContext, fn: () => T): T {
+    return LoggingService.#trafficContextStorage.run(context, fn);
+  }
+
+  getTrafficContext(): SessionTrafficContext | null {
+    return LoggingService.#trafficContextStorage.getStore() ?? null;
+  }
+
   /**
    * Remove provider and evaluator traffic logs older than maxFiles (default 30d)
    */
@@ -376,36 +385,81 @@ export class LoggingService {
     this.log(level, message, meta);
   }
 
-  private writeProviderTrafficArtifact(runtimeRecord: Record<string, unknown>, message: string): void {
-    const trafficRecord: ProviderTrafficRecord | null = extractProviderTrafficRecordFromRuntimeLog({
-      ...runtimeRecord,
-      message,
-    });
-    if (!trafficRecord) {
+  private writeProviderTrafficArtifact(runtimeRecord: Record<string, unknown>, _message: string): void {
+    const eventType = typeof runtimeRecord.eventType === 'string' ? runtimeRecord.eventType : '';
+    const requestId = typeof runtimeRecord.requestId === 'string' ? runtimeRecord.requestId : undefined;
+    const sessionId = typeof runtimeRecord.sessionId === 'string' ? runtimeRecord.sessionId : undefined;
+    const sessionStartedAt =
+      typeof runtimeRecord.sessionStartedAt === 'string' ? runtimeRecord.sessionStartedAt : undefined;
+    if (!requestId || !sessionId || !sessionStartedAt) {
       return;
     }
 
-    const baseDir = trafficRecord.isEvaluator ? this.evaluatorTrafficDir : this.providerTrafficDir;
-
-    const dateKey = (() => {
-      const timestamp = String(trafficRecord.timestamp ?? '');
-      const matched = timestamp.match(/^(\d{4}-\d{2}-\d{2})/);
-      if (matched?.[1]) {
-        return matched[1];
-      }
-      return new Date().toISOString().slice(0, 10);
-    })();
-
-    const artifact = {
-      ...trafficRecord,
-      eventType: runtimeRecord.eventType,
-      messageId: runtimeRecord.messageId,
-    };
-    const filePath = path.join(baseDir, `traffic-${dateKey}.log`);
+    const timestamp =
+      typeof runtimeRecord.timestamp === 'string' && runtimeRecord.timestamp
+        ? runtimeRecord.timestamp
+        : new Date().toISOString();
+    const provider = typeof runtimeRecord.provider === 'string' ? runtimeRecord.provider : 'unknown';
+    const model = typeof runtimeRecord.model === 'string' ? runtimeRecord.model : 'unknown';
+    const mode = typeof runtimeRecord.mode === 'string' ? runtimeRecord.mode : 'unknown';
+    const firstUserMessagePreview =
+      typeof runtimeRecord.firstUserMessagePreview === 'string' ? runtimeRecord.firstUserMessagePreview : undefined;
 
     try {
-      fs.mkdirSync(baseDir, { recursive: true });
-      fs.appendFileSync(filePath, `${JSON.stringify(artifact)}\n`, 'utf8');
+      if (eventType === 'provider.request.started' || eventType === 'evaluator.request.started') {
+        const payload = runtimeRecord.payload;
+        if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+          this.providerTrafficStore.recordRequestStart({
+            requestId,
+            timestamp,
+            provider,
+            model,
+            sessionId,
+            sessionStartedAt,
+            mode,
+            firstUserMessagePreview,
+            sentBody: payload as Record<string, unknown>,
+            evaluator: eventType === 'evaluator.request.started',
+          });
+        }
+        return;
+      }
+
+      if (eventType === 'provider.response.received' || eventType === 'evaluator.response.received') {
+        const summary = runtimeRecord.payload;
+        this.providerTrafficStore.recordRequestComplete({
+          requestId,
+          timestamp,
+          provider,
+          model,
+          sessionId,
+          sessionStartedAt,
+          mode,
+          receivedSummary: summary && typeof summary === 'object' && !Array.isArray(summary) ? (summary as any) : {},
+          evaluator: eventType === 'evaluator.response.received',
+        });
+        return;
+      }
+
+      if (eventType === 'provider.response.failed' || eventType === 'provider.response.log_failed') {
+        this.providerTrafficStore.recordRequestComplete({
+          requestId,
+          timestamp,
+          provider,
+          model,
+          sessionId,
+          sessionStartedAt,
+          mode,
+          error: {
+            message:
+              typeof runtimeRecord.error === 'string'
+                ? runtimeRecord.error
+                : typeof runtimeRecord.errorMessage === 'string'
+                ? runtimeRecord.errorMessage
+                : 'unknown_error',
+          },
+        });
+      }
     } catch (error: any) {
       this.emitConsoleError(`[LoggingService] Failed to write provider traffic artifact: ${error.message}`);
     }

@@ -7,6 +7,25 @@ export interface ILoggingService {
   setCorrelationId(id: string | undefined): void;
   getCorrelationId(): string | undefined;
   clearCorrelationId(): void;
+  runWithTrafficContext?<T>(
+    context: {
+      sessionId: string;
+      sessionStartedAt: string;
+      firstUserMessagePreview?: string;
+      mode?: string;
+      traceId?: string;
+      evaluator?: boolean;
+    },
+    fn: () => T,
+  ): T;
+  getTrafficContext?(): {
+    sessionId: string;
+    sessionStartedAt: string;
+    firstUserMessagePreview?: string;
+    mode?: string;
+    traceId?: string;
+    evaluator?: boolean;
+  } | null;
 }
 
 export interface ISettingsService {

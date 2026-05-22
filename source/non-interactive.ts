@@ -2,6 +2,7 @@ import type { OpenAIAgentClient } from './lib/openai-agent-client.js';
 import type { ILoggingService, ISettingsService } from './services/service-interfaces.js';
 import { ConversationSession } from './services/conversation-session.js';
 import type { ConversationEvent } from './services/conversation-events.js';
+import { randomUUID } from 'node:crypto';
 import { classifyCommandDetailed } from './utils/command-safety/index.js';
 import { SafetyStatus } from './utils/command-safety/constants.js';
 import { evaluateShellAutoApprovalAdvisories } from './services/shell-auto-approval-evaluator.js';
@@ -17,6 +18,8 @@ export interface NonInteractiveConfig {
 }
 
 export const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
+
+export const createNonInteractiveSessionId = (): string => `non-interactive-${randomUUID()}`;
 
 export interface ConversationSessionLike {
   sendMessage: ConversationSession['sendMessage'];
@@ -188,7 +191,7 @@ export async function runNonInteractive(
     settingsService: ISettingsService;
   },
 ): Promise<number> {
-  const session = new ConversationSession('non-interactive', {
+  const session = new ConversationSession(createNonInteractiveSessionId(), {
     agentClient: config.agentClient,
     deps: { logger: config.logger, settingsService: config.settingsService },
   });

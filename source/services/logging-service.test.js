@@ -166,23 +166,35 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
     logLevel: 'info',
   });
 
-  const traceId = 'trace-provider-auto-1';
-  logger.debug('OpenRouter stream start', {
-    traceId,
+  logger.debug('OpenRouter request start', {
+    eventType: 'provider.request.started',
+    direction: 'sent',
+    requestId: 'req-1',
+    sessionId: 'session-1',
+    sessionStartedAt: '2026-05-22T09:14:31.125Z',
+    firstUserMessagePreview: 'hello',
+    mode: 'standard',
     provider: 'openrouter',
     model: 'moonshotai/kimi-k2.5',
-    messages: [{ role: 'system' }, { role: 'user', content: 'hello' }],
-    tools: [{ type: 'function' }],
-    modelRequest: { input: [{ role: 'user', type: 'message' }] },
+    payload: {
+      messages: [{ role: 'system' }, { role: 'user', content: 'hello' }],
+      tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object' } } }],
+    },
+    timestamp: '2026-05-22T09:14:35.044Z',
   });
 
-  logger.debug('OpenRouter stream done', {
-    traceId,
+  logger.debug('OpenRouter response received', {
+    eventType: 'provider.response.received',
+    direction: 'received',
+    requestId: 'req-1',
+    sessionId: 'session-1',
+    sessionStartedAt: '2026-05-22T09:14:31.125Z',
+    firstUserMessagePreview: 'hello',
+    mode: 'standard',
     provider: 'openrouter',
     model: 'moonshotai/kimi-k2.5',
-    text: 'hi',
-    reasoningDetails: [{ type: 'reasoning.text' }],
-    toolCalls: [],
+    payload: { outputText: 'hi', toolCalls: [] },
+    timestamp: '2026-05-22T09:14:36.000Z',
   });
 
   await new Promise((resolve) => setTimeout(resolve, 200));
@@ -190,15 +202,29 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
   const providerRoot = path.join(logDir, 'provider-traffic');
   t.true(fs.existsSync(providerRoot));
 
-  const trafficFiles = fs
+  const dayDirs = fs
     .readdirSync(providerRoot, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && /^traffic-\d{4}-\d{2}-\d{2}\.log$/.test(entry.name))
+    .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
-  t.true(trafficFiles.length > 0);
+  t.true(dayDirs.length > 0);
 
-  const trafficFile = path.join(providerRoot, trafficFiles[0]);
-  const content = fs.readFileSync(trafficFile, 'utf8');
-  const entries = content
+  const dayDir = path.join(providerRoot, dayDirs[0]);
+  const sessionDirs = fs
+    .readdirSync(dayDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  t.true(sessionDirs.some((name) => name.endsWith('_session-1')));
+
+  const sessionDir = path.join(
+    dayDir,
+    sessionDirs.find((name) => name.endsWith('_session-1')),
+  );
+  const requestFiles = fs.readdirSync(sessionDir).filter((name) => name.endsWith('_req-1.jsonl'));
+  t.true(requestFiles.length > 0);
+  const trafficFile = path.join(sessionDir, requestFiles[0]);
+
+  const entries = fs
+    .readFileSync(trafficFile, 'utf8')
     .split('\n')
     .filter((line) => line.trim())
     .map((line) => JSON.parse(line));
@@ -216,9 +242,10 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
   }
 
   t.is(sent.direction, 'sent');
-  t.deepEqual(sent.payload.messages, [{ role: 'system' }, { role: 'user', content: 'hello' }]);
+  t.deepEqual(sent.body.messages, [{ role: 'system' }, { role: 'user', content: 'hello' }]);
+  t.deepEqual(sent.body.tools, ['read_file']);
   t.is(received.direction, 'received');
-  t.is(received.payload.text, 'hi');
+  t.is(received.summary.outputText, 'hi');
 });
 
 test.serial('cleans up old provider traffic files by date', async (t) => {

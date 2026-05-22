@@ -1,5 +1,9 @@
+import { Runner } from '@openai/agents';
+import { OpenAIProvider } from '@openai/agents-openai';
+import OpenAI from 'openai';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
+import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
@@ -39,7 +43,24 @@ async function fetchOpenAIModels(
 registerProvider({
   id: 'openai',
   label: 'OpenAI',
-  createRunner: undefined, // Use SDK default
+  createRunner: ({ settingsService, loggingService }) => {
+    const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
+    const openAIClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      fetch: createAiSdkLoggingFetch({
+        provider: 'openai',
+        model: defaultModel,
+        loggingService,
+      }) as any,
+    });
+
+    return new Runner({
+      modelProvider: new OpenAIProvider({
+        openAIClient: openAIClient as any,
+        useResponses: true,
+      }),
+    });
+  },
   fetchModels: fetchOpenAIModels,
   clearConversations: undefined, // No conversation state to clear
   sensitiveSettingKeys: [],

@@ -131,23 +131,20 @@ export async function evaluateShellAutoApprovalAdvisories({
   const prompt = buildPrompt(toEvaluateByLLM, history);
 
   try {
-    logger.debug('Shell auto-approval evaluation request', {
-      eventType: 'evaluator.request.started',
-      direction: 'sent',
-      provider: autoApproveProvider,
-      model: autoApproveModel,
-      payload: {
-        prompt,
-        instructions,
-      },
-    });
+    const currentContext = logger.getTrafficContext?.() ?? null;
+    const evaluatorContext = currentContext ? { ...currentContext, evaluator: true as const } : null;
 
-    const responseText = await agentClient.chat(prompt, {
-      model: autoApproveModel,
-      provider: autoApproveProvider,
-      reasoningEffort: 'none',
-      instructions,
-    });
+    const runChat = () =>
+      agentClient.chat(prompt, {
+        model: autoApproveModel,
+        provider: autoApproveProvider,
+        reasoningEffort: 'none',
+        instructions,
+      });
+
+    const responseText = evaluatorContext
+      ? await logger.runWithTrafficContext!(evaluatorContext, runChat)
+      : await runChat();
 
     logger.debug('Shell auto-approval evaluation response', {
       eventType: 'evaluator.response.received',

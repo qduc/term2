@@ -432,18 +432,29 @@ if (hasPositionalPrompt) {
   process.exit(exitCode);
 }
 
+// Generate session UUID and handle resume
+let effectiveSessionId = generateId();
+let effectiveCreatedAt = new Date().toISOString();
+let initialMessages: Message[] = [];
+
+if (resumedConversation) {
+  effectiveSessionId = resumedConversation.id;
+  effectiveCreatedAt = resumedConversation.createdAt;
+  initialMessages = resumedConversation.messages as Message[];
+  pendingMessages = initialMessages;
+} else if (resumeRequested) {
+  const target = resumeTarget ?? 'last';
+  console.warn(`No conversation found to resume (${target}). Starting new conversation.`);
+}
+
 const conversationService = new ConversationService({
   agentClient,
+  sessionId: effectiveSessionId,
   deps: {
     logger: logger,
     settingsService: settings,
   },
 });
-
-// Generate session UUID and handle resume
-let effectiveSessionId = generateId();
-let effectiveCreatedAt = new Date().toISOString();
-let initialMessages: Message[] = [];
 
 if (resumedConversation) {
   const savedProviderMatches =
@@ -456,15 +467,7 @@ if (resumedConversation) {
     history: resumedConversation.history,
     previousResponseId,
   });
-  // Use the original conversation ID for saving updates.
   console.log(`Resumed conversation: ${resumedConversation.id}`);
-  effectiveSessionId = resumedConversation.id;
-  effectiveCreatedAt = resumedConversation.createdAt;
-  initialMessages = resumedConversation.messages as Message[];
-  pendingMessages = initialMessages;
-} else if (resumeRequested) {
-  const target = resumeTarget ?? 'last';
-  console.warn(`No conversation found to resume (${target}). Starting new conversation.`);
 }
 
 import { InputProvider } from './context/InputContext.js';

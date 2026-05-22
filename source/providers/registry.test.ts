@@ -70,9 +70,35 @@ test('provider definitions have required properties', (t) => {
   }
 });
 
-test('openai provider has createRunner set to undefined (uses SDK default)', (t) => {
+test('openai provider has createRunner function', (t) => {
   const provider = getProvider('openai');
-  t.is(provider?.createRunner, undefined);
+  t.is(typeof provider?.createRunner, 'function');
+});
+
+test('openai provider createRunner returns a runner instance', (t) => {
+  const provider = getProvider('openai');
+  const runner = provider?.createRunner?.({
+    settingsService: {
+      get: <T = any>(key: string) => {
+        if (key === 'agent.model') return 'gpt-5' as T;
+        return undefined as T;
+      },
+      set: () => {},
+    },
+    loggingService: {
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+      security: () => {},
+      setCorrelationId: () => {},
+      getCorrelationId: () => undefined,
+      clearCorrelationId: () => {},
+      getTrafficContext: () => null,
+    },
+  });
+
+  t.truthy(runner);
 });
 
 test('openrouter provider has createRunner function', (t) => {

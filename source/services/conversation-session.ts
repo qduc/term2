@@ -35,6 +35,7 @@ const supportsConversationChaining = (providerId: string): boolean => {
 
 export class ConversationSession {
   public readonly id: string;
+  public readonly startedAt: string;
   private agentClient: OpenAIAgentClient;
   private logger: ILoggingService;
   private conversationStore: ConversationStore;
@@ -55,9 +56,15 @@ export class ConversationSession {
     {
       agentClient,
       deps,
-    }: { agentClient: OpenAIAgentClient; deps: { logger: ILoggingService; settingsService?: ISettingsService } },
+      sessionStartedAt,
+    }: {
+      agentClient: OpenAIAgentClient;
+      deps: { logger: ILoggingService; settingsService?: ISettingsService };
+      sessionStartedAt?: string;
+    },
   ) {
     this.id = id;
+    this.startedAt = sessionStartedAt ?? new Date().toISOString();
     this.agentClient = agentClient;
     this.logger = deps.logger;
     this.settingsService = deps.settingsService;
@@ -74,6 +81,36 @@ export class ConversationSession {
       logger: this.logger,
       sessionId: this.id,
     });
+  }
+
+  #getTrafficMode(): string {
+    if (!this.settingsService) return 'standard';
+    if (this.settingsService.get<boolean>('app.orchestratorMode')) return 'orchestrator';
+    if (this.settingsService.get<boolean>('app.liteMode')) return 'lite';
+    if (this.settingsService.get<boolean>('app.planMode')) return 'plan';
+    if (this.settingsService.get<boolean>('app.mentorMode')) return 'mentor';
+    return 'standard';
+  }
+
+  #getFirstUserMessagePreview(currentTurn?: string): string {
+    const [firstTurn] = this.conversationStore.listUserTurns();
+    return firstTurn?.text ?? currentTurn ?? '';
+  }
+
+  #withTrafficContext<T>(currentTurn: string | undefined, fn: () => T): T {
+    const runner = this.logger.runWithTrafficContext;
+    if (!runner) return fn();
+    return runner.call(
+      this.logger,
+      {
+        sessionId: this.id,
+        sessionStartedAt: this.startedAt,
+        firstUserMessagePreview: this.#getFirstUserMessagePreview(currentTurn),
+        mode: this.#getTrafficMode(),
+        traceId: this.logger.getCorrelationId(),
+      },
+      fn,
+    ) as T;
   }
 
   #isCurrentGeneration(gen: number): boolean {
@@ -654,42 +691,45 @@ export class ConversationSession {
       hallucinationRetryCount?: number;
     } = {},
   ): Promise<ConversationResult> {
-    getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
-      this.agentClient,
-      onEvent ?? null,
-    );
-    let result: ConversationResult;
-    try {
-      result = await collectTerminalResult(this.run(input, { hallucinationRetryCount }), {
-        onTextChunk,
-        onReasoningChunk,
-        onCommandMessage,
-        onEvent,
-        getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
-        onFinalEvent: (event) => {
-          this.logger.debug('sendMessage received final event', {
-            sessionId: this.id,
-            hasUsage: Boolean(event.usage),
-            usage: event.usage,
-          });
-        },
-      });
-    } finally {
+    const turn = normalizeUserTurn(input);
+    return this.#withTrafficContext(turn.text, async () => {
       getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
         this.agentClient,
-        null,
+        onEvent ?? null,
       );
-    }
+      let result: ConversationResult;
+      try {
+        result = await collectTerminalResult(this.run(input, { hallucinationRetryCount }), {
+          onTextChunk,
+          onReasoningChunk,
+          onCommandMessage,
+          onEvent,
+          getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
+          onFinalEvent: (event) => {
+            this.logger.debug('sendMessage received final event', {
+              sessionId: this.id,
+              hasUsage: Boolean(event.usage),
+              usage: event.usage,
+            });
+          },
+        });
+      } finally {
+        getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
+          this.agentClient,
+          null,
+        );
+      }
 
-    if (result.type === 'response') {
-      this.logger.debug('sendMessage returning response', {
-        sessionId: this.id,
-        hasUsage: Boolean(result.usage),
-        usage: result.usage,
-      });
-    }
+      if (result.type === 'response') {
+        this.logger.debug('sendMessage returning response', {
+          sessionId: this.id,
+          hasUsage: Boolean(result.usage),
+          usage: result.usage,
+        });
+      }
 
-    return result;
+      return result;
+    });
   }
 
   async handleApprovalDecision(
@@ -711,42 +751,44 @@ export class ConversationSession {
       return null;
     }
 
-    getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
-      this.agentClient,
-      onEvent ?? null,
-    );
-    let result: ConversationResult | null;
-    try {
-      result = await collectTerminalResult(this['continue']({ answer, rejectionReason }), {
-        onTextChunk,
-        onReasoningChunk,
-        onCommandMessage,
-        onEvent,
-        getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
-        onFinalEvent: (event) => {
-          this.logger.debug('handleApprovalDecision received final event', {
-            sessionId: this.id,
-            hasUsage: Boolean(event.usage),
-            usage: event.usage,
-          });
-        },
-      });
-    } finally {
+    return this.#withTrafficContext(undefined, async () => {
       getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
         this.agentClient,
-        null,
+        onEvent ?? null,
       );
-    }
+      let result: ConversationResult | null;
+      try {
+        result = await collectTerminalResult(this['continue']({ answer, rejectionReason }), {
+          onTextChunk,
+          onReasoningChunk,
+          onCommandMessage,
+          onEvent,
+          getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
+          onFinalEvent: (event) => {
+            this.logger.debug('handleApprovalDecision received final event', {
+              sessionId: this.id,
+              hasUsage: Boolean(event.usage),
+              usage: event.usage,
+            });
+          },
+        });
+      } finally {
+        getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
+          this.agentClient,
+          null,
+        );
+      }
 
-    if (result.type === 'response') {
-      this.logger.debug('handleApprovalDecision returning response', {
-        sessionId: this.id,
-        hasUsage: Boolean(result.usage),
-        usage: result.usage,
-      });
-    }
+      if (result.type === 'response') {
+        this.logger.debug('handleApprovalDecision returning response', {
+          sessionId: this.id,
+          hasUsage: Boolean(result.usage),
+          usage: result.usage,
+        });
+      }
 
-    return result;
+      return result;
+    });
   }
 
   async *#buildAndResolve(

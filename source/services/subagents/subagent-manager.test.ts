@@ -1083,3 +1083,113 @@ test.serial('worker shell tool blocks dangerous/destructive commands and returns
   t.true(shellResult!.includes('blocked for safety'), 'dangerous command must be blocked');
   t.false(shellResult!.includes('exit 0'), 'dangerous command must not execute');
 });
+
+test.serial('worker shell tool allows YELLOW command when auto-approval evaluator approves', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(process.env['TMPDIR'] ?? '/tmp', 'term2-test-worker-shell-yellow-ok-'));
+  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  let shellResult: string | null = null;
+  let chatCalls = 0;
+
+  registerProvider({
+    id: 'mock-worker-shell-yellow-approved-provider',
+    label: 'Mock Worker Shell Yellow Approved Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
+          shellResult = await shellTool.invoke({}, JSON.stringify({ command: 'npm run test:verbose -- --help' }), {});
+          return {
+            status: 'completed',
+            finalOutput: 'done',
+            history: [],
+            messages: [],
+          };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-worker-shell-yellow-approved-provider',
+      'shell.autoApproveMode': 'auto',
+      'agent.autoApproveModel': 'mock-auto-approve-model',
+      'agent.autoApproveProvider': 'mock-worker-shell-yellow-approved-provider',
+    }),
+    agentClient: {
+      chat: async () => {
+        chatCalls++;
+        return '{"results":[{"approved":true,"reasoning":"Looks related and low risk."}]}';
+      },
+    } as any,
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+  });
+
+  await manager.run({ role: 'worker', task: 'run help for tests' });
+
+  t.is(chatCalls, 1);
+  t.truthy(shellResult);
+  t.false(shellResult!.includes('blocked for safety'), 'approved YELLOW command should execute');
+});
+
+test.serial('worker shell tool blocks YELLOW command when auto-approval evaluator rejects', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(process.env['TMPDIR'] ?? '/tmp', 'term2-test-worker-shell-yellow-no-'));
+  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  let shellResult: string | null = null;
+  let chatCalls = 0;
+
+  registerProvider({
+    id: 'mock-worker-shell-yellow-rejected-provider',
+    label: 'Mock Worker Shell Yellow Rejected Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          const shellTool = agent.tools.find((tool: any) => tool.name === 'shell');
+          shellResult = await shellTool.invoke({}, JSON.stringify({ command: 'npm run test:verbose -- --help' }), {});
+          return {
+            status: 'completed',
+            finalOutput: 'done',
+            history: [],
+            messages: [],
+          };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-worker-shell-yellow-rejected-provider',
+      'shell.autoApproveMode': 'auto',
+      'agent.autoApproveModel': 'mock-auto-approve-model',
+      'agent.autoApproveProvider': 'mock-worker-shell-yellow-rejected-provider',
+    }),
+    agentClient: {
+      chat: async () => {
+        chatCalls++;
+        return '{"results":[{"approved":false,"reasoning":"Not safe."}]}';
+      },
+    } as any,
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+  });
+
+  await manager.run({ role: 'worker', task: 'run help for tests' });
+
+  t.is(chatCalls, 1);
+  t.truthy(shellResult);
+  t.true(shellResult!.includes('blocked for safety'), 'rejected YELLOW command should stay blocked');
+});

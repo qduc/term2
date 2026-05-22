@@ -32,6 +32,8 @@ import { extractUsage, normalizeAgentRunUsage } from '../../utils/token-usage.js
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { tryAcquireFileLock } from '../../tools/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../utils/command-safety/index.js';
+import { evaluateShellAutoApprovalAdvisories } from '../shell-auto-approval-evaluator.js';
+import type { OpenAIAgentClient } from '../../lib/openai-agent-client.js';
 
 const PROMPTS_DIR = path.join(import.meta.dirname, '../../prompts/subagents');
 const ROLE_MAX_TURNS_DEFAULT = 20;
@@ -291,17 +293,20 @@ export class SubagentManager {
   #executionContext?: ExecutionContext;
   #onEvent?: (event: ConversationEvent) => void;
   #mentorSession: SubagentSession;
+  #agentClient?: Pick<OpenAIAgentClient, 'chat'>;
 
   constructor(deps: {
     logger: ILoggingService;
     settings: ISettingsService;
     executionContext?: ExecutionContext;
     onEvent?: (event: ConversationEvent) => void;
+    agentClient?: Pick<OpenAIAgentClient, 'chat'>;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
     this.#executionContext = deps.executionContext;
     this.#onEvent = deps.onEvent;
+    this.#agentClient = deps.agentClient;
     this.#mentorSession = new SubagentSession(randomUUID(), 'mentor');
   }
 
@@ -731,8 +736,14 @@ export class SubagentManager {
         }
 
         const status = classifyCommand(command, this.#logger);
-        if (status === SafetyStatus.YELLOW || status === SafetyStatus.RED) {
+        if (status === SafetyStatus.RED) {
           return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
+        }
+        if (status === SafetyStatus.YELLOW) {
+          const approved = await this.#isYellowCommandApproved(command, requestTaskContextFromDetails(details));
+          if (!approved) {
+            return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
+          }
         }
 
         // For GREEN commands, extract any file paths referenced in the
@@ -763,6 +774,29 @@ export class SubagentManager {
         return originalExecute(params, context, details);
       },
     };
+  }
+
+  async #isYellowCommandApproved(command: string, taskContext: string): Promise<boolean> {
+    if (!this.#agentClient) return false;
+
+    try {
+      const advisories = await evaluateShellAutoApprovalAdvisories({
+        commands: [{ id: '__subagent_worker_shell__', command }],
+        history: taskContext
+          ? [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: taskContext }] } as any]
+          : [],
+        settingsService: this.#settings,
+        agentClient: this.#agentClient,
+        logger: this.#logger,
+      });
+
+      return advisories.get('__subagent_worker_shell__')?.approved === true;
+    } catch (error: any) {
+      this.#logger.warn('Worker shell YELLOW auto-approval evaluation failed', {
+        error: error?.message || String(error),
+      });
+      return false;
+    }
   }
 
   // An explicit writeBoundary narrows where a worker may write. When omitted it
@@ -835,4 +869,9 @@ export class SubagentManager {
       },
     };
   }
+}
+
+function requestTaskContextFromDetails(details: unknown): string {
+  const value = details as { context?: { task?: unknown } } | undefined;
+  return typeof value?.context?.task === 'string' ? value.context.task : '';
 }

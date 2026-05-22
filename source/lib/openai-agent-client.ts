@@ -131,6 +131,7 @@ export class OpenAIAgentClient {
       settings: deps.settings,
       executionContext: deps.executionContext,
       onEvent: (event) => this.#subagentEventSink?.(event),
+      agentClient: { chat: (message, options) => this.chat(message, options) },
     });
     this.#editor = createEditorImpl({
       loggingService: this.#logger,

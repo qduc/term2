@@ -253,6 +253,17 @@ export function listConversations(): Array<{ id: string; updatedAt: string }> {
   }
 }
 
-export function getResumeCommand(id: string): string {
-  return `term2 --resume ${id}`;
+export function getResumeCommand(id: string, sshHost?: string, remoteDir?: string, sshPort?: number): string {
+  const parts: string[] = ['term2'];
+  if (sshHost) {
+    parts.push(`--ssh ${sshHost}`);
+  }
+  if (remoteDir) {
+    parts.push(`--remote-dir ${remoteDir}`);
+  }
+  if (sshPort && sshPort !== 22) {
+    parts.push(`--ssh-port ${sshPort}`);
+  }
+  parts.push(`--resume ${id}`);
+  return parts.join(' ');
 }

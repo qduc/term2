@@ -516,7 +516,7 @@ const saveAndPrintResume = async (messages: Message[]) => {
     messages: messages as SavedMessage[],
   });
 
-  const resumeCmd = getResumeCommand(effectiveSessionId);
+  const resumeCmd = getResumeCommand(effectiveSessionId, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
   printUsageOnce();
   console.log(`\nTo resume this conversation: ${resumeCmd}`);
 };

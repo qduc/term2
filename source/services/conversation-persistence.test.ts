@@ -44,8 +44,30 @@ test.serial('generateId: returns unique IDs', (t) => {
 
 test.serial('getResumeCommand: returns correct format', (t) => {
   const id = 'test-uuid-123';
-  const cmd = persistenceModule.getResumeCommand(id);
-  t.is(cmd, 'term2 --resume test-uuid-123');
+
+  // Local (no SSH)
+  t.is(persistenceModule.getResumeCommand(id), 'term2 --resume test-uuid-123');
+
+  // SSH with host
+  t.is(persistenceModule.getResumeCommand(id, 'user@host'), 'term2 --ssh user@host --resume test-uuid-123');
+
+  // SSH with host and remote directory
+  t.is(
+    persistenceModule.getResumeCommand(id, 'user@host', '/path/to/project'),
+    'term2 --ssh user@host --remote-dir /path/to/project --resume test-uuid-123',
+  );
+
+  // SSH with host, remote directory, and custom port
+  t.is(
+    persistenceModule.getResumeCommand(id, 'user@host', '/path/to/project', 2222),
+    'term2 --ssh user@host --remote-dir /path/to/project --ssh-port 2222 --resume test-uuid-123',
+  );
+
+  // SSH with host and default port 22 (should be omitted)
+  t.is(
+    persistenceModule.getResumeCommand(id, 'user@host', '/path/to/project', 22),
+    'term2 --ssh user@host --remote-dir /path/to/project --resume test-uuid-123',
+  );
 });
 
 test.serial('saveConversation: creates file and last.json pointer', (t) => {

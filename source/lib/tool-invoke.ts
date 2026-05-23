@@ -168,6 +168,31 @@ function getObjectShape(schema: any): Record<string, any> | null {
   return null;
 }
 
+function unwrapSchema(schema: any): any {
+  let current = schema;
+  while (current) {
+    const def = current.def || current._def;
+    if (!def) break;
+    const typeName = def.type || def.typeName;
+    const isOptional = typeName === 'optional' || typeName === 'ZodOptional';
+    const isNullable = typeName === 'nullable' || typeName === 'ZodNullable';
+    if (isOptional || isNullable) {
+      if (typeof current.unwrap === 'function') {
+        current = current.unwrap();
+      } else {
+        current = def.innerType;
+      }
+    } else if (typeName === 'default' || typeName === 'ZodDefault') {
+      current = def.innerType;
+    } else if (typeName === 'effects' || typeName === 'ZodEffects') {
+      current = def.schema;
+    } else {
+      break;
+    }
+  }
+  return current;
+}
+
 export const normalizeToolInput = (input: unknown, schema?: z.ZodTypeAny): string => {
   let jsonStr = '';
   if (typeof input === 'string') {
@@ -218,6 +243,44 @@ export const normalizeToolInput = (input: unknown, schema?: z.ZodTypeAny): strin
                 } else if (lower === 'false') {
                   parsed[key] = false;
                   modified = true;
+                }
+              }
+              // 3. Array or Object coercion from stringified representation
+              const unwrapped = unwrapSchema(fieldSchema);
+              if (typeof value === 'string' && unwrapped) {
+                const def = unwrapped.def || unwrapped._def;
+                if (def) {
+                  const typeName = def.type || def.typeName;
+                  const trimmed = value.trim();
+                  if (
+                    (typeName === 'array' || typeName === 'ZodArray') &&
+                    trimmed.startsWith('[') &&
+                    trimmed.endsWith(']')
+                  ) {
+                    try {
+                      const parsedArray = JSON.parse(trimmed);
+                      if (Array.isArray(parsedArray)) {
+                        parsed[key] = parsedArray;
+                        modified = true;
+                      }
+                    } catch {
+                      // Ignore parsing error
+                    }
+                  } else if (
+                    (typeName === 'object' || typeName === 'ZodObject') &&
+                    trimmed.startsWith('{') &&
+                    trimmed.endsWith('}')
+                  ) {
+                    try {
+                      const parsedObj = JSON.parse(trimmed);
+                      if (parsedObj && typeof parsedObj === 'object' && !Array.isArray(parsedObj)) {
+                        parsed[key] = parsedObj;
+                        modified = true;
+                      }
+                    } catch {
+                      // Ignore parsing error
+                    }
+                  }
                 }
               }
             }

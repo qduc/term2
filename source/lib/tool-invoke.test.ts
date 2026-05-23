@@ -310,3 +310,40 @@ test('wrapToolInvoke intercepts InvalidToolInputError result string and formats 
     'Tool input did not match schema for grep: no_ignore must be boolean, got string "not-a-bool". Retry with valid JSON arguments.',
   );
 });
+
+test('normalizeToolInput with schema coerces stringified array and object inputs', (t) => {
+  const schema = z.object({
+    writeBoundary: z.array(z.string()).optional(),
+    config: z
+      .object({
+        debug: z.boolean(),
+      })
+      .optional(),
+  });
+
+  const input = {
+    writeBoundary: '["src", "tests"]',
+    config: '{"debug": true}',
+  };
+
+  const result = normalizeToolInput(input, schema);
+  t.deepEqual(JSON.parse(result), {
+    writeBoundary: ['src', 'tests'],
+    config: { debug: true },
+  });
+});
+
+test('normalizeToolInput with schema coerces empty stringified array', (t) => {
+  const schema = z.object({
+    writeBoundary: z.array(z.string()).optional(),
+  });
+
+  const input = {
+    writeBoundary: '[]',
+  };
+
+  const result = normalizeToolInput(input, schema);
+  t.deepEqual(JSON.parse(result), {
+    writeBoundary: [],
+  });
+});

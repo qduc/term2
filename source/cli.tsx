@@ -274,8 +274,10 @@ const settings = new SettingsService({
   let resolvedLiteMode: boolean;
   if (resumedConversation) {
     resolvedLiteMode = cliOverrides.app?.liteMode ?? false;
+  } else if (cli.flags.lite) {
+    resolvedLiteMode = true;
   } else {
-    const implicitLite = Boolean(cli.flags.lite || (hasPositionalPrompt && !cli.flags.autoApprove));
+    const implicitLite = Boolean(hasPositionalPrompt && !cli.flags.autoApprove);
     const persistedOrchestrator = settings.get<boolean>('app.orchestratorMode');
     const persistedMentor = settings.get<boolean>('app.mentorMode');
     // Implicit lite must not override a higher-precedence mode already persisted.

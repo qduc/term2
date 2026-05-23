@@ -26,6 +26,47 @@ const parseJsonObject = (raw: string): Record<string, unknown> | null => {
   }
 };
 
+const extractResponseText = (body: Record<string, unknown> | null | undefined): string | undefined => {
+  if (!body) return undefined;
+  if (typeof body.output_text === 'string') {
+    return body.output_text;
+  }
+  if (typeof body.text === 'string') {
+    return body.text;
+  }
+
+  const choices = body.choices;
+  if (Array.isArray(choices)) {
+    const firstChoice = toRecord(choices[0]);
+    const message = toRecord(firstChoice?.message);
+    if (typeof message?.content === 'string') {
+      return message.content;
+    }
+    const delta = toRecord(firstChoice?.delta);
+    if (typeof delta?.content === 'string') {
+      return delta.content;
+    }
+    if (typeof firstChoice?.text === 'string') {
+      return firstChoice.text;
+    }
+  }
+
+  return undefined;
+};
+
+const extractToolCalls = (body: Record<string, unknown> | null | undefined): unknown => {
+  if (!body) return undefined;
+  const choices = body.choices;
+  if (!Array.isArray(choices)) {
+    return undefined;
+  }
+
+  const firstChoice = toRecord(choices[0]);
+  const message = toRecord(firstChoice?.message);
+  const delta = toRecord(firstChoice?.delta);
+  return message?.tool_calls ?? delta?.tool_calls;
+};
+
 const readRequestBody = async (input: RequestInfo | URL, init?: RequestInit): Promise<string | null> => {
   if (typeof init?.body === 'string') {
     return init.body;
@@ -101,6 +142,14 @@ export function createAiSdkLoggingFetch({
     Promise.resolve()
       .then(async () => {
         const summary = await summarizeReceivedTraffic(response.clone());
+        const summaryPayload = toRecord(summary.payload);
+        const responseText = summaryPayload
+          ? extractResponseText(summaryPayload)
+          : typeof summary.fallbackBody === 'string'
+          ? summary.fallbackBody
+          : undefined;
+        const toolCalls = extractToolCalls(summaryPayload);
+
         loggingService.debug(`${provider} ai sdk response`, {
           eventType: `${eventPrefix}.response.received`,
           category: 'provider',
@@ -108,6 +157,8 @@ export function createAiSdkLoggingFetch({
           direction: 'received',
           ...baseMeta,
           status: response.status,
+          text: responseText,
+          toolCalls,
           payload: summary,
         });
       })

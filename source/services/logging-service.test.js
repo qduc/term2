@@ -225,7 +225,7 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
 
   const entries = fs
     .readFileSync(trafficFile, 'utf8')
-    .split('\n')
+    .split(/\r?\n\r?\n/)
     .filter((line) => line.trim())
     .map((line) => JSON.parse(line));
 

@@ -321,12 +321,12 @@ export class SettingsService {
     ) {
       if (value === true) {
         const app = this.settings.app ?? {};
-        const normalized = normalizeAppModes({
-          orchestratorMode: key === 'app.orchestratorMode' ? true : app.orchestratorMode ?? false,
-          liteMode: key === 'app.liteMode' ? true : app.liteMode ?? false,
-          planMode: key === 'app.planMode' ? true : app.planMode ?? false,
-          mentorMode: key === 'app.mentorMode' ? true : app.mentorMode ?? false,
-        });
+        const normalized = {
+          orchestratorMode: key === 'app.orchestratorMode',
+          liteMode: key === 'app.liteMode',
+          planMode: key === 'app.planMode',
+          mentorMode: key === 'app.mentorMode',
+        };
         this.settings.app = { ...app, ...normalized };
         // Update source entries for cleared sibling modes
         for (const modeKey of ['app.orchestratorMode', 'app.liteMode', 'app.planMode', 'app.mentorMode'] as const) {

@@ -1083,3 +1083,32 @@ test.serial('sensitive settings loaded from env are accessible at runtime', asyn
     t.falsy(config.app?.shellPath);
   });
 });
+
+test('set() enables target app mode and disables sibling modes', async (t) => {
+  const settingsDir = getTestSettingsDir();
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+  });
+
+  // Enable orchestrator mode initially
+  service.set('app.orchestratorMode', true);
+  t.true(service.get('app.orchestratorMode'));
+  t.false(service.get('app.liteMode'));
+  t.false(service.get('app.planMode'));
+  t.false(service.get('app.mentorMode'));
+
+  // Setting liteMode to true should disable orchestratorMode
+  service.set('app.liteMode', true);
+  t.true(service.get('app.liteMode'));
+  t.false(service.get('app.orchestratorMode'));
+  t.false(service.get('app.planMode'));
+  t.false(service.get('app.mentorMode'));
+
+  // Setting planMode to true should disable liteMode
+  service.set('app.planMode', true);
+  t.true(service.get('app.planMode'));
+  t.false(service.get('app.liteMode'));
+  t.false(service.get('app.orchestratorMode'));
+  t.false(service.get('app.mentorMode'));
+});

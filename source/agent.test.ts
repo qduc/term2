@@ -398,3 +398,30 @@ test('getAgentDefinition conditionalizes plan mode instructions and does not fil
   t.true(toolsWithoutPlan.includes('create_file'));
   t.true(toolsWithoutPlan.includes('search_replace'));
 });
+
+test('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mode and plan mode', (t) => {
+  // Test Orchestrator Mode
+  const settingsOrchestrator = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'app.orchestratorMode': true,
+  });
+  const definitionOrchestrator = getAgentDefinition({
+    settingsService: settingsOrchestrator,
+    loggingService: mockLogger,
+    runSubagent: async () => ({} as any),
+  });
+  t.true(definitionOrchestrator.instructions.includes('AGENTS.md contents:'));
+  t.true(definitionOrchestrator.instructions.includes('top-level:'));
+
+  // Test Plan Mode
+  const settingsPlan = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'app.planMode': true,
+  });
+  const definitionPlan = getAgentDefinition({
+    settingsService: settingsPlan,
+    loggingService: mockLogger,
+  });
+  t.true(definitionPlan.instructions.includes('AGENTS.md contents:'));
+  t.true(definitionPlan.instructions.includes('top-level:'));
+});

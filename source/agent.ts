@@ -197,8 +197,11 @@ export const getAgentDefinition = (
     prompt += `\n\n${getReasoningEfficiencyAddendum()}`;
   }
 
-  const envInfo = getEnvInfo(settingsService, executionContext, liteMode || orchestratorMode);
   const cwd = executionContext?.getCwd() || process.cwd();
+  const isLiteEnv = liteMode && !orchestratorMode && !planMode;
+  const envInfo = getEnvInfo(settingsService, executionContext, isLiteEnv);
+  const skipAgentsMd = isLiteEnv || (executionContext?.isRemote() ?? false);
+  const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
 
   if (orchestratorMode) {
     if (!runSubagent) {
@@ -216,7 +219,7 @@ export const getAgentDefinition = (
 
     return {
       name: 'Agent',
-      instructions: `${prompt}\n\nEnvironment: ${envInfo}`,
+      instructions: `${prompt}\n\nEnvironment: ${envInfo}${agentsInstructions}`,
       tools,
       model: resolvedModel,
     };
@@ -294,10 +297,6 @@ export const getAgentDefinition = (
   }
 
   registerToolFormatters(tools);
-
-  // In lite mode, skip AGENTS.md loading.
-  // In remote mode, we also skip because we can't synchronously read from remote disk.
-  const agentsInstructions = liteMode || executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
 
   return {
     name: 'Terminal Assistant',

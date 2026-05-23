@@ -12,6 +12,8 @@ interface BannerProps {
 const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
   const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
+  const planMode = useSetting<boolean>(settingsService, 'app.planMode') ?? false;
+  const orchestratorMode = useSetting<boolean>(settingsService, 'app.orchestratorMode') ?? false;
   const model = useSetting<string>(settingsService, 'agent.model');
   const mentorModel = useSetting<string>(settingsService, 'agent.mentorModel');
   const providerKey = useSetting<string>(settingsService, 'agent.provider') ?? 'openai';
@@ -27,6 +29,41 @@ const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
   const purple = '#a78bfa'; // Soft purple for mentor
   const cyan = '#22d3ee'; // Soft cyan for provider
   const lightSlate = '#94a3b8';
+
+  const Pill: FC<{ bg: string; label: string }> = ({ bg, label }) => (
+    <Text backgroundColor={bg} color="white" bold>
+      {' '}
+      {label}{' '}
+    </Text>
+  );
+
+  const baseMode = orchestratorMode
+    ? 'ORCHESTRATOR'
+    : planMode
+    ? 'PLAN'
+    : liteMode
+    ? isShellMode
+      ? 'SHELL'
+      : 'LITE'
+    : 'STANDARD';
+
+  const pills = [
+    {
+      show: true,
+      label: baseMode,
+      bg:
+        baseMode === 'ORCHESTRATOR'
+          ? '#be123c'
+          : baseMode === 'PLAN'
+          ? '#0369a1'
+          : baseMode === 'SHELL'
+          ? '#ca8a04'
+          : baseMode === 'LITE'
+          ? '#059669'
+          : '#0f766e',
+    },
+    { show: mentorMode, label: 'MENTOR', bg: '#7c3aed' },
+  ];
 
   return (
     <Box flexDirection="column" width="100%" borderStyle="round" borderColor={accent} paddingX={2} paddingY={1}>
@@ -44,31 +81,11 @@ const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
 
         {/* Mode pills */}
         <Box gap={1}>
-          {liteMode && isShellMode ? (
-            <Text backgroundColor="#ca8a04" color="white" bold>
-              {' '}
-              SHELL{' '}
-            </Text>
-          ) : (
-            liteMode && (
-              <Text backgroundColor="#059669" color="white" bold>
-                {' '}
-                LITE{' '}
-              </Text>
-            )
-          )}
-          {mentorMode && (
-            <Text backgroundColor="#7c3aed" color="white" bold>
-              {' '}
-              MENTOR{' '}
-            </Text>
-          )}
-          {!mentorMode && !liteMode && (
-            <Text backgroundColor="#0f766e" color="white" bold>
-              {' '}
-              STANDARD{' '}
-            </Text>
-          )}
+          {pills
+            .filter((p) => p.show)
+            .map((p) => (
+              <Pill key={p.label} bg={p.bg} label={p.label} />
+            ))}
         </Box>
       </Box>
 

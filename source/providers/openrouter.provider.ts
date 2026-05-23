@@ -99,10 +99,10 @@ registerProvider({
           baseURL: settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1',
           apiKey,
           headers: {
-            'HTTP-Referer': settingsService.get('agent.openrouter.referrer') || 'http://localhost',
+            'HTTP-Referer': settingsService.get('agent.openrouter.referrer') || 'https://github.com/qduc/term2',
             'X-Title': settingsService.get('agent.openrouter.title') || 'term2',
           },
-          appUrl: settingsService.get('agent.openrouter.referrer') || 'http://localhost',
+          appUrl: settingsService.get('agent.openrouter.referrer') || 'https://github.com/qduc/term2',
           appName: settingsService.get('agent.openrouter.title') || 'term2',
           fetch: createOpenRouterRequestPreprocessingFetch(
             createAiSdkLoggingFetch({

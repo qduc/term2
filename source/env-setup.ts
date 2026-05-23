@@ -3,3 +3,4 @@
  * are evaluated. This ensures background tracing/telemetry loops are disabled by default.
  */
 process.env.OPENAI_AGENTS_DISABLE_TRACING = 'true';
+process.env.AI_SDK_LOG_WARNINGS = 'false';

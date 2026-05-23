@@ -121,6 +121,7 @@ export const getAgentDefinition = (
 
   if (!resolvedModel) throw new Error('Model cannot be undefined or empty');
 
+  const planMode = settingsService.get<boolean>('app.planMode');
   const mentorMode = settingsService.get<boolean>('app.mentorMode');
   const liteMode = settingsService.get<boolean>('app.liteMode');
   const orchestratorMode = settingsService.get<boolean>('app.orchestratorMode');
@@ -174,17 +175,18 @@ export const getAgentDefinition = (
     }
   }
 
-  // Delegation guidance is injected under the same condition that registers
-  // the run_subagent tool (full mode + runSubagent dependency available).
-  if (!liteMode && runSubagent) {
+  // Delegation guidance is injected only in orchestrator mode when runSubagent is available.
+  if (orchestratorMode && runSubagent) {
     prompt = `${prompt}\n\n${getSubagentDelegationAddendum({ orchestratorMode })}`;
   }
 
-  try {
-    const planModeInfoPath = path.join(BASE_PROMPT_PATH, 'plan-mode-info.md');
-    prompt = `${prompt}\n\n${resolvePrompt(planModeInfoPath)}`;
-  } catch (e) {
-    loggingService.error(`Failed to load plan-mode-info: ${e}`);
+  if (planMode) {
+    try {
+      const planModeInfoPath = path.join(BASE_PROMPT_PATH, 'plan-mode-info.md');
+      prompt = `${prompt}\n\n${resolvePrompt(planModeInfoPath)}`;
+    } catch (e) {
+      loggingService.error(`Failed to load plan-mode-info: ${e}`);
+    }
   }
 
   const isOverThinkingModels = ['kimi', 'deepseek', 'glm', 'qwen', 'minimax', 'mimo'].some((key) =>

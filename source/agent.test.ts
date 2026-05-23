@@ -30,7 +30,23 @@ test('getAgentDefinition includes grep and find_files when searchViaShell is fal
   t.true(toolNames.includes('code_context_search'));
 });
 
-test('getAgentDefinition injects delegation guidance when runSubagent is provided', (t) => {
+test('getAgentDefinition injects delegation guidance in orchestrator mode when runSubagent is provided', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'app.orchestratorMode': true,
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+    runSubagent: async () => ({} as any),
+  });
+
+  t.true(definition.tools.map((tool) => tool.name).includes('run_subagent'));
+  t.true(definition.instructions.includes('### Delegating to subagents'));
+});
+
+test('getAgentDefinition omits delegation guidance in standard mode even if runSubagent is provided', (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
   });
@@ -42,7 +58,7 @@ test('getAgentDefinition injects delegation guidance when runSubagent is provide
   });
 
   t.true(definition.tools.map((tool) => tool.name).includes('run_subagent'));
-  t.true(definition.instructions.includes('### Delegating to subagents'));
+  t.false(definition.instructions.includes('### Delegating to subagents'));
 });
 
 test('getAgentDefinition omits delegation guidance when runSubagent is absent', (t) => {
@@ -351,7 +367,7 @@ test('getAgentDefinition excludes code-context tools in remote (SSH) execution',
   t.false(definition.instructions.includes('read_code_outline'));
 });
 
-test('getAgentDefinition unconditionally includes plan mode instructions and does not filter tools based on planMode setting', (t) => {
+test('getAgentDefinition conditionalizes plan mode instructions and does not filter tools based on planMode setting', (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'app.planMode': true,
@@ -362,7 +378,7 @@ test('getAgentDefinition unconditionally includes plan mode instructions and doe
     loggingService: mockLogger,
   });
 
-  t.true(definitionWithPlan.instructions.includes('Plan Mode'));
+  t.true(definitionWithPlan.instructions.includes('restricted from making'));
   const toolsWithPlan = definitionWithPlan.tools.map((tool) => tool.name);
   t.true(toolsWithPlan.includes('create_file'));
   t.true(toolsWithPlan.includes('search_replace'));
@@ -377,7 +393,7 @@ test('getAgentDefinition unconditionally includes plan mode instructions and doe
     loggingService: mockLogger,
   });
 
-  t.true(definitionWithoutPlan.instructions.includes('Plan Mode'));
+  t.false(definitionWithoutPlan.instructions.includes('restricted from making'));
   const toolsWithoutPlan = definitionWithoutPlan.tools.map((tool) => tool.name);
   t.true(toolsWithoutPlan.includes('create_file'));
   t.true(toolsWithoutPlan.includes('search_replace'));

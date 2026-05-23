@@ -93,6 +93,31 @@ test('sanitizeSentTrafficBody truncates system message with content array', (t) 
   t.is(messages[1].content, 'hi');
 });
 
+test('sanitizeSentTrafficBody removes encrypted reasoning payload data from messages', (t) => {
+  const body = {
+    messages: [
+      {
+        role: 'assistant',
+        content: 'keep assistant content',
+        reasoning_details: [
+          { type: 'reasoning.encrypted', data: 'opaque-ciphertext', id: 'r1' },
+          { type: 'reasoning.summary', data: 'keep-readable', id: 'r2' },
+        ],
+      },
+    ],
+  };
+
+  const sanitized = sanitizeSentTrafficBody(body);
+  const messages = sanitized.messages as Array<Record<string, unknown>>;
+  const reasoningDetails = messages[0].reasoning_details as Array<Record<string, unknown>>;
+
+  t.deepEqual(reasoningDetails, [
+    { type: 'reasoning.encrypted', data: '', id: 'r1' },
+    { type: 'reasoning.summary', data: 'keep-readable', id: 'r2' },
+  ]);
+  t.is(messages[0].content, 'keep assistant content');
+});
+
 test('summarizeReceivedTraffic merges OpenAI Responses SSE text reasoning and tool arguments', async (t) => {
   const sse = [
     ': ping',
@@ -177,6 +202,30 @@ test('summarizeReceivedTraffic merges chat completions deltas and retains malfor
   t.is(summary.malformedFrames.length, 1);
   t.is(summary.unknownFrames.length, 1);
   t.is(summary.unknownFrames[0]?.count, 1);
+});
+
+test('summarizeReceivedTraffic recognizes assistant role-only chunks and ignores cost-only trailers', async (t) => {
+  const sse = [
+    'data: {"id":"chatcmpl_1","object":"chat.completion.chunk","created":1779512639,"model":"accounts/fireworks/models/kimi-k2p6","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}],"usage":null}',
+    '',
+    'data: {"choices":[{"delta":{"content":"Hi"}}]}',
+    '',
+    'data: {"choices":[],"cost":"0"}',
+    '',
+    'data: [DONE]',
+    '',
+  ].join('\n');
+
+  const summary = await summarizeReceivedTraffic(
+    new Response(sse, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    }),
+  );
+
+  t.is((summary.payload as any)?.id, 'chatcmpl_1');
+  t.is((summary.payload as any)?.choices?.[0]?.delta?.content, 'Hi');
+  t.deepEqual(summary.unknownFrames, []);
 });
 
 test('summarizeReceivedTraffic handles non-stream JSON and falls back safely for unknown JSON', async (t) => {

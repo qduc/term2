@@ -109,15 +109,30 @@ const sanitizeContentArray = (content: unknown[]): unknown[] =>
     return item;
   });
 
+const sanitizeReasoningDetails = (reasoningDetails: unknown): unknown => {
+  if (!Array.isArray(reasoningDetails)) return reasoningDetails;
+  return reasoningDetails.map((item) => {
+    const record = asRecord(item);
+    if (!record) return item;
+    if (record.type === 'reasoning.encrypted' && typeof record.data === 'string') {
+      return { ...record, data: '' };
+    }
+    return item;
+  });
+};
+
 const sanitizeMessageContent = (message: Record<string, unknown>): Record<string, unknown> => {
+  const sanitizedMessage = Object.prototype.hasOwnProperty.call(message, 'reasoning_details')
+    ? { ...message, reasoning_details: sanitizeReasoningDetails(message.reasoning_details) }
+    : message;
   const role = typeof message.role === 'string' ? message.role : undefined;
-  if (role !== 'system' && role !== 'developer') return message;
-  if (!Object.prototype.hasOwnProperty.call(message, 'content')) return message;
+  if (role !== 'system' && role !== 'developer') return sanitizedMessage;
+  if (!Object.prototype.hasOwnProperty.call(message, 'content')) return sanitizedMessage;
   const content = message.content;
   if (Array.isArray(content)) {
-    return { ...message, content: sanitizeContentArray(content) };
+    return { ...sanitizedMessage, content: sanitizeContentArray(content) };
   }
-  return { ...message, content: sanitizeInstructionLikeValue(content) };
+  return { ...sanitizedMessage, content: sanitizeInstructionLikeValue(content) };
 };
 
 export const sanitizeSentTrafficBody = (body: Record<string, unknown>): Record<string, unknown> => {
@@ -429,7 +444,25 @@ export async function summarizeReceivedTraffic(response: Response): Promise<Rece
     if (!recognized && asRecord(parsed.response)) {
       recognized = true;
     }
+    // Provider-specific bookkeeping frames with no useful content for the assembled payload.
+    if (
+      !recognized &&
+      typeof parsed.cost === 'string' &&
+      Array.isArray(parsed.choices) &&
+      parsed.choices.length === 0
+    ) {
+      recognized = true;
+    }
     // Init frame: role announcement with no content
+    if (
+      !recognized &&
+      delta &&
+      typeof delta.role === 'string' &&
+      !Object.prototype.hasOwnProperty.call(delta, 'content') &&
+      Object.keys(delta).length === 1
+    ) {
+      recognized = true;
+    }
     if (
       !recognized &&
       delta &&

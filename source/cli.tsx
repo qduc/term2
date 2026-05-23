@@ -479,17 +479,20 @@ import { patchStdoutForSynchronizedOutput } from './utils/synchronized-output.js
 patchStdoutForSynchronizedOutput(process.stdout);
 
 // Save conversation on exit and print resume command
-let conversationSavedForExit = false;
-const saveAndPrintResume = async (messages: Message[]) => {
-  if (conversationSavedForExit) {
+const savedSessionIds = new Set<string>();
+const saveAndPrintResume = async (messages: Message[], overrideSessionId?: string, overrideCreatedAt?: string) => {
+  const sessionIdToSave = overrideSessionId || effectiveSessionId;
+  const createdAtToSave = overrideCreatedAt || effectiveCreatedAt;
+
+  if (savedSessionIds.has(sessionIdToSave)) {
     return;
   }
-  conversationSavedForExit = true;
 
   if (!hasConversationContent(messages)) {
     printUsageOnce();
     return;
   }
+  savedSessionIds.add(sessionIdToSave);
 
   const state = conversationService.exportState();
   const model = settings.get('agent.model');
@@ -497,8 +500,8 @@ const saveAndPrintResume = async (messages: Message[]) => {
   const reasoningEffortVal = settings.get('agent.reasoningEffort');
 
   saveConversation({
-    id: effectiveSessionId,
-    createdAt: effectiveCreatedAt,
+    id: sessionIdToSave,
+    createdAt: createdAtToSave,
     updatedAt: new Date().toISOString(),
     projectPath: executionContext.getCwd(),
     sshHost: sshInfo?.host,
@@ -516,7 +519,7 @@ const saveAndPrintResume = async (messages: Message[]) => {
     messages: messages as SavedMessage[],
   });
 
-  const resumeCmd = getResumeCommand(effectiveSessionId, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
+  const resumeCmd = getResumeCommand(sessionIdToSave, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
   printUsageOnce();
   console.log(`\nTo resume this conversation: ${resumeCmd}`);
 };
@@ -542,6 +545,12 @@ const { waitUntilExit } = render(
         onSaveConversation={saveAndPrintResume}
         onMessagesChange={(msgs) => {
           pendingMessages = msgs;
+        }}
+        generateId={generateId}
+        onSessionIdChange={(newId, createdAt) => {
+          effectiveSessionId = newId;
+          effectiveCreatedAt = createdAt;
+          pendingMessages = [];
         }}
       />
     </InputProvider>

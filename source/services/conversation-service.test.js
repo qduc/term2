@@ -699,7 +699,7 @@ test('dedupes commands from initial stream when continuation history contains th
   t.deepEqual(finalResult.commandMessages, []);
 });
 
-test('reset() clears conversation state', async (t) => {
+test('resetWithNewId() clears conversation state', async (t) => {
   const streams = [new MockStream([]), new MockStream([])];
   streams[0].lastResponseId = 'resp-1';
 
@@ -717,14 +717,26 @@ test('reset() clears conversation state', async (t) => {
   });
   await service.sendMessage('first');
 
-  service.reset();
+  service.resetWithNewId('new-id');
 
   await service.sendMessage('second');
 
   t.deepEqual(startCalls[1].options, { previousResponseId: null });
 });
 
-test('reset() clears provider conversations when supported', async (t) => {
+test('resetWithNewId() updates sessionId', (t) => {
+  const service = new ConversationService({
+    agentClient: {},
+    sessionId: 'old-id',
+    deps: { logger: mockLogger },
+  });
+  t.is(service.sessionId, 'old-id');
+
+  service.resetWithNewId('new-id');
+  t.is(service.sessionId, 'new-id');
+});
+
+test('resetWithNewId() clears provider conversations when supported', async (t) => {
   let clearCalls = 0;
   const mockClient = {
     clearConversations() {
@@ -741,7 +753,7 @@ test('reset() clears provider conversations when supported', async (t) => {
   });
   await service.sendMessage('first message');
 
-  service.reset();
+  service.resetWithNewId('new-id');
 
   t.is(clearCalls, 1);
 });

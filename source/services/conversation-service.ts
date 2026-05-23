@@ -12,7 +12,9 @@ export type { CommandMessage } from './conversation-session.js';
  * Phase 3: the session owns the conversation state; the service is a thin wrapper.
  */
 export class ConversationService {
-  readonly #session: ConversationSession;
+  #session: ConversationSession;
+  readonly #agentClient: OpenAIAgentClient;
+  readonly #deps: { logger: ILoggingService; settingsService?: ISettingsService };
 
   constructor({
     agentClient,
@@ -25,6 +27,8 @@ export class ConversationService {
     sessionId?: string;
     sessionStartedAt?: string;
   }) {
+    this.#agentClient = agentClient;
+    this.#deps = deps;
     this.#session = new ConversationSession(sessionId, { agentClient, deps, sessionStartedAt });
   }
 
@@ -32,8 +36,12 @@ export class ConversationService {
     return this.#session.id;
   }
 
-  reset(): void {
+  resetWithNewId(newId: string): void {
     this.#session.reset();
+    this.#session = new ConversationSession(newId, {
+      agentClient: this.#agentClient,
+      deps: this.#deps,
+    });
   }
 
   undoLastUserTurn(): { text: string; imageCount: number } | null {

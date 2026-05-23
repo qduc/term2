@@ -73,12 +73,16 @@ export const useConversation = ({
   usageAccumulator,
   subagentUsageAccumulator,
   initialMessages = [],
+  sessionId,
+  onClear,
 }: {
   conversationService: ConversationService;
   loggingService: ILoggingService;
   usageAccumulator?: UsageAccumulator;
   subagentUsageAccumulator?: UsageAccumulator;
   initialMessages?: Message[];
+  sessionId?: string;
+  onClear?: () => void | Promise<void>;
 }) => {
   const [messages, setMessages] = useState<Message[]>(() =>
     appendMessagesCapped([], initialMessages, MAX_MESSAGE_COUNT),
@@ -429,8 +433,12 @@ export const useConversation = ({
     ],
   );
 
-  const clearConversation = useCallback(() => {
-    conversationService.reset();
+  const clearConversation = useCallback(async () => {
+    if (onClear) {
+      await onClear();
+    } else {
+      conversationService.resetWithNewId(conversationService.sessionId);
+    }
     setMessages([]);
     setWaitingForApproval(false);
     setWaitingForRejectionReason(false);
@@ -440,7 +448,7 @@ export const useConversation = ({
     setLastUsage(null);
     usageAccumulator?.reset();
     subagentUsageAccumulator?.reset();
-  }, [conversationService, usageAccumulator, subagentUsageAccumulator]);
+  }, [conversationService, usageAccumulator, subagentUsageAccumulator, onClear]);
 
   const stopProcessing = useCallback(() => {
     conversationService.abort();
@@ -608,6 +616,7 @@ export const useConversation = ({
 
   return {
     messages,
+    sessionId: sessionId ?? conversationService.sessionId,
     lastUsage,
     pendingApproval,
     waitingForApproval,

@@ -34,8 +34,10 @@ interface AppProps {
   onExitUsage?: () => void;
   sessionId: string;
   initialMessages?: Message[];
-  onSaveConversation: (messages: Message[]) => Promise<void>;
+  onSaveConversation: (messages: Message[], overrideSessionId?: string, overrideCreatedAt?: string) => Promise<void>;
   onMessagesChange: (messages: Message[]) => void;
+  generateId: () => string;
+  onSessionIdChange?: (newId: string, createdAt: string) => void;
 }
 
 export const appendStartupBannerId = (ids: string[]): string[] => [...ids, `startup-banner-${ids.length}`];
@@ -56,7 +58,7 @@ type ScheduleCallback = (callback: () => void, delay: number) => unknown;
 
 export const scheduleExitSideEffects = (
   messages: Message[],
-  onSaveConversation: (messages: Message[]) => Promise<void>,
+  onSaveConversation: (messages: Message[], overrideSessionId?: string, overrideCreatedAt?: string) => Promise<void>,
   onExitUsage?: () => void,
   schedule: ScheduleCallback = setTimeout,
 ): void => {
@@ -81,10 +83,12 @@ const App: FC<AppProps> = ({
   usageAccumulator,
   onPrintUsage,
   onExitUsage,
-  sessionId: _sessionId,
+  sessionId: initialSessionId,
   initialMessages = [],
   onSaveConversation,
   onMessagesChange,
+  generateId,
+  onSessionIdChange,
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -95,6 +99,9 @@ const App: FC<AppProps> = ({
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
   const subagentUsage = useMemo(() => createUsageAccumulator(), []);
+
+  const [sessionId, setSessionId] = useState(initialSessionId);
+  const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
 
   const {
     messages,
@@ -123,7 +130,30 @@ const App: FC<AppProps> = ({
     usageAccumulator: sessionUsage,
     subagentUsageAccumulator: subagentUsage,
     initialMessages,
+    sessionId,
+    onClear: useCallback(async () => {
+      if (handleClearConversationRef.current) {
+        await handleClearConversationRef.current();
+      }
+    }, []),
   });
+
+  const handleClearConversation = useCallback(async () => {
+    if (hasConversationContent(messages)) {
+      await onSaveConversation(messages, sessionId);
+    }
+    const newId = generateId();
+    const newCreatedAt = new Date().toISOString();
+    conversationService.resetWithNewId(newId);
+    setSessionId(newId);
+    if (onSessionIdChange) {
+      onSessionIdChange(newId, newCreatedAt);
+    }
+  }, [messages, sessionId, onSaveConversation, generateId, conversationService, onSessionIdChange]);
+
+  useEffect(() => {
+    handleClearConversationRef.current = handleClearConversation;
+  }, [handleClearConversation]);
 
   // Sync messages to parent for SIGINT save-on-exit
   useEffect(() => {

@@ -93,7 +93,8 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
 
   const filteredCommands = useMemo(() => filterCommands(commands, filter), [commands, filter]);
 
-  const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredCommands);
+  const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
+    useSelection(filteredCommands);
 
   const open = useCallback(() => {
     // Avoid resetting selection when already open to preserve
@@ -138,6 +139,10 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
     // updateFilter removed
     moveUp,
     moveDown,
+    moveHome,
+    moveEnd,
+    pageUp,
+    pageDown,
     getSelectedItem,
     executeSelected,
     completeSelected,

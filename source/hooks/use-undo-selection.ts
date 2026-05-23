@@ -16,6 +16,10 @@ type UndoSelectionResult = {
   close: () => void;
   moveUp: () => void;
   moveDown: () => void;
+  moveHome: () => void;
+  moveEnd: () => void;
+  pageUp: () => void;
+  pageDown: () => void;
   getSelectedItem: () => UndoItem | undefined;
   confirmSelection: (onSelect: (item: UndoItem) => void) => void;
 };
@@ -79,6 +83,22 @@ export const useUndoSelection = (): UndoSelectionResult => {
     selection.moveDown();
   }, [selection]);
 
+  const moveHome = useCallback(() => {
+    selection.moveHome();
+  }, [selection]);
+
+  const moveEnd = useCallback(() => {
+    selection.moveEnd();
+  }, [selection]);
+
+  const pageUp = useCallback(() => {
+    selection.pageUp();
+  }, [selection]);
+
+  const pageDown = useCallback(() => {
+    selection.pageDown();
+  }, [selection]);
+
   const getSelectedItem = useCallback((): UndoItem | undefined => {
     return selection.getSelectedItem();
   }, [selection]);
@@ -103,6 +123,10 @@ export const useUndoSelection = (): UndoSelectionResult => {
     close,
     moveUp,
     moveDown,
+    moveHome,
+    moveEnd,
+    pageUp,
+    pageDown,
     getSelectedItem,
     confirmSelection,
   };

@@ -194,7 +194,8 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     return filterSettingValueSuggestionsByQuery(allSuggestions, query, MAX_RESULTS, settingKey ?? undefined);
   }, [allSuggestions, query, settingKey]);
 
-  const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredEntries);
+  const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
+    useSelection(filteredEntries);
 
   const open = useCallback(
     (key: string, valueStartIndex: number) => {
@@ -254,6 +255,10 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
     resetCurrentSetting,
     moveUp,
     moveDown,
+    moveHome,
+    moveEnd,
+    pageUp,
+    pageDown,
     getSelectedItem,
     isNumericSettings,
   };

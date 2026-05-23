@@ -1,6 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import type { SlashCommand } from '../slash-commands.js';
+import { MenuContainer } from './Common/MenuContainer.js';
 
 type Props = {
   commands: SlashCommand[];
@@ -11,30 +12,22 @@ type Props = {
 const SlashCommandMenu: FC<Props> = ({ commands, selectedIndex, filter }) => {
   const filteredCommands = commands.filter((cmd) => cmd.name.toLowerCase().includes(filter.toLowerCase()));
 
-  if (filteredCommands.length === 0) {
-    return (
-      <Box flexDirection="column" marginLeft={2}>
-        <Text color="#64748b">No matching commands</Text>
-      </Box>
-    );
-  }
-
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="#22d3ee" paddingX={1}>
-      {filteredCommands.map((cmd, index) => (
+    <MenuContainer
+      items={filteredCommands}
+      selectedIndex={selectedIndex}
+      borderColor="#22d3ee"
+      fallbackText="No matching commands"
+      renderItem={(cmd, _index, isSelected) => (
         <Box key={cmd.name}>
-          <Text
-            color={index === selectedIndex ? '#22d3ee' : undefined}
-            bold={index === selectedIndex}
-            inverse={index === selectedIndex}
-          >
+          <Text color={isSelected ? '#22d3ee' : undefined} bold={isSelected} inverse={isSelected}>
             {' '}
             /{cmd.name}{' '}
           </Text>
           <Text color="#64748b"> - {cmd.description}</Text>
         </Box>
-      ))}
-    </Box>
+      )}
+    />
   );
 };
 

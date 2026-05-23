@@ -203,6 +203,26 @@ export const useModelSelection = (
     });
   }, [filteredModels.length]);
 
+  const moveHome = useCallback(() => {
+    shouldPreselectRef.current = false;
+    setSelectedIndex(0);
+  }, []);
+
+  const moveEnd = useCallback(() => {
+    shouldPreselectRef.current = false;
+    setSelectedIndex(Math.max(0, filteredModels.length - 1));
+  }, [filteredModels.length]);
+
+  const pageUp = useCallback(() => {
+    shouldPreselectRef.current = false;
+    setSelectedIndex((prev) => Math.max(0, prev - 10));
+  }, []);
+
+  const pageDown = useCallback(() => {
+    shouldPreselectRef.current = false;
+    setSelectedIndex((prev) => (filteredModels.length === 0 ? 0 : Math.min(filteredModels.length - 1, prev + 10)));
+  }, [filteredModels.length]);
+
   const getSelectedItem = useCallback(() => {
     if (filteredModels.length === 0) return undefined;
     const safeIndex = Math.min(selectedIndex, filteredModels.length - 1);
@@ -253,6 +273,10 @@ export const useModelSelection = (
     close,
     moveUp,
     moveDown,
+    moveHome,
+    moveEnd,
+    pageUp,
+    pageDown,
     getSelectedItem,
     toggleProvider,
     canSwitchProvider,

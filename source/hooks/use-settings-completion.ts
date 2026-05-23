@@ -221,7 +221,8 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     return filterSettingsByQuery(allSettings, query, allSettings.length);
   }, [allSettings, query]);
 
-  const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredEntries);
+  const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
+    useSelection(filteredEntries);
   const [scrollOffset, setScrollOffset] = useState(0);
 
   const [targetKey, setTargetKey] = useState<string | null>(null);
@@ -286,6 +287,10 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     // updateQuery,
     moveUp,
     moveDown,
+    moveHome,
+    moveEnd,
+    pageUp,
+    pageDown,
     getSelectedItem,
   };
 };

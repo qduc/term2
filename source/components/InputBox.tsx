@@ -229,6 +229,7 @@ const InputBox: FC<Props> = ({
         const restoredInput = SETTINGS_TRIGGER + filter;
         onChange(restoredInput);
         setCursorOverride(restoredInput.length);
+        settings.open(SETTINGS_TRIGGER.length, key);
         return true;
       }
 
@@ -281,6 +282,7 @@ const InputBox: FC<Props> = ({
         const restoredInput = SETTINGS_TRIGGER + settingsFilterRef.current;
         onChange(restoredInput);
         setCursorOverride(restoredInput.length);
+        settings.open(SETTINGS_TRIGGER.length, models.modelSettingConfig.modelKey);
         return true;
       }
 
@@ -406,6 +408,22 @@ const InputBox: FC<Props> = ({
     }
     if (key.downArrow) {
       currentHandlers[currentMode].moveDown();
+      return;
+    }
+    if (key.pageUp) {
+      currentHandlers[currentMode].pageUp?.();
+      return;
+    }
+    if (key.pageDown) {
+      currentHandlers[currentMode].pageDown?.();
+      return;
+    }
+    if ((key as any).home) {
+      currentHandlers[currentMode].moveHome?.();
+      return;
+    }
+    if ((key as any).end) {
+      currentHandlers[currentMode].moveEnd?.();
       return;
     }
     if (key.tab && !key.shift) {

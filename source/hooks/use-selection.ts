@@ -23,11 +23,37 @@ export function useSelection<T>(items: T[]) {
     });
   }, [items.length]);
 
+  const moveHome = useCallback(() => {
+    setSelectedIndex(0);
+  }, []);
+
+  const moveEnd = useCallback(() => {
+    setSelectedIndex(Math.max(0, items.length - 1));
+  }, [items.length]);
+
+  const pageUp = useCallback(() => {
+    setSelectedIndex((prev) => Math.max(0, prev - 10));
+  }, []);
+
+  const pageDown = useCallback(() => {
+    setSelectedIndex((prev) => (items.length === 0 ? 0 : Math.min(items.length - 1, prev + 10)));
+  }, [items.length]);
+
   const getSelectedItem = useCallback((): T | undefined => {
     if (items.length === 0) return undefined;
     const safeIndex = clampIndex(selectedIndex, items.length);
     return items[safeIndex];
   }, [items, selectedIndex]);
 
-  return { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem };
+  return {
+    selectedIndex,
+    setSelectedIndex,
+    moveUp,
+    moveDown,
+    moveHome,
+    moveEnd,
+    pageUp,
+    pageDown,
+    getSelectedItem,
+  };
 }

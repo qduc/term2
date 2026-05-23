@@ -298,3 +298,66 @@ test('command-backed model selection still submits after selection', async (t) =
 
   t.true(submitted, 'onSubmit should be called for command-backed model selection');
 });
+
+test('settings value completion saves setting and reopens settings menu targeting the saved key', async (t) => {
+  const settingsService = createMockSettingsService({
+    'shell.timeout': 120000,
+  });
+
+  const { stdin, lastFrame } = render(
+    <InputProvider>
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        slashCommands={[
+          ...mockSlashCommands,
+          {
+            name: '/settings',
+            description: 'Change setting',
+            action: () => {},
+            completion: { type: 'settings', trigger: '/settings ', resetTrigger: '/settings reset ' },
+          },
+        ]}
+      />
+      <StateDisplay />
+    </InputProvider>,
+  );
+
+  // Set input to trigger value completion
+  stdin.write('/settings shell.timeout ');
+
+  // Wait until the mode switches to settings_value_completion
+  for (let i = 0; i < 20; i++) {
+    const frame = lastFrame() ?? '';
+    if (frame.includes('Mode:settings_value_completion')) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  // Press Enter to save the value (60000)
+  stdin.write('6');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  stdin.write('0');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  stdin.write('0');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  stdin.write('0');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  stdin.write('0');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  stdin.write('\r');
+
+  // Wait until the mode switches back to settings_completion
+  for (let i = 0; i < 20; i++) {
+    const frame = lastFrame() ?? '';
+    if (frame.includes('Mode:settings_completion')) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  // The setting should be updated to 60000
+  t.is(settingsService.get('shell.timeout'), 60000);
+
+  // The menu should be restored targeting 'shell.timeout'
+  const frame = lastFrame() ?? '';
+  t.true(frame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
+  t.true(frame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
+});

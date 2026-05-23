@@ -4,6 +4,7 @@ import { Box, Text } from 'ink';
 import type { SettingCompletionItem } from '../hooks/use-settings-completion.js';
 import { SETTING_KEYS } from '../services/settings-service.js';
 import { getRtkBinaryPath } from '../services/rtk-service.js';
+import { MenuContainer } from './Common/MenuContainer.js';
 
 type Props = {
   items: SettingCompletionItem[];
@@ -69,75 +70,50 @@ const VISIBLE_COUNT = 10;
 const KEY_COL_WIDTH = 32;
 
 const SettingsSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query }) => {
-  if (items.length === 0) {
-    return (
-      <Box flexDirection="column" borderStyle="round" borderColor="red" paddingX={1}>
-        <Text bold color="red">
-          No settings found
-        </Text>
-        <Text color="gray">No settings match "{query}"</Text>
-      </Box>
-    );
-  }
-
-  const viewportStart = Math.max(0, Math.min(scrollOffset, Math.max(0, items.length - VISIBLE_COUNT)));
-  const visibleItems = items.slice(viewportStart, viewportStart + VISIBLE_COUNT);
-  const hasScrollUp = viewportStart > 0;
-  const hasScrollDown = viewportStart + VISIBLE_COUNT < items.length;
-
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
-      <Box
-        marginBottom={1}
-        borderStyle="single"
-        borderBottom={false}
-        borderLeft={false}
-        borderRight={false}
-        borderTop={false}
-      >
-        <Text bold color="cyan">
-          ⚙ Settings
-        </Text>
-        <Text color="gray"> · </Text>
-        {query ? (
-          <Text>
-            Searching: "
-            <Text color="white" bold>
-              {query}
-            </Text>
-            "
+    <MenuContainer
+      items={items}
+      selectedIndex={selectedIndex}
+      scrollOffset={scrollOffset}
+      maxHeight={VISIBLE_COUNT}
+      borderColor={items.length === 0 ? 'red' : 'cyan'}
+      title={
+        <Box>
+          <Text bold color="cyan">
+            ⚙ Settings
           </Text>
-        ) : (
-          <Text color="gray">Type to filter</Text>
-        )}
-        <Text color="gray"> · {items.length} items</Text>
-        {items.length > VISIBLE_COUNT && (
-          <>
-            <Text color="gray"> · </Text>
-            <Text color="gray">
-              {viewportStart + 1}-{Math.min(viewportStart + VISIBLE_COUNT, items.length)}/{items.length}
+          <Text color="gray"> · </Text>
+          {query ? (
+            <Text>
+              Searching: "
+              <Text color="white" bold>
+                {query}
+              </Text>
+              "
             </Text>
-          </>
-        )}
-      </Box>
-
-      {hasScrollUp && <Text color="#64748b">↑ {viewportStart} more</Text>}
-
-      {visibleItems.map((item, index) => {
-        const realIndex = viewportStart + index;
-        const isSelected = realIndex === selectedIndex;
+          ) : (
+            <Text color="gray">Type to filter</Text>
+          )}
+        </Box>
+      }
+      fallbackText={
+        <Box flexDirection="column">
+          <Text bold color="red">
+            No settings found
+          </Text>
+          <Text color="gray">No settings match "{query}"</Text>
+        </Box>
+      }
+      footer={
+        <Text color="gray" dimColor>
+          Use <Text bold>↑↓</Text> to navigate, <Text bold>Enter</Text> to edit, <Text bold>Esc</Text> to close
+        </Text>
+      }
+      footerOutsideBorder={false}
+      renderItem={(item, actualIndex, isSelected) => {
         const category = getCategoryForKey(item.key);
-
-        // Show header if it's the first item OR if category changes,
-        // BUT for the very first item in viewport we usually want a header unless it's a continuation
-        // and we want to save space?
-        // Let's always show header if it matches the logic, but force it for index 0 of viewport
-        // if it's different from the one before viewport (which is handled by category !== prevCategory logic naturally)
-        // Wait, if viewport starts at 5, and 4 was 'common', and 5 is 'common', we don't show header?
-        // Users might get lost. Let's show header if index==0 in viewport.
-
-        const prevCategory = realIndex > 0 ? getCategoryForKey(items[realIndex - 1]!.key) : null;
-        const showHeader = index === 0 || category !== prevCategory;
+        const prevCategory = actualIndex > 0 ? getCategoryForKey(items[actualIndex - 1]!.key) : null;
+        const showHeader = actualIndex === scrollOffset || category !== prevCategory;
 
         const valueObj = item.currentValue !== undefined ? formatValue(item.currentValue, item.key) : null;
         const paddedKey =
@@ -148,7 +124,7 @@ const SettingsSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset =
         return (
           <Box key={item.key} flexDirection="column">
             {showHeader && (
-              <Box marginTop={index === 0 ? 0 : 1} marginBottom={0}>
+              <Box marginTop={actualIndex === scrollOffset ? 0 : 1} marginBottom={0}>
                 <Text color="#22d3ee" bold underline>
                   {titleCaseCategory(category)}
                 </Text>
@@ -174,24 +150,8 @@ const SettingsSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset =
             </Box>
           </Box>
         );
-      })}
-
-      {hasScrollDown && <Text color="#64748b">↓ {items.length - viewportStart - VISIBLE_COUNT} more</Text>}
-
-      <Box
-        marginTop={1}
-        borderStyle="single"
-        borderTop={true}
-        borderBottom={false}
-        borderLeft={false}
-        borderRight={false}
-        borderColor="gray"
-      >
-        <Text color="gray" dimColor>
-          Use <Text bold>↑↓</Text> to navigate, <Text bold>Enter</Text> to edit, <Text bold>Esc</Text> to close
-        </Text>
-      </Box>
-    </Box>
+      }}
+    />
   );
 };
 

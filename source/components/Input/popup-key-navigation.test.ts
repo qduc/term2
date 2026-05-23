@@ -53,7 +53,7 @@ test('left/right do not override mode-specific handlers', (t) => {
   );
 });
 
-test('home/end and ctrl+a/ctrl+e move cursor in popup mode', (t) => {
+test('home/end keys return null (fall through) in popup mode', (t) => {
   t.is(
     getPopupNavigationCursor({
       input: '',
@@ -63,7 +63,7 @@ test('home/end and ctrl+a/ctrl+e move cursor in popup mode', (t) => {
       hasModeLeftHandler: false,
       hasModeRightHandler: false,
     }),
-    0,
+    null,
   );
 
   t.is(
@@ -75,9 +75,11 @@ test('home/end and ctrl+a/ctrl+e move cursor in popup mode', (t) => {
       hasModeLeftHandler: false,
       hasModeRightHandler: false,
     }),
-    10,
+    null,
   );
+});
 
+test('ctrl+a/ctrl+e move cursor in popup mode', (t) => {
   t.is(
     getPopupNavigationCursor({
       input: 'a',

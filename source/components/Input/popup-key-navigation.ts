@@ -23,11 +23,11 @@ export function getPopupNavigationCursor({
   hasModeLeftHandler,
   hasModeRightHandler,
 }: Args): number | null {
-  if (key.home || (key.ctrl && input === 'a')) {
+  if (key.ctrl && input === 'a') {
     return 0;
   }
 
-  if (key.end || (key.ctrl && input === 'e')) {
+  if (key.ctrl && input === 'e') {
     return valueLength;
   }
 

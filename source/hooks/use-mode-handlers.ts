@@ -7,6 +7,10 @@ export type SubmitResult = 'handled' | 'fallthrough';
 export type ModeHandler = {
   moveUp: () => void;
   moveDown: () => void;
+  pageUp?: () => void;
+  pageDown?: () => void;
+  moveHome?: () => void;
+  moveEnd?: () => void;
   moveLeft?: () => void;
   moveRight?: () => void;
   onTab?: () => void;
@@ -14,7 +18,14 @@ export type ModeHandler = {
   onReset?: () => void;
 };
 
-type Movable = { moveUp: () => void; moveDown: () => void };
+type Movable = {
+  moveUp: () => void;
+  moveDown: () => void;
+  moveHome: () => void;
+  moveEnd: () => void;
+  pageUp: () => void;
+  pageDown: () => void;
+};
 type Slash = Movable & { executeSelected: () => void; completeSelected: () => void };
 type Models = Movable & { canSwitchProvider: boolean; toggleProvider: (direction?: 'next' | 'prev') => void };
 type Undo = Movable & {
@@ -63,6 +74,10 @@ export const useModeHandlers = ({
       slash_commands: {
         moveUp: slash.moveUp,
         moveDown: slash.moveDown,
+        pageUp: slash.pageUp,
+        pageDown: slash.pageDown,
+        moveHome: slash.moveHome,
+        moveEnd: slash.moveEnd,
         onTab: () => {
           slash.completeSelected();
           onSlashCommandRemount();
@@ -77,6 +92,10 @@ export const useModeHandlers = ({
       path_completion: {
         moveUp: path.moveUp,
         moveDown: path.moveDown,
+        pageUp: path.pageUp,
+        pageDown: path.pageDown,
+        moveHome: path.moveHome,
+        moveEnd: path.moveEnd,
         onTab: () => {
           insertSelectedPath(false);
         },
@@ -85,6 +104,10 @@ export const useModeHandlers = ({
       settings_completion: {
         moveUp: settings.moveUp,
         moveDown: settings.moveDown,
+        pageUp: settings.pageUp,
+        pageDown: settings.pageDown,
+        moveHome: settings.moveHome,
+        moveEnd: settings.moveEnd,
         onTab: () => {
           insertSelectedSetting();
         },
@@ -101,6 +124,10 @@ export const useModeHandlers = ({
       settings_value_completion: {
         moveUp: settingsValue.moveUp,
         moveDown: settingsValue.moveDown,
+        pageUp: settingsValue.pageUp,
+        pageDown: settingsValue.pageDown,
+        moveHome: settingsValue.moveHome,
+        moveEnd: settingsValue.moveEnd,
         onTab: () => {
           insertSelectedSettingValue(false);
         },
@@ -115,6 +142,10 @@ export const useModeHandlers = ({
       model_selection: {
         moveUp: models.moveUp,
         moveDown: models.moveDown,
+        pageUp: models.pageUp,
+        pageDown: models.pageDown,
+        moveHome: models.moveHome,
+        moveEnd: models.moveEnd,
         moveLeft: () => {
           if (models.canSwitchProvider) models.toggleProvider('prev');
         },
@@ -129,6 +160,10 @@ export const useModeHandlers = ({
       undo_selection: {
         moveUp: undo.moveUp,
         moveDown: undo.moveDown,
+        pageUp: undo.pageUp,
+        pageDown: undo.pageDown,
+        moveHome: undo.moveHome,
+        moveEnd: undo.moveEnd,
         onSubmit: () => {
           if (onUndoSelect) {
             undo.confirmSelection(onUndoSelect);

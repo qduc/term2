@@ -63,7 +63,8 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
     return filterPathEntries(entries, query, MAX_RESULTS);
   }, [entries, query]);
 
-  const { selectedIndex, setSelectedIndex, moveUp, moveDown, getSelectedItem } = useSelection(filteredEntries);
+  const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
+    useSelection(filteredEntries);
 
   const [scrollOffset, setScrollOffset] = useState(0);
 
@@ -134,6 +135,10 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
     close,
     moveUp,
     moveDown,
+    moveHome,
+    moveEnd,
+    pageUp,
+    pageDown,
     getSelectedItem,
     refresh,
   };

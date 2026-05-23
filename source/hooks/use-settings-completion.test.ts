@@ -341,6 +341,24 @@ test('filterSettingsByQuery - handles empty settings array', (t) => {
   t.is(result.length, 0);
 });
 
+test('filterSettingsByQuery - description matching requires substring match, not loose subsequence', (t) => {
+  const settings = [
+    {
+      key: 'app.searchViaShell',
+      description: 'Use shell commands (ripgrep/find) for codebase search instead of built-in tools (true|false)',
+    },
+  ];
+
+  // "model" is a subsequence in the description but not a substring
+  const result = filterSettingsByQuery(settings, 'model', 10);
+  t.is(result.length, 0);
+
+  // "shell" is a substring in the description
+  const result2 = filterSettingsByQuery(settings, 'shell', 10);
+  t.is(result2.length, 1);
+  t.is(result2[0].key, 'app.searchViaShell');
+});
+
 // clampIndex tests
 test('clampIndex - returns 0 when array is empty', (t) => {
   t.is(clampIndex(0, 0), 0);

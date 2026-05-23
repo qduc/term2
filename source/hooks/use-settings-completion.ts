@@ -162,7 +162,11 @@ export function filterSettingsByQuery(
   return settings
     .map((item) => {
       const keyScore = scoreSubsequence(trimmed, item.key);
-      const descriptionScore = item.description ? scoreSubsequence(trimmed, item.description) : -Infinity;
+      const hasDescriptionSubstring = item.description
+        ? item.description.toLowerCase().includes(trimmed.toLowerCase())
+        : false;
+      const descriptionScore =
+        item.description && hasDescriptionSubstring ? scoreSubsequence(trimmed, item.description) : -Infinity;
 
       const weightedKey = keyScore === -Infinity ? -Infinity : keyScore * 3;
       const weightedDescription = descriptionScore === -Infinity ? -Infinity : descriptionScore;

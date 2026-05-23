@@ -24,6 +24,7 @@ import { getSubagentDelegationAddendum } from './prompts/subagent-delegation.js'
 import { getReasoningEfficiencyAddendum } from './prompts/reasoning-efficiency.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
+const WORKTREE_HYGIENE_PROMPT_PATH = path.join(BASE_PROMPT_PATH, 'worktree-hygiene.md');
 
 function getTopLevelEntries(cwd: string, limit = 50): string {
   try {
@@ -137,6 +138,14 @@ export const getAgentDefinition = (
     orchestratorMode,
   });
   let prompt = resolvePrompt(promptPath);
+
+  if (!liteMode) {
+    try {
+      prompt = `${prompt}\n\n${resolvePrompt(WORKTREE_HYGIENE_PROMPT_PATH)}`;
+    } catch (e) {
+      loggingService.error(`Failed to load worktree-hygiene prompt fragment: ${e}`);
+    }
+  }
 
   if (mentorMode && !liteMode) {
     const addonPath = path.join(BASE_PROMPT_PATH, 'mentor-addon.md');

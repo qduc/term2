@@ -12,6 +12,8 @@ const mockLogger = {
   getCorrelationId: () => undefined,
 } as any;
 
+const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspect the repo worktree first.';
+
 test('getAgentDefinition includes grep and find_files when searchViaShell is false', (t) => {
   const settingsService = createMockSettingsService({
     'app.searchViaShell': false,
@@ -424,4 +426,54 @@ test('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mo
   });
   t.true(definitionPlan.instructions.includes('AGENTS.md contents:'));
   t.true(definitionPlan.instructions.includes('top-level:'));
+});
+
+test('getAgentDefinition includes worktree hygiene fragment in standard, mentor, plan, and orchestrator modes', (t) => {
+  const standard = getAgentDefinition({
+    settingsService: createMockSettingsService({
+      'agent.model': 'gpt-4o',
+    }),
+    loggingService: mockLogger,
+  });
+  t.true(standard.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
+
+  const mentor = getAgentDefinition({
+    settingsService: createMockSettingsService({
+      'agent.model': 'gpt-4o',
+      'app.mentorMode': true,
+    }),
+    loggingService: mockLogger,
+  });
+  t.true(mentor.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
+
+  const plan = getAgentDefinition({
+    settingsService: createMockSettingsService({
+      'agent.model': 'gpt-4o',
+      'app.planMode': true,
+    }),
+    loggingService: mockLogger,
+  });
+  t.true(plan.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
+
+  const orchestrator = getAgentDefinition({
+    settingsService: createMockSettingsService({
+      'agent.model': 'gpt-4o',
+      'app.orchestratorMode': true,
+    }),
+    loggingService: mockLogger,
+    runSubagent: async () => ({} as any),
+  });
+  t.true(orchestrator.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
+});
+
+test('getAgentDefinition omits worktree hygiene fragment in lite mode', (t) => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({
+      'agent.model': 'gpt-4o',
+      'app.liteMode': true,
+    }),
+    loggingService: mockLogger,
+  });
+
+  t.false(definition.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
 });

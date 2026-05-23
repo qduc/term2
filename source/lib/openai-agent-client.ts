@@ -1,4 +1,13 @@
-import { Agent, run, tool as createTool, applyPatchTool, type Tool, type AgentInputItem, Runner } from '@openai/agents';
+import {
+  Agent,
+  run,
+  tool as createTool,
+  applyPatchTool,
+  type Tool,
+  type AgentInputItem,
+  Runner,
+  type JsonSchemaDefinition,
+} from '@openai/agents';
 import { getProvider } from '../providers/index.js';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
@@ -459,7 +468,7 @@ export class OpenAIAgentClient {
   #runAgentWithProvider(
     providerId: string,
     runner: Runner | null,
-    agent: Agent,
+    agent: Agent<any, any>,
     input: any,
     options: any,
   ): Promise<any> {
@@ -572,6 +581,62 @@ export class OpenAIAgentClient {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error; // Propagate error
+    }
+  }
+
+  async chatJson(
+    message: string,
+    options: {
+      model?: string;
+      provider?: string;
+      reasoningEffort?: ModelSettingsReasoningEffort | 'default';
+      instructions?: string;
+      outputType: JsonSchemaDefinition;
+    },
+  ): Promise<unknown> {
+    const tempProvider = options.provider || this.#provider;
+    this.#logger.debug('Agent structured chat request', {
+      messageLength: message.length,
+      model: options.model || this.#model,
+      provider: tempProvider,
+    });
+
+    try {
+      const tempModel = options.model || this.#model;
+      const tempEffort = options.reasoningEffort || this.#reasoningEffort;
+      const modelSettings: any = {};
+
+      if (tempEffort && tempEffort !== 'default') {
+        modelSettings.reasoning = {
+          effort: tempEffort,
+          summary: 'auto',
+        };
+      }
+
+      const agentForChat = new Agent({
+        name: 'Chat',
+        model: tempModel,
+        ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
+        instructions: options.instructions || 'You are a helpful assistant.',
+        outputType: options.outputType,
+      });
+
+      let runnerForChat = this.#runner;
+      if (tempProvider !== this.#provider) {
+        runnerForChat = this.#createRunner(tempProvider);
+      }
+
+      const result = await this.#runAgentWithProvider(tempProvider, runnerForChat, agentForChat, message, {
+        stream: false,
+        maxTurns: 1,
+      });
+
+      return result.finalOutput ?? this.#extractResponse(result);
+    } catch (error) {
+      this.#logger.error('Agent structured chat failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
   }
 

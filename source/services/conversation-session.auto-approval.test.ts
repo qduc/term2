@@ -202,7 +202,8 @@ const malformedResponseMacro: Macro<
       approved: false,
       source: 'llm',
     });
-    t.is(chatCalls.length, 1);
+    t.is(chatCalls.length, 2);
+    t.true(chatCalls[1].prompt.includes('The previous shell auto-approval response was invalid.'));
   },
   title: (providedTitle = 'malformed LLM advisory response', { llmResponse }) =>
     `${providedTitle}: ${llmResponse.slice(0, 40)}`,

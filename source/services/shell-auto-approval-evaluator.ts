@@ -1,4 +1,4 @@
-import type { AgentInputItem } from '@openai/agents';
+import type { AgentInputItem, JsonSchemaDefinition } from '@openai/agents';
 import type { LLMAdvisory } from '../contracts/conversation.js';
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import { classifyCommandDetailed, SafetyStatus } from '../utils/command-safety/index.js';
@@ -20,6 +20,36 @@ export { SHELL_AUTO_APPROVAL_PROMPT_VERSION };
 const MAX_HISTORY_ITEMS = 8;
 const MAX_CONTEXT_CHARS = 3_000;
 const MAX_MESSAGE_CHARS = 500;
+const STRUCTURED_SUPPORT_CACHE_TTL_MS = 60 * 60 * 1_000;
+
+type StructuredSupport = 'supported' | 'unsupported';
+
+const structuredSupportCache = new Map<string, { value: StructuredSupport; expiresAt: number }>();
+
+const SHELL_AUTO_APPROVAL_OUTPUT_SCHEMA: JsonSchemaDefinition = {
+  type: 'json_schema',
+  name: 'shell_auto_approval_evaluation',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      results: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            reasoning: { type: 'string' },
+            approved: { type: 'boolean' },
+          },
+          required: ['reasoning', 'approved'],
+        },
+      },
+    },
+    required: ['results'],
+  },
+};
 
 const truncate = (text: string, maxChars: number): string => {
   if (text.length <= maxChars) return text;
@@ -86,6 +116,167 @@ Commands to evaluate:
 ${commandsToEvaluateText}`;
 };
 
+const buildRepairPrompt = (originalPrompt: string, invalidResponse: unknown, validationError: string): string => {
+  const responseText = typeof invalidResponse === 'string' ? invalidResponse : JSON.stringify(invalidResponse);
+  return `${originalPrompt}
+
+The previous shell auto-approval response was invalid.
+Validation error: ${validationError}
+Invalid response: ${truncate(responseText ?? '', 2_000)}
+
+Return the corrected JSON response only.`;
+};
+
+const getCacheKey = (provider: string, model: string): string => `${provider}:${model}`;
+
+const getStructuredSupport = (provider: string, model: string): StructuredSupport | 'unknown' => {
+  const cacheKey = getCacheKey(provider, model);
+  const cached = structuredSupportCache.get(cacheKey);
+  if (!cached) return 'unknown';
+  if (cached.expiresAt <= Date.now()) {
+    structuredSupportCache.delete(cacheKey);
+    return 'unknown';
+  }
+  return cached.value;
+};
+
+const setStructuredSupport = (provider: string, model: string, value: StructuredSupport): void => {
+  structuredSupportCache.set(getCacheKey(provider, model), {
+    value,
+    expiresAt: Date.now() + STRUCTURED_SUPPORT_CACHE_TTL_MS,
+  });
+};
+
+const isUnsupportedStructuredOutputError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  const mentionsStructuredOutput =
+    lower.includes('structured output') ||
+    lower.includes('structured outputs') ||
+    lower.includes('response_format') ||
+    lower.includes('json_schema') ||
+    lower.includes('json schema');
+  const indicatesUnsupported =
+    lower.includes('unsupported') ||
+    lower.includes('not supported') ||
+    lower.includes('does not support') ||
+    lower.includes('invalid parameter') ||
+    lower.includes('unsupported parameter');
+  return mentionsStructuredOutput && indicatesUnsupported;
+};
+
+type EvaluationResult = {
+  reasoning: string;
+  approved: boolean;
+};
+
+const parsePromptJson = (response: string): unknown => {
+  const jsonMatch = response.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('response did not contain a JSON object');
+  }
+  return JSON.parse(jsonMatch[0]);
+};
+
+const validateEvaluationBatch = (value: unknown, expectedLength: number): EvaluationResult[] => {
+  const record = asRecord(value);
+  if (!record || !Array.isArray(record.results)) {
+    throw new Error('top-level results must be an array');
+  }
+  if (record.results.length !== expectedLength) {
+    throw new Error(`results length ${record.results.length} did not match command count ${expectedLength}`);
+  }
+
+  return record.results.map((result: unknown, index: number) => {
+    const resultRecord = asRecord(result);
+    if (!resultRecord) {
+      throw new Error(`result ${index + 1} must be an object`);
+    }
+    if (typeof resultRecord.reasoning !== 'string') {
+      throw new Error(`result ${index + 1} reasoning must be a string`);
+    }
+    if (typeof resultRecord.approved !== 'boolean') {
+      throw new Error(`result ${index + 1} approved must be a boolean`);
+    }
+    return {
+      reasoning: resultRecord.reasoning,
+      approved: resultRecord.approved,
+    };
+  });
+};
+
+const buildAdvisoriesFromResults = ({
+  commands,
+  results,
+  redSafetyDetails,
+  model,
+}: {
+  commands: ShellAutoApprovalCommand[];
+  results: EvaluationResult[];
+  redSafetyDetails: Map<string, string>;
+  model: string;
+}): Map<string, ShellAutoApprovalAdvisory> => {
+  const out = new Map<string, ShellAutoApprovalAdvisory>();
+  for (const [index, result] of results.entries()) {
+    const command = commands[index];
+    const redDetail = redSafetyDetails.get(command.id);
+    if (redDetail) {
+      out.set(command.id, {
+        model,
+        reasoning: buildRedSystemReasoning(redDetail, result.reasoning),
+        approved: false,
+        source: 'system',
+      });
+      continue;
+    }
+
+    out.set(command.id, {
+      model,
+      reasoning: result.reasoning,
+      approved: result.approved,
+      source: 'llm',
+    });
+  }
+  return out;
+};
+
+const buildInvalidEvaluationAdvisories = ({
+  commands,
+  redSafetyDetails,
+  model,
+  reasoning,
+  isError,
+}: {
+  commands: ShellAutoApprovalCommand[];
+  redSafetyDetails: Map<string, string>;
+  model: string;
+  reasoning: string;
+  isError?: boolean;
+}): Map<string, ShellAutoApprovalAdvisory> => {
+  const out = new Map<string, ShellAutoApprovalAdvisory>();
+  for (const { id } of commands) {
+    const redDetail = redSafetyDetails.get(id);
+    if (redDetail) {
+      out.set(id, {
+        model,
+        reasoning: buildRedSystemReasoning(redDetail),
+        approved: false,
+        source: 'system',
+      });
+      continue;
+    }
+
+    out.set(id, {
+      model,
+      reasoning,
+      approved: false,
+      source: 'llm',
+      ...(isError ? { isError: true } : {}),
+    });
+  }
+  return out;
+};
+
 export async function evaluateShellAutoApprovalAdvisories({
   commands,
   history,
@@ -97,7 +288,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   commands: ShellAutoApprovalCommand[];
   history: AgentInputItem[];
   settingsService?: ISettingsService;
-  agentClient: Pick<OpenAIAgentClient, 'chat'>;
+  agentClient: Pick<OpenAIAgentClient, 'chat'> & Partial<Pick<OpenAIAgentClient, 'chatJson'>>;
   logger: ILoggingService;
   throwOnError?: boolean;
 }): Promise<Map<string, ShellAutoApprovalAdvisory>> {
@@ -134,81 +325,166 @@ export async function evaluateShellAutoApprovalAdvisories({
     const currentContext = logger.getTrafficContext?.() ?? null;
     const evaluatorContext = currentContext ? { ...currentContext, evaluator: true as const } : null;
 
-    const runChat = () =>
-      agentClient.chat(prompt, {
+    const runPromptChat = (message: string) =>
+      agentClient.chat(message, {
         model: autoApproveModel,
         provider: autoApproveProvider,
         reasoningEffort: 'none',
         instructions,
       });
 
-    const responseText = evaluatorContext
-      ? await logger.runWithTrafficContext!(evaluatorContext, runChat)
-      : await runChat();
+    const runStructuredChat = (message: string) => {
+      if (!agentClient.chatJson) {
+        throw new Error('structured chatJson is not available');
+      }
+      return agentClient.chatJson(message, {
+        model: autoApproveModel,
+        provider: autoApproveProvider,
+        reasoningEffort: 'none',
+        instructions,
+        outputType: SHELL_AUTO_APPROVAL_OUTPUT_SCHEMA,
+      });
+    };
 
-    logger.debug('Shell auto-approval evaluation response', {
-      eventType: 'evaluator.response.received',
-      direction: 'received',
-      provider: autoApproveProvider,
-      model: autoApproveModel,
-      payload: { response: responseText },
-    });
+    const runWithContext = async <T>(fn: () => Promise<T>): Promise<T> =>
+      evaluatorContext ? await logger.runWithTrafficContext!(evaluatorContext, fn) : await fn();
 
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (Array.isArray(parsed.results) && parsed.results.length === toEvaluateByLLM.length) {
-        for (const [index, res] of parsed.results.entries()) {
-          const command = toEvaluateByLLM[index];
-          if (
-            command &&
-            typeof res.reasoning === 'string' &&
-            typeof res.approved === 'boolean' &&
-            !out.has(command.id)
-          ) {
-            const redDetail = redSafetyDetails.get(command.id);
-            if (redDetail) {
-              out.set(command.id, {
-                model: autoApproveModel,
-                reasoning: buildRedSystemReasoning(redDetail, res.reasoning),
-                approved: false,
-                source: 'system',
-              });
-              continue;
-            }
+    const tryPromptMode = async (): Promise<Map<string, ShellAutoApprovalAdvisory>> => {
+      let responseText = await runWithContext(() => runPromptChat(prompt));
+      logger.debug('Shell auto-approval evaluation response', {
+        eventType: 'evaluator.response.received',
+        direction: 'received',
+        provider: autoApproveProvider,
+        model: autoApproveModel,
+        payload: { response: responseText, structured: false },
+      });
 
-            out.set(command.id, {
-              model: autoApproveModel,
-              reasoning: res.reasoning,
-              approved: res.approved,
-              source: 'llm',
-            });
-          }
+      try {
+        const parsed = parsePromptJson(responseText);
+        const results = validateEvaluationBatch(parsed, toEvaluateByLLM.length);
+        return buildAdvisoriesFromResults({
+          commands: toEvaluateByLLM,
+          results,
+          redSafetyDetails,
+          model: autoApproveModel,
+        });
+      } catch (validationError) {
+        const repairPrompt = buildRepairPrompt(
+          prompt,
+          responseText,
+          validationError instanceof Error ? validationError.message : String(validationError),
+        );
+        responseText = await runWithContext(() =>
+          agentClient.chat(repairPrompt, {
+            model: autoApproveModel,
+            provider: autoApproveProvider,
+            reasoningEffort: 'none',
+            instructions,
+          }),
+        );
+        logger.debug('Shell auto-approval repair response', {
+          eventType: 'evaluator.response.received',
+          direction: 'received',
+          provider: autoApproveProvider,
+          model: autoApproveModel,
+          payload: { response: responseText, structured: false, repair: true },
+        });
+
+        try {
+          const repaired = parsePromptJson(responseText);
+          const results = validateEvaluationBatch(repaired, toEvaluateByLLM.length);
+          return buildAdvisoriesFromResults({
+            commands: toEvaluateByLLM,
+            results,
+            redSafetyDetails,
+            model: autoApproveModel,
+          });
+        } catch {
+          return buildInvalidEvaluationAdvisories({
+            commands: toEvaluateByLLM,
+            redSafetyDetails,
+            model: autoApproveModel,
+            reasoning: 'LLM did not provide a valid ordered evaluation for this command.',
+          });
         }
       }
-    }
+    };
 
-    for (const { id } of toEvaluateByLLM) {
-      if (!out.has(id)) {
-        const redDetail = redSafetyDetails.get(id);
-        if (redDetail) {
-          out.set(id, {
-            model: autoApproveModel,
-            reasoning: buildRedSystemReasoning(redDetail),
-            approved: false,
-            source: 'system',
-          });
-          continue;
-        }
+    const tryStructuredMode = async (): Promise<Map<string, ShellAutoApprovalAdvisory>> => {
+      let response: unknown = await runWithContext(() => runStructuredChat(prompt));
+      setStructuredSupport(autoApproveProvider, autoApproveModel, 'supported');
+      logger.debug('Shell auto-approval evaluation response', {
+        eventType: 'evaluator.response.received',
+        direction: 'received',
+        provider: autoApproveProvider,
+        model: autoApproveModel,
+        payload: { response, structured: true },
+      });
 
-        out.set(id, {
+      try {
+        const parsed = typeof response === 'string' ? parsePromptJson(response) : response;
+        const results = validateEvaluationBatch(parsed, toEvaluateByLLM.length);
+        return buildAdvisoriesFromResults({
+          commands: toEvaluateByLLM,
+          results,
+          redSafetyDetails,
           model: autoApproveModel,
-          reasoning: 'LLM did not provide a valid ordered evaluation for this command.',
-          approved: false,
-          source: 'llm',
+        });
+      } catch (validationError) {
+        const repairPrompt = buildRepairPrompt(
+          prompt,
+          response,
+          validationError instanceof Error ? validationError.message : String(validationError),
+        );
+        response = await runWithContext(() => runStructuredChat(repairPrompt));
+        logger.debug('Shell auto-approval repair response', {
+          eventType: 'evaluator.response.received',
+          direction: 'received',
+          provider: autoApproveProvider,
+          model: autoApproveModel,
+          payload: { response, structured: true, repair: true },
+        });
+
+        try {
+          const repaired = typeof response === 'string' ? parsePromptJson(response) : response;
+          const results = validateEvaluationBatch(repaired, toEvaluateByLLM.length);
+          return buildAdvisoriesFromResults({
+            commands: toEvaluateByLLM,
+            results,
+            redSafetyDetails,
+            model: autoApproveModel,
+          });
+        } catch {
+          return buildInvalidEvaluationAdvisories({
+            commands: toEvaluateByLLM,
+            redSafetyDetails,
+            model: autoApproveModel,
+            reasoning: 'LLM did not provide a valid ordered evaluation for this command.',
+          });
+        }
+      }
+    };
+
+    const shouldTryStructured =
+      !!agentClient.chatJson && getStructuredSupport(autoApproveProvider, autoApproveModel) !== 'unsupported';
+
+    if (shouldTryStructured) {
+      try {
+        return await tryStructuredMode();
+      } catch (error) {
+        if (!isUnsupportedStructuredOutputError(error)) {
+          throw error;
+        }
+        setStructuredSupport(autoApproveProvider, autoApproveModel, 'unsupported');
+        logger.debug('Shell auto-approval structured output unsupported; falling back to prompt JSON', {
+          provider: autoApproveProvider,
+          model: autoApproveModel,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     }
+
+    return await tryPromptMode();
   } catch (error) {
     logger.error('Batch auto-approval evaluation failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -218,28 +494,13 @@ export async function evaluateShellAutoApprovalAdvisories({
       throw error;
     }
 
-    for (const { id } of toEvaluateByLLM) {
-      if (!out.has(id)) {
-        const redDetail = redSafetyDetails.get(id);
-        if (redDetail) {
-          out.set(id, {
-            model: autoApproveModel,
-            reasoning: buildRedSystemReasoning(redDetail),
-            approved: false,
-            source: 'system',
-          });
-          continue;
-        }
-
-        out.set(id, {
-          model: autoApproveModel,
-          reasoning: 'LLM evaluation encountered an error.',
-          approved: false,
-          source: 'llm',
-          isError: true,
-        });
-      }
-    }
+    return buildInvalidEvaluationAdvisories({
+      commands: toEvaluateByLLM,
+      redSafetyDetails,
+      model: autoApproveModel,
+      reasoning: 'LLM evaluation encountered an error.',
+      isError: true,
+    });
   }
 
   return out;

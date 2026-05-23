@@ -12,12 +12,16 @@ const createMockLogger = () => ({
   clearCorrelationId: () => {},
 });
 
-const createMockSettings = (mode: 'off' | 'advisory' | 'auto' = 'advisory') => ({
+const createMockSettings = (
+  mode: 'off' | 'advisory' | 'auto' = 'advisory',
+  provider = 'test-auto-provider',
+  model = 'test-auto-model',
+) => ({
   get: (key: string) => {
     const map: Record<string, unknown> = {
       'shell.autoApproveMode': mode,
-      'agent.autoApproveModel': 'test-auto-model',
-      'agent.autoApproveProvider': 'test-auto-provider',
+      'agent.autoApproveModel': model,
+      'agent.autoApproveProvider': provider,
     };
     return map[key];
   },
@@ -100,6 +104,209 @@ test('evaluates non-RED commands via chat and parses valid JSON results', async 
   t.is(chatCalls[0].options.reasoningEffort, 'none');
 });
 
+test('uses structured chatJson when structured support is unknown', async (t) => {
+  const chatJsonCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+  let chatCalls = 0;
+
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-safe', command: 'pwd' }],
+    history: [{ role: 'user', type: 'message', content: 'inspect location' }],
+    settingsService: createMockSettings('advisory', 'structured-unknown-provider') as any,
+    agentClient: {
+      chatJson: async (prompt: string, options: Record<string, unknown>) => {
+        chatJsonCalls.push({ prompt, options });
+        return { results: [{ reasoning: 'Read-only current directory inspection is safe.', approved: true }] };
+      },
+      chat: async () => {
+        chatCalls++;
+        return '{}';
+      },
+    } as any,
+    logger: createMockLogger() as any,
+  });
+
+  t.deepEqual(advisories.get('call-safe'), {
+    model: 'test-auto-model',
+    reasoning: 'Read-only current directory inspection is safe.',
+    approved: true,
+    source: 'llm',
+  });
+  t.is(chatJsonCalls.length, 1);
+  t.is(chatCalls, 0);
+  t.is(chatJsonCalls[0].options.provider, 'structured-unknown-provider');
+});
+
+test.serial('caches structured support after a successful structured request', async (t) => {
+  const provider = 'structured-supported-provider';
+  let chatJsonCalls = 0;
+
+  for (const id of ['call-1', 'call-2']) {
+    const advisories = await evaluateShellAutoApprovalAdvisories({
+      commands: [{ id, command: 'pwd' }],
+      history: [{ role: 'user', type: 'message', content: 'inspect location' }],
+      settingsService: createMockSettings('advisory', provider) as any,
+      agentClient: {
+        chatJson: async () => {
+          chatJsonCalls++;
+          return { results: [{ reasoning: 'Read-only current directory inspection is safe.', approved: true }] };
+        },
+        chat: async () => {
+          throw new Error('chat fallback should not run');
+        },
+      } as any,
+      logger: createMockLogger() as any,
+    });
+
+    t.is(advisories.get(id)?.approved, true);
+  }
+
+  t.is(chatJsonCalls, 2);
+});
+
+test.serial('falls back to chat and caches unsupported after structured output unsupported error', async (t) => {
+  const provider = 'structured-unsupported-provider';
+  let chatJsonCalls = 0;
+  let chatCalls = 0;
+
+  const first = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-1', command: 'pwd' }],
+    history: [{ role: 'user', type: 'message', content: 'inspect location' }],
+    settingsService: createMockSettings('advisory', provider) as any,
+    agentClient: {
+      chatJson: async () => {
+        chatJsonCalls++;
+        throw new Error('response_format json_schema is not supported by this model');
+      },
+      chat: async () => {
+        chatCalls++;
+        return JSON.stringify({
+          results: [{ reasoning: 'Read-only current directory inspection is safe.', approved: true }],
+        });
+      },
+    } as any,
+    logger: createMockLogger() as any,
+  });
+
+  const second = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-2', command: 'pwd' }],
+    history: [{ role: 'user', type: 'message', content: 'inspect location' }],
+    settingsService: createMockSettings('advisory', provider) as any,
+    agentClient: {
+      chatJson: async () => {
+        chatJsonCalls++;
+        throw new Error('chatJson should be skipped while unsupported is cached');
+      },
+      chat: async () => {
+        chatCalls++;
+        return JSON.stringify({
+          results: [{ reasoning: 'Read-only current directory inspection is safe.', approved: true }],
+        });
+      },
+    } as any,
+    logger: createMockLogger() as any,
+  });
+
+  t.is(first.get('call-1')?.approved, true);
+  t.is(second.get('call-2')?.approved, true);
+  t.is(chatJsonCalls, 1);
+  t.is(chatCalls, 2);
+});
+
+test.serial('does not cache unsupported for malformed structured output', async (t) => {
+  const provider = 'structured-malformed-provider';
+  let chatJsonCalls = 0;
+
+  const first = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-1', command: 'pwd' }],
+    history: [{ role: 'user', type: 'message', content: 'inspect location' }],
+    settingsService: createMockSettings('advisory', provider) as any,
+    agentClient: {
+      chatJson: async () => {
+        chatJsonCalls++;
+        return { results: [{ reasoning: 'Missing approved field.' }] };
+      },
+      chat: async () => {
+        throw new Error('prompt fallback should not run for accepted structured malformed output');
+      },
+    } as any,
+    logger: createMockLogger() as any,
+  });
+
+  const second = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-2', command: 'pwd' }],
+    history: [{ role: 'user', type: 'message', content: 'inspect location' }],
+    settingsService: createMockSettings('advisory', provider) as any,
+    agentClient: {
+      chatJson: async () => {
+        chatJsonCalls++;
+        return { results: [{ reasoning: 'Read-only current directory inspection is safe.', approved: true }] };
+      },
+      chat: async () => {
+        throw new Error('prompt fallback should not run');
+      },
+    } as any,
+    logger: createMockLogger() as any,
+  });
+
+  t.is(first.get('call-1')?.approved, false);
+  t.is(second.get('call-2')?.approved, true);
+  t.is(chatJsonCalls, 3);
+});
+
+test('retries once when structured output is missing approved', async (t) => {
+  let chatJsonCalls = 0;
+
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-safe', command: 'pwd' }],
+    history: [{ role: 'user', type: 'message', content: 'inspect location' }],
+    settingsService: createMockSettings('advisory', 'structured-repair-provider') as any,
+    agentClient: {
+      chatJson: async (prompt: string) => {
+        chatJsonCalls++;
+        if (chatJsonCalls === 1) {
+          return { results: [{ reasoning: 'Missing approved field.' }] };
+        }
+        t.true(prompt.includes('The previous shell auto-approval response was invalid.'));
+        return { results: [{ reasoning: 'Read-only current directory inspection is safe.', approved: true }] };
+      },
+      chat: async () => {
+        throw new Error('prompt fallback should not run');
+      },
+    } as any,
+    logger: createMockLogger() as any,
+  });
+
+  t.is(advisories.get('call-safe')?.approved, true);
+  t.is(chatJsonCalls, 2);
+});
+
+test('denies all non-RED commands when original plus repair are invalid', async (t) => {
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [
+      { id: 'call-safe-1', command: 'ls source' },
+      { id: 'call-safe-2', command: 'pwd' },
+    ],
+    history: [{ role: 'user', type: 'message', content: 'inspect repository' }],
+    settingsService: createMockSettings('advisory', 'invalid-repair-provider') as any,
+    agentClient: {
+      chatJson: async () => ({ results: [{ reasoning: 'Only one result.', approved: true }] }),
+      chat: async () => {
+        throw new Error('prompt fallback should not run');
+      },
+    } as any,
+    logger: createMockLogger() as any,
+  });
+
+  for (const id of ['call-safe-1', 'call-safe-2']) {
+    t.deepEqual(advisories.get(id), {
+      model: 'test-auto-model',
+      reasoning: 'LLM did not provide a valid ordered evaluation for this command.',
+      approved: false,
+      source: 'llm',
+    });
+  }
+});
+
 test('instructions distinguish auto-approval from user-requested destructive intent', async (t) => {
   const chatCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
   await evaluateShellAutoApprovalAdvisories({
@@ -173,7 +380,7 @@ test('prompt contains only user and assistant text from bounded history context'
   t.true(chatCalls[0].prompt.length < 6_000);
 });
 
-test('falls back to deny advisory for commands missing from malformed chat response', async (t) => {
+test('falls back to deny advisory for all commands when chat response shape is malformed', async (t) => {
   const advisories = await evaluateShellAutoApprovalAdvisories({
     commands: [
       { id: 'call-safe-1', command: 'ls source' },
@@ -187,18 +394,37 @@ test('falls back to deny advisory for commands missing from malformed chat respo
     logger: createMockLogger() as any,
   });
 
-  t.deepEqual(advisories.get('call-safe-1'), {
-    model: 'test-auto-model',
-    reasoning: 'Looks safe',
-    approved: true,
-    source: 'llm',
+  for (const id of ['call-safe-1', 'call-safe-2']) {
+    t.deepEqual(advisories.get(id), {
+      model: 'test-auto-model',
+      reasoning: 'LLM did not provide a valid ordered evaluation for this command.',
+      approved: false,
+      source: 'llm',
+    });
+  }
+});
+
+test('keeps RED commands system-rejected even if the LLM approves them', async (t) => {
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [{ id: 'call-red', command: 'rm -rf /' }],
+    history: [{ role: 'user', type: 'message', content: 'clean the machine' }],
+    settingsService: createMockSettings('advisory', 'red-structured-provider') as any,
+    agentClient: {
+      chatJson: async () => ({
+        results: [{ reasoning: 'The model incorrectly approved this destructive command.', approved: true }],
+      }),
+      chat: async () => {
+        throw new Error('prompt fallback should not run');
+      },
+    } as any,
+    logger: createMockLogger() as any,
   });
-  t.deepEqual(advisories.get('call-safe-2'), {
-    model: 'test-auto-model',
-    reasoning: 'LLM did not provide a valid ordered evaluation for this command.',
-    approved: false,
-    source: 'llm',
-  });
+
+  const redAdvisory = advisories.get('call-red');
+  t.is(redAdvisory?.approved, false);
+  t.is(redAdvisory?.source, 'system');
+  t.regex(redAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
+  t.regex(redAdvisory?.reasoning ?? '', /Model advisory: The model incorrectly approved/);
 });
 
 test('rethrows upstream errors when throwOnError is enabled', async (t) => {

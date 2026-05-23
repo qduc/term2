@@ -27,8 +27,10 @@ const createMockSettings = (providerId: string): ISettingsService =>
 
 // Mock Runner
 let lastRunOptions: any = null;
+let lastRunAgent: any = null;
 class MockRunner {
   async run(_agent: any, _input: any, _options: any) {
+    lastRunAgent = _agent;
     lastRunOptions = _options;
     return {
       status: 'completed',
@@ -57,6 +59,48 @@ test.before(() => {
     capabilities: {
       supportsConversationChaining: false,
       supportsTracingControl: true,
+    },
+  });
+});
+
+test.serial('OpenAIAgentClient.chatJson passes outputType into the temporary Agent', async (t) => {
+  lastRunAgent = null;
+
+  const client = new OpenAIAgentClient({
+    deps: {
+      logger: mockLogger,
+      settings: createMockSettings('mock-provider-chat'),
+    },
+  });
+
+  await client.chatJson('Return JSON', {
+    outputType: {
+      type: 'json_schema',
+      name: 'test_output',
+      strict: true,
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          ok: { type: 'boolean' },
+        },
+        required: ['ok'],
+      },
+    },
+  });
+
+  t.truthy(lastRunAgent);
+  t.deepEqual(lastRunAgent.outputType, {
+    type: 'json_schema',
+    name: 'test_output',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        ok: { type: 'boolean' },
+      },
+      required: ['ok'],
     },
   });
 });

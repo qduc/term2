@@ -39,7 +39,12 @@ const TestComponent = ({
     const input = initialInput;
     setInput(input);
     setCursorOffset(input.length);
-    setTriggerIndex('/model '.length);
+    let triggerLen = '/model '.length;
+    if (input.startsWith('/settings ')) {
+      const spaceIdx = input.indexOf(' ', '/settings '.length);
+      triggerLen = spaceIdx >= 0 ? spaceIdx + 1 : input.length;
+    }
+    setTriggerIndex(triggerLen);
     setMode('model_selection');
   }, [initialInput, setCursorOffset, setInput, setMode, setTriggerIndex]);
 
@@ -194,7 +199,7 @@ test('exposes modelSettingConfig for settings-backed triggers', async (t) => {
     </InputProvider>,
   );
 
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await new Promise((resolve) => setTimeout(resolve, 100));
   t.truthy(capturedModels.modelSettingConfig);
   t.is(capturedModels.modelSettingConfig.modelKey, 'agent.model');
   t.is(capturedModels.modelSettingConfig.providerKey, 'agent.provider');
@@ -218,7 +223,7 @@ test('modelSettingConfig is undefined for command-backed triggers', async (t) =>
     </InputProvider>,
   );
 
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await new Promise((resolve) => setTimeout(resolve, 100));
   t.is(capturedModels.modelSettingConfig, undefined);
 });
 
@@ -377,4 +382,96 @@ test.serial('keeps completed provider results ready when switching back', async 
     capturedModels.filteredModels.map((model: any) => model.id),
     ['slow-model'],
   );
+});
+
+test.serial('pre-selects the current model of the setting it is changing (command-backed)', async (t) => {
+  clearModelCache();
+
+  const testProvider = `test-provider-${Date.now()}-${Math.random()}`;
+  const modelsList = [
+    { id: 'model-a', name: 'Model A' },
+    { id: 'model-b', name: 'Model B' },
+    { id: 'model-c', name: 'Model C' },
+  ];
+
+  registerProvider({
+    id: testProvider,
+    label: testProvider,
+    fetchModels: async () => modelsList,
+  });
+
+  t.teardown(() => {
+    clearModelCache();
+    unregisterProvider(testProvider);
+  });
+
+  let capturedModels: any;
+  const settingsService = createMockSettingsService({
+    'agent.provider': testProvider,
+    'agent.model': 'model-b',
+    'agent.openrouter.apiKey': 'fake-key',
+  });
+
+  render(
+    <InputProvider>
+      <TestComponent
+        settingsService={settingsService}
+        initialInput="/model "
+        onResults={(m) => {
+          capturedModels = m;
+        }}
+      />
+    </InputProvider>,
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  t.is(capturedModels.provider, testProvider);
+  t.is(capturedModels.selectedIndex, 1);
+});
+
+test.serial('pre-selects the current model of the setting it is changing (settings-backed)', async (t) => {
+  clearModelCache();
+
+  const testProvider = `test-provider-mentor-${Date.now()}-${Math.random()}`;
+  const modelsList = [
+    { id: 'mentor-1', name: 'Mentor 1' },
+    { id: 'mentor-2', name: 'Mentor 2' },
+    { id: 'mentor-3', name: 'Mentor 3' },
+  ];
+
+  registerProvider({
+    id: testProvider,
+    label: testProvider,
+    fetchModels: async () => modelsList,
+  });
+
+  t.teardown(() => {
+    clearModelCache();
+    unregisterProvider(testProvider);
+  });
+
+  let capturedModels: any;
+  const settingsService = createMockSettingsService({
+    'agent.mentorProvider': testProvider,
+    'agent.mentorModel': 'mentor-3',
+    'agent.openrouter.apiKey': 'fake-key',
+  });
+
+  render(
+    <InputProvider>
+      <TestComponent
+        settingsService={settingsService}
+        initialInput="/settings agent.mentorModel "
+        onResults={(m) => {
+          capturedModels = m;
+        }}
+      />
+    </InputProvider>,
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  t.is(capturedModels.provider, testProvider);
+  t.is(capturedModels.selectedIndex, 2);
 });

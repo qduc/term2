@@ -36,6 +36,7 @@ export const useModelSelection = (
   const isInitialLoadRef = useRef(true);
   const loadRequestIdRef = useRef(0);
   const modelsByProviderRef = useRef<Map<string, ModelInfo[]>>(new Map());
+  const shouldPreselectRef = useRef(false);
 
   const isOpen = mode === 'model_selection';
   const modelSettingConfig = getModelSettingConfigForInput(input);
@@ -67,6 +68,7 @@ export const useModelSelection = (
       }
       failedProvidersRef.current.clear();
       isInitialLoadRef.current = true;
+      shouldPreselectRef.current = true;
     }
   }, [isOpen, getInitialProvider, setCurrentProvider]);
 
@@ -123,11 +125,29 @@ export const useModelSelection = (
   }, [models, query]);
 
   useEffect(() => {
-    setSelectedIndex((prev) => {
-      if (filteredModels.length === 0) return 0;
-      return Math.min(prev, filteredModels.length - 1);
-    });
-  }, [filteredModels.length]);
+    if (filteredModels.length === 0) {
+      setSelectedIndex(0);
+      return;
+    }
+
+    if (shouldPreselectRef.current) {
+      const modelKey = modelSettingConfig ? modelSettingConfig.modelKey : 'agent.model';
+      const currentModelValue = settingsService.get<string>(modelKey);
+      if (currentModelValue) {
+        const index = filteredModels.findIndex((m) => m.id === currentModelValue);
+        if (index >= 0) {
+          setSelectedIndex(index);
+          shouldPreselectRef.current = false;
+          return;
+        }
+      }
+      if (!loading) {
+        shouldPreselectRef.current = false;
+      }
+    }
+
+    setSelectedIndex((prev) => Math.min(prev, filteredModels.length - 1));
+  }, [filteredModels, loading, modelSettingConfig, settingsService]);
 
   // Reset scroll to top when query changes (filtering)
   useEffect(() => {
@@ -150,6 +170,7 @@ export const useModelSelection = (
       setCurrentProvider(getInitialProvider());
       setMode('model_selection');
       setTriggerIndex(startIndex);
+      shouldPreselectRef.current = true;
       setSelectedIndex(0);
       setScrollOffset(0);
     },
@@ -167,6 +188,7 @@ export const useModelSelection = (
   }, [mode, setCurrentProvider, setMode, setTriggerIndex]);
 
   const moveUp = useCallback(() => {
+    shouldPreselectRef.current = false;
     setSelectedIndex((prev) => {
       if (filteredModels.length === 0) return 0;
       return prev > 0 ? prev - 1 : filteredModels.length - 1;
@@ -174,6 +196,7 @@ export const useModelSelection = (
   }, [filteredModels.length]);
 
   const moveDown = useCallback(() => {
+    shouldPreselectRef.current = false;
     setSelectedIndex((prev) => {
       if (filteredModels.length === 0) return 0;
       return prev < filteredModels.length - 1 ? prev + 1 : 0;
@@ -205,6 +228,7 @@ export const useModelSelection = (
 
       // If the user manually selects it, we should allow retrying it
       failedProvidersRef.current.delete(nextProvider);
+      shouldPreselectRef.current = true;
       setModels(cachedModels ?? []);
       setSelectedIndex(0);
       setScrollOffset(0);

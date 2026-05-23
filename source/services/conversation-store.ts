@@ -413,15 +413,16 @@ export class ConversationStore {
     const anyItem: any = item as any;
     const raw = anyItem?.rawItem ?? anyItem;
 
-    // Prefer stable IDs when present.
-    if (typeof raw?.id === 'string' && raw.id) {
-      return `id:${raw.id}`;
-    }
-
-    // Tool calls / outputs tend to have call IDs.
+    // Tool calls / outputs are related by call ID. SDK item IDs can change
+    // when a continuation replays full history, so call IDs are the stable key.
     const callId = raw?.callId ?? raw?.call_id ?? raw?.tool_call_id;
     if (typeof callId === 'string' && callId) {
       return `call:${callId}:${raw?.type ?? ''}`;
+    }
+
+    // Prefer stable IDs when present.
+    if (typeof raw?.id === 'string' && raw.id) {
+      return `id:${raw.id}`;
     }
 
     // Message-like items: role + content text.

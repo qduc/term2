@@ -144,6 +144,45 @@ test('updateFromResult() replaces history when incoming history is a superset', 
   t.is(last.content[0].text, 'Ack2');
 });
 
+test('updateFromResult() treats tool callId as stable across full-history replays with changed item ids', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('Inspect the repo');
+
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'Inspect the repo' },
+      { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
+      { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', output: { text: 'contents' } },
+    ] as any,
+  });
+
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'Inspect the repo' },
+      { type: 'function_call', id: 'fc_1_replayed', callId: 'call-read', name: 'read_file', arguments: '{}' },
+      { type: 'function_call_result', id: 'fcr_1_replayed', callId: 'call-read', output: { text: 'contents' } },
+      { type: 'function_call', id: 'fc_2', callId: 'call-grep', name: 'grep', arguments: '{}' },
+      { type: 'function_call_result', id: 'fcr_2', callId: 'call-grep', output: { text: 'matches' } },
+    ] as any,
+  });
+
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'Inspect the repo' },
+      { type: 'function_call', id: 'fc_1_replayed_again', callId: 'call-read', name: 'read_file', arguments: '{}' },
+      { type: 'function_call_result', id: 'fcr_1_replayed_again', callId: 'call-read', output: { text: 'contents' } },
+      { type: 'function_call', id: 'fc_2_replayed', callId: 'call-grep', name: 'grep', arguments: '{}' },
+      { type: 'function_call_result', id: 'fcr_2_replayed', callId: 'call-grep', output: { text: 'matches' } },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Done' }] },
+    ] as any,
+  });
+
+  const history = store.getHistory() as any[];
+  t.is(history.length, 6);
+  t.is(history.filter((item) => (item.rawItem ?? item).callId === 'call-read').length, 2);
+  t.is(history.filter((item) => (item.rawItem ?? item).callId === 'call-grep').length, 2);
+});
+
 test('updateFromResult() collapses SDK replayed history prefixes', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('Investigate upgrade');

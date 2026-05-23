@@ -176,6 +176,52 @@ test.serial('toggleProvider uses the configured provider immediately after openi
   t.is(capturedModels.provider, expectedPrevious);
 });
 
+test('exposes modelSettingConfig for settings-backed triggers', async (t) => {
+  let capturedModels: any;
+  const settingsService = createMockSettingsService({
+    'agent.provider': 'openai',
+  });
+
+  render(
+    <InputProvider>
+      <TestComponent
+        settingsService={settingsService}
+        initialInput="/settings agent.model "
+        onResults={(m) => {
+          capturedModels = m;
+        }}
+      />
+    </InputProvider>,
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  t.truthy(capturedModels.modelSettingConfig);
+  t.is(capturedModels.modelSettingConfig.modelKey, 'agent.model');
+  t.is(capturedModels.modelSettingConfig.providerKey, 'agent.provider');
+});
+
+test('modelSettingConfig is undefined for command-backed triggers', async (t) => {
+  let capturedModels: any;
+  const settingsService = createMockSettingsService({
+    'agent.provider': 'openai',
+  });
+
+  render(
+    <InputProvider>
+      <TestComponent
+        settingsService={settingsService}
+        initialInput="/model gpt-4"
+        onResults={(m) => {
+          capturedModels = m;
+        }}
+      />
+    </InputProvider>,
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  t.is(capturedModels.modelSettingConfig, undefined);
+});
+
 test.serial('model selection query strips provider suffix from input', async (t) => {
   let capturedModels: any;
   render(

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { render } from 'ink-testing-library';
 import { useEscapeKey } from './use-escape-key.js';
 import type { InputMode } from '../context/InputContext.js';
+import { SETTINGS_TRIGGER } from '../components/Input/triggers.js';
 import { Box, Text, useInput } from 'ink';
 
 const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as InputMode }) => {
@@ -247,4 +248,80 @@ test('pressing ESC in settings_completion mode clears input and switches to text
   const frame = lastFrame()!;
   t.true(frame.includes('Mode: text'), 'Mode should switch to text');
   t.false(frame.includes('/settings'), 'Input trigger text should be cleared');
+});
+
+test('pressing ESC in model_selection mode with settings-backed model setting restores settings menu', async (t) => {
+  let settingsOpenArgs: { startIndex: number; initialSelectionKey: string } | null = null;
+  let modelsClosed = false;
+  let cursorOverrides: (number | null)[] = [];
+
+  const SettingsBackedModelComponent = () => {
+    const [value, onChange] = useState('/settings agent.model ');
+    const [mode, setMode] = useState<InputMode>('model_selection');
+    const escPressedRef = { current: false };
+    const [cursorOverride, setCursorOverride] = useState<number | null>(null);
+
+    cursorOverrides.push(cursorOverride);
+
+    const mockModels = {
+      modelSettingConfig: { modelKey: 'agent.model' },
+      close: () => {
+        modelsClosed = true;
+      },
+    };
+
+    useEscapeKey({
+      mode,
+      setMode,
+      value,
+      onChange,
+      settings: {
+        open: (startIndex: number, initialSelectionKey?: string) => {
+          settingsOpenArgs = { startIndex, initialSelectionKey: initialSelectionKey || '' };
+        },
+      } as any,
+      settingsValue: { settingKey: null, close: () => {} } as any,
+      models: mockModels,
+      setCursorOverride,
+      escPressedRef,
+    });
+
+    return (
+      <Box flexDirection="column">
+        <Text>Mode: {mode}</Text>
+        <Text>Value: {value}</Text>
+      </Box>
+    );
+  };
+
+  const { lastFrame, stdin } = render(<SettingsBackedModelComponent />);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const initialFrame = lastFrame()!;
+  t.true(initialFrame.includes('Mode: model_selection'), 'Initial mode should be model_selection');
+  t.true(initialFrame.includes('Value: /settings agent.model'), 'Initial value should contain settings trigger');
+
+  // Press ESC
+  stdin.write('\u001B');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const frame = lastFrame()!;
+  t.log('Frame after ESC:', frame);
+  t.log('Settings open args:', settingsOpenArgs);
+  t.log('Models closed:', modelsClosed);
+
+  // Should NOT switch to text mode - should keep settings_completion or similar
+  t.false(frame.includes('Mode: text'), 'Mode should not switch to text for settings-backed model');
+
+  // Should close models menu
+  t.true(modelsClosed, 'Models menu should be closed');
+
+  // Should call settings.open with the model key
+  const hasArgs = settingsOpenArgs !== null;
+  t.true(hasArgs, 'settings.open should have been called');
+  if (hasArgs) {
+    // settingsOpenArgs is narrowed to non-null here by TypeScript
+    t.is(settingsOpenArgs!.initialSelectionKey, 'agent.model', 'Settings should open with agent.model key');
+    t.is(settingsOpenArgs!.startIndex, SETTINGS_TRIGGER.length, 'Settings should open at trigger length');
+  }
 });

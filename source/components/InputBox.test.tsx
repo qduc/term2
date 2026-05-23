@@ -1,11 +1,13 @@
 import test from 'ava';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { render } from 'ink-testing-library';
 import { Box, Text } from 'ink';
 import InputBox, { calculateInputWidth } from './InputBox.js';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
 import type { SlashCommand } from '../slash-commands.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
+import { registerProvider, unregisterProvider } from '../providers/index.js';
+import { clearModelCache } from '../services/model-service.js';
 
 // Mock slash commands
 const mockSlashCommands: SlashCommand[] = [
@@ -177,4 +179,122 @@ test('calculateInputWidth uses default prompt width for shell mode', (t) => {
 
 test('calculateInputWidth uses rejection prompt width for rejection mode', (t) => {
   t.is(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: true, isShellMode: false }), 71);
+});
+
+const StateDisplay = () => {
+  const { input, mode } = useInputContext();
+  return (
+    <Text>
+      Input:{input}|Mode:{mode}
+    </Text>
+  );
+};
+
+const ModelSelectionSetup = ({ trigger }: { trigger: string }) => {
+  const { setInput, setMode, setCursorOffset, setTriggerIndex } = useInputContext();
+
+  useEffect(() => {
+    setInput(trigger);
+    setCursorOffset(trigger.length);
+    setTriggerIndex(trigger.length);
+    setMode('model_selection');
+  }, [trigger, setInput, setCursorOffset, setTriggerIndex, setMode]);
+
+  return null;
+};
+
+test('settings-backed model selection restores settings menu after submit', async (t) => {
+  clearModelCache();
+  const mockProviderId = `mock-provider-${Date.now()}-${Math.random()}`;
+  registerProvider({
+    id: mockProviderId,
+    label: 'Mock Provider',
+    fetchModels: async () => [{ id: 'gpt-test', name: 'GPT Test' }],
+  });
+  t.teardown(() => {
+    clearModelCache();
+    unregisterProvider(mockProviderId);
+  });
+
+  let submitted = false;
+  const onSubmit = () => {
+    submitted = true;
+  };
+
+  const settingsService = createMockSettingsService({
+    'agent.provider': mockProviderId,
+  });
+
+  const { stdin, lastFrame } = render(
+    <InputProvider>
+      <ModelSelectionSetup trigger="/settings agent.model " />
+      <StateDisplay />
+      <InputBox {...defaultProps} settingsService={settingsService} onSubmit={onSubmit} />
+    </InputProvider>,
+  );
+
+  // Wait for models to load
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Press Enter to select the model
+  stdin.write('\r');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  const frame = lastFrame() ?? '';
+  t.false(submitted, 'onSubmit should not be called for settings-backed model selection');
+  t.true(frame.includes('Input:/settings '), `Input should be restored to settings trigger, got: ${frame}`);
+  t.false(frame.includes('gpt-test'), 'Model ID should not appear in input');
+});
+
+test('command-backed model selection still submits after selection', async (t) => {
+  clearModelCache();
+  const mockProviderId = `mock-provider-2-${Date.now()}-${Math.random()}`;
+  registerProvider({
+    id: mockProviderId,
+    label: 'Mock Provider 2',
+    fetchModels: async () => [{ id: 'gpt-test-2', name: 'GPT Test 2' }],
+  });
+  t.teardown(() => {
+    clearModelCache();
+    unregisterProvider(mockProviderId);
+  });
+
+  let submitted = false;
+  const onSubmit = () => {
+    submitted = true;
+  };
+
+  const settingsService = createMockSettingsService({
+    'agent.provider': mockProviderId,
+  });
+
+  const { stdin } = render(
+    <InputProvider>
+      <ModelSelectionSetup trigger="/model " />
+      <StateDisplay />
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        onSubmit={onSubmit}
+        slashCommands={[
+          ...mockSlashCommands,
+          {
+            name: '/model',
+            description: 'Select model',
+            action: () => {},
+            completion: { type: 'model', trigger: '/model ' },
+          },
+        ]}
+      />
+    </InputProvider>,
+  );
+
+  // Wait for models to load
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Press Enter to select the model
+  stdin.write('\r');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  t.true(submitted, 'onSubmit should be called for command-backed model selection');
 });

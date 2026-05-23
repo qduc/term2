@@ -259,6 +259,31 @@ const InputBox: FC<Props> = ({
         appendTrailingSpace: !submitAfterInsert,
       });
       if (!result) return false;
+
+      if (submitAfterInsert && models.modelSettingConfig) {
+        const modelId = models.getSelectedItem()?.id;
+        if (!modelId) return false;
+
+        const provider = models.provider;
+
+        settingsService.set(models.modelSettingConfig.modelKey, modelId);
+        if (provider) {
+          settingsService.set(models.modelSettingConfig.providerKey, provider);
+        }
+
+        onSettingChange?.(models.modelSettingConfig.modelKey, modelId);
+        if (provider) {
+          onSettingChange?.(models.modelSettingConfig.providerKey, provider);
+        }
+
+        models.close();
+
+        const restoredInput = SETTINGS_TRIGGER + settingsFilterRef.current;
+        onChange(restoredInput);
+        setCursorOverride(restoredInput.length);
+        return true;
+      }
+
       onChange(result.nextValue);
       setCursorOverride(result.nextCursor);
       models.close();
@@ -268,7 +293,7 @@ const InputBox: FC<Props> = ({
       }
       return true;
     },
-    [models, value, onChange, submitTextOnly],
+    [models, value, onChange, submitTextOnly, settingsService, onSettingChange],
   );
 
   const modeHandlers = useModeHandlers({
@@ -319,6 +344,7 @@ const InputBox: FC<Props> = ({
     onChange,
     settings,
     settingsValue,
+    models,
     setCursorOverride,
     escPressedRef,
   });

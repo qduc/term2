@@ -232,5 +232,6 @@ export const useModelSelection = (
     getSelectedItem,
     toggleProvider,
     canSwitchProvider,
+    modelSettingConfig,
   };
 };

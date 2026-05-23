@@ -14,6 +14,11 @@ type SettingsValueHandle = {
   close: () => void;
 };
 
+type ModelsHandle = {
+  modelSettingConfig?: { modelKey: string } | null;
+  close: () => void;
+};
+
 type Options = {
   mode: InputMode;
   setMode: (mode: InputMode) => void;
@@ -21,6 +26,7 @@ type Options = {
   onChange: (value: string) => void;
   settings: SettingsHandle;
   settingsValue: SettingsValueHandle;
+  models?: ModelsHandle;
   setCursorOverride: (cursor: number | null) => void;
   escPressedRef: MutableRefObject<boolean>;
 };
@@ -32,14 +38,15 @@ export const useEscapeKey = ({
   onChange,
   settings,
   settingsValue,
+  models,
   setCursorOverride,
   escPressedRef,
 }: Options): { escHintVisible: boolean } => {
   const [escHintVisible, setEscHintVisible] = useState(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const stateRef = useRef({ mode, escHintVisible, value, settingsValue });
-  stateRef.current = { mode, escHintVisible, value, settingsValue };
+  const stateRef = useRef({ mode, escHintVisible, value, settingsValue, models });
+  stateRef.current = { mode, escHintVisible, value, settingsValue, models };
 
   useEffect(() => {
     return () => {
@@ -55,12 +62,26 @@ export const useEscapeKey = ({
       escHintVisible: currentEscHintVisible,
       value: currentValue,
       settingsValue: currentSettingsValue,
+      models: currentModels,
     } = stateRef.current;
 
     escPressedRef.current = true;
 
     if (currentMode !== 'text') {
       if (currentMode === 'model_selection') {
+        // Check if this is a settings-backed model selection (e.g. from /settings)
+        if (currentModels?.modelSettingConfig && currentValue.startsWith(SETTINGS_TRIGGER)) {
+          const prefix = SETTINGS_TRIGGER;
+          onChange(prefix);
+          setCursorOverride(prefix.length);
+
+          const previousKey = currentModels.modelSettingConfig.modelKey;
+          currentModels.close();
+          settings.open(prefix.length, previousKey);
+          return;
+        }
+
+        // Non-settings-backed: clear input and exit to text mode
         onChange('');
         setMode('text');
         return;

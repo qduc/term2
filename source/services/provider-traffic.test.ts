@@ -303,7 +303,7 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
   });
 
   const dayDir = path.join(rootDir, '2026-05-22');
-  const requestFile = path.join(dayDir, '09-14-35.044Z_sess-session-123_req-req-1.jsonl');
+  const requestFile = path.join(dayDir, '09-14-35.044Z_sess-sessi_req-req-1.jsonl');
 
   t.true(fs.existsSync(dayDir));
   t.true(fs.existsSync(requestFile));
@@ -319,7 +319,7 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
   t.is(indexEntries.length, 1);
   t.like(indexEntries[0], {
     sessionId: 'session-123',
-    sessionDir: '2026-05-22T09-14-31.125Z_session-123',
+    sessionDir: '2026-05-22T09-14-31.125Z_sessi',
     firstRequestAt: '2026-05-22T09:14:35.044Z',
     lastRequestAt: '2026-05-22T09:14:35.044Z',
     requestCount: 1,
@@ -389,13 +389,13 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     sentBody: { input: [{ role: 'user', content: 'resumed later' }] },
   });
 
-  const requestFile = path.join(rootDir, '2026-05-22', '09-14-35.044Z_sess-session-123_req-req-1.jsonl');
+  const requestFile = path.join(rootDir, '2026-05-22', '09-14-35.044Z_sess-sessi_req-req-1.jsonl');
   const requestRecords = readRequestFile(requestFile);
   t.is(requestRecords.length, 2);
   t.is(requestRecords[1]?.direction, 'received');
   t.is((requestRecords[1]?.summary as any)?.outputText, 'done');
 
-  const failureFile = path.join(rootDir, '2026-05-22', '10-00-00.000Z_sess-session-999_req-req-2.jsonl');
+  const failureFile = path.join(rootDir, '2026-05-22', '10-00-00.000Z_sess-sessi_req-req-2.jsonl');
   t.is((readRequestFile(failureFile)[1]?.error as any)?.message, 'fetch failed');
 
   const indexEntries = fs
@@ -409,7 +409,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
   t.deepEqual(indexEntries[0].providersSeen, ['openrouter']);
   t.deepEqual(indexEntries[1].modelsSeen, ['gpt-5']);
 
-  t.true(fs.existsSync(path.join(rootDir, '2026-05-23', '00-00-01.000Z_sess-session-123_req-req-3.jsonl')));
+  t.true(fs.existsSync(path.join(rootDir, '2026-05-23', '00-00-01.000Z_sess-sessi_req-req-3.jsonl')));
   t.is(fs.readFileSync(legacyFile, 'utf8'), '{"legacy":true}\n');
 });
 
@@ -441,7 +441,7 @@ test('ProviderTrafficArtifactStore places evaluator requests under evaluator sub
   });
 
   const dayDir = path.join(rootDir, '2026-05-22');
-  const requestFile = path.join(dayDir, 'evaluator_09-14-35.044Z_sess-session-123_req-eval-req-1.jsonl');
+  const requestFile = path.join(dayDir, 'evaluator_09-14-35.044Z_sess-sessi_req-eval-.jsonl');
 
   t.true(fs.existsSync(dayDir));
   t.true(fs.existsSync(requestFile));

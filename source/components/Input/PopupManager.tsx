@@ -7,7 +7,7 @@ import SettingsValueSelectionMenu from '../SettingsValueSelectionMenu.js';
 import ModelSelectionMenu from '../ModelSelectionMenu.js';
 import UndoSelectionMenu from '../UndoSelectionMenu.js';
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
-import type { SettingCompletionItem } from '../../hooks/use-settings-completion.js';
+import type { SettingCompletionItem, SettingsCategory } from '../../hooks/use-settings-completion.js';
 import type { SettingValueSuggestion } from '../../hooks/use-settings-value-completion.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import type { SettingsService } from '../../services/settings-service.js';
@@ -47,6 +47,9 @@ interface PopupManagerProps {
     selectedIndex: number;
     scrollOffset?: number;
     query: string;
+    isSearchingAll: boolean;
+    activeCategoryId: string;
+    categories: SettingsCategory[];
   };
   settingsValue: {
     isOpen: boolean;
@@ -108,6 +111,9 @@ export const PopupManager: FC<PopupManagerProps> = ({
           selectedIndex={settings.selectedIndex}
           scrollOffset={settings.scrollOffset}
           query={settings.query}
+          isSearchingAll={settings.isSearchingAll}
+          activeCategoryId={settings.activeCategoryId}
+          categories={settings.categories}
         />
       )}
       {settingsValue.isOpen && settingsValue.settingKey && (

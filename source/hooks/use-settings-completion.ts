@@ -10,6 +10,22 @@ export type SettingCompletionItem = {
   currentValue?: string | number | boolean;
 };
 
+export type SettingsCategory = {
+  id: string;
+  label: string;
+};
+
+export const SETTINGS_CATEGORIES: SettingsCategory[] = [
+  { id: 'model', label: 'Model & Reasoning' },
+  { id: 'modes', label: 'Modes' },
+  { id: 'approvals', label: 'Safety & Approvals' },
+  { id: 'shell', label: 'Shell Execution' },
+  { id: 'search', label: 'Search & Web' },
+  { id: 'subagents', label: 'Subagents' },
+  { id: 'uiLogging', label: 'UI & Logging' },
+  { id: 'advanced', label: 'Advanced' },
+];
+
 const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_MODEL]: 'The AI model to use (e.g. gpt-4, claude-3-opus)',
   [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort (none|minimal|low|medium|high|xhigh|default)',
@@ -34,6 +50,8 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Shell command auto-approval mode (off|advisory|auto)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL]: 'Model to use for auto-approval evaluation (fast/cheap)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER]: 'Provider for the auto-approval model (optional)',
+  [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode: read-only research and implementation planning (true|false)',
+  [SETTING_KEYS.APP_ORCHESTRATOR_MODE]: 'Delegate tool-backed work through subagents (true|false)',
   [SETTING_KEYS.WEB_SEARCH_PROVIDER]: 'Web search provider (tavily, exa)',
   [SETTING_KEYS.APP_SEARCH_VIA_SHELL]:
     'Use shell commands (ripgrep/find) for codebase search instead of built-in tools (true|false)',
@@ -72,23 +90,66 @@ const COMMON_SETTINGS: string[] = [
   SETTING_KEYS.AGENT_MODEL,
   SETTING_KEYS.AGENT_REASONING_EFFORT,
   SETTING_KEYS.AGENT_TEMPERATURE,
-  SETTING_KEYS.AGENT_MAX_TURNS,
-  SETTING_KEYS.LOGGING_LOG_LEVEL,
-  SETTING_KEYS.SHELL_TIMEOUT,
 ];
 
+export function getSettingCategory(key: string): SettingsCategory {
+  if (
+    key === SETTING_KEYS.AGENT_MODEL ||
+    key === SETTING_KEYS.AGENT_REASONING_EFFORT ||
+    key === SETTING_KEYS.AGENT_TEMPERATURE ||
+    key === SETTING_KEYS.AGENT_MENTOR_MODEL ||
+    key === SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT ||
+    key === SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER
+  ) {
+    return SETTINGS_CATEGORIES[0]!;
+  }
+
+  if (
+    key === SETTING_KEYS.APP_PLAN_MODE ||
+    key === SETTING_KEYS.APP_ORCHESTRATOR_MODE ||
+    key === SETTING_KEYS.APP_MENTOR_MODE ||
+    key === SETTING_KEYS.APP_LITE_MODE
+  ) {
+    return SETTINGS_CATEGORIES[1]!;
+  }
+
+  if (key === SETTING_KEYS.SHELL_AUTO_APPROVE_MODE || key === SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL) {
+    return SETTINGS_CATEGORIES[2]!;
+  }
+
+  if (
+    key === SETTING_KEYS.SHELL_TIMEOUT ||
+    key === SETTING_KEYS.SHELL_MAX_OUTPUT_LINES ||
+    key === SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS ||
+    key === SETTING_KEYS.SHELL_USE_RTK_COMPRESSION
+  ) {
+    return SETTINGS_CATEGORIES[3]!;
+  }
+
+  if (key === SETTING_KEYS.WEB_SEARCH_PROVIDER || key === SETTING_KEYS.APP_SEARCH_VIA_SHELL) {
+    return SETTINGS_CATEGORIES[4]!;
+  }
+
+  if (key.toLowerCase().includes('subagent')) {
+    return SETTINGS_CATEGORIES[5]!;
+  }
+
+  if (
+    key === SETTING_KEYS.UI_HISTORY_SIZE ||
+    key === SETTING_KEYS.UI_PASTE_THRESHOLD ||
+    key === SETTING_KEYS.LOGGING_LOG_LEVEL ||
+    key === SETTING_KEYS.LOGGING_DISABLE
+  ) {
+    return SETTINGS_CATEGORIES[6]!;
+  }
+
+  return SETTINGS_CATEGORIES[7]!;
+}
+
 function categoryRank(key: string): number {
-  const prefix = key.split('.')[0] || '';
-  const ranks: Record<string, number> = {
-    common: 0,
-    agent: 1,
-    shell: 2,
-    ui: 3,
-    logging: 4,
-    providers: 5,
-    webSearch: 6,
-  };
-  return ranks[prefix] ?? 50;
+  const category = getSettingCategory(key);
+  const index = SETTINGS_CATEGORIES.findIndex((item) => item.id === category.id);
+  return index === -1 ? SETTINGS_CATEGORIES.length : index;
 }
 
 function sortSettings(a: SettingCompletionItem, b: SettingCompletionItem): number {
@@ -180,6 +241,10 @@ export function filterSettingsByQuery(
     .map(({ item }) => item);
 }
 
+export function filterSettingsByCategory<T extends { key: string }>(settings: T[], categoryId: string): T[] {
+  return settings.filter((item) => getSettingCategory(item.key).id === categoryId);
+}
+
 export function clampIndex(currentIndex: number, arrayLength: number): number {
   if (arrayLength === 0) {
     return 0;
@@ -217,9 +282,28 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     );
   }, [settingsVersion, settingsService]);
 
+  const categories = useMemo(() => {
+    const presentCategoryIds = new Set(allSettings.map((item) => getSettingCategory(item.key).id));
+    return SETTINGS_CATEGORIES.filter((category) => presentCategoryIds.has(category.id));
+  }, [allSettings]);
+
+  const [activeCategoryId, setActiveCategoryId] = useState(SETTINGS_CATEGORIES[0]!.id);
+
+  const resolvedActiveCategoryId = useMemo(() => {
+    if (categories.some((category) => category.id === activeCategoryId)) {
+      return activeCategoryId;
+    }
+    return categories[0]?.id ?? activeCategoryId;
+  }, [activeCategoryId, categories]);
+
+  const isSearchingAll = query.trim().length > 0;
+
   const filteredEntries = useMemo(() => {
-    return filterSettingsByQuery(allSettings, query, allSettings.length);
-  }, [allSettings, query]);
+    const candidateSettings = isSearchingAll
+      ? allSettings
+      : filterSettingsByCategory(allSettings, resolvedActiveCategoryId);
+    return filterSettingsByQuery(candidateSettings, query, candidateSettings.length);
+  }, [allSettings, isSearchingAll, query, resolvedActiveCategoryId]);
 
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
     useSelection(filteredEntries);
@@ -230,6 +314,26 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
   useEffect(() => {
     setScrollOffset(0);
   }, [query]);
+
+  const switchCategory = useCallback(
+    (direction: 'next' | 'prev' = 'next') => {
+      if (categories.length === 0) return;
+
+      const currentIndex = Math.max(
+        0,
+        categories.findIndex((category) => category.id === resolvedActiveCategoryId),
+      );
+      const delta = direction === 'next' ? 1 : -1;
+      const nextIndex = (currentIndex + delta + categories.length) % categories.length;
+      const nextCategory = categories[nextIndex];
+      if (!nextCategory) return;
+
+      setActiveCategoryId(nextCategory.id);
+      setSelectedIndex(0);
+      setScrollOffset(0);
+    },
+    [categories, resolvedActiveCategoryId, setSelectedIndex],
+  );
 
   useEffect(() => {
     if (selectedIndex < scrollOffset) {
@@ -257,6 +361,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
       setMode('settings_completion');
       setTriggerIndex(startIndex);
       if (initialSelectionKey) {
+        setActiveCategoryId(getSettingCategory(initialSelectionKey).id);
         setTargetKey(initialSelectionKey);
       } else {
         setSelectedIndex(0);
@@ -282,6 +387,9 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     filteredEntries,
     selectedIndex,
     scrollOffset,
+    isSearchingAll,
+    categories,
+    activeCategoryId: resolvedActiveCategoryId,
     open,
     close,
     // updateQuery,
@@ -291,6 +399,9 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     moveEnd,
     pageUp,
     pageDown,
+    moveLeft: () => switchCategory('prev'),
+    moveRight: () => switchCategory('next'),
+    switchCategory,
     getSelectedItem,
   };
 };

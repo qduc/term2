@@ -1,5 +1,11 @@
 import test from 'ava';
-import { buildSettingsList, filterSettingsByQuery, clampIndex } from './use-settings-completion.js';
+import {
+  buildSettingsList,
+  filterSettingsByQuery,
+  clampIndex,
+  getSettingCategory,
+  filterSettingsByCategory,
+} from './use-settings-completion.js';
 
 // Mock setting keys for testing (matching actual SETTING_KEYS structure)
 const MOCK_SETTING_KEYS = {
@@ -228,6 +234,28 @@ test('buildSettingsList - no duplicate keys', (t) => {
   const uniqueKeys = new Set(keys);
 
   t.is(keys.length, uniqueKeys.size, 'Duplicate keys found');
+});
+
+test('getSettingCategory - groups settings by task-oriented menu tabs', (t) => {
+  t.is(getSettingCategory('agent.model').id, 'model');
+  t.is(getSettingCategory('agent.mentorModel').id, 'model');
+  t.is(getSettingCategory('app.planMode').id, 'modes');
+  t.is(getSettingCategory('shell.autoApproveMode').id, 'approvals');
+  t.is(getSettingCategory('shell.timeout').id, 'shell');
+  t.is(getSettingCategory('app.searchViaShell').id, 'search');
+  t.is(getSettingCategory('agent.subagentWorkerModel').id, 'subagents');
+  t.is(getSettingCategory('ui.pasteThreshold').id, 'uiLogging');
+});
+
+test('filterSettingsByCategory - limits visible settings to the active task tab', (t) => {
+  const settings = [{ key: 'agent.model' }, { key: 'shell.timeout' }, { key: 'webSearch.provider' }];
+
+  const result = filterSettingsByCategory(settings, 'shell');
+
+  t.deepEqual(
+    result.map((item) => item.key),
+    ['shell.timeout'],
+  );
 });
 
 // filterSettingsByQuery tests

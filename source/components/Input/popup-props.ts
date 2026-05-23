@@ -58,6 +58,9 @@ export const toPopupProps = ({
     selectedIndex: settings.selectedIndex,
     scrollOffset: settings.scrollOffset,
     query: settings.query,
+    isSearchingAll: settings.isSearchingAll,
+    activeCategoryId: settings.activeCategoryId,
+    categories: settings.categories,
   },
   settingsValue: {
     isOpen: settingsValue.isOpen,

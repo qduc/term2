@@ -1,7 +1,11 @@
 import React, { FC } from 'react';
 import fs from 'node:fs';
 import { Box, Text } from 'ink';
-import type { SettingCompletionItem } from '../hooks/use-settings-completion.js';
+import {
+  getSettingCategory,
+  type SettingCompletionItem,
+  type SettingsCategory,
+} from '../hooks/use-settings-completion.js';
 import { SETTING_KEYS } from '../services/settings-service.js';
 import { getRtkBinaryPath } from '../services/rtk-service.js';
 import { MenuContainer } from './Common/MenuContainer.js';
@@ -11,32 +15,10 @@ type Props = {
   selectedIndex: number;
   scrollOffset?: number;
   query: string;
+  isSearchingAll?: boolean;
+  activeCategoryId: string;
+  categories: SettingsCategory[];
 };
-
-function titleCaseCategory(category: string): string {
-  if (!category || category === 'other') return 'Other Settings';
-  if (category === 'common') return 'Common Settings';
-  if (category === 'ui') return 'User Interface';
-  if (category === 'webSearch') return 'Web Search';
-  if (category === 'agent') return 'Agent Configuration';
-  if (category === 'openai') return 'OpenAI Provider';
-  if (category === 'anthropic') return 'Anthropic Provider';
-  if (category === 'openrouter') return 'OpenRouter Provider';
-  return category.charAt(0).toUpperCase() + category.slice(1);
-}
-
-function getCategoryForKey(key: string): string {
-  const COMMON_KEYS = new Set([
-    'agent.model',
-    'agent.reasoningEffort',
-    'agent.temperature',
-    'agent.maxTurns',
-    'logging.logLevel',
-    'shell.timeout',
-  ]);
-  if (COMMON_KEYS.has(key)) return 'common';
-  return key.split('.')[0] || 'other';
-}
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -69,89 +51,179 @@ function formatValue(
 const VISIBLE_COUNT = 10;
 const KEY_COL_WIDTH = 32;
 
-const SettingsSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query }) => {
+const SettingsTabs: FC<{
+  categories: SettingsCategory[];
+  activeCategoryId: string;
+}> = ({ categories, activeCategoryId }) => {
+  const terminalWidth = process.stdout.columns || 80;
+  const hint = 'Tab/←→ → switch section';
+  const availableWidth = terminalWidth - hint.length - 2;
+
+  const activeIndex = categories.findIndex((category) => category.id === activeCategoryId);
+  const safeActiveIndex = activeIndex >= 0 ? activeIndex : 0;
+
+  const getTabWidth = (category: SettingsCategory) => category.label.length + 2;
+
+  let start = safeActiveIndex;
+  let end = safeActiveIndex;
+  let currentWidth = categories[safeActiveIndex] ? getTabWidth(categories[safeActiveIndex]!) + 4 : 0;
+
+  while (categories.length > 0) {
+    let expanded = false;
+    if (end + 1 < categories.length) {
+      const rightWidth = getTabWidth(categories[end + 1]!) + 3;
+      if (currentWidth + rightWidth <= availableWidth) {
+        currentWidth += rightWidth;
+        end++;
+        expanded = true;
+      }
+    }
+    if (start - 1 >= 0) {
+      const leftWidth = getTabWidth(categories[start - 1]!) + 3;
+      if (currentWidth + leftWidth <= availableWidth) {
+        currentWidth += leftWidth;
+        start--;
+        expanded = true;
+      }
+    }
+    if (!expanded) break;
+  }
+
+  const visibleCategories = categories.slice(start, end + 1);
+  const hasLeftScroll = start > 0;
+  const hasRightScroll = end < categories.length - 1;
+
   return (
-    <MenuContainer
-      items={items}
-      selectedIndex={selectedIndex}
-      scrollOffset={scrollOffset}
-      maxHeight={VISIBLE_COUNT}
-      borderColor={items.length === 0 ? 'red' : 'cyan'}
-      title={
-        <Box>
-          <Text bold color="cyan">
-            ⚙ Settings
-          </Text>
-          <Text color="gray"> · </Text>
-          {query ? (
-            <Text>
-              Searching: "
-              <Text color="white" bold>
-                {query}
+    <Box justifyContent="space-between">
+      <Box>
+        {hasLeftScroll && <Text color="#64748b">◀ </Text>}
+        {visibleCategories.map((category, index) => {
+          const isActive = category.id === activeCategoryId;
+          return (
+            <Box key={category.id}>
+              <Text inverse={isActive} color={isActive ? 'cyan' : '#64748b'} bold={isActive}>
+                {' '}
+                {category.label}{' '}
               </Text>
-              "
+              {index < visibleCategories.length - 1 && <Text color="#64748b">{' │ '}</Text>}
+            </Box>
+          );
+        })}
+        {hasRightScroll && <Text color="#64748b"> ▶</Text>}
+      </Box>
+      <Text color="#64748b">{hint}</Text>
+    </Box>
+  );
+};
+
+const SettingsSelectionMenu: FC<Props> = ({
+  items,
+  selectedIndex,
+  scrollOffset = 0,
+  query,
+  isSearchingAll = false,
+  activeCategoryId,
+  categories,
+}) => {
+  const activeCategory = categories.find((category) => category.id === activeCategoryId);
+
+  return (
+    <Box flexDirection="column">
+      <SettingsTabs categories={categories} activeCategoryId={activeCategoryId} />
+      <MenuContainer
+        items={items}
+        selectedIndex={selectedIndex}
+        scrollOffset={scrollOffset}
+        maxHeight={VISIBLE_COUNT}
+        borderColor={items.length === 0 ? 'red' : 'cyan'}
+        title={
+          <Box>
+            <Text bold color="cyan">
+              ⚙ Settings
             </Text>
-          ) : (
-            <Text color="gray">Type to filter</Text>
-          )}
-        </Box>
-      }
-      fallbackText={
-        <Box flexDirection="column">
-          <Text bold color="red">
-            No settings found
-          </Text>
-          <Text color="gray">No settings match "{query}"</Text>
-        </Box>
-      }
-      footer={
-        <Text color="gray" dimColor>
-          Use <Text bold>↑↓</Text> to navigate, <Text bold>Enter</Text> to edit, <Text bold>Esc</Text> to close
-        </Text>
-      }
-      footerOutsideBorder={false}
-      renderItem={(item, actualIndex, isSelected) => {
-        const category = getCategoryForKey(item.key);
-        const prevCategory = actualIndex > 0 ? getCategoryForKey(items[actualIndex - 1]!.key) : null;
-        const showHeader = actualIndex === scrollOffset || category !== prevCategory;
-
-        const valueObj = item.currentValue !== undefined ? formatValue(item.currentValue, item.key) : null;
-        const paddedKey =
-          item.key.length > KEY_COL_WIDTH
-            ? truncate(item.key, KEY_COL_WIDTH).padEnd(KEY_COL_WIDTH, ' ')
-            : item.key.padEnd(KEY_COL_WIDTH, ' ');
-
-        return (
-          <Box key={item.key} flexDirection="column">
-            {showHeader && (
-              <Box marginTop={actualIndex === scrollOffset ? 0 : 1} marginBottom={0}>
-                <Text color="#22d3ee" bold underline>
-                  {titleCaseCategory(category)}
+            <Text color="gray"> · </Text>
+            <Text color="#22d3ee">
+              {isSearchingAll ? 'Searching all sections' : activeCategory?.label ?? 'Settings'}
+            </Text>
+            <Text color="gray"> · </Text>
+            {query ? (
+              <Text>
+                Searching: "
+                <Text color="white" bold>
+                  {query}
                 </Text>
-              </Box>
+                "
+              </Text>
+            ) : (
+              <Text color="gray">Type to filter</Text>
             )}
+          </Box>
+        }
+        headerRight={
+          <Text color="#64748b">
+            {items.length} item{items.length === 1 ? '' : 's'}
+          </Text>
+        }
+        fallbackText={
+          <Box flexDirection="column">
+            <Text bold color="red">
+              No settings found
+            </Text>
+            <Text color="gray">
+              No settings match "{query}"{' '}
+              {isSearchingAll ? 'in any section' : `in ${activeCategory?.label ?? 'this section'}`}
+            </Text>
+          </Box>
+        }
+        footer={
+          <Text color="gray" dimColor>
+            Use <Text bold>↑↓</Text> to navigate, <Text bold>Enter</Text> to edit, <Text bold>Esc</Text> to close
+          </Text>
+        }
+        footerOutsideBorder={false}
+        renderItem={(item, actualIndex, isSelected) => {
+          const category = getSettingCategory(item.key);
+          const prevCategory = actualIndex > 0 ? getSettingCategory(items[actualIndex - 1]!.key) : null;
+          const showHeader = actualIndex === scrollOffset || category.id !== prevCategory?.id;
 
-            <Box flexDirection="column">
-              <Box>
-                <Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '▶ ' : '  '}</Text>
-                <Text color={isSelected ? 'green' : 'white'} bold={isSelected}>
-                  {paddedKey}
-                </Text>
-                {valueObj && <Text color={isSelected ? 'white' : 'gray'}>{valueObj.text}</Text>}
-              </Box>
+          const valueObj = item.currentValue !== undefined ? formatValue(item.currentValue, item.key) : null;
+          const paddedKey =
+            item.key.length > KEY_COL_WIDTH
+              ? truncate(item.key, KEY_COL_WIDTH).padEnd(KEY_COL_WIDTH, ' ')
+              : item.key.padEnd(KEY_COL_WIDTH, ' ');
 
-              {isSelected && item.description && (
-                <Box marginLeft={2} marginTop={0}>
-                  <Text color="#7dd3fc" dimColor italic>
-                    └── {item.description}
+          return (
+            <Box key={item.key} flexDirection="column">
+              {showHeader && (
+                <Box marginTop={actualIndex === scrollOffset ? 0 : 1} marginBottom={0}>
+                  <Text color="#22d3ee" bold underline>
+                    {category.label}
                   </Text>
                 </Box>
               )}
+
+              <Box flexDirection="column">
+                <Box>
+                  <Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '▶ ' : '  '}</Text>
+                  <Text color={isSelected ? 'green' : 'white'} bold={isSelected}>
+                    {paddedKey}
+                  </Text>
+                  {valueObj && <Text color={isSelected ? 'white' : 'gray'}>{valueObj.text}</Text>}
+                </Box>
+
+                {isSelected && item.description && (
+                  <Box marginLeft={2} marginTop={0}>
+                    <Text color="#7dd3fc" dimColor italic>
+                      └── {item.description}
+                    </Text>
+                  </Box>
+                )}
+              </Box>
             </Box>
-          </Box>
-        );
-      }}
-    />
+          );
+        }}
+      />
+    </Box>
   );
 };
 

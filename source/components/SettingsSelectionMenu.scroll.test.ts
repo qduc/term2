@@ -17,6 +17,8 @@ test('SettingsSelectionMenu uses scrollOffset to control the visible window', (t
       selectedIndex: 10,
       scrollOffset: 1,
       query: '',
+      activeCategoryId: 'model',
+      categories: [{ id: 'model', label: 'Model & Reasoning' }],
     }),
   );
 
@@ -26,4 +28,32 @@ test('SettingsSelectionMenu uses scrollOffset to control the visible window', (t
   t.true(output.includes('agent.setting1'));
   t.true(output.includes('agent.setting10'));
   t.false(output.includes('agent.setting11'));
+});
+
+test('SettingsSelectionMenu renders task tabs and switch hint', (t) => {
+  const { lastFrame } = render(
+    React.createElement(SettingsSelectionMenu, {
+      items: [
+        {
+          key: 'agent.model',
+          description: 'Model',
+          currentValue: 'gpt-5',
+        },
+      ],
+      selectedIndex: 0,
+      scrollOffset: 0,
+      query: '',
+      activeCategoryId: 'model',
+      categories: [
+        { id: 'model', label: 'Model & Reasoning' },
+        { id: 'shell', label: 'Shell Execution' },
+      ],
+    }),
+  );
+
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('Model & Reasoning'));
+  t.true(output.includes('Shell Execution'));
+  t.true(output.includes('Tab/←→ → switch section'));
 });

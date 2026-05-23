@@ -17,27 +17,69 @@ const items: SettingCompletionItem[] = [
   },
 ];
 
+const defaultTabs = {
+  activeCategoryId: 'model',
+  categories: [
+    { id: 'model', label: 'Model & Reasoning' },
+    { id: 'shell', label: 'Shell Execution' },
+  ],
+};
+
 test('SettingsSelectionMenu renders empty state (does not disappear)', (t) => {
-  const { lastFrame } = render(<SettingsSelectionMenu items={[]} selectedIndex={0} query="abc" />);
+  const { lastFrame } = render(
+    React.createElement(SettingsSelectionMenu, {
+      items: [],
+      selectedIndex: 0,
+      query: 'abc',
+      activeCategoryId: defaultTabs.activeCategoryId,
+      categories: defaultTabs.categories,
+    }),
+  );
   t.true(lastFrame()?.includes('No settings match'));
   t.true(lastFrame()?.includes('abc'));
 });
 
 test('SettingsSelectionMenu shows query and suggestion count', (t) => {
-  const { lastFrame } = render(<SettingsSelectionMenu items={items} selectedIndex={0} query="ag" />);
+  const { lastFrame } = render(
+    React.createElement(SettingsSelectionMenu, {
+      items,
+      selectedIndex: 0,
+      query: 'ag',
+      isSearchingAll: true,
+      activeCategoryId: defaultTabs.activeCategoryId,
+      categories: defaultTabs.categories,
+    }),
+  );
   const output = lastFrame() ?? '';
   t.true(output.includes('ag'));
+  t.true(output.includes('Searching all sections'));
   t.true(output.includes('2 items'));
 });
 
 test('SettingsSelectionMenu shows category headers', (t) => {
-  const { lastFrame } = render(<SettingsSelectionMenu items={items} selectedIndex={0} query="" />);
+  const { lastFrame } = render(
+    React.createElement(SettingsSelectionMenu, {
+      items,
+      selectedIndex: 0,
+      query: '',
+      activeCategoryId: defaultTabs.activeCategoryId,
+      categories: defaultTabs.categories,
+    }),
+  );
   const output = lastFrame() ?? '';
-  t.true(output.includes('Common Settings'));
+  t.true(output.includes('Model & Reasoning'));
 });
 
 test('SettingsSelectionMenu marks the selected item', (t) => {
-  const { lastFrame } = render(<SettingsSelectionMenu items={items} selectedIndex={1} query="" />);
+  const { lastFrame } = render(
+    React.createElement(SettingsSelectionMenu, {
+      items,
+      selectedIndex: 1,
+      query: '',
+      activeCategoryId: defaultTabs.activeCategoryId,
+      categories: defaultTabs.categories,
+    }),
+  );
   const output = lastFrame() ?? '';
   // We mark selected rows with a leading arrow
   t.true(output.includes('▶'));

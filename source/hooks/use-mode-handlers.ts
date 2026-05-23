@@ -26,6 +26,9 @@ type Movable = {
   pageUp: () => void;
   pageDown: () => void;
 };
+type Settings = Movable & {
+  switchCategory: (direction?: 'next' | 'prev') => void;
+};
 type Slash = Movable & { executeSelected: () => void; completeSelected: () => void };
 type Models = Movable & { canSwitchProvider: boolean; toggleProvider: (direction?: 'next' | 'prev') => void };
 type Undo = Movable & {
@@ -35,7 +38,7 @@ type Undo = Movable & {
 type Options = {
   slash: Slash;
   path: Movable;
-  settings: Movable;
+  settings: Settings;
   settingsValue: Movable;
   models: Models;
   undo: Undo;
@@ -108,8 +111,14 @@ export const useModeHandlers = ({
         pageDown: settings.pageDown,
         moveHome: settings.moveHome,
         moveEnd: settings.moveEnd,
+        moveLeft: () => {
+          settings.switchCategory('prev');
+        },
+        moveRight: () => {
+          settings.switchCategory('next');
+        },
         onTab: () => {
-          insertSelectedSetting();
+          settings.switchCategory();
         },
         onSubmit: (submittedValue) => {
           // If the user has typed key + value already, submit through.

@@ -827,6 +827,7 @@ export class OpenAIAgentClient {
               return trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
             },
           }),
+          definition.parameters,
         ),
       );
 

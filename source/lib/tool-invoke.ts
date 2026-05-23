@@ -1,4 +1,5 @@
 import type { Tool, FunctionTool } from '@openai/agents';
+import { z } from 'zod';
 
 /**
  * Maximum payload size (in characters) for which JSON repair is attempted.
@@ -144,20 +145,97 @@ export const repairJson = (text: string): string => {
   return repaired;
 };
 
-export const normalizeToolInput = (input: unknown): string => {
+function getZodSchema(schema: any): any {
+  if (!schema) return null;
+  if (schema.safeParse && typeof schema.safeParse === 'function') {
+    return schema;
+  }
+  if (schema.schema && typeof schema.schema.safeParse === 'function') {
+    return schema.schema;
+  }
+  return null;
+}
+
+function getObjectShape(schema: any): Record<string, any> | null {
+  const zodSchema = getZodSchema(schema);
+  if (!zodSchema) return null;
+  if (zodSchema instanceof z.ZodObject || zodSchema.shape) {
+    return zodSchema.shape;
+  }
+  if (zodSchema._def && zodSchema._def.schema) {
+    return getObjectShape(zodSchema._def.schema);
+  }
+  return null;
+}
+
+export const normalizeToolInput = (input: unknown, schema?: z.ZodTypeAny): string => {
+  let jsonStr = '';
   if (typeof input === 'string') {
-    return repairJson(input);
+    jsonStr = repairJson(input);
+  } else {
+    try {
+      jsonStr = JSON.stringify(input);
+      if (typeof jsonStr !== 'string') {
+        jsonStr = '{}';
+      }
+    } catch {
+      jsonStr = '{}';
+    }
   }
 
-  try {
-    const serialized = JSON.stringify(input);
-    return typeof serialized === 'string' ? serialized : '{}';
-  } catch {
-    return '{}';
+  if (schema) {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const shape = getObjectShape(schema);
+        if (shape) {
+          let modified = false;
+          for (const key of Object.keys(shape)) {
+            const fieldSchema = shape[key];
+            if (!fieldSchema || typeof fieldSchema.safeParse !== 'function') {
+              continue;
+            }
+            const value = parsed[key];
+            if (value !== undefined) {
+              // 1. Optional field sentinels: "null", "None", "" or null -> undefined (omit)
+              if (fieldSchema.safeParse(undefined).success) {
+                if (value === 'null' || value === 'None' || value === '' || value === null) {
+                  delete parsed[key];
+                  modified = true;
+                  continue;
+                }
+              }
+              // 2. Boolean coercion: "true"/"false" -> boolean
+              const isBool =
+                fieldSchema.safeParse(true).success &&
+                fieldSchema.safeParse(false).success &&
+                !fieldSchema.safeParse('not a boolean').success;
+              if (isBool && typeof value === 'string') {
+                const lower = value.toLowerCase();
+                if (lower === 'true') {
+                  parsed[key] = true;
+                  modified = true;
+                } else if (lower === 'false') {
+                  parsed[key] = false;
+                  modified = true;
+                }
+              }
+            }
+          }
+          if (modified) {
+            jsonStr = JSON.stringify(parsed);
+          }
+        }
+      }
+    } catch {
+      // Ignore parsing errors and return jsonStr as-is
+    }
   }
+
+  return jsonStr;
 };
 
-export const wrapToolInvoke = <T extends Tool>(tool: T): T => {
+export const wrapToolInvoke = <T extends Tool>(tool: T, originalSchema?: z.ZodTypeAny): T => {
   // Only FunctionTool has an invoke method
   if (tool.type !== 'function') {
     return tool;
@@ -166,8 +244,73 @@ export const wrapToolInvoke = <T extends Tool>(tool: T): T => {
   const functionTool = tool as FunctionTool;
   const originalInvoke = functionTool.invoke.bind(functionTool);
   functionTool.invoke = async (context: any, input: unknown, details: any) => {
-    const normalizedInput = normalizeToolInput(input);
-    return originalInvoke(context, normalizedInput, details);
+    const targetSchema = originalSchema || functionTool.parameters;
+    const normalizedInput = normalizeToolInput(input, targetSchema as any);
+
+    const isInvalidToolInputError = (error: any) => {
+      if (!error) return false;
+      const name = error.name || error.constructor?.name;
+      return name === 'InvalidToolInputError' || name === 'AI_InvalidToolInputError';
+    };
+
+    const isValidationErrorString = (str: string) => {
+      return (
+        str.includes('InvalidToolInputError') ||
+        str.includes('AI_InvalidToolInputError') ||
+        str.includes('Invalid JSON input for tool')
+      );
+    };
+
+    const runDiagnostics = (toolName: string, schema: z.ZodTypeAny, rawInput: any): string => {
+      let parsedInput: any;
+      try {
+        parsedInput = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;
+      } catch {
+        parsedInput = rawInput;
+      }
+
+      const zodSchema = getZodSchema(schema);
+      if (zodSchema) {
+        const parseResult = zodSchema.safeParse(parsedInput);
+        if (!parseResult.success) {
+          const issues = parseResult.error.issues.map((issue: any) => {
+            const field = issue.path.join('.') || 'input';
+            let actualVal = parsedInput;
+            for (const segment of issue.path) {
+              if (actualVal && typeof actualVal === 'object') {
+                actualVal = (actualVal as any)[segment];
+              }
+            }
+            const valStr = typeof actualVal === 'string' ? `"${actualVal}"` : JSON.stringify(actualVal);
+            const typeStr = actualVal === null ? 'null' : typeof actualVal;
+
+            let msg = issue.message;
+            if (issue.code === 'invalid_type') {
+              msg = `must be ${issue.expected}`;
+            }
+            return `${field} ${msg}, got ${typeStr} ${valStr}`;
+          });
+          return `Tool input did not match schema for ${toolName}: ${issues.join(
+            '; ',
+          )}. Retry with valid JSON arguments.`;
+        }
+      }
+      return `Tool input was invalid for this tool. Retry with arguments matching the tool schema.`;
+    };
+
+    try {
+      const result = await originalInvoke(context, normalizedInput, details);
+      if (typeof result === 'string' && isValidationErrorString(result)) {
+        return runDiagnostics(functionTool.name, targetSchema as any, normalizedInput);
+      }
+      return result;
+    } catch (error: any) {
+      if (isInvalidToolInputError(error)) {
+        const diagnosticsMsg = runDiagnostics(functionTool.name, targetSchema as any, normalizedInput);
+        throw new Error(diagnosticsMsg);
+      }
+      throw error;
+    }
   };
 
   return tool;

@@ -218,3 +218,95 @@ test('wrapToolInvoke repairs multiline string arguments before SDK validation', 
 
   t.is(result, '+line 1\n+line 2\n');
 });
+
+test('normalizeToolInput with schema filters sentinel values for optional fields', (t) => {
+  const schema = z.object({
+    path: z.string(),
+    start_line: z.number().optional(),
+    end_line: z.number().optional(),
+    writeBoundary: z.array(z.string()).optional(),
+  });
+
+  const input = {
+    path: 'README.md',
+    start_line: 'None',
+    end_line: 'null',
+    writeBoundary: 'null',
+  };
+
+  const result = normalizeToolInput(input, schema);
+  t.deepEqual(JSON.parse(result), { path: 'README.md' });
+});
+
+test('normalizeToolInput with schema coerces boolean string inputs', (t) => {
+  const schema = z.object({
+    pattern: z.string(),
+    no_ignore: z.boolean().optional(),
+    case_sensitive: z.boolean(),
+  });
+
+  const input = {
+    pattern: 'test',
+    no_ignore: 'false',
+    case_sensitive: 'TRUE',
+  };
+
+  const result = normalizeToolInput(input, schema);
+  t.deepEqual(JSON.parse(result), {
+    pattern: 'test',
+    no_ignore: false,
+    case_sensitive: true,
+  });
+});
+
+test('wrapToolInvoke intercepts InvalidToolInputError exception and formats diagnostics', async (t) => {
+  const parametersSchema = z.object({
+    pattern: z.string(),
+    no_ignore: z.boolean().optional(),
+  });
+  const rawTool = createTool({
+    name: 'grep',
+    description: 'grep tool',
+    parameters: parametersSchema,
+    execute: async () => 'ok',
+  });
+
+  rawTool.invoke = async (_context, _input, _details) => {
+    const err = new Error('Invalid JSON input for tool');
+    err.name = 'InvalidToolInputError';
+    throw err;
+  };
+
+  const wrappedTool = wrapToolInvoke(rawTool, parametersSchema);
+  const err = await t.throwsAsync(() =>
+    wrappedTool.invoke({} as RunContext, '{"pattern": "test", "no_ignore": "not-a-bool"}'),
+  );
+  t.is(
+    err?.message,
+    'Tool input did not match schema for grep: no_ignore must be boolean, got string "not-a-bool". Retry with valid JSON arguments.',
+  );
+});
+test('wrapToolInvoke intercepts InvalidToolInputError result string and formats diagnostics', async (t) => {
+  const parametersSchema = z.object({
+    pattern: z.string(),
+    no_ignore: z.boolean().optional(),
+  });
+  const rawTool = createTool({
+    name: 'grep',
+    description: 'grep tool',
+    parameters: parametersSchema,
+    execute: async () => 'ok',
+  });
+
+  rawTool.invoke = async (_context, _input, _details) => {
+    return 'An error occurred while running the tool. Please try again. Error: InvalidToolInputError: Invalid JSON input for tool';
+  };
+
+  const wrappedTool = wrapToolInvoke(rawTool, parametersSchema);
+
+  const result = await wrappedTool.invoke({} as RunContext, '{"pattern": "test", "no_ignore": "not-a-bool"}');
+  t.is(
+    result,
+    'Tool input did not match schema for grep: no_ignore must be boolean, got string "not-a-bool". Retry with valid JSON arguments.',
+  );
+});

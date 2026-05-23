@@ -613,9 +613,12 @@ export class ProviderTrafficArtifactStore {
     const dateKey = input.timestamp.slice(0, 10);
     const dayDir = `${this.#rootDir}/${dateKey}`;
     const sessionDirName = `${safeTimestampForPath(input.sessionStartedAt)}_${input.sessionId}`;
-    const sessionDir = `${dayDir}/${sessionDirName}`;
-    const requestDir = input.evaluator ? `${sessionDir}/evaluator` : sessionDir;
-    const requestPath = `${requestDir}/${safeTimestampForPath(input.timestamp)}_${input.requestId}.jsonl`;
+    const sessionDir = dayDir;
+    const timePart = input.timestamp.includes('T')
+      ? safeTimestampForPath(input.timestamp.substring(input.timestamp.indexOf('T') + 1))
+      : safeTimestampForPath(input.timestamp);
+    const prefix = input.evaluator ? 'evaluator_' : '';
+    const requestPath = `${dayDir}/${prefix}${timePart}_sess-${input.sessionId}_req-${input.requestId}.jsonl`;
     return { dayDir, sessionDir, requestPath, sessionDirName };
   }
 

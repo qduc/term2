@@ -209,19 +209,11 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
   t.true(dayDirs.length > 0);
 
   const dayDir = path.join(providerRoot, dayDirs[0]);
-  const sessionDirs = fs
-    .readdirSync(dayDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
-  t.true(sessionDirs.some((name) => name.endsWith('_session-1')));
-
-  const sessionDir = path.join(
-    dayDir,
-    sessionDirs.find((name) => name.endsWith('_session-1')),
-  );
-  const requestFiles = fs.readdirSync(sessionDir).filter((name) => name.endsWith('_req-1.jsonl'));
+  const requestFiles = fs
+    .readdirSync(dayDir)
+    .filter((name) => name.includes('sess-session-1') && name.includes('req-req-1') && name.endsWith('.jsonl'));
   t.true(requestFiles.length > 0);
-  const trafficFile = path.join(sessionDir, requestFiles[0]);
+  const trafficFile = path.join(dayDir, requestFiles[0]);
 
   const entries = fs
     .readFileSync(trafficFile, 'utf8')
@@ -248,15 +240,23 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
   t.is(received.summary.outputText, 'hi');
 });
 
-test.serial('cleans up old provider traffic files by date', async (t) => {
+test.serial('cleans up old provider traffic files and directories by date', async (t) => {
   const logDir = getTestLogDir();
   const providerRoot = path.join(logDir, 'provider-traffic');
   const oldFile = path.join(providerRoot, `traffic-${formatDateDaysAgo(40)}.log`);
   const recentFile = path.join(providerRoot, `traffic-${formatDateDaysAgo(5)}.log`);
+  const oldDir = path.join(providerRoot, formatDateDaysAgo(40));
+  const recentDir = path.join(providerRoot, formatDateDaysAgo(5));
 
   fs.mkdirSync(providerRoot, { recursive: true });
   fs.writeFileSync(oldFile, '{"direction":"sent"}\n', 'utf8');
   fs.writeFileSync(recentFile, '{"direction":"received"}\n', 'utf8');
+
+  fs.mkdirSync(oldDir, { recursive: true });
+  fs.writeFileSync(path.join(oldDir, 'some-file.jsonl'), '{}', 'utf8');
+
+  fs.mkdirSync(recentDir, { recursive: true });
+  fs.writeFileSync(path.join(recentDir, 'some-file.jsonl'), '{}', 'utf8');
 
   new LoggingService({
     logDir,
@@ -265,6 +265,8 @@ test.serial('cleans up old provider traffic files by date', async (t) => {
 
   t.false(fs.existsSync(oldFile));
   t.true(fs.existsSync(recentFile));
+  t.false(fs.existsSync(oldDir));
+  t.true(fs.existsSync(recentDir));
 });
 
 test.serial('suppresses console output when configured', async (t) => {

@@ -290,22 +290,32 @@ export class LoggingService {
 
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
-        if (!entry.isFile()) {
-          continue;
+        let dateKey: string | undefined;
+        let isDir = false;
+
+        if (entry.isFile()) {
+          const match = entry.name.match(/^traffic-(\d{4}-\d{2}-\d{2})\.log$/);
+          if (match) {
+            dateKey = match[1];
+          }
+        } else if (entry.isDirectory()) {
+          const match = entry.name.match(/^(\d{4}-\d{2}-\d{2})$/);
+          if (match) {
+            dateKey = match[1];
+            isDir = true;
+          }
         }
 
-        const match = entry.name.match(/^traffic-(\d{4}-\d{2}-\d{2})\.log$/);
-        if (!match) {
-          continue;
-        }
-
-        const dateKey = match[1];
-        if (dateKey < thresholdStr) {
+        if (dateKey && dateKey < thresholdStr) {
           const fullPath = path.join(dir, entry.name);
           try {
-            fs.rmSync(fullPath, { force: true });
+            fs.rmSync(fullPath, { recursive: true, force: true });
           } catch (err: any) {
-            this.emitConsoleError(`[LoggingService] Failed to delete old traffic log ${entry.name}: ${err.message}`);
+            this.emitConsoleError(
+              `[LoggingService] Failed to delete old traffic ${isDir ? 'directory' : 'log'} ${entry.name}: ${
+                err.message
+              }`,
+            );
           }
         }
       }

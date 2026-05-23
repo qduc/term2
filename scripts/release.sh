@@ -210,6 +210,7 @@ else
         PROMPT="Generate a concise user-oriented CHANGELOG.md entry for version $NEW_VERSION.
         Group changes into sections: Features, Bug Fixes, Improvements.
         Do not list internal changes that end-user does not need to know.
+        If a bug-fix is for a feature that newly added in this same release, do not mention them.
         Here are the commits:
         $COMMITS
 

@@ -145,6 +145,34 @@ test.serial('saveConversation: normalizes pending command messages to completed'
   fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
 });
 
+test.serial('saveConversation: writes repaired history for duplicated tool replay artifacts', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    previousResponseId: 'resp-123',
+    history: [
+      { role: 'user', type: 'message', content: 'Inspect' },
+      { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
+      { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', output: 'contents' },
+      { type: 'function_call', id: 'fc_2', callId: 'call-read', name: 'read_file', arguments: '{}' },
+      { type: 'function_call_result', id: 'fcr_2', callId: 'call-read', output: 'contents' },
+    ],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'Inspect' }],
+  };
+
+  const filePath = persistenceModule.saveConversation(conversation);
+  const saved = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as persistenceModule.SavedConversation;
+
+  t.is(saved.previousResponseId, 'resp-123');
+  t.is(saved.history.length, 3);
+  t.deepEqual(
+    saved.history.filter((item: any) => item.callId === 'call-read').map((item: any) => item.id),
+    ['fc_1', 'fcr_1'],
+  );
+});
+
 test.serial('loadConversation: returns null for non-existent id', (t) => {
   const result = persistenceModule.loadConversation('non-existent-id');
   t.is(result, null);
@@ -174,6 +202,42 @@ test.serial('loadConversation: returns saved conversation', (t) => {
   // Cleanup
   const filePath = path.join(persistenceModule.getConversationsDirForTest(), `${id}.json`);
   fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
+});
+
+test.serial('loadConversation: returns repaired history with transient repair metadata', (t) => {
+  const id = persistenceModule.generateId();
+  const dir = persistenceModule.getConversationsDirForTest();
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, `${id}.json`),
+    JSON.stringify(
+      {
+        id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        previousResponseId: 'resp-123',
+        history: [
+          { role: 'user', type: 'message', content: 'Inspect' },
+          { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
+          { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', output: 'contents' },
+          { type: 'function_call', id: 'fc_2', callId: 'call-read', name: 'read_file', arguments: '{}' },
+          { type: 'function_call_result', id: 'fcr_2', callId: 'call-read', output: 'contents' },
+        ],
+        messages: [{ id: 'msg-1', sender: 'user', text: 'Inspect' }],
+      },
+      null,
+      2,
+    ),
+    'utf-8',
+  );
+
+  const loaded = persistenceModule.loadConversation(id);
+
+  t.truthy(loaded);
+  t.is(loaded!.previousResponseId, 'resp-123');
+  t.is(loaded!.history.length, 3);
+  t.true(loaded!.historyRepair?.repaired);
+  t.is(loaded!.historyRepair?.removedItems, 2);
 });
 
 test.serial('loadConversation: preserves saved app mode settings', (t) => {
@@ -325,6 +389,41 @@ test.serial('loadLastConversation: returns the last saved conversation', (t) => 
 
   // Cleanup
   fs.rmSync(persistenceModule.getConversationsDirForTest(), { recursive: true, force: true });
+});
+
+test.serial('loadLastConversation: surfaces repaired conversation metadata', (t) => {
+  const id = persistenceModule.generateId();
+  const dir = persistenceModule.getConversationsDirForTest();
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, `${id}.json`),
+    JSON.stringify(
+      {
+        id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        previousResponseId: null,
+        history: [
+          { role: 'user', type: 'message', content: 'Inspect' },
+          { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
+          { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', output: 'contents' },
+          { type: 'function_call', id: 'fc_2', callId: 'call-read', name: 'read_file', arguments: '{}' },
+          { type: 'function_call_result', id: 'fcr_2', callId: 'call-read', output: 'contents' },
+        ],
+        messages: [{ id: 'msg-1', sender: 'user', text: 'Inspect' }],
+      },
+      null,
+      2,
+    ),
+    'utf-8',
+  );
+  fs.writeFileSync(path.join(dir, 'last.json'), JSON.stringify({ id }), 'utf-8');
+
+  const last = persistenceModule.loadLastConversation();
+
+  t.truthy(last);
+  t.true(last!.historyRepair?.repaired);
+  t.is(last!.history.length, 3);
 });
 
 test.serial('loadLastConversation: returns most recent conversation for expected project path', (t) => {

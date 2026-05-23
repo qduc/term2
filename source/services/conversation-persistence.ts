@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import envPaths from 'env-paths';
+import { repairConversationHistory, type ConversationHistoryRepairSummary } from './conversation-history-repair.js';
 
 const paths = envPaths('term2');
 const CONVERSATIONS_DIR = path.join(paths.log, 'conversations');
@@ -35,6 +36,7 @@ export interface SavedConversation {
   previousResponseId: string | null;
   history: unknown[];
   messages: SavedMessage[];
+  historyRepair?: ConversationHistoryRepairSummary;
 }
 
 export type LoadConversationForProjectResult =
@@ -126,6 +128,7 @@ export function generateId(): string {
 export function saveConversation(conversation: SavedConversation): string {
   ensureConversationsDir();
   const filePath = getConversationPath(conversation.id);
+  const { historyRepair: _historyRepair, ...persistedConversation } = conversation;
 
   // Normalize messages: mark any streaming/running states as terminal
   const normalizedMessages = conversation.messages.map((msg) => {
@@ -139,7 +142,8 @@ export function saveConversation(conversation: SavedConversation): string {
   });
 
   const data: SavedConversation = {
-    ...conversation,
+    ...persistedConversation,
+    history: repairConversationHistory(persistedConversation.history).history,
     messages: normalizedMessages,
     updatedAt: new Date().toISOString(),
   };
@@ -168,7 +172,23 @@ export function loadConversation(
     if (!conversationMatchesProject(data, expectedProjectPath, expectedSshHost)) {
       return null;
     }
-    return data;
+    const { historyRepair: _historyRepair, ...persistedData } = data;
+    const repair = repairConversationHistory(Array.isArray(persistedData.history) ? persistedData.history : []);
+    return {
+      ...persistedData,
+      history: repair.history,
+      ...(repair.repaired
+        ? {
+            historyRepair: {
+              repaired: repair.repaired,
+              removedItems: repair.removedItems,
+              repairs: repair.repairs,
+              statsBefore: repair.statsBefore,
+              statsAfter: repair.statsAfter,
+            },
+          }
+        : {}),
+    };
   } catch {
     return null;
   }

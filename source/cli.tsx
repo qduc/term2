@@ -27,6 +27,7 @@ import {
   type SavedConversation,
   type SavedMessage,
 } from './services/conversation-persistence.js';
+import { repairConversationHistory } from './services/conversation-history-repair.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
 import { normalizeAppModes } from './services/settings-schema.js';
 import os from 'os';
@@ -465,6 +466,11 @@ if (resumedConversation) {
   const previousResponseId = savedProviderMatches && savedModelMatches ? resumedConversation.previousResponseId : null;
 
   // Restore agent conversation history.
+  if (resumedConversation.historyRepair?.repaired) {
+    console.warn(
+      `Repaired saved conversation history before resume: removed ${resumedConversation.historyRepair.removedItems} duplicated tool replay item(s).`,
+    );
+  }
   conversationService.importState({
     history: resumedConversation.history,
     previousResponseId,
@@ -497,6 +503,12 @@ const saveAndPrintResume = async (messages: Message[], overrideSessionId?: strin
   savedSessionIds.add(sessionIdToSave);
 
   const state = conversationService.exportState();
+  const historyRepair = repairConversationHistory(state.history);
+  if (historyRepair.repaired) {
+    console.warn(
+      `Repaired conversation history before save: removed ${historyRepair.removedItems} duplicated tool replay item(s).`,
+    );
+  }
   const model = settings.get('agent.model');
   const provider = settings.get('agent.provider');
   const reasoningEffortVal = settings.get('agent.reasoningEffort');
@@ -517,7 +529,7 @@ const saveAndPrintResume = async (messages: Message[], overrideSessionId?: strin
     provider,
     reasoningEffort: reasoningEffortVal ?? undefined,
     previousResponseId: state.previousResponseId,
-    history: state.history as import('@openai/agents').AgentInputItem[],
+    history: historyRepair.history as import('@openai/agents').AgentInputItem[],
     messages: messages as SavedMessage[],
   });
 

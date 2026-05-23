@@ -9,6 +9,7 @@ import {
 import { SETTING_KEYS } from '../services/settings-service.js';
 import { getRtkBinaryPath } from '../services/rtk-service.js';
 import { MenuContainer } from './Common/MenuContainer.js';
+import { ScrollableTabBar } from './Common/ScrollableTabBar.js';
 
 type Props = {
   items: SettingCompletionItem[];
@@ -51,71 +52,6 @@ function formatValue(
 const VISIBLE_COUNT = 10;
 const KEY_COL_WIDTH = 32;
 
-const SettingsTabs: FC<{
-  categories: SettingsCategory[];
-  activeCategoryId: string;
-}> = ({ categories, activeCategoryId }) => {
-  const terminalWidth = process.stdout.columns || 80;
-  const hint = 'Tab/←→ → switch section';
-  const availableWidth = terminalWidth - hint.length - 2;
-
-  const activeIndex = categories.findIndex((category) => category.id === activeCategoryId);
-  const safeActiveIndex = activeIndex >= 0 ? activeIndex : 0;
-
-  const getTabWidth = (category: SettingsCategory) => category.label.length + 2;
-
-  let start = safeActiveIndex;
-  let end = safeActiveIndex;
-  let currentWidth = categories[safeActiveIndex] ? getTabWidth(categories[safeActiveIndex]!) + 4 : 0;
-
-  while (categories.length > 0) {
-    let expanded = false;
-    if (end + 1 < categories.length) {
-      const rightWidth = getTabWidth(categories[end + 1]!) + 3;
-      if (currentWidth + rightWidth <= availableWidth) {
-        currentWidth += rightWidth;
-        end++;
-        expanded = true;
-      }
-    }
-    if (start - 1 >= 0) {
-      const leftWidth = getTabWidth(categories[start - 1]!) + 3;
-      if (currentWidth + leftWidth <= availableWidth) {
-        currentWidth += leftWidth;
-        start--;
-        expanded = true;
-      }
-    }
-    if (!expanded) break;
-  }
-
-  const visibleCategories = categories.slice(start, end + 1);
-  const hasLeftScroll = start > 0;
-  const hasRightScroll = end < categories.length - 1;
-
-  return (
-    <Box justifyContent="space-between">
-      <Box>
-        {hasLeftScroll && <Text color="#64748b">◀ </Text>}
-        {visibleCategories.map((category, index) => {
-          const isActive = category.id === activeCategoryId;
-          return (
-            <Box key={category.id}>
-              <Text inverse={isActive} color={isActive ? 'cyan' : '#64748b'} bold={isActive}>
-                {' '}
-                {category.label}{' '}
-              </Text>
-              {index < visibleCategories.length - 1 && <Text color="#64748b">{' │ '}</Text>}
-            </Box>
-          );
-        })}
-        {hasRightScroll && <Text color="#64748b"> ▶</Text>}
-      </Box>
-      <Text color="#64748b">{hint}</Text>
-    </Box>
-  );
-};
-
 const SettingsSelectionMenu: FC<Props> = ({
   items,
   selectedIndex,
@@ -129,7 +65,18 @@ const SettingsSelectionMenu: FC<Props> = ({
 
   return (
     <Box flexDirection="column">
-      <SettingsTabs categories={categories} activeCategoryId={activeCategoryId} />
+      <ScrollableTabBar
+        items={categories}
+        activeItemId={activeCategoryId}
+        getItemWidth={(category) => category.label.length + 2}
+        renderTab={(category, isActive) => (
+          <Text inverse={isActive} color={isActive ? 'cyan' : '#64748b'} bold={isActive}>
+            {' '}
+            {category.label}{' '}
+          </Text>
+        )}
+        hint="Tab/←→ → switch section"
+      />
       <MenuContainer
         items={items}
         selectedIndex={selectedIndex}

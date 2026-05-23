@@ -1,3 +1,22 @@
+## [0.6.1] - 2026-05-23
+
+### Features
+- **SSH session resumption**: Resume SSH sessions with `--resume`, including full SSH options support in the resume command.
+- **Session archiving**: Cleared conversations are now archived and assigned a fresh session ID, preserving history without cluttering the active session.
+- **Subagent auto-approval**: Shell commands rated YELLOW (low-risk) are now auto-approved when issued by subagents, reducing interruptions during delegated tasks.
+- **Flex tier retry**: Automatically retries requests when the flex tier fails.
+- **OpenRouter reasoning**: Reasoning details in OpenRouter API requests are now preprocessed for improved compatibility.
+- **Conversation history repair**: Automatic cleanup and optimization of conversation history to recover from corrupted or oversized state.
+
+### Bug Fixes
+- Fixed incorrect model sort order when a filter is active.
+- Fixed missing task context when subagents request auto-approval, restoring correct approval decisions.
+
+### Improvements
+- Plan Mode and Subagent Delegation instructions are now only included in the system prompt when those modes are active, reducing token usage.
+- Shell command auto-approval evaluations now use structured output and caching for faster, more consistent decisions.
+- Provider traffic logs reorganized into a flat per-day folder layout with millisecond-precision timestamps and key-value labels for easier querying.
+
 ## [0.6.0] - 2026-05-21
 
 ### Features

@@ -76,8 +76,8 @@ After making code changes, you MUST run tests appropriate to the scope of the ta
 
 ```bash
 npm test              # Run all tests
-npm test:verbose -- <source/*.test.ts>           # Run a single .ts source test
-npm test:verbose -- dist/<path to compiled JS test file>  # Use for .tsx tests; dist paths omit the leading source/
+npm run test:verbose -- <source/*.test.ts>           # Run a single .ts source test
+npm run test:verbose -- dist/<path to compiled JS test file>  # Use for .tsx tests; dist paths omit the leading source/
 npx prettier --write <file1, file2, file3> # Fix formatting issues in files you changed
 ```
 

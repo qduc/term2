@@ -135,7 +135,7 @@ test('integration: approval round-trip (approval_required -> continue -> final)'
   t.is(final?.type === 'response' ? final.finalText : '', 'Approved run');
   t.deepEqual(approvalState.approved, [interruption]);
   t.deepEqual(approvalState.rejected, []);
-  t.deepEqual(continueOptions, { previousResponseId: 'resp-before-approval' });
+  t.deepEqual(continueOptions, { previousResponseId: 'resp-before-approval', sessionId: 'default' });
 });
 
 test('integration: hallucination retry retries once and succeeds', async (t) => {

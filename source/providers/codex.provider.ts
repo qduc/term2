@@ -265,12 +265,26 @@ export function sanitizeCodexRequestInit(url: unknown, init?: RequestInit): Requ
       return init;
     }
 
+    let normalizedInclude = parsed.include;
+    if (typeof parsed.include === 'string') {
+      try {
+        const candidate = JSON.parse(parsed.include);
+        if (Array.isArray(candidate) && candidate.every((entry) => typeof entry === 'string')) {
+          normalizedInclude = candidate;
+        }
+      } catch {
+        // ignore malformed include payloads and leave as-is
+      }
+    }
+
     const filteredInput = parsed.input.filter((item: any) => {
       const raw = item?.rawItem ?? item;
       return raw?.type !== 'reasoning';
     });
 
-    if (filteredInput.length === parsed.input.length) {
+    const inputChanged = filteredInput.length !== parsed.input.length;
+    const includeChanged = normalizedInclude !== parsed.include;
+    if (!inputChanged && !includeChanged) {
       return init;
     }
 
@@ -278,7 +292,8 @@ export function sanitizeCodexRequestInit(url: unknown, init?: RequestInit): Requ
       ...init,
       body: JSON.stringify({
         ...parsed,
-        input: filteredInput,
+        input: parsed.input,
+        include: normalizedInclude,
       }),
     };
   } catch {

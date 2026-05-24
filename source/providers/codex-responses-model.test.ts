@@ -158,3 +158,88 @@ test.serial('CodexResponsesModel.getStreamedResponse yields response_done with r
     (OpenAIResponsesModel.prototype as any)._fetchResponse = original;
   }
 });
+
+test.serial(
+  'CodexResponsesModel._buildResponsesCreateRequest merges modelSettings.include into requestData.include',
+  (t) => {
+    const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+      return {
+        requestData: {
+          include: ['file_search_call.results'],
+        },
+        sdkRequestHeaders: {},
+        signal: undefined,
+      };
+    };
+
+    try {
+      const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+      const built = (model as any)._buildResponsesCreateRequest(
+        {
+          modelSettings: {
+            include: ['reasoning.encrypted_content', 'file_search_call.results'],
+          },
+        },
+        true,
+      );
+
+      t.deepEqual(built.requestData.include, ['file_search_call.results', 'reasoning.encrypted_content']);
+    } finally {
+      (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+    }
+  },
+);
+
+test.serial('CodexResponsesModel._buildResponsesCreateRequest strips temperature from requestData', (t) => {
+  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        temperature: 0.2,
+      },
+      sdkRequestHeaders: {},
+      signal: undefined,
+    };
+  };
+
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const built = (model as any)._buildResponsesCreateRequest({ modelSettings: { temperature: 0.2 } }, true);
+
+    t.false('temperature' in built.requestData);
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+  }
+});
+
+test.serial('CodexResponsesModel._buildResponsesCreateRequest forwards prompt_cache_key from modelSettings', (t) => {
+  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        include: [],
+        temperature: 0.4,
+      },
+      sdkRequestHeaders: {},
+      signal: undefined,
+    };
+  };
+
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const built = (model as any)._buildResponsesCreateRequest(
+      {
+        modelSettings: {
+          prompt_cache_key: 'conv_123',
+        },
+      },
+      true,
+    );
+
+    t.is(built.requestData.prompt_cache_key, 'conv_123');
+    t.false('temperature' in built.requestData);
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+  }
+});

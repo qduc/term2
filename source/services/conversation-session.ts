@@ -276,6 +276,7 @@ export class ConversationSession {
         try {
           const continuedStream = (await this.agentClient.continueRunStream(abortedContext.state, {
             previousResponseId: this.previousResponseId,
+            sessionId: this.id,
           })) as AgentStream;
 
           const acc = createStreamAccumulator();
@@ -405,6 +406,7 @@ export class ConversationSession {
 
       stream = (await this.agentClient.startStream(streamInput, {
         previousResponseId: useChaining ? this.previousResponseId : null,
+        sessionId: this.id,
       })) as AgentStream;
 
       const acc = createStreamAccumulator();
@@ -587,6 +589,7 @@ export class ConversationSession {
         try {
           const stream = (await this.agentClient.continueRunStream(state, {
             previousResponseId: this.previousResponseId,
+            sessionId: this.id,
           })) as AgentStream;
 
           const acc = createStreamAccumulator();

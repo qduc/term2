@@ -14,6 +14,34 @@ import { OpenAIResponsesModel } from '@openai/agents-openai';
 // existing conversion logic (`convertToOutputItem`) produces a normal
 // `response_done` event.
 export class CodexResponsesModel extends OpenAIResponsesModel {
+  _buildResponsesCreateRequest(request: any, stream: boolean): any {
+    const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
+    const requestData = { ...built.requestData };
+
+    // Codex responses endpoint rejects temperature; always omit it.
+    if ('temperature' in requestData) {
+      delete requestData.temperature;
+    }
+
+    const modelInclude = request?.modelSettings?.include;
+    if (Array.isArray(modelInclude) && modelInclude.length > 0) {
+      const existingInclude = Array.isArray(requestData.include) ? requestData.include : [];
+      requestData.include = Array.from(
+        new Set([...existingInclude, ...modelInclude].filter((entry) => typeof entry === 'string' && entry.length > 0)),
+      );
+    }
+
+    const promptCacheKey = request?.modelSettings?.prompt_cache_key;
+    if (typeof promptCacheKey === 'string' && promptCacheKey.length > 0) {
+      requestData.prompt_cache_key = promptCacheKey;
+    }
+
+    return {
+      ...built,
+      requestData,
+    };
+  }
+
   async _fetchResponse(request: any, stream: boolean): Promise<any> {
     const response = await (OpenAIResponsesModel.prototype as any)._fetchResponse.call(this, request, stream);
     if (!stream) return response;

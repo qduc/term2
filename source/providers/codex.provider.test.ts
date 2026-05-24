@@ -360,6 +360,20 @@ test('sanitizeCodexRequestInit leaves non-responses requests unchanged', (t) => 
   t.deepEqual(sanitized, init);
 });
 
+test('sanitizeCodexRequestInit normalizes include JSON string to array', (t) => {
+  const init: RequestInit = {
+    body: JSON.stringify({
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
+      include: '["reasoning.encrypted_content"]',
+    }),
+  };
+
+  const sanitized = sanitizeCodexRequestInit('https://chatgpt.com/backend-api/codex/responses', init);
+  const body = JSON.parse(String(sanitized?.body));
+  t.true(Array.isArray(body.include));
+  t.deepEqual(body.include, ['reasoning.encrypted_content']);
+});
+
 test('resolveCodexClientVersion falls back to npm registry if local version fails', async (t) => {
   const cacheDir = path.join(TEST_DIR, 'cache-npm');
   fs.mkdirSync(cacheDir, { recursive: true });

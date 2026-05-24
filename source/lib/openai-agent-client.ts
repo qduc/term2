@@ -373,7 +373,7 @@ export class OpenAIAgentClient {
 
   async startStream(
     userInput: string | AgentInputItem | AgentInputItem[],
-    { previousResponseId }: { previousResponseId?: string | null } = {},
+    { previousResponseId, sessionId }: { previousResponseId?: string | null; sessionId?: string } = {},
   ): Promise<any> {
     // Abort any previous operation
     this.abort();
@@ -414,13 +414,14 @@ export class OpenAIAgentClient {
         maxTurns: this.#maxTurns,
         signal,
       };
+      const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
       const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
       if (supportsConversationChaining && previousResponseId) {
         options.previousResponseId = previousResponseId;
       }
 
-      const result = await this.#executeWithRetry(() => this.#runAgent(this.#agent, userInput, options));
+      const result = await this.#executeWithRetry(() => this.#runAgent(agentForRun, userInput, options));
       return result;
     } catch (error: any) {
       this.#logger.error('Agent stream failed', {
@@ -439,7 +440,10 @@ export class OpenAIAgentClient {
     }
   }
 
-  async continueRun(state: any, { previousResponseId }: { previousResponseId?: string | null } = {}): Promise<any> {
+  async continueRun(
+    state: any,
+    { previousResponseId, sessionId }: { previousResponseId?: string | null; sessionId?: string } = {},
+  ): Promise<any> {
     this.abort();
     this.#currentAbortController = new AbortController();
     const signal = this.#currentAbortController.signal;
@@ -447,18 +451,19 @@ export class OpenAIAgentClient {
     const options: any = {
       signal,
     };
+    const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
     const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
     if (supportsConversationChaining && previousResponseId) {
       options.previousResponseId = previousResponseId;
     }
 
-    return this.#executeWithRetry(() => this.#runAgent(this.#agent, state, options));
+    return this.#executeWithRetry(() => this.#runAgent(agentForRun, state, options));
   }
 
   async continueRunStream(
     state: any,
-    { previousResponseId }: { previousResponseId?: string | null } = {},
+    { previousResponseId, sessionId }: { previousResponseId?: string | null; sessionId?: string } = {},
   ): Promise<any> {
     this.abort();
     this.#currentAbortController = new AbortController();
@@ -469,13 +474,14 @@ export class OpenAIAgentClient {
       maxTurns: this.#maxTurns,
       signal,
     };
+    const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
     const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
     if (supportsConversationChaining && previousResponseId) {
       options.previousResponseId = previousResponseId;
     }
 
-    return this.#executeWithRetry(() => this.#runAgent(this.#agent, state, options));
+    return this.#executeWithRetry(() => this.#runAgent(agentForRun, state, options));
   }
 
   #runAgentWithProvider(
@@ -672,6 +678,19 @@ export class OpenAIAgentClient {
     }
 
     return '';
+  }
+
+  #getAgentForRun(agent: Agent, { sessionId }: { sessionId?: string } = {}): Agent {
+    if (this.#provider !== 'codex' || !sessionId) {
+      return agent;
+    }
+
+    return agent.clone({
+      modelSettings: {
+        ...(agent.modelSettings || {}),
+        prompt_cache_key: sessionId,
+      } as any,
+    });
   }
 
   #createMentor = async (question: string): Promise<string> => {
@@ -945,6 +964,7 @@ export class OpenAIAgentClient {
 
     if (this.#provider === 'codex') {
       modelSettings.store = false;
+      modelSettings.include = ['reasoning.encrypted_content'];
     }
 
     return modelSettings;

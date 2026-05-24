@@ -68,6 +68,8 @@ let mentorInputsAltProvider: any[] = [];
 let mentorResponseCounter = 0;
 let chainingProviderRegistered = false;
 let chainingRunnerCalls: any[] = [];
+let codexProviderRegistered = false;
+let codexRunnerCalls: any[] = [];
 let failingProviderRegistered = false;
 function ensureMentorProvidersRegistered() {
   if (!mentorProviderRegistered) {
@@ -180,6 +182,36 @@ function ensureChainingProvidersRegistered() {
   }
 }
 
+function ensureCodexProviderRegistered() {
+  if (!codexProviderRegistered) {
+    registerProvider(
+      {
+        id: 'codex',
+        label: 'Mock Codex',
+        createRunner: () =>
+          ({
+            run: async (agent: any, _input: any, options: any) => {
+              codexRunnerCalls.push({ agent, options });
+              return {
+                status: 'completed',
+                finalOutput: 'ok',
+                messages: [],
+              };
+            },
+          } as any),
+        fetchModels: async () => [{ id: 'mock-model' }],
+        capabilities: {
+          supportsConversationChaining: true,
+          supportsTracingControl: true,
+        },
+      },
+      { allowOverride: true },
+    );
+
+    codexProviderRegistered = true;
+  }
+}
+
 function ensureFailingProviderRegistered() {
   if (!failingProviderRegistered) {
     registerProvider({
@@ -204,12 +236,14 @@ test.beforeEach(() => {
   ensureProviderRegistered();
   ensureMentorProvidersRegistered();
   ensureChainingProvidersRegistered();
+  ensureCodexProviderRegistered();
   ensureFailingProviderRegistered();
   capturedMainAgentForMentorTest = null;
   mentorInputs = [];
   mentorInputsAltProvider = [];
   mentorResponseCounter = 0;
   chainingRunnerCalls = [];
+  codexRunnerCalls = [];
 });
 
 // ========== setModel tests ==========
@@ -285,6 +319,21 @@ test.serial('startStream only passes previousResponseId when provider supports c
   await client.startStream('Hello', { previousResponseId: 'prev-2' });
   t.is(chainingRunnerCalls.length, 2);
   t.is(chainingRunnerCalls[1].options.previousResponseId, 'prev-2');
+});
+
+test.serial('codex startStream puts prompt_cache_key on agent modelSettings, not run options', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'codex',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings },
+  });
+
+  await client.startStream('Hello', { sessionId: 'session-123' });
+
+  t.is(codexRunnerCalls.length, 1);
+  t.is(codexRunnerCalls[0].agent.modelSettings.prompt_cache_key, 'session-123');
+  t.false('modelSettings' in codexRunnerCalls[0].options);
 });
 
 test.serial('abort logs with active trace id before clearing correlation', async (t) => {

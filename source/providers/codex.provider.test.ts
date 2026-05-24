@@ -253,9 +253,9 @@ test('Codex fetchModels parses custom models endpoint', async (t) => {
     authHeader = init?.headers?.Authorization || init?.headers?.authorization || '';
     return new Response(
       JSON.stringify({
-        data: [
-          { id: 'gpt-5-codex', name: 'GPT-5 Codex' },
-          { id: 'gpt-4o', name: 'GPT-4o' },
+        models: [
+          { slug: 'gpt-5-codex', display_name: 'GPT-5 Codex' },
+          { slug: 'gpt-4o', display_name: 'GPT-4o' },
         ],
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },

@@ -80,14 +80,14 @@ test.serial('useSettingsCompletion filters settings by active task tab and switc
   capturedSettings.switchCategory('next');
 
   for (let attempt = 0; attempt < 20; attempt++) {
-    if (capturedSettings.activeCategoryId === 'modes') {
+    if (capturedSettings.activeCategoryId === 'approvals') {
       break;
     }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 
-  t.is(capturedSettings.activeCategoryId, 'modes');
-  t.true(capturedSettings.filteredEntries.some((item: any) => item.key === 'app.planMode'));
+  t.is(capturedSettings.activeCategoryId, 'approvals');
+  t.true(capturedSettings.filteredEntries.some((item: any) => item.key === 'agent.autoApproveModel'));
   t.false(capturedSettings.filteredEntries.some((item: any) => item.key === 'agent.model'));
   t.is(capturedSettings.selectedIndex, 0);
   t.is(capturedSettings.scrollOffset, 0);

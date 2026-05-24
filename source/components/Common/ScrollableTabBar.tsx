@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useStdout } from 'ink';
 import { computeVisibleTabs } from './compute-visible-tabs.js';
 
 export interface ScrollableTabBarProps<T extends { id: string }> {
@@ -29,7 +29,8 @@ export function ScrollableTabBar<T extends { id: string }>({
   renderTab,
   hint,
 }: ScrollableTabBarProps<T>): React.ReactElement {
-  const terminalWidth = process.stdout.columns || 80;
+  const { stdout } = useStdout();
+  const terminalWidth = (stdout as any)?.columns || process.stdout.columns || 80;
   const hintLength = hint ? hint.length : 0;
   const availableWidth = terminalWidth - hintLength - 2; // -2 for padding
 

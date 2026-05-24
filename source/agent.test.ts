@@ -12,7 +12,7 @@ const mockLogger = {
   getCorrelationId: () => undefined,
 } as any;
 
-const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspect the repo worktree first.';
+const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspect the repo worktree.';
 
 test('getAgentDefinition includes grep and find_files when searchViaShell is false', (t) => {
   const settingsService = createMockSettingsService({

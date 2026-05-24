@@ -75,30 +75,14 @@ test('openai provider has createRunner function', (t) => {
   t.is(typeof provider?.createRunner, 'function');
 });
 
-test('openai provider createRunner returns a runner instance', (t) => {
+test('openai provider exposes capabilities without requiring credentials', (t) => {
   const provider = getProvider('openai');
-  const runner = provider?.createRunner?.({
-    settingsService: {
-      get: <T = any>(key: string) => {
-        if (key === 'agent.model') return 'gpt-5' as T;
-        return undefined as T;
-      },
-      set: () => {},
-    },
-    loggingService: {
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      debug: () => {},
-      security: () => {},
-      setCorrelationId: () => {},
-      getCorrelationId: () => undefined,
-      clearCorrelationId: () => {},
-      getTrafficContext: () => null,
-    },
+  t.deepEqual(provider?.capabilities, {
+    supportsConversationChaining: true,
+    supportsTracingControl: true,
+    usesStrictToolSchema: true,
+    nativePatchModelPrefixes: ['gpt-5.1'],
   });
-
-  t.truthy(runner);
 });
 
 test('openrouter provider has createRunner function', (t) => {

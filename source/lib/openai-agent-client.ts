@@ -153,7 +153,7 @@ export class OpenAIAgentClient {
     this.#maxTurns = maxTurns ?? 20;
     this.#retryAttempts = retryAttempts ?? 2;
     this.#agent = this.#createAgent({ model, reasoningEffort });
-    this.#runner = this.#createRunner(this.#provider);
+    this.#runner = null;
 
     // Subscribe to settings changes that affect agent definition (prompt,
     // tools, model, provider, modes) and rebuild the agent automatically.
@@ -233,7 +233,7 @@ export class OpenAIAgentClient {
       model: this.#model,
       reasoningEffort: this.#reasoningEffort,
     });
-    this.#runner = this.#createRunner(this.#provider);
+    this.#runner = null;
     this.#resetMentorState();
   }
 
@@ -295,6 +295,19 @@ export class OpenAIAgentClient {
       settingsService: this.#settings,
       loggingService: this.#logger,
     });
+  }
+
+  #getOrCreateRunner(providerId: string): Runner | null {
+    if (providerId !== this.#provider) {
+      return this.#createRunner(providerId);
+    }
+
+    if (this.#runner) {
+      return this.#runner;
+    }
+
+    this.#runner = this.#createRunner(providerId);
+    return this.#runner;
   }
 
   setRetryCallback(callback: () => void): void {
@@ -501,7 +514,13 @@ export class OpenAIAgentClient {
   async #runAgent(agent: Agent, input: any, options: any): Promise<any> {
     const shouldResetServiceTierOverride = this.#serviceTierOverrideForNextRequest === 'standard';
     try {
-      return await this.#runAgentWithProvider(this.#provider, this.#runner, agent, input, options);
+      return await this.#runAgentWithProvider(
+        this.#provider,
+        this.#getOrCreateRunner(this.#provider),
+        agent,
+        input,
+        options,
+      );
     } finally {
       if (shouldResetServiceTierOverride) {
         this.#serviceTierOverrideForNextRequest = null;
@@ -564,10 +583,7 @@ export class OpenAIAgentClient {
       }
 
       // If provider is different from main provider, we need a separate runner
-      let runnerForChat = this.#runner;
-      if (tempProvider !== this.#provider) {
-        runnerForChat = this.#createRunner(tempProvider);
-      }
+      const runnerForChat = this.#getOrCreateRunner(tempProvider);
 
       // We use a simplified run flow for chat
       const result = await this.#runAgentWithProvider(tempProvider, runnerForChat, agentForChat, message, {
@@ -621,10 +637,7 @@ export class OpenAIAgentClient {
         outputType: options.outputType,
       });
 
-      let runnerForChat = this.#runner;
-      if (tempProvider !== this.#provider) {
-        runnerForChat = this.#createRunner(tempProvider);
-      }
+      const runnerForChat = this.#getOrCreateRunner(tempProvider);
 
       const result = await this.#runAgentWithProvider(tempProvider, runnerForChat, agentForChat, message, {
         stream: false,

@@ -59,12 +59,6 @@ test('SettingsSelectionMenu renders task tabs and switch hint', (t) => {
 });
 
 test('SettingsSelectionMenu keeps task tabs on one row', (t) => {
-  const originalColumns = process.stdout.columns;
-  process.stdout.columns = 119;
-  t.teardown(() => {
-    process.stdout.columns = originalColumns;
-  });
-
   const { lastFrame } = render(
     React.createElement(SettingsSelectionMenu, {
       items: [

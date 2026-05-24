@@ -68,6 +68,7 @@ let mentorInputsAltProvider: any[] = [];
 let mentorResponseCounter = 0;
 let chainingProviderRegistered = false;
 let chainingRunnerCalls: any[] = [];
+let failingProviderRegistered = false;
 function ensureMentorProvidersRegistered() {
   if (!mentorProviderRegistered) {
     registerProvider({
@@ -179,11 +180,31 @@ function ensureChainingProvidersRegistered() {
   }
 }
 
+function ensureFailingProviderRegistered() {
+  if (!failingProviderRegistered) {
+    registerProvider({
+      id: 'mock-missing-creds',
+      label: 'Mock Missing Creds',
+      createRunner: () => {
+        throw new Error('Missing credentials');
+      },
+      fetchModels: async () => [{ id: 'mock-model' }],
+      capabilities: {
+        supportsConversationChaining: false,
+        supportsTracingControl: true,
+      },
+    });
+
+    failingProviderRegistered = true;
+  }
+}
+
 test.beforeEach(() => {
   runnerCalls = [];
   ensureProviderRegistered();
   ensureMentorProvidersRegistered();
   ensureChainingProvidersRegistered();
+  ensureFailingProviderRegistered();
   capturedMainAgentForMentorTest = null;
   mentorInputs = [];
   mentorInputsAltProvider = [];
@@ -231,6 +252,21 @@ test.serial('setProvider updates provider and persists to settings', (t) => {
   client.setProvider('openai');
   t.is(client.getProvider(), 'openai');
   t.is(settings.get('agent.provider'), 'openai');
+});
+
+test.serial('setProvider does not initialize provider credentials eagerly', async (t) => {
+  const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings },
+  });
+
+  client.setProvider('mock-missing-creds');
+
+  t.is(client.getProvider(), 'mock-missing-creds');
+  t.is(settings.get('agent.provider'), 'mock-missing-creds');
+
+  const error = await t.throwsAsync(async () => client.chat('test'));
+  t.is(error?.message, 'Missing credentials');
 });
 
 test.serial('startStream only passes previousResponseId when provider supports chaining', async (t) => {

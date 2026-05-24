@@ -38,6 +38,7 @@ const PROVIDER_VALUE_SUGGESTIONS: SettingValueSuggestion[] = [
   { value: 'openai-compatible', description: 'Local models/Ollama' },
   { value: 'anthropic', description: 'Anthropic Claude' },
   { value: 'google', description: 'Google Gemini' },
+  { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
 ];
 
 // A small, curated set of value suggestions for common settings.

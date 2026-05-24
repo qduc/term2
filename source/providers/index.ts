@@ -1,6 +1,7 @@
 // Import provider registration modules to trigger registration
 import './openai.provider.js';
 import './openrouter.provider.js';
+import './codex.provider.js';
 
 // Import web search provider registration
 import './web-search/index.js';

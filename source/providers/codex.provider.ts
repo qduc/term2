@@ -1,7 +1,8 @@
 import { Runner } from '@openai/agents';
-import { getDefaultModel } from '@openai/agents-core';
+import { getDefaultModel, ModelProvider, Model } from '@openai/agents-core';
 import OpenAI from 'openai';
-import { CodexResponsesModel } from './codex-responses-model.js';
+import { CodexResponsesModel, CodexResponsesWSModel } from './codex-responses-model.js';
+import { FallbackResponsesModel } from './fallback-responses-model.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -416,6 +417,54 @@ async function fetchCodexModels(
     .reverse() as Array<{ id: string; name?: string }>;
 }
 
+class FallbackCodexProvider implements ModelProvider {
+  private readonly fallbackState = { isDowngraded: false };
+  private readonly models = new Map<string, FallbackResponsesModel>();
+
+  constructor(
+    private readonly openAIClient: OpenAI,
+    private readonly tokenManager: CodexTokenManager,
+    private readonly loggingService: any,
+  ) {}
+
+  async getModel(modelName?: string): Promise<Model> {
+    const resolvedModel = modelName || getDefaultModel();
+    const cached = this.models.get(resolvedModel);
+    if (cached) {
+      return cached;
+    }
+
+    const wsModel = new CodexResponsesWSModel(this.openAIClient as any, resolvedModel, this.tokenManager);
+    const httpModel = new CodexResponsesModel(this.openAIClient as any, resolvedModel);
+
+    const fallbackModel = new FallbackResponsesModel(
+      wsModel,
+      httpModel,
+      this.fallbackState,
+      (err) => {
+        this.loggingService.warn(
+          `Codex WebSocket connection failed for model ${resolvedModel}, falling back to HTTP responses API`,
+          {
+            error: err instanceof Error ? err.message : String(err),
+          },
+        );
+      },
+      this.loggingService,
+      'codex',
+    );
+
+    this.models.set(resolvedModel, fallbackModel);
+    return fallbackModel;
+  }
+
+  async close(): Promise<void> {
+    for (const model of this.models.values()) {
+      await model.close();
+    }
+    this.models.clear();
+  }
+}
+
 // Register Codex provider
 registerProvider({
   id: 'codex',
@@ -469,10 +518,7 @@ registerProvider({
     });
 
     return new Runner({
-      modelProvider: {
-        getModel: async (modelName?: string) =>
-          new CodexResponsesModel(openAIClient as any, modelName || getDefaultModel()),
-      },
+      modelProvider: new FallbackCodexProvider(openAIClient, tokenManager, loggingService),
     });
   },
   fetchModels: fetchCodexModels,

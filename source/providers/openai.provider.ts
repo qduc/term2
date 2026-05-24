@@ -1,9 +1,10 @@
-import { Runner } from '@openai/agents';
-import { OpenAIProvider } from '@openai/agents-openai';
+import { Runner, Model, ModelProvider } from '@openai/agents';
+import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import OpenAI from 'openai';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
+import { FallbackResponsesModel } from './fallback-responses-model.js';
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
@@ -39,6 +40,52 @@ async function fetchOpenAIModels(
     .reverse() as Array<{ id: string; name?: string }>;
 }
 
+class FallbackOpenAIProvider implements ModelProvider {
+  private readonly fallbackState = { isDowngraded: false };
+  private readonly models = new Map<string, FallbackResponsesModel>();
+
+  constructor(private readonly openAIClient: OpenAI, private readonly loggingService: any) {}
+
+  getModel(modelName?: string): Model {
+    const model = modelName || 'gpt-4o';
+    const cached = this.models.get(model);
+    if (cached) {
+      return cached;
+    }
+
+    const wsModel = new OpenAIResponsesWSModel(this.openAIClient as any, model, {
+      reuseConnection: true,
+    });
+    const httpModel = new OpenAIResponsesModel(this.openAIClient as any, model);
+
+    const fallbackModel = new FallbackResponsesModel(
+      wsModel,
+      httpModel,
+      this.fallbackState,
+      (err) => {
+        this.loggingService.warn(
+          `OpenAI WebSocket connection failed for model ${model}, falling back to HTTP responses API`,
+          {
+            error: err instanceof Error ? err.message : String(err),
+          },
+        );
+      },
+      this.loggingService,
+      'openai',
+    );
+
+    this.models.set(model, fallbackModel);
+    return fallbackModel;
+  }
+
+  async close(): Promise<void> {
+    for (const model of this.models.values()) {
+      await model.close();
+    }
+    this.models.clear();
+  }
+}
+
 // Register OpenAI provider
 registerProvider({
   id: 'openai',
@@ -55,10 +102,7 @@ registerProvider({
     });
 
     return new Runner({
-      modelProvider: new OpenAIProvider({
-        openAIClient: openAIClient as any,
-        useResponses: true,
-      }),
+      modelProvider: new FallbackOpenAIProvider(openAIClient, loggingService),
     });
   },
   fetchModels: fetchOpenAIModels,

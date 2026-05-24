@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 export const TRAFFIC_TEXT_LIMIT = 100;
 const PREVIEW_LIMIT = 160;
@@ -170,6 +171,11 @@ export const sanitizeSentTrafficBody = (body: Record<string, unknown>): Record<s
 };
 
 const safeTimestampForPath = (timestamp: string): string => timestamp.replace(/:/g, '-');
+
+const safePathSegment = (segment: string): string => segment.replace(/[\\/]/g, '_');
+
+const timePartForPath = (timestamp: string): string =>
+  safeTimestampForPath(timestamp.includes('T') ? timestamp.substring(timestamp.indexOf('T') + 1) : timestamp);
 
 const detectContentType = (response: Response): string => response.headers.get('content-type')?.toLowerCase() ?? '';
 
@@ -594,7 +600,7 @@ export class ProviderTrafficArtifactStore {
 
   recordRequestStart(input: RequestStartInput): void {
     const { dayDir, requestPath, sessionDirName } = this.#pathsFor(input);
-    fs.mkdirSync(requestPath.slice(0, requestPath.lastIndexOf('/')), { recursive: true });
+    fs.mkdirSync(path.dirname(requestPath), { recursive: true });
     this.#requestPaths.set(input.requestId, requestPath);
     const sentRecord = {
       direction: 'sent',
@@ -637,7 +643,7 @@ export class ProviderTrafficArtifactStore {
       ...(input.receivedSummary ? { summary: input.receivedSummary } : {}),
       ...(input.error ? { error: input.error } : {}),
     };
-    fs.mkdirSync(requestPath.slice(0, requestPath.lastIndexOf('/')), { recursive: true });
+    fs.mkdirSync(path.dirname(requestPath), { recursive: true });
     fs.appendFileSync(requestPath, `\n${JSON.stringify(receivedRecord, null, 2)}\n`, 'utf8');
     this.#touchDailyIndex(dayDir, {
       sessionId: input.sessionId,
@@ -663,16 +669,10 @@ export class ProviderTrafficArtifactStore {
   } {
     const dateKey = input.timestamp.slice(0, 10);
     const dayDir = `${this.#rootDir}/${dateKey}`;
-    const sessionDirName = `${safeTimestampForPath(input.sessionStartedAt)}_${input.sessionId.substring(0, 5)}`;
-    const sessionDir = dayDir;
-    const timePart = input.timestamp.includes('T')
-      ? safeTimestampForPath(input.timestamp.substring(input.timestamp.indexOf('T') + 1))
-      : safeTimestampForPath(input.timestamp);
-    const prefix = input.evaluator ? 'evaluator_' : '';
-    const requestPath = `${dayDir}/${prefix}${timePart}_sess-${input.sessionId.substring(
-      0,
-      5,
-    )}_req-${input.requestId.substring(0, 5)}.jsonl`;
+    const sessionDirName = `${timePartForPath(input.sessionStartedAt)}_${input.sessionId.substring(0, 5)}`;
+    const sessionDir = `${dayDir}/${sessionDirName}`;
+    const requestFileName = `${input.evaluator ? 'evaluator_' : ''}${safePathSegment(input.requestId)}.jsonl`;
+    const requestPath = `${sessionDir}/${requestFileName}`;
     return { dayDir, sessionDir, requestPath, sessionDirName };
   }
 

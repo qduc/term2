@@ -209,9 +209,11 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
   t.true(dayDirs.length > 0);
 
   const dayDir = path.join(providerRoot, dayDirs[0]);
-  const requestFiles = fs.readdirSync(dayDir).filter((name) => name.endsWith('.jsonl'));
+  const sessionDirs = fs.readdirSync(dayDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+  t.true(sessionDirs.length > 0);
+  const requestFiles = fs.readdirSync(path.join(dayDir, sessionDirs[0].name)).filter((name) => name.endsWith('.jsonl'));
   t.true(requestFiles.length > 0);
-  const trafficFile = path.join(dayDir, requestFiles[0]);
+  const trafficFile = path.join(dayDir, sessionDirs[0].name, requestFiles[0]);
 
   const entries = fs
     .readFileSync(trafficFile, 'utf8')

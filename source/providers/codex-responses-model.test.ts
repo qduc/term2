@@ -77,6 +77,29 @@ test('wrapCodexStream leaves non-empty output untouched', async (t) => {
   t.is(completed.response.output[0], serverItem);
 });
 
+test('wrapCodexStream reconstructs each completed response from only its own streamed items', async (t) => {
+  const firstItem = { type: 'function_call', id: 'fc_1', call_id: 'call_1' };
+  const secondItem = { type: 'message', id: 'msg_2', role: 'assistant' };
+
+  const events = await collect(
+    wrapCodexStream(
+      makeStream([
+        { type: 'response.created', response: { id: 'resp_1' } },
+        { type: 'response.output_item.done', output_index: 0, item: firstItem },
+        { type: 'response.completed', response: { id: 'resp_1', output: [], usage: {} } },
+        { type: 'response.created', response: { id: 'resp_2' } },
+        { type: 'response.output_item.done', output_index: 0, item: secondItem },
+        { type: 'response.completed', response: { id: 'resp_2', output: [], usage: {} } },
+      ]),
+    ),
+  );
+
+  const completed = events.filter((e: any) => e.type === 'response.completed') as any[];
+  t.is(completed.length, 2);
+  t.deepEqual(completed[0].response.output, [firstItem]);
+  t.deepEqual(completed[1].response.output, [secondItem]);
+});
+
 test('wrapCodexStream keeps empty output empty when no items were streamed', async (t) => {
   const events = await collect(
     wrapCodexStream(

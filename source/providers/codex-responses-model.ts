@@ -114,7 +114,7 @@ export class CodexResponsesModel extends OpenAIResponsesModel {
 }
 
 export async function* wrapCodexStream(source: AsyncIterable<any>): AsyncIterable<any> {
-  const accumulatedItems: any[] = [];
+  let accumulatedItems: any[] = [];
   for await (let event of source) {
     const type = event?.type;
     if (type === 'response.output_item.done' && event.item) {
@@ -122,12 +122,16 @@ export async function* wrapCodexStream(source: AsyncIterable<any>): AsyncIterabl
     } else if (type === 'response.completed' && event.response) {
       const output = event.response.output;
       if (Array.isArray(output) && output.length === 0 && accumulatedItems.length > 0) {
+        const reconstructedOutput = accumulatedItems;
+        accumulatedItems = [];
         try {
-          event.response.output = accumulatedItems;
+          event.response.output = reconstructedOutput;
         } catch {
           // Response object may be frozen; clone with the reconstructed output.
-          event = { ...event, response: { ...event.response, output: accumulatedItems } };
+          event = { ...event, response: { ...event.response, output: reconstructedOutput } };
         }
+      } else {
+        accumulatedItems = [];
       }
     }
     yield event;

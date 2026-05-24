@@ -404,7 +404,7 @@ export class ConversationSession {
       }
 
       stream = (await this.agentClient.startStream(streamInput, {
-        previousResponseId: this.previousResponseId,
+        previousResponseId: useChaining ? this.previousResponseId : null,
       })) as AgentStream;
 
       const acc = createStreamAccumulator();

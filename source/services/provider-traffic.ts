@@ -173,6 +173,21 @@ const safeTimestampForPath = (timestamp: string): string => timestamp.replace(/:
 
 const detectContentType = (response: Response): string => response.headers.get('content-type')?.toLowerCase() ?? '';
 
+const sniffTransportFromBody = (raw: string): 'sse' | 'json' | 'text' | 'unknown' => {
+  const head = raw.trimStart().slice(0, 64);
+  if (!head) return 'unknown';
+  if (/^(event:|data:|:)/.test(head)) return 'sse';
+  if (head.startsWith('{') || head.startsWith('[')) return 'json';
+  return 'unknown';
+};
+
+const transportFromContentType = (contentType: string): 'sse' | 'json' | 'text' | 'unknown' => {
+  if (contentType.includes('text/event-stream')) return 'sse';
+  if (contentType.includes('application/json')) return 'json';
+  if (contentType.startsWith('text/')) return 'text';
+  return 'unknown';
+};
+
 const parseToolArgumentsJson = (text: string | undefined): unknown => {
   if (!text) return undefined;
   return tryParseJson(text);
@@ -253,14 +268,13 @@ const extractJsonToolCalls = (body: Record<string, unknown>): unknown[] => {
 export async function summarizeReceivedTraffic(response: Response): Promise<ReceivedTrafficSummary> {
   const contentType = detectContentType(response);
   const raw = await response.text();
+  let transport = transportFromContentType(contentType);
+  if (transport === 'unknown' || transport === 'text') {
+    const sniffed = sniffTransportFromBody(raw);
+    if (sniffed !== 'unknown') transport = sniffed;
+  }
   const summary: ReceivedTrafficSummary = {
-    transport: contentType.includes('text/event-stream')
-      ? 'sse'
-      : contentType.includes('application/json')
-      ? 'json'
-      : contentType.startsWith('text/')
-      ? 'text'
-      : 'unknown',
+    transport,
     status: response.status,
     errorFrames: [],
     malformedFrames: [],

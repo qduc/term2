@@ -259,6 +259,38 @@ test('summarizeReceivedTraffic handles non-stream JSON and falls back safely for
   t.is((fallbackSummary.fallbackBody as any).strange.nested, true);
 });
 
+test('summarizeReceivedTraffic sniffs SSE body when content-type is missing', async (t) => {
+  const sse = [
+    'event: response.output_text.delta',
+    'data: {"type":"response.output_text.delta","delta":"Hi"}',
+    '',
+    'event: response.completed',
+    'data: {"type":"response.completed","response":{"id":"resp_sniff","status":"completed"}}',
+    '',
+    'data: [DONE]',
+    '',
+  ].join('\n');
+
+  const summary = await summarizeReceivedTraffic(new Response(sse, { status: 200 }));
+
+  t.is(summary.transport, 'sse');
+  t.is((summary.payload as any)?.id, 'resp_sniff');
+  t.is((summary.payload as any)?.choices?.[0]?.delta?.content, 'Hi');
+  t.falsy(summary.fallbackBody);
+});
+
+test('summarizeReceivedTraffic sniffs JSON body when content-type is missing', async (t) => {
+  const summary = await summarizeReceivedTraffic(
+    new Response(JSON.stringify({ id: 'resp_json_sniff', output_text: 'Done' }), {
+      status: 200,
+    }),
+  );
+
+  t.is(summary.transport, 'json');
+  t.is((summary.payload as any)?.id, 'resp_json_sniff');
+  t.falsy(summary.fallbackBody);
+});
+
 test('summarizeReceivedTraffic recognizes response.content_part.added as a lifecycle frame', async (t) => {
   const sse = [
     'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_1","output_index":0,"part":{"type":"output_text","annotations":[],"text":""},"sequence_number":1}',

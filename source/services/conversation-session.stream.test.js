@@ -606,6 +606,64 @@ test('run() sends full history for openai-compatible providers', async (t) => {
   t.true(secondInput.length >= 2, 'Second call should include conversation history');
 });
 
+test('run() sends full history for Codex provider and omits previousResponseId', async (t) => {
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First response' }]);
+  firstStream.finalOutput = 'First response';
+  firstStream.lastResponseId = 'resp-codex-1';
+  firstStream.history = [
+    { role: 'user', type: 'message', content: 'First message' },
+    {
+      role: 'assistant',
+      type: 'message',
+      content: [{ type: 'output_text', text: 'First response' }],
+    },
+  ];
+
+  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Second response' }]);
+  secondStream.finalOutput = 'Second response';
+  secondStream.lastResponseId = 'resp-codex-2';
+  secondStream.history = [
+    ...firstStream.history,
+    { role: 'user', type: 'message', content: 'Second message' },
+    {
+      role: 'assistant',
+      type: 'message',
+      content: [{ type: 'output_text', text: 'Second response' }],
+    },
+  ];
+
+  const calls = [];
+  const mockClient = {
+    async startStream(input, opts) {
+      calls.push({ input, opts });
+      return calls.length === 1 ? firstStream : secondStream;
+    },
+    getProvider() {
+      return 'codex';
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  for await (const _ of session.run('First message')) {
+    // consume events
+  }
+  for await (const _ of session.run('Second message')) {
+    // consume events
+  }
+
+  t.true(Array.isArray(calls[0].input), 'Codex should use full-history input from the first turn');
+  t.falsy(calls[0].opts.previousResponseId, 'Codex should not receive a usable previousResponseId on turn 1');
+  t.true(Array.isArray(calls[1].input), 'Codex should use full-history input on follow-up turns');
+  t.true(calls[1].input.some((item) => item.role === 'user' && item.content === 'First message'));
+  t.true(calls[1].input.some((item) => item.role === 'assistant'));
+  t.true(calls[1].input.some((item) => item.role === 'user' && item.content === 'Second message'));
+  t.falsy(calls[1].opts.previousResponseId, 'Codex should not receive a usable previousResponseId on turn 2');
+});
+
 test('sendMessage() returns usage from final event', async (t) => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
   stream.finalOutput = 'Response';

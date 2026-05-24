@@ -1,6 +1,7 @@
 import { Runner } from '@openai/agents';
-import { OpenAIProvider } from '@openai/agents-openai';
+import { getDefaultModel } from '@openai/agents-core';
 import OpenAI from 'openai';
+import { CodexResponsesModel } from './codex-responses-model.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -252,6 +253,39 @@ export async function resolveCodexClientVersion(options?: {
   return version;
 }
 
+export function sanitizeCodexRequestInit(url: unknown, init?: RequestInit): RequestInit | undefined {
+  const target = typeof url === 'string' ? url : url instanceof URL ? url.toString() : '';
+  if (!target.includes('/responses') || !init?.body || typeof init.body !== 'string') {
+    return init;
+  }
+
+  try {
+    const parsed = JSON.parse(init.body);
+    if (!Array.isArray(parsed?.input)) {
+      return init;
+    }
+
+    const filteredInput = parsed.input.filter((item: any) => {
+      const raw = item?.rawItem ?? item;
+      return raw?.type !== 'reasoning';
+    });
+
+    if (filteredInput.length === parsed.input.length) {
+      return init;
+    }
+
+    return {
+      ...init,
+      body: JSON.stringify({
+        ...parsed,
+        input: filteredInput,
+      }),
+    };
+  } catch {
+    return init;
+  }
+}
+
 async function fetchCodexModels(
   _deps: ProviderDeps,
   fetchImpl: ProviderFetch = fetch as any,
@@ -308,7 +342,7 @@ registerProvider({
 
     const openAIClient = new OpenAI({
       apiKey: 'placeholder',
-      baseURL: 'https://chatgpt.com/backend-api/codex/v1',
+      baseURL: 'https://chatgpt.com/backend-api/codex',
       fetch: (async (url, init) => {
         try {
           const accessToken = await tokenManager.getOrRefreshAccessToken();
@@ -327,11 +361,13 @@ registerProvider({
           }
           headers['authorization'] = `Bearer ${accessToken}`;
 
+          const sanitizedInit = sanitizeCodexRequestInit(url, init);
+
           return createAiSdkLoggingFetch({
             provider: 'codex',
             model: defaultModel,
             loggingService,
-          })(url, { ...init, headers });
+          })(url, { ...sanitizedInit, headers });
         } catch (err: any) {
           loggingService.error('Codex OAuth fetch interceptor error', {
             error: err.message,
@@ -342,17 +378,17 @@ registerProvider({
     });
 
     return new Runner({
-      modelProvider: new OpenAIProvider({
-        openAIClient: openAIClient as any,
-        useResponses: true,
-      }),
+      modelProvider: {
+        getModel: async (modelName?: string) =>
+          new CodexResponsesModel(openAIClient as any, modelName || getDefaultModel()),
+      },
     });
   },
   fetchModels: fetchCodexModels,
   clearConversations: undefined,
   sensitiveSettingKeys: [],
   capabilities: {
-    supportsConversationChaining: true,
+    supportsConversationChaining: false,
     supportsTracingControl: false,
     usesStrictToolSchema: true,
     nativePatchModelPrefixes: ['gpt-5.1'],

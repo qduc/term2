@@ -943,6 +943,10 @@ export class OpenAIAgentClient {
       };
     }
 
+    if (this.#provider === 'codex') {
+      modelSettings.store = false;
+    }
+
     return modelSettings;
   }
 

@@ -2,7 +2,13 @@ import test from 'ava';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getProvider } from './index.js';
-import { CodexTokenManager, resolveTokenPath, getJwtExpiry, resolveCodexClientVersion } from './codex.provider.js';
+import {
+  CodexTokenManager,
+  resolveTokenPath,
+  getJwtExpiry,
+  resolveCodexClientVersion,
+  sanitizeCodexRequestInit,
+} from './codex.provider.js';
 
 // Helper to create a fake JWT with a specific expiry time in seconds from now
 function createFakeJwt(expiresInSeconds: number): string {
@@ -230,6 +236,12 @@ test('Codex provider is registered in the registry', (t) => {
   t.is(provider?.label, 'Codex');
   t.is(typeof provider?.fetchModels, 'function');
   t.is(typeof provider?.createRunner, 'function');
+  t.deepEqual(provider?.capabilities, {
+    supportsConversationChaining: false,
+    supportsTracingControl: false,
+    usesStrictToolSchema: true,
+    nativePatchModelPrefixes: ['gpt-5.1'],
+  });
 });
 
 test('Codex fetchModels parses custom models endpoint', async (t) => {
@@ -317,6 +329,35 @@ test('resolveCodexClientVersion returns local version if available and writes to
   const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
   t.is(cached.version, '1.2.3');
   t.true(typeof cached.timestamp === 'number');
+});
+
+test('sanitizeCodexRequestInit drops reasoning items from responses input', (t) => {
+  const init: RequestInit = {
+    body: JSON.stringify({
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+        { type: 'reasoning', id: 'rs_123', content: [] },
+        { rawItem: { type: 'reasoning', id: 'rs_456', content: [] } },
+      ],
+      store: false,
+    }),
+  };
+
+  const sanitized = sanitizeCodexRequestInit('https://chatgpt.com/backend-api/codex/responses', init);
+  const body = JSON.parse(String(sanitized?.body));
+  t.is(body.input.length, 1);
+  t.is(body.input[0].type, 'message');
+});
+
+test('sanitizeCodexRequestInit leaves non-responses requests unchanged', (t) => {
+  const init: RequestInit = {
+    body: JSON.stringify({
+      input: [{ type: 'reasoning', id: 'rs_123' }],
+    }),
+  };
+
+  const sanitized = sanitizeCodexRequestInit('https://chatgpt.com/backend-api/codex/models', init);
+  t.deepEqual(sanitized, init);
 });
 
 test('resolveCodexClientVersion falls back to npm registry if local version fails', async (t) => {

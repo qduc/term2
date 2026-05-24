@@ -371,6 +371,7 @@ test('isRuntimeModifiable identifies correct settings', async (t) => {
   t.true(service.isRuntimeModifiable('agent.model'));
   t.true(service.isRuntimeModifiable('agent.reasoningEffort'));
   t.true(service.isRuntimeModifiable('agent.temperature'));
+  t.true(service.isRuntimeModifiable('agent.retryAttempts'));
   t.true(service.isRuntimeModifiable('tools.editHealingModel'));
   t.true(service.isRuntimeModifiable('tools.editHealingProvider'));
   t.true(service.isRuntimeModifiable('shell.timeout'));
@@ -380,7 +381,6 @@ test('isRuntimeModifiable identifies correct settings', async (t) => {
 
   // Startup-only settings
   t.false(service.isRuntimeModifiable('agent.maxTurns'));
-  t.false(service.isRuntimeModifiable('agent.retryAttempts'));
   t.false(service.isRuntimeModifiable('ui.historySize'));
 });
 

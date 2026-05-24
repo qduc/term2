@@ -28,6 +28,57 @@ export function getJwtExpiry(token: string): number | null {
   return null;
 }
 
+// Decodes the JWT and returns all its claims
+export function getJwtClaims(token: string): any {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payloadJson = Buffer.from(parts[1], 'base64').toString('utf8');
+    return JSON.parse(payloadJson);
+  } catch {
+    return null;
+  }
+}
+
+// Extracts accountId from claims in the order of precedence
+export function extractAccountIdFromClaims(claims: any): string | null {
+  if (!claims || typeof claims !== 'object') return null;
+  if (typeof claims.chatgpt_account_id === 'string' && claims.chatgpt_account_id) {
+    return claims.chatgpt_account_id;
+  }
+  const authClaim = claims['https://api.openai.com/auth'];
+  if (
+    authClaim &&
+    typeof authClaim === 'object' &&
+    typeof authClaim.chatgpt_account_id === 'string' &&
+    authClaim.chatgpt_account_id
+  ) {
+    return authClaim.chatgpt_account_id;
+  }
+  if (Array.isArray(claims.organizations) && claims.organizations.length > 0) {
+    const firstOrg = claims.organizations[0];
+    if (firstOrg && typeof firstOrg === 'object' && typeof firstOrg.id === 'string' && firstOrg.id) {
+      return firstOrg.id;
+    }
+  }
+  return null;
+}
+
+// Extracts account ID from id_token, falling back to access_token
+export function extractAccountId(idToken?: string, accessToken?: string): string | null {
+  if (idToken) {
+    const claims = getJwtClaims(idToken);
+    const accountId = extractAccountIdFromClaims(claims);
+    if (accountId) return accountId;
+  }
+  if (accessToken) {
+    const claims = getJwtClaims(accessToken);
+    const accountId = extractAccountIdFromClaims(claims);
+    if (accountId) return accountId;
+  }
+  return null;
+}
+
 // Searches token file locations in predefined priority order
 export function resolveTokenPath(): string | null {
   const candidates: string[] = [];
@@ -63,10 +114,15 @@ export class CodexTokenManager {
   private activeRefreshPromise: Promise<string> | null = null;
   private tokenPathResolver: () => string | null;
   private fetchImpl: typeof fetch;
+  private accountId: string | null = null;
 
   constructor(options?: { tokenPathResolver?: () => string | null; fetchImpl?: typeof fetch }) {
     this.tokenPathResolver = options?.tokenPathResolver || resolveTokenPath;
     this.fetchImpl = options?.fetchImpl || (globalThis.fetch as any);
+  }
+
+  getAccountId(): string | null {
+    return this.accountId;
   }
 
   async getOrRefreshAccessToken(): Promise<string> {
@@ -86,6 +142,12 @@ export class CodexTokenManager {
 
     const accessToken = fileData?.tokens?.access_token;
     const refreshToken = fileData?.tokens?.refresh_token;
+    const idToken = fileData?.tokens?.id_token;
+
+    const resolvedAccountId = extractAccountId(idToken, accessToken) || fileData?.tokens?.account_id;
+    if (resolvedAccountId) {
+      this.accountId = resolvedAccountId;
+    }
 
     if (!accessToken) {
       throw new Error(`Codex token file at ${tokenPath} is missing access_token.`);
@@ -141,13 +203,20 @@ export class CodexTokenManager {
           throw new Error('Refresh response did not contain access_token');
         }
 
+        const newIdToken = resBody.id_token || fileData.tokens?.id_token;
+        const refreshedAccountId = extractAccountId(newIdToken, newAccessToken) || fileData?.tokens?.account_id;
+        if (refreshedAccountId) {
+          this.accountId = refreshedAccountId;
+        }
+
         const updatedData = {
           ...fileData,
           tokens: {
             ...fileData.tokens,
             access_token: newAccessToken,
-            refresh_token: resBody.refresh_token || fileData.tokens.refresh_token,
-            id_token: resBody.id_token || fileData.tokens.id_token,
+            refresh_token: resBody.refresh_token || fileData.tokens?.refresh_token,
+            id_token: resBody.id_token || fileData.tokens?.id_token,
+            ...(refreshedAccountId ? { account_id: refreshedAccountId } : {}),
           },
           last_refresh: new Date().toISOString(),
         };
@@ -172,6 +241,8 @@ export class CodexTokenManager {
 const execAsync = promisify(exec);
 
 const FALLBACK_CODEX_CLIENT_VERSION = '0.133.0';
+export const CODEX_REQUEST_TIMEOUT_MS = 20_000;
+export const CODEX_MAX_RETRIES = 0;
 
 interface VersionCache {
   version: string;
@@ -277,14 +348,7 @@ export function sanitizeCodexRequestInit(url: unknown, init?: RequestInit): Requ
       }
     }
 
-    const filteredInput = parsed.input.filter((item: any) => {
-      const raw = item?.rawItem ?? item;
-      return raw?.type !== 'reasoning';
-    });
-
-    const inputChanged = filteredInput.length !== parsed.input.length;
-    const includeChanged = normalizedInclude !== parsed.include;
-    if (!inputChanged && !includeChanged) {
+    if (normalizedInclude === parsed.include) {
       return init;
     }
 
@@ -312,6 +376,11 @@ async function fetchCodexModels(
     'Content-Type': 'application/json',
     Authorization: `Bearer ${accessToken}`,
   };
+
+  const accountId = tokenManager.getAccountId();
+  if (accountId) {
+    headers['ChatGPT-Account-Id'] = accountId;
+  }
 
   const clientVersion = await resolveCodexClientVersion({ fetchImpl });
   const response = await fetchImpl(`https://chatgpt.com/backend-api/codex/models?client_version=${clientVersion}`, {
@@ -358,6 +427,8 @@ registerProvider({
     const openAIClient = new OpenAI({
       apiKey: 'placeholder',
       baseURL: 'https://chatgpt.com/backend-api/codex',
+      timeout: CODEX_REQUEST_TIMEOUT_MS,
+      maxRetries: CODEX_MAX_RETRIES,
       fetch: (async (url, init) => {
         try {
           const accessToken = await tokenManager.getOrRefreshAccessToken();
@@ -375,6 +446,11 @@ registerProvider({
             }
           }
           headers['authorization'] = `Bearer ${accessToken}`;
+
+          const accountId = tokenManager.getAccountId();
+          if (accountId) {
+            headers['chatgpt-account-id'] = accountId;
+          }
 
           const sanitizedInit = sanitizeCodexRequestInit(url, init);
 

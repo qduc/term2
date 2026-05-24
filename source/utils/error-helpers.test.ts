@@ -1,5 +1,5 @@
 import test from 'ava';
-import { isAbortLikeError } from './error-helpers.js';
+import { describeError, isAbortLikeError } from './error-helpers.js';
 
 // Test isAbortLikeError with AbortError name
 test('isAbortLikeError returns true for error with name AbortError', (t) => {
@@ -180,4 +180,20 @@ test('isAbortLikeError returns false for TypeError: terminated without abort-lik
     cause: { name: 'SocketError', message: 'socket hang up' },
   });
   t.false(isAbortLikeError(error));
+});
+
+test('describeError includes nested cause when top-level fetch error is generic', (t) => {
+  const error = Object.assign(new TypeError('fetch failed'), {
+    cause: new Error('connect ECONNREFUSED 127.0.0.1:443'),
+  });
+
+  t.is(describeError(error), 'fetch failed: connect ECONNREFUSED 127.0.0.1:443');
+});
+
+test('describeError keeps specific top-level error without repeating the same cause', (t) => {
+  const error = Object.assign(new Error('socket hang up'), {
+    cause: new Error('socket hang up'),
+  });
+
+  t.is(describeError(error), 'socket hang up');
 });

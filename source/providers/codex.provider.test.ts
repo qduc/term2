@@ -4,8 +4,12 @@ import path from 'node:path';
 import { getProvider } from './index.js';
 import {
   CodexTokenManager,
+  CODEX_MAX_RETRIES,
+  CODEX_REQUEST_TIMEOUT_MS,
   resolveTokenPath,
   getJwtExpiry,
+  extractAccountIdFromClaims,
+  extractAccountId,
   resolveCodexClientVersion,
   sanitizeCodexRequestInit,
 } from './codex.provider.js';
@@ -331,24 +335,6 @@ test('resolveCodexClientVersion returns local version if available and writes to
   t.true(typeof cached.timestamp === 'number');
 });
 
-test('sanitizeCodexRequestInit drops reasoning items from responses input', (t) => {
-  const init: RequestInit = {
-    body: JSON.stringify({
-      input: [
-        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
-        { type: 'reasoning', id: 'rs_123', content: [] },
-        { rawItem: { type: 'reasoning', id: 'rs_456', content: [] } },
-      ],
-      store: false,
-    }),
-  };
-
-  const sanitized = sanitizeCodexRequestInit('https://chatgpt.com/backend-api/codex/responses', init);
-  const body = JSON.parse(String(sanitized?.body));
-  t.is(body.input.length, 1);
-  t.is(body.input[0].type, 'message');
-});
-
 test('sanitizeCodexRequestInit leaves non-responses requests unchanged', (t) => {
   const init: RequestInit = {
     body: JSON.stringify({
@@ -552,4 +538,252 @@ test('Codex fetchModels appends correct client_version from cache/resolver', asy
       fs.unlinkSync(path.join(TEST_DIR, 'auth.json'));
     } catch {}
   }
+});
+
+function createFakeJwtWithClaims(claims: any): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+  return `${header}.${payload}.signature`;
+}
+
+test('extractAccountIdFromClaims resolves account ID with correct precedence', (t) => {
+  const claims1 = { chatgpt_account_id: 'acc_1' };
+  t.is(extractAccountIdFromClaims(claims1), 'acc_1');
+
+  const claims2 = {
+    'https://api.openai.com/auth': { chatgpt_account_id: 'acc_2' },
+  };
+  t.is(extractAccountIdFromClaims(claims2), 'acc_2');
+
+  const claims3 = {
+    organizations: [{ id: 'org_3' }],
+  };
+  t.is(extractAccountIdFromClaims(claims3), 'org_3');
+
+  // Precedence test: chatgpt_account_id > https://api.openai.com/auth > organizations
+  const claimsAll = {
+    chatgpt_account_id: 'acc_1',
+    'https://api.openai.com/auth': { chatgpt_account_id: 'acc_2' },
+    organizations: [{ id: 'org_3' }],
+  };
+  t.is(extractAccountIdFromClaims(claimsAll), 'acc_1');
+
+  const claimsNestedAndOrg = {
+    'https://api.openai.com/auth': { chatgpt_account_id: 'acc_2' },
+    organizations: [{ id: 'org_3' }],
+  };
+  t.is(extractAccountIdFromClaims(claimsNestedAndOrg), 'acc_2');
+});
+
+test('extractAccountId prefers id_token claims over access_token claims', (t) => {
+  const idToken = createFakeJwtWithClaims({ chatgpt_account_id: 'acc_id_token' });
+  const accessToken = createFakeJwtWithClaims({ chatgpt_account_id: 'acc_access_token' });
+
+  // Preferred id_token
+  t.is(extractAccountId(idToken, accessToken), 'acc_id_token');
+
+  // Fallback to access_token if id_token is missing or has no relevant claim
+  t.is(extractAccountId(undefined, accessToken), 'acc_access_token');
+  t.is(extractAccountId('', accessToken), 'acc_access_token');
+});
+
+test.serial('CodexTokenManager extracts and stores accountId from file and refresh responses', async (t) => {
+  const tokenPath = path.join(TEST_DIR, 'auth_account_id.json');
+  const idToken = createFakeJwtWithClaims({ chatgpt_account_id: 'acc_from_id_token' });
+  const accessToken = createFakeJwt(3600);
+
+  const initialTokens = {
+    tokens: {
+      access_token: accessToken,
+      refresh_token: 'refresh-token',
+      id_token: idToken,
+    },
+    last_refresh: new Date().toISOString(),
+  };
+
+  fs.writeFileSync(tokenPath, JSON.stringify(initialTokens));
+
+  const manager = new CodexTokenManager({
+    tokenPathResolver: () => tokenPath,
+  });
+
+  // Ensure accountId is initially null before loading
+  t.is(manager.getAccountId(), null);
+
+  await manager.getOrRefreshAccessToken();
+  t.is(manager.getAccountId(), 'acc_from_id_token');
+
+  // Test update with fallback to file-level account_id if no claims found
+  const tokenPathFallback = path.join(TEST_DIR, 'auth_account_id_fallback.json');
+  const initialTokensFallback = {
+    tokens: {
+      access_token: accessToken,
+      refresh_token: 'refresh-token',
+      account_id: 'acc_from_file_direct',
+    },
+    last_refresh: new Date().toISOString(),
+  };
+  fs.writeFileSync(tokenPathFallback, JSON.stringify(initialTokensFallback));
+
+  const managerFallback = new CodexTokenManager({
+    tokenPathResolver: () => tokenPathFallback,
+  });
+  await managerFallback.getOrRefreshAccessToken();
+  t.is(managerFallback.getAccountId(), 'acc_from_file_direct');
+});
+
+test.serial('Codex fetchModels injects ChatGPT-Account-Id header if present', async (t) => {
+  const provider = getProvider('codex');
+  t.truthy(provider);
+
+  const tokenPath = path.join(TEST_DIR, 'auth_models_header.json');
+  const validToken = createFakeJwt(3600);
+  const idToken = createFakeJwtWithClaims({ chatgpt_account_id: 'acc_models_test' });
+  fs.writeFileSync(
+    tokenPath,
+    JSON.stringify({
+      tokens: { access_token: validToken, id_token: idToken },
+      last_refresh: new Date().toISOString(),
+    }),
+  );
+
+  let fetchHeaders: Record<string, string> = {};
+  const mockFetch = async (_url: string, init: any) => {
+    fetchHeaders = init?.headers || {};
+    return new Response(
+      JSON.stringify({
+        models: [],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  };
+
+  const deps = {
+    settingsService: { get: () => 'gpt-5-codex' },
+    loggingService: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+  };
+
+  const origHome = process.env.CHATGPT_LOCAL_HOME;
+  process.env.CHATGPT_LOCAL_HOME = TEST_DIR;
+  fs.renameSync(tokenPath, path.join(TEST_DIR, 'auth.json'));
+
+  try {
+    await provider!.fetchModels(deps as any, mockFetch as any);
+    t.is(fetchHeaders['ChatGPT-Account-Id'], 'acc_models_test');
+  } finally {
+    process.env.CHATGPT_LOCAL_HOME = origHome;
+    try {
+      fs.unlinkSync(path.join(TEST_DIR, 'auth.json'));
+    } catch {}
+  }
+});
+
+test.serial('Codex provider createRunner custom fetch injects chatgpt-account-id header', async (t) => {
+  const provider = getProvider('codex');
+  t.truthy(provider);
+  if (!provider || !provider.createRunner) {
+    t.fail('createRunner is undefined');
+    return;
+  }
+
+  const validToken = createFakeJwt(3600);
+  const idToken = createFakeJwtWithClaims({ chatgpt_account_id: 'acc_runner_test' });
+
+  const origHome = process.env.CHATGPT_LOCAL_HOME;
+  process.env.CHATGPT_LOCAL_HOME = TEST_DIR;
+  fs.writeFileSync(
+    path.join(TEST_DIR, 'auth.json'),
+    JSON.stringify({
+      tokens: { access_token: validToken, id_token: idToken },
+      last_refresh: new Date().toISOString(),
+    }),
+  );
+
+  const mockLogging = {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+  };
+
+  const deps = {
+    settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+    loggingService: mockLogging,
+  };
+
+  let interceptorHeaders: Record<string, string> = {};
+  const mockFetch = async (_url: string, init: any) => {
+    interceptorHeaders = {};
+    if (init?.headers) {
+      if (typeof init.headers.forEach === 'function') {
+        init.headers.forEach((v: string, k: string) => {
+          interceptorHeaders[k.toLowerCase()] = String(v);
+        });
+      } else {
+        for (const [k, v] of Object.entries(init.headers)) {
+          interceptorHeaders[k.toLowerCase()] = String(v);
+        }
+      }
+    }
+    return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = mockFetch as any;
+
+  try {
+    const runner = provider.createRunner(deps as any);
+    t.truthy(runner);
+    if (!runner) return;
+    const modelProvider = runner.config.modelProvider;
+    const model = await modelProvider.getModel('gpt-5.3-codex');
+    const client = (model as any)._client;
+
+    await client.chat.completions
+      .create({
+        messages: [{ role: 'user', content: 'hi' }],
+        model: 'gpt-4o',
+      })
+      .catch(() => {});
+
+    t.is(interceptorHeaders['chatgpt-account-id'], 'acc_runner_test');
+  } finally {
+    globalThis.fetch = origFetch;
+    process.env.CHATGPT_LOCAL_HOME = origHome;
+    try {
+      fs.unlinkSync(path.join(TEST_DIR, 'auth.json'));
+    } catch {}
+  }
+});
+
+test.serial('Codex provider configures a shorter request timeout without SDK retries', async (t) => {
+  const provider = getProvider('codex');
+  t.truthy(provider);
+  if (!provider?.createRunner) {
+    t.fail('createRunner is undefined');
+    return;
+  }
+
+  const deps = {
+    settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
+    loggingService: {
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+    },
+  };
+
+  const runner = provider.createRunner(deps as any);
+  if (!runner) {
+    t.fail('runner is undefined');
+    return;
+  }
+
+  const modelProvider = runner.config.modelProvider;
+  const model = (await modelProvider.getModel('gpt-5.3-codex')) as any;
+  const client = model._client;
+
+  t.is(client.timeout, CODEX_REQUEST_TIMEOUT_MS);
+  t.is(client.maxRetries, CODEX_MAX_RETRIES);
 });

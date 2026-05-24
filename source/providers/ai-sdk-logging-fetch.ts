@@ -1,6 +1,68 @@
 import { randomUUID } from 'node:crypto';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { summarizeReceivedTraffic } from '../services/provider-traffic.js';
+import { describeError } from '../utils/error-helpers.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import os from 'node:os';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+let installationVersion = '0.6.1';
+try {
+  const packageJsonPath = join(__dirname, '../../package.json');
+  const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+  if (pkg && typeof pkg.version === 'string') {
+    installationVersion = pkg.version;
+  }
+} catch {
+  // fallback
+}
+
+function injectHeaders(initHeaders: HeadersInit | undefined, newHeaders: Record<string, string>): HeadersInit {
+  if (!initHeaders) {
+    return newHeaders;
+  }
+
+  if (typeof Headers !== 'undefined' && initHeaders instanceof Headers) {
+    const headers = new Headers(initHeaders);
+    for (const [key, value] of Object.entries(newHeaders)) {
+      if (value) {
+        headers.set(key, value);
+      }
+    }
+    return headers;
+  }
+
+  if (Array.isArray(initHeaders)) {
+    const headers = [...initHeaders] as [string, string][];
+    for (const [key, value] of Object.entries(newHeaders)) {
+      if (value) {
+        const idx = headers.findIndex(([k]) => k.toLowerCase() === key.toLowerCase());
+        if (idx !== -1) {
+          headers[idx] = [key, value];
+        } else {
+          headers.push([key, value]);
+        }
+      }
+    }
+    return headers;
+  }
+
+  const headers = { ...(initHeaders as Record<string, string>) };
+  for (const [key, value] of Object.entries(newHeaders)) {
+    if (value) {
+      const existingKey = Object.keys(headers).find((k) => k.toLowerCase() === key.toLowerCase());
+      if (existingKey) {
+        delete headers[existingKey];
+      }
+      headers[key] = value;
+    }
+  }
+  return headers;
+}
 
 type FetchLike = typeof fetch;
 
@@ -125,16 +187,36 @@ export function createAiSdkLoggingFetch({
       payload: parsedRequest ?? undefined,
     });
 
+    let nextInit = init;
+    if (provider === 'codex') {
+      const originator = 'term2';
+      const userAgent = `term2/${installationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`;
+      const sessionId = trafficContext?.sessionId;
+
+      const extraHeaders: Record<string, string> = {
+        originator: originator,
+        'User-Agent': userAgent,
+      };
+      if (sessionId) {
+        extraHeaders['session_id'] = sessionId;
+      }
+
+      nextInit = {
+        ...init,
+        headers: injectHeaders(init?.headers, extraHeaders),
+      };
+    }
+
     let response: Response;
     try {
-      response = await fetchImpl(input, init);
+      response = await fetchImpl(input, nextInit);
     } catch (error) {
       loggingService.error(`${provider} ai sdk request failed`, {
         eventType: 'provider.response.failed',
         category: 'provider',
         phase: 'provider_response',
         ...baseMeta,
-        error: error instanceof Error ? error.message : String(error),
+        error: describeError(error),
       });
       throw error;
     }
@@ -168,7 +250,7 @@ export function createAiSdkLoggingFetch({
           category: 'provider',
           phase: 'provider_response',
           ...baseMeta,
-          error: error instanceof Error ? error.message : String(error),
+          error: describeError(error),
         });
       });
 

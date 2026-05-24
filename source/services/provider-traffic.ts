@@ -372,12 +372,16 @@ export async function summarizeReceivedTraffic(response: Response): Promise<Rece
     let recognized = false;
 
     const deltaText = firstDefinedString(parsed.delta, parsed.text);
-    if (eventType?.includes('output_text') && typeof deltaText === 'string') {
-      outputChunks.push(deltaText);
+    if (eventType?.includes('output_text') && typeof parsed.delta === 'string') {
+      outputChunks.push(parsed.delta);
+      recognized = true;
+    } else if (eventType?.includes('output_text') && typeof deltaText === 'string') {
       recognized = true;
     }
-    if ((eventType?.includes('reasoning') || eventType?.includes('summary')) && typeof deltaText === 'string') {
-      reasoningChunks.push(deltaText);
+    if ((eventType?.includes('reasoning') || eventType?.includes('summary')) && typeof parsed.delta === 'string') {
+      reasoningChunks.push(parsed.delta);
+      recognized = true;
+    } else if ((eventType?.includes('reasoning') || eventType?.includes('summary')) && typeof deltaText === 'string') {
       recognized = true;
     }
     if (eventType?.includes('function_call_arguments') && typeof parsed.delta === 'string') {

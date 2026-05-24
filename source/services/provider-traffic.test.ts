@@ -367,6 +367,31 @@ test('summarizeReceivedTraffic registers tool name from response.output_item.add
   t.is(toolCalls?.[0]?.function?.arguments, '{"cmd":"ls"}');
 });
 
+test('summarizeReceivedTraffic does not duplicate content from output_text.done after delta events', async (t) => {
+  const sse = [
+    'data: {"type":"response.output_text.delta","content_index":0,"item_id":"msg_1","output_index":0,"delta":"Hello! How can I help?","sequence_number":1}',
+    '',
+    'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_1","output_index":0,"logprobs":[],"sequence_number":2,"text":"Hello! How can I help?"}',
+    '',
+    'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_1","output_index":0,"part":{"type":"output_text","annotations":[],"text":"Hello! How can I help?"},"sequence_number":3}',
+    '',
+    'data: {"type":"response.output_item.done","item":{"id":"msg_1","type":"message","status":"completed","content":[{"type":"output_text","text":"Hello! How can I help?"}]},"output_index":0,"sequence_number":4}',
+    '',
+    'data: [DONE]',
+    '',
+  ].join('\n');
+
+  const summary = await summarizeReceivedTraffic(
+    new Response(sse, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    }),
+  );
+
+  t.deepEqual(summary.unknownFrames, []);
+  t.is((summary.payload as any)?.choices?.[0]?.delta?.content, 'Hello! How can I help?');
+});
+
 test('ProviderTrafficArtifactStore writes per-day per-session request files and daily index', (t) => {
   const rootDir = makeTempDir();
   const store = new ProviderTrafficArtifactStore({ rootDir });

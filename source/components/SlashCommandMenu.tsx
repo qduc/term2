@@ -7,15 +7,17 @@ type Props = {
   commands: SlashCommand[];
   selectedIndex: number;
   filter: string;
+  scrollOffset?: number;
 };
 
-const SlashCommandMenu: FC<Props> = ({ commands, selectedIndex, filter }) => {
+const SlashCommandMenu: FC<Props> = ({ commands, selectedIndex, filter, scrollOffset = 0 }) => {
   const filteredCommands = commands.filter((cmd) => cmd.name.toLowerCase().includes(filter.toLowerCase()));
 
   return (
     <MenuContainer
       items={filteredCommands}
       selectedIndex={selectedIndex}
+      scrollOffset={scrollOffset}
       borderColor="#22d3ee"
       fallbackText="No matching commands"
       renderItem={(cmd, _index, isSelected) => (

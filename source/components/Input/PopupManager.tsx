@@ -18,6 +18,7 @@ interface PopupManagerProps {
     isOpen: boolean;
     commands: SlashCommand[];
     selectedIndex: number;
+    scrollOffset?: number;
     filter: string;
   };
   path: {
@@ -103,7 +104,12 @@ export const PopupManager: FC<PopupManagerProps> = ({
         />
       )}
       {slash.isOpen && (
-        <SlashCommandMenu commands={slash.commands} selectedIndex={slash.selectedIndex} filter={slash.filter} />
+        <SlashCommandMenu
+          commands={slash.commands}
+          selectedIndex={slash.selectedIndex}
+          filter={slash.filter}
+          scrollOffset={slash.scrollOffset}
+        />
       )}
       {settings.isOpen && (
         <SettingsSelectionMenu

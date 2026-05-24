@@ -30,6 +30,7 @@ export const toPopupProps = ({
     isOpen: slash.isOpen,
     commands: slash.filteredCommands,
     selectedIndex: slash.selectedIndex,
+    scrollOffset: slash.scrollOffset,
     filter: slash.filter,
   },
   path: {

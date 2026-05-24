@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SlashCommand } from '../slash-commands.js';
 import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
@@ -93,8 +93,25 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
 
   const filteredCommands = useMemo(() => filterCommands(commands, filter), [commands, filter]);
 
+  const MAX_VISIBLE_ITEMS = 10;
+  const [scrollOffset, setScrollOffset] = useState(0);
+
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
     useSelection(filteredCommands);
+
+  // Sync scrollOffset with selectedIndex
+  useEffect(() => {
+    if (selectedIndex < scrollOffset) {
+      setScrollOffset(selectedIndex);
+    } else if (selectedIndex >= scrollOffset + MAX_VISIBLE_ITEMS) {
+      setScrollOffset(selectedIndex - MAX_VISIBLE_ITEMS + 1);
+    }
+  }, [selectedIndex, scrollOffset]);
+
+  // Reset scroll when menu opens or closes
+  useEffect(() => {
+    setScrollOffset(0);
+  }, [isOpen]);
 
   const open = useCallback(() => {
     // Avoid resetting selection when already open to preserve
@@ -133,6 +150,7 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
     isOpen,
     filter,
     selectedIndex,
+    scrollOffset,
     filteredCommands,
     open,
     close,

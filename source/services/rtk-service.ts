@@ -1,5 +1,4 @@
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { createHash } from 'crypto';
 import { spawnSync } from 'child_process';
@@ -249,7 +248,7 @@ export async function ensureRtkInstalled(deps: RtkServiceDeps): Promise<string |
 
     const stamp = Date.now();
     const tmpTar = path.join(destDir, `rtk-dl-${stamp}.tar.gz`);
-    const tmpExtractDir = path.join(os.tmpdir(), `rtk-extract-${stamp}`);
+    const tmpExtractDir = path.join(destDir, `rtk-extract-${stamp}`);
 
     fs.writeFileSync(tmpTar, buffer);
     fs.mkdirSync(tmpExtractDir, { recursive: true });

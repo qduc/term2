@@ -57,3 +57,139 @@ test('SettingsSelectionMenu renders task tabs and switch hint', (t) => {
   t.true(output.includes('Shell Execution'));
   t.true(output.includes('Tab/←→ → switch section'));
 });
+
+test('SettingsSelectionMenu keeps task tabs on one row', (t) => {
+  const originalColumns = process.stdout.columns;
+  process.stdout.columns = 119;
+  t.teardown(() => {
+    process.stdout.columns = originalColumns;
+  });
+
+  const { lastFrame } = render(
+    React.createElement(SettingsSelectionMenu, {
+      items: [
+        {
+          key: 'app.orchestratorMode',
+          description: 'Delegate tool-backed work through subagents (true|false)',
+          currentValue: true,
+        },
+        {
+          key: 'app.planMode',
+          description: 'Plan mode: read-only research and implementation planning (true|false)',
+          currentValue: false,
+        },
+      ],
+      selectedIndex: 0,
+      scrollOffset: 0,
+      query: '',
+      activeCategoryId: 'modes',
+      categories: [
+        { id: 'model', label: 'Model & Reasoning' },
+        { id: 'modes', label: 'Modes' },
+        { id: 'approvals', label: 'Safety & Approvals' },
+        { id: 'shell', label: 'Shell Execution' },
+        { id: 'search', label: 'Search & Web' },
+        { id: 'subagents', label: 'Subagents' },
+        { id: 'uiLogging', label: 'UI & Logging' },
+        { id: 'advanced', label: 'Advanced' },
+      ],
+    }),
+  );
+
+  const lines = (lastFrame() ?? '').split('\n');
+  t.true(lines[0]?.includes('Tab/←→ → switch section'));
+  t.false(lines[0]?.includes('STab/←→ → switch section'));
+  t.true(lines[1]?.startsWith('╭'));
+});
+
+test('SettingsSelectionMenu shrinks after broad search collapses', (t) => {
+  const categories = [
+    { id: 'model', label: 'Model & Reasoning' },
+    { id: 'modes', label: 'Modes' },
+    { id: 'approvals', label: 'Safety & Approvals' },
+    { id: 'shell', label: 'Shell Execution' },
+    { id: 'search', label: 'Search & Web' },
+    { id: 'subagents', label: 'Subagents' },
+    { id: 'uiLogging', label: 'UI & Logging' },
+    { id: 'advanced', label: 'Advanced' },
+  ];
+  const searchItems = [
+    'agent.model',
+    'app.planMode',
+    'agent.maxTurns',
+    'agent.temperature',
+    'agent.mentorModel',
+    'app.searchViaShell',
+    'agent.retryAttempts',
+    'app.orchestratorMode',
+    'agent.reasoningEffort',
+    'agent.autoApproveModel',
+  ].map((key) => ({
+    key,
+    description: `Description for ${key}`,
+    currentValue: key.startsWith('app.') ? false : 'value',
+  }));
+  const modeItems = [
+    {
+      key: 'app.orchestratorMode',
+      description: 'Delegate tool-backed work through subagents (true|false)',
+      currentValue: true,
+    },
+    {
+      key: 'app.planMode',
+      description: 'Plan mode: read-only research and implementation planning (true|false)',
+      currentValue: false,
+    },
+  ];
+
+  const view = render(
+    React.createElement(SettingsSelectionMenu, {
+      items: searchItems,
+      selectedIndex: 0,
+      scrollOffset: 0,
+      query: 'a',
+      isSearchingAll: true,
+      activeCategoryId: 'modes',
+      categories,
+    }),
+  );
+  const expandedHeight = (view.lastFrame() ?? '').split('\n').length;
+
+  view.rerender(
+    React.createElement(SettingsSelectionMenu, {
+      items: modeItems,
+      selectedIndex: 0,
+      scrollOffset: 0,
+      query: '',
+      activeCategoryId: 'modes',
+      categories,
+    }),
+  );
+  const collapsedHeight = (view.lastFrame() ?? '').split('\n').length;
+
+  view.rerender(
+    React.createElement(SettingsSelectionMenu, {
+      items: [
+        {
+          key: 'shell.timeout',
+          description: 'Shell command timeout in milliseconds',
+          currentValue: 120000,
+        },
+        {
+          key: 'shell.maxOutputLines',
+          description: 'Maximum lines of shell output to capture',
+          currentValue: 1000,
+        },
+      ],
+      selectedIndex: 0,
+      scrollOffset: 0,
+      query: '',
+      activeCategoryId: 'shell',
+      categories,
+    }),
+  );
+  const switchedHeight = (view.lastFrame() ?? '').split('\n').length;
+
+  t.true(collapsedHeight < expandedHeight);
+  t.true(switchedHeight < expandedHeight);
+});

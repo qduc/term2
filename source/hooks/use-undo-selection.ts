@@ -63,8 +63,9 @@ export const useUndoSelection = (): UndoSelectionResult => {
       setItems(userMessages);
       setMode('undo_selection');
       setScrollOffset(0);
+      selection.moveEnd();
     },
-    [setMode],
+    [setMode, selection],
   );
 
   const close = useCallback(() => {

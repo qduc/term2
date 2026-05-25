@@ -571,3 +571,90 @@ test.serial('ask_mentor resets conversation chain when mentor provider changes',
   t.true(Array.isArray(mentorInputsAltProvider[0]));
   t.is(mentorInputsAltProvider[0].length, 1);
 });
+
+test.serial('codex resolves default_reasoning_level if agent.reasoningEffort is default', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'codex',
+    'agent.model': 'gpt-5.3-codex',
+    'agent.reasoningEffort': 'default',
+  });
+
+  registerProvider(
+    {
+      id: 'codex',
+      label: 'Mock Codex',
+      createRunner: () =>
+        ({
+          run: async (agent: any, _input: any, options: any) => {
+            codexRunnerCalls.push({ agent, options });
+            return {
+              status: 'completed',
+              finalOutput: 'ok',
+              messages: [],
+            };
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', default_reasoning_level: 'medium' }],
+      capabilities: {
+        supportsConversationChaining: true,
+        supportsTracingControl: true,
+      },
+    },
+    { allowOverride: true },
+  );
+
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings },
+  });
+
+  await client.startStream('Hello');
+
+  t.is(codexRunnerCalls.length, 1);
+  const agent = codexRunnerCalls[0].agent;
+  t.truthy(agent);
+  t.is(agent.modelSettings?.reasoning?.effort, 'medium');
+  t.is(agent.defaultRunOptions?.reasoning?.effort, 'medium');
+});
+
+test.serial('codex chat resolves default_reasoning_level if agent.reasoningEffort is default', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'codex',
+    'agent.model': 'gpt-5.3-codex',
+    'agent.reasoningEffort': 'default',
+  });
+
+  registerProvider(
+    {
+      id: 'codex',
+      label: 'Mock Codex',
+      createRunner: () =>
+        ({
+          run: async (agent: any, _input: any, options: any) => {
+            codexRunnerCalls.push({ agent, options });
+            return {
+              status: 'completed',
+              finalOutput: 'ok',
+              messages: [],
+            };
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', default_reasoning_level: 'medium' }],
+      capabilities: {
+        supportsConversationChaining: true,
+        supportsTracingControl: true,
+      },
+    },
+    { allowOverride: true },
+  );
+
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings },
+  });
+
+  await client.chat('Hello', { provider: 'codex', model: 'gpt-5.3-codex', reasoningEffort: 'default' });
+
+  t.is(codexRunnerCalls.length, 1);
+  const agent = codexRunnerCalls[0].agent;
+  t.truthy(agent);
+  t.is(agent.modelSettings?.reasoning?.effort, 'medium');
+});

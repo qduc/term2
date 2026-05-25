@@ -23,6 +23,7 @@ import { shouldUseNativePatchTool, shouldUseStrictToolSchema } from './tool-sele
 import { isFlexServiceTierTimeout } from '../utils/flex-service-tier.js';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
 import type { ConversationEvent } from '../services/conversation-events.js';
+import { fetchModels, getModelDefaultReasoningLevel } from '../services/model-service.js';
 
 /**
  * Wraps a tool definition's needsApproval so that structurally invalid params
@@ -378,12 +379,24 @@ export class OpenAIAgentClient {
     // Abort any previous operation
     this.abort();
 
+    let agentRefreshed = false;
+    // Ensure Codex models are fetched/cached if reasoningEffort is default, so we can apply default_reasoning_level
+    if (this.#provider === 'codex' && this.#settings.get<string>('agent.reasoningEffort') === 'default') {
+      try {
+        await fetchModels({ settingsService: this.#settings, loggingService: this.#logger }, 'codex');
+        this.#refreshAgent();
+        agentRefreshed = true;
+      } catch (err) {
+        // ignore
+      }
+    }
+
     // Refresh agent instructions for the first message of a session to ensure
     // directory structure and AGENTS.md content are up to date.
     const isFirstMessage =
       !previousResponseId && (!Array.isArray(userInput) || (userInput.length > 0 && userInput.length <= 1));
 
-    if (isFirstMessage) {
+    if (isFirstMessage && !agentRefreshed) {
       this.#refreshAgent();
     }
 
@@ -563,6 +576,16 @@ export class OpenAIAgentClient {
       provider: tempProvider,
     });
 
+    const isDefaultSetting = this.#settings.get<string>('agent.reasoningEffort') === 'default';
+    if (tempProvider === 'codex' && isDefaultSetting) {
+      try {
+        await fetchModels({ settingsService: this.#settings, loggingService: this.#logger }, 'codex');
+        this.#refreshAgent();
+      } catch (err) {
+        // ignore
+      }
+    }
+
     try {
       // Create a temporary agent for this specific chat request if params differ
       let agentForChat = this.#agent;
@@ -572,9 +595,17 @@ export class OpenAIAgentClient {
       if (options.model || options.reasoningEffort || options.instructions || options.provider) {
         const modelSettings: any = {};
 
-        if (tempEffort && tempEffort !== 'default') {
+        let effectiveEffort = tempEffort;
+        if (tempProvider === 'codex' && isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
+          const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', tempModel);
+          if (defaultReasoningLevel) {
+            effectiveEffort = defaultReasoningLevel as ModelSettingsReasoningEffort;
+          }
+        }
+
+        if (effectiveEffort && effectiveEffort !== 'default') {
           modelSettings.reasoning = {
-            effort: tempEffort,
+            effort: effectiveEffort,
             summary: 'auto',
           };
         }
@@ -623,14 +654,32 @@ export class OpenAIAgentClient {
       provider: tempProvider,
     });
 
+    const isDefaultSetting = this.#settings.get<string>('agent.reasoningEffort') === 'default';
+    if (tempProvider === 'codex' && isDefaultSetting) {
+      try {
+        await fetchModels({ settingsService: this.#settings, loggingService: this.#logger }, 'codex');
+        this.#refreshAgent();
+      } catch (err) {
+        // ignore
+      }
+    }
+
     try {
       const tempModel = options.model || this.#model;
       const tempEffort = options.reasoningEffort || this.#reasoningEffort;
       const modelSettings: any = {};
 
-      if (tempEffort && tempEffort !== 'default') {
+      let effectiveEffort = tempEffort;
+      if (tempProvider === 'codex' && isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
+        const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', tempModel);
+        if (defaultReasoningLevel) {
+          effectiveEffort = defaultReasoningLevel as ModelSettingsReasoningEffort;
+        }
+      }
+
+      if (effectiveEffort && effectiveEffort !== 'default') {
         modelSettings.reasoning = {
-          effort: tempEffort,
+          effort: effectiveEffort,
           summary: 'auto',
         };
       }
@@ -773,8 +822,21 @@ export class OpenAIAgentClient {
       shouldUseNativePatchTool: shouldUseNativePatchToolForModel,
     });
 
+    let effectiveReasoningEffort = reasoningEffort;
+    const isDefaultSetting = this.#settings.get<string>('agent.reasoningEffort') === 'default';
+    if (
+      this.#provider === 'codex' &&
+      isDefaultSetting &&
+      (!effectiveReasoningEffort || effectiveReasoningEffort === 'default')
+    ) {
+      const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', resolvedModel);
+      if (defaultReasoningLevel) {
+        effectiveReasoningEffort = defaultReasoningLevel as ModelSettingsReasoningEffort;
+      }
+    }
+
     const modelSettings = this.#buildModelSettings({
-      reasoningEffort,
+      reasoningEffort: effectiveReasoningEffort,
       resolvedTemperature,
     });
 
@@ -789,11 +851,11 @@ export class OpenAIAgentClient {
     // Only add defaultRunOptions if an explicit effort is set (not
     // 'default'). This ensures the API receives the param only when
     // intended.
-    if (reasoningEffort && reasoningEffort !== 'default') {
+    if (effectiveReasoningEffort && effectiveReasoningEffort !== 'default') {
       (agent as any).defaultRunOptions = {
         ...((agent as any).defaultRunOptions || {}),
         // Pass through to underlying client for models that support it
-        reasoning: { effort: reasoningEffort },
+        reasoning: { effort: effectiveReasoningEffort },
       };
     }
 

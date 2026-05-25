@@ -244,7 +244,7 @@ export class CodexTokenManager {
 const execAsync = promisify(exec);
 
 const FALLBACK_CODEX_CLIENT_VERSION = '0.133.0';
-export const CODEX_REQUEST_TIMEOUT_MS = 30_000;
+export const CODEX_REQUEST_TIMEOUT_MS = 60_000;
 export const CODEX_MAX_RETRIES = 0;
 
 interface VersionCache {
@@ -371,7 +371,7 @@ export function sanitizeCodexRequestInit(url: unknown, init?: RequestInit): Requ
 async function fetchCodexModels(
   _deps: ProviderDeps,
   fetchImpl: ProviderFetch = fetch as any,
-): Promise<Array<{ id: string; name?: string }>> {
+): Promise<Array<{ id: string; name?: string; default_reasoning_level?: string }>> {
   const tokenManager = new CodexTokenManager({ fetchImpl: fetchImpl as any });
   const accessToken = await tokenManager.getOrRefreshAccessToken();
 
@@ -402,9 +402,10 @@ async function fetchCodexModels(
         .map((item: any) => {
           const id = item?.slug || item?.model || '';
           const name = item?.name || item?.display_name || item?.description;
-          return id ? { id, name } : null;
+          const default_reasoning_level = item?.default_reasoning_level;
+          return id ? { id, name, default_reasoning_level } : null;
         })
-        .filter(Boolean) as Array<{ id: string; name?: string }>;
+        .filter(Boolean) as Array<{ id: string; name?: string; default_reasoning_level?: string }>;
     }
     return [];
   }
@@ -413,10 +414,11 @@ async function fetchCodexModels(
     .map((item: any) => {
       const id = item?.slug || item?.model || '';
       const name = item?.name || item?.display_name || item?.description;
-      return id ? { id, name } : null;
+      const default_reasoning_level = item?.default_reasoning_level;
+      return id ? { id, name, default_reasoning_level } : null;
     })
     .filter(Boolean)
-    .reverse() as Array<{ id: string; name?: string }>;
+    .reverse() as Array<{ id: string; name?: string; default_reasoning_level?: string }>;
 }
 
 class FallbackCodexProvider implements ModelProvider {

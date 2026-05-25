@@ -28,7 +28,10 @@ export interface ProviderDefinition {
   createRunner?: (deps: ProviderDeps) => Runner | null;
 
   /** Function to fetch available models for this provider */
-  fetchModels: (deps: ProviderDeps, fetchImpl?: ProviderFetch) => Promise<Array<{ id: string; name?: string }>>;
+  fetchModels: (
+    deps: ProviderDeps,
+    fetchImpl?: ProviderFetch,
+  ) => Promise<Array<{ id: string; name?: string; default_reasoning_level?: string }>>;
 
   /** Optional function to clear conversation state for this provider */
   clearConversations?: () => void;

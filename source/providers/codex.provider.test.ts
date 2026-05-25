@@ -270,8 +270,8 @@ test('Codex fetchModels parses custom models endpoint', async (t) => {
     return new Response(
       JSON.stringify({
         models: [
-          { slug: 'gpt-5-codex', display_name: 'GPT-5 Codex' },
-          { slug: 'gpt-4o', display_name: 'GPT-4o' },
+          { slug: 'gpt-5-codex', display_name: 'GPT-5 Codex', default_reasoning_level: 'medium' },
+          { slug: 'gpt-4o', display_name: 'GPT-4o', default_reasoning_level: 'low' },
         ],
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -300,7 +300,9 @@ test('Codex fetchModels parses custom models endpoint', async (t) => {
     t.is(authHeader, `Bearer ${validToken}`);
     t.is(models.length, 2);
     t.is(models[0].id, 'gpt-4o');
+    t.is(models[0].default_reasoning_level, 'low');
     t.is(models[1].id, 'gpt-5-codex');
+    t.is(models[1].default_reasoning_level, 'medium');
   } finally {
     process.env.CHATGPT_LOCAL_HOME = origHome;
     try {

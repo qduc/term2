@@ -6,6 +6,7 @@ export type ModelInfo = {
   id: string;
   name?: string;
   provider: string;
+  default_reasoning_level?: string;
 };
 
 type FetchFn = (url: string, options?: any) => Promise<any>;
@@ -53,6 +54,13 @@ export async function fetchModels(
 
 export function clearModelCache(): void {
   cache.clear();
+}
+
+export function getModelDefaultReasoningLevel(provider: string, modelId: string): string | undefined {
+  const models = cache.get(provider);
+  if (!models) return undefined;
+  const model = models.find((m) => m.id === modelId);
+  return model?.default_reasoning_level;
 }
 
 export function filterModels(models: ModelInfo[], query: string): ModelInfo[] {

@@ -1,5 +1,8 @@
 import test from 'ava';
-import React, { useEffect, useMemo, useRef } from 'react';
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+import React, { act, useEffect, useMemo, useRef } from 'react';
 import { render } from 'ink-testing-library';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
 import { useModelSelection } from './use-model-selection.js';
@@ -17,6 +20,20 @@ type TestComponentProps = {
 type ImmediateToggleComponentProps = {
   onResults: (results: any) => void;
   settingsService?: ReturnType<typeof createMockSettingsService>;
+};
+
+const flush = async (callback: () => void) => {
+  await act(async () => {
+    callback();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+};
+
+const waitForIdle = async (getModels: () => any) => {
+  for (let i = 0; i < 20 && getModels()?.loading; i++) {
+    await flush(() => {});
+  }
 };
 
 const TestComponent = ({
@@ -97,61 +114,83 @@ const ImmediateToggleComponent = ({ onResults, settingsService }: ImmediateToggl
 
 test.serial('toggleProvider cycles through available providers', async (t) => {
   let capturedModels: any;
-  render(
-    <InputProvider>
-      <TestComponent
-        onResults={(m) => {
-          capturedModels = m;
-        }}
-      />
-    </InputProvider>,
-  );
+  let renderer: any;
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
   const firstProvider = capturedModels.provider;
   t.truthy(firstProvider);
 
   // Manual toggle
-  capturedModels.toggleProvider();
+  await flush(() => {
+    capturedModels.toggleProvider();
+  });
+  await waitForIdle(() => capturedModels);
 
-  await new Promise((resolve) => setTimeout(resolve, 50));
   const secondProvider = capturedModels.provider;
   t.not(secondProvider, firstProvider, 'Provider should have switched');
 
   // Toggle back or to next
-  capturedModels.toggleProvider();
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await flush(() => {
+    capturedModels.toggleProvider();
+  });
+  await waitForIdle(() => capturedModels);
   const thirdProvider = capturedModels.provider;
   t.not(thirdProvider, secondProvider, 'Provider should have switched again');
+
+  await flush(() => {
+    renderer.unmount();
+  });
 });
 
 test.serial('toggleProvider supports prev and next direction', async (t) => {
   let capturedModels: any;
-  render(
-    <InputProvider>
-      <TestComponent
-        onResults={(m) => {
-          capturedModels = m;
-        }}
-      />
-    </InputProvider>,
-  );
+  let renderer: any;
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
   const firstProvider = capturedModels.provider;
   t.truthy(firstProvider);
 
   // Toggle prev should switch to the last provider
-  capturedModels.toggleProvider('prev');
+  await flush(() => {
+    capturedModels.toggleProvider('prev');
+  });
+  await waitForIdle(() => capturedModels);
 
-  await new Promise((resolve) => setTimeout(resolve, 50));
   const lastProvider = capturedModels.provider;
   t.not(lastProvider, firstProvider, 'Provider should have switched to previous/last');
 
   // Toggle next should switch back to the first provider
-  capturedModels.toggleProvider('next');
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await flush(() => {
+    capturedModels.toggleProvider('next');
+  });
+  await waitForIdle(() => capturedModels);
   t.is(capturedModels.provider, firstProvider, 'Provider should have switched back to first');
+
+  await flush(() => {
+    renderer.unmount();
+  });
 });
 
 test.serial('toggleProvider uses the configured provider immediately after opening', async (t) => {
@@ -165,82 +204,140 @@ test.serial('toggleProvider uses the configured provider immediately after openi
     'agent.provider': configuredProvider,
     'agent.openrouter.apiKey': 'fake-key',
   });
+  let renderer: any;
 
-  render(
-    <InputProvider>
-      <ImmediateToggleComponent
-        settingsService={settingsService}
-        onResults={(m) => {
-          capturedModels = m;
-        }}
-      />
-    </InputProvider>,
-  );
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <ImmediateToggleComponent
+          settingsService={settingsService}
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
 
-  await new Promise((resolve) => setTimeout(resolve, 50));
   t.is(capturedModels.provider, expectedPrevious);
+
+  await flush(() => {
+    renderer.unmount();
+  });
 });
 
 test('exposes modelSettingConfig for settings-backed triggers', async (t) => {
   let capturedModels: any;
+  clearModelCache();
+  const testProvider = `setting-backed-provider-${Date.now()}-${Math.random()}`;
+  registerProvider({
+    id: testProvider,
+    label: testProvider,
+    fetchModels: (() => []) as any,
+  });
+  t.teardown(() => {
+    clearModelCache();
+    unregisterProvider(testProvider);
+  });
   const settingsService = createMockSettingsService({
-    'agent.provider': 'openai',
+    'agent.provider': testProvider,
+  });
+  let renderer: any;
+
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/settings agent.model "
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
   });
 
-  render(
-    <InputProvider>
-      <TestComponent
-        settingsService={settingsService}
-        initialInput="/settings agent.model "
-        onResults={(m) => {
-          capturedModels = m;
-        }}
-      />
-    </InputProvider>,
-  );
+  await waitForIdle(() => capturedModels);
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
   t.truthy(capturedModels.modelSettingConfig);
   t.is(capturedModels.modelSettingConfig.modelKey, 'agent.model');
   t.is(capturedModels.modelSettingConfig.providerKey, 'agent.provider');
+
+  await flush(() => {
+    renderer.unmount();
+  });
+  for (let i = 0; i < 5; i++) {
+    await flush(() => {});
+  }
 });
 
 test('modelSettingConfig is undefined for command-backed triggers', async (t) => {
   let capturedModels: any;
+  clearModelCache();
+  const testProvider = `command-backed-provider-${Date.now()}-${Math.random()}`;
+  registerProvider({
+    id: testProvider,
+    label: testProvider,
+    fetchModels: (() => []) as any,
+  });
+  t.teardown(() => {
+    clearModelCache();
+    unregisterProvider(testProvider);
+  });
   const settingsService = createMockSettingsService({
-    'agent.provider': 'openai',
+    'agent.provider': testProvider,
+  });
+  let renderer: any;
+
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/model gpt-4"
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
   });
 
-  render(
-    <InputProvider>
-      <TestComponent
-        settingsService={settingsService}
-        initialInput="/model gpt-4"
-        onResults={(m) => {
-          capturedModels = m;
-        }}
-      />
-    </InputProvider>,
-  );
+  await waitForIdle(() => capturedModels);
 
-  await new Promise((resolve) => setTimeout(resolve, 100));
   t.is(capturedModels.modelSettingConfig, undefined);
+
+  await flush(() => {
+    renderer.unmount();
+  });
+  for (let i = 0; i < 5; i++) {
+    await flush(() => {});
+  }
 });
 
 test.serial('model selection query strips provider suffix from input', async (t) => {
   let capturedModels: any;
-  render(
-    <InputProvider>
-      <TestComponent
-        onResults={(m) => {
-          capturedModels = m;
-        }}
-      />
-    </InputProvider>,
-  );
+  let renderer: any;
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
 
-  await new Promise((resolve) => setTimeout(resolve, 50));
   t.is(capturedModels.query, 'deepseek-v4-flash');
+
+  await flush(() => {
+    renderer.unmount();
+  });
 });
 
 test.serial('ignores stale model results after switching providers', async (t) => {
@@ -276,38 +373,49 @@ test.serial('ignores stale model results after switching providers', async (t) =
   const settingsService = createMockSettingsService({
     'agent.provider': firstProvider,
   });
+  let renderer: any;
 
-  render(
-    <InputProvider>
-      <TestComponent
-        settingsService={settingsService}
-        initialInput="/model "
-        onResults={(m) => {
-          capturedModels = m;
-        }}
-      />
-    </InputProvider>,
-  );
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/model "
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
 
-  await new Promise((resolve) => setTimeout(resolve, 50));
   t.is(capturedModels.provider, firstProvider);
 
-  capturedModels.toggleProvider();
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await flush(() => {
+    capturedModels.toggleProvider();
+  });
+  await waitForIdle(() => capturedModels);
   t.is(capturedModels.provider, secondProvider);
   t.deepEqual(
     capturedModels.filteredModels.map((model: any) => model.id),
     ['fast-model'],
   );
 
-  resolveFirst?.();
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await flush(() => {
+    resolveFirst?.();
+  });
+  await waitForIdle(() => capturedModels);
 
   t.is(capturedModels.provider, secondProvider);
   t.deepEqual(
     capturedModels.filteredModels.map((model: any) => model.id),
     ['fast-model'],
   );
+
+  await flush(() => {
+    renderer.unmount();
+  });
 });
 
 test.serial('keeps completed provider results ready when switching back', async (t) => {
@@ -343,38 +451,47 @@ test.serial('keeps completed provider results ready when switching back', async 
   const settingsService = createMockSettingsService({
     'agent.provider': firstProvider,
   });
+  let renderer: any;
 
-  render(
-    <InputProvider>
-      <TestComponent
-        settingsService={settingsService}
-        initialInput="/model "
-        onResults={(m) => {
-          capturedModels = m;
-        }}
-      />
-    </InputProvider>,
-  );
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/model "
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
 
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  capturedModels.toggleProvider();
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await flush(() => {
+    capturedModels.toggleProvider();
+  });
+  await waitForIdle(() => capturedModels);
   t.is(capturedModels.provider, secondProvider);
   t.deepEqual(
     capturedModels.filteredModels.map((model: any) => model.id),
     ['fast-model'],
   );
 
-  resolveFirst?.();
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await flush(() => {
+    resolveFirst?.();
+  });
+  await waitForIdle(() => capturedModels);
   t.deepEqual(
     capturedModels.filteredModels.map((model: any) => model.id),
     ['fast-model'],
   );
 
   for (let i = 0; i < getProviderIds().length && capturedModels.provider !== firstProvider; i++) {
-    capturedModels.toggleProvider();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await flush(() => {
+      capturedModels.toggleProvider();
+    });
+    await waitForIdle(() => capturedModels);
   }
 
   t.is(capturedModels.provider, firstProvider);
@@ -382,6 +499,10 @@ test.serial('keeps completed provider results ready when switching back', async 
     capturedModels.filteredModels.map((model: any) => model.id),
     ['slow-model'],
   );
+
+  await flush(() => {
+    renderer.unmount();
+  });
 });
 
 test.serial('pre-selects the current model of the setting it is changing (command-backed)', async (t) => {
@@ -397,7 +518,7 @@ test.serial('pre-selects the current model of the setting it is changing (comman
   registerProvider({
     id: testProvider,
     label: testProvider,
-    fetchModels: async () => modelsList,
+    fetchModels: (() => modelsList) as any,
   });
 
   t.teardown(() => {
@@ -411,23 +532,29 @@ test.serial('pre-selects the current model of the setting it is changing (comman
     'agent.model': 'model-b',
     'agent.openrouter.apiKey': 'fake-key',
   });
+  let renderer: any;
 
-  render(
-    <InputProvider>
-      <TestComponent
-        settingsService={settingsService}
-        initialInput="/model "
-        onResults={(m) => {
-          capturedModels = m;
-        }}
-      />
-    </InputProvider>,
-  );
-
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/model "
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
 
   t.is(capturedModels.provider, testProvider);
   t.is(capturedModels.selectedIndex, 1);
+
+  await flush(() => {
+    renderer.unmount();
+  });
 });
 
 test.serial('pre-selects the current model of the setting it is changing (settings-backed)', async (t) => {
@@ -443,7 +570,7 @@ test.serial('pre-selects the current model of the setting it is changing (settin
   registerProvider({
     id: testProvider,
     label: testProvider,
-    fetchModels: async () => modelsList,
+    fetchModels: (() => modelsList) as any,
   });
 
   t.teardown(() => {
@@ -457,21 +584,27 @@ test.serial('pre-selects the current model of the setting it is changing (settin
     'agent.mentorModel': 'mentor-3',
     'agent.openrouter.apiKey': 'fake-key',
   });
+  let renderer: any;
 
-  render(
-    <InputProvider>
-      <TestComponent
-        settingsService={settingsService}
-        initialInput="/settings agent.mentorModel "
-        onResults={(m) => {
-          capturedModels = m;
-        }}
-      />
-    </InputProvider>,
-  );
-
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/settings agent.mentorModel "
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
 
   t.is(capturedModels.provider, testProvider);
   t.is(capturedModels.selectedIndex, 2);
+
+  await flush(() => {
+    renderer.unmount();
+  });
 });

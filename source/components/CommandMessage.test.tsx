@@ -1,10 +1,74 @@
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
-import React from 'react';
+import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import CommandMessage from './CommandMessage.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE } from '../tools/tool-names.js';
 
+type FakeTimer = {
+  advanceBy: (ms: number) => void;
+  restore: () => void;
+};
+
+const createFakeTimerClock = (): FakeTimer => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  let now = 0;
+  let nextId = 1;
+  const timers = new Map<number, { dueAt: number; callback: (...args: any[]) => void; args: any[] }>();
+
+  globalThis.setTimeout = ((callback: (...args: any[]) => void, delay = 0, ...args: any[]) => {
+    const id = nextId++;
+    timers.set(id, { dueAt: now + Math.max(0, Number(delay) || 0), callback, args });
+    return id as any;
+  }) as typeof globalThis.setTimeout;
+
+  globalThis.clearTimeout = ((timerId: number | undefined) => {
+    if (typeof timerId === 'number') {
+      timers.delete(timerId);
+    }
+  }) as typeof globalThis.clearTimeout;
+
+  const advanceBy = (ms: number) => {
+    const targetTime = now + ms;
+
+    while (true) {
+      let nextTimerId: number | null = null;
+      let nextDueAt = Number.POSITIVE_INFINITY;
+
+      for (const [id, timer] of timers) {
+        if (timer.dueAt < nextDueAt) {
+          nextDueAt = timer.dueAt;
+          nextTimerId = id;
+        }
+      }
+
+      if (nextTimerId === null || nextDueAt > targetTime) {
+        break;
+      }
+
+      now = nextDueAt;
+      const timer = timers.get(nextTimerId);
+      timers.delete(nextTimerId);
+      timer?.callback(...timer.args);
+    }
+
+    now = targetTime;
+  };
+
+  return {
+    advanceBy,
+    restore: () => {
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
+    },
+  };
+};
+
 test('CommandMessage does not duplicate parameters when they are already in command string', async (t) => {
+  const clock = createFakeTimerClock();
   const props = {
     command: 'shell: ls -la',
     toolName: 'shell',
@@ -12,21 +76,31 @@ test('CommandMessage does not duplicate parameters when they are already in comm
     status: 'running' as 'running' | 'pending' | 'completed' | 'failed',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
-  await new Promise((resolve) => setTimeout(resolve, 1100));
-  const output = lastFrame() ?? '';
+  let lastFrame: (() => string | undefined) | undefined;
 
-  // The bug would cause "ls -la" to appear twice
-  // e.g. "$ shell: ls -la ls -la"
+  try {
+    await act(async () => {
+      ({ lastFrame } = render(<CommandMessage {...props} />));
+      clock.advanceBy(1100);
+    });
 
-  // Count occurrences of "ls -la"
-  const count = (output.match(/ls -la/g) || []).length;
+    const output = lastFrame?.() ?? '';
 
-  // It should only appear once in the command line
-  t.is(count, 1, `Expected "ls -la" to appear once, but found ${count}. Output: ${output}`);
+    // The bug would cause "ls -la" to appear twice
+    // e.g. "$ shell: ls -la ls -la"
+
+    // Count occurrences of "ls -la"
+    const count = (output.match(/ls -la/g) || []).length;
+
+    // It should only appear once in the command line
+    t.is(count, 1, `Expected "ls -la" to appear once, but found ${count}. Output: ${output}`);
+  } finally {
+    clock.restore();
+  }
 });
 
 test('CommandMessage still shows arguments for unknown tools where command is just toolName', async (t) => {
+  const clock = createFakeTimerClock();
   const props = {
     command: 'unknown_tool',
     toolName: 'unknown_tool',
@@ -34,12 +108,21 @@ test('CommandMessage still shows arguments for unknown tools where command is ju
     status: 'running' as 'running' | 'pending' | 'completed' | 'failed',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
-  await new Promise((resolve) => setTimeout(resolve, 1100));
-  const output = lastFrame() ?? '';
+  let lastFrame: (() => string | undefined) | undefined;
 
-  t.true(output.includes('unknown_tool'));
-  t.true(output.includes('foo=bar'));
+  try {
+    await act(async () => {
+      ({ lastFrame } = render(<CommandMessage {...props} />));
+      clock.advanceBy(1100);
+    });
+
+    const output = lastFrame?.() ?? '';
+
+    t.true(output.includes('unknown_tool'));
+    t.true(output.includes('foo=bar'));
+  } finally {
+    clock.restore();
+  }
 });
 
 test('CommandMessage renders create_file with [CREATE] header and file path', async (t) => {
@@ -51,8 +134,11 @@ test('CommandMessage renders create_file with [CREATE] header and file path', as
     success: true,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
-  const output = lastFrame() ?? '';
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<CommandMessage {...props} />));
+  });
+  const output = lastFrame?.() ?? '';
 
   t.true(output.includes('[CREATE]'), `Expected "[CREATE]" in output: ${output}`);
   t.true(output.includes('src/new-file.ts'), `Expected file path in output: ${output}`);
@@ -67,8 +153,11 @@ test('CommandMessage renders create_file content as diff with + prefix', async (
     success: true,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
-  const output = lastFrame() ?? '';
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<CommandMessage {...props} />));
+  });
+  const output = lastFrame?.() ?? '';
 
   t.true(output.includes('+line 1'), `Expected "+line 1" in output: ${output}`);
   t.true(output.includes('+line 2'), `Expected "+line 2" in output: ${output}`);
@@ -85,8 +174,11 @@ test('CommandMessage renders apply_patch update_file with [PATCH] header and dif
     output: 'Updated src/file.ts',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
-  const output = lastFrame() ?? '';
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<CommandMessage {...props} />));
+  });
+  const output = lastFrame?.() ?? '';
 
   t.true(output.includes('[PATCH]'), `Expected "[PATCH]" in output: ${output}`);
   t.true(output.includes('src/file.ts'), `Expected file path in output: ${output}`);
@@ -105,8 +197,11 @@ test('CommandMessage renders apply_patch create_file with [CREATE FILE] header a
     output: 'Created src/new.ts',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
-  const output = lastFrame() ?? '';
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<CommandMessage {...props} />));
+  });
+  const output = lastFrame?.() ?? '';
 
   t.true(output.includes('[CREATE FILE]'), `Expected "[CREATE FILE]" in output: ${output}`);
   t.true(output.includes('src/new.ts'), `Expected file path in output: ${output}`);
@@ -125,8 +220,11 @@ test('CommandMessage renders apply_patch with only output when hadApproval is tr
     hadApproval: true,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
-  const output = lastFrame() ?? '';
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<CommandMessage {...props} />));
+  });
+  const output = lastFrame?.() ?? '';
 
   t.false(output.includes('[PATCH]'), `Expected no "[PATCH]" when hadApproval: ${output}`);
   t.true(output.includes('Updated src/file.ts'), `Expected output message: ${output}`);
@@ -142,8 +240,11 @@ test('CommandMessage renders create_file failure in red', async (t) => {
     output: 'Error: File already exists at src/existing.ts.',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
-  const output = lastFrame() ?? '';
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<CommandMessage {...props} />));
+  });
+  const output = lastFrame?.() ?? '';
 
   t.true(output.includes('[CREATE]'), `Expected "[CREATE]" in output: ${output}`);
   t.true(output.includes('Error'), `Expected error message in output: ${output}`);
@@ -159,8 +260,11 @@ test('CommandMessage truncates output and shows the last line when output is lon
     output: 'line 1\nline 2\nline 3\nline 4\nline 5\nline 6',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
-  const output = lastFrame() ?? '';
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<CommandMessage {...props} />));
+  });
+  const output = lastFrame?.() ?? '';
 
   t.true(output.includes('line 1'), `Expected "line 1" in output: ${output}`);
   t.true(output.includes('line 2'), `Expected "line 2" in output: ${output}`);
@@ -181,8 +285,11 @@ test('CommandMessage does not truncate output and shows all lines when output is
     output: 'line 1\nline 2\nline 3\nline 4',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
-  const output = lastFrame() ?? '';
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<CommandMessage {...props} />));
+  });
+  const output = lastFrame?.() ?? '';
 
   t.true(output.includes('line 1'));
   t.true(output.includes('line 2'));

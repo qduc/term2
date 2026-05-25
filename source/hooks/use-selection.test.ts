@@ -2,7 +2,7 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
-import React, { useEffect } from 'react';
+import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import { useSelection } from './use-selection.js';
 
@@ -45,24 +45,32 @@ test('useSelection - handles up and down wraps', (t) => {
   t.is(currentSelection!.selectedIndex, 0);
 
   // Move down goes to 1
-  currentSelection?.moveDown();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 1);
+  act(() => {
+    currentSelection!.moveDown();
+  });
+  t.is(currentSelection!.selectedIndex, 1);
 
   // Move down to 2
-  currentSelection?.moveDown();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 2);
+  act(() => {
+    currentSelection!.moveDown();
+  });
+  t.is(currentSelection!.selectedIndex, 2);
 
   // Move down wraps to 0
-  currentSelection?.moveDown();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 0);
+  act(() => {
+    currentSelection!.moveDown();
+  });
+  t.is(currentSelection!.selectedIndex, 0);
 
   // Move up wraps to 2
-  currentSelection?.moveUp();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 2);
+  act(() => {
+    currentSelection!.moveUp();
+  });
+  t.is(currentSelection!.selectedIndex, 2);
+
+  act(() => {
+    renderer.unmount();
+  });
 });
 
 test('useSelection - handles home and end keys', (t) => {
@@ -87,14 +95,20 @@ test('useSelection - handles home and end keys', (t) => {
   t.is(currentSelection!.selectedIndex, 0);
 
   // Move to end (index 4)
-  currentSelection?.moveEnd();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 4);
+  act(() => {
+    currentSelection!.moveEnd();
+  });
+  t.is(currentSelection!.selectedIndex, 4);
 
   // Move to home (index 0)
-  currentSelection?.moveHome();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 0);
+  act(() => {
+    currentSelection!.moveHome();
+  });
+  t.is(currentSelection!.selectedIndex, 0);
+
+  act(() => {
+    renderer.unmount();
+  });
 });
 
 test('useSelection - pageUp and pageDown navigation', (t) => {
@@ -119,32 +133,42 @@ test('useSelection - pageUp and pageDown navigation', (t) => {
   t.is(currentSelection!.selectedIndex, 0);
 
   // Page down moves by 10 (index 10)
-  currentSelection?.pageDown();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 10);
+  act(() => {
+    currentSelection!.pageDown();
+  });
+  t.is(currentSelection!.selectedIndex, 10);
 
   // Page down moves by 10 (index 20)
-  currentSelection?.pageDown();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 20);
+  act(() => {
+    currentSelection!.pageDown();
+  });
+  t.is(currentSelection!.selectedIndex, 20);
 
   // Page down clamped at 24
-  currentSelection?.pageDown();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 24);
+  act(() => {
+    currentSelection!.pageDown();
+  });
+  t.is(currentSelection!.selectedIndex, 24);
 
   // Page up moves by 10 (index 14)
-  currentSelection?.pageUp();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 14);
+  act(() => {
+    currentSelection!.pageUp();
+  });
+  t.is(currentSelection!.selectedIndex, 14);
 
   // Page up moves by 10 (index 4)
-  currentSelection?.pageUp();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 4);
+  act(() => {
+    currentSelection!.pageUp();
+  });
+  t.is(currentSelection!.selectedIndex, 4);
 
   // Page up clamped at 0
-  currentSelection?.pageUp();
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  t.is(currentSelection?.selectedIndex, 0);
+  act(() => {
+    currentSelection!.pageUp();
+  });
+  t.is(currentSelection!.selectedIndex, 0);
+
+  act(() => {
+    renderer.unmount();
+  });
 });

@@ -1,12 +1,13 @@
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
-import React, { useMemo } from 'react';
+import React, { act, useMemo } from 'react';
 import { Text } from 'ink';
 import { render } from 'ink-testing-library';
 import { useTriggerDetection } from './use-trigger-detection.js';
 import type { InputMode } from '../context/InputContext.js';
 import type { SlashCommand } from '../slash-commands.js';
-
-const waitForEffect = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 type Counts = Record<string, number>;
 
@@ -67,17 +68,17 @@ test('useTriggerDetection keeps model selection open when cursor moves before th
     },
   ];
 
-  render(
-    <TestComponent
-      counts={counts}
-      mode="model_selection"
-      value="/model gpt-5"
-      cursorOffset={1}
-      slashCommands={slashCommands}
-    />,
-  );
-
-  await waitForEffect();
+  await act(async () => {
+    render(
+      <TestComponent
+        counts={counts}
+        mode="model_selection"
+        value="/model gpt-5"
+        cursorOffset={1}
+        slashCommands={slashCommands}
+      />,
+    );
+  });
 
   t.is(counts['models.close'] ?? 0, 0);
   t.is(counts['models.open'] ?? 0, 0);
@@ -86,9 +87,9 @@ test('useTriggerDetection keeps model selection open when cursor moves before th
 test('useTriggerDetection closes model selection on none outside model mode', async (t) => {
   const counts: Counts = {};
 
-  render(<TestComponent counts={counts} mode="text" value="/model gpt-5" cursorOffset={1} />);
-
-  await waitForEffect();
+  await act(async () => {
+    render(<TestComponent counts={counts} mode="text" value="/model gpt-5" cursorOffset={1} />);
+  });
 
   t.is(counts['models.close'], 1);
 });

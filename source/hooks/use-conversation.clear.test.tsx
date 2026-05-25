@@ -1,5 +1,8 @@
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
-import React, { useState } from 'react';
+import React, { act, useState } from 'react';
 import { Text } from 'ink';
 import { render } from 'ink-testing-library';
 import { useConversation } from './use-conversation.js';
@@ -8,10 +11,6 @@ const loggingService = {
   debug() {},
   error() {},
 } as any;
-
-const flush = async () => {
-  await new Promise((resolve) => setTimeout(resolve, 100));
-};
 
 test('useConversation triggers onClear and resets messages/sessionId', async (t) => {
   let onClearCalled = false;
@@ -47,13 +46,19 @@ test('useConversation triggers onClear and resets messages/sessionId', async (t)
     );
   };
 
-  const { lastFrame } = render(<Harness />);
-  t.is(lastFrame(), 'old-session-id|1');
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<Harness />));
+  });
+  t.truthy(lastFrame);
+  t.is(lastFrame!(), 'old-session-id|1');
 
-  await clearFn();
-  await flush();
+  await act(async () => {
+    await clearFn();
+  });
 
   t.true(onClearCalled);
   t.is(mockConversationService.sessionId, 'new-session-id');
-  t.is(lastFrame(), 'new-session-id|0');
+  t.truthy(lastFrame);
+  t.is(lastFrame!(), 'new-session-id|0');
 });

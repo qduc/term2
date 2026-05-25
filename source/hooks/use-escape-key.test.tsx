@@ -1,10 +1,13 @@
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
-import React, { useState } from 'react';
+import React, { act, useEffect, useState } from 'react';
 import { render } from 'ink-testing-library';
 import { useEscapeKey } from './use-escape-key.js';
 import type { InputMode } from '../context/InputContext.js';
 import { SETTINGS_TRIGGER } from '../components/Input/triggers.js';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdin } from 'ink';
 
 const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as InputMode }) => {
   const [value, onChange] = useState(initialValue);
@@ -32,8 +35,47 @@ const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as Inp
   );
 };
 
+const flushReactUpdates = async (iterations = 1) => {
+  await act(async () => {
+    for (let i = 0; i < iterations; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  });
+};
+
+const renderAndFlush = async (element: React.ReactElement) => {
+  const result = render(element);
+  await flushReactUpdates(10);
+  return result;
+};
+
+const useCaptureInputEmitter = (setEmitter: (emitter: any) => void) => {
+  const stdin = useStdin() as any;
+
+  useEffect(() => {
+    setEmitter(stdin.internal_eventEmitter);
+  }, [setEmitter, stdin]);
+};
+
+const pressEscape = async (emitter: { emit: (event: string, input: string) => void }) => {
+  await act(async () => {
+    emitter.emit('input', '\u001B');
+  });
+
+  await flushReactUpdates(3);
+};
+
 test('pressing ESC once shows hint, second time clears input', async (t) => {
-  const { lastFrame, stdin } = render(<TestComponent />);
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+
+  const TestHarness = () => {
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
+    return <TestComponent />;
+  };
+
+  const { lastFrame } = await renderAndFlush(<TestHarness />);
 
   // Initial state
   t.true(lastFrame()!.includes('Value: some text'));
@@ -41,19 +83,13 @@ test('pressing ESC once shows hint, second time clears input', async (t) => {
 
   // First ESC
   // Ink's stdin.write sends raw bytes. ESC is \u001B
-  stdin.write('\u001B');
-
-  // Wait for state updates and re-render
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await pressEscape(inputEmitter!);
 
   t.true(lastFrame()!.includes('HINT'), 'Hint should be visible after first ESC');
   t.true(lastFrame()!.includes('Value: some text'), 'Value should still be there');
 
   // Second ESC
-  stdin.write('\u001B');
-
-  // Wait for state updates and re-render
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await pressEscape(inputEmitter!);
 
   const finalFrame = lastFrame()!;
   // console.log('Final frame:', JSON.stringify(finalFrame));
@@ -66,22 +102,26 @@ test('pressing ESC once shows hint, second time clears input', async (t) => {
 test('useInput fires ESC in non-text mode', async (t) => {
   // Minimal test: verify useInput fires ESC when mode starts as model_selection
   let inputFired = false;
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const MinimalComponent = () => {
     useInput((_input, key) => {
       if (key.escape) inputFired = true;
     });
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
     return <Text>test</Text>;
   };
 
-  const { stdin } = render(<MinimalComponent />);
-  stdin.write('\u001B');
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await renderAndFlush(<MinimalComponent />);
+  await pressEscape(inputEmitter!);
   t.true(inputFired, 'useInput should fire on ESC');
 });
 
 test('pressing ESC in model_selection mode clears input and switches to text mode', async (t) => {
   let modes: InputMode[] = [];
   let values: string[] = [];
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
 
   const ModelSelectionTestComponent = () => {
     const [value, onChange] = useState('/model ');
@@ -91,6 +131,9 @@ test('pressing ESC in model_selection mode clears input and switches to text mod
 
     modes.push(mode);
     values.push(value);
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
 
     useEscapeKey({
       mode,
@@ -111,8 +154,7 @@ test('pressing ESC in model_selection mode clears input and switches to text mod
     );
   };
 
-  const { lastFrame, stdin } = render(<ModelSelectionTestComponent />);
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  const { lastFrame } = await renderAndFlush(<ModelSelectionTestComponent />);
 
   const initialFrame = lastFrame()!;
   t.log('Initial frame:', JSON.stringify(initialFrame));
@@ -122,8 +164,7 @@ test('pressing ESC in model_selection mode clears input and switches to text mod
   t.true(initialFrame.includes('Value: /model'), 'Initial value should contain trigger');
 
   // Press ESC
-  stdin.write('\u001B');
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await pressEscape(inputEmitter!);
 
   const frame = lastFrame()!;
   t.log('Modes seen:', modes.join(', '));
@@ -134,11 +175,15 @@ test('pressing ESC in model_selection mode clears input and switches to text mod
 });
 
 test('pressing ESC in slash_commands mode clears input and switches to text mode', async (t) => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const SlashTestComponent = () => {
     const [value, onChange] = useState('/cle');
     const [mode, setMode] = useState<InputMode>('slash_commands');
     const escPressedRef = { current: false };
     const [, setCursorOverride] = useState<number | null>(null);
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
 
     useEscapeKey({
       mode,
@@ -159,13 +204,11 @@ test('pressing ESC in slash_commands mode clears input and switches to text mode
     );
   };
 
-  const { lastFrame, stdin } = render(<SlashTestComponent />);
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  const { lastFrame } = await renderAndFlush(<SlashTestComponent />);
 
   t.true(lastFrame()!.includes('Mode: slash_commands'), 'Initial mode should be slash_commands');
 
-  stdin.write('\u001B');
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await pressEscape(inputEmitter!);
 
   const frame = lastFrame()!;
   t.true(frame.includes('Mode: text'), 'Mode should switch to text');
@@ -173,11 +216,15 @@ test('pressing ESC in slash_commands mode clears input and switches to text mode
 });
 
 test('pressing ESC in path_completion mode clears input and switches to text mode', async (t) => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const PathTestComponent = () => {
     const [value, onChange] = useState('@src/foo');
     const [mode, setMode] = useState<InputMode>('path_completion');
     const escPressedRef = { current: false };
     const [, setCursorOverride] = useState<number | null>(null);
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
 
     useEscapeKey({
       mode,
@@ -198,13 +245,11 @@ test('pressing ESC in path_completion mode clears input and switches to text mod
     );
   };
 
-  const { lastFrame, stdin } = render(<PathTestComponent />);
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  const { lastFrame } = await renderAndFlush(<PathTestComponent />);
 
   t.true(lastFrame()!.includes('Mode: path_completion'), 'Initial mode should be path_completion');
 
-  stdin.write('\u001B');
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await pressEscape(inputEmitter!);
 
   const frame = lastFrame()!;
   t.true(frame.includes('Mode: text'), 'Mode should switch to text');
@@ -212,11 +257,15 @@ test('pressing ESC in path_completion mode clears input and switches to text mod
 });
 
 test('pressing ESC in settings_completion mode clears input and switches to text mode', async (t) => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const SettingsTestComponent = () => {
     const [value, onChange] = useState('/settings ');
     const [mode, setMode] = useState<InputMode>('settings_completion');
     const escPressedRef = { current: false };
     const [, setCursorOverride] = useState<number | null>(null);
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
 
     useEscapeKey({
       mode,
@@ -237,13 +286,11 @@ test('pressing ESC in settings_completion mode clears input and switches to text
     );
   };
 
-  const { lastFrame, stdin } = render(<SettingsTestComponent />);
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  const { lastFrame } = await renderAndFlush(<SettingsTestComponent />);
 
   t.true(lastFrame()!.includes('Mode: settings_completion'), 'Initial mode should be settings_completion');
 
-  stdin.write('\u001B');
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await pressEscape(inputEmitter!);
 
   const frame = lastFrame()!;
   t.true(frame.includes('Mode: text'), 'Mode should switch to text');
@@ -254,6 +301,7 @@ test('pressing ESC in model_selection mode with settings-backed model setting re
   let settingsOpenArgs: { startIndex: number; initialSelectionKey: string } | null = null;
   let modelsClosed = false;
   let cursorOverrides: (number | null)[] = [];
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
 
   const SettingsBackedModelComponent = () => {
     const [value, onChange] = useState('/settings agent.model ');
@@ -262,6 +310,9 @@ test('pressing ESC in model_selection mode with settings-backed model setting re
     const [cursorOverride, setCursorOverride] = useState<number | null>(null);
 
     cursorOverrides.push(cursorOverride);
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
 
     const mockModels = {
       modelSettingConfig: { modelKey: 'agent.model' },
@@ -294,16 +345,14 @@ test('pressing ESC in model_selection mode with settings-backed model setting re
     );
   };
 
-  const { lastFrame, stdin } = render(<SettingsBackedModelComponent />);
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  const { lastFrame } = await renderAndFlush(<SettingsBackedModelComponent />);
 
   const initialFrame = lastFrame()!;
   t.true(initialFrame.includes('Mode: model_selection'), 'Initial mode should be model_selection');
   t.true(initialFrame.includes('Value: /settings agent.model'), 'Initial value should contain settings trigger');
 
   // Press ESC
-  stdin.write('\u001B');
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await pressEscape(inputEmitter!);
 
   const frame = lastFrame()!;
   t.log('Frame after ESC:', frame);

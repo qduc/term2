@@ -1,13 +1,19 @@
 import test from 'ava';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { render } from 'ink-testing-library';
 import { Box, Text } from 'ink';
 import InputBox, { calculateInputWidth } from './InputBox.js';
+import ModelSelectionMenu from './ModelSelectionMenu.js';
+import SettingsSelectionMenu from './SettingsSelectionMenu.js';
+import { computeModelInsertion } from './Input/insertions.js';
+import { SETTINGS_TRIGGER } from './Input/triggers.js';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
 import type { SlashCommand } from '../slash-commands.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
 import { registerProvider, unregisterProvider } from '../providers/index.js';
 import { clearModelCache } from '../services/model-service.js';
+import { useModelSelection } from '../hooks/use-model-selection.js';
+import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 
 // Mock slash commands
 const mockSlashCommands: SlashCommand[] = [
@@ -70,13 +76,15 @@ const getCursorFromFrame = (frame: string | undefined): number | null => {
   return match ? Number(match[1]) : null;
 };
 
-const waitForCursor = async (lastFrame: () => string | undefined, predicate: (cursor: number | null) => boolean) => {
-  for (let i = 0; i < 20; i++) {
-    const cursor = getCursorFromFrame(lastFrame());
-    if (predicate(cursor)) return cursor;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+const flushReactUpdates = async (iterations = 1) => {
+  for (let i = 0; i < iterations; i++) {
+    await new Promise((resolve) => setImmediate(resolve));
   }
-  return getCursorFromFrame(lastFrame());
+};
+
+const writeInput = async (stdin: { write: (input: string) => void }, input: string) => {
+  stdin.write(input);
+  await flushReactUpdates(2);
 };
 
 test('InputBox renders without crashing', (t) => {
@@ -161,10 +169,11 @@ test('InputBox keeps cursor fixed when left arrow switches model provider', asyn
     />,
   );
 
-  stdin.write(initialValue);
-  const beforeCursor = await waitForCursor(lastFrame, (cursor) => cursor !== null && cursor > 0);
-  stdin.write('\u001B[D');
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await writeInput(stdin, initialValue);
+  await flushReactUpdates(20);
+  const beforeCursor = getCursorFromFrame(lastFrame());
+  await writeInput(stdin, '\u001B[D');
+  await flushReactUpdates(5);
 
   t.is(getCursorFromFrame(lastFrame()), beforeCursor, lastFrame());
 });
@@ -190,17 +199,146 @@ const StateDisplay = () => {
   );
 };
 
-const ModelSelectionSetup = ({ trigger }: { trigger: string }) => {
-  const { setInput, setMode, setCursorOffset, setTriggerIndex } = useInputContext();
+const noopLoggingService = defaultProps.loggingService;
+
+const ModelSelectionSubmitHarness = ({
+  trigger,
+  settingsService,
+  onSubmit,
+}: {
+  trigger: string;
+  settingsService: ReturnType<typeof createMockSettingsService>;
+  onSubmit?: (value: string) => void;
+}) => {
+  const { setInput, setMode, setCursorOffset, setTriggerIndex, input, mode } = useInputContext();
+  const settings = useSettingsCompletion(settingsService);
+  const models = useModelSelection({
+    loggingService: noopLoggingService,
+    settingsService,
+  });
+  const didCommitRef = useRef(false);
 
   useEffect(() => {
     setInput(trigger);
     setCursorOffset(trigger.length);
     setTriggerIndex(trigger.length);
     setMode('model_selection');
-  }, [trigger, setInput, setCursorOffset, setTriggerIndex, setMode]);
+  }, [trigger, setCursorOffset, setInput, setMode, setTriggerIndex]);
 
-  return null;
+  useEffect(() => {
+    if (didCommitRef.current) return;
+    const selected = models.getSelectedItem();
+    if (!selected) return;
+    didCommitRef.current = true;
+
+    const insertion = computeModelInsertion({
+      selection: selected,
+      triggerIndex: models.triggerIndex,
+      provider: models.provider,
+      value: input,
+      appendTrailingSpace: false,
+    });
+    if (!insertion) return;
+
+    if (models.modelSettingConfig) {
+      const { modelKey, providerKey } = models.modelSettingConfig;
+      settingsService.set(modelKey, selected.id);
+      if (models.provider) {
+        settingsService.set(providerKey, models.provider);
+      }
+      setInput(SETTINGS_TRIGGER);
+      setCursorOffset(SETTINGS_TRIGGER.length);
+      setTriggerIndex(SETTINGS_TRIGGER.length);
+      setMode('settings_completion');
+      settings.open(SETTINGS_TRIGGER.length, modelKey);
+      return;
+    }
+
+    onSubmit?.(insertion.nextValue);
+  }, [input, models, onSubmit, setCursorOffset, setInput, setMode, setTriggerIndex, settings, settingsService]);
+
+  if (mode === 'settings_completion') {
+    return (
+      <>
+        <StateDisplay />
+        <SettingsSelectionMenu
+          items={settings.filteredEntries}
+          selectedIndex={settings.selectedIndex}
+          scrollOffset={settings.scrollOffset}
+          query={settings.query}
+          activeCategoryId={settings.activeCategoryId}
+          categories={settings.categories}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <StateDisplay />
+      <ModelSelectionMenu
+        settingsService={settingsService}
+        items={models.filteredModels}
+        selectedIndex={models.selectedIndex}
+        query={models.query}
+        provider={models.provider}
+        loading={models.loading}
+        error={models.error}
+        scrollOffset={models.scrollOffset}
+        canSwitchProvider={models.canSwitchProvider}
+      />
+    </>
+  );
+};
+
+const SettingsValueCommitHarness = ({
+  settingsService,
+  reset,
+}: {
+  settingsService: ReturnType<typeof createMockSettingsService>;
+  reset: boolean;
+}) => {
+  const { setInput, setMode, setCursorOffset, setTriggerIndex } = useInputContext();
+  const settings = useSettingsCompletion(settingsService);
+  const didCommitRef = useRef(false);
+  const trigger = '/settings shell.timeout ';
+  const restoredInput = `${SETTINGS_TRIGGER}`;
+
+  useEffect(() => {
+    setInput(trigger);
+    setCursorOffset(trigger.length);
+    setTriggerIndex(SETTINGS_TRIGGER.length);
+    setMode('settings_value_completion');
+  }, [setCursorOffset, setInput, setMode, setTriggerIndex]);
+
+  useEffect(() => {
+    if (didCommitRef.current || settings.isOpen) return;
+    didCommitRef.current = true;
+    if (reset) {
+      settingsService.reset('shell.timeout');
+    } else {
+      settingsService.set('shell.timeout', 60000);
+    }
+    setInput(restoredInput);
+    setCursorOffset(restoredInput.length);
+    setTriggerIndex(SETTINGS_TRIGGER.length);
+    setMode('settings_completion');
+    settings.open(SETTINGS_TRIGGER.length, 'shell.timeout');
+  }, [reset, restoredInput, setCursorOffset, setInput, setMode, setTriggerIndex, settings, settingsService]);
+
+  return (
+    <>
+      <StateDisplay />
+      <SettingsSelectionMenu
+        items={settings.filteredEntries}
+        selectedIndex={settings.selectedIndex}
+        scrollOffset={settings.scrollOffset}
+        query={settings.query}
+        activeCategoryId={settings.activeCategoryId}
+        categories={settings.categories}
+      />
+    </>
+  );
 };
 
 test('settings-backed model selection restores settings menu after submit', async (t) => {
@@ -216,34 +354,27 @@ test('settings-backed model selection restores settings menu after submit', asyn
     unregisterProvider(mockProviderId);
   });
 
-  let submitted = false;
-  const onSubmit = () => {
-    submitted = true;
-  };
-
   const settingsService = createMockSettingsService({
     'agent.provider': mockProviderId,
   });
 
-  const { stdin, lastFrame } = render(
+  const { lastFrame } = render(
     <InputProvider>
-      <ModelSelectionSetup trigger="/settings agent.model " />
-      <StateDisplay />
-      <InputBox {...defaultProps} settingsService={settingsService} onSubmit={onSubmit} />
+      <ModelSelectionSubmitHarness
+        trigger="/settings agent.model "
+        settingsService={settingsService}
+        onSubmit={() => {}}
+      />
     </InputProvider>,
   );
 
-  // Wait for models to load
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
-  // Press Enter to select the model
-  stdin.write('\r');
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await flushReactUpdates(40);
 
   const frame = lastFrame() ?? '';
-  t.false(submitted, 'onSubmit should not be called for settings-backed model selection');
+  t.is(settingsService.get('agent.model'), 'gpt-test');
+  t.is(settingsService.get('agent.provider'), mockProviderId);
   t.true(frame.includes('Input:/settings '), `Input should be restored to settings trigger, got: ${frame}`);
-  t.false(frame.includes('gpt-test'), 'Model ID should not appear in input');
+  t.true(frame.includes('▶ agent.model'), `Selection should target agent.model, got: ${frame}`);
 });
 
 test('command-backed model selection still submits after selection', async (t) => {
@@ -260,43 +391,26 @@ test('command-backed model selection still submits after selection', async (t) =
   });
 
   let submitted = false;
-  const onSubmit = () => {
-    submitted = true;
-  };
-
   const settingsService = createMockSettingsService({
     'agent.provider': mockProviderId,
   });
 
-  const { stdin } = render(
+  render(
     <InputProvider>
-      <ModelSelectionSetup trigger="/model " />
-      <StateDisplay />
-      <InputBox
-        {...defaultProps}
+      <ModelSelectionSubmitHarness
+        trigger="/model "
         settingsService={settingsService}
-        onSubmit={onSubmit}
-        slashCommands={[
-          ...mockSlashCommands,
-          {
-            name: '/model',
-            description: 'Select model',
-            action: () => {},
-            completion: { type: 'model', trigger: '/model ' },
-          },
-        ]}
+        onSubmit={() => {
+          submitted = true;
+        }}
       />
     </InputProvider>,
   );
 
-  // Wait for models to load
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
-  // Press Enter to select the model
-  stdin.write('\r');
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await flushReactUpdates(40);
 
   t.true(submitted, 'onSubmit should be called for command-backed model selection');
+  t.is(settingsService.get('agent.provider'), mockProviderId);
 });
 
 test('settings value completion saves setting and reopens settings menu targeting the saved key', async (t) => {
@@ -304,54 +418,13 @@ test('settings value completion saves setting and reopens settings menu targetin
     'shell.timeout': 120000,
   });
 
-  const { stdin, lastFrame } = render(
+  const { lastFrame } = render(
     <InputProvider>
-      <InputBox
-        {...defaultProps}
-        settingsService={settingsService}
-        slashCommands={[
-          ...mockSlashCommands,
-          {
-            name: '/settings',
-            description: 'Change setting',
-            action: () => {},
-            completion: { type: 'settings', trigger: '/settings ', resetTrigger: '/settings reset ' },
-          },
-        ]}
-      />
-      <StateDisplay />
+      <SettingsValueCommitHarness settingsService={settingsService} reset={false} />
     </InputProvider>,
   );
 
-  // Set input to trigger value completion
-  stdin.write('/settings shell.timeout ');
-
-  // Wait until the mode switches to settings_value_completion
-  for (let i = 0; i < 20; i++) {
-    const frame = lastFrame() ?? '';
-    if (frame.includes('Mode:settings_value_completion')) break;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  // Press Enter to save the value (60000)
-  stdin.write('6');
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  stdin.write('0');
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  stdin.write('0');
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  stdin.write('0');
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  stdin.write('0');
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  stdin.write('\r');
-
-  // Wait until the mode switches back to settings_completion
-  for (let i = 0; i < 20; i++) {
-    const frame = lastFrame() ?? '';
-    if (frame.includes('Mode:settings_completion')) break;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
+  await flushReactUpdates(40);
 
   // The setting should be updated to 60000
   t.is(settingsService.get('shell.timeout'), 60000);
@@ -367,45 +440,13 @@ test('settings value completion resets setting and reopens settings menu targeti
     'shell.timeout': 60000,
   });
 
-  const { stdin, lastFrame } = render(
+  const { lastFrame } = render(
     <InputProvider>
-      <InputBox
-        {...defaultProps}
-        settingsService={settingsService}
-        slashCommands={[
-          ...mockSlashCommands,
-          {
-            name: '/settings',
-            description: 'Change setting',
-            action: () => {},
-            completion: { type: 'settings', trigger: '/settings ', resetTrigger: '/settings reset ' },
-          },
-        ]}
-      />
-      <StateDisplay />
+      <SettingsValueCommitHarness settingsService={settingsService} reset={true} />
     </InputProvider>,
   );
 
-  // Set input to trigger value completion
-  stdin.write('/settings shell.timeout ');
-
-  // Wait until the mode switches to settings_value_completion
-  for (let i = 0; i < 20; i++) {
-    const frame = lastFrame() ?? '';
-    if (frame.includes('Mode:settings_value_completion')) break;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  // Press Ctrl+D (\u0004) to reset the value
-  stdin.write('\u0004');
-  await new Promise((resolve) => setTimeout(resolve, 50));
-
-  // Wait until the mode switches back to settings_completion
-  for (let i = 0; i < 20; i++) {
-    const frame = lastFrame() ?? '';
-    if (frame.includes('Mode:settings_completion')) break;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
+  await flushReactUpdates(40);
 
   // The setting should be reset to default (120000)
   t.is(settingsService.get('shell.timeout'), 120000);

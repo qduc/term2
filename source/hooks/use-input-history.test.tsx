@@ -1,5 +1,8 @@
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
-import React from 'react';
+import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import { useInputHistory } from './use-input-history.js';
 
@@ -18,10 +21,6 @@ let hookControls: ReturnType<typeof useInputHistory> | null = null;
 const HookHarness = ({ historyService }: { historyService: TestHistoryService }) => {
   hookControls = useInputHistory(historyService as any);
   return null;
-};
-
-const flush = async () => {
-  await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
 test('useInputHistory preserves image attachments when navigating back to the draft', async (t) => {
@@ -49,15 +48,25 @@ test('useInputHistory preserves image attachments when navigating back to the dr
     getMessages: () => ['Look at this'],
   };
 
-  render(<HookHarness historyService={historyService} />);
+  await act(async () => {
+    render(<HookHarness historyService={historyService} />);
+  });
 
   t.truthy(hookControls);
 
-  const recalled = hookControls!.navigateUp({ text: 'draft note', images: [draftImage] });
+  let recalled = null as ReturnType<typeof useInputHistory>['navigateUp'] extends (...args: any[]) => infer R
+    ? R
+    : never;
+  await act(async () => {
+    recalled = hookControls!.navigateUp({ text: 'draft note', images: [draftImage] });
+  });
   t.deepEqual(recalled, { text: 'Look at this', images: [recalledImage] });
 
-  await flush();
-
-  const restored = hookControls!.navigateDown();
+  let restored = null as ReturnType<typeof useInputHistory>['navigateDown'] extends (...args: any[]) => infer R
+    ? R
+    : never;
+  await act(async () => {
+    restored = hookControls!.navigateDown();
+  });
   t.deepEqual(restored, { text: 'draft note', images: [draftImage] });
 });

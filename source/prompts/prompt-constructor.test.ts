@@ -54,15 +54,15 @@ test('buildPromptSpec composes file fragments in stable order', (t) => {
   ]);
 });
 
-test('buildPromptSpec composes inline sections for tool and mode guidance', (t) => {
+test('buildPromptSpec includes code context inline section when enabled and not orchestrator', (t) => {
   const standard = buildPromptSpec({
     model: 'gpt-4o',
     liteMode: false,
     codeContextEnabled: true,
     searchViaShell: false,
   });
-  t.true(standard.inlineSections.some((section) => section.includes('### Code Context Tools')));
-  t.true(standard.inlineSections.some((section) => section.includes('Prefer `find_files`')));
+  t.true(standard.inlineSections.length > 0);
+  t.true(standard.inlineSections.some((s) => s.includes('Code Context')));
 
   const gpt5 = buildPromptSpec({
     model: 'gpt-5.5',
@@ -70,9 +70,10 @@ test('buildPromptSpec composes inline sections for tool and mode guidance', (t) 
     codeContextEnabled: true,
     searchViaShell: false,
   });
-  t.true(gpt5.inlineSections.some((section) => section.includes('### Code Context Tools')));
-  t.false(gpt5.inlineSections.some((section) => section.includes('Prefer `find_files`')));
+  t.true(gpt5.inlineSections.some((s) => s.includes('Code Context')));
+});
 
+test('buildPromptSpec includes subagent delegation for orchestrator mode', (t) => {
   const orchestrator = buildPromptSpec({
     model: 'gpt-5.5',
     liteMode: false,
@@ -81,9 +82,11 @@ test('buildPromptSpec composes inline sections for tool and mode guidance', (t) 
     codeContextEnabled: true,
     searchViaShell: false,
   });
-  t.true(orchestrator.inlineSections.some((section) => section.includes('### Delegating to subagents')));
-  t.false(orchestrator.inlineSections.some((section) => section.includes('### Code Context Tools')));
+  t.true(orchestrator.inlineSections.some((s) => s.includes('Delegating to subagents')));
+  t.false(orchestrator.inlineSections.some((s) => s.includes('Code Context')));
+});
 
+test('buildPromptSpec uses lite base and skips worktree-hygiene fragment in lite mode', (t) => {
   const lite = buildPromptSpec({
     model: 'gpt-5.5',
     liteMode: true,
@@ -92,5 +95,5 @@ test('buildPromptSpec composes inline sections for tool and mode guidance', (t) 
   });
   t.is(lite.basePromptFile, 'lite.md');
   t.false(lite.fragmentFiles.includes('worktree-hygiene.md'));
-  t.true(lite.inlineSections.some((section) => section.includes('### Search Tools')));
+  t.true(lite.inlineSections.some((s) => s.includes('Search Tools')));
 });

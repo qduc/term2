@@ -669,9 +669,12 @@ export class ProviderTrafficArtifactStore {
   } {
     const dateKey = input.timestamp.slice(0, 10);
     const dayDir = `${this.#rootDir}/${dateKey}`;
-    const sessionDirName = `${timePartForPath(input.sessionStartedAt)}_${input.sessionId.substring(0, 5)}`;
+    const sessionTimePart = timePartForPath(input.sessionStartedAt).replace(/\..*$/, '');
+    const sessionDirName = `${sessionTimePart}_${input.sessionId.substring(0, 5)}`;
     const sessionDir = `${dayDir}/${sessionDirName}`;
-    const requestFileName = `${input.evaluator ? 'evaluator_' : ''}${safePathSegment(input.requestId)}.jsonl`;
+    const requestTimePart = timePartForPath(input.timestamp);
+    const requestIdShort = safePathSegment(input.requestId).substring(0, 5);
+    const requestFileName = `${input.evaluator ? 'evaluator_' : ''}${requestTimePart}_${requestIdShort}.jsonl`;
     const requestPath = `${sessionDir}/${requestFileName}`;
     return { dayDir, sessionDir, requestPath, sessionDirName };
   }

@@ -213,10 +213,14 @@ function generateOpencodeSessionId(): string {
   return `ses_${timestamp}${random}`;
 }
 
-function createOpenAICompatibleMiddleware(providerType: string, baseUrl?: string): FetchMiddleware {
+function createOpenAICompatibleMiddleware(
+  providerType: string,
+  baseUrl?: string,
+  loggingService?: ILoggingService,
+): FetchMiddleware {
   const isOpencode =
     providerType === 'opencode' || (typeof baseUrl === 'string' && baseUrl.toLowerCase().includes('opencode.ai'));
-  const sessionId = isOpencode ? generateOpencodeSessionId() : undefined;
+  const fallbackSessionId = isOpencode ? generateOpencodeSessionId() : undefined;
 
   return async (ctx, next) => {
     if (typeof ctx.init?.body === 'string') {
@@ -239,13 +243,16 @@ function createOpenAICompatibleMiddleware(providerType: string, baseUrl?: string
           changed = true;
         }
 
-        if (isOpencode && sessionId) {
+        const trafficSessionId = isOpencode ? loggingService?.getTrafficContext?.()?.sessionId : undefined;
+        const opencodeSessionId = trafficSessionId || fallbackSessionId;
+
+        if (isOpencode && opencodeSessionId) {
           changed = true;
         }
 
         if (changed) {
           let newInit: RequestInit = { ...ctx.init, body: JSON.stringify(body) };
-          if (isOpencode && sessionId) {
+          if (isOpencode && opencodeSessionId) {
             const existingHeaders: Record<string, string> = {};
             if (ctx.init.headers) {
               if (typeof (ctx.init.headers as any).forEach === 'function') {
@@ -260,7 +267,7 @@ function createOpenAICompatibleMiddleware(providerType: string, baseUrl?: string
               ...newInit,
               headers: {
                 ...existingHeaders,
-                'x-opencode-session': sessionId,
+                'x-opencode-session': opencodeSessionId,
               },
             };
           }
@@ -436,7 +443,7 @@ export class OpencodeMinimaxHybridProvider implements ModelProvider {
       baseURL: normalizeBaseUrl(effectiveBaseUrl),
       apiKey: effectiveApiKey || 'no-key',
       fetch: buildProviderFetch(this.config, this.deps, [
-        createOpenAICompatibleMiddleware(this.config.type || 'opencode', effectiveBaseUrl),
+        createOpenAICompatibleMiddleware(this.config.type || 'opencode', effectiveBaseUrl, this.deps.loggingService),
       ]) as any,
     });
     applyClientResponseNormalization(openAIClient, this.deps.loggingService);
@@ -508,7 +515,7 @@ export function createCustomProviderModelProvider(
         baseURL: normalizeBaseUrl(effectiveBaseUrl),
         apiKey: effectiveApiKey || 'no-key',
         fetch: buildProviderFetch(config, deps, [
-          createOpenAICompatibleMiddleware(providerType, effectiveBaseUrl),
+          createOpenAICompatibleMiddleware(providerType, effectiveBaseUrl, deps.loggingService),
         ]) as any,
       });
       applyClientResponseNormalization(openAIClient, deps.loggingService);

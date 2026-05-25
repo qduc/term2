@@ -21,6 +21,7 @@ function buildProvider(
   response: any,
   providerType = 'openai-compatible',
   baseUrl = 'https://provider.test/v1',
+  loggingService?: ProviderDeps['loggingService'],
 ) {
   return createCustomProviderModelProvider(
     {
@@ -31,6 +32,7 @@ function buildProvider(
     },
     {
       defaultModel: 'provider-model',
+      loggingService,
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         const headers: Record<string, string> = {};
         const rawHeaders = init?.headers as any;
@@ -569,6 +571,36 @@ test('opencode session ID is stable across requests within a session', async (t)
     firstSessionId,
     'session ID should be stable across requests in the same session',
   );
+});
+
+test('opencode session header uses traffic context session ID when available', async (t) => {
+  const captured: CapturedRequest[] = [];
+  const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://opencode.ai/v1', {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+    security: () => {},
+    setCorrelationId: () => {},
+    getCorrelationId: () => undefined,
+    clearCorrelationId: () => {},
+    getTrafficContext: () => ({
+      sessionId: 'conversation-session-123',
+      sessionStartedAt: '2026-05-25T12:00:00.000Z',
+    }),
+  });
+  const model = await provider.getModel('provider-model');
+
+  await runUnderTrace(() =>
+    model.getResponse({
+      ...baseRequest,
+      input: [{ role: 'user', content: 'hello' }] as any,
+      modelSettings: {},
+    } as any),
+  );
+
+  t.is(captured.length, 1);
+  t.is(captured[0].headers['x-opencode-session'], 'conversation-session-123');
 });
 
 test('non-opencode.ai baseUrl does not add opencode headers or body fields', async (t) => {

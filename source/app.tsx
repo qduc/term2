@@ -137,6 +137,7 @@ const App: FC<AppProps> = ({
         await handleClearConversationRef.current();
       }
     }, []),
+    settingsService,
   });
 
   const handleClearConversation = useCallback(async () => {

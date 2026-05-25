@@ -486,6 +486,11 @@ export function createConversationEventHandler<
         // This case exists for exhaustiveness and to document the event flow
         return;
 
+      case 'codex_rate_limits':
+        // Codex rate limits are handled separately in streaming-session-factory.ts
+        // This case exists for exhaustiveness and to document the event flow
+        return;
+
       default:
         // Ignore unknown events (approval_required, error handled elsewhere)
         return;

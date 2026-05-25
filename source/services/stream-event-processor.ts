@@ -7,6 +7,32 @@ import { createInvalidToolCallDiagnostic } from './logging-contract.js';
 import { asRecord, getString } from './interruption-info.js';
 import type { AgentStream } from './agent-stream.js';
 
+function normalizeCodexRateLimitWindow(obj: unknown): CodexRateLimitWindow | undefined {
+  if (!obj || typeof obj !== 'object') {
+    return undefined;
+  }
+  const rec = obj as Record<string, unknown>;
+  const used_percent = typeof rec.used_percent === 'number' ? rec.used_percent : undefined;
+  const window_minutes = typeof rec.window_minutes === 'number' ? rec.window_minutes : undefined;
+  const reset_after_seconds = typeof rec.reset_after_seconds === 'number' ? rec.reset_after_seconds : undefined;
+  const reset_at = typeof rec.reset_at === 'number' ? rec.reset_at : undefined;
+
+  if (
+    used_percent !== undefined &&
+    window_minutes !== undefined &&
+    reset_after_seconds !== undefined &&
+    reset_at !== undefined
+  ) {
+    return {
+      used_percent,
+      window_minutes,
+      reset_after_seconds,
+      reset_at,
+    };
+  }
+  return undefined;
+}
+
 export interface StreamAccumulator {
   finalOutput: string;
   reasoningOutput: string;
@@ -104,18 +130,23 @@ export async function* processStreamEvents(
     if (rawRateLimit) {
       const rl = asRecord(rawRateLimit);
       const rlData = asRecord(rl?.rate_limits) ?? rl;
-      const rateLimits: CodexRateLimitInfo = {
-        allowed: Boolean(rlData?.allowed),
-        limit_reached: Boolean(rlData?.limit_reached),
-        primary: (asRecord(rlData?.primary) ?? {}) as unknown as CodexRateLimitWindow,
-        secondary: (asRecord(rlData?.secondary) ?? {}) as unknown as CodexRateLimitWindow,
-      };
-      logger.debug('Codex rate limits extracted from stream event', {
-        sessionId,
-        source: 'codex_rate_limits',
-        rateLimits,
-      });
-      yield { type: 'codex_rate_limits' as const, rateLimits };
+      const primary = normalizeCodexRateLimitWindow(rlData?.primary);
+      const secondary = normalizeCodexRateLimitWindow(rlData?.secondary);
+
+      if (primary !== undefined || secondary !== undefined) {
+        const rateLimits: CodexRateLimitInfo = {
+          allowed: Boolean(rlData?.allowed),
+          limit_reached: Boolean(rlData?.limit_reached),
+          ...(primary !== undefined ? { primary } : {}),
+          ...(secondary !== undefined ? { secondary } : {}),
+        };
+        logger.debug('Codex rate limits extracted from stream event', {
+          sessionId,
+          source: 'codex_rate_limits',
+          rateLimits,
+        });
+        yield { type: 'codex_rate_limits' as const, rateLimits };
+      }
     }
 
     const delta1 = extractTextDelta(rawEvent);

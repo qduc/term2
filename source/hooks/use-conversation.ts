@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConversationService } from '../services/conversation-service.js';
 import { isAbortLikeError } from '../utils/error-helpers.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
@@ -10,6 +10,8 @@ import type { CommandMessage as BaseCommandMessage } from '../tools/types.js';
 import type { NormalizedUsage, UsageAccumulator } from '../utils/token-usage.js';
 import type { CodexRateLimitInfo } from '../services/conversation-events.js';
 import type { ConversationTerminal, PendingApproval, ReasoningEffortSetting } from '../contracts/conversation.js';
+import { useSetting } from './use-setting.js';
+import type { SettingsService } from '../services/settings-service.js';
 import {
   annotateApprovedCommandMessage,
   filterPendingCommandMessagesForApproval,
@@ -68,6 +70,11 @@ export type Message =
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 const MAX_MESSAGE_COUNT = 300;
 
+const dummySettingsService = {
+  get: () => 'openai',
+  onChange: () => () => {},
+} as any;
+
 export const useConversation = ({
   conversationService,
   loggingService,
@@ -76,6 +83,7 @@ export const useConversation = ({
   initialMessages = [],
   sessionId,
   onClear,
+  settingsService,
 }: {
   conversationService: ConversationService;
   loggingService: ILoggingService;
@@ -84,6 +92,7 @@ export const useConversation = ({
   initialMessages?: Message[];
   sessionId?: string;
   onClear?: () => void | Promise<void>;
+  settingsService?: SettingsService;
 }) => {
   const [messages, setMessages] = useState<Message[]>(() =>
     appendMessagesCapped([], initialMessages, MAX_MESSAGE_COUNT),
@@ -97,6 +106,12 @@ export const useConversation = ({
   const setCodexRateLimit = setLastCodexRateLimit;
   const approvedContextRef = useRef<ApprovedToolContext | null>(null);
   const trimMessages = useCallback((list: Message[]) => appendMessagesCapped(list, [], MAX_MESSAGE_COUNT), []);
+
+  const provider = useSetting<string>(settingsService || dummySettingsService, 'agent.provider') ?? 'openai';
+
+  useEffect(() => {
+    setLastCodexRateLimit(null);
+  }, [provider]);
 
   const appendMessages = useCallback(
     (additions: Message[]) => {
@@ -452,6 +467,7 @@ export const useConversation = ({
     approvedContextRef.current = null;
     setIsProcessing(false);
     setLastUsage(null);
+    setLastCodexRateLimit(null);
     usageAccumulator?.reset();
     subagentUsageAccumulator?.reset();
   }, [conversationService, usageAccumulator, subagentUsageAccumulator, onClear]);

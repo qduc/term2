@@ -140,8 +140,8 @@ export interface CodexRateLimitWindow {
 export interface CodexRateLimitInfo {
   allowed: boolean;
   limit_reached: boolean;
-  primary: CodexRateLimitWindow;
-  secondary: CodexRateLimitWindow;
+  primary?: CodexRateLimitWindow;
+  secondary?: CodexRateLimitWindow;
 }
 
 export interface CodexRateLimitEvent {

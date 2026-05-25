@@ -1,8 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 import envPaths from 'env-paths';
 import { repairConversationHistory, type ConversationHistoryRepairSummary } from './conversation-history-repair.js';
+import type { NormalizedUsage } from '../utils/token-usage.js';
 
 const paths = envPaths('term2');
 const CONVERSATIONS_DIR = path.join(paths.log, 'conversations');
@@ -37,6 +38,8 @@ export interface SavedConversation {
   history: unknown[];
   messages: SavedMessage[];
   historyRepair?: ConversationHistoryRepairSummary;
+  usage?: NormalizedUsage;
+  subagentUsage?: NormalizedUsage;
 }
 
 export type LoadConversationForProjectResult =

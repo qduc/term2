@@ -572,6 +572,72 @@ test.serial('ask_mentor resets conversation chain when mentor provider changes',
   t.is(mentorInputsAltProvider[0].length, 1);
 });
 
+test.serial('setSubagentEventSink defers cleanup to null when subagents are active', async (t) => {
+  let subagentPromiseResolve: (() => void) | null = null;
+  registerProvider({
+    id: 'mock-deferred-sink-provider',
+    label: 'Mock Deferred Sink Provider',
+    createRunner: () =>
+      ({
+        run: async () => {
+          await new Promise<void>((resolve) => {
+            subagentPromiseResolve = resolve;
+          });
+          return {
+            status: 'completed',
+            finalOutput: 'mentor response',
+            history: [],
+            messages: [],
+          };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const settings = createMockSettings({
+    'agent.provider': 'mock-main-mentor-refresh',
+    'agent.model': 'mock-model',
+    'agent.mentorModel': 'mock-mentor-model',
+    'agent.mentorProvider': 'mock-deferred-sink-provider',
+    'app.liteMode': false,
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings },
+  });
+
+  await client.chat('prime tools');
+
+  const askMentorTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_mentor');
+  t.truthy(askMentorTool);
+
+  let eventCount = 0;
+  const dummySink = () => {
+    eventCount++;
+  };
+
+  client.setSubagentEventSink(dummySink);
+
+  // Start the run
+  const invokePromise = askMentorTool.invoke({}, JSON.stringify({ question: 'help me' }), {
+    toolCall: { callId: 'call-1' },
+  });
+
+  // Yield to event loop to allow the runner's async function to execute and populate subagentPromiseResolve
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  // Call setSubagentEventSink(null) while the run is active
+  client.setSubagentEventSink(null);
+
+  // Resolve the run
+  if (subagentPromiseResolve) {
+    (subagentPromiseResolve as () => void)();
+  }
+  await invokePromise;
+
+  // The event sink should have been kept active until the end of the run
+  t.true(eventCount > 0, 'Should have received events during the active run even after setting sink to null');
+});
+
 test.serial('codex resolves default_reasoning_level if agent.reasoningEffort is default', async (t) => {
   const settings = createMockSettings({
     'agent.provider': 'codex',

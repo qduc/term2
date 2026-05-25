@@ -102,6 +102,8 @@ export class OpenAIAgentClient {
   #editor: ReturnType<typeof createEditorImpl>;
   #subagentManager: SubagentManager;
   #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
+  #activeSubagentsCount = 0;
+  #pendingClearSink = false;
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -109,7 +111,12 @@ export class OpenAIAgentClient {
    * afterwards so events reach the UI's onEvent callback.
    */
   setSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void {
-    this.#subagentEventSink = sink;
+    if (sink === null && this.#activeSubagentsCount > 0) {
+      this.#pendingClearSink = true;
+    } else {
+      this.#subagentEventSink = sink;
+      this.#pendingClearSink = false;
+    }
   }
 
   #resetMentorState(): void {
@@ -743,6 +750,7 @@ export class OpenAIAgentClient {
   }
 
   #createMentor = async (question: string): Promise<string> => {
+    this.#activeSubagentsCount++;
     try {
       const result = await this.#subagentManager.run({ role: 'mentor', task: question });
       if (result.status === 'failed') {
@@ -754,6 +762,12 @@ export class OpenAIAgentClient {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      this.#activeSubagentsCount--;
+      if (this.#activeSubagentsCount === 0 && this.#pendingClearSink) {
+        this.#subagentEventSink = null;
+        this.#pendingClearSink = false;
+      }
     }
   };
 
@@ -772,15 +786,24 @@ export class OpenAIAgentClient {
       ...(detailsRecord?.signal ? { signal: detailsRecord.signal } : {}),
     };
 
-    const result = await this.#subagentManager.run(request);
+    this.#activeSubagentsCount++;
+    try {
+      const result = await this.#subagentManager.run(request);
 
-    // saveAgentToolRunResult is not exported as a public API from
-    // @openai/agents-core, so we cannot call it here. The nestedRunResult
-    // is preserved on the SubagentResult for use by the caller and will
-    // be propagated back through the conversation result builder when the
-    // run_subagent is registered via Agent.asTool (future work).
+      // saveAgentToolRunResult is not exported as a public API from
+      // @openai/agents-core, so we cannot call it here. The nestedRunResult
+      // is preserved on the SubagentResult for use by the caller and will
+      // be propagated back through the conversation result builder when the
+      // run_subagent is registered via Agent.asTool (future work).
 
-    return result;
+      return result;
+    } finally {
+      this.#activeSubagentsCount--;
+      if (this.#activeSubagentsCount === 0 && this.#pendingClearSink) {
+        this.#subagentEventSink = null;
+        this.#pendingClearSink = false;
+      }
+    }
   };
 
   #createAgent({

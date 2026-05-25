@@ -347,6 +347,8 @@ export class SubagentManager {
         error?.message?.includes('cancel') ||
         error?.code === 'ERR_ABORTED';
 
+      const usage = normalizeAgentRunUsage(error?.state?.usage) ?? extractUsage(error);
+
       const result: SubagentResult = {
         agentId,
         role: request.role,
@@ -355,6 +357,7 @@ export class SubagentManager {
         filesChanged: [],
         toolsUsed: [],
         error: error?.message || String(error),
+        ...(usage ? { usage } : {}),
       };
       this.#emit({ type: 'subagent_completed', result });
       return result;

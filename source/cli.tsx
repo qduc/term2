@@ -17,7 +17,7 @@ import { SSHService, SSHConfig } from './services/ssh-service.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { resolveSSHHost } from './utils/ssh-config-parser.js';
-import { createUsageAccumulator, formatSessionTokenUsage } from './utils/token-usage.js';
+import { createUsageAccumulator, formatSessionUsageBreakdown } from './utils/token-usage.js';
 import {
   generateId,
   getResumeCommand,
@@ -36,9 +36,12 @@ import path from 'path';
 import type { Message } from './hooks/use-conversation.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
+const subagentUsageAccumulator = createUsageAccumulator();
 let usagePrinted = false;
 const printUsage = () => {
-  process.stdout.write(`\n${formatSessionTokenUsage(sessionUsageAccumulator.get())}\n`);
+  process.stdout.write(
+    `\n${formatSessionUsageBreakdown(sessionUsageAccumulator.get(), subagentUsageAccumulator.get())}\n`,
+  );
 };
 const printUsageOnce = () => {
   if (usagePrinted) return;
@@ -445,6 +448,12 @@ if (resumedConversation) {
   effectiveCreatedAt = resumedConversation.createdAt;
   initialMessages = resumedConversation.messages as Message[];
   pendingMessages = initialMessages;
+  if (resumedConversation.usage) {
+    sessionUsageAccumulator.add(resumedConversation.usage);
+  }
+  if (resumedConversation.subagentUsage) {
+    subagentUsageAccumulator.add(resumedConversation.subagentUsage);
+  }
 } else if (resumeRequested) {
   const target = resumeTarget ?? 'last';
   console.warn(`No conversation found to resume (${target}). Starting new conversation.`);
@@ -531,6 +540,8 @@ const saveAndPrintResume = async (messages: Message[], overrideSessionId?: strin
     previousResponseId: state.previousResponseId,
     history: historyRepair.history as import('@openai/agents').AgentInputItem[],
     messages: messages as SavedMessage[],
+    usage: sessionUsageAccumulator.get(),
+    subagentUsage: subagentUsageAccumulator.get(),
   });
 
   const resumeCmd = getResumeCommand(sessionIdToSave, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
@@ -552,6 +563,7 @@ const { waitUntilExit } = render(
         sshInfo={sshInfo}
         sshService={sshService}
         usageAccumulator={sessionUsageAccumulator}
+        subagentUsageAccumulator={subagentUsageAccumulator}
         onPrintUsage={printUsage}
         onExitUsage={printUsageOnce}
         sessionId={effectiveSessionId}

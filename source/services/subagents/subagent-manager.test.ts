@@ -1196,3 +1196,41 @@ test.serial('worker shell tool blocks YELLOW command when auto-approval evaluato
   t.truthy(shellResult);
   t.true(shellResult!.includes('blocked for safety'), 'rejected YELLOW command should stay blocked');
 });
+
+test.serial('run() extracts usage from error.state.usage when subagent run fails', async (t) => {
+  registerProvider({
+    id: 'mock-failed-usage-provider',
+    label: 'Mock Failed Usage Provider',
+    createRunner: () =>
+      ({
+        run: async () => {
+          const err = new Error('Run failed due to some reason');
+          (err as any).state = {
+            usage: {
+              inputTokens: 15,
+              outputTokens: 25,
+            },
+          };
+          throw err;
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const settings = createMockSettings({
+    'agent.model': 'mock-model',
+    'agent.provider': 'mock-failed-usage-provider',
+  });
+  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const result = await manager.run({
+    role: 'explorer',
+    task: 'find files',
+  });
+
+  t.is(result.status, 'failed');
+  t.deepEqual(result.usage, {
+    prompt_tokens: 15,
+    completion_tokens: 25,
+    total_tokens: 40,
+  });
+});

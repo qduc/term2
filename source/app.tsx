@@ -30,6 +30,7 @@ interface AppProps {
   sshInfo?: SSHInfo;
   sshService?: ISSHService;
   usageAccumulator?: UsageAccumulator;
+  subagentUsageAccumulator?: UsageAccumulator;
   onPrintUsage?: () => void;
   onExitUsage?: () => void;
   sessionId: string;
@@ -81,6 +82,7 @@ const App: FC<AppProps> = ({
   sshInfo,
   sshService,
   usageAccumulator,
+  subagentUsageAccumulator,
   onPrintUsage,
   onExitUsage,
   sessionId: initialSessionId,
@@ -98,7 +100,7 @@ const App: FC<AppProps> = ({
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
-  const subagentUsage = useMemo(() => createUsageAccumulator(), []);
+  const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
 
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);

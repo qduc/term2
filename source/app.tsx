@@ -106,6 +106,7 @@ const App: FC<AppProps> = ({
   const {
     messages,
     lastUsage,
+    lastCodexRateLimit,
     pendingApproval,
     waitingForApproval,
     waitingForRejectionReason,
@@ -378,6 +379,7 @@ const App: FC<AppProps> = ({
             onApprove={handleApprove}
             onReject={handleReject}
             sshInfo={sshInfo}
+            lastCodexRateLimit={lastCodexRateLimit}
             undoMenuRef={undoMenuRef}
             onUndoSelect={handleUndoSelect}
             onSettingChange={applyRuntimeSetting}

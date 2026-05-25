@@ -13,6 +13,7 @@ import {
 import { createStreamingState, type StreamingState } from './conversation-utils.js';
 import { createStreamingUpdateCoordinator } from './streaming-updater.js';
 import type { NormalizedUsage } from './token-usage.js';
+import type { CodexRateLimitInfo } from '../services/conversation-events.js';
 import { createMessageIdFactory } from '../hooks/message-id.js';
 
 export interface StreamingSessionFactoryDeps<MessageT extends UIMessage = UIMessage> {
@@ -22,6 +23,7 @@ export interface StreamingSessionFactoryDeps<MessageT extends UIMessage = UIMess
   annotateCommandMessage: ConversationEventHandlerDeps<MessageT>['annotateCommandMessage'];
   loggingService: ILoggingService;
   setLastUsage: (usage: NormalizedUsage) => void;
+  setCodexRateLimit?: (rateLimit: CodexRateLimitInfo) => void;
   reasoningThrottleMs: number;
   now?: () => number;
   createStreamingState?: () => StreamingState;
@@ -142,6 +144,9 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
       } else {
         deps.loggingService.debug(`UI final event has no usage (${label})`);
       }
+    } else if (event.type === 'codex_rate_limits' && deps.setCodexRateLimit) {
+      deps.loggingService.debug(`UI received Codex rate limits (${label})`, { rateLimits: event.rateLimits });
+      deps.setCodexRateLimit(event.rateLimits);
     }
     baseEventHandler(event);
   };

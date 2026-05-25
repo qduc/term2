@@ -9,6 +9,7 @@ import type { LoggingService } from '../services/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';
 import type { SSHInfo } from '../hooks/use-shell-mode.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
+import type { CodexRateLimitInfo } from '../services/conversation-events.js';
 import type { PendingApproval } from '../contracts/conversation.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { UndoItem } from '../hooks/use-undo-selection.js';
@@ -20,6 +21,7 @@ export type BottomAreaProps = {
   isProcessing: boolean;
   isShellMode?: boolean;
   lastUsage?: NormalizedUsage | null;
+  lastCodexRateLimit?: CodexRateLimitInfo | null;
   onSubmit: (value: UserTurn) => Promise<void>;
   slashCommands: SlashCommand[];
   hasConversationHistory: boolean;
@@ -50,6 +52,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   onReject,
   sshInfo,
   lastUsage,
+  lastCodexRateLimit,
   undoMenuRef,
   onUndoSelect,
   onSettingChange,
@@ -96,7 +99,13 @@ const BottomArea: FC<BottomAreaProps> = ({
         ) : null}
       </Box>
 
-      <StatusBar settingsService={settingsService} isShellMode={isShellMode} sshInfo={sshInfo} lastUsage={lastUsage} />
+      <StatusBar
+        settingsService={settingsService}
+        isShellMode={isShellMode}
+        sshInfo={sshInfo}
+        lastUsage={lastUsage}
+        lastCodexRateLimit={lastCodexRateLimit}
+      />
     </Box>
   );
 };

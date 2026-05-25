@@ -1,4 +1,4 @@
-import type { ConversationEvent } from './conversation-events.js';
+import type { ConversationEvent, CodexRateLimitInfo, CodexRateLimitWindow } from './conversation-events.js';
 import type { ILoggingService } from './service-interfaces.js';
 import { extractUsage, mergeUsage, normalizeAgentRunUsage, type NormalizedUsage } from '../utils/token-usage.js';
 import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.js';
@@ -88,6 +88,24 @@ export async function* processStreamEvents(
         usage: mergedUsage,
       });
       yield { type: 'usage_update', usage: mergedUsage };
+    }
+
+    // Intercept Codex rate-limits frames (e.g. codex.rate_limits) from the
+    // upstream provider stream so the UI can display them in the status bar.
+    if (getString(modelEvent, 'type') === 'codex.rate_limits') {
+      const rl = asRecord(modelEvent);
+      const rateLimits: CodexRateLimitInfo = {
+        allowed: Boolean(rl?.allowed),
+        limit_reached: Boolean(rl?.limit_reached),
+        primary: (asRecord(rl?.primary) ?? {}) as unknown as CodexRateLimitWindow,
+        secondary: (asRecord(rl?.secondary) ?? {}) as unknown as CodexRateLimitWindow,
+      };
+      logger.debug('Codex rate limits extracted from stream event', {
+        sessionId,
+        source: 'codex_rate_limits',
+        rateLimits,
+      });
+      yield { type: 'codex_rate_limits' as const, rateLimits };
     }
 
     const delta1 = extractTextDelta(rawEvent);

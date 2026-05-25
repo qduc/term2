@@ -16,7 +16,8 @@ export type ConversationEvent =
   | SubagentStartedEvent
   | SubagentToolStartedEvent
   | SubagentCommandMessageEvent
-  | SubagentCompletedEvent;
+  | SubagentCompletedEvent
+  | CodexRateLimitEvent;
 
 export interface RetryEvent {
   type: 'retry';
@@ -123,4 +124,27 @@ export interface SubagentCommandMessageEvent {
 export interface SubagentCompletedEvent {
   type: 'subagent_completed';
   result: SubagentResult;
+}
+
+/**
+ * Rate limit information from the Codex provider.
+ * Emitted as a raw `codex.rate_limits` frame from the Codex backend.
+ */
+export interface CodexRateLimitWindow {
+  used_percent: number;
+  window_minutes: number;
+  reset_after_seconds: number;
+  reset_at: number;
+}
+
+export interface CodexRateLimitInfo {
+  allowed: boolean;
+  limit_reached: boolean;
+  primary: CodexRateLimitWindow;
+  secondary: CodexRateLimitWindow;
+}
+
+export interface CodexRateLimitEvent {
+  type: 'codex_rate_limits';
+  rateLimits: CodexRateLimitInfo;
 }

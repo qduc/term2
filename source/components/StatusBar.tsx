@@ -5,15 +5,23 @@ import { getProvider } from '../providers/index.js';
 import type { SettingsService } from '../services/settings-service.js';
 import type { SSHInfo } from '../hooks/use-shell-mode.js';
 import { formatFooterUsage, type NormalizedUsage } from '../utils/token-usage.js';
+import type { CodexRateLimitInfo } from '../services/conversation-events.js';
 
 interface StatusBarProps {
   settingsService: SettingsService;
   isShellMode?: boolean;
   sshInfo?: SSHInfo;
   lastUsage?: NormalizedUsage | null;
+  lastCodexRateLimit?: CodexRateLimitInfo | null;
 }
 
-const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, sshInfo, lastUsage }) => {
+const StatusBar: FC<StatusBarProps> = ({
+  settingsService,
+  isShellMode = false,
+  sshInfo,
+  lastUsage,
+  lastCodexRateLimit,
+}) => {
   const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const planMode = useSetting<boolean>(settingsService, 'app.planMode') ?? false;
@@ -33,6 +41,26 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
   const accent = '#0ed7b5';
 
   const usageText = formatFooterUsage(lastUsage);
+
+  const codexRateLimitText = (() => {
+    if (!lastCodexRateLimit) return '';
+    const { primary, secondary } = lastCodexRateLimit;
+    const parts: string[] = [];
+
+    if (primary) {
+      const hours = Math.round(primary.window_minutes / 60);
+      const resetDate = new Date(primary.reset_at * 1000);
+      const timeStr = resetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      parts.push(`${hours}H: ${primary.used_percent}% (reset at ${timeStr})`);
+    }
+    if (secondary) {
+      const days = Math.round(secondary.window_minutes / (60 * 24));
+      const resetDate = new Date(secondary.reset_at * 1000);
+      const dateStr = resetDate.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+      parts.push(`${days}D: ${secondary.used_percent}% (reset on ${dateStr})`);
+    }
+    return parts.join(' / ');
+  })();
 
   return (
     <Box marginTop={1} flexDirection="column" width="100%">
@@ -108,6 +136,13 @@ const StatusBar: FC<StatusBarProps> = ({ settingsService, isShellMode = false, s
             </>
           )}
         </Box>
+
+        {/* Far-right: Codex rate limit display */}
+        {codexRateLimitText && (
+          <Box>
+            <Text color={slate}>{codexRateLimitText}</Text>
+          </Box>
+        )}
       </Box>
 
       {/* Row 2: Status & Metrics */}

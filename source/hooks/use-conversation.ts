@@ -8,6 +8,7 @@ import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils
 import { createStreamingSession } from '../utils/streaming-session-factory.js';
 import type { CommandMessage as BaseCommandMessage } from '../tools/types.js';
 import type { NormalizedUsage, UsageAccumulator } from '../utils/token-usage.js';
+import type { CodexRateLimitInfo } from '../services/conversation-events.js';
 import type { ConversationTerminal, PendingApproval, ReasoningEffortSetting } from '../contracts/conversation.js';
 import {
   annotateApprovedCommandMessage,
@@ -92,6 +93,8 @@ export const useConversation = ({
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(null);
+  const [lastCodexRateLimit, setLastCodexRateLimit] = useState<CodexRateLimitInfo | null>(null);
+  const setCodexRateLimit = setLastCodexRateLimit;
   const approvedContextRef = useRef<ApprovedToolContext | null>(null);
   const trimMessages = useCallback((list: Message[]) => appendMessagesCapped(list, [], MAX_MESSAGE_COUNT), []);
 
@@ -211,6 +214,7 @@ export const useConversation = ({
             annotateCommandMessage,
             loggingService,
             setLastUsage,
+            setCodexRateLimit,
             reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
           },
           'sendUserMessage',
@@ -320,6 +324,7 @@ export const useConversation = ({
               annotateCommandMessage,
               loggingService,
               setLastUsage,
+              setCodexRateLimit,
               reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
             },
             'maxTurnsContinuation',
@@ -376,6 +381,7 @@ export const useConversation = ({
             annotateCommandMessage,
             loggingService,
             setLastUsage,
+            setCodexRateLimit,
             reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
           },
           'approvalDecision',
@@ -618,6 +624,7 @@ export const useConversation = ({
     messages,
     sessionId: sessionId ?? conversationService.sessionId,
     lastUsage,
+    lastCodexRateLimit,
     pendingApproval,
     waitingForApproval,
     waitingForRejectionReason,

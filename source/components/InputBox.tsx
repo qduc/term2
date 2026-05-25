@@ -204,11 +204,15 @@ const InputBox: FC<Props> = ({
         if (suggestion) {
           parsedValue = parseSettingValue(suggestion.value);
         } else if (typedValue) {
-          // Extract value from the typed input (e.g., "/settings agent.model gpt-4o-mini")
-          const afterTrigger = typedValue.slice(SETTINGS_TRIGGER.length);
-          const parts = afterTrigger.split(/\s+/).filter(Boolean);
+          // Extract value from the typed input.
+          // For /settings trigger: format is "/settings <key> <value>"
+          // For direct triggers like /effort: format is "/effort <value>"
+          const parts = typedValue.split(/\s+/).filter(Boolean);
           if (parts.length >= 2) {
-            parsedValue = parseSettingValue(parts.slice(1).join(' '));
+            const valueParts = typedValue.startsWith(SETTINGS_TRIGGER) ? parts.slice(2) : parts.slice(1);
+            if (valueParts.length > 0) {
+              parsedValue = parseSettingValue(valueParts.join(' '));
+            }
           }
         }
 
@@ -217,19 +221,26 @@ const InputBox: FC<Props> = ({
             settingsService.set(key, parsedValue);
             onSettingChange?.(key, parsedValue);
           } catch {
-            // Continue restoring the menu even if setting fails
+            // Continue even if setting fails
           }
         }
 
         // Close value menu
         settingsValue.close();
 
-        // Restore the settings filter to reopen the settings completion menu
-        const filter = settingsFilterRef.current;
-        const restoredInput = SETTINGS_TRIGGER + filter;
-        onChange(restoredInput);
-        setCursorOverride(restoredInput.length);
-        settings.open(SETTINGS_TRIGGER.length, key);
+        // Only restore the settings completion menu when the input came from
+        // /settings. Direct triggers like /effort or /auto-approve are top-level
+        // menus — just close and clear the input after saving.
+        const submittedValue = typedValue ?? value;
+        if (submittedValue.startsWith(SETTINGS_TRIGGER)) {
+          const filter = settingsFilterRef.current;
+          const restoredInput = SETTINGS_TRIGGER + filter;
+          onChange(restoredInput);
+          setCursorOverride(restoredInput.length);
+          settings.open(SETTINGS_TRIGGER.length, key);
+        } else {
+          onChange('');
+        }
         return true;
       }
 

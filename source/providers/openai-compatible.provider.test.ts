@@ -757,3 +757,37 @@ test('opencode provider type keeps the fallback session ID stable across turns',
   t.is(captured.length, 2);
   t.is(captured[1].headers['x-opencode-session'], firstSessionId);
 });
+
+test('opencode provider type caches model instances across getModel calls', async (t) => {
+  const provider = createCustomProviderModelProvider(
+    {
+      name: 'opencode-test',
+      type: 'opencode',
+    },
+    {
+      defaultModel: 'provider-model',
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            id: 'test',
+            object: 'chat.completion',
+            created: 1,
+            model: 'provider-model',
+            choices: [
+              {
+                index: 0,
+                message: { role: 'assistant', content: 'ok' },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    },
+  );
+
+  const model1 = await provider.getModel('provider-model');
+  const model2 = await provider.getModel('provider-model');
+  t.is(model1, model2, 'getModel should return the same model instance for the same model name');
+});

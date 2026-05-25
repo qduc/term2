@@ -405,6 +405,7 @@ function buildProviderFetch(
 
 export class OpencodeMinimaxHybridProvider implements ModelProvider {
   private readonly fallbackSessionId: string | undefined;
+  private readonly models = new Map<string, Model | Promise<Model>>();
 
   constructor(private readonly config: CustomProviderConfig, private readonly deps: CustomProviderRuntimeDeps) {
     const isOpencode =
@@ -416,6 +417,11 @@ export class OpencodeMinimaxHybridProvider implements ModelProvider {
 
   getModel(modelName?: string): Promise<Model> | Model {
     const resolvedModel = modelName || this.deps.defaultModel || '';
+    const cached = this.models.get(resolvedModel);
+    if (cached) {
+      return cached;
+    }
+
     if (resolvedModel.toLowerCase().includes('minimax')) {
       const isOpencode =
         this.config.type === 'opencode' ||
@@ -437,7 +443,9 @@ export class OpencodeMinimaxHybridProvider implements ModelProvider {
           },
         }),
       });
-      return anthropicProvider.getModel(resolvedModel);
+      const model = anthropicProvider.getModel(resolvedModel);
+      this.models.set(resolvedModel, model);
+      return model;
     }
 
     const isOpencode =
@@ -465,7 +473,9 @@ export class OpencodeMinimaxHybridProvider implements ModelProvider {
       openAIClient: openAIClient as any,
       useResponses: false,
     });
-    return openaiProvider.getModel(resolvedModel);
+    const model = openaiProvider.getModel(resolvedModel);
+    this.models.set(resolvedModel, model);
+    return model;
   }
 }
 

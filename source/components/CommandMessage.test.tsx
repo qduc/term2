@@ -336,3 +336,39 @@ test('CommandMessage trims trailing newlines when checking for truncation', asyn
   t.true(output.includes('line 4'));
   t.false(output.includes('more lines'));
 });
+
+test('CommandMessage renders shell approval rejection with [DENIED] and denial message', async (t) => {
+  // Regression test: when shell approval is denied, the UI must render the attempted
+  // command and the denial reason so the user knows what was blocked and why.
+  const props = {
+    command: 'rm -rf /dangerous',
+    toolName: 'shell',
+    toolArgs: { command: 'rm -rf /dangerous' },
+    status: 'completed' as 'completed',
+    success: false,
+    isApprovalRejection: true,
+    output: "Tool execution was not approved. User's reason: too risky",
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('DENIED'), `Expected [DENIED] marker in output: ${output}`);
+  t.true(output.includes('not approved'), `Expected denial message in output: ${output}`);
+});
+
+test('CommandMessage renders shell approval rejection without command in output when only command field is provided', async (t) => {
+  const props = {
+    command: 'shell: rm -rf /',
+    status: 'completed' as 'completed',
+    success: false,
+    isApprovalRejection: true,
+    output: "Tool execution was not approved. User's reason: not safe",
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('DENIED'), `Expected [DENIED] marker in output: ${output}`);
+  t.true(output.includes('not safe'), `Expected denial reason in output: ${output}`);
+});

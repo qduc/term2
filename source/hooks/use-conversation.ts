@@ -178,7 +178,20 @@ export const useConversation = ({
 
       setMessages((prev) => {
         const annotatedCommands = result.commandMessages.map(annotateCommandMessage);
-        let next = [...prev, ...annotatedCommands];
+        // Remove stale running/pending messages that are about to be replaced
+        // by completed ones (e.g. after a denied tool where a "running" message
+        // was shown during streaming but the final result never cleaned it up).
+        const completedCallIds = new Set(annotatedCommands.filter((m) => m.callId).map((m) => m.callId));
+        const cleaned =
+          completedCallIds.size > 0
+            ? prev.filter((msg) => {
+                if (msg.sender !== 'command') return true;
+                const cmd = msg as CommandMessage;
+                if (cmd.status !== 'running' && cmd.status !== 'pending') return true;
+                return !cmd.callId || !completedCallIds.has(cmd.callId);
+              })
+            : prev;
+        let next = [...cleaned, ...annotatedCommands];
 
         // Append finalText only when streaming never pushed it via text_delta/final events.
         // Providers that skip streaming (synchronous or non-interactive) may return text

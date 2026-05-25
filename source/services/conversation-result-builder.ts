@@ -4,6 +4,7 @@ import type { ILoggingService } from './service-interfaces.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 import { extractUsage } from '../utils/token-usage.js';
 import { extractCommandMessages } from '../utils/extract-command-messages.js';
+import { attachCachedArguments } from './command-message-streaming.js';
 import { asRecord, getCallIdFromObject, getString, getToolInfoFromInterruption } from './interruption-info.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
@@ -136,13 +137,18 @@ export async function buildConversationResult(
   approvalFlow.clearPending();
   shellAutoApproval.clearCache();
 
-  const allCommandMessages = extractCommandMessages(result.newItems || result.history || []);
+  const items = result.newItems || result.history || [];
+  attachCachedArguments(items, toolCallArgumentsById);
+  const allCommandMessages = extractCommandMessages(items);
 
   const commandMessages = emittedCommandIds
     ? allCommandMessages.filter((msg) => !emittedCommandIds.has(msg.id))
     : allCommandMessages;
 
-  const visibleCommandMessages = commandMessages.filter((msg) => !msg.isApprovalRejection);
+  const visibleCommandMessages = commandMessages;
+  // Note: Previously isApprovalRejection messages were filtered out here, which caused
+  // denied shell tool executions to be invisible in the UI. They must be preserved so
+  // the frontend can render the attempted command and the denial reason.
 
   return {
     kind: 'response',

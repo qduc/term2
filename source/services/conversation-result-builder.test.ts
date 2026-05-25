@@ -6,9 +6,22 @@ import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { ConversationStore } from './conversation-store.js';
 import { LoggingService } from './logging-service.js';
 import type { AgentStream } from './agent-stream.js';
+import { clearToolFormatters, registerToolFormatters } from '../tools/command-message-formatters.js';
+import { formatShellCommandMessage } from '../tools/shell.js';
+import { clearApprovalRejectionMarkers } from '../utils/extract-command-messages.js';
+
+test.beforeEach(() => {
+  clearToolFormatters();
+  registerToolFormatters([{ name: 'shell', formatCommandMessage: formatShellCommandMessage }]);
+  clearApprovalRejectionMarkers();
+});
+
+test.afterEach(() => {
+  clearToolFormatters();
+  clearApprovalRejectionMarkers();
+});
 
 const logger = new LoggingService({ disableLogging: true });
-
 const makeStream = (extras: Partial<AgentStream> = {}): AgentStream =>
   ({
     [Symbol.asyncIterator]: async function* () {},
@@ -267,5 +280,55 @@ test('toTerminalEvent shapes approval_required with optional fields', (t) => {
     t.is(event.approval.callId, 'c1');
     t.is(event.approval.toolName, 'shell');
     t.deepEqual(event.usage, { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 });
+  }
+});
+
+test('response outcome preserves approval-rejected command messages for rendering', async (t) => {
+  // Regression test: when shell approval is denied, the command message with the rejection
+  // message must still appear in commandMessages so the UI can render it.
+  // Previously these were filtered out silently, leaving the user without feedback.
+  // Simulate that approval-flow-coordinator marked call-1 as rejected (happens before buildConversationResult).
+  const { markToolCallAsApprovalRejection } = await import('../utils/extract-command-messages.js');
+  markToolCallAsApprovalRejection('call-1');
+
+  // A model turn carries command items in newItems (not history), so mirror that shape.
+  const stream = makeStream({
+    newItems: [
+      {
+        rawItem: {
+          type: 'function_call',
+          id: 'fc-1',
+          callId: 'call-1',
+          name: 'shell',
+          arguments: JSON.stringify({ command: 'rm -rf /dangerous' }),
+        },
+      },
+      {
+        rawItem: {
+          type: 'function_call_output',
+          id: 'fco-1',
+          callId: 'call-1',
+          name: 'shell',
+          output: "Tool execution was not approved. User's reason: too risky",
+        },
+      },
+    ],
+  });
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, makeDeps());
+
+  t.is(outcome.kind, 'response');
+  if (outcome.kind === 'response') {
+    // Previously this assertion would fail because isApprovalRejection messages were filtered out.
+    t.true(
+      (outcome.result.commandMessages ?? []).length > 0,
+      'Expected at least one command message to be preserved after approval rejection',
+    );
+    const rejectedMsg = (outcome.result.commandMessages ?? []).find((m) => m.isApprovalRejection);
+    t.truthy(rejectedMsg, 'Expected a command message with isApprovalRejection=true');
+    t.is(rejectedMsg!.toolName, 'shell', 'Expected toolName to be preserved for shell command');
+    t.true(
+      rejectedMsg!.output.includes('not approved'),
+      'Expected rejection message in output, but got: ' + rejectedMsg!.output,
+    );
   }
 });

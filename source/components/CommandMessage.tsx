@@ -135,6 +135,7 @@ const CommandMessage: FC<Props> = ({
   failureReason,
   toolName,
   toolArgs,
+  isApprovalRejection,
   hadApproval,
 }) => {
   const isRunning = status === 'pending' || status === 'running';
@@ -160,6 +161,20 @@ const CommandMessage: FC<Props> = ({
         : '',
     [toolName, toolArgs?.content],
   );
+
+  // Parse the denial reason from the JSON wrapper that the tool rejection interceptor
+  // produces (e.g. {"output":[{"success":false,"error":"..."}]}).
+  const denialReason = useMemo(() => {
+    if (!output) return 'Tool execution was not approved.';
+    try {
+      const parsed = JSON.parse(output);
+      if (parsed?.output?.[0]?.error) return parsed.output[0].error;
+      if (parsed?.error) return parsed.error;
+    } catch {
+      /* not JSON, use as-is */
+    }
+    return output;
+  }, [output]);
 
   useEffect(() => {
     if (!isRunning) {
@@ -264,6 +279,21 @@ const CommandMessage: FC<Props> = ({
   }
 
   const formattedArgs = toolArgs ? formatToolArgs(toolName, toolArgs) : '';
+
+  // Special handling for approval-rejected shell commands: show the denial message
+  // with a clear [DENIED] label so the user knows what was attempted and why.
+  if (isApprovalRejection) {
+    // Extract just the command part for display (e.g. "rm -rf /dangerous").
+    const displayCommand = formattedArgs || command;
+    return (
+      <Box flexDirection="column">
+        <Text color="red" bold>
+          $ <Text bold>{displayCommand}</Text>
+        </Text>
+        <Text color="red">→ DENIED: {denialReason}</Text>
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column">

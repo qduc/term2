@@ -3,6 +3,7 @@ import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, Rat
 import { OpenRouterError, OpenAICompatibleError } from '../providers/common/provider-errors.js';
 
 export const MAX_HALLUCINATION_RETRIES = 2;
+export const MAX_SUBAGENT_MODEL_RETRIES = 1;
 export const MAX_TRANSIENT_RETRIES = 3;
 
 /**
@@ -75,6 +76,17 @@ export interface RetryLogPayload {
   errorMessage: string;
 }
 
+export type RecoverableRetryDecision =
+  | { kind: 'no_retry' }
+  | {
+      kind: 'retry';
+      message: string;
+      toolName: string;
+      retryType: RetryType;
+      attempt: number;
+      maxRetries: number;
+    };
+
 export type RetryDecision =
   | { kind: 'no_retry' }
   | {
@@ -91,13 +103,17 @@ export type RetryDecision =
       nextRunOptions: { hallucinationRetryCount: number; skipUserMessage: boolean };
     };
 
-export const decideRetry = (
+/**
+ * Decides whether a model error is recoverable and returns retry metadata only.
+ * Useful for callers (e.g. subagent manager) that need retry classification
+ * without parent-specific fields like hadStream or nextRunOptions.
+ */
+export const decideRecoverableModelRetry = (
   error: unknown,
   attemptCount: number,
-  hadStream: boolean,
-  streamHistoryLength: number,
-): RetryDecision => {
-  if (!isRecoverableModelError(error) || attemptCount >= MAX_HALLUCINATION_RETRIES) {
+  maxRetries: number = MAX_HALLUCINATION_RETRIES,
+): RecoverableRetryDecision => {
+  if (!isRecoverableModelError(error) || attemptCount >= maxRetries) {
     return { kind: 'no_retry' };
   }
 
@@ -107,14 +123,36 @@ export const decideRetry = (
   const isParsingError = lower.includes('parsing tool arguments') || lower.includes('valid json');
   const toolName = isHallucination ? message.match(/Tool (\S+) not found/)?.[1] || 'unknown' : 'unknown';
   const retryType: RetryType = isHallucination ? 'hallucination' : isParsingError ? 'parsing_error' : 'behavior';
-  const attempt = attemptCount + 1;
+
+  return {
+    kind: 'retry',
+    message,
+    toolName,
+    retryType,
+    attempt: attemptCount + 1,
+    maxRetries,
+  };
+};
+
+export const decideRetry = (
+  error: unknown,
+  attemptCount: number,
+  hadStream: boolean,
+  streamHistoryLength: number,
+): RetryDecision => {
+  const decision = decideRecoverableModelRetry(error, attemptCount);
+  if (decision.kind === 'no_retry') {
+    return { kind: 'no_retry' };
+  }
+
+  const { message, toolName, retryType, attempt } = decision;
 
   return {
     kind: 'retry',
     message,
     retryEvent: {
       type: 'retry',
-      toolName: isHallucination ? toolName : 'model',
+      toolName: retryType === 'hallucination' ? toolName : 'model',
       attempt,
       maxRetries: MAX_HALLUCINATION_RETRIES,
       errorMessage: message,

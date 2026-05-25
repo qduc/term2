@@ -1,6 +1,7 @@
 import test from 'ava';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ModelBehaviorError } from '@openai/agents';
 import { SubagentManager } from './subagent-manager.js';
 import { registerProvider } from '../../providers/registry.js';
 import { ExecutionContext } from '../execution-context.js';
@@ -1233,4 +1234,383 @@ test.serial('run() extracts usage from error.state.usage when subagent run fails
     completion_tokens: 25,
     total_tokens: 40,
   });
+});
+
+// ========== Model error retry ==========
+
+test.serial(
+  'run() retries on recoverable model error (hallucinated tool) and succeeds on second attempt',
+  async (t) => {
+    let runCount = 0;
+    const events: any[] = [];
+    const logWarnCalls: any[] = [];
+
+    registerProvider({
+      id: 'mock-retry-recoverable-provider',
+      label: 'Mock Retry Recoverable Provider',
+      createRunner: () =>
+        ({
+          run: async () => {
+            runCount++;
+            if (runCount === 1) {
+              throw new ModelBehaviorError('Tool bash not found in agent Explorer.');
+            }
+            return {
+              status: 'completed',
+              finalOutput: 'Success on retry',
+              history: [],
+              messages: [],
+            };
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'mock-model' }],
+    });
+
+    const manager = new SubagentManager({
+      logger: {
+        ...createMockLogger(),
+        warn: (msg: string, meta?: Record<string, unknown>) => {
+          logWarnCalls.push({ msg, meta });
+        },
+      },
+      settings: createMockSettings({
+        'agent.model': 'mock-model',
+        'agent.provider': 'mock-retry-recoverable-provider',
+        'agent.retryAttempts': 2,
+      }),
+      onEvent: (event) => events.push(event),
+    });
+
+    const result = await manager.run({ role: 'explorer', task: 'find all files' });
+
+    t.is(result.status, 'completed');
+    t.is(runCount, 2);
+    const retryEvent = events.find((e) => e.type === 'retry');
+    t.truthy(retryEvent, 'should emit retry event');
+    t.is(retryEvent.toolName, 'bash');
+    t.is(retryEvent.retryType, 'hallucination');
+    t.is(retryEvent.attempt, 1);
+    t.is(retryEvent.maxRetries, 1);
+
+    const retryLog = logWarnCalls.find((c) => c.meta?.eventType === 'retry.subagent_model_error');
+    t.truthy(retryLog, 'should log subagent model error retry');
+  },
+);
+
+test.serial('run() exhausts retries on repeated recoverable model errors and returns failed result', async (t) => {
+  let runCount = 0;
+  const events: any[] = [];
+
+  registerProvider({
+    id: 'mock-retry-exhaust-provider',
+    label: 'Mock Retry Exhaust Provider',
+    createRunner: () =>
+      ({
+        run: async () => {
+          runCount++;
+          throw new ModelBehaviorError('Tool bash not found in agent Explorer.');
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-retry-exhaust-provider',
+      'agent.retryAttempts': 2,
+    }),
+    onEvent: (event) => events.push(event),
+  });
+
+  const result = await manager.run({ role: 'explorer', task: 'find all files' });
+
+  t.is(result.status, 'failed');
+  t.truthy(result.error);
+  t.true(result.error!.includes('bash'));
+  // Should have tried: initial + MAX_SUBAGENT_MODEL_RETRIES (1) = 2 attempts
+  t.is(runCount, 2);
+  const retryEvents = events.filter((e) => e.type === 'retry');
+  t.is(retryEvents.length, 1, 'should emit one retry event before exhaustion');
+});
+
+test.serial('run() does not retry on non-recoverable ModelBehaviorError', async (t) => {
+  let runCount = 0;
+  const events: any[] = [];
+
+  registerProvider({
+    id: 'mock-no-retry-non-recoverable-provider',
+    label: 'Mock No Retry Non-Recoverable Provider',
+    createRunner: () =>
+      ({
+        run: async () => {
+          runCount++;
+          throw new ModelBehaviorError('something else unrelated to tools');
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-no-retry-non-recoverable-provider',
+      'agent.retryAttempts': 2,
+    }),
+    onEvent: (event) => events.push(event),
+  });
+
+  const result = await manager.run({ role: 'explorer', task: 'find all files' });
+
+  t.is(result.status, 'failed');
+  t.is(runCount, 1, 'no retry should be attempted');
+  const retryEvents = events.filter((e) => e.type === 'retry');
+  t.is(retryEvents.length, 0);
+});
+
+test.serial('run() aborted subagent returns cancelled status without model-error retry', async (t) => {
+  const events: any[] = [];
+
+  registerProvider({
+    id: 'mock-abort-no-retry-provider',
+    label: 'Mock Abort No Retry Provider',
+    createRunner: () =>
+      ({
+        run: async () => {
+          const err = new Error('The operation was aborted');
+          (err as any).name = 'AbortError';
+          throw err;
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-abort-no-retry-provider',
+      'agent.retryAttempts': 2,
+    }),
+    onEvent: (event) => events.push(event),
+  });
+
+  const result = await manager.run({ role: 'explorer', task: 'find all files' });
+
+  t.is(result.status, 'cancelled');
+  const retryEvents = events.filter((e) => e.type === 'retry');
+  t.is(retryEvents.length, 0, 'abort errors should not trigger model-error retries');
+});
+
+test.serial('run() retries on transient upstream error via executeWithRetry', async (t) => {
+  let runCount = 0;
+  const logWarnCalls: any[] = [];
+
+  registerProvider({
+    id: 'mock-transient-retry-provider',
+    label: 'Mock Transient Retry Provider',
+    createRunner: () =>
+      ({
+        run: async () => {
+          runCount++;
+          if (runCount === 1) {
+            const err = new Error('rate limit') as any;
+            err.status = 429;
+            err.headers = { 'retry-after': '0' };
+            throw err;
+          }
+          return {
+            status: 'completed',
+            finalOutput: 'Success after upstream retry',
+            history: [],
+            messages: [],
+          };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: {
+      ...createMockLogger(),
+      warn: (msg: string, meta?: Record<string, unknown>) => {
+        logWarnCalls.push({ msg, meta });
+      },
+    },
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-transient-retry-provider',
+      'agent.retryAttempts': 2,
+    }),
+  });
+
+  const result = await manager.run({ role: 'explorer', task: 'find all files' });
+
+  t.is(result.status, 'completed');
+  t.is(runCount, 2, 'should have retried once after transient error');
+  const upstreamRetry = logWarnCalls.find((c) => c.meta?.eventType === 'retry.upstream');
+  t.truthy(upstreamRetry, 'should log upstream retry');
+});
+
+test.serial('run() does not retry worker after a mutating write tool was invoked before the model error', async (t) => {
+  let runCount = 0;
+  const events: any[] = [];
+
+  registerProvider({
+    id: 'mock-write-then-crash-provider',
+    label: 'Mock Write Then Crash Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          runCount++;
+          // Invoke a write tool before crashing with a recoverable model error
+          const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
+          if (createFile) {
+            await createFile.invoke({}, JSON.stringify({ path: 'touched.ts', content: 'x' }), {});
+          }
+          throw new ModelBehaviorError('Tool bash not found in agent Worker.');
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-write-then-crash-'));
+  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-write-then-crash-provider',
+      'agent.retryAttempts': 2,
+    }),
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+    onEvent: (event) => events.push(event),
+  });
+
+  const result = await manager.run({ role: 'worker', task: 'do some work', writeBoundary: ['.'] });
+
+  t.is(result.status, 'failed');
+  t.is(runCount, 1, 'must not retry when a write tool was invoked before the model error');
+  const retryEvents = events.filter((e) => e.type === 'retry');
+  t.is(retryEvents.length, 0, 'no retry event should be emitted');
+});
+
+test.serial('run() retries read-only subagent (explorer) even after read tools were called', async (t) => {
+  let runCount = 0;
+
+  registerProvider({
+    id: 'mock-explorer-read-then-crash-provider',
+    label: 'Mock Explorer Read Then Crash Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          runCount++;
+          if (runCount === 1) {
+            // Call a read tool then throw a recoverable error
+            const grep = agent.tools.find((tool: any) => tool.name === 'grep');
+            if (grep) {
+              await grep.invoke({}, JSON.stringify({ pattern: 'foo', path: '.' }), {}).catch(() => {});
+            }
+            throw new ModelBehaviorError('Tool bash not found in agent Explorer.');
+          }
+          return { status: 'completed', finalOutput: 'found it', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-explorer-read-then-crash-provider',
+      'agent.retryAttempts': 2,
+    }),
+  });
+
+  const result = await manager.run({ role: 'explorer', task: 'search for something' });
+
+  t.is(result.status, 'completed');
+  t.is(runCount, 2, 'read-only subagent should retry even after read tools ran');
+});
+
+test.serial('corrective retry task for hallucination names the specific bad tool', async (t) => {
+  const runInputs: string[] = [];
+
+  registerProvider({
+    id: 'mock-corrective-hallucination-provider',
+    label: 'Mock Corrective Hallucination Provider',
+    createRunner: () =>
+      ({
+        run: async (_agent: any, input: any) => {
+          const inputText = typeof input === 'string' ? input : JSON.stringify(input);
+          runInputs.push(inputText);
+          if (runInputs.length === 1) {
+            throw new ModelBehaviorError('Tool bash not found in agent Explorer.');
+          }
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-corrective-hallucination-provider',
+      'agent.retryAttempts': 2,
+    }),
+  });
+
+  await manager.run({ role: 'explorer', task: 'do something' });
+
+  t.is(runInputs.length, 2);
+  const retryInput = runInputs[1];
+  t.true(retryInput.includes('"bash"'), 'corrective prompt should name the hallucinated tool');
+  t.true(retryInput.includes('does not exist'), 'corrective prompt should say the tool does not exist');
+});
+
+test.serial('corrective retry task for behavior error instructs model to produce a final answer', async (t) => {
+  const runInputs: string[] = [];
+
+  registerProvider({
+    id: 'mock-corrective-behavior-provider',
+    label: 'Mock Corrective Behavior Provider',
+    createRunner: () =>
+      ({
+        run: async (_agent: any, input: any) => {
+          const inputText = typeof input === 'string' ? input : JSON.stringify(input);
+          runInputs.push(inputText);
+          if (runInputs.length === 1) {
+            throw new ModelBehaviorError('Model did not produce a final response');
+          }
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-corrective-behavior-provider',
+      'agent.retryAttempts': 2,
+    }),
+  });
+
+  await manager.run({ role: 'explorer', task: 'do something' });
+
+  t.is(runInputs.length, 2);
+  const retryInput = runInputs[1];
+  t.true(retryInput.includes('final'), 'corrective prompt for behavior should instruct to produce a final answer');
+  t.true(retryInput.includes('Do not call'), 'should tell model not to call more tools');
 });

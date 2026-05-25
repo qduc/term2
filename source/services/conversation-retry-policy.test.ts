@@ -3,6 +3,7 @@ import { ModelBehaviorError } from '@openai/agents';
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
 import { OpenRouterError, OpenAICompatibleError } from '../providers/common/provider-errors.js';
 import {
+  decideRecoverableModelRetry,
   decideRetry,
   isRecoverableModelError,
   isTransientRetryableError,
@@ -90,6 +91,60 @@ test('decideRetry: without stream returns retry with skipUserMessage=false', asy
   t.false(decision.hadStream);
   t.false(decision.shouldInjectErrorContext);
   t.deepEqual(decision.nextRunOptions, { hallucinationRetryCount: 1, skipUserMessage: false });
+});
+
+// ========== decideRecoverableModelRetry (shared helper) ==========
+
+test('decideRecoverableModelRetry: hallucinated tool extracts tool name', (t) => {
+  const decision = decideRecoverableModelRetry(new ModelBehaviorError('Tool bash not found in agent Explorer.'), 0);
+  t.is(decision.kind, 'retry');
+  if (decision.kind !== 'retry') return;
+  t.is(decision.toolName, 'bash');
+  t.is(decision.retryType, 'hallucination');
+  t.is(decision.attempt, 1);
+  t.is(decision.maxRetries, MAX_HALLUCINATION_RETRIES);
+  t.truthy(decision.message.includes('bash'));
+});
+
+test('decideRecoverableModelRetry: parsing error classifies as parsing_error', (t) => {
+  const decision = decideRecoverableModelRetry(new ModelBehaviorError('Error parsing tool arguments'), 0);
+  t.is(decision.kind, 'retry');
+  if (decision.kind !== 'retry') return;
+  t.is(decision.retryType, 'parsing_error');
+  t.is(decision.toolName, 'unknown');
+  t.is(decision.attempt, 1);
+});
+
+test('decideRecoverableModelRetry: behavior error classifies as behavior', (t) => {
+  const decision = decideRecoverableModelRetry(new ModelBehaviorError('Model did not produce a final response'), 0);
+  t.is(decision.kind, 'retry');
+  if (decision.kind !== 'retry') return;
+  t.is(decision.retryType, 'behavior');
+  t.is(decision.toolName, 'unknown');
+  t.is(decision.attempt, 1);
+});
+
+test('decideRecoverableModelRetry: max attempts returns no_retry', (t) => {
+  const decision = decideRecoverableModelRetry(
+    new ModelBehaviorError('Tool bash not found'),
+    MAX_HALLUCINATION_RETRIES,
+  );
+  t.is(decision.kind, 'no_retry');
+});
+
+test('decideRecoverableModelRetry: non-recoverable error returns no_retry', (t) => {
+  t.is(decideRecoverableModelRetry(new Error('regular error'), 0).kind, 'no_retry');
+  t.is(decideRecoverableModelRetry(new ModelBehaviorError('unrelated error'), 0).kind, 'no_retry');
+});
+
+test('decideRecoverableModelRetry: respects custom maxRetries=1 and returns no_retry at attempt 1', (t) => {
+  const stillRetry = decideRecoverableModelRetry(new ModelBehaviorError('Tool bash not found'), 0, 1);
+  t.is(stillRetry.kind, 'retry');
+  if (stillRetry.kind !== 'retry') return;
+  t.is(stillRetry.maxRetries, 1);
+
+  const exhausted = decideRecoverableModelRetry(new ModelBehaviorError('Tool bash not found'), 1, 1);
+  t.is(exhausted.kind, 'no_retry');
 });
 
 function asInstanceOf<T extends object>(prototype: object, props: Partial<T>): T {

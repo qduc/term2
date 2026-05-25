@@ -99,7 +99,19 @@ const InputBox: FC<Props> = ({
 
   const path = usePathCompletion({ loggingService });
   const settings = useSettingsCompletion(settingsService);
-  const settingsValue = useSettingsValueCompletion(settingsService);
+  const reopenSettingsMenu = useCallback(
+    (key: string) => {
+      const filter = settingsFilterRef.current;
+      const restoredInput = SETTINGS_TRIGGER + filter;
+      onChange(restoredInput);
+      setCursorOverride(restoredInput.length);
+      settings.open(SETTINGS_TRIGGER.length, key);
+    },
+    [onChange, settings],
+  );
+  const settingsValue = useSettingsValueCompletion(settingsService, {
+    onReset: reopenSettingsMenu,
+  });
   const models = useModelSelection(
     {
       loggingService,
@@ -233,12 +245,7 @@ const InputBox: FC<Props> = ({
         // menus — just close and clear the input after saving.
         const submittedValue = typedValue ?? value;
         if (submittedValue.startsWith(SETTINGS_TRIGGER)) {
-          const filter = settingsFilterRef.current;
-          const restoredInput = SETTINGS_TRIGGER + filter;
-          onChange(restoredInput);
-          setCursorOverride(restoredInput.length);
-          settings.open(SETTINGS_TRIGGER.length, key);
-        } else {
+          reopenSettingsMenu(key);} else {
           onChange('');
         }
         return true;
@@ -290,10 +297,7 @@ const InputBox: FC<Props> = ({
 
         models.close();
 
-        const restoredInput = SETTINGS_TRIGGER + settingsFilterRef.current;
-        onChange(restoredInput);
-        setCursorOverride(restoredInput.length);
-        settings.open(SETTINGS_TRIGGER.length, models.modelSettingConfig.modelKey);
+        reopenSettingsMenu(models.modelSettingConfig.modelKey);
         return true;
       }
 

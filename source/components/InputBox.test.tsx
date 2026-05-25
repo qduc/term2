@@ -361,3 +361,57 @@ test('settings value completion saves setting and reopens settings menu targetin
   t.true(frame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
   t.true(frame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
 });
+
+test('settings value completion resets setting and reopens settings menu targeting the reset key', async (t) => {
+  const settingsService = createMockSettingsService({
+    'shell.timeout': 60000,
+  });
+
+  const { stdin, lastFrame } = render(
+    <InputProvider>
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        slashCommands={[
+          ...mockSlashCommands,
+          {
+            name: '/settings',
+            description: 'Change setting',
+            action: () => {},
+            completion: { type: 'settings', trigger: '/settings ', resetTrigger: '/settings reset ' },
+          },
+        ]}
+      />
+      <StateDisplay />
+    </InputProvider>,
+  );
+
+  // Set input to trigger value completion
+  stdin.write('/settings shell.timeout ');
+
+  // Wait until the mode switches to settings_value_completion
+  for (let i = 0; i < 20; i++) {
+    const frame = lastFrame() ?? '';
+    if (frame.includes('Mode:settings_value_completion')) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  // Press Ctrl+D (\u0004) to reset the value
+  stdin.write('\u0004');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  // Wait until the mode switches back to settings_completion
+  for (let i = 0; i < 20; i++) {
+    const frame = lastFrame() ?? '';
+    if (frame.includes('Mode:settings_completion')) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  // The setting should be reset to default (120000)
+  t.is(settingsService.get('shell.timeout'), 120000);
+
+  // The menu should be restored targeting 'shell.timeout'
+  const frame = lastFrame() ?? '';
+  t.true(frame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
+  t.true(frame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
+});

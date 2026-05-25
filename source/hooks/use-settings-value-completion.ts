@@ -162,7 +162,10 @@ export function filterSettingValueSuggestionsByQuery(
   return results.slice(0, maxResults);
 }
 
-export const useSettingsValueCompletion = (settingsService: SettingsService) => {
+export const useSettingsValueCompletion = (
+  settingsService: SettingsService,
+  options?: { onReset?: (key: string) => void },
+) => {
   const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex } = useInputContext();
 
   const isOpen = mode === 'settings_value_completion';
@@ -236,10 +239,14 @@ export const useSettingsValueCompletion = (settingsService: SettingsService) => 
 
   const resetCurrentSetting = useCallback(() => {
     if (settingKey) {
-      settingsService.reset(settingKey);
+      const key = settingKey;
+      settingsService.reset(key);
+      close();
+      options?.onReset?.(key);
+    } else {
+      close();
     }
-    close();
-  }, [settingKey, settingsService, close]);
+  }, [settingKey, settingsService, close, options]);
 
   const isNumericSettings = useMemo(() => {
     return settingKey ? NUMBER_SETTING_KEYS.has(settingKey) : false;

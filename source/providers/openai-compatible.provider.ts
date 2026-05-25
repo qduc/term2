@@ -217,10 +217,11 @@ function createOpenAICompatibleMiddleware(
   providerType: string,
   baseUrl?: string,
   loggingService?: ILoggingService,
+  fallbackSessionIdOverride?: string,
 ): FetchMiddleware {
   const isOpencode =
     providerType === 'opencode' || (typeof baseUrl === 'string' && baseUrl.toLowerCase().includes('opencode.ai'));
-  const fallbackSessionId = isOpencode ? generateOpencodeSessionId() : undefined;
+  const fallbackSessionId = isOpencode ? fallbackSessionIdOverride ?? generateOpencodeSessionId() : undefined;
 
   return async (ctx, next) => {
     if (typeof ctx.init?.body === 'string') {
@@ -403,7 +404,15 @@ function buildProviderFetch(
 }
 
 export class OpencodeMinimaxHybridProvider implements ModelProvider {
-  constructor(private readonly config: CustomProviderConfig, private readonly deps: CustomProviderRuntimeDeps) {}
+  private readonly fallbackSessionId: string | undefined;
+
+  constructor(private readonly config: CustomProviderConfig, private readonly deps: CustomProviderRuntimeDeps) {
+    const isOpencode =
+      this.config.type === 'opencode' ||
+      this.config.name === 'opencode' ||
+      (typeof this.config.baseUrl === 'string' && this.config.baseUrl.toLowerCase().includes('opencode.ai'));
+    this.fallbackSessionId = isOpencode ? generateOpencodeSessionId() : undefined;
+  }
 
   getModel(modelName?: string): Promise<Model> | Model {
     const resolvedModel = modelName || this.deps.defaultModel || '';
@@ -443,7 +452,12 @@ export class OpencodeMinimaxHybridProvider implements ModelProvider {
       baseURL: normalizeBaseUrl(effectiveBaseUrl),
       apiKey: effectiveApiKey || 'no-key',
       fetch: buildProviderFetch(this.config, this.deps, [
-        createOpenAICompatibleMiddleware(this.config.type || 'opencode', effectiveBaseUrl, this.deps.loggingService),
+        createOpenAICompatibleMiddleware(
+          this.config.type || 'opencode',
+          effectiveBaseUrl,
+          this.deps.loggingService,
+          this.fallbackSessionId,
+        ),
       ]) as any,
     });
     applyClientResponseNormalization(openAIClient, this.deps.loggingService);

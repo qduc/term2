@@ -695,3 +695,65 @@ test('opencode provider type uses default base URL and falls back to OPENCODE_AP
   t.is(captured[0].headers.authorization, 'Bearer env-opencode-key');
   t.truthy(captured[0].headers['x-opencode-session']);
 });
+
+test('opencode provider type keeps the fallback session ID stable across turns', async (t) => {
+  const captured: CapturedRequest[] = [];
+  process.env.OPENCODE_API_KEY = 'env-opencode-key';
+  t.teardown(() => {
+    delete process.env.OPENCODE_API_KEY;
+  });
+
+  const provider = createCustomProviderModelProvider(
+    {
+      name: 'opencode-test',
+      type: 'opencode',
+    },
+    {
+      defaultModel: 'provider-model',
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const headers: Record<string, string> = {};
+        const rawHeaders = init?.headers as any;
+        if (rawHeaders) {
+          if (typeof rawHeaders.forEach === 'function') {
+            rawHeaders.forEach((v: string, k: string) => {
+              headers[k.toLowerCase()] = String(v);
+            });
+          } else {
+            for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
+              headers[k.toLowerCase()] = String(v);
+            }
+          }
+        }
+        const rawBody = typeof init?.body === 'string' ? init.body : '';
+        captured.push({
+          url: typeof input === 'string' ? input : (input as URL).toString(),
+          body: rawBody ? JSON.parse(rawBody) : null,
+          headers,
+        });
+        return new Response(JSON.stringify(successResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch,
+    },
+  );
+
+  const runTurn = async () => {
+    const model = await provider.getModel('provider-model');
+    return runUnderTrace(() =>
+      model.getResponse({
+        ...baseRequest,
+        input: [{ role: 'user', content: 'hello' }] as any,
+        modelSettings: {},
+      } as any),
+    );
+  };
+
+  await runTurn();
+  const firstSessionId = captured[0].headers['x-opencode-session'];
+
+  await runTurn();
+
+  t.is(captured.length, 2);
+  t.is(captured[1].headers['x-opencode-session'], firstSessionId);
+});

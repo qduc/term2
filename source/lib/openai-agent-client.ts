@@ -939,9 +939,32 @@ export class OpenAIAgentClient {
                 });
                 return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
               }
-              // Normal execution
-              const result = await definition.execute(params, _context, details);
-              return trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+
+              // Combine parent abort signal with any tool timeout signal passed by details
+              const parentSignal = this.#currentAbortController?.signal;
+              const toolSignal = details?.signal;
+              const combined = combineAbortSignals(parentSignal, toolSignal);
+              const combinedSignal = combined?.signal;
+              const cleanupSignal = combined?.cleanup;
+
+              const wrappedDetails = details
+                ? Object.create(Object.getPrototypeOf(details), {
+                    ...Object.getOwnPropertyDescriptors(details),
+                    ...(combinedSignal
+                      ? { signal: { value: combinedSignal, writable: true, enumerable: true, configurable: true } }
+                      : {}),
+                  })
+                : combinedSignal
+                ? { signal: combinedSignal }
+                : undefined;
+
+              try {
+                // Normal execution with combined abort signal
+                const result = await definition.execute(params, _context, wrappedDetails);
+                return trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+              } finally {
+                cleanupSignal?.();
+              }
             },
           }),
           definition.parameters,
@@ -1058,4 +1081,37 @@ export class OpenAIAgentClient {
   getSettings(): ISettingsService {
     return this.#settings;
   }
+}
+
+export function combineAbortSignals(
+  signal1?: AbortSignal,
+  signal2?: AbortSignal,
+): { signal: AbortSignal; cleanup: () => void } | undefined {
+  if (!signal1 && !signal2) return undefined;
+  if (!signal1) return { signal: signal2!, cleanup: () => {} };
+  if (!signal2) return { signal: signal1!, cleanup: () => {} };
+
+  if (typeof AbortSignal.any === 'function') {
+    return { signal: AbortSignal.any([signal1, signal2]), cleanup: () => {} };
+  }
+
+  const controller = new AbortController();
+  const onAbort = () => {
+    controller.abort();
+    cleanup();
+  };
+
+  const cleanup = () => {
+    signal1.removeEventListener('abort', onAbort);
+    signal2.removeEventListener('abort', onAbort);
+  };
+
+  if (signal1.aborted || signal2.aborted) {
+    controller.abort();
+  } else {
+    signal1.addEventListener('abort', onAbort);
+    signal2.addEventListener('abort', onAbort);
+  }
+
+  return { signal: controller.signal, cleanup };
 }

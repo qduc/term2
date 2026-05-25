@@ -159,22 +159,14 @@ export class CodexTokenManager {
     const expiryMs = getJwtExpiry(accessToken);
     const isExpiredOrSoon = expiryMs !== null && Date.now() + 5 * 60 * 1000 >= expiryMs;
 
-    const lastRefreshStr = fileData?.last_refresh;
-    const lastRefreshMs = lastRefreshStr ? Date.parse(lastRefreshStr) : NaN;
-    const timeSinceLastRefresh = isNaN(lastRefreshMs) ? Infinity : Date.now() - lastRefreshMs;
-    const isRefreshNeeded = isExpiredOrSoon || timeSinceLastRefresh >= 55 * 60 * 1000;
-
-    if (!isRefreshNeeded) {
+    if (!isExpiredOrSoon) {
       return accessToken;
     }
 
     if (!refreshToken) {
-      if (isExpiredOrSoon) {
-        throw new Error(
-          `Codex access token is expired or expiring soon, but no refresh token is present in ${tokenPath}`,
-        );
-      }
-      return accessToken;
+      throw new Error(
+        `Codex access token is expired or expiring soon, but no refresh token is present in ${tokenPath}`,
+      );
     }
 
     if (this.activeRefreshPromise) {
@@ -417,8 +409,7 @@ async function fetchCodexModels(
       const default_reasoning_level = item?.default_reasoning_level;
       return id ? { id, name, default_reasoning_level } : null;
     })
-    .filter(Boolean)
-    .reverse() as Array<{ id: string; name?: string; default_reasoning_level?: string }>;
+    .filter(Boolean) as Array<{ id: string; name?: string; default_reasoning_level?: string }>;
 }
 
 class FallbackCodexProvider implements ModelProvider {

@@ -328,7 +328,17 @@ export function createApplyPatchToolDefinition(deps: {
               await mkdirFn(path.dirname(targetPath));
 
               // Apply diff to empty content for new file
-              const content = applyDiff('', diff);
+              let content: string;
+              try {
+                content = applyDiff('', diff);
+              } catch (err: any) {
+                return {
+                  success: false,
+                  operation: 'create_file',
+                  path: filePath,
+                  error: formatPatchError(err, diff, ''),
+                };
+              }
               await writeFileFn(targetPath, content);
 
               if (enableFileLogging) {
@@ -367,6 +377,8 @@ export function createApplyPatchToolDefinition(deps: {
                   }
                   return {
                     success: false,
+                    operation: 'update_file',
+                    path: filePath,
                     error: `Cannot update missing file: ${filePath}`,
                   };
                 }
@@ -375,7 +387,17 @@ export function createApplyPatchToolDefinition(deps: {
               }
 
               // Re-apply validation against the locked, current content.
-              const patched = applyDiff(original, diff);
+              let patched: string;
+              try {
+                patched = applyDiff(original, diff);
+              } catch (err: any) {
+                return {
+                  success: false,
+                  operation: 'update_file',
+                  path: filePath,
+                  error: formatPatchError(err, diff, original),
+                };
+              }
               await writeFileFn(targetPath, patched);
 
               if (enableFileLogging) {
@@ -449,4 +471,160 @@ export function createApplyPatchToolDefinition(deps: {
     },
     formatCommandMessage: formatApplyPatchCommandMessage,
   };
+}
+
+/**
+ * Helper to analyze why a context block failed to match the original file content.
+ */
+export function diagnoseContextMismatch(contextText: string, original: string): string {
+  const contextLines = contextText.split(/\r?\n/);
+  const originalLines = original.split(/\r?\n/);
+
+  if (originalLines.length === 0 || (originalLines.length === 1 && originalLines[0] === '')) {
+    return 'The target file is empty. If you want to create a new file, use type: "create_file" or provide a diff that starts from an empty file.';
+  }
+
+  const reports: string[] = [];
+
+  for (let i = 0; i < contextLines.length; i++) {
+    const contextLine = contextLines[i];
+    const trimmedContext = contextLine.trim();
+    if (!trimmedContext) continue;
+
+    // Find any line in original that matches when trimmed
+    const matchIndices: number[] = [];
+    originalLines.forEach((origLine, idx) => {
+      if (origLine.trim() === trimmedContext) {
+        matchIndices.push(idx);
+      }
+    });
+
+    if (matchIndices.length === 0) {
+      reports.push(`- Line ${i + 1}: "${trimmedContext}" could not be found anywhere in the file.`);
+    } else {
+      // Check if ANY of the matches in the original file are exact matches (including indentation)
+      const exactMatch = matchIndices.some((idx) => originalLines[idx] === contextLine);
+      if (!exactMatch) {
+        // Find if any match has matching indentation
+        const sameIndentMatch = matchIndices.find((idx) => {
+          const origIndent = originalLines[idx].match(/^\s*/)?.[0] || '';
+          const contextIndent = contextLine.match(/^\s*/)?.[0] || '';
+          return origIndent === contextIndent;
+        });
+
+        if (sameIndentMatch !== undefined) {
+          const origLine = originalLines[sameIndentMatch];
+          reports.push(
+            `- Line ${i + 1}: Whitespace mismatch for "${trimmedContext}". Diff has "${contextLine.replace(
+              / /g,
+              '·',
+            )}" but file has "${origLine.replace(/ /g, '·')}" on line ${sameIndentMatch + 1}.`,
+          );
+        } else {
+          const matchIdx = matchIndices[0];
+          const origLine = originalLines[matchIdx];
+          const contextIndent = contextLine.match(/^\s*/)?.[0] || '';
+          const origIndent = origLine.match(/^\s*/)?.[0] || '';
+          const displayContextIndent = contextIndent.replace(/ /g, '·').replace(/\t/g, '→');
+          const displayOrigIndent = origIndent.replace(/ /g, '·').replace(/\t/g, '→');
+          reports.push(
+            `- Line ${
+              i + 1
+            }: Indentation mismatch for "${trimmedContext}". Diff expected "${displayContextIndent}" but file has "${displayOrigIndent}" on line ${
+              matchIdx + 1
+            }.`,
+          );
+        }
+      }
+    }
+  }
+
+  let diagnosis = 'The patch failed because the search context block could not be found in the file.\n';
+  if (reports.length > 0) {
+    diagnosis += 'Specific mismatches found:\n' + reports.slice(0, 5).join('\n');
+    if (reports.length > 5) {
+      diagnosis += `\n... and ${reports.length - 5} more line mismatches.`;
+    }
+  } else {
+    diagnosis +=
+      'All context lines exist in the file individually, but not in the sequence/location specified. Please ensure the context block is contiguous and matches the file structure.';
+  }
+
+  return diagnosis;
+}
+
+/**
+ * Format errors from applyDiff to be clearer and more actionable.
+ */
+export function formatPatchError(error: Error, diff: string, original?: string): string {
+  const message = error.message || String(error);
+  let formatted = '';
+
+  // 1. Check for standard unified diff headers: "--- a/file" or "+++ b/file"
+  if (diff.includes('--- ') || diff.includes('+++ ')) {
+    formatted =
+      'The patch diff contains unified diff headers (e.g. "--- a/file" or "+++ b/file"). The apply_patch tool uses a headerless/metadata-free diff format. Please remove the file header lines and only include: "@@ Anchor", context lines (space prefix), added lines (+ prefix), and removed lines (- prefix).';
+  }
+  // 2. Check for unified diff chunk headers with line numbers: "@@ -1,5 +1,6 @@"
+  else if (/@@\s+-\d+(?:,\d+)?\s+\+\d+(?:,\d+)?\s+@@/.test(diff)) {
+    formatted =
+      'The patch diff contains standard unified diff chunk headers with line numbers (e.g. "@@ -1,5 +1,6 @@"). The apply_patch tool uses headerless anchors (e.g. "@@ functionName" or a bare "@@"). Please remove the line numbers from your "@@" anchors.';
+  }
+  // 3. Check for leading line numbers like "10: const x = 1;" or "10  const x = 1;"
+  else if (
+    diff.split(/\r?\n/).some((line) => /^\s*\d+[:\s]/.test(line) && !line.startsWith('@@') && !line.startsWith('***'))
+  ) {
+    formatted =
+      'Some lines in the patch diff start with line numbers (e.g. "10: code" or "10 code"). Please remove all line numbers from the start of the lines.';
+  }
+  // 4. Check for invalid line prefix (missing space, +, -, or @@)
+  else {
+    const lines = diff.split(/\r?\n/);
+    let invalidPrefixLine = -1;
+    let invalidLineContent = '';
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (
+        line.startsWith('@@') ||
+        line.trim() === '' ||
+        line.startsWith('***') ||
+        line === '*** End Patch' ||
+        line === '*** End of File'
+      ) {
+        continue;
+      }
+      if (line[0] !== ' ' && line[0] !== '+' && line[0] !== '-') {
+        invalidPrefixLine = i + 1;
+        invalidLineContent = line;
+        break;
+      }
+    }
+
+    if (invalidPrefixLine !== -1) {
+      formatted = `Line ${invalidPrefixLine} in the diff does not start with a valid prefix (' ', '+', or '-'). It starts with '${invalidLineContent[0]}':\n"${invalidLineContent}"\n\nEach line in the diff must start with one of those three characters (or '@@' for anchors). Please ensure unchanged context lines start with a single space character.`;
+    }
+    // 5. Handle "Invalid Context" / "Invalid EOF Context" errors
+    else {
+      const contextMatch = message.match(/^Invalid (?:EOF )?Context \d+:\n([\s\S]*)$/);
+      if (contextMatch && original !== undefined) {
+        const contextText = contextMatch[1];
+        formatted = diagnoseContextMismatch(contextText, original);
+      }
+      // 6. Handle "Invalid Line" error
+      else {
+        const invalidLineMatch = message.match(/^Invalid Line:\s*([\s\S]*)$/);
+        if (invalidLineMatch) {
+          const invalidLine = invalidLineMatch[1].trim();
+          formatted = `The patch has an invalid line: "${invalidLine}". Each line in the diff must start with a valid prefix: ' ' (space) for context, '+' for addition, or '-' for deletion. Ensure you do not include line numbers or unified diff headers.`;
+        }
+      }
+    }
+  }
+
+  if (formatted) {
+    return `Invalid patch: ${formatted}`;
+  }
+
+  // 7. General cleanup for any other error
+  return `Invalid patch: ${message}. Please check the file path and diff format.`;
 }

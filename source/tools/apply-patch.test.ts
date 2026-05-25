@@ -252,3 +252,92 @@ test.serial('execute: rejects invalid diffs with proper error', async (t) => {
     t.true(parsed.output[0].error.includes('Invalid patch'));
   });
 });
+
+test.serial('execute: detailed error for unified diff headers', async (t) => {
+  await withTempDir(async () => {
+    const tool = createTool();
+    const result = await tool.execute({
+      type: 'create_file',
+      path: 'test.txt',
+      diff: '--- a/test.txt\n+++ b/test.txt\n+Hello',
+    });
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+    t.true(parsed.output[0].error.includes('unified diff headers'));
+  });
+});
+
+test.serial('execute: detailed error for chunk headers with line numbers', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    const filePath = 'existing.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'Hello\nWorld');
+
+    const result = await tool.execute({
+      type: 'update_file',
+      path: filePath,
+      diff: '@@ -1,2 +1,2 @@\n Hello\n-World\n+Universe\n line missing',
+    });
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+    t.true(parsed.output[0].error.includes('line numbers from your "@@" anchors'));
+  });
+});
+
+test.serial('execute: detailed error for leading line numbers', async (t) => {
+  await withTempDir(async () => {
+    const tool = createTool();
+    const result = await tool.execute({
+      type: 'create_file',
+      path: 'test.txt',
+      diff: '10: +Hello',
+    });
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+    t.true(parsed.output[0].error.includes('remove all line numbers'));
+  });
+});
+
+test.serial('execute: detailed error for invalid line prefix', async (t) => {
+  await withTempDir(async () => {
+    const tool = createTool();
+    const result = await tool.execute({
+      type: 'create_file',
+      path: 'test.txt',
+      diff: 'Hello',
+    });
+    const parsed = JSON.parse(result);
+    t.false(parsed.output[0].success);
+    t.true(parsed.output[0].error.includes('does not start with a valid prefix'));
+  });
+});
+
+test.serial('execute: detailed error for context block mismatch', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    const filePath = 'existing.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'line one\n  line two\nline three');
+
+    // Missing line mismatch
+    const result1 = await tool.execute({
+      type: 'update_file',
+      path: filePath,
+      diff: '@@\n line one\n line missing\n line three',
+    });
+    const parsed1 = JSON.parse(result1);
+    t.false(parsed1.output[0].success);
+    t.true(parsed1.output[0].error.includes('could not be found anywhere in the file'));
+
+    // Indentation mismatch (with a missing line to force application failure)
+    const result2 = await tool.execute({
+      type: 'update_file',
+      path: filePath,
+      diff: '@@\n line one\n line two\n line missing\n line three', // diff has 0 spaces for 'line two', file has 2 spaces
+    });
+    const parsed2 = JSON.parse(result2);
+    t.false(parsed2.output[0].success);
+    t.true(parsed2.output[0].error.includes('Indentation mismatch for "line two"'));
+  });
+});

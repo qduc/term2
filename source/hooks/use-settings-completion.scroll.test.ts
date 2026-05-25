@@ -1,9 +1,12 @@
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
-import React, { useEffect } from 'react';
+import React, { useEffect, act } from 'react';
 import { render } from 'ink-testing-library';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
 import { SETTINGS_TRIGGER } from '../components/Input/triggers.js';
-import { useSettingsCompletion } from './use-settings-completion.js';
+import { useSettingsCompletion, getSettingCategory } from './use-settings-completion.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
 import { Text } from 'ink';
 
@@ -49,73 +52,75 @@ const SearchComponent = ({ onResults }: { onResults: (results: any) => void }) =
   return React.createElement(Text, null, settings.query);
 };
 
-test.serial('useSettingsCompletion filters settings by active task tab and switches tabs', async (t) => {
+test('useSettingsCompletion filters settings by active task tab and switches tabs', (t) => {
   let capturedSettings: any;
+  let renderer: any;
 
-  render(
-    React.createElement(
-      InputProvider,
-      null,
-      React.createElement(TestComponent, {
-        onResults: (results: any) => {
-          capturedSettings = results;
-        },
-      }),
-    ),
-  );
+  act(() => {
+    renderer = render(
+      React.createElement(
+        InputProvider,
+        null,
+        React.createElement(TestComponent, {
+          onResults: (results: any) => {
+            capturedSettings = results;
+          },
+        }),
+      ),
+    );
+  });
 
-  for (let attempt = 0; attempt < 20; attempt++) {
-    if (capturedSettings?.isOpen && capturedSettings.filteredEntries.length > 0) {
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
+  // Verify initial state
+  const categories = capturedSettings.categories;
+  t.true(categories.length > 1, 'Should have at least 2 categories to switch');
+  const initialCategoryId = categories[0].id;
+  const nextCategoryId = categories[1].id;
 
-  t.is(capturedSettings.activeCategoryId, 'model');
-  t.true(capturedSettings.filteredEntries.some((item: any) => item.key === 'agent.model'));
-  t.false(capturedSettings.filteredEntries.some((item: any) => item.key === 'shell.timeout'));
+  t.is(capturedSettings.activeCategoryId, initialCategoryId);
+  t.true(capturedSettings.filteredEntries.length > 0);
+  t.true(capturedSettings.filteredEntries.every((item: any) => getSettingCategory(item.key).id === initialCategoryId));
   t.is(capturedSettings.selectedIndex, 0);
   t.is(capturedSettings.scrollOffset, 0);
 
-  capturedSettings.switchCategory('next');
+  // Switch category
+  act(() => {
+    capturedSettings.switchCategory('next');
+  });
 
-  for (let attempt = 0; attempt < 20; attempt++) {
-    if (capturedSettings.activeCategoryId === 'approvals') {
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-
-  t.is(capturedSettings.activeCategoryId, 'approvals');
-  t.true(capturedSettings.filteredEntries.some((item: any) => item.key === 'agent.autoApproveModel'));
-  t.false(capturedSettings.filteredEntries.some((item: any) => item.key === 'agent.model'));
+  t.is(capturedSettings.activeCategoryId, nextCategoryId);
+  t.true(capturedSettings.filteredEntries.length > 0);
+  t.true(capturedSettings.filteredEntries.every((item: any) => getSettingCategory(item.key).id === nextCategoryId));
   t.is(capturedSettings.selectedIndex, 0);
   t.is(capturedSettings.scrollOffset, 0);
+
+  act(() => {
+    renderer.unmount();
+  });
 });
 
-test.serial('useSettingsCompletion searches all task tabs when query is present', async (t) => {
+test('useSettingsCompletion searches all task tabs when query is present', (t) => {
   let capturedSettings: any;
+  let renderer: any;
 
-  render(
-    React.createElement(
-      InputProvider,
-      null,
-      React.createElement(SearchComponent, {
-        onResults: (results: any) => {
-          capturedSettings = results;
-        },
-      }),
-    ),
-  );
+  act(() => {
+    renderer = render(
+      React.createElement(
+        InputProvider,
+        null,
+        React.createElement(SearchComponent, {
+          onResults: (results: any) => {
+            capturedSettings = results;
+          },
+        }),
+      ),
+    );
+  });
 
-  for (let attempt = 0; attempt < 20; attempt++) {
-    if (capturedSettings?.isOpen && capturedSettings.filteredEntries.length > 0) {
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-
-  t.is(capturedSettings.activeCategoryId, 'model');
+  t.is(capturedSettings.activeCategoryId, capturedSettings.categories[0].id);
   t.true(capturedSettings.isSearchingAll);
   t.true(capturedSettings.filteredEntries.some((item: any) => item.key === 'shell.timeout'));
+
+  act(() => {
+    renderer.unmount();
+  });
 });

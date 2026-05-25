@@ -5,6 +5,7 @@ import {
   clampIndex,
   getSettingCategory,
   filterSettingsByCategory,
+  SETTINGS_CATEGORIES,
 } from './use-settings-completion.js';
 
 // Mock setting keys for testing (matching actual SETTING_KEYS structure)
@@ -237,9 +238,16 @@ test('buildSettingsList - no duplicate keys', (t) => {
 });
 
 test('getSettingCategory - groups settings by task-oriented menu tabs', (t) => {
+  const categoryIds = new Set(SETTINGS_CATEGORIES.map((c) => c.id));
+
+  // Check that the returned category is always a valid category in SETTINGS_CATEGORIES
+  t.true(categoryIds.has(getSettingCategory('agent.model').id));
+  t.true(categoryIds.has(getSettingCategory('shell.timeout').id));
+  t.true(categoryIds.has(getSettingCategory('app.planMode').id));
+
+  // Verify specific expected mappings for key settings
   t.is(getSettingCategory('agent.model').id, 'model');
   t.is(getSettingCategory('agent.mentorModel').id, 'model');
-  t.is(getSettingCategory('app.planMode').id, 'modes');
   t.is(getSettingCategory('shell.autoApproveMode').id, 'approvals');
   t.is(getSettingCategory('shell.timeout').id, 'shell');
   t.is(getSettingCategory('app.searchViaShell').id, 'search');

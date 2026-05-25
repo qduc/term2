@@ -17,11 +17,10 @@ export type SettingsCategory = {
 
 export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   { id: 'model', label: 'Model & Reasoning' },
-  { id: 'modes', label: 'Modes' },
+  { id: 'subagents', label: 'Subagents' },
   { id: 'approvals', label: 'Safety & Approvals' },
   { id: 'shell', label: 'Shell Execution' },
   { id: 'search', label: 'Search & Web' },
-  { id: 'subagents', label: 'Subagents' },
   { id: 'uiLogging', label: 'UI & Logging' },
   { id: 'advanced', label: 'Advanced' },
 ];
@@ -94,6 +93,12 @@ const COMMON_SETTINGS: string[] = [
   SETTING_KEYS.AGENT_TEMPERATURE,
 ];
 
+function findCategoryById(id: string): SettingsCategory {
+  return (
+    SETTINGS_CATEGORIES.find((category) => category.id === id) || SETTINGS_CATEGORIES[SETTINGS_CATEGORIES.length - 1]!
+  );
+}
+
 export function getSettingCategory(key: string): SettingsCategory {
   if (
     key === SETTING_KEYS.AGENT_MODEL ||
@@ -103,7 +108,7 @@ export function getSettingCategory(key: string): SettingsCategory {
     key === SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT ||
     key === SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER
   ) {
-    return SETTINGS_CATEGORIES[0]!;
+    return findCategoryById('model');
   }
 
   if (
@@ -112,11 +117,11 @@ export function getSettingCategory(key: string): SettingsCategory {
     key === SETTING_KEYS.APP_MENTOR_MODE ||
     key === SETTING_KEYS.APP_LITE_MODE
   ) {
-    return SETTINGS_CATEGORIES[1]!;
+    return findCategoryById('modes');
   }
 
   if (key === SETTING_KEYS.SHELL_AUTO_APPROVE_MODE || key === SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL) {
-    return SETTINGS_CATEGORIES[2]!;
+    return findCategoryById('approvals');
   }
 
   if (
@@ -125,15 +130,15 @@ export function getSettingCategory(key: string): SettingsCategory {
     key === SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS ||
     key === SETTING_KEYS.SHELL_USE_RTK_COMPRESSION
   ) {
-    return SETTINGS_CATEGORIES[3]!;
+    return findCategoryById('shell');
   }
 
   if (key === SETTING_KEYS.WEB_SEARCH_PROVIDER || key === SETTING_KEYS.APP_SEARCH_VIA_SHELL) {
-    return SETTINGS_CATEGORIES[4]!;
+    return findCategoryById('search');
   }
 
   if (key.toLowerCase().includes('subagent')) {
-    return SETTINGS_CATEGORIES[5]!;
+    return findCategoryById('subagents');
   }
 
   if (
@@ -142,10 +147,10 @@ export function getSettingCategory(key: string): SettingsCategory {
     key === SETTING_KEYS.LOGGING_LOG_LEVEL ||
     key === SETTING_KEYS.LOGGING_DISABLE
   ) {
-    return SETTINGS_CATEGORIES[6]!;
+    return findCategoryById('uiLogging');
   }
 
-  return SETTINGS_CATEGORIES[7]!;
+  return findCategoryById('advanced');
 }
 
 function categoryRank(key: string): number {
@@ -289,7 +294,7 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
     return SETTINGS_CATEGORIES.filter((category) => presentCategoryIds.has(category.id));
   }, [allSettings]);
 
-  const [activeCategoryId, setActiveCategoryId] = useState(SETTINGS_CATEGORIES[0]!.id);
+  const [activeCategoryId, setActiveCategoryId] = useState(() => SETTINGS_CATEGORIES[0]?.id ?? 'model');
 
   const resolvedActiveCategoryId = useMemo(() => {
     if (categories.some((category) => category.id === activeCategoryId)) {

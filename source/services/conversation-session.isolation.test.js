@@ -66,9 +66,9 @@ test('sessions do not share previousResponseId', async (t) => {
   await sessionA.sendMessage('A2');
 
   t.deepEqual(startCalls, [
-    { text: 'A1', options: { previousResponseId: null } },
-    { text: 'B1', options: { previousResponseId: null } },
-    { text: 'A2', options: { previousResponseId: 'resp-A1' } },
+    { text: 'A1', options: { previousResponseId: null, sessionId: 'A' } },
+    { text: 'B1', options: { previousResponseId: null, sessionId: 'B' } },
+    { text: 'A2', options: { previousResponseId: 'resp-A1', sessionId: 'A' } },
   ]);
 });
 

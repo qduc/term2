@@ -218,7 +218,7 @@ test('emits events when resolving aborted approval on next message', async (t) =
     },
     async continueRunStream(state, options) {
       t.is(state, initialStream.state);
-      t.deepEqual(options, { previousResponseId: 'resp_test' });
+      t.deepEqual(options, { previousResponseId: 'resp_test', sessionId: 'default' });
       return continuationStream;
     },
   };
@@ -377,8 +377,8 @@ test('passes previous response ids into subsequent runs', async (t) => {
   const secondResult = await service.sendMessage('second');
 
   t.deepEqual(startCalls, [
-    { text: 'first', options: { previousResponseId: null } },
-    { text: 'second', options: { previousResponseId: 'resp-1' } },
+    { text: 'first', options: { previousResponseId: null, sessionId: 'default' } },
+    { text: 'second', options: { previousResponseId: 'resp-1', sessionId: 'default' } },
   ]);
   t.is(secondResult.type, 'response');
   t.is(secondResult.finalText, 'Second run done.');
@@ -413,7 +413,7 @@ test('emits approval interruptions and resumes after approval', async (t) => {
     },
     async continueRunStream(state, options) {
       t.is(state, initialStream.state);
-      t.deepEqual(options, { previousResponseId: 'resp_test' });
+      t.deepEqual(options, { previousResponseId: 'resp_test', sessionId: 'default' });
       return continuationStream;
     },
   };
@@ -721,7 +721,7 @@ test('resetWithNewId() clears conversation state', async (t) => {
 
   await service.sendMessage('second');
 
-  t.deepEqual(startCalls[1].options, { previousResponseId: null });
+  t.deepEqual(startCalls[1].options, { previousResponseId: null, sessionId: 'new-id' });
 });
 
 test('resetWithNewId() updates sessionId', (t) => {
@@ -856,7 +856,7 @@ test('handleApprovalDecision() rejects interruption when answer is n', async (t)
       return initialStream;
     },
     async continueRunStream(state, options) {
-      t.deepEqual(options, { previousResponseId: 'resp_test' });
+      t.deepEqual(options, { previousResponseId: 'resp_test', sessionId: 'default' });
       return continuationStream;
     },
     addToolInterceptor(fn) {

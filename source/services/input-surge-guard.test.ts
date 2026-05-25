@@ -1,5 +1,5 @@
 import test from 'ava';
-import { collectInputSurgeStats, InputSurgeGuard } from './input-surge-guard.js';
+import { collectDuplicateToolCallResultPairs, collectInputSurgeStats, InputSurgeGuard } from './input-surge-guard.js';
 
 const toolCall = (callId: string, type = 'function_call') => ({
   type,
@@ -100,6 +100,22 @@ test('InputSurgeGuard blocks duplicate tool call and result pairs at two copies'
 
   t.is(decision.action, 'block');
   t.true(decision.reason?.includes('tool call/result pairs'));
+});
+
+test('collectDuplicateToolCallResultPairs reports duplicated call/result pairs without content', (t) => {
+  const input = [
+    toolCall('call-1'),
+    { type: 'function_call_result', callId: 'call-1', output: { text: 'secret' } },
+    toolCall('call-1'),
+    { type: 'function_call_result', callId: 'call-1', output: { text: 'secret again' } },
+    toolCall('call-2'),
+    { type: 'function_call_result', callId: 'call-2', output: { text: 'single' } },
+  ];
+
+  t.deepEqual(collectDuplicateToolCallResultPairs(input), {
+    pairs: 1,
+    maxCopies: 2,
+  });
 });
 
 test('InputSurgeGuard blocks a large tool result appended after a successful full-history request', (t) => {

@@ -69,6 +69,48 @@ test('run() streams ConversationEvents (text_delta → final) in order', async (
   t.is(emitted[2].finalText, 'Hello world');
 });
 
+test('run() warns when completed stream history already contains duplicated tool pairs', async (t) => {
+  const warnings = [];
+  const logger = {
+    ...mockLogger,
+    warn: (message, meta) => warnings.push({ message, meta }),
+  };
+  const stream = new MockStream([]);
+  stream.history = [
+    { role: 'user', type: 'message', content: 'inspect' },
+    { type: 'function_call', callId: 'call-read', id: 'fc_1' },
+    { type: 'function_call_result', callId: 'call-read', id: 'fcr_1', output: 'hidden' },
+    { type: 'function_call', callId: 'call-read', id: 'fc_2' },
+    { type: 'function_call_result', callId: 'call-read', id: 'fcr_2', output: 'hidden again' },
+  ];
+  stream.newItems = stream.history.slice(1);
+  stream.state = { _generatedItems: stream.newItems };
+
+  const mockClient = {
+    async startStream() {
+      return stream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger },
+  });
+
+  for await (const _ev of session.run('hi')) {
+    // consume stream
+  }
+
+  const warning = warnings.find((entry) => entry.meta?.eventType === 'conversation.stream_history.replayed_tools');
+  t.truthy(warning);
+  t.is(warning.meta.phase, 'post_stream');
+  t.is(warning.meta.source, 'startStream');
+  t.is(warning.meta.historyDuplicatePairs, 1);
+  t.is(warning.meta.newItemsDuplicatePairs, 1);
+  t.is(warning.meta.stateGeneratedItemsDuplicatePairs, 1);
+  t.false('output' in warning.meta);
+});
+
 test('run() falls back to standard service tier after flex timeout', async (t) => {
   const timeoutError = new Error(
     'data: {"error":{"code":504,"message":"The operation was aborted","metadata":{"error_type":"timeout"}}}',

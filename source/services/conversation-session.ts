@@ -23,7 +23,7 @@ import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { buildConversationResult, toTerminalEvent } from './conversation-result-builder.js';
 import type { AgentStream } from './agent-stream.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
-import { InputSurgeGuard } from './input-surge-guard.js';
+import { collectDuplicateToolCallResultPairs, InputSurgeGuard } from './input-surge-guard.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -31,6 +31,57 @@ export type ConversationResult = ConversationTerminal;
 const supportsConversationChaining = (providerId: string): boolean => {
   const providerDef = getProvider(providerId);
   return providerDef?.capabilities?.supportsConversationChaining ?? false;
+};
+
+const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
+type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
+
+const warnIfStreamHistoryReplayedTools = ({
+  logger,
+  sessionId,
+  source,
+  stream,
+}: {
+  logger: ILoggingService;
+  sessionId: string;
+  source: StreamHistorySource;
+  stream: AgentStream;
+}): void => {
+  const streamRecord = stream as unknown as {
+    history?: unknown;
+    newItems?: unknown;
+    state?: { _generatedItems?: unknown };
+  };
+  const history = asArray(streamRecord.history);
+  const newItems = asArray(streamRecord.newItems);
+  const stateGeneratedItems = asArray(streamRecord.state?._generatedItems);
+
+  const historyDuplicates = collectDuplicateToolCallResultPairs(history);
+  const newItemsDuplicates = collectDuplicateToolCallResultPairs(newItems);
+  const stateGeneratedItemsDuplicates = collectDuplicateToolCallResultPairs(stateGeneratedItems);
+
+  if (historyDuplicates.pairs === 0 && newItemsDuplicates.pairs === 0 && stateGeneratedItemsDuplicates.pairs === 0) {
+    return;
+  }
+
+  logger.warn('Completed stream history contains replayed tool call/result pairs', {
+    eventType: 'conversation.stream_history.replayed_tools',
+    category: 'provider',
+    phase: 'post_stream',
+    sessionId,
+    traceId: logger.getCorrelationId(),
+    source,
+    historyLength: history.length,
+    newItemsLength: newItems.length,
+    stateGeneratedItemsLength: stateGeneratedItems.length,
+    historyDuplicatePairs: historyDuplicates.pairs,
+    historyMaxCopies: historyDuplicates.maxCopies,
+    newItemsDuplicatePairs: newItemsDuplicates.pairs,
+    newItemsMaxCopies: newItemsDuplicates.maxCopies,
+    stateGeneratedItemsDuplicatePairs: stateGeneratedItemsDuplicates.pairs,
+    stateGeneratedItemsMaxCopies: stateGeneratedItemsDuplicates.maxCopies,
+  });
 };
 
 export class ConversationSession {
@@ -294,6 +345,12 @@ export class ConversationSession {
 
           if (this.#isCurrentGeneration(gen)) {
             this.previousResponseId = continuedStream.lastResponseId ?? null;
+            warnIfStreamHistoryReplayedTools({
+              logger: this.logger,
+              sessionId: this.id,
+              source: 'abortResolution',
+              stream: continuedStream,
+            });
             this.conversationStore.updateFromResult(continuedStream);
           }
 
@@ -423,6 +480,12 @@ export class ConversationSession {
 
       if (this.#isCurrentGeneration(gen)) {
         this.previousResponseId = stream.lastResponseId ?? null;
+        warnIfStreamHistoryReplayedTools({
+          logger: this.logger,
+          sessionId: this.id,
+          source: 'startStream',
+          stream,
+        });
         this.conversationStore.updateFromResult(stream);
       }
 
@@ -606,6 +669,12 @@ export class ConversationSession {
 
           if (this.#isCurrentGeneration(gen)) {
             this.previousResponseId = stream.lastResponseId ?? null;
+            warnIfStreamHistoryReplayedTools({
+              logger: this.logger,
+              sessionId: this.id,
+              source: 'continueRunStream',
+              stream,
+            });
             this.conversationStore.updateFromResult(stream);
           }
 

@@ -1,5 +1,44 @@
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 
+type DiagnosticLogger = {
+  warn?: (message: string, meta?: Record<string, unknown>) => void;
+};
+
+const SUSPICIOUS_RECONSTRUCTED_OUTPUT_ITEM_COUNT = 20;
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const stringValue = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
+
+const summarizeReconstructedItems = (items: unknown[]): Record<string, unknown> => {
+  const typeCounts: Record<string, number> = {};
+  let functionCallCount = 0;
+
+  for (const item of items) {
+    const record = asRecord(item);
+    const type = stringValue(record?.type) ?? 'unknown';
+    typeCounts[type] = (typeCounts[type] ?? 0) + 1;
+    if (type === 'function_call') {
+      functionCallCount++;
+    }
+  }
+
+  const first = asRecord(items[0]);
+  const last = asRecord(items[items.length - 1]);
+  return {
+    itemCount: items.length,
+    typeCounts,
+    functionCallCount,
+    firstItemType: stringValue(first?.type),
+    firstItemId: stringValue(first?.id),
+    firstItemCallId: stringValue(first?.call_id) ?? stringValue(first?.callId),
+    lastItemType: stringValue(last?.type),
+    lastItemId: stringValue(last?.id),
+    lastItemCallId: stringValue(last?.call_id) ?? stringValue(last?.callId),
+  };
+};
+
 // Codex's `/backend-api/codex/responses` endpoint ships `response.completed`
 // with an empty `output` array even when the assistant message was already
 // delivered via `response.output_item.done`. The agents-SDK runner trusts
@@ -14,7 +53,13 @@ import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-ope
 // existing conversion logic (`convertToOutputItem`) produces a normal
 // `response_done` event.
 export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
-  constructor(client: any, model: string, private readonly tokenManager: any, options?: any) {
+  constructor(
+    client: any,
+    model: string,
+    private readonly tokenManager: any,
+    private readonly diagnosticLogger?: DiagnosticLogger,
+    options?: any,
+  ) {
     super(client, model, options);
   }
 
@@ -73,11 +118,15 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
     const response = await (OpenAIResponsesWSModel.prototype as any)._fetchResponse.call(this, updatedRequest, stream);
     if (!stream) return response;
-    return wrapCodexStream(response);
+    return wrapCodexStream(response, this.diagnosticLogger);
   }
 }
 
 export class CodexResponsesModel extends OpenAIResponsesModel {
+  constructor(client: any, model: string, private readonly diagnosticLogger?: DiagnosticLogger) {
+    super(client, model);
+  }
+
   _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
     const requestData = { ...built.requestData };
@@ -109,11 +158,11 @@ export class CodexResponsesModel extends OpenAIResponsesModel {
   async _fetchResponse(request: any, stream: boolean): Promise<any> {
     const response = await (OpenAIResponsesModel.prototype as any)._fetchResponse.call(this, request, stream);
     if (!stream) return response;
-    return wrapCodexStream(response);
+    return wrapCodexStream(response, this.diagnosticLogger);
   }
 }
 
-export async function* wrapCodexStream(source: AsyncIterable<any>): AsyncIterable<any> {
+export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: DiagnosticLogger): AsyncIterable<any> {
   let accumulatedItems: any[] = [];
   for await (let event of source) {
     const type = event?.type;
@@ -124,6 +173,15 @@ export async function* wrapCodexStream(source: AsyncIterable<any>): AsyncIterabl
       if (Array.isArray(output) && output.length === 0 && accumulatedItems.length > 0) {
         const reconstructedOutput = accumulatedItems;
         accumulatedItems = [];
+        if (reconstructedOutput.length >= SUSPICIOUS_RECONSTRUCTED_OUTPUT_ITEM_COUNT) {
+          logger?.warn?.('Codex stream reconstructed a suspiciously large completed response output', {
+            eventType: 'codex.reconstructed_output.suspicious',
+            category: 'provider',
+            phase: 'provider_response',
+            responseId: stringValue(event.response.id),
+            ...summarizeReconstructedItems(reconstructedOutput),
+          });
+        }
         try {
           event.response.output = reconstructedOutput;
         } catch {

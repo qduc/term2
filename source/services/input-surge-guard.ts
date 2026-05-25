@@ -106,7 +106,7 @@ export const collectInputSurgeStats = (input: unknown): InputSurgeStats => {
   };
 };
 
-const countDuplicateToolCallResultPairs = (input: unknown): { pairs: number; maxCopies: number } => {
+export const collectDuplicateToolCallResultPairs = (input: unknown): { pairs: number; maxCopies: number } => {
   const items = Array.isArray(input) ? input : [input];
   const calls = new Map<string, number>();
   const results = new Map<string, number>();
@@ -190,7 +190,7 @@ export class InputSurgeGuard {
 
     const previousStats = this.#lastSuccessfulStats.get(kind);
 
-    const duplicatePairs = countDuplicateToolCallResultPairs(input);
+    const duplicatePairs = collectDuplicateToolCallResultPairs(input);
     if (duplicatePairs.pairs >= 3 && duplicatePairs.maxCopies >= 2) {
       return {
         action: 'block',

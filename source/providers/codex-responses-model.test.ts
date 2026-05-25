@@ -133,6 +133,36 @@ test('wrapCodexStream survives a frozen response object by cloning', async (t) =
   t.is(completed.response.output[0], item);
 });
 
+test('wrapCodexStream warns with metadata when reconstructed output is suspiciously large', async (t) => {
+  const warnings: any[] = [];
+  const items = Array.from({ length: 21 }, (_, index) => ({
+    type: index % 2 === 0 ? 'function_call' : 'function_call_output',
+    id: `item_${index}`,
+    call_id: `call_${Math.floor(index / 2)}`,
+    output: `hidden-output-${index}`,
+  }));
+
+  const events = await collect(
+    wrapCodexStream(
+      makeStream([
+        ...items.map((item, output_index) => ({ type: 'response.output_item.done', output_index, item })),
+        { type: 'response.completed', response: { id: 'resp_large', output: [], usage: {} } },
+      ]),
+      { warn: (_message: string, meta?: any) => warnings.push(meta) },
+    ),
+  );
+
+  const completed = events.find((e: any) => e.type === 'response.completed') as any;
+  t.is(completed.response.output.length, 21);
+  t.is(warnings.length, 1);
+  t.is(warnings[0].eventType, 'codex.reconstructed_output.suspicious');
+  t.is(warnings[0].responseId, 'resp_large');
+  t.is(warnings[0].itemCount, 21);
+  t.is(warnings[0].firstItemId, 'item_0');
+  t.is(warnings[0].lastItemId, 'item_20');
+  t.false('output' in warnings[0]);
+});
+
 // Integration check: confirm CodexResponsesModel.getStreamedResponse threads
 // the stream through wrapCodexStream so a Codex-style terminal frame with
 // empty output gets rebuilt into a populated response_done event. We stub the

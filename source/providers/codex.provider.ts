@@ -436,8 +436,13 @@ class FallbackCodexProvider implements ModelProvider {
       return cached;
     }
 
-    const wsModel = new CodexResponsesWSModel(this.openAIClient as any, resolvedModel, this.tokenManager);
-    const httpModel = new CodexResponsesModel(this.openAIClient as any, resolvedModel);
+    const wsModel = new CodexResponsesWSModel(
+      this.openAIClient as any,
+      resolvedModel,
+      this.tokenManager,
+      this.loggingService,
+    );
+    const httpModel = new CodexResponsesModel(this.openAIClient as any, resolvedModel, this.loggingService);
 
     const fallbackModel = new FallbackResponsesModel(
       wsModel,

@@ -2,10 +2,9 @@ import { Runner } from '@openai/agents';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkOpenRouterProvider } from './ai-sdk-openrouter.provider.js';
-import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
+import { createProviderFetch } from './fetch/composer.js';
+import type { FetchMiddleware } from './fetch/compose.js';
 import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
-
-type FetchLike = typeof fetch;
 
 function sanitizeOpenRouterReasoningDetails(messages: any[]): void {
   const requiresSignature = new Set(['google-gemini-v1', 'anthropic-claude-v1']);
@@ -25,23 +24,21 @@ function sanitizeOpenRouterReasoningDetails(messages: any[]): void {
   }
 }
 
-export function createOpenRouterRequestPreprocessingFetch(fetchImpl: FetchLike): FetchLike {
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (typeof init?.body === 'string') {
-      try {
-        const body = JSON.parse(init.body);
-        if (Array.isArray(body?.messages)) {
-          sanitizeOpenRouterReasoningDetails(body.messages);
-          addCacheControlToLastTwoMessages(body.messages, body.model);
-          return fetchImpl(input, { ...init, body: JSON.stringify(body) });
-        }
-      } catch {
-        /* fall through */
+export const openRouterPreprocessingMiddleware: FetchMiddleware = async (ctx, next) => {
+  if (typeof ctx.init?.body === 'string') {
+    try {
+      const body = JSON.parse(ctx.init.body);
+      if (Array.isArray(body?.messages)) {
+        sanitizeOpenRouterReasoningDetails(body.messages);
+        addCacheControlToLastTwoMessages(body.messages, body.model);
+        ctx.init = { ...ctx.init, body: JSON.stringify(body) };
       }
+    } catch {
+      /* fall through */
     }
-    return fetchImpl(input, init);
-  }) as FetchLike;
-}
+  }
+  return next(ctx);
+};
 
 async function fetchOpenRouterModels(
   deps: ProviderDeps,
@@ -104,13 +101,12 @@ registerProvider({
           },
           appUrl: settingsService.get('agent.openrouter.referrer') || 'https://github.com/qduc/term2',
           appName: settingsService.get('agent.openrouter.title') || 'term2',
-          fetch: createOpenRouterRequestPreprocessingFetch(
-            createAiSdkLoggingFetch({
-              provider: 'openrouter',
-              model: settingsService.get('agent.model') || defaultModel,
-              loggingService,
-            }),
-          ),
+          fetch: createProviderFetch({
+            providerId: 'openrouter',
+            defaultModel: settingsService.get('agent.model') || defaultModel,
+            deps: { loggingService },
+            middlewares: [openRouterPreprocessingMiddleware],
+          }),
         }),
       }),
     });

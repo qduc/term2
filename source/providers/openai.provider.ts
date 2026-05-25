@@ -3,7 +3,7 @@ import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-ope
 import OpenAI from 'openai';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
-import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
+import { createProviderFetch } from './fetch/composer.js';
 import { FallbackResponsesModel } from './fallback-responses-model.js';
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
@@ -94,10 +94,10 @@ registerProvider({
     const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
     const openAIClient = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
-      fetch: createAiSdkLoggingFetch({
-        provider: 'openai',
-        model: defaultModel,
-        loggingService,
+      fetch: createProviderFetch({
+        providerId: 'openai',
+        defaultModel,
+        deps: { loggingService },
       }) as any,
     });
 

@@ -1,12 +1,15 @@
 import test from 'ava';
-import { createOpenRouterRequestPreprocessingFetch } from './openrouter.provider.js';
+import { composeFetch } from './fetch/compose.js';
+import { openRouterPreprocessingMiddleware } from './openrouter.provider.js';
 
-test('createOpenRouterRequestPreprocessingFetch strips unsigned reasoning.text for gemini/anthropic formats', async (t) => {
+test('openRouterPreprocessingMiddleware strips unsigned reasoning.text for gemini/anthropic formats', async (t) => {
   let capturedBody: any;
-  const wrapped = createOpenRouterRequestPreprocessingFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+  const baseFetch: typeof fetch = async (_input, init) => {
     capturedBody = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
     return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
-  });
+  };
+
+  const composed = composeFetch(baseFetch, [openRouterPreprocessingMiddleware]);
 
   const body = {
     model: 'openrouter/auto',
@@ -25,7 +28,7 @@ test('createOpenRouterRequestPreprocessingFetch strips unsigned reasoning.text f
     ],
   };
 
-  await wrapped('https://openrouter.ai/api/v1/chat/completions', {
+  await composed('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     body: JSON.stringify(body),
   });
@@ -37,15 +40,17 @@ test('createOpenRouterRequestPreprocessingFetch strips unsigned reasoning.text f
   ]);
 });
 
-test('createOpenRouterRequestPreprocessingFetch passes through non-JSON bodies', async (t) => {
+test('openRouterPreprocessingMiddleware passes through non-JSON bodies', async (t) => {
   let called = false;
-  const wrapped = createOpenRouterRequestPreprocessingFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+  const baseFetch: typeof fetch = async (_input, init) => {
     called = true;
     t.is(init?.body, 'not-json');
     return new Response('{}', { status: 200 });
-  });
+  };
 
-  await wrapped('https://openrouter.ai/api/v1/chat/completions', {
+  const composed = composeFetch(baseFetch, [openRouterPreprocessingMiddleware]);
+
+  await composed('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     body: 'not-json',
   });

@@ -8,7 +8,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
-import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
+import { createProviderFetch } from './fetch/composer.js';
+import type { FetchMiddleware } from './fetch/compose.js';
+import { injectHeaders, installationVersion } from './fetch/logging-middleware.js';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import envPaths from 'env-paths';
@@ -465,6 +467,74 @@ class FallbackCodexProvider implements ModelProvider {
   }
 }
 
+// ── Middlewares ──────────────────────────────────────────────────────────
+
+function codexAuthMiddleware(
+  tokenManager: CodexTokenManager,
+  loggingService: { error: (msg: string, meta?: any) => void },
+): FetchMiddleware {
+  return async (ctx, next) => {
+    try {
+      const accessToken = await tokenManager.getOrRefreshAccessToken();
+      const rawHeaders = ctx.init?.headers;
+      const headers: Record<string, string> = {};
+      if (rawHeaders) {
+        if (typeof (rawHeaders as any).forEach === 'function') {
+          (rawHeaders as any).forEach((v: string, k: string) => {
+            headers[k.toLowerCase()] = String(v);
+          });
+        } else {
+          for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
+            headers[k.toLowerCase()] = String(v);
+          }
+        }
+      }
+      headers['authorization'] = `Bearer ${accessToken}`;
+
+      const accountId = tokenManager.getAccountId();
+      if (accountId) {
+        headers['chatgpt-account-id'] = accountId;
+      }
+
+      return next({ url: ctx.url, init: { ...ctx.init, headers } });
+    } catch (err: any) {
+      loggingService.error('Codex OAuth fetch interceptor error', {
+        error: err.message,
+      });
+      throw err;
+    }
+  };
+}
+
+const codexSanitizeRequestMiddleware: FetchMiddleware = (ctx, next) => {
+  const sanitizedInit = sanitizeCodexRequestInit(ctx.url, ctx.init);
+  if (sanitizedInit !== ctx.init) {
+    return next({ url: ctx.url, init: sanitizedInit });
+  }
+  return next(ctx);
+};
+
+function codexHeadersMiddleware(loggingService: {
+  getTrafficContext?: () => { sessionId?: string } | null;
+}): FetchMiddleware {
+  return (ctx, next) => {
+    const trafficContext = loggingService.getTrafficContext?.() ?? null;
+    const sessionId = trafficContext?.sessionId;
+    const userAgent = `term2/${installationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`;
+
+    const extraHeaders: Record<string, string> = {
+      originator: 'term2',
+      'User-Agent': userAgent,
+    };
+    if (sessionId) {
+      extraHeaders['session_id'] = sessionId;
+    }
+
+    const mergedHeaders = injectHeaders(ctx.init?.headers, extraHeaders);
+    return next({ url: ctx.url, init: { ...ctx.init, headers: mergedHeaders } });
+  };
+}
+
 // Register Codex provider
 registerProvider({
   id: 'codex',
@@ -478,42 +548,15 @@ registerProvider({
       baseURL: 'https://chatgpt.com/backend-api/codex',
       timeout: CODEX_REQUEST_TIMEOUT_MS,
       maxRetries: CODEX_MAX_RETRIES,
-      fetch: (async (url, init) => {
-        try {
-          const accessToken = await tokenManager.getOrRefreshAccessToken();
-          const rawHeaders = init?.headers;
-          const headers: Record<string, string> = {};
-          if (rawHeaders) {
-            if (typeof (rawHeaders as any).forEach === 'function') {
-              (rawHeaders as any).forEach((v: string, k: string) => {
-                headers[k.toLowerCase()] = String(v);
-              });
-            } else {
-              for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
-                headers[k.toLowerCase()] = String(v);
-              }
-            }
-          }
-          headers['authorization'] = `Bearer ${accessToken}`;
-
-          const accountId = tokenManager.getAccountId();
-          if (accountId) {
-            headers['chatgpt-account-id'] = accountId;
-          }
-
-          const sanitizedInit = sanitizeCodexRequestInit(url, init);
-
-          return createAiSdkLoggingFetch({
-            provider: 'codex',
-            model: defaultModel,
-            loggingService,
-          })(url, { ...sanitizedInit, headers });
-        } catch (err: any) {
-          loggingService.error('Codex OAuth fetch interceptor error', {
-            error: err.message,
-          });
-          throw err;
-        }
+      fetch: createProviderFetch({
+        providerId: 'codex',
+        defaultModel,
+        deps: { loggingService },
+        middlewares: [
+          codexAuthMiddleware(tokenManager, loggingService),
+          codexSanitizeRequestMiddleware,
+          codexHeadersMiddleware(loggingService),
+        ],
       }) as any,
     });
 

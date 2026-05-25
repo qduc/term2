@@ -1,4 +1,5 @@
 import test from 'ava';
+import { withTrace } from '@openai/agents-core';
 import { OpenAIProvider, OpenAIChatCompletionsModel, OpenAIResponsesModel } from '@openai/agents-openai';
 
 import {
@@ -96,6 +97,74 @@ test('createCustomProviderModelProvider uses Google adapter for google type', (t
   );
 
   t.true(provider instanceof AiSdkGoogleProvider);
+});
+
+test('createCustomProviderModelProvider Google type gets logging fetch wrapper', async (t) => {
+  const loggedEvents: any[] = [];
+  const dummyLoggingService = {
+    debug: (msg: string, meta?: any) => {
+      loggedEvents.push({ msg, meta });
+    },
+    error: () => {},
+    getCorrelationId: () => 'test-correlation-id',
+    getTrafficContext: () => ({
+      traceId: 'test-trace-id',
+      sessionId: 'test-session-id',
+      sessionStartedAt: 12345,
+      firstUserMessagePreview: 'hello',
+      mode: 'standard',
+    }),
+  };
+
+  const provider = createCustomProviderModelProvider(
+    {
+      ...baseConfig,
+      type: 'google',
+    },
+    {
+      defaultModel: 'gemini-test',
+      loggingService: dummyLoggingService as any,
+      fetch: (async (_input: RequestInfo | URL, _init?: RequestInit) => {
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: 'Hello from mock Gemini!' }],
+                  role: 'model',
+                },
+                finishReason: 'STOP',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }) as typeof fetch,
+    },
+  );
+
+  t.true(provider instanceof AiSdkGoogleProvider);
+
+  const model = await provider.getModel('gemini-test');
+  await withTrace('test', () =>
+    model.getResponse({
+      tools: [],
+      handoffs: [],
+      outputType: 'text' as const,
+      tracing: false as const,
+      input: [{ role: 'user', content: 'hello' }] as any,
+      modelSettings: {},
+    } as any),
+  );
+
+  // Verify that the request started event was logged by the logging middleware
+  const requestStartedEvent = loggedEvents.find((e) => e.meta?.eventType === 'provider.request.started');
+  t.truthy(requestStartedEvent);
+  t.is(requestStartedEvent.meta.provider, 'custom-provider');
+  t.is(requestStartedEvent.meta.model, 'gemini-test');
 });
 
 test('createCustomProviderModelProvider uses OpencodeMinimaxHybridProvider for opencode type', async (t) => {

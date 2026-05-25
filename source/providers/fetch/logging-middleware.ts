@@ -1,18 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import type { ILoggingService } from '../services/service-interfaces.js';
-import { summarizeReceivedTraffic } from '../services/provider-traffic.js';
-import { describeError } from '../utils/error-helpers.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import os from 'node:os';
+import type { ILoggingService } from '../../services/service-interfaces.js';
+import { summarizeReceivedTraffic } from '../../services/provider-traffic.js';
+import { describeError } from '../../utils/error-helpers.js';
+import type { FetchMiddleware } from './compose.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-let installationVersion = '0.6.1';
+export let installationVersion = '0.6.1';
 try {
-  const packageJsonPath = join(__dirname, '../../package.json');
+  const packageJsonPath = join(__dirname, '../../../package.json');
   const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
   if (pkg && typeof pkg.version === 'string') {
     installationVersion = pkg.version;
@@ -21,56 +21,10 @@ try {
   // fallback
 }
 
-function injectHeaders(initHeaders: HeadersInit | undefined, newHeaders: Record<string, string>): HeadersInit {
-  if (!initHeaders) {
-    return newHeaders;
-  }
-
-  if (typeof Headers !== 'undefined' && initHeaders instanceof Headers) {
-    const headers = new Headers(initHeaders);
-    for (const [key, value] of Object.entries(newHeaders)) {
-      if (value) {
-        headers.set(key, value);
-      }
-    }
-    return headers;
-  }
-
-  if (Array.isArray(initHeaders)) {
-    const headers = [...initHeaders] as [string, string][];
-    for (const [key, value] of Object.entries(newHeaders)) {
-      if (value) {
-        const idx = headers.findIndex(([k]) => k.toLowerCase() === key.toLowerCase());
-        if (idx !== -1) {
-          headers[idx] = [key, value];
-        } else {
-          headers.push([key, value]);
-        }
-      }
-    }
-    return headers;
-  }
-
-  const headers = { ...(initHeaders as Record<string, string>) };
-  for (const [key, value] of Object.entries(newHeaders)) {
-    if (value) {
-      const existingKey = Object.keys(headers).find((k) => k.toLowerCase() === key.toLowerCase());
-      if (existingKey) {
-        delete headers[existingKey];
-      }
-      headers[key] = value;
-    }
-  }
-  return headers;
-}
-
-type FetchLike = typeof fetch;
-
-type CreateAiSdkLoggingFetchOptions = {
+export type CreateLoggingMiddlewareOptions = {
   provider: string;
   model: string;
   loggingService: Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId' | 'getTrafficContext'>;
-  fetchImpl?: FetchLike;
 };
 
 const toRecord = (value: unknown): Record<string, unknown> | null => {
@@ -149,14 +103,59 @@ const readRequestBody = async (input: RequestInfo | URL, init?: RequestInit): Pr
   return null;
 };
 
-export function createAiSdkLoggingFetch({
-  provider,
-  model,
-  loggingService,
-  fetchImpl = fetch,
-}: CreateAiSdkLoggingFetchOptions): FetchLike {
-  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const requestBody = await readRequestBody(input, init);
+/**
+ * Merges newHeaders into an existing HeadersInit value.
+ * Preserves the original structure type (Headers instance, array, or plain object).
+ * Can be used by middlewares that need to inject or read headers.
+ */
+export function injectHeaders(initHeaders: HeadersInit | undefined, newHeaders: Record<string, string>): HeadersInit {
+  if (!initHeaders) {
+    return newHeaders;
+  }
+
+  if (typeof Headers !== 'undefined' && initHeaders instanceof Headers) {
+    const headers = new Headers(initHeaders);
+    for (const [key, value] of Object.entries(newHeaders)) {
+      if (value) {
+        headers.set(key, value);
+      }
+    }
+    return headers;
+  }
+
+  if (Array.isArray(initHeaders)) {
+    const headers = [...initHeaders] as [string, string][];
+    for (const [key, value] of Object.entries(newHeaders)) {
+      if (value) {
+        const idx = headers.findIndex(([k]) => k.toLowerCase() === key.toLowerCase());
+        if (idx !== -1) {
+          headers[idx] = [key, value];
+        } else {
+          headers.push([key, value]);
+        }
+      }
+    }
+    return headers;
+  }
+
+  const headers = { ...(initHeaders as Record<string, string>) };
+  for (const [key, value] of Object.entries(newHeaders)) {
+    if (value) {
+      const existingKey = Object.keys(headers).find((k) => k.toLowerCase() === key.toLowerCase());
+      if (existingKey) {
+        delete headers[existingKey];
+      }
+      headers[key] = value;
+    }
+  }
+  return headers;
+}
+
+export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions): FetchMiddleware {
+  const { provider, model, loggingService } = options;
+
+  return async (ctx, next) => {
+    const requestBody = await readRequestBody(ctx.url, ctx.init);
     const parsedRequest = requestBody ? parseJsonObject(requestBody) : null;
     const requestModel = typeof parsedRequest?.model === 'string' ? parsedRequest.model : model;
     const requestId = randomUUID();
@@ -187,32 +186,12 @@ export function createAiSdkLoggingFetch({
       payload: parsedRequest ?? undefined,
     });
 
-    let nextInit = init;
-    if (provider === 'codex') {
-      const originator = 'term2';
-      const userAgent = `term2/${installationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`;
-      const sessionId = trafficContext?.sessionId;
-
-      const extraHeaders: Record<string, string> = {
-        originator: originator,
-        'User-Agent': userAgent,
-      };
-      if (sessionId) {
-        extraHeaders['session_id'] = sessionId;
-      }
-
-      nextInit = {
-        ...init,
-        headers: injectHeaders(init?.headers, extraHeaders),
-      };
-    }
-
     let response: Response;
     try {
-      response = await fetchImpl(input, nextInit);
+      response = await next(ctx);
     } catch (error) {
       loggingService.error(`${provider} ai sdk request failed`, {
-        eventType: 'provider.response.failed',
+        eventType: `${eventPrefix}.response.failed`,
         category: 'provider',
         phase: 'provider_response',
         ...baseMeta,
@@ -221,6 +200,7 @@ export function createAiSdkLoggingFetch({
       throw error;
     }
 
+    // Fire-and-forget async logging so it never blocks the caller
     Promise.resolve()
       .then(async () => {
         const summary = await summarizeReceivedTraffic(response.clone());
@@ -246,7 +226,7 @@ export function createAiSdkLoggingFetch({
       })
       .catch((error) => {
         loggingService.debug(`${provider} ai sdk response log failed`, {
-          eventType: 'provider.response.log_failed',
+          eventType: `${eventPrefix}.response.log_failed`,
           category: 'provider',
           phase: 'provider_response',
           ...baseMeta,

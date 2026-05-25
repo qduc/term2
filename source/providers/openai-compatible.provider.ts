@@ -6,7 +6,8 @@ import type { ISettingsService, ILoggingService } from '../services/service-inte
 import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
-import { createAiSdkLoggingFetch } from './ai-sdk-logging-fetch.js';
+import { createProviderFetch } from './fetch/composer.js';
+import type { FetchMiddleware } from './fetch/compose.js';
 import { mergeAssistantMessages } from './ai-sdk-message-normalizer.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
 import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
@@ -212,21 +213,15 @@ function generateOpencodeSessionId(): string {
   return `ses_${timestamp}${random}`;
 }
 
-function createOpenAICompatibleFetch(
-  fetchImpl: typeof fetch | undefined,
-  providerType: string,
-  baseUrl?: string,
-): typeof fetch | undefined {
-  if (!fetchImpl) return undefined;
-
+function createOpenAICompatibleMiddleware(providerType: string, baseUrl?: string): FetchMiddleware {
   const isOpencode =
     providerType === 'opencode' || (typeof baseUrl === 'string' && baseUrl.toLowerCase().includes('opencode.ai'));
   const sessionId = isOpencode ? generateOpencodeSessionId() : undefined;
 
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (typeof init?.body === 'string') {
+  return async (ctx, next) => {
+    if (typeof ctx.init?.body === 'string') {
       try {
-        const body = JSON.parse(init.body);
+        const body = JSON.parse(ctx.init.body);
         let changed = false;
 
         if (Array.isArray(body?.messages)) {
@@ -249,16 +244,16 @@ function createOpenAICompatibleFetch(
         }
 
         if (changed) {
-          let newInit: RequestInit = { ...init, body: JSON.stringify(body) };
+          let newInit: RequestInit = { ...ctx.init, body: JSON.stringify(body) };
           if (isOpencode && sessionId) {
             const existingHeaders: Record<string, string> = {};
-            if (init.headers) {
-              if (typeof (init.headers as any).forEach === 'function') {
-                (init.headers as any).forEach((v: string, k: string) => {
+            if (ctx.init.headers) {
+              if (typeof (ctx.init.headers as any).forEach === 'function') {
+                (ctx.init.headers as any).forEach((v: string, k: string) => {
                   existingHeaders[k] = v;
                 });
               } else {
-                Object.assign(existingHeaders, init.headers);
+                Object.assign(existingHeaders, ctx.init.headers);
               }
             }
             newInit = {
@@ -269,15 +264,15 @@ function createOpenAICompatibleFetch(
               },
             };
           }
-          return fetchImpl(input, newInit);
+          return next({ url: ctx.url, init: newInit });
         }
       } catch {
-        return fetchImpl(input, init);
+        return next(ctx);
       }
     }
 
-    return fetchImpl(input, init);
-  }) as typeof fetch;
+    return next(ctx);
+  };
 }
 
 function findConfigFromSettings(settingsService: ISettingsService, providerId: string): CustomProviderConfig | null {
@@ -318,22 +313,21 @@ function mapModelListItem(providerType: string | undefined, item: any): { id: st
   return id ? { id, name } : null;
 }
 
-function createCacheControlFetch(fetchImpl: typeof fetch | undefined): typeof fetch | undefined {
-  if (!fetchImpl) return undefined;
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (typeof init?.body === 'string') {
+function createCacheControlMiddleware(): FetchMiddleware {
+  return async (ctx, next) => {
+    if (typeof ctx.init?.body === 'string') {
       try {
-        const body = JSON.parse(init.body);
+        const body = JSON.parse(ctx.init.body);
         if (Array.isArray(body?.messages)) {
           addCacheControlToLastTwoMessages(body.messages, body.model);
-          return fetchImpl(input, { ...init, body: JSON.stringify(body) });
+          return next({ url: ctx.url, init: { ...ctx.init, body: JSON.stringify(body) } });
         }
       } catch {
         /* fall through */
       }
     }
-    return fetchImpl(input, init);
-  }) as typeof fetch;
+    return next(ctx);
+  };
 }
 
 export function sanitizeResponsesApiBody(body: any): any {
@@ -365,21 +359,40 @@ export function sanitizeResponsesApiBody(body: any): any {
   };
 }
 
-function createOpenAIResponsesFetch(fetchImpl: typeof fetch | undefined): typeof fetch | undefined {
-  if (!fetchImpl) return undefined;
-
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (typeof init?.body === 'string') {
+function createOpenAIResponsesMiddleware(): FetchMiddleware {
+  return async (ctx, next) => {
+    if (typeof ctx.init?.body === 'string') {
       try {
-        const body = sanitizeResponsesApiBody(JSON.parse(init.body));
-        return fetchImpl(input, { ...init, body: JSON.stringify(body) });
+        const body = sanitizeResponsesApiBody(JSON.parse(ctx.init.body));
+        return next({ url: ctx.url, init: { ...ctx.init, body: JSON.stringify(body) } });
       } catch {
-        return fetchImpl(input, init);
+        return next(ctx);
       }
     }
 
-    return fetchImpl(input, init);
-  }) as typeof fetch;
+    return next(ctx);
+  };
+}
+
+function buildProviderFetch(
+  config: CustomProviderConfig,
+  deps: CustomProviderRuntimeDeps,
+  middlewares: FetchMiddleware[],
+): typeof fetch {
+  return createProviderFetch({
+    providerId: config.name,
+    defaultModel: deps.defaultModel,
+    deps: {
+      loggingService: deps.loggingService || {
+        debug: () => {},
+        error: () => {},
+        getCorrelationId: () => undefined,
+        getTrafficContext: () => null,
+      },
+    },
+    middlewares,
+    fetchImpl: deps.fetch,
+  });
 }
 
 export class OpencodeMinimaxHybridProvider implements ModelProvider {
@@ -401,7 +414,7 @@ export class OpencodeMinimaxHybridProvider implements ModelProvider {
         resolveConfig: () => ({
           baseURL: effectiveBaseUrl ? normalizeBaseUrl(effectiveBaseUrl) : undefined,
           apiKey: effectiveApiKey,
-          fetch: createCacheControlFetch(this.deps.fetch),
+          fetch: buildProviderFetch(this.config, this.deps, [createCacheControlMiddleware()]),
           name: this.config.name,
           headers: {
             'anthropic-version': '2023-06-01',
@@ -422,7 +435,9 @@ export class OpencodeMinimaxHybridProvider implements ModelProvider {
     const openAIClient = new OpenAI({
       baseURL: normalizeBaseUrl(effectiveBaseUrl),
       apiKey: effectiveApiKey || 'no-key',
-      fetch: createOpenAICompatibleFetch(this.deps.fetch, this.config.type || 'opencode', effectiveBaseUrl) as any,
+      fetch: buildProviderFetch(this.config, this.deps, [
+        createOpenAICompatibleMiddleware(this.config.type || 'opencode', effectiveBaseUrl),
+      ]) as any,
     });
     applyClientResponseNormalization(openAIClient, this.deps.loggingService);
     const openaiProvider = new OpenAIProvider({
@@ -450,7 +465,7 @@ export function createCustomProviderModelProvider(
       const openAIClient = new OpenAI({
         apiKey: config.apiKey,
         baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
-        fetch: createOpenAIResponsesFetch(deps.fetch) as any,
+        fetch: buildProviderFetch(config, deps, [createOpenAIResponsesMiddleware()]) as any,
       });
       return new OpenAIProvider({
         openAIClient: openAIClient as any,
@@ -462,7 +477,7 @@ export function createCustomProviderModelProvider(
         defaultModel: deps.defaultModel,
         resolveConfig: () => ({
           ...resolveConfig(),
-          fetch: createCacheControlFetch(deps.fetch),
+          fetch: buildProviderFetch(config, deps, [createCacheControlMiddleware()]),
           headers: {
             'anthropic-version': '2023-06-01',
           },
@@ -471,7 +486,10 @@ export function createCustomProviderModelProvider(
     case 'google':
       return new AiSdkGoogleProvider({
         defaultModel: deps.defaultModel,
-        resolveConfig,
+        resolveConfig: () => ({
+          ...resolveConfig(),
+          fetch: buildProviderFetch(config, deps, []),
+        }),
       });
     case 'opencode':
       return new OpencodeMinimaxHybridProvider(config, deps);
@@ -489,7 +507,9 @@ export function createCustomProviderModelProvider(
       const openAIClient = new OpenAI({
         baseURL: normalizeBaseUrl(effectiveBaseUrl),
         apiKey: effectiveApiKey || 'no-key',
-        fetch: createOpenAICompatibleFetch(deps.fetch, providerType, effectiveBaseUrl) as any,
+        fetch: buildProviderFetch(config, deps, [
+          createOpenAICompatibleMiddleware(providerType, effectiveBaseUrl),
+        ]) as any,
       });
       applyClientResponseNormalization(openAIClient, deps.loggingService);
       return new OpenAIProvider({
@@ -524,11 +544,6 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
 
           return createCustomProviderModelProvider(resolved, {
             defaultModel: settingsService.get('agent.model') || '',
-            fetch: createAiSdkLoggingFetch({
-              provider: providerId,
-              model: settingsService.get('agent.model') || '',
-              loggingService,
-            }),
             loggingService,
           });
         })(),

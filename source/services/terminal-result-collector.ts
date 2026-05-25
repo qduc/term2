@@ -100,7 +100,12 @@ export async function collectTerminalResult(
         break;
       }
       case 'error': {
-        throw new Error(event.message);
+        const parts = [event.message || '(no message)', event.kind ? `kind=${event.kind}` : ''].filter(Boolean);
+        const err = new Error(parts.join(' '));
+        // Preserve the raw event so callers can inspect it without re-parsing the message.
+        (err as any).eventKind = event.kind;
+        (err as any).rawEvent = event;
+        throw err;
       }
       default:
         break;

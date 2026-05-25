@@ -259,6 +259,8 @@ export const useConversation = ({
         loggingService.error('Error in sendUserMessage', {
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
+          ...(error instanceof Error && (error as any).eventKind ? { eventKind: (error as any).eventKind } : {}),
+          ...(error instanceof Error && (error as any).rawEvent ? { rawEvent: (error as any).rawEvent } : {}),
         });
 
         // Don't show error messages for user-initiated aborts

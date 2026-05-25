@@ -573,7 +573,7 @@ test('opencode session ID is stable across requests within a session', async (t)
   );
 });
 
-test('opencode session header uses traffic context session ID when available', async (t) => {
+test('opencode session header prefers fallback session ID over traffic context session ID', async (t) => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://opencode.ai/v1', {
     info: () => {},
@@ -600,7 +600,9 @@ test('opencode session header uses traffic context session ID when available', a
   );
 
   t.is(captured.length, 1);
-  t.is(captured[0].headers['x-opencode-session'], 'conversation-session-123');
+  t.truthy(captured[0].headers['x-opencode-session']);
+  t.not(captured[0].headers['x-opencode-session'], 'conversation-session-123');
+  t.regex(captured[0].headers['x-opencode-session'], /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
 });
 
 test('non-opencode.ai baseUrl does not add opencode headers or body fields', async (t) => {

@@ -138,7 +138,11 @@ export const AppSettingsSchema = z.object({
   liteMode: z.boolean().optional().default(false),
   planMode: z.boolean().optional().default(false),
   orchestratorMode: z.boolean().optional().default(false),
-  searchViaShell: z.boolean().optional().default(false),
+  searchViaShell: z
+    .union([z.boolean(), z.enum(['auto', 'on', 'off'])])
+    .transform((val) => (typeof val === 'boolean' ? (val ? 'on' : 'off') : val))
+    .optional()
+    .default('auto'),
 });
 
 export const ToolsSettingsSchema = z.object({
@@ -329,7 +333,7 @@ export interface SettingsWithSources {
     liteMode: SettingWithSource<boolean>;
     planMode: SettingWithSource<boolean>;
     orchestratorMode: SettingWithSource<boolean>;
-    searchViaShell: SettingWithSource<boolean>;
+    searchViaShell: SettingWithSource<'auto' | 'on' | 'off'>;
   };
   tools: {
     logFileOperations: SettingWithSource<boolean>;
@@ -546,7 +550,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     liteMode: false,
     planMode: false,
     orchestratorMode: false,
-    searchViaShell: false,
+    searchViaShell: 'auto',
   },
   tools: {
     logFileOperations: true,

@@ -43,6 +43,7 @@ const SETTINGS_SOURCE_KEYS = {
     liteMode: 'app.liteMode',
     planMode: 'app.planMode',
     orchestratorMode: 'app.orchestratorMode',
+    searchViaShell: 'app.searchViaShell',
   },
   tools: {
     logFileOperations: 'tools.logFileOperations',

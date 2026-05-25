@@ -127,7 +127,9 @@ export const getAgentDefinition = (
   const mentorMode = settingsService.get<boolean>('app.mentorMode');
   const liteMode = settingsService.get<boolean>('app.liteMode');
   const orchestratorMode = settingsService.get<boolean>('app.orchestratorMode');
-  const searchViaShell = settingsService.get<boolean>('app.searchViaShell');
+  const searchViaShellSetting = settingsService.get<'auto' | 'on' | 'off'>('app.searchViaShell') ?? 'auto';
+  const searchViaShell =
+    searchViaShellSetting === 'auto' ? shouldPreferPatchEditingModel(resolvedModel) : searchViaShellSetting === 'on';
   // Code-context tools operate on the local filesystem only; disable them for
   // remote (SSH) execution where the workspace lives on another host.
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);

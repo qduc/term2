@@ -16,7 +16,7 @@ const WORKTREE_HYGIENE_FRAGMENT_MARKER = 'Before making any code changes, inspec
 
 test('getAgentDefinition includes grep and find_files when searchViaShell is false', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': false,
+    'app.searchViaShell': 'off',
     'agent.model': 'gpt-4o',
   });
 
@@ -166,7 +166,7 @@ test('getAgentDefinition throws if orchestratorMode is true and runSubagent is m
 
 test('getAgentDefinition excludes grep and find_files when searchViaShell is true', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': true,
+    'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
   });
 
@@ -184,7 +184,7 @@ test('getAgentDefinition excludes grep and find_files when searchViaShell is tru
 
 test('getAgentDefinition preserves read_file and editing tools when searchViaShell is true', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': true,
+    'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
   });
 
@@ -204,7 +204,7 @@ test('getAgentDefinition preserves read_file and editing tools when searchViaShe
 
 test('getAgentDefinition excludes grep and find_files in lite mode when searchViaShell is true', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': true,
+    'app.searchViaShell': 'on',
     'app.liteMode': true,
     'agent.model': 'gpt-4o',
   });
@@ -225,7 +225,7 @@ test('getAgentDefinition excludes grep and find_files in lite mode when searchVi
 
 test('getAgentDefinition for gpt-5 omits grep and find_files regardless of searchViaShell', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': false,
+    'app.searchViaShell': 'off',
     'agent.model': 'gpt-5',
   });
 
@@ -240,6 +240,64 @@ test('getAgentDefinition for gpt-5 omits grep and find_files regardless of searc
   t.true(toolNames.includes('read_code_outline'));
   t.true(toolNames.includes('code_context_search'));
   t.true(toolNames.includes('apply_patch'));
+});
+
+test('getAgentDefinition defaults searchViaShell to true for gpt-5 models when not explicitly configured', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+  });
+
+  t.true(definition.instructions.includes('### Searching via the shell'));
+});
+
+test('getAgentDefinition respects explicitly disabled searchViaShell for gpt-5 models', (t) => {
+  const settingsService = createMockSettingsService({
+    'app.searchViaShell': 'off',
+    'agent.model': 'gpt-5',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+  });
+
+  t.false(definition.instructions.includes('### Searching via the shell'));
+});
+
+test('getAgentDefinition does not default searchViaShell to true for non-gpt-5 models', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+  });
+
+  t.false(definition.instructions.includes('### Searching via the shell'));
+  t.true(definition.instructions.includes('`find_files`'));
+  t.true(definition.instructions.includes('`grep`'));
+});
+
+test('getAgentDefinition forces searchViaShell on for non-gpt-5 models when explicitly set to on', (t) => {
+  const settingsService = createMockSettingsService({
+    'app.searchViaShell': 'on',
+    'agent.model': 'gpt-4o',
+  });
+
+  const definition = getAgentDefinition({
+    settingsService,
+    loggingService: mockLogger,
+  });
+
+  t.true(definition.instructions.includes('### Searching via the shell'));
+  t.false(definition.instructions.includes('`find_files`'));
+  t.false(definition.instructions.includes('`grep`'));
 });
 
 test('getAgentDefinition includes GPT version-specific prompt fragments', (t) => {
@@ -281,7 +339,7 @@ test('getAgentDefinition includes GPT version-specific prompt fragments', (t) =>
 
 test('getAgentDefinition appends search-via-shell addendum when enabled', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': true,
+    'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
   });
 
@@ -295,7 +353,7 @@ test('getAgentDefinition appends search-via-shell addendum when enabled', (t) =>
 
 test('getAgentDefinition omits dedicated search tool references from prompt when searchViaShell is true', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': true,
+    'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
   });
 
@@ -310,7 +368,7 @@ test('getAgentDefinition omits dedicated search tool references from prompt when
 
 test('getAgentDefinition dynamically includes dedicated search tool references when searchViaShell is false', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': false,
+    'app.searchViaShell': 'off',
     'agent.model': 'gpt-4o',
   });
 
@@ -328,7 +386,7 @@ test('getAgentDefinition dynamically includes dedicated search tool references w
 
 test('getAgentDefinition dynamically includes code-context tool references when available', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': true,
+    'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
   });
 
@@ -344,7 +402,7 @@ test('getAgentDefinition dynamically includes code-context tool references when 
 
 test('getAgentDefinition dynamically includes code-context tool references for gpt-5 models', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': false,
+    'app.searchViaShell': 'off',
     'agent.model': 'gpt-5',
   });
 
@@ -359,7 +417,7 @@ test('getAgentDefinition dynamically includes code-context tool references for g
 
 test('getAgentDefinition uses fallback search prompt for remote execution', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': true,
+    'app.searchViaShell': 'on',
     'agent.model': 'gpt-4o',
   });
 
@@ -384,7 +442,7 @@ test('getAgentDefinition uses fallback search prompt for remote execution', (t) 
 
 test('getAgentDefinition excludes code-context tools in remote (SSH) execution', (t) => {
   const settingsService = createMockSettingsService({
-    'app.searchViaShell': false,
+    'app.searchViaShell': 'off',
     'agent.model': 'gpt-4o',
   });
 

@@ -17,14 +17,10 @@ import fs from 'fs';
 import path from 'path';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
-import { getPromptPath } from './prompts/prompt-selector.js';
+import { buildPromptSpec } from './prompts/prompt-constructor.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
-import { getSearchViaShellAddendum } from './prompts/search-via-shell.js';
-import { getSubagentDelegationAddendum } from './prompts/subagent-delegation.js';
-import { getReasoningEfficiencyAddendum } from './prompts/reasoning-efficiency.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
-const WORKTREE_HYGIENE_PROMPT_PATH = path.join(BASE_PROMPT_PATH, 'worktree-hygiene.md');
 
 function getTopLevelEntries(cwd: string, limit = 50): string {
   try {
@@ -91,7 +87,12 @@ function resolvePrompt(promptPath: string): string {
   try {
     return fs.readFileSync(promptPath, 'utf-8').trim();
   } catch (e: any) {
-    const sourcePromptPath = path.join(import.meta.dirname, '../source/prompts', path.basename(promptPath));
+    const relativePromptPath = path.relative(BASE_PROMPT_PATH, promptPath);
+    const sourcePromptPath = path.join(
+      import.meta.dirname,
+      '../source/prompts',
+      relativePromptPath.startsWith('..') ? path.basename(promptPath) : relativePromptPath,
+    );
     if (sourcePromptPath !== promptPath && fs.existsSync(sourcePromptPath)) {
       return fs.readFileSync(sourcePromptPath, 'utf-8').trim();
     }
@@ -131,79 +132,29 @@ export const getAgentDefinition = (
   // remote (SSH) execution where the workspace lives on another host.
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const isGpt5 = !liteMode && shouldPreferPatchEditingModel(resolvedModel);
-  const promptPath = getPromptPath({
-    basePromptDir: BASE_PROMPT_PATH,
+  const promptSpec = buildPromptSpec({
     model: resolvedModel,
     liteMode,
     orchestratorMode,
+    mentorMode,
+    planMode,
+    searchViaShell,
+    codeContextEnabled,
+    runSubagentEnabled: Boolean(runSubagent),
+    executionContext,
   });
-  let prompt = resolvePrompt(promptPath);
+  let prompt = resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile));
 
-  if (!liteMode) {
+  for (const fragmentFile of promptSpec.fragmentFiles) {
     try {
-      prompt = `${prompt}\n\n${resolvePrompt(WORKTREE_HYGIENE_PROMPT_PATH)}`;
+      prompt = `${prompt}\n\n${resolvePrompt(path.join(BASE_PROMPT_PATH, fragmentFile))}`;
     } catch (e) {
-      loggingService.error(`Failed to load worktree-hygiene prompt fragment: ${e}`);
+      loggingService.error(`Failed to load prompt fragment ${fragmentFile}: ${e}`);
     }
   }
 
-  if (mentorMode && !liteMode) {
-    const addonPath = path.join(BASE_PROMPT_PATH, 'mentor-addon.md');
-    try {
-      const addon = resolvePrompt(addonPath);
-      prompt = `${prompt}\n\n${addon}`;
-    } catch (e) {
-      loggingService.error(`Failed to load mentor addon: ${e}`);
-    }
-  }
-
-  const codeContextDoc =
-    !orchestratorMode && codeContextEnabled
-      ? liteMode
-        ? '### Code Context Tools\n\n- `read_code_outline`: inspect file structure.\n- `code_context_search`: find related files or symbol declarations. Use `read_file` before editing.'
-        : '### Code Context Tools\n\n- Use `read_code_outline` for a compact file outline.\n- Use `code_context_search` for related files or symbol declarations.\n- Use `read_file` before editing.'
-      : '';
-
-  if (codeContextDoc) {
-    prompt = `${prompt}\n\n${codeContextDoc}`;
-  }
-
-  if (!orchestratorMode && searchViaShell) {
-    try {
-      const addendum = getSearchViaShellAddendum({ executionContext });
-      prompt = `${prompt}\n\n${addendum}`;
-    } catch (e) {
-      loggingService.error(`Failed to load search-via-shell addendum: ${e}`);
-    }
-  } else if (!orchestratorMode) {
-    if (!isGpt5) {
-      const searchToolsDoc = liteMode
-        ? '### Search Tools\n\n- `find_files`: locate files by name or glob.\n- `grep`: search file contents.'
-        : '### Search Tools\n\n- Prefer `find_files` for locating files by name or glob.\n- Prefer `grep` for searching code content or symbols.';
-      prompt = `${prompt}\n\n${searchToolsDoc}`;
-    }
-  }
-
-  // Delegation guidance is injected only in orchestrator mode when runSubagent is available.
-  if (orchestratorMode && runSubagent) {
-    prompt = `${prompt}\n\n${getSubagentDelegationAddendum({ orchestratorMode })}`;
-  }
-
-  if (planMode) {
-    try {
-      const planModeInfoPath = path.join(BASE_PROMPT_PATH, 'plan-mode-info.md');
-      prompt = `${prompt}\n\n${resolvePrompt(planModeInfoPath)}`;
-    } catch (e) {
-      loggingService.error(`Failed to load plan-mode-info: ${e}`);
-    }
-  }
-
-  const isOverThinkingModels = ['kimi', 'deepseek', 'glm', 'qwen', 'minimax', 'mimo'].some((key) =>
-    resolvedModel.toLowerCase().includes(key),
-  );
-
-  if (isOverThinkingModels) {
-    prompt += `\n\n${getReasoningEfficiencyAddendum()}`;
+  for (const inlineSection of promptSpec.inlineSections) {
+    prompt = `${prompt}\n\n${inlineSection}`;
   }
 
   const cwd = executionContext?.getCwd() || process.cwd();

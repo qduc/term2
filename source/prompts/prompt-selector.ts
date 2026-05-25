@@ -1,11 +1,5 @@
 import path from 'path';
-
-const DEFAULT_PROMPT = 'simple.md';
-const ANTHROPIC_PROMPT = 'anthropic.md';
-const MODERN_GPT_PROMPT = 'gpt-5-modern.md';
-const CODEX_PROMPT = 'codex.md';
-const LITE_PROMPT = 'lite.md';
-const ORCHESTRATOR_PROMPT = 'orchestrator.md';
+import { selectPromptProfile } from './prompt-profiles.js';
 
 type PromptSelectorOptions = {
   basePromptDir: string;
@@ -15,22 +9,6 @@ type PromptSelectorOptions = {
 };
 
 export function getPromptPath({ basePromptDir, model, liteMode, orchestratorMode }: PromptSelectorOptions): string {
-  const normalizedModel = model.trim().toLowerCase();
-
-  // Lite mode takes precedence - minimal context for terminal assistance
-  if (liteMode) {
-    return path.join(basePromptDir, LITE_PROMPT);
-  }
-
-  if (orchestratorMode) {
-    return path.join(basePromptDir, ORCHESTRATOR_PROMPT);
-  }
-
-  if (normalizedModel.includes('sonnet') || normalizedModel.includes('haiku'))
-    return path.join(basePromptDir, ANTHROPIC_PROMPT);
-  if (normalizedModel.includes('gpt-5') && normalizedModel.includes('codex'))
-    return path.join(basePromptDir, CODEX_PROMPT);
-  if (normalizedModel.includes('gpt-5')) return path.join(basePromptDir, MODERN_GPT_PROMPT);
-
-  return path.join(basePromptDir, DEFAULT_PROMPT);
+  const profile = selectPromptProfile({ model, liteMode, orchestratorMode });
+  return path.join(basePromptDir, profile.basePromptFile);
 }

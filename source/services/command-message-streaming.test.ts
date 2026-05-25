@@ -83,9 +83,11 @@ test('emitCommandMessagesFromItems: attaches args and filters duplicates/rejecti
     extractCommandMessages,
   });
 
-  t.is(events.length, 1);
+  t.is(events.length, 2);
   t.is(events[0].type, 'command_message');
   t.is((events[0] as any).message.id, 'keep');
+  t.is(events[1].type, 'command_message');
+  t.is((events[1] as any).message.id, 'reject');
   t.true(emittedCommandIds.has('keep'));
-  t.false(emittedCommandIds.has('reject'));
+  t.true(emittedCommandIds.has('reject'));
 });

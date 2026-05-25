@@ -86,9 +86,6 @@ export const emitCommandMessagesFromItems = (
     if (emittedCommandIds.has(cmdMsg.id)) {
       continue;
     }
-    if (cmdMsg.isApprovalRejection) {
-      continue;
-    }
     emittedCommandIds.add(cmdMsg.id);
     out.push({ type: 'command_message', message: cmdMsg });
   }

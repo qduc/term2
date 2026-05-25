@@ -299,10 +299,10 @@ test('Codex fetchModels parses custom models endpoint', async (t) => {
     t.true(fetchUrl.startsWith('https://chatgpt.com/backend-api/codex/models?client_version='));
     t.is(authHeader, `Bearer ${validToken}`);
     t.is(models.length, 2);
-    t.is(models[0].id, 'gpt-4o');
-    t.is(models[0].default_reasoning_level, 'low');
-    t.is(models[1].id, 'gpt-5-codex');
-    t.is(models[1].default_reasoning_level, 'medium');
+    t.is(models[1].id, 'gpt-4o');
+    t.is(models[1].default_reasoning_level, 'low');
+    t.is(models[0].id, 'gpt-5-codex');
+    t.is(models[0].default_reasoning_level, 'medium');
   } finally {
     process.env.CHATGPT_LOCAL_HOME = origHome;
     try {

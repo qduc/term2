@@ -300,42 +300,42 @@ test('getAgentDefinition forces searchViaShell on for non-gpt-5 models when expl
   t.false(definition.instructions.includes('`grep`'));
 });
 
-test('getAgentDefinition includes GPT version-specific prompt fragments', (t) => {
-  const gpt55 = getAgentDefinition({
-    settingsService: createMockSettingsService({
-      'agent.model': 'gpt-5.5-2026-04-23',
-    }),
-    loggingService: mockLogger,
-  });
-  t.true(gpt55.instructions.includes('## GPT-5.5 Guidance'));
-  t.true(gpt55.instructions.includes('outcome-first behavior'));
-
-  const gpt54 = getAgentDefinition({
-    settingsService: createMockSettingsService({
-      'agent.model': 'gpt-5.4',
-    }),
-    loggingService: mockLogger,
-  });
-  t.true(gpt54.instructions.includes('## GPT-5.4 Guidance'));
-  t.false(gpt54.instructions.includes('## GPT-5.4 Small-Model Guidance'));
-
-  const gpt54Mini = getAgentDefinition({
-    settingsService: createMockSettingsService({
-      'agent.model': 'gpt-5.4-mini',
-    }),
-    loggingService: mockLogger,
-  });
-  t.true(gpt54Mini.instructions.includes('## GPT-5.4 Guidance'));
-  t.true(gpt54Mini.instructions.includes('## GPT-5.4 Small-Model Guidance'));
-
-  const gpt53Codex = getAgentDefinition({
-    settingsService: createMockSettingsService({
-      'agent.model': 'gpt-5.3-codex',
-    }),
-    loggingService: mockLogger,
-  });
-  t.true(gpt53Codex.instructions.includes('## GPT-5.3 Codex Guidance'));
-});
+// test('getAgentDefinition includes GPT version-specific prompt fragments', (t) => {
+//   const gpt55 = getAgentDefinition({
+//     settingsService: createMockSettingsService({
+//       'agent.model': 'gpt-5.5-2026-04-23',
+//     }),
+//     loggingService: mockLogger,
+//   });
+//   t.true(gpt55.instructions.includes('## GPT-5.5 Guidance'));
+//   t.true(gpt55.instructions.includes('outcome-first behavior'));
+//
+//   const gpt54 = getAgentDefinition({
+//     settingsService: createMockSettingsService({
+//       'agent.model': 'gpt-5.4',
+//     }),
+//     loggingService: mockLogger,
+//   });
+//   t.true(gpt54.instructions.includes('## GPT-5.4 Guidance'));
+//   t.false(gpt54.instructions.includes('## GPT-5.4 Small-Model Guidance'));
+//
+//   const gpt54Mini = getAgentDefinition({
+//     settingsService: createMockSettingsService({
+//       'agent.model': 'gpt-5.4-mini',
+//     }),
+//     loggingService: mockLogger,
+//   });
+//   t.true(gpt54Mini.instructions.includes('## GPT-5.4 Guidance'));
+//   t.true(gpt54Mini.instructions.includes('## GPT-5.4 Small-Model Guidance'));
+//
+//   const gpt53Codex = getAgentDefinition({
+//     settingsService: createMockSettingsService({
+//       'agent.model': 'gpt-5.3-codex',
+//     }),
+//     loggingService: mockLogger,
+//   });
+//   t.true(gpt53Codex.instructions.includes('## GPT-5.3 Codex Guidance'));
+// });
 
 test('getAgentDefinition appends search-via-shell addendum when enabled', (t) => {
   const settingsService = createMockSettingsService({

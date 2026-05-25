@@ -47,17 +47,33 @@ const StatusBar: FC<StatusBarProps> = ({
     const { primary, secondary } = lastCodexRateLimit;
     const parts: string[] = [];
 
-    if (primary) {
+    if (
+      primary &&
+      typeof primary.window_minutes === 'number' &&
+      !isNaN(primary.window_minutes) &&
+      typeof primary.used_percent === 'number' &&
+      !isNaN(primary.used_percent) &&
+      typeof primary.reset_at === 'number' &&
+      !isNaN(primary.reset_at)
+    ) {
       const hours = Math.round(primary.window_minutes / 60);
       const resetDate = new Date(primary.reset_at * 1000);
       const timeStr = resetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      parts.push(`${hours}H: ${primary.used_percent}% (reset at ${timeStr})`);
+      parts.push(`${hours}H: ${primary.used_percent}% (${timeStr})`);
     }
-    if (secondary) {
+    if (
+      secondary &&
+      typeof secondary.window_minutes === 'number' &&
+      !isNaN(secondary.window_minutes) &&
+      typeof secondary.used_percent === 'number' &&
+      !isNaN(secondary.used_percent) &&
+      typeof secondary.reset_at === 'number' &&
+      !isNaN(secondary.reset_at)
+    ) {
       const days = Math.round(secondary.window_minutes / (60 * 24));
       const resetDate = new Date(secondary.reset_at * 1000);
       const dateStr = resetDate.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
-      parts.push(`${days}D: ${secondary.used_percent}% (reset on ${dateStr})`);
+      parts.push(`${days}D: ${secondary.used_percent}% (${dateStr})`);
     }
     return parts.join(' / ');
   })();

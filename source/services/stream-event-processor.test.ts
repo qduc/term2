@@ -259,3 +259,31 @@ test('throws AbortError if stream is cancelled', async (t) => {
     { name: 'AbortError', message: 'The user aborted a request.' },
   );
 });
+
+test('extracts codex rate limits from nested or flat structures in raw events', async (t) => {
+  const nestedEvent = {
+    type: 'codex.rate_limits',
+    plan_type: 'plus',
+    rate_limits: {
+      allowed: true,
+      limit_reached: false,
+      primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
+      secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
+    },
+  };
+
+  const stream = makeStream([nestedEvent]);
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+
+  const rateLimitEvents = events.filter((e) => e.type === 'codex_rate_limits');
+  t.is(rateLimitEvents.length, 1);
+  const info = rateLimitEvents[0].rateLimits;
+  t.is(info.allowed, true);
+  t.is(info.limit_reached, false);
+  t.is(info.primary.used_percent, 11);
+  t.is(info.secondary.used_percent, 14);
+});

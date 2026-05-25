@@ -69,3 +69,48 @@ test('StatusBar renders Orchestrator mode badge instead of Standard', (t) => {
   t.true(output.includes('Orchestrator'));
   t.false(output.includes('Standard'));
 });
+
+test('StatusBar renders Codex rate limits when valid, but hides them when invalid or NaN', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  // 1. Valid case
+  const { lastFrame: lastFrameValid } = render(
+    <StatusBar
+      settingsService={settingsService}
+      lastCodexRateLimit={{
+        allowed: true,
+        limit_reached: false,
+        primary: { used_percent: 11, window_minutes: 300, reset_after_seconds: 9697, reset_at: 1779703037 },
+        secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
+      }}
+    />,
+  );
+  const outputValid = lastFrameValid() ?? '';
+  t.true(outputValid.includes('5H: 11%'));
+  t.true(outputValid.includes('7D: 14%'));
+  t.false(outputValid.includes('undefined'));
+  t.false(outputValid.includes('NaN'));
+
+  // 2. Invalid/partial case (e.g. empty objects as fallback values)
+  const { lastFrame: lastFrameInvalid } = render(
+    <StatusBar
+      settingsService={settingsService}
+      lastCodexRateLimit={{
+        allowed: true,
+        limit_reached: false,
+        primary: {} as any,
+        secondary: {} as any,
+      }}
+    />,
+  );
+  const outputInvalid = lastFrameInvalid() ?? '';
+  t.false(outputInvalid.includes('H:'));
+  t.false(outputInvalid.includes('D:'));
+  t.false(outputInvalid.includes('undefined'));
+  t.false(outputInvalid.includes('NaN'));
+  t.false(outputInvalid.includes('Invalid Date'));
+});

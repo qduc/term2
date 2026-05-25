@@ -92,13 +92,23 @@ export async function* processStreamEvents(
 
     // Intercept Codex rate-limits frames (e.g. codex.rate_limits) from the
     // upstream provider stream so the UI can display them in the status bar.
-    if (getString(modelEvent, 'type') === 'codex.rate_limits') {
-      const rl = asRecord(modelEvent);
+    const rawRateLimit =
+      getString(event, 'type') === 'codex.rate_limits'
+        ? event
+        : getString(eventData, 'type') === 'codex.rate_limits'
+        ? eventData
+        : getString(modelEvent, 'type') === 'codex.rate_limits'
+        ? modelEvent
+        : undefined;
+
+    if (rawRateLimit) {
+      const rl = asRecord(rawRateLimit);
+      const rlData = asRecord(rl?.rate_limits) ?? rl;
       const rateLimits: CodexRateLimitInfo = {
-        allowed: Boolean(rl?.allowed),
-        limit_reached: Boolean(rl?.limit_reached),
-        primary: (asRecord(rl?.primary) ?? {}) as unknown as CodexRateLimitWindow,
-        secondary: (asRecord(rl?.secondary) ?? {}) as unknown as CodexRateLimitWindow,
+        allowed: Boolean(rlData?.allowed),
+        limit_reached: Boolean(rlData?.limit_reached),
+        primary: (asRecord(rlData?.primary) ?? {}) as unknown as CodexRateLimitWindow,
+        secondary: (asRecord(rlData?.secondary) ?? {}) as unknown as CodexRateLimitWindow,
       };
       logger.debug('Codex rate limits extracted from stream event', {
         sessionId,

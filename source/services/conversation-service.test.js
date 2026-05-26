@@ -1039,7 +1039,7 @@ test('does not retry on non-hallucination ModelBehaviorError', async (t) => {
   }
 });
 
-test('failed user turn remains in history after non-retryable provider error', async (t) => {
+test('failed user turn is dropped from history after non-retryable provider error', async (t) => {
   const startCalls = [];
   const mockClient = {
     getProvider() {
@@ -1075,15 +1075,11 @@ test('failed user turn remains in history after non-retryable provider error', a
 
   t.is(result.type, 'response');
   t.is(startCalls.length, 2);
-  // collectTerminalResult throws on the error event, which short-circuits
-  // the generator before the cleanup code that removes the last user message.
-  // So the first failed message remains in history.
+  // The session removes the failed user turn from the store before yielding the
+  // error event (so the drop happens regardless of generator-cleanup semantics),
+  // and surfaces the dropped text on the error event for UI restoration. The
+  // next request must not include the stranded first turn.
   t.deepEqual(startCalls[1], [
-    {
-      role: 'user',
-      type: 'message',
-      content: 'first failed message',
-    },
     {
       role: 'user',
       type: 'message',

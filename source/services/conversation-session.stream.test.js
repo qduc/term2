@@ -1360,3 +1360,106 @@ test('run() with image attachment does not throw when supportsChaining is true',
   t.is(receivedInput[0].content[0].type, 'input_text');
   t.is(receivedInput[0].content[1].type, 'input_image');
 });
+
+test('run() yields an error event carrying droppedUserMessage when startStream fails pre-stream', async (t) => {
+  const mockClient = {
+    async startStream() {
+      throw new Error('upstream 500');
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const emitted = [];
+  let thrown = null;
+  try {
+    for await (const ev of session.run('hello')) {
+      emitted.push(ev);
+    }
+  } catch (e) {
+    thrown = e;
+  }
+
+  // The run wraps the throw inside the catch and re-throws after yielding the
+  // error event, but consumer-cleanup may swallow the re-throw — what matters
+  // is that the error event carried the drop signal.
+  const errorEvent = emitted.find((e) => e.type === 'error');
+  t.truthy(errorEvent, 'should emit an error event');
+  t.truthy(errorEvent.droppedUserMessage, 'error event should carry droppedUserMessage');
+  t.is(errorEvent.droppedUserMessage.text, 'hello');
+  t.is(errorEvent.droppedUserMessage.imageCount, 0);
+
+  // And the store should have rolled back the user turn so /undo state is clean.
+  t.is(session.listUserTurns().length, 0);
+  t.truthy(thrown);
+});
+
+test('run() omits droppedUserMessage when no user turn was added (skipUserMessage)', async (t) => {
+  const mockClient = {
+    async startStream() {
+      throw new Error('upstream 500');
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const emitted = [];
+  try {
+    for await (const ev of session.run('hello', { skipUserMessage: true })) {
+      emitted.push(ev);
+    }
+  } catch {
+    // expected
+  }
+
+  const errorEvent = emitted.find((e) => e.type === 'error');
+  t.truthy(errorEvent);
+  t.is(errorEvent.droppedUserMessage, undefined);
+});
+
+test('run() emits user_message_consumed_for_abort when an aborted approval is being resolved', async (t) => {
+  // Plant an aborted approval context directly via approvalState so the
+  // session's consumeAborted() picks it up. The downstream fake-execution
+  // path will throw (no real interruption), but we only care about event order.
+  const mockClient = {
+    async startStream() {
+      throw new Error('not used');
+    },
+    async continueRunStream() {
+      throw new Error('continue not implemented in test');
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  session.approvalState.setPending({
+    state: {},
+    interruption: { type: 'tool_approval_item', rawItem: { name: 'noop', callId: 'c1' } },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  session.approvalState.abortPending();
+
+  const emitted = [];
+  try {
+    for await (const ev of session.run('follow up text')) {
+      emitted.push(ev);
+    }
+  } catch {
+    // expected — downstream paths will fail in this minimal mock
+  }
+
+  const idx = emitted.findIndex((e) => e.type === 'user_message_consumed_for_abort');
+  t.true(idx >= 0, 'must emit user_message_consumed_for_abort');
+  // The store must not have a genuine user turn for this input.
+  t.is(session.listUserTurns().length, 0);
+});

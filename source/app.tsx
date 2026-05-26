@@ -149,6 +149,7 @@ const App: FC<AppProps> = ({
       }
     }, []),
     settingsService,
+    onRestoreInput: setInput,
   });
 
   const handleClearConversation = useCallback(async () => {

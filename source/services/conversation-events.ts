@@ -17,7 +17,8 @@ export type ConversationEvent =
   | SubagentToolStartedEvent
   | SubagentCommandMessageEvent
   | SubagentCompletedEvent
-  | CodexRateLimitEvent;
+  | CodexRateLimitEvent
+  | UserMessageConsumedForAbortEvent;
 
 export interface RetryEvent {
   type: 'retry';
@@ -97,6 +98,21 @@ export interface ErrorEvent {
   type: 'error';
   message: string;
   kind?: string;
+  /**
+   * Set when the session removed the just-added user turn from its store as part of
+   * handling this error. UIs should drop the corresponding trailing user message and
+   * restore the text to the input box so the user can edit and retry.
+   */
+  droppedUserMessage?: { text: string; imageCount: number };
+}
+
+/**
+ * Emitted when the user's input was consumed as resolution for a previously aborted
+ * tool approval rather than added to the conversation as a new user turn. UIs should
+ * mark the corresponding user message so /undo and the undo menu skip it.
+ */
+export interface UserMessageConsumedForAbortEvent {
+  type: 'user_message_consumed_for_abort';
 }
 
 export interface SubagentStartedEvent {

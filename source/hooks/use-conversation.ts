@@ -23,6 +23,12 @@ export interface UserMessage {
   id: string;
   sender: 'user';
   text: string;
+  /**
+   * True when the input was consumed as resolution for an aborted tool approval
+   * rather than added to the conversation store as a new user turn. /undo and the
+   * undo selection menu must skip these so UI and store stay aligned.
+   */
+  consumedForAbort?: boolean;
 }
 
 export interface BotMessage {
@@ -84,6 +90,7 @@ export const useConversation = ({
   sessionId,
   onClear,
   settingsService,
+  onRestoreInput,
 }: {
   conversationService: ConversationService;
   loggingService: ILoggingService;
@@ -93,6 +100,13 @@ export const useConversation = ({
   sessionId?: string;
   onClear?: () => void | Promise<void>;
   settingsService?: SettingsService;
+  /**
+   * Called when a user message could not be sent (e.g. upstream error before any
+   * stream tokens, or input-surge guard) and the session dropped it from the
+   * conversation store. The UI removes the trailing user message and forwards
+   * the original text here so the caller can repopulate the input box.
+   */
+  onRestoreInput?: (text: string) => void;
 }) => {
   const [messages, setMessages] = useState<Message[]>(() =>
     appendMessagesCapped([], initialMessages, MAX_MESSAGE_COUNT),
@@ -248,9 +262,28 @@ export const useConversation = ({
           'sendUserMessage',
         );
 
+      const wrappedOnEvent = (event: any) => {
+        if (event?.type === 'user_message_consumed_for_abort') {
+          setMessages((prev) => {
+            for (let i = prev.length - 1; i >= 0; i--) {
+              const msg = prev[i];
+              if (msg.sender === 'user') {
+                if ((msg as UserMessage).consumedForAbort) return prev;
+                const next = prev.slice();
+                next[i] = { ...(msg as UserMessage), consumedForAbort: true };
+                return next;
+              }
+            }
+            return prev;
+          });
+          return;
+        }
+        applyConversationEvent(event);
+      };
+
       try {
         const result = await conversationService.sendMessage(turn, {
-          onEvent: createOnEventWithSubagentTracking(applyConversationEvent),
+          onEvent: createOnEventWithSubagentTracking(wrappedOnEvent),
         });
 
         applyConversationEvent({ type: 'final', finalText: '' } as any);
@@ -272,6 +305,24 @@ export const useConversation = ({
 
         const rawErrorMessage = error instanceof Error ? error.message : String(error);
         const errorMessage = enhanceApiKeyError(rawErrorMessage);
+
+        // If the session dropped the user turn from the store as part of this
+        // error, mirror that in the UI: remove the trailing user message and
+        // restore its text to the input box for editing/retry.
+        const dropped = (error as any)?.rawEvent?.droppedUserMessage as
+          | { text: string; imageCount: number }
+          | undefined;
+        if (dropped) {
+          setMessages((prev) => {
+            for (let i = prev.length - 1; i >= 0; i--) {
+              if (prev[i].sender === 'user') {
+                return prev.slice(0, i);
+              }
+            }
+            return prev;
+          });
+          onRestoreInput?.(dropped.text);
+        }
 
         if (isMaxTurnsError(errorMessage)) {
           // Create an approval prompt for max turns continuation
@@ -313,6 +364,7 @@ export const useConversation = ({
       trimMessages,
       loggingService,
       createOnEventWithSubagentTracking,
+      onRestoreInput,
     ],
   );
 
@@ -499,7 +551,8 @@ export const useConversation = ({
   const undoLastUserMessage = useCallback(() => {
     let lastUserIndex = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].sender === 'user') {
+      const m = messages[i];
+      if (m.sender === 'user' && !(m as UserMessage).consumedForAbort) {
         lastUserIndex = i;
         break;
       }
@@ -538,8 +591,9 @@ export const useConversation = ({
   const getUserMessages = useCallback((): { uiIndex: number; text: string }[] => {
     const result: { uiIndex: number; text: string }[] = [];
     for (let i = 0; i < messages.length; i++) {
-      if (messages[i].sender === 'user') {
-        result.push({ uiIndex: i, text: (messages[i] as UserMessage).text });
+      const m = messages[i];
+      if (m.sender === 'user' && !(m as UserMessage).consumedForAbort) {
+        result.push({ uiIndex: i, text: (m as UserMessage).text });
       }
     }
     return result;
@@ -547,10 +601,12 @@ export const useConversation = ({
 
   const undoToUserMessage = useCallback(
     (uiIndex: number): string | null => {
-      // Count how many user messages are at or after this index
+      // Count how many genuine user turns (excluding abort-consumed messages) are
+      // at or after this index — that's what the store needs to roll back.
       let undoCount = 0;
       for (let i = uiIndex; i < messages.length; i++) {
-        if (messages[i].sender === 'user') {
+        const m = messages[i];
+        if (m.sender === 'user' && !(m as UserMessage).consumedForAbort) {
           undoCount++;
         }
       }

@@ -305,6 +305,11 @@ export class ConversationSession {
       if (shouldAddUserMessage) {
         this.conversationStore.addUserTurn(turn);
         addedUserMessage = true;
+      } else if (abortedContext && !skipUserMessage) {
+        // The UI appended a user message for this input, but the store will consume it
+        // as fake tool output for the aborted approval rather than as a new user turn.
+        // Signal the UI to mark it so /undo skips it.
+        yield { type: 'user_message_consumed_for_abort' };
       }
 
       // If there's an aborted approval, we need to resolve it first.
@@ -438,8 +443,10 @@ export class ConversationSession {
       const inputSurgeKind = useChaining ? 'delta' : 'full_history';
       const surgeDecision = this.inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind });
       if (surgeDecision.action === 'block') {
+        let droppedUserMessage: { text: string; imageCount: number } | undefined;
         if (addedUserMessage && this.#isCurrentGeneration(gen)) {
           this.conversationStore.removeLastUserMessage();
+          droppedUserMessage = { text: turn.text, imageCount: turn.images?.length ?? 0 };
         }
 
         this.logger.warn('Input surge guard blocked provider request', {
@@ -457,6 +464,7 @@ export class ConversationSession {
           type: 'error',
           kind: 'input_surge_guard',
           message: `${surgeDecision.reason} Request blocked to prevent runaway context growth. Try /undo or /clear, or compact the conversation history.`,
+          ...(droppedUserMessage ? { droppedUserMessage } : {}),
         };
         return;
       }
@@ -591,13 +599,19 @@ export class ConversationSession {
         return;
       }
 
+      // Drop the just-added user turn from the store before yielding so the
+      // generator-cleanup path doesn't strand the removal — and so the error
+      // event can carry the dropped text for UI restoration.
+      let droppedUserMessage: { text: string; imageCount: number } | undefined;
+      if (addedUserMessage && !stream && this.#isCurrentGeneration(gen)) {
+        this.conversationStore.removeLastUserMessage();
+        droppedUserMessage = { text: turn.text, imageCount: turn.images?.length ?? 0 };
+      }
       yield {
         type: 'error',
         message: error instanceof Error ? error.message : String(error),
+        ...(droppedUserMessage ? { droppedUserMessage } : {}),
       };
-      if (addedUserMessage && !stream && this.#isCurrentGeneration(gen)) {
-        this.conversationStore.removeLastUserMessage();
-      }
       this.logger.error('Conversation stream error', {
         eventType: 'stream.failed',
         category: 'stream',

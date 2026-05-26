@@ -375,7 +375,10 @@ export function createConversationEventHandler<
 
           if (pendingIndex !== -1) {
             const next = [...prev];
-            next[pendingIndex] = annotated as unknown as MessageT;
+            next[pendingIndex] = {
+              ...annotated,
+              id: prev[pendingIndex].id,
+            } as unknown as MessageT;
             return trimMessages(next);
           }
 

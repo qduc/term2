@@ -17,6 +17,7 @@ type MessageLike = {
   id: string;
   sender?: string;
   status?: string;
+  callId?: string;
 };
 
 type StaticBannerItem = {

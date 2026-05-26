@@ -1193,3 +1193,81 @@ test('command_message: leaves stale running message when no callId is present on
   t.is(result.length, 1);
   t.is(result[0].status, 'completed');
 });
+
+test('command_message: preserves the id of the running message when replacing it', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'command_message',
+    message: {
+      id: 'call-1-0', // different id from the running command
+      sender: 'command',
+      status: 'completed',
+      command: 'ls',
+      output: 'file.txt',
+      callId: 'call-1',
+      toolName: 'shell',
+    },
+  } as ConversationEvent);
+
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const existingMessages = [{ id: 'call-1', sender: 'command', status: 'running', callId: 'call-1' }];
+  const result = updater(existingMessages);
+  t.is(result.length, 1);
+  t.is(result[0].id, 'call-1'); // preserves running message id
+  t.is(result[0].status, 'completed');
+});
+
+test('command_message: preserves running ids for batch completions matched by callId', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'command_message',
+    message: {
+      id: 'call-1-0',
+      sender: 'command',
+      status: 'completed',
+      command: 'read_file file1.ts',
+      output: 'content1',
+      callId: 'call-1',
+      toolName: 'read_file',
+    },
+  } as ConversationEvent);
+
+  handler({
+    type: 'command_message',
+    message: {
+      id: 'call-2-0',
+      sender: 'command',
+      status: 'completed',
+      command: 'read_file file2.ts',
+      output: 'content2',
+      callId: 'call-2',
+      toolName: 'read_file',
+    },
+  } as ConversationEvent);
+
+  const firstUpdater = deps.calls.setMessagesCalls[0]!;
+  const secondUpdater = deps.calls.setMessagesCalls[1]!;
+  const afterFirst = firstUpdater([
+    { id: 'call-1', sender: 'command', status: 'running', callId: 'call-1' },
+    { id: 'call-2', sender: 'command', status: 'running', callId: 'call-2' },
+  ]);
+  const afterSecond = secondUpdater(afterFirst);
+
+  t.deepEqual(
+    afterSecond.map((message) => ({
+      id: message.id,
+      callId: (message as any).callId,
+      status: message.status,
+    })),
+    [
+      { id: 'call-1', callId: 'call-1', status: 'completed' },
+      { id: 'call-2', callId: 'call-2', status: 'completed' },
+    ],
+  );
+});

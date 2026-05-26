@@ -187,6 +187,11 @@ fi
 
 echo -e "Preparing release for version: ${GREEN}$NEW_VERSION${NC}"
 
+# Re-check if changelog already has an entry for this version
+if changelog_has_version "$NEW_VERSION"; then
+    CHANGELOG_DONE=true
+fi
+
 # 4. Generate Changelog (skip if already done)
 if [[ "$CHANGELOG_DONE" == "true" ]]; then
     echo -e "${YELLOW}Skipping changelog generation (already has v$NEW_VERSION entry)${NC}"

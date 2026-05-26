@@ -24,6 +24,7 @@ import { buildConversationResult, toTerminalEvent } from './conversation-result-
 import type { AgentStream } from './agent-stream.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 import { collectDuplicateToolCallResultPairs, InputSurgeGuard } from './input-surge-guard.js';
+import { LargeUncachedInputGuard, type LargeUncachedInputDecision } from './large-uncached-input-guard.js';
 import {
   reconcileHistoryWithToolLedger,
   ToolExecutionLedger,
@@ -62,6 +63,12 @@ const supportsConversationChaining = (providerId: string): boolean => {
 };
 
 const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
+type BuiltOutgoingInput = {
+  streamInput: string | AgentInputItem | AgentInputItem[];
+  inputSurgeKind: 'delta' | 'full_history';
+  modeNoticeToPersist?: string;
+};
 
 type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
 
@@ -125,6 +132,7 @@ export class ConversationSession {
   private shellAutoApproval: ShellAutoApprovalResolver;
   private approvalFlow: ApprovalFlowCoordinator;
   private inputSurgeGuard = new InputSurgeGuard();
+  private largeUncachedInputGuard = new LargeUncachedInputGuard();
   private toolLedger = new ToolExecutionLedger();
   private generation = 0;
 
@@ -173,6 +181,90 @@ export class ConversationSession {
     return 'standard';
   }
 
+  #getModelForGuard(): string | null {
+    return this.settingsService?.get<string>('agent.model') ?? null;
+  }
+
+  #getReasoningEffortForGuard(): string | null {
+    return this.settingsService?.get<string>('agent.reasoningEffort') ?? null;
+  }
+
+  #getProviderForGuard(): string | null {
+    const getProvider = getMethod<[], string>(this.agentClient, 'getProvider');
+    return getProvider
+      ? getProvider.call(this.agentClient)
+      : this.settingsService?.get<string>('agent.provider') ?? null;
+  }
+
+  #makeUserInputItem(turn: UserTurn): AgentInputItem {
+    const images = turn.images ?? [];
+    if (images.length === 0) {
+      return { role: 'user', type: 'message', content: turn.text ?? '' };
+    }
+
+    const content: any[] = [];
+    if (turn.text) {
+      content.push({ type: 'input_text', text: turn.text });
+    }
+    for (const image of images) {
+      content.push({
+        type: 'input_image',
+        image: `data:${image.mimeType};base64,${image.data}`,
+        detail: 'auto',
+      });
+    }
+
+    return { role: 'user', type: 'message', content } as AgentInputItem;
+  }
+
+  #buildOutgoingInput(turn: UserTurn, { includeTurn }: { includeTurn: boolean }): BuiltOutgoingInput {
+    const provider = this.#getProviderForGuard() ?? 'openai';
+    const supportsChaining = supportsConversationChaining(provider);
+    const history = this.conversationStore.getHistory();
+    const outgoingHistory = includeTurn ? [...history, this.#makeUserInputItem(turn)] : history;
+    const useChaining = supportsChaining && (!!this.previousResponseId || outgoingHistory.length <= 1);
+    const notice = this.pendingModeNotice;
+    const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? turn.text;
+    const chainedInput = turn.images?.length ? latestInput : turn.text;
+
+    if (notice) {
+      if (useChaining) {
+        const userItem: AgentInputItem =
+          typeof chainedInput === 'string' ? { role: 'user', type: 'message', content: chainedInput } : chainedInput;
+        const noticeItem: AgentInputItem = { role: 'system', type: 'message', content: notice };
+        return {
+          streamInput: [noticeItem, userItem],
+          inputSurgeKind: 'delta',
+        };
+      }
+
+      const noticeItem: AgentInputItem = { role: 'user', type: 'message', content: notice };
+      return {
+        streamInput: [...outgoingHistory, noticeItem],
+        inputSurgeKind: 'full_history',
+        modeNoticeToPersist: notice,
+      };
+    }
+
+    return {
+      streamInput: useChaining ? (typeof chainedInput === 'string' ? chainedInput : [chainedInput]) : outgoingHistory,
+      inputSurgeKind: useChaining ? 'delta' : 'full_history',
+    };
+  }
+
+  previewLargeUncachedInput(input: string | UserTurn, now = Date.now()): LargeUncachedInputDecision {
+    const turn = normalizeUserTurn(input);
+    const { streamInput } = this.#buildOutgoingInput(turn, { includeTurn: true });
+    return this.largeUncachedInputGuard.inspect({
+      input: streamInput,
+      now,
+      provider: this.#getProviderForGuard(),
+      model: this.#getModelForGuard(),
+      reasoningEffort: this.#getReasoningEffortForGuard(),
+      mode: this.#getTrafficMode(),
+    });
+  }
+
   #getFirstUserMessagePreview(currentTurn?: string): string {
     const [firstTurn] = this.conversationStore.listUserTurns();
     return firstTurn?.text ?? currentTurn ?? '';
@@ -208,6 +300,7 @@ export class ConversationSession {
     this.toolLedger = new ToolExecutionLedger();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
+    this.largeUncachedInputGuard.reset();
     const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
     clearConversations?.call(this.agentClient);
   }
@@ -222,6 +315,7 @@ export class ConversationSession {
     this.toolCallArgumentsById.clear();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
+    this.largeUncachedInputGuard.markUndoOrRewind();
     this.#log({ type: 'undo', removedUserTurns: 1, snapshot: this.getCurrentSnapshot() });
     return removed;
   }
@@ -240,6 +334,7 @@ export class ConversationSession {
     this.toolCallArgumentsById.clear();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
+    this.largeUncachedInputGuard.markUndoOrRewind();
     this.#log({ type: 'undo', removedUserTurns: n, snapshot: this.getCurrentSnapshot() });
     return removed;
   }
@@ -391,6 +486,7 @@ export class ConversationSession {
     history: unknown[];
     previousResponseId: string | null;
     toolLedger?: SavedToolExecution[];
+    updatedAt?: string;
   }): void {
     this.conversationStore.clear();
     this.toolLedger.import(state.toolLedger);
@@ -410,6 +506,9 @@ export class ConversationSession {
     }
     this.previousResponseId = state.previousResponseId;
     this.inputSurgeGuard.reset();
+    this.largeUncachedInputGuard.markResumedSession({
+      updatedAtMs: state.updatedAt ? Date.parse(state.updatedAt) : null,
+    });
     this.generation++;
   }
 
@@ -574,49 +673,27 @@ export class ConversationSession {
       }
 
       // Normal message flow
-      const getProvider = getMethod<[], string>(this.agentClient, 'getProvider');
-      const provider = getProvider ? getProvider.call(this.agentClient) : 'openai';
-
-      const supportsChaining = supportsConversationChaining(provider);
-      const history = this.conversationStore.getHistory();
       // Use chaining mode only when the provider supports it AND either a valid
       // chain exists (previousResponseId is set) or there is no prior history to
       // resync (fresh start with just the current message). After undo the chain
       // is severed (previousResponseId = null) while prior turns remain in the
       // local store, so we fall back to full-history mode to re-establish context.
-      const useChaining = supportsChaining && (!!this.previousResponseId || history.length <= 1);
-
-      let streamInput: string | AgentInputItem | AgentInputItem[];
-
+      const { streamInput, inputSurgeKind, modeNoticeToPersist } = this.#buildOutgoingInput(turn, {
+        includeTurn: false,
+      });
       if (this.pendingModeNotice) {
-        const notice = this.pendingModeNotice;
         this.pendingModeNotice = null;
-
-        if (useChaining) {
-          const latestInput = history[history.length - 1] ?? text;
-          const chainedInput = turn.images?.length ? latestInput : text;
-          const userItem: AgentInputItem =
-            typeof chainedInput === 'string' ? { role: 'user', type: 'message', content: chainedInput } : chainedInput;
-          const noticeItem: AgentInputItem = { role: 'system', type: 'message', content: notice };
-          streamInput = [noticeItem, userItem];
-        } else {
-          // Persist the notice at the tail (append-only) rather than splicing
-          // it before the last user turn or sending it as a one-shot item.
-          // Mid-history insertion adds a stray ephemeral cache breakpoint (see
-          // addCacheControlToLastTwoMessages) and a transient item makes
-          // consecutive requests diverge at the tail — both break the
-          // Claude/Qwen prompt cache. Appending keeps the cached prefix
-          // byte-identical and only growing.
-          this.conversationStore.addModeNotice(notice);
-          streamInput = this.conversationStore.getHistory();
-        }
-      } else {
-        const latestInput = history[history.length - 1] ?? text;
-        const chainedInput = turn.images?.length ? latestInput : text;
-        streamInput = useChaining ? (typeof chainedInput === 'string' ? chainedInput : [chainedInput]) : history;
       }
-
-      const inputSurgeKind = useChaining ? 'delta' : 'full_history';
+      if (modeNoticeToPersist) {
+        // Persist the notice at the tail (append-only) rather than splicing
+        // it before the last user turn or sending it as a one-shot item.
+        // Mid-history insertion adds a stray ephemeral cache breakpoint (see
+        // addCacheControlToLastTwoMessages) and a transient item makes
+        // consecutive requests diverge at the tail — both break the
+        // Claude/Qwen prompt cache. Appending keeps the cached prefix
+        // byte-identical and only growing.
+        this.conversationStore.addModeNotice(modeNoticeToPersist);
+      }
       const surgeDecision = this.inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind });
       if (surgeDecision.action === 'block') {
         let droppedUserMessage: { text: string; imageCount: number } | undefined;
@@ -646,7 +723,7 @@ export class ConversationSession {
       }
 
       stream = (await this.agentClient.startStream(streamInput, {
-        previousResponseId: useChaining ? this.previousResponseId : null,
+        previousResponseId: inputSurgeKind === 'delta' ? this.previousResponseId : null,
         sessionId: this.id,
       })) as AgentStream;
 
@@ -683,7 +760,7 @@ export class ConversationSession {
         acc.latestUsage,
       );
 
-      if (useChaining) {
+      if (inputSurgeKind === 'delta') {
         this.inputSurgeGuard.recordSuccessfulInput(streamInput, { kind: inputSurgeKind });
       } else {
         this.inputSurgeGuard.recordSuccessfulInput(this.conversationStore.getHistory(), {
@@ -691,6 +768,14 @@ export class ConversationSession {
           previousInput: streamInput,
         });
       }
+      this.largeUncachedInputGuard.recordSuccessfulInput({
+        input: inputSurgeKind === 'delta' ? streamInput : this.conversationStore.getHistory(),
+        now: Date.now(),
+        provider: this.#getProviderForGuard(),
+        model: this.#getModelForGuard(),
+        reasoningEffort: this.#getReasoningEffortForGuard(),
+        mode: this.#getTrafficMode(),
+      });
 
       if (resolvedResult.type === 'approval_required') {
         this.logger.debug('Tool approval required', {

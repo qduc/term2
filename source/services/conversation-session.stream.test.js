@@ -1550,6 +1550,78 @@ test('run() with image attachment does not throw when supportsChaining is true',
   t.is(receivedInput[0].content[1].type, 'input_image');
 });
 
+test('previewLargeUncachedInput() does not mutate history or consume pending mode notice', (t) => {
+  const mockClient = {
+    getProvider() {
+      return 'codex';
+    },
+  };
+  const settings = new Map([
+    ['agent.model', 'gpt-5'],
+    ['agent.provider', 'codex'],
+    ['agent.reasoningEffort', 'medium'],
+    ['app.planMode', true],
+  ]);
+  const settingsService = {
+    get(key) {
+      return settings.get(key);
+    },
+  };
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, settingsService },
+  });
+
+  session.queueModeNotice('Plan mode enabled');
+  const before = session.exportState();
+
+  const decision = session.previewLargeUncachedInput('hello', 1_000);
+
+  t.is(decision.action, 'allow');
+  t.deepEqual(session.exportState(), before);
+});
+
+test('sendMessage() records successful large guard state after provider request completion', async (t) => {
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'ok' }]);
+  firstStream.finalOutput = 'ok';
+  firstStream.history = [
+    { role: 'user', type: 'message', content: 'first' },
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'ok' }] },
+  ];
+
+  const mockClient = {
+    getProvider() {
+      return 'codex';
+    },
+    async startStream() {
+      return firstStream;
+    },
+  };
+  const settings = new Map([
+    ['agent.model', 'gpt-5'],
+    ['agent.provider', 'codex'],
+    ['agent.reasoningEffort', 'medium'],
+  ]);
+  const settingsService = {
+    get(key) {
+      return settings.get(key);
+    },
+  };
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, settingsService },
+  });
+
+  const large = 'x'.repeat(64_000 * 4);
+  t.is(session.previewLargeUncachedInput(large, 1_000).action, 'allow');
+
+  await session.sendMessage(large);
+
+  const decision = session.previewLargeUncachedInput(large, Date.now() + 5 * 60 * 1_000 + 1);
+  t.is(decision.action, 'warn');
+  t.true(decision.reasons.includes('idle_timeout'));
+});
+
 test('run() yields an error event carrying droppedUserMessage when startStream fails pre-stream', async (t) => {
   const mockClient = {
     async startStream() {

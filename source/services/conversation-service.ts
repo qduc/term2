@@ -113,6 +113,12 @@ export class ConversationService {
     return this.#session.sendMessage(...args);
   }
 
+  previewLargeUncachedInput(
+    ...args: Parameters<ConversationSession['previewLargeUncachedInput']>
+  ): ReturnType<ConversationSession['previewLargeUncachedInput']> {
+    return this.#session.previewLargeUncachedInput(...args);
+  }
+
   handleApprovalDecision(
     ...args: Parameters<ConversationSession['handleApprovalDecision']>
   ): Promise<ConversationTerminal | null> {
@@ -131,6 +137,7 @@ export class ConversationService {
     history: unknown[];
     previousResponseId: string | null;
     toolLedger?: SavedToolExecution[];
+    updatedAt?: string;
   }): void {
     this.#session.importState(state);
   }

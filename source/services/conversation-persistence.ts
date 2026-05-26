@@ -112,6 +112,21 @@ function readEnvelopes(filePath: string): LogEnvelope[] {
   return envelopes;
 }
 
+function restoredUpdatedAt(filePath: string, envelopes: LogEnvelope[]): string | undefined {
+  const latestEnvelopeTs = [...envelopes]
+    .reverse()
+    .map((envelope) => envelope.ts)
+    .find((ts) => typeof ts === 'string' && ts.length > 0);
+  if (latestEnvelopeTs) {
+    return latestEnvelopeTs;
+  }
+  try {
+    return fs.statSync(filePath).mtime.toISOString();
+  } catch {
+    return undefined;
+  }
+}
+
 export function loadConversation(
   id: string,
   expectedProjectPath?: string,
@@ -124,6 +139,7 @@ export function loadConversation(
     }
     const envelopes = readEnvelopes(filePath);
     const restored = replayEvents(envelopes);
+    restored.updatedAt = restoredUpdatedAt(filePath, envelopes);
     if (!restored.id) {
       restored.id = id;
     }
@@ -147,6 +163,7 @@ export function loadConversationForProject(
   }
   const envelopes = readEnvelopes(filePath);
   const conversation = replayEvents(envelopes);
+  conversation.updatedAt = restoredUpdatedAt(filePath, envelopes);
   if (!conversation.id) {
     conversation.id = id;
   }

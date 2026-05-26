@@ -535,6 +535,7 @@ if (resumedConversation) {
     history: resumedConversation.history,
     previousResponseId,
     toolLedger: resumedConversation.toolLedger,
+    updatedAt: resumedConversation.updatedAt,
   });
   for (const warning of resumedConversation.replayWarnings) {
     console.warn(`Conversation replay: ${warning}`);

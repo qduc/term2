@@ -13,6 +13,7 @@ import type { SavedAppMode, SavedMessage } from './conversation-persistence-type
 export interface RestoredState {
   id: string;
   createdAt: string;
+  updatedAt?: string;
   projectPath?: string;
   sshHost?: string;
   appMode?: SavedAppMode;

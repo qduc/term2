@@ -144,6 +144,36 @@ test('updateFromResult() replaces history when incoming history is a superset', 
   t.is(last.content[0].text, 'Ack2');
 });
 
+test('updateFromResult() rejects reordered full-snapshot supersets', (t) => {
+  const store = new ConversationStore();
+
+  store.updateFromResult(
+    {
+      history: [
+        { role: 'user', type: 'message', content: 'A' },
+        { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'B' }] },
+      ] satisfies AgentInputItem[],
+    },
+    { historyKind: 'full_snapshot', authoritative: true },
+  );
+
+  store.updateFromResult(
+    {
+      history: [
+        { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'B' }] },
+        { role: 'user', type: 'message', content: 'A' },
+        { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'C' }] },
+      ] satisfies AgentInputItem[],
+    },
+    { historyKind: 'full_snapshot', authoritative: true },
+  );
+
+  const history = store.getHistory() as any[];
+  t.is(history.length, 2);
+  t.is(history[0].content, 'A');
+  t.is(history[1].content[0].text, 'B');
+});
+
 test('updateFromResult() treats tool callId as stable across full-history replays with changed item ids', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('Inspect the repo');

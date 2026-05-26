@@ -133,16 +133,21 @@ export class ConversationStore {
   }
 
   #mergeWithIncoming(next: AgentInputItem[], historyKind: HistoryKind, authoritative: boolean): void {
-    const nextSigs = next.map((item) => this.#signature(item));
-    const nextSet = new Set(nextSigs);
-
-    // 1. Full replay / superset: incoming contains every existing item by identity.
-    //    This handles the mid-batch splice case where positional matching fails.
-    const allExistingInNext = this.#history.every((item) => nextSet.has(this.#signature(item)));
-    const someShared = nextSigs.some((sig) => this.#history.some((item) => this.#signature(item) === sig));
-
-    if (allExistingInNext && someShared) {
+    // 1. Full replay / superset: incoming contains every existing item in order.
+    //    This handles mid-batch inserts where positional matching fails without
+    //    accepting reordered transcripts as canonical history.
+    if (this.#isOrderedReplayOfExisting(this.#history, next)) {
       this.#history = next;
+      return;
+    }
+
+    if (historyKind === 'full_snapshot' && this.#containsAllExistingItems(this.#history, next)) {
+      console.warn('conversation-store suspicious merge rejected', {
+        historyKind,
+        authoritative,
+        existingLength: this.#history.length,
+        incomingLength: next.length,
+      });
       return;
     }
 
@@ -540,6 +545,47 @@ export class ConversationStore {
       if (this.#signature(prefix[i]) !== this.#signature(full[i])) {
         return false;
       }
+    }
+
+    return true;
+  }
+
+  #isOrderedReplayOfExisting(existing: AgentInputItem[], incoming: AgentInputItem[]): boolean {
+    if (existing.length === 0 || incoming.length < existing.length) {
+      return false;
+    }
+
+    if (this.#signature(existing[0]) !== this.#signature(incoming[0])) {
+      return false;
+    }
+
+    let existingIndex = 0;
+    for (const item of incoming) {
+      if (this.#signature(existing[existingIndex]) === this.#signature(item)) {
+        existingIndex++;
+        if (existingIndex === existing.length) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  #containsAllExistingItems(existing: AgentInputItem[], incoming: AgentInputItem[]): boolean {
+    const incomingCounts = new Map<string, number>();
+    for (const item of incoming) {
+      const signature = this.#signature(item);
+      incomingCounts.set(signature, (incomingCounts.get(signature) ?? 0) + 1);
+    }
+
+    for (const item of existing) {
+      const signature = this.#signature(item);
+      const count = incomingCounts.get(signature) ?? 0;
+      if (count === 0) {
+        return false;
+      }
+      incomingCounts.set(signature, count - 1);
     }
 
     return true;

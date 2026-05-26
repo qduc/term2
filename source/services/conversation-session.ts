@@ -777,6 +777,7 @@ export class ConversationSession {
         });
         this.conversationStore.updateFromResult(stream, {
           historyKind: inputSurgeKind === 'delta' ? 'delta' : 'full_snapshot',
+          authoritative: inputSurgeKind !== 'delta',
         });
       }
 

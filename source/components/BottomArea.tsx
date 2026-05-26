@@ -26,7 +26,6 @@ export type BottomAreaProps = {
   lastCodexRateLimit?: CodexRateLimitInfo | null;
   onSubmit: (value: UserTurn) => Promise<void>;
   slashCommands: SlashCommand[];
-  hasConversationHistory: boolean;
   settingsService: SettingsService;
   loggingService: LoggingService;
   historyService: HistoryService;
@@ -50,7 +49,6 @@ const BottomArea: FC<BottomAreaProps> = ({
   isShellMode = false,
   onSubmit,
   slashCommands,
-  hasConversationHistory,
   settingsService,
   loggingService,
   historyService,
@@ -104,7 +102,6 @@ const BottomArea: FC<BottomAreaProps> = ({
           <InputBox
             onSubmit={onSubmit}
             slashCommands={slashCommands}
-            hasConversationHistory={hasConversationHistory}
             waitingForRejectionReason={waitingForRejectionReason}
             isShellMode={isShellMode}
             settingsService={settingsService}

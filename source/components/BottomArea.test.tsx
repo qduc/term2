@@ -16,7 +16,6 @@ const baseProps: BottomAreaProps = {
   onSubmit: async () => {},
   slashCommands: mockSlashCommands,
   isShellMode: false,
-  hasConversationHistory: false,
   settingsService: createMockSettingsService(),
   loggingService: {
     info: () => {},

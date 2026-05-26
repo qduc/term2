@@ -43,8 +43,14 @@ export const useRuntimeSettings = ({
       }
 
       if (key === 'agent.provider') {
-        // Provider changes require the agent to be recreated, which happens
-        // via the conversation service's setProvider method
+        // Provider changes must drop provider-bound continuity while
+        // preserving the local transcript for the next turn.
+        const switchProviderFn = (conversationService as any).switchProvider;
+        if (typeof switchProviderFn === 'function') {
+          switchProviderFn.call(conversationService, value);
+          return;
+        }
+
         const setProviderFn = (conversationService as any).setProvider;
         if (typeof setProviderFn === 'function') {
           setProviderFn.call(conversationService, value);

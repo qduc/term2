@@ -55,7 +55,6 @@ const areImagesEqual = (a: ImageRef[], b: ImageRef[]): boolean => {
 type Props = {
   onSubmit: (v: UserTurn) => void | Promise<void>;
   slashCommands: SlashCommand[];
-  hasConversationHistory?: boolean;
   waitingForRejectionReason?: boolean;
   isShellMode?: boolean;
   settingsService: SettingsService;
@@ -71,7 +70,6 @@ const InputBox: FC<Props> = ({
   slashCommands,
   settingsService,
   loggingService,
-  hasConversationHistory = false,
   waitingForRejectionReason = false,
   isShellMode = false,
   historyService,
@@ -112,13 +110,10 @@ const InputBox: FC<Props> = ({
   const settingsValue = useSettingsValueCompletion(settingsService, {
     onReset: reopenSettingsMenu,
   });
-  const models = useModelSelection(
-    {
-      loggingService,
-      settingsService,
-    },
-    hasConversationHistory,
-  );
+  const models = useModelSelection({
+    loggingService,
+    settingsService,
+  });
   const undo = useUndoSelection();
 
   // Wire up the undo menu ref so app.tsx can open the menu
@@ -245,7 +240,8 @@ const InputBox: FC<Props> = ({
         // menus — just close and clear the input after saving.
         const submittedValue = typedValue ?? value;
         if (submittedValue.startsWith(SETTINGS_TRIGGER)) {
-          reopenSettingsMenu(key);} else {
+          reopenSettingsMenu(key);
+        } else {
           onChange('');
         }
         return true;

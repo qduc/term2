@@ -15,13 +15,7 @@ export const SUBAGENT_EXPLORER_MODEL_TRIGGER = MODEL_SETTING_CONFIGS[4].trigger;
 export const SUBAGENT_WORKER_MODEL_TRIGGER = MODEL_SETTING_CONFIGS[5].trigger;
 export const SUBAGENT_RESEARCHER_MODEL_TRIGGER = MODEL_SETTING_CONFIGS[6].trigger;
 
-export const useModelSelection = (
-  deps: {
-    loggingService: ILoggingService;
-    settingsService: ISettingsService;
-  },
-  hasConversationHistory = false,
-) => {
+export const useModelSelection = (deps: { loggingService: ILoggingService; settingsService: ISettingsService }) => {
   const { loggingService, settingsService } = deps;
   const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex } = useInputContext();
 
@@ -40,8 +34,7 @@ export const useModelSelection = (
 
   const isOpen = mode === 'model_selection';
   const modelSettingConfig = getModelSettingConfigForInput(input);
-  const canSwitchProvider =
-    Boolean(modelSettingConfig && modelSettingConfig.providerKey !== 'agent.provider') || !hasConversationHistory;
+  const canSwitchProvider = true;
 
   const query = useMemo(() => {
     if (!isOpen || triggerIndex === null) return '';

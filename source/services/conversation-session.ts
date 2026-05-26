@@ -233,8 +233,21 @@ export class ConversationSession {
   }
 
   setProvider(provider: string): void {
+    this.generation++;
+    this.previousResponseId = null;
+    this.approvalState.clearPending();
+    this.approvalState.consumeAborted();
+    this.toolCallArgumentsById.clear();
+    this.shellAutoApproval.clearCache();
+    this.inputSurgeGuard.reset();
+    const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
+    clearConversations?.call(this.agentClient);
     const setProvider = getMethod<[string], void>(this.agentClient, 'setProvider');
     setProvider?.call(this.agentClient, provider);
+  }
+
+  switchProvider(provider: string): void {
+    this.setProvider(provider);
   }
   setRetryCallback(callback: () => void): void {
     if (typeof this.agentClient.setRetryCallback === 'function') {

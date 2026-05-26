@@ -73,6 +73,10 @@ export class ConversationService {
     this.#session.setProvider(provider);
   }
 
+  switchProvider(provider: string): void {
+    this.#session.switchProvider(provider);
+  }
+
   setRetryCallback(callback: () => void): void {
     this.#session.setRetryCallback(callback);
   }

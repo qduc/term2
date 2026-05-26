@@ -295,8 +295,6 @@ const App: FC<AppProps> = ({
     [undoToUserMessage, redrawMessageList, setInput],
   );
 
-  const hasConversationHistory = useMemo(() => hasConversationContent(messages), [messages]);
-
   // Handle Ctrl+C to exit immediately
   useInput((_input: string, key) => {
     if (key.ctrl && _input === 'c') {
@@ -448,7 +446,6 @@ const App: FC<AppProps> = ({
             lastUsage={lastUsage}
             onSubmit={handleSubmit}
             slashCommands={slashCommands}
-            hasConversationHistory={hasConversationHistory}
             settingsService={settingsService}
             loggingService={loggingService}
             historyService={historyService}

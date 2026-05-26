@@ -608,3 +608,63 @@ test.serial('pre-selects the current model of the setting it is changing (settin
     renderer.unmount();
   });
 });
+
+test.serial('allows switching the main provider even when conversation history exists', async (t) => {
+  clearModelCache();
+
+  const firstProvider = `history-provider-a-${Date.now()}-${Math.random()}`;
+  const secondProvider = `history-provider-b-${Date.now()}-${Math.random()}`;
+
+  registerProvider({
+    id: firstProvider,
+    label: firstProvider,
+    fetchModels: async () => [{ id: 'model-a', name: 'Model A' }],
+  });
+  registerProvider({
+    id: secondProvider,
+    label: secondProvider,
+    fetchModels: async () => [{ id: 'model-b', name: 'Model B' }],
+  });
+
+  t.teardown(() => {
+    clearModelCache();
+    unregisterProvider(firstProvider);
+    unregisterProvider(secondProvider);
+  });
+
+  let capturedModels: any;
+  let renderer: any;
+  const settingsService = createMockSettingsService({
+    'agent.provider': firstProvider,
+    'agent.model': 'model-a',
+  });
+
+  await flush(() => {
+    renderer = render(
+      <InputProvider>
+        <TestComponent
+          settingsService={settingsService}
+          initialInput="/settings agent.model "
+          onResults={(m) => {
+            capturedModels = m;
+          }}
+        />
+      </InputProvider>,
+    );
+  });
+  await waitForIdle(() => capturedModels);
+
+  t.true(capturedModels.canSwitchProvider);
+  t.is(capturedModels.provider, firstProvider);
+
+  await flush(() => {
+    capturedModels.toggleProvider();
+  });
+  await waitForIdle(() => capturedModels);
+
+  t.is(capturedModels.provider, secondProvider);
+
+  await flush(() => {
+    renderer.unmount();
+  });
+});

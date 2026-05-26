@@ -1652,3 +1652,73 @@ test('run() emits user_message_consumed_for_abort when an aborted approval is be
   // The store must not have a genuine user turn for this input.
   t.is(session.listUserTurns().length, 0);
 });
+
+test('switchProvider() clears provider continuity but preserves transcript history', async (t) => {
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
+  firstStream.finalOutput = 'First reply';
+  firstStream.lastResponseId = 'resp-openai-1';
+
+  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Second reply' }]);
+  secondStream.finalOutput = 'Second reply';
+  secondStream.lastResponseId = 'resp-openrouter-1';
+
+  const calls = [];
+  let provider = 'openai';
+  let clearConversationsCalls = 0;
+  const mockClient = {
+    getProvider() {
+      return provider;
+    },
+    setProvider(nextProvider) {
+      provider = nextProvider;
+    },
+    clearConversations() {
+      clearConversationsCalls++;
+    },
+    async startStream(input, opts) {
+      calls.push({ input, opts, provider });
+      return calls.length === 1 ? firstStream : secondStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  for await (const _ of session.run('First message')) {
+  }
+
+  session.approvalState.setPending({
+    state: {},
+    interruption: { type: 'tool_approval_item', rawItem: { name: 'noop', callId: 'c1' } },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  session.approvalState.abortPending();
+
+  session.switchProvider('openrouter');
+
+  t.is(await session.handleApprovalDecision('y'), null, 'pending approval should be cleared on provider switch');
+
+  const emitted = [];
+  for await (const ev of session.run('Second message')) {
+    emitted.push(ev);
+  }
+
+  t.is(clearConversationsCalls, 1);
+  t.is(provider, 'openrouter');
+  t.false(
+    emitted.some((event) => event.type === 'user_message_consumed_for_abort'),
+    'aborted approval state should be cleared on provider switch',
+  );
+
+  const secondCall = calls[1];
+  t.true(Array.isArray(secondCall.input), 'provider switch should force full-history replay on the next turn');
+  t.true(secondCall.input.length >= 2, 'replayed history should include the earlier user turn');
+  t.falsy(secondCall.opts.previousResponseId, 'provider switch must discard previousResponseId from the old provider');
+  t.deepEqual(
+    session.listUserTurns().map((turn) => turn.text),
+    ['First message', 'Second message'],
+  );
+});

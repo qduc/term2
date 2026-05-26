@@ -652,7 +652,9 @@ export class ConversationSession {
               source: 'abortResolution',
               stream: continuedStream,
             });
-            this.conversationStore.updateFromResult(continuedStream);
+            this.conversationStore.updateFromResult(continuedStream, {
+              historyKind: 'partial_replay',
+            });
           }
 
           // Check if another interruption occurred
@@ -773,7 +775,9 @@ export class ConversationSession {
           source: 'startStream',
           stream,
         });
-        this.conversationStore.updateFromResult(stream);
+        this.conversationStore.updateFromResult(stream, {
+          historyKind: inputSurgeKind === 'delta' ? 'delta' : 'full_snapshot',
+        });
       }
 
       const resolvedResult = yield* this.#buildAndResolve(
@@ -1010,7 +1014,9 @@ export class ConversationSession {
               source: 'continueRunStream',
               stream,
             });
-            this.conversationStore.updateFromResult(stream);
+            this.conversationStore.updateFromResult(stream, {
+              historyKind: 'partial_replay',
+            });
           }
 
           // Merge previously emitted command IDs with newly emitted ones

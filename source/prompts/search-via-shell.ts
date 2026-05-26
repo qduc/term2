@@ -64,7 +64,6 @@ Use the \`shell\` tool with the standard CLI binaries.`;
 - Quote paths that contain spaces.
 - Prefer absolute paths or paths relative to a known root; avoid \`cd\`.
 - When chaining commands, use \`&&\` for "stop on first failure", \`;\` only if you accept failures, never raw newlines.
-- Don't use \`cat\` / \`head\` / \`tail\` / \`sed\` / \`echo\` for reading or writing files — use the dedicated \`read_file\`, \`apply_patch\`, and \`search_replace\` tools. The shell is for *search* and *one-shot inspection*, not for editing.
 - For destructive operations (deletes, force-pushes, schema migrations), pause and confirm before running.`;
 
   return `${header}\n\n${textSearch}\n\n${fileSearch}\n\n${hygiene}`;

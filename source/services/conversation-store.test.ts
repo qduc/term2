@@ -708,3 +708,177 @@ test('updateFromResult() handles continued streams with interleaved tool calls w
     ['call_1', 'call_2', 'call_3'],
   );
 });
+
+test('updateFromResult() handles repeated identical user messages without false overlap', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('ok');
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'ok' },
+      {
+        role: 'assistant',
+        type: 'message',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'acknowledged' }],
+      },
+    ] satisfies AgentInputItem[],
+  });
+
+  // The user says 'ok' again.
+  store.addUserMessage('ok');
+
+  // The incoming history starts with 'ok' (the user message from the new turn).
+  // Because 'ok' is low-confidence, we should NOT match it as an overlap with the first 'ok'
+  // and instead match it with the second 'ok' at the tail of existing.
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'ok' },
+      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'done' }] },
+    ] satisfies AgentInputItem[],
+  });
+
+  const history = store.getHistory();
+  t.is(history.length, 4);
+  t.is((history[0] as any).content, 'ok');
+  t.is((history[1] as any).content[0].text, 'acknowledged');
+  t.is((history[2] as any).content, 'ok');
+  t.is((history[3] as any).content[0].text, 'done');
+});
+
+test('updateFromResult() handles image-only messages and same text with different images', (t) => {
+  const store = new ConversationStore();
+
+  // Turn 1: user sends image A
+  store.addUserTurn({
+    text: 'describe this',
+    images: [{ id: 'img-a', data: 'AAAA', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
+  });
+
+  store.updateFromResult({
+    history: [
+      {
+        role: 'user',
+        type: 'message',
+        content: [
+          { type: 'input_text', text: 'describe this' },
+          { type: 'input_image', image: 'data:image/png;base64,AAAA', detail: 'auto' },
+        ],
+      },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'an image of A' }] },
+    ] as any,
+  });
+
+  // Turn 2: user sends image B with the same text
+  store.addUserTurn({
+    text: 'describe this',
+    images: [{ id: 'img-b', data: 'BBBB', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
+  });
+
+  // We receive a new run result.
+  // Because the image content hashes are different, the signatures are different.
+  // This prevents false prefix matches or false overlap matches.
+  store.updateFromResult({
+    history: [
+      {
+        role: 'user',
+        type: 'message',
+        content: [
+          { type: 'input_text', text: 'describe this' },
+          { type: 'input_image', image: 'data:image/png;base64,BBBB', detail: 'auto' },
+        ],
+      },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'an image of B' }] },
+    ] as any,
+  });
+
+  const history = store.getHistory();
+  t.is(history.length, 4);
+  t.is((history[1] as any).content[0].text, 'an image of A');
+  t.is((history[3] as any).content[0].text, 'an image of B');
+});
+
+test('updateFromResult() reject divergent full transcript replacement when signatures differ', (t) => {
+  const store = new ConversationStore();
+  store.addUserTurn({
+    text: 'analyze',
+    images: [{ id: 'img-a', data: 'AAAA', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
+  });
+
+  // Incoming has different image but same text. Should not match as prefix.
+  store.updateFromResult({
+    history: [
+      {
+        role: 'user',
+        type: 'message',
+        content: [
+          { type: 'input_text', text: 'analyze' },
+          { type: 'input_image', image: 'data:image/png;base64,BBBB', detail: 'auto' },
+        ],
+      },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'reply' }] },
+    ] as any,
+  });
+
+  // Since it was divergent, they are appended rather than replacing.
+  const history = store.getHistory();
+  t.is(history.length, 3);
+});
+
+test('updateFromResult() supports suffix-prefix overlap search beyond 50 items', (t) => {
+  const store = new ConversationStore();
+
+  // Build a long history of 60 items in the store
+  for (let i = 1; i <= 60; i++) {
+    store.addUserMessage(`message-${i}`);
+  }
+
+  // The incoming result contains the last 15 items plus 5 new ones.
+  // The overlap is 15 items, which is > 50 if maxWindow existed.
+  const incomingHistory: AgentInputItem[] = [];
+  for (let i = 46; i <= 60; i++) {
+    incomingHistory.push({ role: 'user', type: 'message', content: `message-${i}` });
+  }
+  for (let i = 61; i <= 65; i++) {
+    incomingHistory.push({ role: 'user', type: 'message', content: `message-${i}` });
+  }
+
+  store.updateFromResult({ history: incomingHistory });
+
+  const history = store.getHistory();
+  // It should correctly merge the overlap and result in 65 items total.
+  t.is(history.length, 65);
+  t.is((history[64] as any).content, 'message-65');
+});
+
+test('updateFromResult() collapses exact prefix duplicates only when tool calls are present', (t) => {
+  const store = new ConversationStore();
+
+  // Tool call present: should collapse duplicate prefix
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'again' },
+      { type: 'function_call', callId: 'call-1', name: 'ls', arguments: '{}' },
+      { type: 'function_call_result', callId: 'call-1', output: 'ok' },
+      { role: 'user', type: 'message', content: 'again' },
+      { type: 'function_call', callId: 'call-1', name: 'ls', arguments: '{}' },
+      { type: 'function_call_result', callId: 'call-1', output: 'ok' },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'done' }] },
+    ] as any,
+  });
+
+  t.is(store.getHistory().length, 4);
+
+  store.clear();
+
+  // No tool calls: should NOT collapse
+  store.updateFromResult({
+    history: [
+      { role: 'user', type: 'message', content: 'again' },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first' }] },
+      { role: 'user', type: 'message', content: 'again' },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first' }] },
+    ] as any,
+  });
+
+  t.is(store.getHistory().length, 4);
+});

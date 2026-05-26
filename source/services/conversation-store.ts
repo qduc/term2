@@ -4,6 +4,11 @@ import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
 
 type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
+type HistoryKind = 'delta' | 'partial_replay' | 'full_snapshot';
+type UpdateFromResultOptions = {
+  historyKind?: HistoryKind;
+  authoritative?: boolean;
+};
 
 export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
 
@@ -106,11 +111,14 @@ export class ConversationStore {
    *                     representing the conversation history to be merged or updated.
    * @return {void} This method does not return a value, but it modifies the internal state of the instance.
    */
-  updateFromResult(result: any): void {
+  updateFromResult(result: any, options: UpdateFromResultOptions = {}): void {
     const incoming = result?.history;
     if (!Array.isArray(incoming) || incoming.length === 0) {
       return;
     }
+
+    const historyKind: HistoryKind = options.historyKind ?? 'delta';
+    const authoritative = options.authoritative === true;
 
     const next = this.#collapseReplayedHistoryPrefixes(this.#cloneHistory(incoming as AgentInputItem[]));
 
@@ -122,7 +130,13 @@ export class ConversationStore {
     } else {
       // Otherwise, merge by detecting any overlap between the end of the existing
       // history and the beginning of the incoming history.
-      const overlap = this.#findSuffixPrefixOverlap(this.#history, next);
+      let overlap = this.#findSuffixPrefixOverlap(this.#history, next);
+
+      if (overlap === 0 && (historyKind === 'full_snapshot' || historyKind === 'partial_replay')) {
+        // Try a relaxed overlap detection (ignoring signature confidence checks) before failing
+        overlap = this.#findSuffixPrefixOverlap(this.#history, next, true);
+      }
+
       if (overlap > 0) {
         // Preserve richer incoming items (e.g. assistant reasoning_details) for the
         // overlapped region. This is important because overlap detection uses a
@@ -134,7 +148,24 @@ export class ConversationStore {
         }
         this.#history = [...mergedExisting, ...next.slice(overlap)];
       } else {
-        this.#history = [...this.#history, ...next];
+        if (historyKind === 'delta') {
+          this.#history = [...this.#history, ...next];
+        } else if (authoritative) {
+          this.#history = next;
+        } else if (historyKind === 'full_snapshot' && this.#isSameConversation(this.#history, next)) {
+          // Relaxed fallback: if it's a full snapshot of the same conversation, overwrite the history
+          this.#history = next;
+        } else if (historyKind === 'partial_replay' && this.#isSameConversation(this.#history, next)) {
+          // Relaxed fallback: if it's a partial replay of the same conversation, append it
+          this.#history = [...this.#history, ...next];
+        } else {
+          console.warn('conversation-store suspicious merge rejected', {
+            historyKind,
+            authoritative,
+            existingLength: this.#history.length,
+            incomingLength: next.length,
+          });
+        }
       }
     }
 
@@ -367,7 +398,7 @@ export class ConversationStore {
   }
 
   #getSignatureConfidence(signature: string): 'high' | 'medium' | 'low' {
-    if (signature.startsWith('call:') || signature.startsWith('id:')) {
+    if (signature.startsWith('call:')) {
       return 'high';
     }
     if (signature.startsWith('msg:')) {
@@ -390,7 +421,7 @@ export class ConversationStore {
       const parts = signature.split(':');
       const name = parts[2] ?? '';
       if (!this.#isGenericOrShort(name)) {
-        return 'medium';
+        return 'high';
       }
       return 'low';
     }
@@ -502,11 +533,6 @@ export class ConversationStore {
       return `call:${callId}:${raw?.type ?? ''}`;
     }
 
-    // Prefer stable IDs when present.
-    if (typeof raw?.id === 'string' && raw.id) {
-      return `id:${raw.id}`;
-    }
-
     // Message-like items: role + type + content parts + tool_calls.
     const role = typeof raw?.role === 'string' ? raw.role : '';
     if (role) {
@@ -552,10 +578,11 @@ export class ConversationStore {
       return `msg:${role}:${type}:${parts.join('|')}`;
     }
 
-    // Fallback: type + name if present.
+    // Fallback: type + name if present, with SDK id as an additional hint.
     const type = typeof raw?.type === 'string' ? raw.type : '';
     const name = typeof raw?.name === 'string' ? raw.name : '';
-    return `item:${type}:${name}`;
+    const id = typeof raw?.id === 'string' ? raw.id : '';
+    return `item:${type}:${name}:${id}`;
   }
 
   #isPrefixMatch(prefix: AgentInputItem[], full: AgentInputItem[]): boolean {
@@ -572,7 +599,7 @@ export class ConversationStore {
     return true;
   }
 
-  #findSuffixPrefixOverlap(existing: AgentInputItem[], incoming: AgentInputItem[]): number {
+  #findSuffixPrefixOverlap(existing: AgentInputItem[], incoming: AgentInputItem[], relaxed = false): number {
     const maxOverlap = Math.min(existing.length, incoming.length);
 
     for (let k = maxOverlap; k >= 1; k--) {
@@ -598,11 +625,74 @@ export class ConversationStore {
       const lastRaw = lastItem?.rawItem ?? lastItem;
       const isSingleUserMessage = k === 1 && lastRaw?.role === 'user';
 
-      if (matches && (hasSubstantialMatch || isSingleUserMessage)) {
+      if (matches && (relaxed || hasSubstantialMatch || isSingleUserMessage)) {
         return k;
       }
     }
 
     return 0;
+  }
+
+  static #listUserTurnsForHistory(
+    history: AgentInputItem[],
+  ): { text: string; imageCount: number; images?: UserTurn['images'] }[] {
+    const turns: { text: string; imageCount: number; images?: UserTurn['images'] }[] = [];
+    for (const item of history) {
+      const anyItem: any = item as any;
+      const raw = anyItem?.rawItem ?? anyItem;
+      if (raw?.role !== 'user') continue;
+      const text = ConversationStore.#extractText(raw);
+      if (text.startsWith(SHELL_CONTEXT_PREFIX)) continue;
+      const images = ConversationStore.#extractImages(raw);
+      turns.push({
+        text,
+        imageCount: images?.length ?? 0,
+        images,
+      });
+    }
+    return turns;
+  }
+
+  #areUserTurnsEqual(
+    a: { text: string; imageCount: number; images?: UserTurn['images'] },
+    b: { text: string; imageCount: number; images?: UserTurn['images'] },
+  ): boolean {
+    if (a.text !== b.text) return false;
+    if (a.imageCount !== b.imageCount) return false;
+    if (a.images && b.images) {
+      for (let i = 0; i < a.images.length; i++) {
+        if (a.images[i].data !== b.images[i].data) return false;
+      }
+    }
+    return true;
+  }
+
+  #isSameConversation(existing: AgentInputItem[], incoming: AgentInputItem[]): boolean {
+    if (existing.length === 0 || incoming.length === 0) {
+      return true;
+    }
+
+    // Check if first item matches
+    if (this.#signature(existing[0]) === this.#signature(incoming[0])) {
+      return true;
+    }
+
+    // Check if they share any genuine user turn
+    const existingUserTurns = ConversationStore.#listUserTurnsForHistory(existing);
+    const incomingUserTurns = ConversationStore.#listUserTurnsForHistory(incoming);
+
+    if (existingUserTurns.length === 0 || incomingUserTurns.length === 0) {
+      return true; // No user turns to compare, assume same conversation
+    }
+
+    for (const incTurn of incomingUserTurns) {
+      for (const extTurn of existingUserTurns) {
+        if (this.#areUserTurnsEqual(extTurn, incTurn)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 }

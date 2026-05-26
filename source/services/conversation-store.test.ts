@@ -661,3 +661,50 @@ test('addModeNotice() ignores blank text', (t) => {
 
   t.is(store.getHistory().length, 1);
 });
+
+test('updateFromResult() handles continued streams with interleaved tool calls where prefix-match fails', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('Test interleaved stream');
+
+  const historyPart1 = [
+    { role: 'user', type: 'message', content: 'Test interleaved stream' },
+    { role: 'assistant', type: 'message', content: 'Hello' },
+    { type: 'function_call', id: 'fc_1', callId: 'call_1', name: 'shell', arguments: '{}' },
+    { type: 'function_call_result', id: 'fcr_1', callId: 'call_1', output: 'ok' },
+    { type: 'function_call', id: 'fc_2', callId: 'call_2', name: 'shell', arguments: '{}' },
+    { type: 'function_call_result', id: 'fcr_2', callId: 'call_2', output: 'ok' },
+  ] as any[];
+
+  store.updateFromResult({ history: historyPart1 });
+
+  // In the continuation, a new tool call `call_3` is inserted *between* fc_2 and fcr_2,
+  // causing fcr_2 to shift position in the incoming history.
+  const historyPart2 = [
+    { role: 'user', type: 'message', content: 'Test interleaved stream' },
+    { role: 'assistant', type: 'message', content: 'Hello' },
+    { type: 'function_call', id: 'fc_1', callId: 'call_1', name: 'shell', arguments: '{}' },
+    { type: 'function_call_result', id: 'fcr_1', callId: 'call_1', output: 'ok' },
+    { type: 'function_call', id: 'fc_2', callId: 'call_2', name: 'shell', arguments: '{}' },
+    { type: 'function_call', id: 'fc_3', callId: 'call_3', name: 'shell', arguments: '{}' },
+    { type: 'function_call_result', id: 'fcr_2', callId: 'call_2', output: 'ok' },
+    { type: 'function_call_result', id: 'fcr_3', callId: 'call_3', output: 'ok' },
+  ] as any[];
+
+  store.updateFromResult({ history: historyPart2 });
+
+  const history = store.getHistory();
+  // It should merge them and deduplicate. The result should contain exactly one copy of call_1, call_2, and call_3.
+  const calls = history.filter((item: any) => item.type === 'function_call');
+  const results = history.filter((item: any) => item.type === 'function_call_result');
+
+  t.is(calls.length, 3);
+  t.is(results.length, 3);
+  t.deepEqual(
+    calls.map((c: any) => c.callId),
+    ['call_1', 'call_2', 'call_3'],
+  );
+  t.deepEqual(
+    results.map((r: any) => r.callId),
+    ['call_1', 'call_2', 'call_3'],
+  );
+});

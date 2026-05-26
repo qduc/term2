@@ -1,5 +1,6 @@
 import type { AgentInputItem } from '@openai/agents';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
+import { repairConversationHistory } from './conversation-history-repair.js';
 
 type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
 
@@ -97,6 +98,13 @@ export class ConversationStore {
     this.#history.push(item);
   }
 
+  /**
+   * Updates the internal history of the instance based on the provided result object.
+   *
+   * @param {any} result The result object containing a `history` property, which is an array of items
+   *                     representing the conversation history to be merged or updated.
+   * @return {void} This method does not return a value, but it modifies the internal state of the instance.
+   */
   updateFromResult(result: any): void {
     const incoming = result?.history;
     if (!Array.isArray(incoming) || incoming.length === 0) {
@@ -107,35 +115,30 @@ export class ConversationStore {
 
     if (this.#history.length === 0) {
       this.#history = next;
-      return;
-    }
-
-    // If the incoming history looks like a full transcript (superset), prefer it.
-    if (next.length >= this.#history.length) {
-      const isSuperset = this.#isPrefixMatch(this.#history, next);
-      if (isSuperset) {
-        this.#history = next;
-        return;
+    } else if (next.length >= this.#history.length && this.#isPrefixMatch(this.#history, next)) {
+      // If the incoming history looks like a full transcript (superset), prefer it.
+      this.#history = next;
+    } else {
+      // Otherwise, merge by detecting any overlap between the end of the existing
+      // history and the beginning of the incoming history.
+      const overlap = this.#findSuffixPrefixOverlap(this.#history, next);
+      if (overlap > 0) {
+        // Preserve richer incoming items (e.g. assistant reasoning_details) for the
+        // overlapped region. This is important because overlap detection uses a
+        // signature that intentionally ignores many fields.
+        const mergedExisting = this.#cloneHistory(this.#history);
+        for (let i = 0; i < overlap; i++) {
+          const existingIndex = mergedExisting.length - overlap + i;
+          mergedExisting[existingIndex] = this.#preferIncomingItem(mergedExisting[existingIndex], next[i]);
+        }
+        this.#history = [...mergedExisting, ...next.slice(overlap)];
+      } else {
+        this.#history = [...this.#history, ...next];
       }
     }
 
-    // Otherwise, merge by detecting any overlap between the end of the existing
-    // history and the beginning of the incoming history.
-    const overlap = this.#findSuffixPrefixOverlap(this.#history, next);
-    if (overlap > 0) {
-      // Preserve richer incoming items (e.g. assistant reasoning_details) for the
-      // overlapped region. This is important because overlap detection uses a
-      // signature that intentionally ignores many fields.
-      const mergedExisting = this.#cloneHistory(this.#history);
-      for (let i = 0; i < overlap; i++) {
-        const existingIndex = mergedExisting.length - overlap + i;
-        mergedExisting[existingIndex] = this.#preferIncomingItem(mergedExisting[existingIndex], next[i]);
-      }
-      this.#history = [...mergedExisting, ...next.slice(overlap)];
-      return;
-    }
-
-    this.#history = [...this.#history, ...next];
+    // Repair the history to deduplicate any SDK-interleaved replayed history or tool pairs.
+    this.#history = repairConversationHistory(this.#history).history as AgentInputItem[];
   }
 
   getHistory(): AgentInputItem[] {

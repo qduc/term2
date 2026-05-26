@@ -236,7 +236,7 @@ export class CodexTokenManager {
 const execAsync = promisify(exec);
 
 const FALLBACK_CODEX_CLIENT_VERSION = '0.133.0';
-export const CODEX_REQUEST_TIMEOUT_MS = 30_000;
+export const CODEX_REQUEST_TIMEOUT_MS = 300_000;
 export const CODEX_MAX_RETRIES = 3;
 
 interface VersionCache {

@@ -1,3 +1,55 @@
+## [0.7.0] - 2026-05-26
+
+### Features
+- Add `/handoff` command and workflow for transferring assistant responses between sessions
+- Add `/retry` command to re-send the last user message
+- Implement event-log conversation persistence for reliable session saving and resumption
+- Add tool execution ledger for stream failure recovery
+- Implement project tree generation with custom ignore rules and limits
+- Add Codex rate limit information display in the status bar
+- Introduce `auto`, `on`, and `off` options for `searchViaShell` setting
+- Add reasoning efficiency guidance to system prompts
+- Enhance subagent recoverable error handling and retry logic
+- Add `callId` field to message types for better message tracking
+- Implement `switchProvider` with safety guard for runtime provider changes
+- Add `large-uncached-input` guard to prevent excessive input sizes
+- Handle truncated events during conversation replay
+- Sanitize nested subagent results in conversation logs
+- Enhance `apply-patch` error reporting for invalid diffs and context mismatches
+- Add `combineAbortSignals` utility for improved tool execution control
+- Enrich error context with event details for better debugging
+- Add duplicate tool call/result pair detection and warnings in streams
+- Ensure stable fallback session ID for opencode across turns
+- Integrate traffic context session ID for opencode headers
+- Cache model instances in Opencode provider for efficiency
+- Resolve and apply default reasoning level for Codex models
+
+### Bug Fixes
+- Fix undo not working correctly when there is an error on the last turn
+- Fix newline dropped when emitting reasoning delta in stream event processor
+- Fix stale path entries not being refreshed in `use-path-completion`
+- Fix rejected commands not being preserved during message extraction
+- Fix approval-rejected commands not rendering correctly in the UI
+- Fix Codex rate limit handling and provider reset behavior
+- Fix rate limit extraction and StatusBar rendering for Codex
+- Fix input-box handling of direct command triggers vs settings menu
+- Fix prompt test suite
+
+### Improvements
+- Centralize error description with `describeError` and enhance retry logic
+- Deduplicate `tool_started` events and normalize tool call arguments
+- Replace `writeLastPointer` with `saveLastConversation` for more robust persistence
+- Extract match context and approval logic into utility functions for `search-replace`
+- Improve category lookup and test coverage in settings
+- Add `onReset` option to `useSettingsValueCompletion` and refactor reset handling
+- Track subagent usage and integrate into session management
+- Introduce prompt profiles and restructure prompt selection
+- Add modular middleware and session handling for OpenAI-compatible providers
+- Simplify token refresh logic in Codex provider
+- Refactor `useSelection` state handling and stabilize tests
+- Include plan-mode-info in standard mode for cache stability
+- Clarify and expand Plan Mode drafting requirements in docs
+
 ## [0.6.1] - 2026-05-23
 
 ### Features

@@ -3,8 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as persistenceModule from './conversation-persistence.js';
-import { hasConversationContent } from '../app.js';
-import type { Message } from '../hooks/use-conversation.js';
+import { createConversationLogWriter } from './conversation-log-writer.js';
+
+const stubLogger = {
+  error: () => {},
+  warn: () => {},
+  info: () => {},
+  debug: () => {},
+  trace: () => {},
+  getCorrelationId: () => undefined,
+} as any;
 
 let testDir = '';
 
@@ -21,88 +29,39 @@ test.afterEach.always(() => {
   testDir = '';
 });
 
-test.serial(
-  'CLI clear behavior: saves old conversation, starts new in-memory, avoids empty save on exit',
-  async (t) => {
-    // 1. Initial State
-    let effectiveSessionId = 'session-old';
-    let effectiveCreatedAt = new Date().toISOString();
-    let pendingMessages: Message[] = [{ id: '1', sender: 'user', text: 'hello in old session' }];
+test.serial('clear rotates writer: old session file remains, new file begins fresh', async (t) => {
+  const oldId = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: oldId, dir: testDir, logger: stubLogger });
+  writer.init({ id: oldId, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/test/project' });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello in old session' } });
+  writer.append({
+    type: 'assistant_final',
+    message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'reply' },
+    finalText: 'reply',
+    snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+  });
 
-    const savedSessionIds = new Set<string>();
+  const oldPath = path.join(testDir, `${oldId}.jsonl`);
+  t.true(fs.existsSync(oldPath));
 
-    const saveAndPrintResume = async (messages: Message[], overrideSessionId?: string, overrideCreatedAt?: string) => {
-      const sessionIdToSave = overrideSessionId || effectiveSessionId;
-      const createdAtToSave = overrideCreatedAt || effectiveCreatedAt;
+  // Rotate (simulates /clear)
+  const newId = persistenceModule.generateId();
+  writer.append({ type: 'session_cleared' });
+  writer.rotate(newId, { id: newId, createdAt: '2026-05-26T00:01:00.000Z' });
 
-      if (savedSessionIds.has(sessionIdToSave)) {
-        return;
-      }
+  const newPath = path.join(testDir, `${newId}.jsonl`);
+  t.true(fs.existsSync(newPath));
+  t.true(fs.existsSync(oldPath));
 
-      if (!hasConversationContent(messages)) {
-        return;
-      }
-      savedSessionIds.add(sessionIdToSave);
+  // Old session is resumable
+  const restored = persistenceModule.loadConversation(oldId);
+  t.truthy(restored);
+  t.is(restored!.previousResponseId, 'r1');
 
-      persistenceModule.saveConversation({
-        id: sessionIdToSave,
-        createdAt: createdAtToSave,
-        updatedAt: new Date().toISOString(),
-        projectPath: '/test/project',
-        model: 'gpt-4o',
-        provider: 'openai',
-        previousResponseId: null,
-        history: [],
-        messages: messages as any[],
-      });
-    };
+  // New file has no assistant_final yet → empty restored state
+  const newRestored = persistenceModule.loadConversation(newId);
+  t.is(newRestored!.previousResponseId, null);
+  t.is(newRestored!.messages.length, 0);
 
-    // 2. Perform Clear Action
-    // Simulating: onClear / handleClearConversation
-    if (hasConversationContent(pendingMessages)) {
-      await saveAndPrintResume(pendingMessages, effectiveSessionId, effectiveCreatedAt);
-    }
-
-    // Verify old session is saved to disk
-    const oldSessionFile = path.join(testDir, 'session-old.json');
-    t.true(fs.existsSync(oldSessionFile));
-    t.true(savedSessionIds.has('session-old'));
-
-    // Simulate parent onSessionIdChange callback
-    const onSessionIdChange = (newId: string, createdAt: string) => {
-      effectiveSessionId = newId;
-      effectiveCreatedAt = createdAt;
-      pendingMessages = []; // Reset pending messages immediately!
-    };
-
-    const newId = 'session-new';
-    const newCreatedAt = new Date().toISOString();
-    onSessionIdChange(newId, newCreatedAt);
-
-    // 3. Verify new session is only in-memory (not written to disk yet)
-    const newSessionFile = path.join(testDir, 'session-new.json');
-    t.false(fs.existsSync(newSessionFile));
-    t.is(effectiveSessionId, 'session-new');
-    t.deepEqual(pendingMessages, []);
-
-    // 4. Simulate exit without sending messages in new session
-    await saveAndPrintResume(pendingMessages);
-
-    // Verify new session file STILL does not exist (not saved because empty)
-    t.false(fs.existsSync(newSessionFile));
-    t.false(savedSessionIds.has('session-new'));
-
-    // 5. Send message in new session
-    pendingMessages = [{ id: '2', sender: 'user', text: 'first message in new session' }];
-
-    // Simulate exit now that new session has content
-    await saveAndPrintResume(pendingMessages);
-
-    // Verify new session is saved to disk
-    t.true(fs.existsSync(newSessionFile));
-    t.true(savedSessionIds.has('session-new'));
-
-    const savedData = JSON.parse(fs.readFileSync(newSessionFile, 'utf-8'));
-    t.is(savedData.messages[0].text, 'first message in new session');
-  },
-);
+  await writer.close();
+});

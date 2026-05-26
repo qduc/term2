@@ -2,60 +2,26 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import envPaths from 'env-paths';
-import { repairConversationHistory, type ConversationHistoryRepairSummary } from './conversation-history-repair.js';
-import type { NormalizedUsage } from '../utils/token-usage.js';
-import type { SavedToolExecution } from './tool-execution-ledger.js';
+import type { LogEnvelope } from './conversation-log-events.js';
+import { replayEvents, type RestoredState } from './conversation-replay.js';
+
+export type { SavedAppMode, SavedMessage } from './conversation-persistence-types.js';
+export type { RestoredState } from './conversation-replay.js';
 
 const paths = envPaths('term2');
 const CONVERSATIONS_DIR = path.join(paths.log, 'conversations');
 let conversationsDirOverride: string | null = null;
 
-export interface SavedMessage {
-  id: string;
-  sender: string;
-  text?: string;
-  [key: string]: unknown;
-}
-
-export interface SavedAppMode {
-  mentorMode: boolean;
-  liteMode: boolean;
-  planMode: boolean;
-  /** Optional: absent in saves from before orchestrator mode was introduced. Treat undefined as false. */
-  orchestratorMode?: boolean;
-}
-
-export interface SavedConversation {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  projectPath?: string;
-  sshHost?: string;
-  appMode?: SavedAppMode;
-  model?: string;
-  provider?: string;
-  reasoningEffort?: string;
-  previousResponseId: string | null;
-  history: unknown[];
-  toolLedger?: SavedToolExecution[];
-  messages: SavedMessage[];
-  historyRepair?: ConversationHistoryRepairSummary;
-  usage?: NormalizedUsage;
-  subagentUsage?: NormalizedUsage;
-}
-
 export type LoadConversationForProjectResult =
-  | { status: 'loaded'; conversation: SavedConversation }
+  | { status: 'loaded'; conversation: RestoredState }
   | { status: 'not_found' }
-  | { status: 'project_mismatch'; conversation: SavedConversation };
+  | { status: 'project_mismatch'; conversation: RestoredState }
+  | { status: 'locked'; lockPath: string; lockInfo: { pid: number; startedAt: string; host: string } | null };
 
 function getConversationsDir(): string {
   return conversationsDirOverride ?? CONVERSATIONS_DIR;
 }
 
-/**
- * Expose the conversations directory for testing purposes.
- */
 export function getConversationsDirForTest(): string {
   return getConversationsDir();
 }
@@ -73,7 +39,11 @@ function ensureConversationsDir(): string {
 }
 
 function getConversationPath(id: string): string {
-  return path.join(getConversationsDir(), `${id}.json`);
+  return path.join(getConversationsDir(), `${id}.jsonl`);
+}
+
+function getLockPath(id: string): string {
+  return path.join(getConversationsDir(), `${id}.lock`);
 }
 
 function getLastConversationPath(): string {
@@ -90,16 +60,14 @@ function normalizeSshHost(host: string): string {
 }
 
 function conversationMatchesProject(
-  conversation: SavedConversation,
+  conversation: RestoredState,
   expectedProjectPath?: string,
   expectedSshHost?: string,
 ): boolean {
-  // If no expectations provided, skip all checks
   if (expectedProjectPath === undefined && expectedSshHost === undefined) {
     return true;
   }
 
-  // Check project path
   if (expectedProjectPath) {
     if (!conversation.projectPath) {
       return false;
@@ -109,7 +77,6 @@ function conversationMatchesProject(
     }
   }
 
-  // Check SSH host: use normalized matching
   if (expectedSshHost) {
     if (!conversation.sshHost) {
       return false;
@@ -117,8 +84,6 @@ function conversationMatchesProject(
     return normalizeSshHost(conversation.sshHost) === normalizeSshHost(expectedSshHost);
   }
 
-  // expectedSshHost is undefined/falsy but expectation exists (projectPath given)
-  // so conversation.sshHost must also be falsy
   if (conversation.sshHost) {
     return false;
   }
@@ -130,70 +95,42 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
-export function saveConversation(conversation: SavedConversation): string {
-  ensureConversationsDir();
-  const filePath = getConversationPath(conversation.id);
-  const { historyRepair: _historyRepair, ...persistedConversation } = conversation;
-
-  // Normalize messages: mark any streaming/running states as terminal
-  const normalizedMessages = conversation.messages.map((msg) => {
-    if (msg.sender === 'bot' && msg.status === 'streaming') {
-      return { ...msg, status: 'finalized' };
+function readEnvelopes(filePath: string): LogEnvelope[] {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const lines = content.split('\n');
+  const envelopes: LogEnvelope[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const envelope = JSON.parse(trimmed) as LogEnvelope;
+      envelopes.push(envelope);
+    } catch {
+      // skip corrupt line
     }
-    if (msg.sender === 'command' && (msg.status === 'pending' || msg.status === 'running')) {
-      return { ...msg, status: 'completed', success: msg.success ?? false };
-    }
-    return msg;
-  });
-
-  const data: SavedConversation = {
-    ...persistedConversation,
-    history: repairConversationHistory(persistedConversation.history).history,
-    messages: normalizedMessages,
-    updatedAt: new Date().toISOString(),
-  };
-
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-
-  // Update last conversation pointer
-  const lastPath = getLastConversationPath();
-  fs.writeFileSync(lastPath, JSON.stringify({ id: conversation.id }), 'utf-8');
-
-  return filePath;
+  }
+  return envelopes;
 }
 
 export function loadConversation(
   id: string,
   expectedProjectPath?: string,
   expectedSshHost?: string,
-): SavedConversation | null {
+): RestoredState | null {
   const filePath = getConversationPath(id);
   try {
     if (!fs.existsSync(filePath)) {
       return null;
     }
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const data = JSON.parse(content) as SavedConversation;
-    if (!conversationMatchesProject(data, expectedProjectPath, expectedSshHost)) {
+    const envelopes = readEnvelopes(filePath);
+    const restored = replayEvents(envelopes);
+    if (!restored.id) {
+      restored.id = id;
+    }
+    if (!conversationMatchesProject(restored, expectedProjectPath, expectedSshHost)) {
       return null;
     }
-    const { historyRepair: _historyRepair, ...persistedData } = data;
-    const repair = repairConversationHistory(Array.isArray(persistedData.history) ? persistedData.history : []);
-    return {
-      ...persistedData,
-      history: repair.history,
-      ...(repair.repaired
-        ? {
-            historyRepair: {
-              repaired: repair.repaired,
-              removedItems: repair.removedItems,
-              repairs: repair.repairs,
-              statsBefore: repair.statsBefore,
-              statsAfter: repair.statsAfter,
-            },
-          }
-        : {}),
-    };
+    return restored;
   } catch {
     return null;
   }
@@ -204,9 +141,14 @@ export function loadConversationForProject(
   expectedProjectPath: string,
   expectedSshHost?: string,
 ): LoadConversationForProjectResult {
-  const conversation = loadConversation(id);
-  if (!conversation) {
+  const filePath = getConversationPath(id);
+  if (!fs.existsSync(filePath)) {
     return { status: 'not_found' };
+  }
+  const envelopes = readEnvelopes(filePath);
+  const conversation = replayEvents(envelopes);
+  if (!conversation.id) {
+    conversation.id = id;
   }
   if (!conversationMatchesProject(conversation, expectedProjectPath, expectedSshHost)) {
     return { status: 'project_mismatch', conversation };
@@ -214,14 +156,13 @@ export function loadConversationForProject(
   return { status: 'loaded', conversation };
 }
 
-export function loadLastConversation(expectedProjectPath?: string, expectedSshHost?: string): SavedConversation | null {
+export function loadLastConversation(expectedProjectPath?: string, expectedSshHost?: string): RestoredState | null {
   const hasFilters = !!expectedProjectPath || !!expectedSshHost;
-
   if (hasFilters) {
     return (
       listConversations()
         .map(({ id }) => loadConversation(id, expectedProjectPath, expectedSshHost))
-        .find((conversation): conversation is SavedConversation => conversation !== null) ?? null
+        .find((conversation): conversation is RestoredState => conversation !== null) ?? null
     );
   }
 
@@ -241,40 +182,112 @@ export function loadLastConversation(expectedProjectPath?: string, expectedSshHo
   }
 }
 
-export function deleteConversation(id: string): boolean {
-  const filePath = getConversationPath(id);
+export function isConversationLocked(id: string): { pid: number; startedAt: string; host: string } | null {
+  const lp = getLockPath(id);
+  if (!fs.existsSync(lp)) {
+    return null;
+  }
   try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      return true;
-    }
-    return false;
+    return JSON.parse(fs.readFileSync(lp, 'utf-8'));
   } catch {
-    return false;
+    return { pid: -1, startedAt: '', host: '' };
   }
 }
 
-export function listConversations(): Array<{ id: string; updatedAt: string }> {
+export function deleteConversation(id: string): boolean {
+  const filePath = getConversationPath(id);
+  const lockFile = getLockPath(id);
+  let removed = false;
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      removed = true;
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    if (fs.existsSync(lockFile)) {
+      fs.unlinkSync(lockFile);
+    }
+  } catch {
+    // ignore
+  }
+  // Clear last.json pointer if it points to this id
+  const lp = getLastConversationPath();
+  try {
+    if (fs.existsSync(lp)) {
+      const data = JSON.parse(fs.readFileSync(lp, 'utf-8'));
+      if (data?.id === id) {
+        fs.unlinkSync(lp);
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return removed;
+}
+
+interface ConversationListEntry {
+  id: string;
+  updatedAt: string;
+  projectPath?: string;
+  sshHost?: string;
+}
+
+export function listConversations(): ConversationListEntry[] {
   const dir = getConversationsDir();
   try {
     if (!fs.existsSync(dir)) {
       return [];
     }
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json') && f !== 'last.json');
-    return files
-      .map((f) => {
-        try {
-          const content = fs.readFileSync(path.join(dir, f), 'utf-8');
-          const data = JSON.parse(content) as SavedConversation;
-          return { id: data.id, updatedAt: data.updatedAt };
-        } catch {
-          return null;
-        }
-      })
-      .filter((item): item is { id: string; updatedAt: string } => item !== null)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'));
+    const entries: ConversationListEntry[] = [];
+    for (const f of files) {
+      const fp = path.join(dir, f);
+      try {
+        const stat = fs.statSync(fp);
+        const firstLine = readFirstLine(fp);
+        if (!firstLine) continue;
+        const envelope = JSON.parse(firstLine) as LogEnvelope;
+        if (envelope?.event?.type !== 'session_init') continue;
+        const init = envelope.event;
+        entries.push({
+          id: init.id,
+          updatedAt: stat.mtime.toISOString(),
+          ...(init.projectPath ? { projectPath: init.projectPath } : {}),
+          ...(init.sshHost ? { sshHost: init.sshHost } : {}),
+        });
+      } catch {
+        // skip
+      }
+    }
+    return entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   } catch {
     return [];
+  }
+}
+
+function readFirstLine(filePath: string): string | null {
+  const buf = Buffer.alloc(8192);
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const read = fs.readSync(fd, buf, 0, buf.length, 0);
+    if (read <= 0) return null;
+    const text = buf.subarray(0, read).toString('utf-8');
+    const nl = text.indexOf('\n');
+    return nl === -1 ? text : text.slice(0, nl);
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // ignore
+      }
+    }
   }
 }
 
@@ -292,3 +305,23 @@ export function getResumeCommand(id: string, sshHost?: string, remoteDir?: strin
   parts.push(`--resume ${id}`);
   return parts.join(' ');
 }
+
+/**
+ * Fork a conversation: copy <sourceId>.jsonl to <newId>.jsonl and return the new id.
+ * The source is untouched. The new file is ready to be opened by a fresh writer.
+ */
+export function forkConversation(sourceId: string, newId: string): boolean {
+  const dir = ensureConversationsDir();
+  const srcPath = path.join(dir, `${sourceId}.jsonl`);
+  const dstPath = path.join(dir, `${newId}.jsonl`);
+  if (!fs.existsSync(srcPath)) {
+    return false;
+  }
+  fs.copyFileSync(srcPath, dstPath);
+  return true;
+}
+
+export const __testing = {
+  getConversationPath,
+  getLockPath,
+};

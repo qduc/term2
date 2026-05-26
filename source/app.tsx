@@ -36,8 +36,8 @@ interface AppProps {
   onExitUsage?: () => void;
   sessionId: string;
   initialMessages?: Message[];
-  onSaveConversation: (messages: Message[], overrideSessionId?: string, overrideCreatedAt?: string) => Promise<void>;
-  onMessagesChange: (messages: Message[]) => void;
+  logWriter?: { append: (event: any) => void };
+  onRotateWriter?: (newSessionId: string) => void;
   generateId: () => string;
   onSessionIdChange?: (newId: string, createdAt: string) => void;
 }
@@ -59,19 +59,12 @@ export const clearTerminalForRedraw = (stdout: TerminalWriter): void => {
 type ScheduleCallback = (callback: () => void, delay: number) => unknown;
 
 export const scheduleExitSideEffects = (
-  messages: Message[],
-  onSaveConversation: (messages: Message[], overrideSessionId?: string, overrideCreatedAt?: string) => Promise<void>,
+  _messages: Message[],
   onExitUsage?: () => void,
   schedule: ScheduleCallback = setTimeout,
 ): void => {
   schedule(() => {
-    if (hasConversationContent(messages)) {
-      void onSaveConversation(messages).finally(() => {
-        onExitUsage?.();
-      });
-    } else {
-      onExitUsage?.();
-    }
+    onExitUsage?.();
   }, 0);
 };
 
@@ -94,8 +87,8 @@ const App: FC<AppProps> = ({
   onExitUsage,
   sessionId: initialSessionId,
   initialMessages = [],
-  onSaveConversation,
-  onMessagesChange,
+  logWriter,
+  onRotateWriter,
   generateId,
   onSessionIdChange,
 }) => {
@@ -150,29 +143,25 @@ const App: FC<AppProps> = ({
     }, []),
     settingsService,
     onRestoreInput: setInput,
+    logWriter,
   });
 
   const handleClearConversation = useCallback(async () => {
-    if (hasConversationContent(messages)) {
-      await onSaveConversation(messages, sessionId);
-    }
     const newId = generateId();
     const newCreatedAt = new Date().toISOString();
+    if (onRotateWriter) {
+      onRotateWriter(newId);
+    }
     conversationService.resetWithNewId(newId);
     setSessionId(newId);
     if (onSessionIdChange) {
       onSessionIdChange(newId, newCreatedAt);
     }
-  }, [messages, sessionId, onSaveConversation, generateId, conversationService, onSessionIdChange]);
+  }, [generateId, conversationService, onSessionIdChange, onRotateWriter]);
 
   useEffect(() => {
     handleClearConversationRef.current = handleClearConversation;
   }, [handleClearConversation]);
-
-  // Sync messages to parent for SIGINT save-on-exit
-  useEffect(() => {
-    onMessagesChange(messages);
-  }, [messages, onMessagesChange]);
 
   useEffect(() => {
     conversationService.setRetryCallback(() => addSystemMessage('Retrying due to upstream error...'));
@@ -226,8 +215,8 @@ const App: FC<AppProps> = ({
 
   const exitWithUsage = useCallback(() => {
     exit();
-    scheduleExitSideEffects(messages, onSaveConversation, onExitUsage);
-  }, [exit, onExitUsage, onSaveConversation, messages]);
+    onExitUsage?.();
+  }, [exit, onExitUsage]);
 
   const handleHandoffConfirm = useCallback(async () => {
     await clearConversationAndRefreshBanner();

@@ -4,6 +4,7 @@ import { ConversationSession } from './conversation-session.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
+import type { UserTurn } from '../types/user-turn.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../contracts/conversation.js';
 export type { CommandMessage } from './conversation-session.js';
@@ -61,7 +62,7 @@ export class ConversationService {
     return this.#session.getCurrentSnapshot();
   }
 
-  undoLastUserTurn(): { text: string; imageCount: number } | null {
+  undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null {
     return this.#session.undoLastUserTurn();
   }
 
@@ -69,7 +70,7 @@ export class ConversationService {
     return this.#session.listUserTurns();
   }
 
-  undoNUserTurns(n: number): { text: string; imageCount: number } | null {
+  undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null {
     return this.#session.undoNUserTurns(n);
   }
 

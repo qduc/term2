@@ -118,7 +118,7 @@ test('createCopySlashCommand reports clipboard failures asynchronously', async (
 test('createUndoSlashCommand opens undo menu when no args', (t) => {
   let menuOpened = false;
   const command = createUndoSlashCommand({
-    undoLastUserMessage: () => 'Previous message',
+    undoLastUserMessage: () => ({ text: 'Previous message' }),
     setInput: () => {},
     addSystemMessage: () => {},
     openUndoMenu: () => {
@@ -135,7 +135,7 @@ test('createUndoSlashCommand with "last" arg restores last user message to input
   let input = '';
   let undoRedraws = 0;
   const command = createUndoSlashCommand({
-    undoLastUserMessage: () => 'Previous message',
+    undoLastUserMessage: () => ({ text: 'Previous message' }),
     setInput: (value) => {
       input = value;
     },
@@ -181,7 +181,7 @@ test('createRetrySlashCommand undoes and re-sends the last user message', async 
   const command = createRetrySlashCommand({
     undoLastUserMessage: () => {
       undoCalled = true;
-      return 'hello';
+      return { text: 'hello' };
     },
     sendUserMessage: async (input) => {
       sentText = typeof input === 'string' ? input : input.text;
@@ -223,30 +223,34 @@ test('createRetrySlashCommand shows system message when nothing to retry', (t) =
   t.deepEqual(systemMessages, ['Nothing to retry.']);
 });
 
-test('createRetrySlashCommand blocks when previous turn included images', (t) => {
+test('createRetrySlashCommand retries when previous turn included images', async (t) => {
   const systemMessages: string[] = [];
   let undoCalled = false;
-  let sendCalled = false;
+  let sentInput: any = null;
 
   const command = createRetrySlashCommand({
     undoLastUserMessage: () => {
       undoCalled = true;
-      return 'hello';
+      return {
+        text: 'hello',
+        images: [{ id: 'img-1', data: 'xyz', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
+      };
     },
-    sendUserMessage: async () => {
-      sendCalled = true;
+    sendUserMessage: async (input) => {
+      sentInput = input;
     },
     addSystemMessage: (text) => systemMessages.push(text),
-    listUserTurns: () => [{ index: 0, text: 'hello', imageCount: 2 }],
+    listUserTurns: () => [{ index: 0, text: 'hello', imageCount: 1 }],
   });
 
   const result = command.action();
   t.is(result, true);
-  t.false(undoCalled);
-  t.false(sendCalled);
-  t.deepEqual(systemMessages, [
-    'Cannot retry: the previous turn included images that cannot be reattached. Use `/undo` to restore the text instead.',
-  ]);
+  t.true(undoCalled);
+  t.deepEqual(sentInput, {
+    text: 'hello',
+    images: [{ id: 'img-1', data: 'xyz', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
+  });
+  t.deepEqual(systemMessages, []);
 });
 
 const TestHookWrapper = ({

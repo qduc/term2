@@ -20,7 +20,7 @@ interface UseAppCommandsProps {
   exit: () => void;
   messages: Message[];
   setModel: (model: string) => void;
-  undoLastUserMessage: () => string | null;
+  undoLastUserMessage: () => { text: string; images?: UserTurn['images'] } | null;
   openUndoMenu: () => void;
   onUndo?: () => void;
   onHandoff?: (capturedText: string) => void;
@@ -35,7 +35,7 @@ interface CreateCopySlashCommandOptions {
 }
 
 interface CreateUndoSlashCommandOptions {
-  undoLastUserMessage: () => string | null;
+  undoLastUserMessage: () => { text: string; images?: UserTurn['images'] } | null;
   setInput: (input: string) => void;
   addSystemMessage: (text: string) => void;
   openUndoMenu: () => void;
@@ -43,7 +43,7 @@ interface CreateUndoSlashCommandOptions {
 }
 
 interface CreateRetrySlashCommandOptions {
-  undoLastUserMessage: () => string | null;
+  undoLastUserMessage: () => { text: string; images?: UserTurn['images'] } | null;
   sendUserMessage: (input: string | UserTurn) => Promise<void>;
   addSystemMessage: (text: string) => void;
   listUserTurns: () => { index: number; text: string; imageCount: number }[];
@@ -140,10 +140,10 @@ export function createUndoSlashCommand({
       }
       // /undo last — immediate undo of last message
       if (args.trim() === 'last') {
-        const text = undoLastUserMessage();
-        if (text !== null) {
+        const removed = undoLastUserMessage();
+        if (removed !== null) {
           onUndo?.();
-          setInput(text);
+          setInput(removed.text);
           return false;
         }
         addSystemMessage('Nothing to undo.');
@@ -158,26 +158,17 @@ export function createRetrySlashCommand({
   undoLastUserMessage,
   sendUserMessage,
   addSystemMessage,
-  listUserTurns,
+  listUserTurns: _,
   onUndo,
 }: CreateRetrySlashCommandOptions): SlashCommand {
   return {
     name: 'retry',
     description: 'Undo the last user message and re-send it',
     action: () => {
-      const turns = listUserTurns();
-      const lastTurn = turns[turns.length - 1];
-      if (lastTurn && lastTurn.imageCount > 0) {
-        addSystemMessage(
-          'Cannot retry: the previous turn included images that cannot be reattached. Use `/undo` to restore the text instead.',
-        );
-        return true;
-      }
-
-      const text = undoLastUserMessage();
-      if (text !== null) {
+      const removed = undoLastUserMessage();
+      if (removed !== null) {
         onUndo?.();
-        void sendUserMessage(text);
+        void sendUserMessage({ text: removed.text, ...(removed.images?.length ? { images: removed.images } : {}) });
         return true;
       }
 

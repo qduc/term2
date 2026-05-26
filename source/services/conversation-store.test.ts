@@ -428,7 +428,12 @@ test('removeLastUserTurn() returns imageCount > 0 for multimodal turn', (t) => {
 
   const result = store.removeLastUserTurn();
 
-  t.deepEqual(result, { text: 'hi', imageCount: 1 });
+  t.is(result?.text, 'hi');
+  t.is(result?.imageCount, 1);
+  t.is(result?.images?.[0]?.data, 'AAAA');
+  t.is(result?.images?.[0]?.mimeType, 'image/png');
+  t.is(result?.images?.[0]?.byteSize, 3);
+  t.is(result?.images?.[0]?.displayNumber, 1);
   t.is(store.getHistory().length, 0);
 });
 

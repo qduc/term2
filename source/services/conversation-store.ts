@@ -1,6 +1,8 @@
 import type { AgentInputItem } from '@openai/agents';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 
+type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
+
 export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
 
 /**
@@ -201,6 +203,41 @@ export class ConversationStore {
     return Array.isArray(content) ? content.filter((c: any) => c?.type === 'input_image').length : 0;
   }
 
+  static #extractImages(raw: any): UserTurn['images'] {
+    const content = raw?.content;
+    if (!Array.isArray(content)) return undefined;
+
+    const images = content
+      .filter((c: any) => c?.type === 'input_image' && typeof c.image === 'string')
+      .map((c: any, index: number) => {
+        const match = /^data:([^;,]+);base64,(.*)$/.exec(c.image as string);
+        if (!match) return null;
+        const [, mimeType, data] = match;
+        return {
+          id: crypto.randomUUID() as string,
+          data,
+          mimeType,
+          byteSize: Buffer.from(data, 'base64').length,
+          displayNumber: index + 1,
+        };
+      })
+      .filter((image): image is NonNullable<UserTurn['images']>[number] => image !== null);
+
+    return images.length > 0 ? images : undefined;
+  }
+
+  static #extractRemovedUserTurn(raw: any): RemovedUserTurn {
+    const images = ConversationStore.#extractImages(raw);
+    const result: RemovedUserTurn = {
+      text: ConversationStore.#extractText(raw),
+      imageCount: images?.length ?? 0,
+    };
+    if (images) {
+      result.images = images;
+    }
+    return result;
+  }
+
   /**
    * Returns a list of genuine user turns (excluding shell context items),
    * each with their index in the history array, text, and image count.
@@ -225,7 +262,7 @@ export class ConversationStore {
    * Used by /undo to rewind to before the last user turn.
    * Returns { text, imageCount } of the removed item, or null if none found.
    */
-  removeLastUserTurn(): { text: string; imageCount: number } | null {
+  removeLastUserTurn(): RemovedUserTurn | null {
     let anchor = -1;
     for (let i = this.#history.length - 1; i >= 0; i--) {
       const item: any = this.#history[i];
@@ -241,11 +278,10 @@ export class ConversationStore {
 
     const item: any = this.#history[anchor];
     const raw = item?.rawItem ?? item;
-    const text = ConversationStore.#extractText(raw);
-    const imageCount = ConversationStore.#extractImageCount(raw);
+    const removed = ConversationStore.#extractRemovedUserTurn(raw);
 
     this.#history.splice(anchor);
-    return { text, imageCount };
+    return removed;
   }
 
   /**
@@ -253,7 +289,7 @@ export class ConversationStore {
    * one's anchor). Returns info from the earliest removed turn, or null if
    * no genuine turns found.
    */
-  removeNLastUserTurns(n: number): { text: string; imageCount: number } | null {
+  removeNLastUserTurns(n: number): RemovedUserTurn | null {
     if (n <= 0) return null;
 
     // Walk backwards to find the nth-from-last genuine user turn
@@ -288,11 +324,10 @@ export class ConversationStore {
 
     const item: any = this.#history[anchor];
     const raw = item?.rawItem ?? item;
-    const text = ConversationStore.#extractText(raw);
-    const imageCount = ConversationStore.#extractImageCount(raw);
+    const removed = ConversationStore.#extractRemovedUserTurn(raw);
 
     this.#history.splice(anchor);
-    return { text, imageCount };
+    return removed;
   }
 
   /**

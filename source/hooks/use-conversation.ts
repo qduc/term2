@@ -551,7 +551,7 @@ export const useConversation = ({
     setIsProcessing(false);
   }, [conversationService]);
 
-  const undoLastUserMessage = useCallback(() => {
+  const undoLastUserMessage = useCallback((): { text: string; images?: UserTurn['images'] } | null => {
     let lastUserIndex = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
@@ -568,7 +568,7 @@ export const useConversation = ({
     const uiText = lastUserMessage.sender === 'user' ? lastUserMessage.text : '';
     conversationService.abort();
     const removed = conversationService.undoLastUserTurn();
-    const restored = removed?.text ?? uiText;
+    const restored = removed ?? { text: uiText };
     setMessages((prev) => prev.slice(0, lastUserIndex));
     setWaitingForApproval(false);
     setWaitingForRejectionReason(false);
@@ -576,20 +576,8 @@ export const useConversation = ({
     approvedContextRef.current = null;
     setIsProcessing(false);
 
-    if (removed && removed.imageCount > 0) {
-      appendMessages([
-        {
-          id: createMessageId(),
-          sender: 'system',
-          text: `Note: ${removed.imageCount} attached image${
-            removed.imageCount === 1 ? '' : 's'
-          } could not be restored to the input.`,
-        },
-      ]);
-    }
-
     return restored;
-  }, [messages, conversationService, appendMessages]);
+  }, [messages, conversationService]);
 
   const getUserMessages = useCallback((): { uiIndex: number; text: string }[] => {
     const result: { uiIndex: number; text: string }[] = [];
@@ -630,21 +618,9 @@ export const useConversation = ({
       approvedContextRef.current = null;
       setIsProcessing(false);
 
-      if (removed && removed.imageCount > 0) {
-        appendMessages([
-          {
-            id: createMessageId(),
-            sender: 'system',
-            text: `Note: ${removed.imageCount} attached image${
-              removed.imageCount === 1 ? '' : 's'
-            } could not be restored to the input.`,
-          },
-        ]);
-      }
-
       return restored;
     },
-    [messages, conversationService, appendMessages],
+    [messages, conversationService],
   );
 
   const setModel = useCallback(

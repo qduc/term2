@@ -308,7 +308,7 @@ export class ConversationSession {
     clearConversations?.call(this.agentClient);
   }
 
-  undoLastUserTurn(): { text: string; imageCount: number } | null {
+  undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null {
     const removed = this.conversationStore.removeLastUserTurn();
     if (removed === null) return null;
     this.generation++;
@@ -328,7 +328,7 @@ export class ConversationSession {
     return this.conversationStore.listUserTurns();
   }
 
-  undoNUserTurns(n: number): { text: string; imageCount: number } | null {
+  undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null {
     const removed = this.conversationStore.removeNLastUserTurns(n);
     if (removed === null) return null;
     this.generation++;

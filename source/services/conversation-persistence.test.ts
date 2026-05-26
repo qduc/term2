@@ -403,6 +403,117 @@ test.serial('deleteConversation: removes the jsonl and clears last.json', (t) =>
   t.false(fs.existsSync(path.join(testDir, 'last.json')));
 });
 
+test.serial('subagent_completed and corresponding records omit nestedRunResult', (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
+
+  // 1. Log subagent_completed event
+  writer.append({
+    type: 'subagent_completed',
+    result: {
+      agentId: 'sub-agent-1',
+      role: 'worker',
+      status: 'completed',
+      finalText: 'Task resolved successfully',
+      filesChanged: ['src/app.ts'],
+      toolsUsed: [{ toolName: 'create_file', count: 1 }],
+      usage: { prompt_tokens: 120, completion_tokens: 80, total_tokens: 200 },
+      nestedRunResult: {
+        state: {
+          history: [{ role: 'user', content: 'test' }],
+          generatedItems: ['item1'],
+        },
+      },
+    } as any,
+  });
+
+  // 2. Log tool_result event with JSON string containing nestedRunResult
+  writer.append({
+    type: 'tool_result',
+    callId: 'call-subagent-1',
+    toolName: 'run_subagent',
+    status: 'completed',
+    output: JSON.stringify({
+      status: 'completed',
+      finalText: 'Result text',
+      nestedRunResult: { state: { internalStuff: 'hidden' } },
+    }),
+  });
+
+  // 3. Log assistant_final event with nestedRunResult in snapshot
+  writer.append({
+    type: 'assistant_final',
+    message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'all done' },
+    finalText: 'all done',
+    snapshot: {
+      history: [
+        {
+          role: 'tool',
+          type: 'function_call_result',
+          name: 'run_subagent',
+          output: JSON.stringify({
+            status: 'completed',
+            finalText: 'Snapshot result text',
+            nestedRunResult: { state: { internalStuff: 'hidden' } },
+          }),
+        } as any,
+      ],
+      previousResponseId: 'resp-1',
+      toolLedger: [
+        {
+          turnId: 'turn-1',
+          callId: 'call-subagent-1',
+          toolName: 'run_subagent',
+          status: 'completed',
+          startedAt: '2026-05-26T00:00:00.000Z',
+          output: {
+            status: 'completed',
+            nestedRunResult: { state: { internalStuff: 'hidden' } },
+          },
+        } as any,
+      ],
+    },
+  });
+
+  void writer.close();
+
+  // Load raw file contents to check what was written to disk
+  const filePath = path.join(testDir, `${id}.jsonl`);
+  const lines = fs.readFileSync(filePath, 'utf-8').trim().split('\n');
+
+  // Parse lines to check events
+  const envelopes = lines.map((line) => JSON.parse(line));
+
+  // Find subagent_completed
+  const completedEnv = envelopes.find((env) => env.event?.type === 'subagent_completed');
+  t.truthy(completedEnv);
+  t.is(completedEnv.event.result.status, 'completed');
+  t.is(completedEnv.event.result.finalText, 'Task resolved successfully');
+  t.deepEqual(completedEnv.event.result.filesChanged, ['src/app.ts']);
+  t.is(completedEnv.event.result.nestedRunResult, undefined);
+
+  // Find tool_result
+  const toolResultEnv = envelopes.find((env) => env.event?.type === 'tool_result');
+  t.truthy(toolResultEnv);
+  t.is(toolResultEnv.event.toolName, 'run_subagent');
+  const parsedOutput = JSON.parse(toolResultEnv.event.output);
+  t.is(parsedOutput.status, 'completed');
+  t.is(parsedOutput.finalText, 'Result text');
+  t.is(parsedOutput.nestedRunResult, undefined);
+
+  // Find assistant_final and check snapshot
+  const finalEnv = envelopes.find((env) => env.event?.type === 'assistant_final');
+  t.truthy(finalEnv);
+  const snapHistoryOutput = JSON.parse(finalEnv.event.snapshot.history[0].output);
+  t.is(snapHistoryOutput.status, 'completed');
+  t.is(snapHistoryOutput.finalText, 'Snapshot result text');
+  t.is(snapHistoryOutput.nestedRunResult, undefined);
+
+  t.is(finalEnv.event.snapshot.toolLedger[0].output.status, 'completed');
+  t.is(finalEnv.event.snapshot.toolLedger[0].output.nestedRunResult, undefined);
+});
+
 // Suppress unused-event-import lint
 const _ev: LogEvent | null = null;
 void _ev;

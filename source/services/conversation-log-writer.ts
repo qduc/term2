@@ -59,6 +59,45 @@ function ensureDir(dir: string): void {
   }
 }
 
+function sanitizeSubagentResult(value: unknown): unknown {
+  if (!value) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object') {
+          const sanitized = sanitizeSubagentResult(parsed);
+          return JSON.stringify(sanitized);
+        }
+      } catch {
+        // Return original string
+      }
+    }
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(sanitizeSubagentResult);
+  }
+
+  if (typeof value === 'object') {
+    const obj = { ...value } as Record<string, any>;
+    if ('nestedRunResult' in obj) {
+      delete obj.nestedRunResult;
+    }
+    for (const key of Object.keys(obj)) {
+      obj[key] = sanitizeSubagentResult(obj[key]);
+    }
+    return obj;
+  }
+
+  return value;
+}
+
 function truncateForLog(event: LogEvent): LogEvent {
   const serialized = JSON.stringify(event);
   if (serialized.length <= MAX_EVENT_BYTES) {
@@ -158,7 +197,8 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     if (this.#closed || this.#fd === null) {
       return;
     }
-    const safeEvent = truncateForLog(event);
+    const sanitizedEvent = sanitizeSubagentResult(event) as LogEvent;
+    const safeEvent = truncateForLog(sanitizedEvent);
     const envelope: LogEnvelope = {
       v: LOG_ENVELOPE_VERSION,
       seq: ++this.#seq,
@@ -168,7 +208,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     const line = JSON.stringify(envelope) + '\n';
     try {
       fs.writeSync(this.#fd, line);
-      if (FSYNC_EVENTS.has(event.type)) {
+      if (FSYNC_EVENTS.has(sanitizedEvent.type)) {
         try {
           fs.fsyncSync(this.#fd);
         } catch {

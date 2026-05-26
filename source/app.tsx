@@ -1,5 +1,6 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useInputActions } from './context/InputContext.js';
+import { useInputActions, useInputState } from './context/InputContext.js';
+import { parseModelProviderArg } from './utils/model-provider-arg.js';
 
 import { Box, useApp, useInput, useStdout } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
@@ -74,6 +75,12 @@ export const scheduleExitSideEffects = (
   }, 0);
 };
 
+export type HandoffStage = 'confirm_model' | 'selecting_model';
+export interface HandoffState {
+  capturedText: string;
+  stage: HandoffStage;
+}
+
 const App: FC<AppProps> = ({
   conversationService,
   settingsService,
@@ -94,7 +101,9 @@ const App: FC<AppProps> = ({
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const { setInput } = useInputActions();
+  const { setInput, setMode, setTriggerIndex } = useInputActions();
+  const { mode } = useInputState();
+  const [handoffState, setHandoffState] = useState<HandoffState | null>(null);
   const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
@@ -168,6 +177,14 @@ const App: FC<AppProps> = ({
     conversationService.setRetryCallback(() => addSystemMessage('Retrying due to upstream error...'));
   }, [conversationService, addSystemMessage]);
 
+  useEffect(() => {
+    if (handoffState?.stage === 'selecting_model' && mode === 'text') {
+      setHandoffState(null);
+      setInput('');
+      void sendUserMessage({ text: `Implement this:\n\n${handoffState.capturedText}` });
+    }
+  }, [mode, sendUserMessage, setInput, handoffState]);
+
   const applyRuntimeSetting = useRuntimeSettings({
     setModel,
     setReasoningEffort,
@@ -190,9 +207,9 @@ const App: FC<AppProps> = ({
     setStartupBannerIds(appendStartupBannerId);
   }, []);
 
-  const clearConversationAndRefreshBanner = useCallback(() => {
+  const clearConversationAndRefreshBanner = useCallback(async () => {
     onPrintUsage?.();
-    clearConversation();
+    await clearConversation();
     refreshStartupBanner();
   }, [clearConversation, onPrintUsage, refreshStartupBanner]);
 
@@ -210,6 +227,34 @@ const App: FC<AppProps> = ({
     exit();
     scheduleExitSideEffects(messages, onSaveConversation, onExitUsage);
   }, [exit, onExitUsage, onSaveConversation, messages]);
+
+  const handleHandoffConfirm = useCallback(async () => {
+    await clearConversationAndRefreshBanner();
+    setHandoffState((prev) => (prev ? { ...prev, stage: 'selecting_model' } : null));
+    setInput('/model ');
+    setMode('model_selection');
+    setTriggerIndex('/model '.length);
+  }, [clearConversationAndRefreshBanner, setInput, setMode, setTriggerIndex]);
+
+  const handleHandoffDecline = useCallback(async () => {
+    const text = handoffState?.capturedText;
+    await clearConversationAndRefreshBanner();
+    setHandoffState(null);
+    setInput('');
+    if (text) {
+      await sendUserMessage({ text: `Implement this:\n\n${text}` });
+    }
+  }, [handoffState, clearConversationAndRefreshBanner, sendUserMessage, setInput]);
+
+  const handleHandoffCancel = useCallback(() => {
+    setHandoffState(null);
+    setInput('');
+    addSystemMessage('Handoff cancelled');
+  }, [addSystemMessage, setInput]);
+
+  const handleHandoff = useCallback((capturedText: string) => {
+    setHandoffState({ capturedText, stage: 'confirm_model' });
+  }, []);
 
   const { slashCommands, cycleAppModes } = useAppCommands({
     settingsService,
@@ -233,6 +278,7 @@ const App: FC<AppProps> = ({
         undoMenuRef.current.open(userMessages);
       }
     },
+    onHandoff: handleHandoff,
   });
 
   const handleUndoSelect = useCallback(
@@ -313,6 +359,30 @@ const App: FC<AppProps> = ({
       return;
     }
 
+    // Handoff flow interception
+    if (handoffState) {
+      if (handoffState.stage === 'selecting_model') {
+        // Model was selected from popup → model text submitted as message
+        const parsedInput = parseInput(value);
+        const modelArg = parsedInput.type === 'slash-command' ? parsedInput.args : value;
+        const { modelId, provider } = parseModelProviderArg(modelArg);
+        if (modelId) {
+          settingsService.set('agent.model', modelId);
+          if (provider) {
+            settingsService.set('agent.provider', provider);
+            applyRuntimeSetting('agent.provider', provider);
+          }
+          applyRuntimeSetting('agent.model', modelId);
+          setModel(modelId);
+        }
+        const text = handoffState.capturedText;
+        setHandoffState(null);
+        setInput('');
+        await sendUserMessage({ text: `Implement this:\n\n${text}` });
+        return;
+      }
+    }
+
     // Parse the input to determine what to do
     const parsed = parseInput(value);
 
@@ -386,6 +456,10 @@ const App: FC<AppProps> = ({
             undoMenuRef={undoMenuRef}
             onUndoSelect={handleUndoSelect}
             onSettingChange={applyRuntimeSetting}
+            handoffState={handoffState}
+            onHandoffConfirm={handleHandoffConfirm}
+            onHandoffDecline={handleHandoffDecline}
+            onHandoffCancel={handleHandoffCancel}
           />
         </Box>
       </Box>

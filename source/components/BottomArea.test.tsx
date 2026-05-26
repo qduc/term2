@@ -79,3 +79,18 @@ test('BottomArea shows processing indicator when busy', (t) => {
   t.false(output.includes('Allow this action?'));
   t.false(output.includes('❯'));
 });
+
+test('BottomArea shows handoff confirmation prompt when handoffState is confirm_model', (t) => {
+  const { lastFrame } = renderBottomArea({
+    ...baseProps,
+    handoffState: {
+      capturedText: 'some test code',
+      stage: 'confirm_model',
+    },
+  });
+  const output = lastFrame() ?? '';
+  t.true(output.includes('📋 Change model?'));
+  t.true(output.includes('Yes'));
+  t.true(output.includes('No'));
+  t.false(output.includes('Allow this action?'));
+});

@@ -14,7 +14,7 @@ interface UseAppCommandsProps {
   addSystemMessage: (text: string) => void;
   applyRuntimeSetting: (key: string, value: any) => void;
   setInput: (input: string) => void;
-  clearConversation: () => void;
+  clearConversation: () => void | Promise<void>;
   getSessionUsage: () => string;
   exit: () => void;
   messages: Message[];
@@ -22,6 +22,7 @@ interface UseAppCommandsProps {
   undoLastUserMessage: () => string | null;
   openUndoMenu: () => void;
   onUndo?: () => void;
+  onHandoff?: (capturedText: string) => void;
 }
 
 interface CreateCopySlashCommandOptions {
@@ -159,6 +160,7 @@ export const useAppCommands = ({
   undoLastUserMessage,
   openUndoMenu,
   onUndo,
+  onHandoff,
 }: UseAppCommandsProps) => {
   /**
    * Disable all exclusive sibling modes except the one being enabled.
@@ -272,8 +274,9 @@ export const useAppCommands = ({
         name: 'clear',
         description: 'Start a new conversation',
         action: () => {
-          clearConversation();
-          addSystemMessage('Welcome to term²! Type a message to start chatting.');
+          void Promise.resolve(clearConversation()).then(() => {
+            addSystemMessage('Welcome to term²! Type a message to start chatting.');
+          });
         },
       },
       createUndoSlashCommand({ undoLastUserMessage, setInput, addSystemMessage, openUndoMenu, onUndo }),
@@ -448,6 +451,20 @@ export const useAppCommands = ({
           return true;
         },
       },
+      {
+        name: 'handoff',
+        description: 'Hand off the last assistant response to another model',
+        action: () => {
+          const lastText = getLastFinalAssistantText(messages);
+          if (!lastText) {
+            addSystemMessage('No assistant response available to hand off.');
+            return true;
+          }
+
+          onHandoff?.(lastText);
+          return true;
+        },
+      },
       guardedSettingsCommand,
     ];
   }, [
@@ -465,6 +482,7 @@ export const useAppCommands = ({
     openUndoMenu,
     onUndo,
     togglePlanMode,
+    onHandoff,
   ]);
 
   return {

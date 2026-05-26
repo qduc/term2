@@ -411,3 +411,77 @@ test('useAppCommands cycleAppModes when in mentor mode switches to plan and disa
   t.true(settings.get('app.planMode'));
   t.false(settings.get('app.mentorMode'));
 });
+
+test('useAppCommands /handoff when no assistant response exists shows system message', (t) => {
+  const settings = new Map<string, any>();
+  const systemMessages: string[] = [];
+  let hookResult: any;
+
+  render(
+    React.createElement(TestHookWrapper, {
+      settings,
+      messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+      onSystemMessage: (text: string) => systemMessages.push(text),
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  const command = hookResult.slashCommands.find((c: any) => c.name === 'handoff');
+  t.truthy(command);
+  const result = command.action();
+  t.is(result, true);
+  t.deepEqual(systemMessages, ['No assistant response available to hand off.']);
+});
+
+test('useAppCommands /handoff when assistant response exists copies, clears, message, and calls onHandoff', async (t) => {
+  const settings = new Map<string, any>();
+  const systemMessages: string[] = [];
+  let clearCalled = false;
+  let handoffText: string | null = null;
+  let hookResult: any;
+
+  const messages: Message[] = [
+    { id: '1', sender: 'user', text: 'please write a plan' },
+    { id: '2', sender: 'bot', text: 'my plan' },
+  ];
+
+  const TestWrapper = () => {
+    hookResult = useAppCommands({
+      settingsService: {
+        get: (key: string) => settings.get(key) ?? false,
+        set: (key: string, value: any) => settings.set(key, value),
+      } as any,
+      addSystemMessage: (text: string) => systemMessages.push(text),
+      applyRuntimeSetting: () => {},
+      setInput: () => {},
+      clearConversation: () => {
+        clearCalled = true;
+      },
+      getSessionUsage: () => '',
+      exit: () => {},
+      messages,
+      setModel: () => {},
+      undoLastUserMessage: () => null,
+      openUndoMenu: () => {},
+      onHandoff: (text) => {
+        handoffText = text;
+      },
+    });
+    return null;
+  };
+
+  render(React.createElement(TestWrapper));
+
+  const command = hookResult.slashCommands.find((c: any) => c.name === 'handoff');
+  t.truthy(command);
+  const result = command.action();
+  t.is(result, true);
+  t.false(clearCalled);
+
+  await flushMicrotasks();
+
+  t.is(handoffText as any, 'my plan');
+  t.deepEqual(systemMessages, []);
+});

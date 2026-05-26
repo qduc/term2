@@ -3,6 +3,8 @@ import { Box, Text } from 'ink';
 import ApprovalPrompt from './ApprovalPrompt.js';
 import InputBox from './InputBox.js';
 import StatusBar from './StatusBar.js';
+import HandoffConfirmationPrompt from './HandoffConfirmationPrompt.js';
+import type { HandoffState } from '../app.js';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings-service.js';
 import type { LoggingService } from '../services/logging-service.js';
@@ -34,6 +36,10 @@ export type BottomAreaProps = {
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
   onUndoSelect?: (item: UndoItem) => void;
   onSettingChange?: (key: string, value: any) => void;
+  handoffState?: HandoffState | null;
+  onHandoffConfirm?: () => void;
+  onHandoffDecline?: () => void;
+  onHandoffCancel?: () => void;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -56,6 +62,10 @@ const BottomArea: FC<BottomAreaProps> = ({
   undoMenuRef,
   onUndoSelect,
   onSettingChange,
+  handoffState,
+  onHandoffConfirm,
+  onHandoffDecline,
+  onHandoffCancel,
 }) => {
   const [dotCount, setDotCount] = useState(1);
 
@@ -72,13 +82,21 @@ const BottomArea: FC<BottomAreaProps> = ({
     return () => clearInterval(interval);
   }, [isProcessing]);
 
-  const showApprovalPrompt = waitingForApproval && !isProcessing && !waitingForRejectionReason && pendingApproval;
-  const showInput = (!isProcessing && !waitingForApproval) || waitingForRejectionReason;
+  const showHandoffConfirm = handoffState?.stage === 'confirm_model';
+  const showApprovalPrompt =
+    !showHandoffConfirm && waitingForApproval && !isProcessing && !waitingForRejectionReason && pendingApproval;
+  const showInput = !showHandoffConfirm && ((!isProcessing && !waitingForApproval) || waitingForRejectionReason);
 
   return (
     <Box flexDirection="column" width="100%">
       <Box flexDirection="column" marginTop={1}>
-        {showApprovalPrompt ? (
+        {showHandoffConfirm ? (
+          <HandoffConfirmationPrompt
+            onConfirm={onHandoffConfirm || (() => {})}
+            onDecline={onHandoffDecline || (() => {})}
+            onCancel={onHandoffCancel || (() => {})}
+          />
+        ) : showApprovalPrompt ? (
           <ApprovalPrompt approval={pendingApproval} onApprove={onApprove} onReject={onReject} />
         ) : isProcessing ? (
           <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>

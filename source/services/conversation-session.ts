@@ -29,6 +29,29 @@ import {
   ToolExecutionLedger,
   type SavedToolExecution,
 } from './tool-execution-ledger.js';
+import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
+
+const asRecordLocal = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+const rawItemLocal = (item: unknown): Record<string, unknown> | null => {
+  const rec = asRecordLocal(item);
+  if (!rec) return null;
+  return asRecordLocal(rec.rawItem) ?? rec;
+};
+const callIdOfLocal = (item: unknown): string | null => {
+  const raw = rawItemLocal(item);
+  const cid = raw?.callId ?? raw?.call_id ?? raw?.tool_call_id ?? raw?.toolCallId ?? raw?.id;
+  return typeof cid === 'string' && cid ? cid : null;
+};
+const toolNameOfLocal = (item: unknown): string => {
+  const raw = rawItemLocal(item);
+  const name = raw?.name ?? asRecordLocal(item)?.name;
+  return typeof name === 'string' && name ? name : 'unknown';
+};
+const outputOfLocal = (item: unknown): unknown => {
+  const raw = rawItemLocal(item);
+  return raw?.output ?? asRecordLocal(item)?.output;
+};
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -107,6 +130,7 @@ export class ConversationSession {
 
   private settingsService?: ISettingsService;
   private pendingModeNotice: string | null = null;
+  private logSink: ((event: LogEvent) => void) | null = null;
 
   constructor(
     id: string,
@@ -198,6 +222,7 @@ export class ConversationSession {
     this.toolCallArgumentsById.clear();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
+    this.#log({ type: 'undo', removedUserTurns: 1, snapshot: this.getCurrentSnapshot() });
     return removed;
   }
 
@@ -215,6 +240,7 @@ export class ConversationSession {
     this.toolCallArgumentsById.clear();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
+    this.#log({ type: 'undo', removedUserTurns: n, snapshot: this.getCurrentSnapshot() });
     return removed;
   }
 
@@ -239,6 +265,100 @@ export class ConversationSession {
   setRetryCallback(callback: () => void): void {
     if (typeof this.agentClient.setRetryCallback === 'function') {
       this.agentClient.setRetryCallback(callback);
+    }
+  }
+
+  setLogSink(sink: ((event: LogEvent) => void) | null): void {
+    this.logSink = sink;
+  }
+
+  getCurrentSnapshot(): StateSnapshot {
+    const getProvider = getMethod<[], string>(this.agentClient, 'getProvider');
+    const provider = getProvider
+      ? getProvider.call(this.agentClient)
+      : this.settingsService?.get<string>('agent.provider');
+    const model = this.settingsService?.get<string>('agent.model');
+    return {
+      history: this.conversationStore.getHistory(),
+      previousResponseId: this.previousResponseId,
+      toolLedger: this.toolLedger.export(),
+      ...(model ? { model } : {}),
+      ...(provider ? { provider } : {}),
+    };
+  }
+
+  #log(event: LogEvent): void {
+    if (!this.logSink) return;
+    try {
+      this.logSink(event);
+    } catch (err: any) {
+      this.logger.warn('Conversation log sink threw', {
+        eventType: 'conversation_log.sink_failed',
+        category: 'persistence',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  #dispatchEventToLog(event: ConversationEvent): void {
+    if (!this.logSink) return;
+    switch (event.type) {
+      case 'tool_started':
+        this.#log({
+          type: 'tool_started',
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          arguments: event.arguments,
+        });
+        return;
+      case 'command_message':
+        this.#log({ type: 'command_message', message: event.message });
+        return;
+      case 'approval_required':
+        this.#log({
+          type: 'approval_required',
+          approval: {
+            toolName: event.approval.toolName,
+            argumentsText: event.approval.argumentsText,
+            agentName: event.approval.agentName,
+            ...('callId' in event.approval && event.approval.callId ? { callId: event.approval.callId as string } : {}),
+          },
+        });
+        return;
+      case 'subagent_started':
+        this.#log({
+          type: 'subagent_started',
+          agentId: event.agentId,
+          role: event.role,
+          task: event.task,
+        });
+        return;
+      case 'subagent_completed':
+        this.#log({ type: 'subagent_completed', result: event.result });
+        return;
+      case 'error':
+        this.#log({ type: 'error', message: event.message, ...(event.kind ? { kind: event.kind } : {}) });
+        return;
+      case 'final': {
+        const snapshot = this.getCurrentSnapshot();
+        this.#log({
+          type: 'assistant_final',
+          message: {
+            id: `bot-${snapshot.history.length}-${Date.now()}`,
+            sender: 'bot',
+            status: 'finalized',
+            text: event.finalText,
+            ...(event.reasoningText ? { reasoningText: event.reasoningText } : {}),
+          },
+          finalText: event.finalText,
+          ...(event.reasoningText ? { reasoningText: event.reasoningText } : {}),
+          ...(event.usage ? { usage: event.usage } : {}),
+          snapshot,
+        });
+        return;
+      }
+      default:
+        return;
     }
   }
 
@@ -372,7 +492,21 @@ export class ConversationSession {
               emittedInvalidToolCallPackets: this.emittedInvalidToolCallPackets,
               preserveExistingToolArgs: true,
               onFunctionCallItem: (item) => this.toolLedger.recordFunctionCall(item),
-              onFunctionResultItem: (item) => this.toolLedger.recordFunctionResult(item),
+              onFunctionResultItem: (item) => {
+                this.toolLedger.recordFunctionResult(item);
+                const cid = callIdOfLocal(item);
+                if (cid && this.logSink) {
+                  const entry = this.toolLedger.export().find((e) => e.callId === cid);
+                  this.#log({
+                    type: 'tool_result',
+                    callId: cid,
+                    toolName: entry?.toolName ?? toolNameOfLocal(item),
+                    status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
+                    output: entry?.output ?? outputOfLocal(item),
+                    ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
+                  });
+                }
+              },
             },
             { logger: this.logger, sessionId: this.id },
           );
@@ -723,7 +857,21 @@ export class ConversationSession {
               emittedInvalidToolCallPackets: this.emittedInvalidToolCallPackets,
               preserveExistingToolArgs: true,
               onFunctionCallItem: (item) => this.toolLedger.recordFunctionCall(item),
-              onFunctionResultItem: (item) => this.toolLedger.recordFunctionResult(item),
+              onFunctionResultItem: (item) => {
+                this.toolLedger.recordFunctionResult(item);
+                const cid = callIdOfLocal(item);
+                if (cid && this.logSink) {
+                  const entry = this.toolLedger.export().find((e) => e.callId === cid);
+                  this.#log({
+                    type: 'tool_result',
+                    callId: cid,
+                    toolName: entry?.toolName ?? toolNameOfLocal(item),
+                    status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
+                    output: entry?.output ?? outputOfLocal(item),
+                    ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
+                  });
+                }
+              },
             },
             { logger: this.logger, sessionId: this.id },
           );
@@ -826,9 +974,13 @@ export class ConversationSession {
   ): Promise<ConversationResult> {
     const turn = normalizeUserTurn(input);
     return this.#withTrafficContext(turn.text, async () => {
+      const wrappedOnEvent = (event: ConversationEvent) => {
+        this.#dispatchEventToLog(event);
+        onEvent?.(event);
+      };
       getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
         this.agentClient,
-        onEvent ?? null,
+        wrappedOnEvent,
       );
       let result: ConversationResult;
       try {
@@ -836,7 +988,7 @@ export class ConversationSession {
           onTextChunk,
           onReasoningChunk,
           onCommandMessage,
-          onEvent,
+          onEvent: wrappedOnEvent,
           getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
           onFinalEvent: (event) => {
             this.logger.debug('sendMessage received final event', {
@@ -884,10 +1036,19 @@ export class ConversationSession {
       return null;
     }
 
+    this.#log({
+      type: 'approval_resolved',
+      answer: answer === 'y' ? 'y' : 'n',
+      ...(rejectionReason ? { rejectionReason } : {}),
+    });
     return this.#withTrafficContext(undefined, async () => {
+      const wrappedOnEvent = (event: ConversationEvent) => {
+        this.#dispatchEventToLog(event);
+        onEvent?.(event);
+      };
       getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
         this.agentClient,
-        onEvent ?? null,
+        wrappedOnEvent,
       );
       let result: ConversationResult | null;
       try {
@@ -895,7 +1056,7 @@ export class ConversationSession {
           onTextChunk,
           onReasoningChunk,
           onCommandMessage,
-          onEvent,
+          onEvent: wrappedOnEvent,
           getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
           onFinalEvent: (event) => {
             this.logger.debug('handleApprovalDecision received final event', {

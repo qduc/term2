@@ -3,6 +3,7 @@ import type { ILoggingService, ISettingsService } from './service-interfaces.js'
 import { ConversationSession } from './conversation-session.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
+import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../contracts/conversation.js';
 export type { CommandMessage } from './conversation-session.js';
@@ -38,11 +39,26 @@ export class ConversationService {
   }
 
   resetWithNewId(newId: string): void {
+    const previousLogSink = this.#logSink;
     this.#session.reset();
     this.#session = new ConversationSession(newId, {
       agentClient: this.#agentClient,
       deps: this.#deps,
     });
+    if (previousLogSink) {
+      this.#session.setLogSink(previousLogSink);
+    }
+  }
+
+  #logSink: ((event: LogEvent) => void) | null = null;
+
+  setLogSink(sink: ((event: LogEvent) => void) | null): void {
+    this.#logSink = sink;
+    this.#session.setLogSink(sink);
+  }
+
+  getCurrentSnapshot(): StateSnapshot {
+    return this.#session.getCurrentSnapshot();
   }
 
   undoLastUserTurn(): { text: string; imageCount: number } | null {

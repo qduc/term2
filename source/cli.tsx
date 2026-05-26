@@ -4,7 +4,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { render } from 'ink';
 import meow from 'meow';
-import App, { hasConversationContent } from './app.js';
+import App from './app.js';
 import { SSHInfo } from './hooks/use-shell-mode.js';
 import { getInkRenderOptions } from './utils/ink-render-options.js';
 import { OpenAIAgentClient } from './lib/openai-agent-client.js';
@@ -23,11 +23,12 @@ import {
   getResumeCommand,
   loadConversationForProject,
   loadLastConversation,
-  saveConversation,
-  type SavedConversation,
-  type SavedMessage,
+  forkConversation,
+  isConversationLocked,
+  type RestoredState,
 } from './services/conversation-persistence.js';
-import { repairConversationHistory } from './services/conversation-history-repair.js';
+import { createConversationLogWriter, LockConflictError } from './services/conversation-log-writer.js';
+import { AGENT_AFFECTING_SETTINGS } from './services/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
 import { normalizeAppModes } from './services/settings-schema.js';
 import os from 'os';
@@ -49,18 +50,27 @@ const printUsageOnce = () => {
   printUsage();
 };
 
-// Shared ref for saving conversation on exit (populated by App component)
-let pendingMessages: Message[] = [];
-let saveConversationOnExit: ((messages: Message[]) => Promise<void>) | null = null;
+type WriterHandle = ReturnType<typeof createConversationLogWriter> | null;
+let activeLogWriter: WriterHandle = null;
 
 // Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
-process.on('SIGINT', async () => {
-  if (saveConversationOnExit) {
-    await saveConversationOnExit(pendingMessages);
-  } else {
+process.on('SIGINT', () => {
+  void (activeLogWriter ? activeLogWriter.flush() : Promise.resolve()).finally(() => {
     printUsageOnce();
+    process.exit(130);
+  });
+});
+
+// Best-effort release of lock + close on uncatchable exits (caught process.exit).
+process.on('exit', () => {
+  if (activeLogWriter) {
+    try {
+      // Synchronous close path: the writer's close() does sync work and unlinks the lock.
+      void activeLogWriter.close();
+    } catch {
+      /* ignore */
+    }
   }
-  process.exit(0);
 });
 
 const cli = meow(
@@ -128,15 +138,25 @@ const cli = meow(
         alias: 'R',
         default: false,
       },
+      fork: {
+        type: 'boolean',
+        default: false,
+      },
     },
   },
 );
 
 const resumeRequested = Boolean(cli.flags.resume);
+const forkRequested = Boolean(cli.flags.fork);
 const resumeTarget = resumeRequested ? cli.input[0]?.trim() : undefined;
 
 if (resumeRequested && cli.input.length > 1) {
   console.error('Error: --resume accepts at most one conversation id.');
+  process.exit(1);
+}
+
+if (forkRequested && !resumeRequested) {
+  console.error('Error: --fork can only be used with --resume.');
   process.exit(1);
 }
 
@@ -188,7 +208,8 @@ const expectedSshHost = cli.flags.ssh
     ? cli.flags.ssh.split('@')[1]
     : cli.flags.ssh
   : undefined;
-let resumedConversation: SavedConversation | null = null;
+let resumedConversation: RestoredState | null = null;
+let resumedSourceId: string | undefined;
 if (resumeRequested) {
   if (resumeTarget) {
     const result = resumeProjectPath
@@ -208,9 +229,27 @@ if (resumeRequested) {
       process.exit(1);
     }
     resumedConversation = result.status === 'loaded' ? result.conversation : null;
+    resumedSourceId = resumeTarget;
   } else {
     resumedConversation = loadLastConversation(resumeProjectPath, expectedSshHost);
+    resumedSourceId = resumedConversation?.id;
   }
+}
+
+// If --fork was requested, copy the source jsonl to a new id and resume from the copy.
+if (forkRequested) {
+  if (!resumedSourceId || !resumedConversation) {
+    console.error('Error: --fork requires an existing conversation to fork from.');
+    process.exit(1);
+  }
+  const forkedId = generateId();
+  if (!forkConversation(resumedSourceId, forkedId)) {
+    console.error(`Error: Could not fork conversation ${resumedSourceId}.`);
+    process.exit(1);
+  }
+  console.log(`Forked conversation ${resumedSourceId} → ${forkedId}`);
+  resumedConversation = { ...resumedConversation, id: forkedId, forkedFrom: resumedSourceId };
+  resumedSourceId = forkedId;
 }
 
 // Apply CLI overrides to settings service
@@ -447,7 +486,6 @@ if (resumedConversation) {
   effectiveSessionId = resumedConversation.id;
   effectiveCreatedAt = resumedConversation.createdAt;
   initialMessages = resumedConversation.messages as Message[];
-  pendingMessages = initialMessages;
   if (resumedConversation.usage) {
     sessionUsageAccumulator.add(resumedConversation.usage);
   }
@@ -457,6 +495,25 @@ if (resumedConversation) {
 } else if (resumeRequested) {
   const target = resumeTarget ?? 'last';
   console.warn(`No conversation found to resume (${target}). Starting new conversation.`);
+}
+
+// Refuse to open a session whose log file is locked by another writer (live or stale).
+// --fork (handled above) is the documented escape hatch.
+if (!forkRequested) {
+  const lockInfo = isConversationLocked(effectiveSessionId);
+  if (lockInfo) {
+    const pid = lockInfo.pid;
+    const host = lockInfo.host;
+    const startedAt = lockInfo.startedAt;
+    console.error(
+      `Conversation ${effectiveSessionId} is locked (pid ${pid}, started ${startedAt}, host ${host}).\n` +
+        `- If another terminal still has it open, close that one first.\n` +
+        `- If a previous run crashed and left the lock behind, fork into a new\n` +
+        `  conversation that branches from the same state:\n` +
+        `      term2 --resume ${effectiveSessionId} --fork\n`,
+    );
+    process.exit(1);
+  }
 }
 
 const conversationService = new ConversationService({
@@ -474,19 +531,66 @@ if (resumedConversation) {
   const savedModelMatches = !resumedConversation.model || resumedConversation.model === settings.get('agent.model');
   const previousResponseId = savedProviderMatches && savedModelMatches ? resumedConversation.previousResponseId : null;
 
-  // Restore agent conversation history.
-  if (resumedConversation.historyRepair?.repaired) {
-    console.warn(
-      `Repaired saved conversation history before resume: removed ${resumedConversation.historyRepair.removedItems} duplicated tool replay item(s).`,
-    );
-  }
   conversationService.importState({
     history: resumedConversation.history,
     previousResponseId,
     toolLedger: resumedConversation.toolLedger,
   });
+  for (const warning of resumedConversation.replayWarnings) {
+    console.warn(`Conversation replay: ${warning}`);
+  }
   console.log(`Resumed conversation: ${resumedConversation.id}`);
 }
+
+// Open the append-only log writer for the active session.
+import envPaths from 'env-paths';
+const logWriterDir = path.join(envPaths('term2').log, 'conversations');
+const logWriter = createConversationLogWriter({ sessionId: effectiveSessionId, dir: logWriterDir, logger });
+function buildInitMeta(id: string, createdAt: string) {
+  const cwd = executionContext?.getCwd();
+  return {
+    id,
+    createdAt,
+    ...(cwd ? { projectPath: cwd } : {}),
+    ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
+    appMode: {
+      mentorMode: settings.get<boolean>('app.mentorMode') ?? false,
+      liteMode: settings.get<boolean>('app.liteMode') ?? false,
+      planMode: settings.get<boolean>('app.planMode') ?? false,
+      orchestratorMode: settings.get<boolean>('app.orchestratorMode') ?? false,
+    },
+    ...(settings.get<string>('agent.model') ? { model: settings.get<string>('agent.model') } : {}),
+    ...(settings.get<string>('agent.provider') ? { provider: settings.get<string>('agent.provider') } : {}),
+    ...(settings.get<string>('agent.reasoningEffort')
+      ? { reasoningEffort: settings.get<string>('agent.reasoningEffort') }
+      : {}),
+    ...(resumedConversation?.forkedFrom ? { forkedFrom: resumedConversation.forkedFrom } : {}),
+  };
+}
+try {
+  logWriter.init(buildInitMeta(effectiveSessionId, effectiveCreatedAt));
+} catch (err) {
+  if (err instanceof LockConflictError) {
+    const info = err.lockInfo;
+    console.error(
+      `Conversation ${effectiveSessionId} is locked (pid ${info?.pid}, started ${info?.startedAt}, host ${info?.host}).\n` +
+        `- If another terminal still has it open, close that one first.\n` +
+        `- If a previous run crashed and left the lock behind, fork into a new\n` +
+        `  conversation that branches from the same state:\n` +
+        `      term2 --resume ${effectiveSessionId} --fork\n`,
+    );
+    process.exit(1);
+  }
+  throw err;
+}
+activeLogWriter = logWriter;
+conversationService.setLogSink((event) => logWriter.append(event));
+
+// Persist agent-affecting settings changes as they happen.
+settings.onChange((key) => {
+  if (!key || !AGENT_AFFECTING_SETTINGS.has(key)) return;
+  logWriter.append({ type: 'settings_changed', key, value: settings.get(key) });
+});
 
 import { InputProvider } from './context/InputContext.js';
 import { patchStdoutForSynchronizedOutput } from './utils/synchronized-output.js';
@@ -495,64 +599,6 @@ import { patchStdoutForSynchronizedOutput } from './utils/synchronized-output.js
 // This wraps every stdout.write() in begin/end markers so the terminal
 // buffers the entire Ink render frame and paints it atomically.
 patchStdoutForSynchronizedOutput(process.stdout);
-
-// Save conversation on exit and print resume command
-const savedSessionIds = new Set<string>();
-const saveAndPrintResume = async (messages: Message[], overrideSessionId?: string, overrideCreatedAt?: string) => {
-  const sessionIdToSave = overrideSessionId || effectiveSessionId;
-  const createdAtToSave = overrideCreatedAt || effectiveCreatedAt;
-
-  if (savedSessionIds.has(sessionIdToSave)) {
-    return;
-  }
-
-  if (!hasConversationContent(messages)) {
-    printUsageOnce();
-    return;
-  }
-  savedSessionIds.add(sessionIdToSave);
-
-  const state = conversationService.exportState();
-  const historyRepair = repairConversationHistory(state.history);
-  if (historyRepair.repaired) {
-    console.warn(
-      `Repaired conversation history before save: removed ${historyRepair.removedItems} duplicated tool replay item(s).`,
-    );
-  }
-  const model = settings.get('agent.model');
-  const provider = settings.get('agent.provider');
-  const reasoningEffortVal = settings.get('agent.reasoningEffort');
-
-  saveConversation({
-    id: sessionIdToSave,
-    createdAt: createdAtToSave,
-    updatedAt: new Date().toISOString(),
-    projectPath: executionContext.getCwd(),
-    sshHost: sshInfo?.host,
-    appMode: {
-      mentorMode: settings.get<boolean>('app.mentorMode') ?? false,
-      liteMode: settings.get<boolean>('app.liteMode') ?? false,
-      planMode: settings.get<boolean>('app.planMode') ?? false,
-      orchestratorMode: settings.get<boolean>('app.orchestratorMode') ?? false,
-    },
-    model,
-    provider,
-    reasoningEffort: reasoningEffortVal ?? undefined,
-    previousResponseId: state.previousResponseId,
-    history: historyRepair.history as import('@openai/agents').AgentInputItem[],
-    toolLedger: state.toolLedger,
-    messages: messages as SavedMessage[],
-    usage: sessionUsageAccumulator.get(),
-    subagentUsage: subagentUsageAccumulator.get(),
-  });
-
-  const resumeCmd = getResumeCommand(sessionIdToSave, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
-  printUsageOnce();
-  console.log(`\nTo resume this conversation: ${resumeCmd}`);
-};
-
-// Register the save callback for SIGINT handling
-saveConversationOnExit = saveAndPrintResume;
 
 const { waitUntilExit } = render(
   (
@@ -570,15 +616,15 @@ const { waitUntilExit } = render(
         onExitUsage={printUsageOnce}
         sessionId={effectiveSessionId}
         initialMessages={initialMessages}
-        onSaveConversation={saveAndPrintResume}
-        onMessagesChange={(msgs) => {
-          pendingMessages = msgs;
+        logWriter={logWriter}
+        onRotateWriter={(newId) => {
+          logWriter.append({ type: 'session_cleared' });
+          logWriter.rotate(newId, buildInitMeta(newId, new Date().toISOString()));
         }}
         generateId={generateId}
         onSessionIdChange={(newId, createdAt) => {
           effectiveSessionId = newId;
           effectiveCreatedAt = createdAt;
-          pendingMessages = [];
         }}
       />
     </InputProvider>
@@ -587,5 +633,9 @@ const { waitUntilExit } = render(
 );
 
 await waitUntilExit();
-await saveAndPrintResume(pendingMessages);
+await logWriter.close();
+activeLogWriter = null;
+const resumeCmd = getResumeCommand(effectiveSessionId, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
+printUsageOnce();
+console.log(`\nTo resume this conversation: ${resumeCmd}`);
 process.exit(0);

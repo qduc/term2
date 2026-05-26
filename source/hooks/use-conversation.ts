@@ -91,6 +91,7 @@ export const useConversation = ({
   onClear,
   settingsService,
   onRestoreInput,
+  logWriter,
 }: {
   conversationService: ConversationService;
   loggingService: ILoggingService;
@@ -107,6 +108,7 @@ export const useConversation = ({
    * the original text here so the caller can repopulate the input box.
    */
   onRestoreInput?: (text: string) => void;
+  logWriter?: { append: (event: any) => void };
 }) => {
   const [messages, setMessages] = useState<Message[]>(() =>
     appendMessagesCapped([], initialMessages, MAX_MESSAGE_COUNT),
@@ -245,6 +247,7 @@ export const useConversation = ({
         text: formatUserTurnForDisplay(turn),
       };
       appendMessages([userMessage]);
+      logWriter?.append({ type: 'user_message', message: userMessage });
       setIsProcessing(true);
 
       const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =

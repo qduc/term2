@@ -38,15 +38,12 @@ test('clearTerminalForRedraw clears scrollback and moves cursor home', (t) => {
   t.deepEqual(writes, [TERMINAL_REDRAW_CLEAR]);
 });
 
-test('scheduleExitSideEffects defers saving conversations until after exit scheduling', async (t) => {
+test('scheduleExitSideEffects schedules the exit-usage hook', (t) => {
   const events: string[] = [];
   const scheduled: Array<() => void> = [];
 
   scheduleExitSideEffects(
     [{ id: 'user-message', sender: 'user', text: 'hello' }],
-    async () => {
-      events.push('save');
-    },
     () => {
       events.push('usage');
     },
@@ -58,27 +55,5 @@ test('scheduleExitSideEffects defers saving conversations until after exit sched
 
   t.deepEqual(events, ['scheduled']);
   scheduled[0]!();
-  await Promise.resolve();
-  t.deepEqual(events, ['scheduled', 'save', 'usage']);
-});
-
-test('scheduleExitSideEffects does not save empty conversations', (t) => {
-  const events: string[] = [];
-  const scheduled: Array<() => void> = [];
-
-  scheduleExitSideEffects(
-    [],
-    async () => {
-      events.push('save');
-    },
-    () => {
-      events.push('usage');
-    },
-    (callback) => {
-      scheduled.push(callback);
-    },
-  );
-
-  scheduled[0]!();
-  t.deepEqual(events, ['usage']);
+  t.deepEqual(events, ['scheduled', 'usage']);
 });

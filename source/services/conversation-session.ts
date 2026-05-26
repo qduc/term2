@@ -886,7 +886,7 @@ export class ConversationSession {
       }
       yield {
         type: 'error',
-        message: error instanceof Error ? error.message : String(error),
+        message: describeError(error),
         ...(droppedUserMessage ? { droppedUserMessage } : {}),
       };
       this.logger.error('Conversation stream error', {
@@ -895,7 +895,7 @@ export class ConversationSession {
         phase: 'abort',
         sessionId: this.id,
         traceId: this.logger.getCorrelationId(),
-        errorMessage: error instanceof Error ? error.message : String(error),
+        errorMessage: describeError(error),
       });
       throw error;
     }
@@ -1045,7 +1045,7 @@ export class ConversationSession {
     } catch (error) {
       yield {
         type: 'error',
-        message: error instanceof Error ? error.message : String(error),
+        message: describeError(error),
       };
       throw error;
     } finally {

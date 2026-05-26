@@ -28,6 +28,13 @@ export const isTransientRetryableError = (error: unknown): boolean => {
     return true;
   }
 
+  if (typeof error === 'string') {
+    const lower = error.toLowerCase();
+    if (lower === 'terminated' || lower.startsWith('terminated:')) {
+      return true;
+    }
+  }
+
   if (error && typeof error === 'object') {
     const statusRaw = (error as any).status ?? (error as any).statusCode;
     const status = typeof statusRaw === 'number' ? statusRaw : parseInt(statusRaw, 10);
@@ -35,7 +42,13 @@ export const isTransientRetryableError = (error: unknown): boolean => {
       return true;
     }
     const message = String((error as any).message || '').toLowerCase();
-    if (message.includes('rate limit') || message.includes('too many requests') || message.includes('rate_limit')) {
+    if (
+      message.includes('rate limit') ||
+      message.includes('too many requests') ||
+      message.includes('rate_limit') ||
+      message === 'terminated' ||
+      message.startsWith('terminated:')
+    ) {
       return true;
     }
   }

@@ -189,10 +189,19 @@ test('isTransientRetryableError: generic errors with rate-limit message are retr
   t.true(isTransientRetryableError(new Error('rate_limit retry after 10s')));
 });
 
+test('isTransientRetryableError: terminated errors are retryable', (t) => {
+  t.true(isTransientRetryableError('terminated'));
+  t.true(isTransientRetryableError('terminated: other side closed'));
+  t.true(isTransientRetryableError(new Error('terminated')));
+  t.true(isTransientRetryableError(new Error('terminated: other side closed')));
+});
+
 test('isTransientRetryableError: non-retryable errors return false', (t) => {
   t.false(isTransientRetryableError(new Error('something else')));
   t.false(isTransientRetryableError(new ModelBehaviorError('Tool x not found')));
   t.false(isTransientRetryableError(null));
   t.false(isTransientRetryableError('string error'));
+  t.false(isTransientRetryableError('unterminated string'));
+  t.false(isTransientRetryableError(new Error('unterminated string')));
   t.false(isTransientRetryableError(42));
 });

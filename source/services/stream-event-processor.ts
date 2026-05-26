@@ -89,7 +89,7 @@ export async function* processStreamEvents(
   };
 
   const emitReasoning = (delta: string) => {
-    if (!delta || delta.replaceAll('\n', '') === '') return null;
+    if (!delta) return null;
     acc.reasoningOutput += delta;
     acc.reasoningDeltaCount++;
     return { type: 'reasoning_delta' as const, delta, fullText: acc.reasoningOutput };

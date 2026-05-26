@@ -5,6 +5,7 @@ import { createSettingsCommand, parseSettingValue } from '../utils/settings-comm
 import { getProvider } from '../providers/index.js';
 import { copyToClipboard } from '../utils/clipboard.js';
 import { Message } from './use-conversation.js';
+import type { UserTurn } from '../types/user-turn.js';
 import { parseModelProviderArg } from '../utils/model-provider-arg.js';
 import { MODEL_CMD_TRIGGER } from '../utils/model-settings.js';
 import { AUTO_APPROVE_TRIGGER, EFFORT_TRIGGER } from '../components/Input/triggers.js';
@@ -23,6 +24,8 @@ interface UseAppCommandsProps {
   openUndoMenu: () => void;
   onUndo?: () => void;
   onHandoff?: (capturedText: string) => void;
+  sendUserMessage: (input: string | UserTurn) => Promise<void>;
+  listUserTurns: () => { index: number; text: string; imageCount: number }[];
 }
 
 interface CreateCopySlashCommandOptions {
@@ -36,6 +39,14 @@ interface CreateUndoSlashCommandOptions {
   setInput: (input: string) => void;
   addSystemMessage: (text: string) => void;
   openUndoMenu: () => void;
+  onUndo?: () => void;
+}
+
+interface CreateRetrySlashCommandOptions {
+  undoLastUserMessage: () => string | null;
+  sendUserMessage: (input: string | UserTurn) => Promise<void>;
+  addSystemMessage: (text: string) => void;
+  listUserTurns: () => { index: number; text: string; imageCount: number }[];
   onUndo?: () => void;
 }
 
@@ -143,6 +154,39 @@ export function createUndoSlashCommand({
   };
 }
 
+export function createRetrySlashCommand({
+  undoLastUserMessage,
+  sendUserMessage,
+  addSystemMessage,
+  listUserTurns,
+  onUndo,
+}: CreateRetrySlashCommandOptions): SlashCommand {
+  return {
+    name: 'retry',
+    description: 'Undo the last user message and re-send it',
+    action: () => {
+      const turns = listUserTurns();
+      const lastTurn = turns[turns.length - 1];
+      if (lastTurn && lastTurn.imageCount > 0) {
+        addSystemMessage(
+          'Cannot retry: the previous turn included images that cannot be reattached. Use `/undo` to restore the text instead.',
+        );
+        return true;
+      }
+
+      const text = undoLastUserMessage();
+      if (text !== null) {
+        onUndo?.();
+        void sendUserMessage(text);
+        return true;
+      }
+
+      addSystemMessage('Nothing to retry.');
+      return true;
+    },
+  };
+}
+
 /** All exclusive mode keys. */
 const EXCLUSIVE_MODE_KEYS = ['app.liteMode', 'app.orchestratorMode', 'app.planMode', 'app.mentorMode'] as const;
 type ExclusiveModeKey = (typeof EXCLUSIVE_MODE_KEYS)[number];
@@ -161,6 +205,8 @@ export const useAppCommands = ({
   openUndoMenu,
   onUndo,
   onHandoff,
+  sendUserMessage,
+  listUserTurns,
 }: UseAppCommandsProps) => {
   /**
    * Disable all exclusive sibling modes except the one being enabled.
@@ -280,6 +326,7 @@ export const useAppCommands = ({
         },
       },
       createUndoSlashCommand({ undoLastUserMessage, setInput, addSystemMessage, openUndoMenu, onUndo }),
+      createRetrySlashCommand({ undoLastUserMessage, sendUserMessage, addSystemMessage, listUserTurns, onUndo }),
       {
         name: 'quit',
         description: 'Exit the application',
@@ -483,6 +530,8 @@ export const useAppCommands = ({
     onUndo,
     togglePlanMode,
     onHandoff,
+    sendUserMessage,
+    listUserTurns,
   ]);
 
   return {

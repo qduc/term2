@@ -280,6 +280,8 @@ const App: FC<AppProps> = ({
       }
     },
     onHandoff: handleHandoff,
+    sendUserMessage,
+    listUserTurns: () => conversationService.listUserTurns(),
   });
 
   const handleUndoSelect = useCallback(

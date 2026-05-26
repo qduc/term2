@@ -4,6 +4,7 @@ import { render } from 'ink-testing-library';
 import type { Message } from './use-conversation.js';
 import {
   createCopySlashCommand,
+  createRetrySlashCommand,
   createUndoSlashCommand,
   createUsageSlashCommand,
   getLastFinalAssistantText,
@@ -171,6 +172,83 @@ test('createUndoSlashCommand shows system message via undoLastUserMessage when n
   t.is(undoRedraws, 0);
 });
 
+test('createRetrySlashCommand undoes and re-sends the last user message', async (t) => {
+  const systemMessages: string[] = [];
+  let undoCalled = false;
+  let sentText: string | null = null;
+  let undoRedraws = 0;
+
+  const command = createRetrySlashCommand({
+    undoLastUserMessage: () => {
+      undoCalled = true;
+      return 'hello';
+    },
+    sendUserMessage: async (input) => {
+      sentText = typeof input === 'string' ? input : input.text;
+    },
+    addSystemMessage: (text) => systemMessages.push(text),
+    listUserTurns: () => [{ index: 0, text: 'hello', imageCount: 0 }],
+    onUndo: () => {
+      undoRedraws++;
+    },
+  });
+
+  t.is(command.name, 'retry');
+  const result = command.action();
+  t.is(result, true);
+  t.true(undoCalled);
+  t.not(sentText, null);
+  t.is(sentText!, 'hello');
+  t.is(undoRedraws, 1);
+  t.deepEqual(systemMessages, []);
+});
+
+test('createRetrySlashCommand shows system message when nothing to retry', (t) => {
+  const systemMessages: string[] = [];
+  let undoCalled = false;
+
+  const command = createRetrySlashCommand({
+    undoLastUserMessage: () => {
+      undoCalled = true;
+      return null;
+    },
+    sendUserMessage: async () => {},
+    addSystemMessage: (text) => systemMessages.push(text),
+    listUserTurns: () => [],
+  });
+
+  const result = command.action();
+  t.is(result, true);
+  t.true(undoCalled);
+  t.deepEqual(systemMessages, ['Nothing to retry.']);
+});
+
+test('createRetrySlashCommand blocks when previous turn included images', (t) => {
+  const systemMessages: string[] = [];
+  let undoCalled = false;
+  let sendCalled = false;
+
+  const command = createRetrySlashCommand({
+    undoLastUserMessage: () => {
+      undoCalled = true;
+      return 'hello';
+    },
+    sendUserMessage: async () => {
+      sendCalled = true;
+    },
+    addSystemMessage: (text) => systemMessages.push(text),
+    listUserTurns: () => [{ index: 0, text: 'hello', imageCount: 2 }],
+  });
+
+  const result = command.action();
+  t.is(result, true);
+  t.false(undoCalled);
+  t.false(sendCalled);
+  t.deepEqual(systemMessages, [
+    'Cannot retry: the previous turn included images that cannot be reattached. Use `/undo` to restore the text instead.',
+  ]);
+});
+
 const TestHookWrapper = ({
   settings,
   onHookResult,
@@ -201,6 +279,8 @@ const TestHookWrapper = ({
     setModel: () => {},
     undoLastUserMessage: () => null,
     openUndoMenu: () => {},
+    sendUserMessage: async () => {},
+    listUserTurns: () => [],
   });
 
   onHookResult(hookResult);
@@ -468,6 +548,8 @@ test('useAppCommands /handoff when assistant response exists copies, clears, mes
       onHandoff: (text) => {
         handoffText = text;
       },
+      sendUserMessage: async () => {},
+      listUserTurns: () => [],
     });
     return null;
   };

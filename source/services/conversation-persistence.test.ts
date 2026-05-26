@@ -514,6 +514,130 @@ test.serial('subagent_completed and corresponding records omit nestedRunResult',
   t.is(finalEnv.event.snapshot.toolLedger[0].output.nestedRunResult, undefined);
 });
 
+test.serial('saveLastConversation: stores per-project last conversation', (t) => {
+  const id1 = persistenceModule.generateId();
+  const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
+  w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/project-a' });
+  w1.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi a' } });
+  void w1.close();
+
+  const id2 = persistenceModule.generateId();
+  const w2 = createConversationLogWriter({ sessionId: id2, dir: testDir, logger: stubLogger });
+  w2.init({ id: id2, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/project-b' });
+  w2.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'hi b' } });
+  void w2.close();
+
+  const lastA = persistenceModule.loadLastConversation('/project-a');
+  t.truthy(lastA);
+  t.is(lastA!.id, id1);
+
+  const lastB = persistenceModule.loadLastConversation('/project-b');
+  t.truthy(lastB);
+  t.is(lastB!.id, id2);
+});
+
+test.serial('saveLastConversation: stores per-ssh-host last conversation', (t) => {
+  const id1 = persistenceModule.generateId();
+  const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
+  w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/remote', sshHost: 'host-a' });
+  w1.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi a' } });
+  void w1.close();
+
+  const id2 = persistenceModule.generateId();
+  const w2 = createConversationLogWriter({ sessionId: id2, dir: testDir, logger: stubLogger });
+  w2.init({ id: id2, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/remote', sshHost: 'host-b' });
+  w2.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'hi b' } });
+  void w2.close();
+
+  const lastA = persistenceModule.loadLastConversation('/remote', 'host-a');
+  t.truthy(lastA);
+  t.is(lastA!.id, id1);
+
+  const lastB = persistenceModule.loadLastConversation('/remote', 'host-b');
+  t.truthy(lastB);
+  t.is(lastB!.id, id2);
+});
+
+test.serial('loadLastConversation: falls back to scanning when no last.json entry matches', (t) => {
+  const id = persistenceModule.generateId();
+  const w = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  w.init({ id, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/fallback' });
+  w.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } });
+  void w.close();
+
+  // Directly overwrite last.json so the entry has no projectPath
+  fs.writeFileSync(
+    path.join(testDir, 'last.json'),
+    JSON.stringify({ entries: [{ id, updatedAt: new Date().toISOString() }] }),
+    'utf-8',
+  );
+
+  const last = persistenceModule.loadLastConversation('/fallback');
+  t.truthy(last);
+  t.is(last!.id, id);
+});
+
+test.serial('loadLastConversation: migrates old last.json format', (t) => {
+  const id = persistenceModule.generateId();
+  const w = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  w.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
+  w.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } });
+  void w.close();
+
+  // Simulate old format
+  fs.writeFileSync(
+    path.join(testDir, 'last.json'),
+    JSON.stringify({ id, updatedAt: '2026-05-26T00:00:00.000Z' }),
+    'utf-8',
+  );
+
+  const last = persistenceModule.loadLastConversation();
+  t.truthy(last);
+  t.is(last!.id, id);
+});
+
+test.serial('deleteConversation: removes only matching entry from last.json', (t) => {
+  const id1 = persistenceModule.generateId();
+  const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
+  w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/project-a' });
+  w1.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi a' } });
+  void w1.close();
+
+  const id2 = persistenceModule.generateId();
+  const w2 = createConversationLogWriter({ sessionId: id2, dir: testDir, logger: stubLogger });
+  w2.init({ id: id2, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/project-b' });
+  w2.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'hi b' } });
+  void w2.close();
+
+  t.true(persistenceModule.deleteConversation(id1));
+  t.false(fs.existsSync(path.join(testDir, `${id1}.jsonl`)));
+  t.true(fs.existsSync(path.join(testDir, 'last.json')));
+
+  const lastB = persistenceModule.loadLastConversation('/project-b');
+  t.truthy(lastB);
+  t.is(lastB!.id, id2);
+});
+
+test.serial('saveLastConversation: updates entry when projectPath changes for same id', (t) => {
+  const id = persistenceModule.generateId();
+  const w = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  w.init({ id, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/old-path' });
+  w.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } });
+  void w.close();
+
+  // Re-open same session with different project path (simulating rotate or manual update)
+  const w2 = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  w2.init({ id, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/new-path' });
+  w2.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'hi again' } });
+  void w2.close();
+
+  t.is(persistenceModule.loadLastConversation('/old-path'), null);
+
+  const lastNew = persistenceModule.loadLastConversation('/new-path');
+  t.truthy(lastNew);
+  t.is(lastNew!.id, id);
+});
+
 // Suppress unused-event-import lint
 const _ev: LogEvent | null = null;
 void _ev;

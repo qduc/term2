@@ -175,6 +175,8 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   #seq = 0;
   #closed = false;
   #writeErrorLogged = false;
+  #projectPath: string | undefined;
+  #sshHost: string | undefined;
 
   constructor(opts: WriterOptions) {
     this.#sessionId = opts.sessionId;
@@ -187,6 +189,8 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   }
 
   init(meta: Omit<SessionInitEvent, 'type'>): void {
+    this.#projectPath = meta.projectPath;
+    this.#sshHost = meta.sshHost;
     ensureDir(this.#dir);
     acquireLock(this.#dir, this.#sessionId);
     this.#fd = fs.openSync(logPath(this.#dir, this.#sessionId), 'a');
@@ -214,7 +218,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
         } catch {
           // ignore fsync errors; data is in kernel buffer
         }
-        saveLastConversation(this.#sessionId);
+        saveLastConversation(this.#sessionId, this.#projectPath, this.#sshHost);
       }
     } catch (err: any) {
       if (!this.#writeErrorLogged) {
@@ -276,7 +280,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       }
       this.#fd = null;
     }
-    saveLastConversation(this.#sessionId);
+    saveLastConversation(this.#sessionId, this.#projectPath, this.#sshHost);
     releaseLock(this.#dir, this.#sessionId);
   }
 }

@@ -174,6 +174,13 @@ export function loadConversationForProject(
 }
 
 export function loadLastConversation(expectedProjectPath?: string, expectedSshHost?: string): RestoredState | null {
+  const file = readLastConversationFile();
+  const candidates = file.entries.filter((e) => matchesEntryContext(e, expectedProjectPath, expectedSshHost));
+  const mostRecent = candidates.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  if (mostRecent) {
+    return loadConversation(mostRecent.id, expectedProjectPath, expectedSshHost);
+  }
+  // Fallback: scan all conversations when no last.json entry matches.
   const hasFilters = !!expectedProjectPath || !!expectedSshHost;
   if (hasFilters) {
     return (
@@ -182,21 +189,7 @@ export function loadLastConversation(expectedProjectPath?: string, expectedSshHo
         .find((conversation): conversation is RestoredState => conversation !== null) ?? null
     );
   }
-
-  const lastPath = getLastConversationPath();
-  try {
-    if (!fs.existsSync(lastPath)) {
-      return null;
-    }
-    const content = fs.readFileSync(lastPath, 'utf-8');
-    const { id } = JSON.parse(content) as { id: string };
-    if (!id) {
-      return null;
-    }
-    return loadConversation(id);
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 export function isConversationLocked(id: string): { pid: number; startedAt: string; host: string } | null {
@@ -230,17 +223,19 @@ export function deleteConversation(id: string): boolean {
   } catch {
     // ignore
   }
-  // Clear last.json pointer if it points to this id
-  const lp = getLastConversationPath();
-  try {
-    if (fs.existsSync(lp)) {
-      const data = JSON.parse(fs.readFileSync(lp, 'utf-8'));
-      if (data?.id === id) {
-        fs.unlinkSync(lp);
+  // Remove any last.json entries pointing to this id
+  const file = readLastConversationFile();
+  const filtered = file.entries.filter((e) => e.id !== id);
+  if (filtered.length !== file.entries.length) {
+    if (filtered.length === 0) {
+      try {
+        fs.unlinkSync(getLastConversationPath());
+      } catch {
+        // ignore
       }
+    } else {
+      writeLastConversationFile({ entries: filtered });
     }
-  } catch {
-    // ignore
   }
   return removed;
 }
@@ -367,18 +362,98 @@ export function hasConversationContent(id: string): boolean {
   return false;
 }
 
-export function saveLastConversation(id: string): void {
-  if (!hasConversationContent(id)) {
-    return;
+interface LastConversationEntry {
+  id: string;
+  updatedAt: string;
+  projectPath?: string;
+  sshHost?: string;
+}
+
+interface LastConversationFile {
+  entries: LastConversationEntry[];
+}
+
+function readLastConversationFile(): LastConversationFile {
+  const lp = getLastConversationPath();
+  try {
+    if (!fs.existsSync(lp)) {
+      return { entries: [] };
+    }
+    const content = fs.readFileSync(lp, 'utf-8');
+    const parsed = JSON.parse(content) as unknown;
+    if (parsed && typeof parsed === 'object') {
+      if ('entries' in parsed && Array.isArray((parsed as LastConversationFile).entries)) {
+        return parsed as LastConversationFile;
+      }
+      // Old format: { id, updatedAt }
+      if ('id' in parsed && typeof (parsed as { id: unknown }).id === 'string') {
+        const old = parsed as { id: string; updatedAt?: string };
+        return {
+          entries: [{ id: old.id, updatedAt: old.updatedAt ?? new Date().toISOString() }],
+        };
+      }
+    }
+  } catch {
+    // ignore
   }
+  return { entries: [] };
+}
+
+function writeLastConversationFile(file: LastConversationFile): void {
   const lp = getLastConversationPath();
   const tmp = `${lp}.tmp`;
   try {
-    fs.writeFileSync(tmp, JSON.stringify({ id, updatedAt: new Date().toISOString() }), 'utf-8');
+    fs.writeFileSync(tmp, JSON.stringify(file, null, 2), 'utf-8');
     fs.renameSync(tmp, lp);
   } catch {
     // best-effort
   }
+}
+
+function matchesEntryContext(
+  entry: LastConversationEntry,
+  expectedProjectPath?: string,
+  expectedSshHost?: string,
+): boolean {
+  if (expectedProjectPath !== undefined) {
+    if (!entry.projectPath) {
+      return false;
+    }
+    if (normalizeProjectPath(entry.projectPath) !== normalizeProjectPath(expectedProjectPath)) {
+      return false;
+    }
+  } else if (entry.projectPath) {
+    return false;
+  }
+
+  if (expectedSshHost !== undefined) {
+    if (!entry.sshHost) {
+      return false;
+    }
+    if (normalizeSshHost(entry.sshHost) !== normalizeSshHost(expectedSshHost)) {
+      return false;
+    }
+  } else if (entry.sshHost) {
+    return false;
+  }
+
+  return true;
+}
+
+export function saveLastConversation(id: string, projectPath?: string, sshHost?: string): void {
+  if (!hasConversationContent(id)) {
+    return;
+  }
+  const file = readLastConversationFile();
+  // Remove any existing entry with the same id to avoid duplicates when context changes.
+  file.entries = file.entries.filter((e) => e.id !== id);
+  file.entries.push({
+    id,
+    updatedAt: new Date().toISOString(),
+    ...(projectPath !== undefined ? { projectPath } : {}),
+    ...(sshHost !== undefined ? { sshHost } : {}),
+  });
+  writeLastConversationFile(file);
 }
 
 export const __testing = {

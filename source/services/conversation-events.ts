@@ -13,6 +13,7 @@ export type ConversationEvent =
   | FinalResponseEvent
   | ErrorEvent
   | RetryEvent
+  | ToolRecoveryEvent
   | SubagentStartedEvent
   | SubagentToolStartedEvent
   | SubagentCommandMessageEvent
@@ -27,6 +28,13 @@ export interface RetryEvent {
   maxRetries: number;
   errorMessage: string;
   retryType?: 'hallucination' | 'parsing_error' | 'behavior' | 'flex_service_tier' | 'upstream';
+}
+
+export interface ToolRecoveryEvent {
+  type: 'tool_recovery';
+  recoveredCallIds: string[];
+  droppedCallIds: string[];
+  message: string;
 }
 
 /**

@@ -58,6 +58,10 @@ export interface StreamProcessorOptions {
   emittedInvalidToolCallPackets: Set<string>;
   /** When false, args map is cleared at start (initial run); when true, preserved (continue/abort). */
   preserveExistingToolArgs: boolean;
+  /** Optional durable recovery hook for provider function_call items. */
+  onFunctionCallItem?: (item: unknown) => void;
+  /** Optional durable recovery hook for provider function_call_result/output items. */
+  onFunctionResultItem?: (item: unknown) => void;
 }
 
 export interface StreamProcessorDeps {
@@ -181,6 +185,7 @@ export async function* processStreamEvents(
 
       const rawItem = asRecord(eventItemRecord?.rawItem) ?? eventItemRecord;
       if (getString(rawItem, 'type') === 'function_call') {
+        opts.onFunctionCallItem?.(eventItem);
         const callId =
           getString(rawItem, 'callId') ??
           getString(rawItem, 'call_id') ??
@@ -249,6 +254,16 @@ export async function* processStreamEvents(
         }
       }
 
+      const rawItemType = getString(rawItem, 'type');
+      if (
+        rawItemType === 'function_call_result' ||
+        rawItemType === 'function_call_output' ||
+        rawItemType === 'function_call_output_result' ||
+        rawItemType === 'tool_call_output_item'
+      ) {
+        opts.onFunctionResultItem?.(eventItem);
+      }
+
       for (const e of maybeEmitCommandMessagesFromItems([eventItem])) {
         yield e;
       }
@@ -257,6 +272,7 @@ export async function* processStreamEvents(
       getString(asRecord(event?.rawItem), 'type') === 'function_call_output'
     ) {
       captureToolCallArguments(rawEvent, toolCallArgumentsById);
+      opts.onFunctionResultItem?.(rawEvent);
       for (const e of maybeEmitCommandMessagesFromItems([rawEvent])) {
         yield e;
       }

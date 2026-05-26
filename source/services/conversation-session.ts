@@ -24,6 +24,11 @@ import { buildConversationResult, toTerminalEvent } from './conversation-result-
 import type { AgentStream } from './agent-stream.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 import { collectDuplicateToolCallResultPairs, InputSurgeGuard } from './input-surge-guard.js';
+import {
+  reconcileHistoryWithToolLedger,
+  ToolExecutionLedger,
+  type SavedToolExecution,
+} from './tool-execution-ledger.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -97,6 +102,7 @@ export class ConversationSession {
   private shellAutoApproval: ShellAutoApprovalResolver;
   private approvalFlow: ApprovalFlowCoordinator;
   private inputSurgeGuard = new InputSurgeGuard();
+  private toolLedger = new ToolExecutionLedger();
   private generation = 0;
 
   private settingsService?: ISettingsService;
@@ -175,6 +181,7 @@ export class ConversationSession {
     this.approvalState.clearPending();
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
+    this.toolLedger = new ToolExecutionLedger();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
     const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
@@ -238,16 +245,34 @@ export class ConversationSession {
   exportState(): {
     history: unknown[];
     previousResponseId: string | null;
+    toolLedger: SavedToolExecution[];
   } {
     return {
       history: this.conversationStore.getHistory(),
       previousResponseId: this.previousResponseId,
+      toolLedger: this.toolLedger.export(),
     };
   }
 
-  importState(state: { history: unknown[]; previousResponseId: string | null }): void {
+  importState(state: {
+    history: unknown[];
+    previousResponseId: string | null;
+    toolLedger?: SavedToolExecution[];
+  }): void {
     this.conversationStore.clear();
-    for (const item of state.history as import('@openai/agents').AgentInputItem[]) {
+    this.toolLedger.import(state.toolLedger);
+    const reconciled = reconcileHistoryWithToolLedger(state.history, state.toolLedger);
+    if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
+      this.logger.warn('Reconciled saved conversation history with tool execution ledger', {
+        eventType: 'conversation.tool_ledger.reconciled',
+        category: 'conversation',
+        phase: 'resume',
+        sessionId: this.id,
+        addedCompletedPairs: reconciled.addedCompletedPairs,
+        droppedIncompleteCalls: reconciled.droppedIncompleteCalls,
+      });
+    }
+    for (const item of reconciled.history as import('@openai/agents').AgentInputItem[]) {
       this.conversationStore.addImportedItem(item);
     }
     this.previousResponseId = state.previousResponseId;
@@ -290,6 +315,8 @@ export class ConversationSession {
     const turn = normalizeUserTurn(input);
     const text = turn.text;
     let addedUserMessage = false;
+    const ledgerSnapshot = this.toolLedger.export();
+    this.toolLedger.beginTurn();
     try {
       this.logger.debug('Conversation stream start', {
         eventType: 'stream.started',
@@ -344,6 +371,8 @@ export class ConversationSession {
               toolCallArgumentsById: this.toolCallArgumentsById,
               emittedInvalidToolCallPackets: this.emittedInvalidToolCallPackets,
               preserveExistingToolArgs: true,
+              onFunctionCallItem: (item) => this.toolLedger.recordFunctionCall(item),
+              onFunctionResultItem: (item) => this.toolLedger.recordFunctionResult(item),
             },
             { logger: this.logger, sessionId: this.id },
           );
@@ -482,6 +511,8 @@ export class ConversationSession {
           toolCallArgumentsById: this.toolCallArgumentsById,
           emittedInvalidToolCallPackets: this.emittedInvalidToolCallPackets,
           preserveExistingToolArgs: false,
+          onFunctionCallItem: (item) => this.toolLedger.recordFunctionCall(item),
+          onFunctionResultItem: (item) => this.toolLedger.recordFunctionResult(item),
         },
         { logger: this.logger, sessionId: this.id },
       );
@@ -559,6 +590,7 @@ export class ConversationSession {
         };
 
         getMethod<[], void>(this.agentClient, 'useStandardServiceTierForNextRequest')?.call(this.agentClient);
+        this.toolLedger.import(ledgerSnapshot);
         yield* this.run(turn, {
           skipUserMessage: true,
           flexServiceTierFallbackCount: flexServiceTierFallbackCount + 1,
@@ -588,6 +620,7 @@ export class ConversationSession {
         if (!this.#isCurrentGeneration(gen)) return;
 
         if (decision.hadStream && stream) {
+          this.toolLedger.import(ledgerSnapshot);
           if (decision.shouldInjectErrorContext) {
             this.conversationStore.addErrorContext(decision.errorContextMessage);
           }
@@ -606,6 +639,18 @@ export class ConversationSession {
       if (addedUserMessage && !stream && this.#isCurrentGeneration(gen)) {
         this.conversationStore.removeLastUserMessage();
         droppedUserMessage = { text: turn.text, imageCount: turn.images?.length ?? 0 };
+      }
+      if (stream && this.#isCurrentGeneration(gen)) {
+        this.toolLedger.markOpenCallsAborted(error instanceof Error ? error.message : String(error));
+        const recoverySummary = this.toolLedger.getRecoverySummary();
+        if (recoverySummary) {
+          yield {
+            type: 'tool_recovery',
+            recoveredCallIds: recoverySummary.recoveredCallIds,
+            droppedCallIds: recoverySummary.droppedCallIds,
+            message: recoverySummary.message,
+          };
+        }
       }
       yield {
         type: 'error',
@@ -677,6 +722,8 @@ export class ConversationSession {
               toolCallArgumentsById: this.toolCallArgumentsById,
               emittedInvalidToolCallPackets: this.emittedInvalidToolCallPackets,
               preserveExistingToolArgs: true,
+              onFunctionCallItem: (item) => this.toolLedger.recordFunctionCall(item),
+              onFunctionResultItem: (item) => this.toolLedger.recordFunctionResult(item),
             },
             { logger: this.logger, sessionId: this.id },
           );

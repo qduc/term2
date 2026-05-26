@@ -204,6 +204,38 @@ test.serial('loadConversation: returns saved conversation', (t) => {
   fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
 });
 
+test.serial('saveConversation/loadConversation: preserves tool execution ledger', (t) => {
+  const id = persistenceModule.generateId();
+  const conversation: persistenceModule.SavedConversation = {
+    id,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    previousResponseId: 'resp-123',
+    history: [{ role: 'user', content: 'hello' }],
+    toolLedger: [
+      {
+        turnId: 'turn-1',
+        callId: 'call-read',
+        toolName: 'read_file',
+        arguments: '{}',
+        status: 'completed',
+        startedAt: '2026-05-26T00:00:00.000Z',
+        completedAt: '2026-05-26T00:00:01.000Z',
+        historyItems: [
+          { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
+          { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', output: 'contents' },
+        ],
+      },
+    ],
+    messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
+  };
+
+  persistenceModule.saveConversation(conversation);
+  const loaded = persistenceModule.loadConversation(id);
+
+  t.deepEqual(loaded!.toolLedger, conversation.toolLedger);
+});
+
 test.serial('loadConversation: returns repaired history with transient repair metadata', (t) => {
   const id = persistenceModule.generateId();
   const dir = persistenceModule.getConversationsDirForTest();

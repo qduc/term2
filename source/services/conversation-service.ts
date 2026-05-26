@@ -2,6 +2,7 @@ import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import type { ILoggingService, ISettingsService } from './service-interfaces.js';
 import { ConversationSession } from './conversation-session.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
+import type { SavedToolExecution } from './tool-execution-ledger.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../contracts/conversation.js';
 export type { CommandMessage } from './conversation-session.js';
@@ -101,11 +102,16 @@ export class ConversationService {
   exportState(): {
     history: unknown[];
     previousResponseId: string | null;
+    toolLedger: SavedToolExecution[];
   } {
     return this.#session.exportState();
   }
 
-  importState(state: { history: unknown[]; previousResponseId: string | null }): void {
+  importState(state: {
+    history: unknown[];
+    previousResponseId: string | null;
+    toolLedger?: SavedToolExecution[];
+  }): void {
     this.#session.importState(state);
   }
 }

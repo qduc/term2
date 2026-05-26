@@ -483,6 +483,7 @@ if (resumedConversation) {
   conversationService.importState({
     history: resumedConversation.history,
     previousResponseId,
+    toolLedger: resumedConversation.toolLedger,
   });
   console.log(`Resumed conversation: ${resumedConversation.id}`);
 }
@@ -539,6 +540,7 @@ const saveAndPrintResume = async (messages: Message[], overrideSessionId?: strin
     reasoningEffort: reasoningEffortVal ?? undefined,
     previousResponseId: state.previousResponseId,
     history: historyRepair.history as import('@openai/agents').AgentInputItem[],
+    toolLedger: state.toolLedger,
     messages: messages as SavedMessage[],
     usage: sessionUsageAccumulator.get(),
     subagentUsage: subagentUsageAccumulator.get(),

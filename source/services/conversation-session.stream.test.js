@@ -213,6 +213,195 @@ test('run() retries streamed recoverable errors without committing failed stream
   t.deepEqual(calls[1], [{ role: 'user', type: 'message', content: 'retry me' }]);
 });
 
+test('run() exports completed tool pairs from a stream that later fails', async (t) => {
+  class FailingStream extends MockStream {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call',
+            id: 'fc_1',
+            callId: 'call-read',
+            name: 'read_file',
+            arguments: '{}',
+          },
+        },
+      };
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call_result',
+            id: 'fcr_1',
+            callId: 'call-read',
+            name: 'read_file',
+            output: 'contents',
+          },
+        },
+      };
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call',
+            id: 'fc_2',
+            callId: 'call-write',
+            name: 'apply_patch',
+            arguments: '{}',
+          },
+        },
+      };
+      throw new Error('context exceeded');
+    }
+  }
+
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    async startStream() {
+      return new FailingStream();
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  await t.throwsAsync(async () => {
+    for await (const _ev of session.run('inspect')) {
+      // consume stream
+    }
+  });
+
+  const state = session.exportState();
+  t.is(state.history.length, 1);
+  t.is(state.toolLedger.length, 2);
+  t.is(state.toolLedger[0].status, 'completed');
+  t.is(state.toolLedger[1].status, 'aborted');
+  t.deepEqual(
+    state.toolLedger[0].historyItems.map((item) => item.callId),
+    ['call-read', 'call-read'],
+  );
+});
+
+test('run() emits tool_recovery before error when a streamed turn fails after tool activity', async (t) => {
+  class FailingStream extends MockStream {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call',
+            id: 'fc_1',
+            callId: 'call-read',
+            name: 'read_file',
+            arguments: '{}',
+          },
+        },
+      };
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call_result',
+            id: 'fcr_1',
+            callId: 'call-read',
+            name: 'read_file',
+            output: 'contents',
+          },
+        },
+      };
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call',
+            id: 'fc_2',
+            callId: 'call-write',
+            name: 'apply_patch',
+            arguments: '{}',
+          },
+        },
+      };
+      throw new Error('context exceeded');
+    }
+  }
+
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    async startStream() {
+      return new FailingStream();
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const emitted = [];
+  await t.throwsAsync(async () => {
+    for await (const ev of session.run('inspect')) {
+      emitted.push(ev);
+    }
+  });
+
+  const recovery = emitted.find((event) => event.type === 'tool_recovery');
+  t.truthy(recovery);
+  t.deepEqual(recovery.recoveredCallIds, ['call-read']);
+  t.deepEqual(recovery.droppedCallIds, ['call-write']);
+  t.true(recovery.message.includes('Recovered 1 completed'));
+  t.true(
+    emitted.findIndex((event) => event.type === 'tool_recovery') < emitted.findIndex((event) => event.type === 'error'),
+  );
+});
+
+test('importState() reconciles completed ledger pairs into canonical history', (t) => {
+  const session = new ConversationSession('s1', {
+    agentClient: {},
+    deps: { logger: mockLogger },
+  });
+
+  session.importState({
+    previousResponseId: null,
+    history: [{ role: 'user', type: 'message', content: 'inspect' }],
+    toolLedger: [
+      {
+        turnId: 'turn-1',
+        callId: 'call-read',
+        toolName: 'read_file',
+        arguments: '{}',
+        status: 'completed',
+        startedAt: '2026-05-26T00:00:00.000Z',
+        completedAt: '2026-05-26T00:00:01.000Z',
+        historyItems: [
+          { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
+          { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', output: 'contents' },
+        ],
+      },
+      {
+        turnId: 'turn-1',
+        callId: 'call-write',
+        toolName: 'apply_patch',
+        arguments: '{}',
+        status: 'aborted',
+        startedAt: '2026-05-26T00:00:02.000Z',
+      },
+    ],
+  });
+
+  const state = session.exportState();
+  t.is(state.history.length, 4);
+  t.is(state.history[1].callId, 'call-read');
+  t.is(state.history[2].callId, 'call-read');
+  t.is(state.history[3].role, 'system');
+});
+
 test('run() allows a follow-up after a long non-chaining run expands full history', async (t) => {
   const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'first' }]);
   firstStream.finalOutput = 'first';

@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import envPaths from 'env-paths';
 import { repairConversationHistory, type ConversationHistoryRepairSummary } from './conversation-history-repair.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
+import type { SavedToolExecution } from './tool-execution-ledger.js';
 
 const paths = envPaths('term2');
 const CONVERSATIONS_DIR = path.join(paths.log, 'conversations');
@@ -36,6 +37,7 @@ export interface SavedConversation {
   reasoningEffort?: string;
   previousResponseId: string | null;
   history: unknown[];
+  toolLedger?: SavedToolExecution[];
   messages: SavedMessage[];
   historyRepair?: ConversationHistoryRepairSummary;
   usage?: NormalizedUsage;

@@ -469,6 +469,36 @@ export function createConversationEventHandler<
         return;
       }
 
+      case 'tool_recovery': {
+        const droppedCallIds = new Set(event.droppedCallIds);
+        const systemMessage: SystemMessage = {
+          id: createMessageId(),
+          sender: 'system',
+          text: event.message,
+        };
+
+        setMessages((prev) => {
+          const next = prev.map((message) => {
+            if (message.sender !== 'command' || !message.callId || !droppedCallIds.has(message.callId)) {
+              return message;
+            }
+
+            return {
+              ...message,
+              status: 'failed',
+              output:
+                typeof (message as any).output === 'string' && (message as any).output.trim()
+                  ? (message as any).output
+                  : 'This tool call was interrupted and was not sent to model history.',
+              failureReason: 'Dropped during recovery',
+            };
+          });
+
+          return trimMessages([...next, systemMessage as unknown as MessageT]);
+        });
+        return;
+      }
+
       case 'final':
         if (event.finalText?.trim()) {
           state.accumulatedText = event.finalText;

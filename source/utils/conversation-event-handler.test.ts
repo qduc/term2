@@ -716,6 +716,47 @@ test('command_message: flushes accumulated text before adding', (t) => {
   t.is(deps.calls.appendedMessages[0][0].text, 'Partial response');
 });
 
+test('tool_recovery: marks dropped running commands failed and appends recovery note', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'tool_recovery',
+    recoveredCallIds: ['call-read'],
+    droppedCallIds: ['call-write'],
+    message:
+      'Recovered 1 completed tool call/result pair(s) from a previously interrupted turn. Dropped 1 incomplete tool call(s); do not assume dropped calls completed.',
+  } as ConversationEvent);
+
+  t.is(deps.calls.setMessagesCalls.length, 1);
+  const next = deps.calls.setMessagesCalls[0]!([
+    {
+      id: 'read',
+      sender: 'command',
+      status: 'completed',
+      command: 'read_file source/a.ts',
+      output: 'contents',
+      callId: 'call-read',
+    },
+    {
+      id: 'write',
+      sender: 'command',
+      status: 'running',
+      command: 'apply_patch',
+      output: '',
+      callId: 'call-write',
+    },
+  ]);
+
+  t.is(next[0].status, 'completed');
+  t.is(next[1].status, 'failed');
+  t.is(next[1].failureReason, 'Dropped during recovery');
+  t.true(next[1].output.includes('not sent to model history'));
+  t.is(next[2].sender, 'system');
+  t.true(next[2].text.startsWith('Recovered 1 completed'));
+});
+
 // =============================================================================
 // subagent activity tests
 // =============================================================================

@@ -13,15 +13,15 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 
 ## Features
 
-- 🎭 **Four Operating Modes** - Standard (full-power, auto-approves patches), Lite (fast & safe), Mentor (expert model advice), and Plan (read-only research/implementation drafting)
+- 🎭 **Five Operating Modes** - Standard (full-power, auto-approves patches), Lite (fast & safe), Mentor (expert model advice), Plan (read-only research/planning), and Orchestrator (delegates task execution to subagents)
 - 🌍 **Open Source** - MIT licensed, hackable, auditable, community-driven
 - 🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, OpenAI-compatible APIs, and Vercel AI SDK providers
 - 🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
 - 🛠️ **Advanced Tools** - Shell execution, file patching, search/replace (with `<...>` gap matching), grep, find files, file reading, file creation, web search, web fetching, code outline & context search, mentor consultation, and subagent invocation
 - 👥 **Subagent Delegation** - Spawn specialized, synchronous subagents (`explorer`, `worker`, `researcher`, `mentor`) to perform sub-tasks in parallel while conserving your main context
 - ⏪ **Conversation Undo & Rewind** - Undo the last turn or select any past user message to rewind the conversation state back to that point
-- 💾 **Conversation Resumption** - Saved conversations are persisted and can be resumed later using the `--resume` flag
-- 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite`, `/copy`, `/auto-approve`, `/plan`, `/undo`, `/usage`, and `/effort` for easy control
+- 💾 **Conversation Resumption & Persistence** - Saved conversations are persisted using robust event logging and can be resumed later using the `--resume` flag
+- 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite`, `/copy`, `/auto-approve`, `/plan`, `/undo`, `/usage`, `/effort`, `/handoff`, `/retry`, and `/orchestrator` for easy control
 - 📝 **Smart Context** - The assistant understands your environment and provides relevant help
 - 🎯 **Streaming Responses** - See the AI's thoughts and reasoning in real-time
 - 🧠 **Reasoning Effort Control** - Configurable reasoning levels (minimal to high) for O1/O3 models
@@ -152,10 +152,13 @@ While in the chat, you can use these commands:
 - `/mentor` - Toggle mentor mode
 - `/lite` - Toggle lite mode (requires `/clear` first if a session is active)
 - `/plan` - Toggle plan mode (read-only research/planning mode)
+- `/orchestrator` - Toggle orchestrator mode (delegates all tool-backed work to subagents; requires `/clear` first if a session is active)
 - `/undo [last]` - Open the conversation rewind menu, or revert the last turn immediately if `last` is specified
+- `/retry` - Undo the last user message and re-send it
 - `/usage` - Show token usage breakdown for the current session (includes subagent usage)
 - `/effort [level]` - Set reasoning effort for O1/O3 models (e.g. none, minimal, low, medium, high)
 - `/copy` - Copy the latest assistant response to the clipboard
+- `/handoff` - Hand off the last assistant response to another model or session
 - `/auto-approve [off|advisory|auto]` - Set or cycle shell auto-approval mode
 - `/settings [key] [value]` - Modify runtime settings (e.g., `/settings agent.temperature 0.7`)
 
@@ -172,6 +175,7 @@ term2 offers multiple operating modes tailored to different workflows.
 | **Plan**    | `/plan`             | Researching and designing plans      | Read-only tools      | Full codebase |
 | **Lite**    | `term2 --lite`      | General terminal tasks (no codebase) | Read-only tools      | None          |
 | **Mentor**  | `/mentor`           | Complex codebase problems            | All + mentor tool    | Full codebase |
+| **Orchestrator**| `/orchestrator` | Delegating complex multi-step work   | Subagents + read-only| Full codebase |
 
 ### Standard Mode - Rapid Development
 
@@ -289,6 +293,16 @@ AI: [Does additional checks based on mentor's questions]
     [Implements solution addressing all concerns]
 ```
 
+### Orchestrator Mode - Context-Saving Delegation
+
+**The problem it solves:** For complex, multi-step tasks, letting the main assistant execute commands and edits directly can quickly fill up the context window with long files and command outputs, leading to performance degradation and high costs.
+
+Orchestrator Mode delegates execution details to specialized subagents. In this mode, the primary assistant focuses on orchestrating the high-level plan and analyzing results. It only has access to a minimal set of read-only tools and the subagent runner tool (`run_subagent`), preventing context bloat.
+
+- 👥 **Context preservation** - Offloads execution details to child sessions
+- 🛠️ **Controlled workspace** - Restricts main assistant to high-level orchestration
+- 🔄 **Toggleable** - Switch with the `/orchestrator` command
+
 ### Switching Modes
 
 Modes represent different working styles matched to your task. You can switch modes mid-session:
@@ -296,8 +310,9 @@ Modes represent different working styles matched to your task. You can switch mo
 - `/lite` - Toggle lite mode (requires clearing history first with `/clear` if session is active)
 - `/mentor` - Toggle mentor mode
 - `/plan` - Toggle plan mode
-- `Shift+Tab` - Cycles through `Default -> Edit -> Plan -> Default` (or toggles Shell Mode in Lite Mode)
-- Switch triggers handle mutual exclusions automatically (e.g. enabling Plan Mode disables Edit/Lite modes)
+- `/orchestrator` - Toggle orchestrator mode (requires clearing history first with `/clear` if session is active)
+- `Shift+Tab` - Cycles between Standard and Plan modes (or toggles Shell Mode in Lite Mode)
+- Switch triggers handle mutual exclusions automatically (e.g. enabling Plan Mode disables other active modes like Lite, Mentor, or Orchestrator)
 
 
 ## SSH Mode
@@ -674,8 +689,8 @@ Here is a comprehensive example demonstrating the most useful settings keys you 
     "provider": "tavily"
   },
   "app": {
-    "searchViaShell": false,
-    "editMode": false,
+    "searchViaShell": "auto",
+    "orchestratorMode": false,
     "planMode": false,
     "mentorMode": false,
     "liteMode": false

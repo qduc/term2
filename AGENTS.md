@@ -6,7 +6,7 @@ This is a terminal-based AI assistant built with React (Ink), OpenAI Agents SDK,
 
 A CLI app that lets users chat with an AI agent in real-time. The agent can execute shell commands and modify files, with interactive approval prompts for safety.
 
-**Key features**: streaming responses, command approval flow, slash commands (e.g. `/clear`, `/quit`, `/model`, `/settings`, `/mentor`, `/lite`, `/plan`, `/undo`, `/usage`, `/effort`, `/copy`), input history, markdown rendering, tool hallucination retry logic, multi-provider support, SSH mode for remote execution, non-interactive mode, subagent delegation, plan mode, undo/rewind, and conversation persistence.
+**Key features**: streaming responses, command approval flow, slash commands (e.g. `/clear`, `/quit`, `/model`, `/settings`, `/mentor`, `/lite`, `/plan`, `/undo`, `/usage`, `/effort`, `/copy`, `/auto-approve`, `/handoff`, `/retry`, `/orchestrator`), input history, markdown rendering, tool hallucination retry logic, multi-provider support, SSH mode for remote execution, non-interactive mode, subagent delegation, plan mode, undo/rewind, and conversation persistence.
 
 ## Quick Start
 
@@ -59,7 +59,7 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
     - **Tool Interceptor and Approval Model**: Tools run through centralized validation and approval flow.
 - **Tool Hallucination Retry Logic**: Automatic retry with partial stream recovery when the agent hallucinates tool responses (MAX_HALLUCINATION_RETRIES = 2).
 - **Session & Streaming Model**: Conversation sessions stream deltas, capture reasoning separately, and surface tool calls.
-- **App Mode Support**: standard, lite, mentor, and plan modes are supported. Lite mode is minimal-context; standard mode auto-approves apply_patch operations within workspace; plan mode is a cache-stable read-only mode for researching and proposing step-by-step implementation plans.
+- **App Mode Support**: standard, lite, mentor, plan, and orchestrator modes are supported. Lite mode is minimal-context; standard mode auto-approves apply_patch operations within workspace; plan mode is a cache-stable read-only mode for researching and proposing step-by-step implementation plans; orchestrator mode delegates complex task execution to specialized subagents.
 - **SSH Mode**: Execution of commands and file operations on remote servers over SSH.
 - **Subagent Manager**: Equips the agent with `run_subagent` to delegate tasks to specialized synchronous subagents (`explorer`, `worker`, `researcher`, `mentor`) to conserve context.
 - **Conversation State Persistence**: Automatic and manual session persistence, allowing resuming a conversation with `--resume`.
@@ -121,8 +121,10 @@ jq 'select(.direction == "received") | .summary.payload' <file.jsonl>
 - **Tool Approval**: Pauses for user approval (unless in standard mode).
 - **Subagents**: Synchronous workers (`explorer`, `worker`, `researcher`, `mentor`) to isolate task execution.
 - **Plan Mode**: Strict read-only mode that blocks file modifications and state-changing shell commands.
+- **Orchestrator Mode**: Delegates complex execution details to specialized subagents to conserve context window space.
 - **Undo/Rewind**: State rewinding capability.
 - **Conversation Resumption**: Session serialization to resume later.
+- **Event-Log Conversation Persistence**: Robust session saving, session replay, and tool execution recovery.
 
 ## Where to Look
 
@@ -131,7 +133,9 @@ jq 'select(.direction == "received") | .summary.payload' <file.jsonl>
     - **Adding a new tool?** → Create in `source/tools/` and register in `agent.ts`
     - **Adding a new provider?** → Create in `source/providers/` and register in provider registry
     - **Changing the UI?** → `source/components/` and `app.tsx`
-    - **Conversation persistence?** → `conversation-persistence.ts`
+    - **Conversation persistence?** → `conversation-persistence.ts` and `conversation-log-events.ts`
+    - **Tool execution ledger?** → `tool-execution-ledger.ts`
+    - **Large uncached input guard?** → `large-uncached-input-guard.ts`
     - **Subagents?** → `run-subagent.ts` and `source/services/subagents/`
     - **Plan mode logic?** → `plan-mode-interceptor.ts`
     - **Web search config?** → `settings-service.ts` and `source/providers/web-search/`

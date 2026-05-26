@@ -124,53 +124,58 @@ export class ConversationStore {
 
     if (this.#history.length === 0) {
       this.#history = next;
-    } else if (next.length >= this.#history.length && this.#isPrefixMatch(this.#history, next)) {
-      // If the incoming history looks like a full transcript (superset), prefer it.
-      this.#history = next;
     } else {
-      // Otherwise, merge by detecting any overlap between the end of the existing
-      // history and the beginning of the incoming history.
-      let overlap = this.#findSuffixPrefixOverlap(this.#history, next);
-
-      if (overlap === 0 && (historyKind === 'full_snapshot' || historyKind === 'partial_replay')) {
-        // Try a relaxed overlap detection (ignoring signature confidence checks) before failing
-        overlap = this.#findSuffixPrefixOverlap(this.#history, next, true);
-      }
-
-      if (overlap > 0) {
-        // Preserve richer incoming items (e.g. assistant reasoning_details) for the
-        // overlapped region. This is important because overlap detection uses a
-        // signature that intentionally ignores many fields.
-        const mergedExisting = this.#cloneHistory(this.#history);
-        for (let i = 0; i < overlap; i++) {
-          const existingIndex = mergedExisting.length - overlap + i;
-          mergedExisting[existingIndex] = this.#preferIncomingItem(mergedExisting[existingIndex], next[i]);
-        }
-        this.#history = [...mergedExisting, ...next.slice(overlap)];
-      } else {
-        if (historyKind === 'delta') {
-          this.#history = [...this.#history, ...next];
-        } else if (authoritative) {
-          this.#history = next;
-        } else if (historyKind === 'full_snapshot' && this.#isSameConversation(this.#history, next)) {
-          // Relaxed fallback: if it's a full snapshot of the same conversation, overwrite the history
-          this.#history = next;
-        } else if (historyKind === 'partial_replay' && this.#isSameConversation(this.#history, next)) {
-          // Relaxed fallback: if it's a partial replay of the same conversation, append it
-          this.#history = [...this.#history, ...next];
-        } else {
-          console.warn('conversation-store suspicious merge rejected', {
-            historyKind,
-            authoritative,
-            existingLength: this.#history.length,
-            incomingLength: next.length,
-          });
-        }
-      }
+      this.#mergeWithIncoming(next, historyKind, authoritative);
     }
 
     // Repair the history to deduplicate any SDK-interleaved replayed history or tool pairs.
     this.#history = repairConversationHistory(this.#history).history as AgentInputItem[];
+  }
+
+  #mergeWithIncoming(next: AgentInputItem[], historyKind: HistoryKind, authoritative: boolean): void {
+    const nextSigs = next.map((item) => this.#signature(item));
+    const nextSet = new Set(nextSigs);
+
+    // 1. Full replay / superset: incoming contains every existing item by identity.
+    //    This handles the mid-batch splice case where positional matching fails.
+    const allExistingInNext = this.#history.every((item) => nextSet.has(this.#signature(item)));
+    const someShared = nextSigs.some((sig) => this.#history.some((item) => this.#signature(item) === sig));
+
+    if (allExistingInNext && someShared) {
+      this.#history = next;
+      return;
+    }
+
+    // 2. Find suffix-prefix overlap by identity (no confidence heuristics).
+    const overlap = this.#findSuffixPrefixOverlap(this.#history, next);
+
+    if (overlap > 0) {
+      const mergedExisting = this.#cloneHistory(this.#history);
+      for (let i = 0; i < overlap; i++) {
+        const existingIndex = mergedExisting.length - overlap + i;
+        mergedExisting[existingIndex] = this.#preferIncomingItem(mergedExisting[existingIndex], next[i]);
+      }
+      this.#history = [...mergedExisting, ...next.slice(overlap)];
+      return;
+    }
+
+    // 3. Fallbacks.
+    if (historyKind === 'delta') {
+      this.#history = [...this.#history, ...next];
+    } else if (authoritative) {
+      this.#history = next;
+    } else if (historyKind === 'full_snapshot' && this.#isSameConversation(this.#history, next)) {
+      this.#history = next;
+    } else if (historyKind === 'partial_replay' && this.#isSameConversation(this.#history, next)) {
+      this.#history = [...this.#history, ...next];
+    } else {
+      console.warn('conversation-store suspicious merge rejected', {
+        historyKind,
+        authoritative,
+        existingLength: this.#history.length,
+        incomingLength: next.length,
+      });
+    }
   }
 
   getHistory(): AgentInputItem[] {
@@ -397,65 +402,6 @@ export class ConversationStore {
     return createHash('sha256').update(str).digest('hex');
   }
 
-  #getSignatureConfidence(signature: string): 'high' | 'medium' | 'low' {
-    if (signature.startsWith('call:')) {
-      return 'high';
-    }
-    if (signature.startsWith('msg:')) {
-      if (signature.includes('image:') || signature.includes('image_url:') || signature.includes('tool:')) {
-        return 'high';
-      }
-      const firstColon = signature.indexOf(':');
-      const secondColon = signature.indexOf(':', firstColon + 1);
-      const thirdColon = signature.indexOf(':', secondColon + 1);
-      if (thirdColon !== -1) {
-        const contentStr = signature.slice(thirdColon + 1);
-        const cleanContent = contentStr.replace(/(text:|part:|msg:)/g, '');
-        if (!this.#isGenericOrShort(cleanContent)) {
-          return 'medium';
-        }
-      }
-      return 'low';
-    }
-    if (signature.startsWith('item:')) {
-      const parts = signature.split(':');
-      const name = parts[2] ?? '';
-      if (!this.#isGenericOrShort(name)) {
-        return 'high';
-      }
-      return 'low';
-    }
-    return 'low';
-  }
-
-  #isGenericOrShort(text: string): boolean {
-    const genericWords = new Set([
-      'ok',
-      'yes',
-      'no',
-      'cancel',
-      'done',
-      'help',
-      'quit',
-      'exit',
-      'y',
-      'n',
-      'clear',
-      'stop',
-      'go',
-      'run',
-      'true',
-      'false',
-      'again',
-      'reply',
-    ]);
-    const trimmed = text.trim().toLowerCase();
-    if (trimmed.length < 3) {
-      return true;
-    }
-    return genericWords.has(trimmed);
-  }
-
   #collapseReplayedHistoryPrefixes(items: AgentInputItem[]): AgentInputItem[] {
     let collapsed = items;
 
@@ -599,33 +545,22 @@ export class ConversationStore {
     return true;
   }
 
-  #findSuffixPrefixOverlap(existing: AgentInputItem[], incoming: AgentInputItem[], relaxed = false): number {
+  #findSuffixPrefixOverlap(existing: AgentInputItem[], incoming: AgentInputItem[]): number {
     const maxOverlap = Math.min(existing.length, incoming.length);
 
     for (let k = maxOverlap; k >= 1; k--) {
       let matches = true;
-      let hasSubstantialMatch = false;
 
       for (let i = 0; i < k; i++) {
         const a = existing[existing.length - k + i];
         const b = incoming[i];
-        const sigA = this.#signature(a);
-        const sigB = this.#signature(b);
-        if (sigA !== sigB) {
+        if (this.#signature(a) !== this.#signature(b)) {
           matches = false;
           break;
         }
-        const confidence = this.#getSignatureConfidence(sigA);
-        if (confidence === 'high' || confidence === 'medium') {
-          hasSubstantialMatch = true;
-        }
       }
 
-      const lastItem: any = existing[existing.length - 1];
-      const lastRaw = lastItem?.rawItem ?? lastItem;
-      const isSingleUserMessage = k === 1 && lastRaw?.role === 'user';
-
-      if (matches && (relaxed || hasSubstantialMatch || isSingleUserMessage)) {
+      if (matches) {
         return k;
       }
     }

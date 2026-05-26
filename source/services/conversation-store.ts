@@ -1,4 +1,5 @@
 import type { AgentInputItem } from '@openai/agents';
+import { createHash } from 'node:crypto';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
 
@@ -349,12 +350,79 @@ export class ConversationStore {
 
   #cloneHistory(items: AgentInputItem[]): AgentInputItem[] {
     // Avoid leaking references to external callers.
-    // structuredClone is available in modern Node; fall back to a shallow copy.
+    // structuredClone is available in modern Node; fall back to a deep copy fallback.
     try {
       return structuredClone(items);
     } catch {
-      return items.slice();
+      try {
+        return JSON.parse(JSON.stringify(items));
+      } catch {
+        return items.slice();
+      }
     }
+  }
+
+  #hashString(str: string): string {
+    return createHash('sha256').update(str).digest('hex');
+  }
+
+  #getSignatureConfidence(signature: string): 'high' | 'medium' | 'low' {
+    if (signature.startsWith('call:') || signature.startsWith('id:')) {
+      return 'high';
+    }
+    if (signature.startsWith('msg:')) {
+      if (signature.includes('image:') || signature.includes('image_url:') || signature.includes('tool:')) {
+        return 'high';
+      }
+      const firstColon = signature.indexOf(':');
+      const secondColon = signature.indexOf(':', firstColon + 1);
+      const thirdColon = signature.indexOf(':', secondColon + 1);
+      if (thirdColon !== -1) {
+        const contentStr = signature.slice(thirdColon + 1);
+        const cleanContent = contentStr.replace(/(text:|part:|msg:)/g, '');
+        if (!this.#isGenericOrShort(cleanContent)) {
+          return 'medium';
+        }
+      }
+      return 'low';
+    }
+    if (signature.startsWith('item:')) {
+      const parts = signature.split(':');
+      const name = parts[2] ?? '';
+      if (!this.#isGenericOrShort(name)) {
+        return 'medium';
+      }
+      return 'low';
+    }
+    return 'low';
+  }
+
+  #isGenericOrShort(text: string): boolean {
+    const genericWords = new Set([
+      'ok',
+      'yes',
+      'no',
+      'cancel',
+      'done',
+      'help',
+      'quit',
+      'exit',
+      'y',
+      'n',
+      'clear',
+      'stop',
+      'go',
+      'run',
+      'true',
+      'false',
+      'again',
+      'reply',
+    ]);
+    const trimmed = text.trim().toLowerCase();
+    if (trimmed.length < 3) {
+      return true;
+    }
+    return genericWords.has(trimmed);
   }
 
   #collapseReplayedHistoryPrefixes(items: AgentInputItem[]): AgentInputItem[] {
@@ -369,23 +437,31 @@ export class ConversationStore {
           continue;
         }
 
-        const prefixCallSignatures = this.#collectCallSignatures(collapsed.slice(0, i));
-        if (prefixCallSignatures.size === 0) {
-          continue;
-        }
+        const prefix = collapsed.slice(0, i);
+        const suffix = collapsed.slice(i);
 
-        const suffixCallSignatures = this.#collectCallSignatures(collapsed.slice(i));
-        let allPrefixCallsReplayed = true;
-        for (const signature of prefixCallSignatures) {
-          if (!suffixCallSignatures.has(signature)) {
-            allPrefixCallsReplayed = false;
+        // Require tool calls in the prefix before collapsing.
+        const prefixCallSignatures = this.#collectCallSignatures(prefix);
+        if (prefixCallSignatures.size > 0) {
+          // Heuristic 1: prefix is an exact/ordered prefix match of the suffix.
+          if (this.#isPrefixMatch(prefix, suffix)) {
+            replayStart = i;
             break;
           }
-        }
 
-        if (allPrefixCallsReplayed) {
-          replayStart = i;
-          break;
+          // Heuristic 2: the prefix contains tool calls, and all those tool calls are present in the suffix.
+          const suffixCallSignatures = this.#collectCallSignatures(suffix);
+          let allPrefixCallsReplayed = true;
+          for (const signature of prefixCallSignatures) {
+            if (!suffixCallSignatures.has(signature)) {
+              allPrefixCallsReplayed = false;
+              break;
+            }
+          }
+          if (allPrefixCallsReplayed) {
+            replayStart = i;
+            break;
+          }
         }
       }
 
@@ -410,41 +486,9 @@ export class ConversationStore {
     return signatures;
   }
 
-  #preferIncomingItem(existing: AgentInputItem, incoming: AgentInputItem): AgentInputItem {
-    const eAny: any = existing as any;
-    const iAny: any = incoming as any;
-    const eRaw: any = eAny?.rawItem ?? eAny;
-    const iRaw: any = iAny?.rawItem ?? iAny;
-
-    // Prefer the incoming item if it provides reasoning_details/tool_calls that
-    // the existing overlapped item doesn't have.
-    const isAssistantMessage =
-      iRaw?.role === 'assistant' && iRaw?.type === 'message' && eRaw?.role === 'assistant' && eRaw?.type === 'message';
-
-    if (isAssistantMessage) {
-      const incomingReasoning = iAny?.reasoning_details ?? iRaw?.reasoning_details;
-      const existingReasoning = eAny?.reasoning_details ?? eRaw?.reasoning_details;
-      if (existingReasoning == null && incomingReasoning != null) {
-        return incoming;
-      }
-
-      // Preserve OpenRouter "reasoning" (reasoning tokens) field as well.
-      const incomingReasoningText =
-        iAny?.reasoning ?? iRaw?.reasoning ?? iAny?.reasoning_content ?? iRaw?.reasoning_content;
-      const existingReasoningText =
-        eAny?.reasoning ?? eRaw?.reasoning ?? eAny?.reasoning_content ?? eRaw?.reasoning_content;
-      if (existingReasoningText == null && incomingReasoningText != null) {
-        return incoming;
-      }
-
-      const incomingToolCalls = iAny?.tool_calls ?? iRaw?.tool_calls;
-      const existingToolCalls = eAny?.tool_calls ?? eRaw?.tool_calls;
-      if (existingToolCalls == null && incomingToolCalls != null) {
-        return incoming;
-      }
-    }
-
-    return existing;
+  #preferIncomingItem(_existing: AgentInputItem, incoming: AgentInputItem): AgentInputItem {
+    // Since the signatures match, we can prefer incoming because it represents the provider/SDK's latest canonical state.
+    return incoming;
   }
 
   #signature(item: AgentInputItem): string {
@@ -463,25 +507,53 @@ export class ConversationStore {
       return `id:${raw.id}`;
     }
 
-    // Message-like items: role + content text.
+    // Message-like items: role + type + content parts + tool_calls.
     const role = typeof raw?.role === 'string' ? raw.role : '';
-    const type = typeof raw?.type === 'string' ? raw.type : '';
-    let text = '';
-    const content = raw?.content;
-    if (typeof content === 'string') {
-      text = content;
-    } else if (Array.isArray(content)) {
-      text = content
-        .filter((c: any) => typeof c?.text === 'string')
-        .map((c: any) => c.text)
-        .join('');
-    }
-
     if (role) {
-      return `msg:${role}:${type}:${text}`;
+      const type = typeof raw?.type === 'string' ? raw.type : '';
+      const parts: string[] = [];
+      const content = raw?.content;
+      if (typeof content === 'string') {
+        if (content) {
+          parts.push(`text:${content}`);
+        }
+      } else if (Array.isArray(content)) {
+        for (const c of content) {
+          if (c && typeof c === 'object') {
+            if (typeof c.type === 'string') {
+              parts.push(`part:${c.type}`);
+            }
+            if (typeof c.text === 'string' && c.text) {
+              parts.push(`text:${c.text}`);
+            }
+            // Image URLs / base64 image data
+            if (typeof c.image === 'string' && c.image) {
+              parts.push(`image:${this.#hashString(c.image)}`);
+            }
+            if (c.image_url && typeof c.image_url.url === 'string' && c.image_url.url) {
+              parts.push(`image_url:${this.#hashString(c.image_url.url)}`);
+            }
+          }
+        }
+      }
+
+      // Embed tool calls inside the signature if present
+      const toolCalls = anyItem?.tool_calls ?? raw?.tool_calls;
+      if (Array.isArray(toolCalls)) {
+        for (const tc of toolCalls) {
+          if (tc && typeof tc === 'object') {
+            const tcId = tc.id ?? tc.callId ?? tc.call_id ?? '';
+            const tcName = tc.function?.name ?? tc.name ?? '';
+            parts.push(`tool:${tcId}:${tcName}`);
+          }
+        }
+      }
+
+      return `msg:${role}:${type}:${parts.join('|')}`;
     }
 
     // Fallback: type + name if present.
+    const type = typeof raw?.type === 'string' ? raw.type : '';
     const name = typeof raw?.name === 'string' ? raw.name : '';
     return `item:${type}:${name}`;
   }
@@ -501,20 +573,32 @@ export class ConversationStore {
   }
 
   #findSuffixPrefixOverlap(existing: AgentInputItem[], incoming: AgentInputItem[]): number {
-    const maxWindow = 50;
-    const maxOverlap = Math.min(existing.length, incoming.length, maxWindow);
+    const maxOverlap = Math.min(existing.length, incoming.length);
 
     for (let k = maxOverlap; k >= 1; k--) {
       let matches = true;
+      let hasSubstantialMatch = false;
+
       for (let i = 0; i < k; i++) {
         const a = existing[existing.length - k + i];
         const b = incoming[i];
-        if (this.#signature(a) !== this.#signature(b)) {
+        const sigA = this.#signature(a);
+        const sigB = this.#signature(b);
+        if (sigA !== sigB) {
           matches = false;
           break;
         }
+        const confidence = this.#getSignatureConfidence(sigA);
+        if (confidence === 'high' || confidence === 'medium') {
+          hasSubstantialMatch = true;
+        }
       }
-      if (matches) {
+
+      const lastItem: any = existing[existing.length - 1];
+      const lastRaw = lastItem?.rawItem ?? lastItem;
+      const isSingleUserMessage = k === 1 && lastRaw?.role === 'user';
+
+      if (matches && (hasSubstantialMatch || isSingleUserMessage)) {
         return k;
       }
     }

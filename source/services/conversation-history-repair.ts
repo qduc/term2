@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export interface ConversationHistoryRepairStats {
   count: number;
   duplicatePairs: number;
@@ -50,8 +52,16 @@ const cloneHistory = (history: unknown[]): unknown[] => {
   try {
     return structuredClone(history);
   } catch {
-    return history.slice();
+    try {
+      return JSON.parse(JSON.stringify(history));
+    } catch {
+      return history.slice();
+    }
   }
+};
+
+const hashString = (str: string): string => {
+  return createHash('sha256').update(str).digest('hex');
 };
 
 const itemSignature = (item: unknown): string => {
@@ -67,20 +77,48 @@ const itemSignature = (item: unknown): string => {
     return `id:${id}`;
   }
 
+  // Message-like items: role + type + content parts + tool_calls.
   const role = raw?.role;
-  let text = '';
-  const content = raw?.content;
-  if (typeof content === 'string') {
-    text = content;
-  } else if (Array.isArray(content)) {
-    text = content
-      .filter((part: any) => typeof part?.text === 'string')
-      .map((part: any) => part.text)
-      .join('');
-  }
-
   if (typeof role === 'string' && role) {
-    return `msg:${role}:${type}:${text}`;
+    const parts: string[] = [];
+    const content = raw?.content;
+    if (typeof content === 'string') {
+      if (content) {
+        parts.push(`text:${content}`);
+      }
+    } else if (Array.isArray(content)) {
+      for (const c of content) {
+        if (c && typeof c === 'object') {
+          if (typeof c.type === 'string') {
+            parts.push(`part:${c.type}`);
+          }
+          if (typeof c.text === 'string' && c.text) {
+            parts.push(`text:${c.text}`);
+          }
+          // Image URLs / base64 image data
+          if (typeof c.image === 'string' && c.image) {
+            parts.push(`image:${hashString(c.image)}`);
+          }
+          if (c.image_url && typeof c.image_url.url === 'string' && c.image_url.url) {
+            parts.push(`image_url:${hashString(c.image_url.url)}`);
+          }
+        }
+      }
+    }
+
+    // Embed tool calls inside the signature if present
+    const toolCalls = (item as any)?.tool_calls ?? raw?.tool_calls;
+    if (Array.isArray(toolCalls)) {
+      for (const tc of toolCalls) {
+        if (tc && typeof tc === 'object') {
+          const tcId = tc.id ?? tc.callId ?? tc.call_id ?? '';
+          const tcName = tc.function?.name ?? tc.name ?? '';
+          parts.push(`tool:${tcId}:${tcName}`);
+        }
+      }
+    }
+
+    return `msg:${role}:${type}:${parts.join('|')}`;
   }
 
   const name = raw?.name;
@@ -154,6 +192,18 @@ const repairMetadata = (
   };
 };
 
+const isPrefixMatch = (prefix: unknown[], full: unknown[]): boolean => {
+  if (prefix.length > full.length) {
+    return false;
+  }
+  for (let i = 0; i < prefix.length; i++) {
+    if (itemSignature(prefix[i]) !== itemSignature(full[i])) {
+      return false;
+    }
+  }
+  return true;
+};
+
 const collapseReplayedHistoryPrefixes = (
   input: unknown[],
 ): { history: unknown[]; repairs: ConversationHistoryRepair[] } => {
@@ -169,23 +219,32 @@ const collapseReplayedHistoryPrefixes = (
         continue;
       }
 
-      const prefixCallSignatures = collectCallSignatures(collapsed.slice(0, i));
-      if (prefixCallSignatures.size === 0) {
-        continue;
-      }
+      const prefix = collapsed.slice(0, i);
+      const suffix = collapsed.slice(i);
 
-      const suffixCallSignatures = collectCallSignatures(collapsed.slice(i));
-      let allPrefixCallsReplayed = true;
-      for (const signature of prefixCallSignatures) {
-        if (!suffixCallSignatures.has(signature)) {
-          allPrefixCallsReplayed = false;
+      // Require tool calls in the prefix before collapsing.
+      const prefixCallSignatures = collectCallSignatures(prefix);
+      if (prefixCallSignatures.size > 0) {
+        // Heuristic 1: prefix is an exact/ordered prefix match of the suffix.
+        if (isPrefixMatch(prefix, suffix)) {
+          replayStart = i;
           break;
         }
-      }
 
-      if (allPrefixCallsReplayed) {
-        replayStart = i;
-        break;
+        // Heuristic 2: the prefix contains tool calls, and all those tool calls are present in the suffix.
+        const suffixCallSignatures = collectCallSignatures(suffix);
+        let allPrefixCallsReplayed = true;
+        for (const signature of prefixCallSignatures) {
+          if (!suffixCallSignatures.has(signature)) {
+            allPrefixCallsReplayed = false;
+            break;
+          }
+        }
+
+        if (allPrefixCallsReplayed) {
+          replayStart = i;
+          break;
+        }
       }
     }
 

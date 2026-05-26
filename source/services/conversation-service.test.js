@@ -548,7 +548,7 @@ test('attaches cached shell args when output uses call_id', async (t) => {
   t.deepEqual(result.commandMessages, []);
 });
 
-test('skips approval rejection command messages', async (t) => {
+test('preserves approval rejection command messages', async (t) => {
   const rejectionPayload = JSON.stringify({
     output: [
       {
@@ -589,12 +589,15 @@ test('skips approval rejection command messages', async (t) => {
     deps: { logger: mockLogger },
   });
   const result = await service.sendMessage('run shell', {
-    onCommandMessage() {
-      emitted.push('called');
+    onCommandMessage(message) {
+      emitted.push(message);
     },
   });
 
-  t.deepEqual(emitted, []);
+  t.is(emitted.length, 1);
+  t.true(emitted[0].isApprovalRejection);
+  t.is(emitted[0].command, 'should-not-show');
+  t.is(emitted[0].output, rejectionPayload);
   t.deepEqual(result.commandMessages, []);
 });
 

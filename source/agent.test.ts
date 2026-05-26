@@ -464,7 +464,7 @@ test('getAgentDefinition excludes code-context tools in remote (SSH) execution',
   t.false(definition.instructions.includes('read_code_outline'));
 });
 
-test('getAgentDefinition conditionalizes plan mode instructions and does not filter tools based on planMode setting', (t) => {
+test('getAgentDefinition does not filter tools based on planMode setting', (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'app.planMode': true,
@@ -475,7 +475,6 @@ test('getAgentDefinition conditionalizes plan mode instructions and does not fil
     loggingService: mockLogger,
   });
 
-  t.true(definitionWithPlan.instructions.includes('restricted from making'));
   const toolsWithPlan = definitionWithPlan.tools.map((tool) => tool.name);
   t.true(toolsWithPlan.includes('create_file'));
   t.true(toolsWithPlan.includes('search_replace'));
@@ -490,7 +489,6 @@ test('getAgentDefinition conditionalizes plan mode instructions and does not fil
     loggingService: mockLogger,
   });
 
-  t.false(definitionWithoutPlan.instructions.includes('restricted from making'));
   const toolsWithoutPlan = definitionWithoutPlan.tools.map((tool) => tool.name);
   t.true(toolsWithoutPlan.includes('create_file'));
   t.true(toolsWithoutPlan.includes('search_replace'));

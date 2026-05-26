@@ -314,6 +314,7 @@ test.serial('loadLastConversation: returns the last written conversation', (t) =
   const id1 = persistenceModule.generateId();
   const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
   w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z' });
+  w1.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } });
   void w1.close();
   const target = Date.now() + 20;
   while (Date.now() < target) {
@@ -322,6 +323,7 @@ test.serial('loadLastConversation: returns the last written conversation', (t) =
   const id2 = persistenceModule.generateId();
   const w2 = createConversationLogWriter({ sessionId: id2, dir: testDir, logger: stubLogger });
   w2.init({ id: id2, createdAt: '2026-05-26T00:00:00.000Z' });
+  w2.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'hi2' } });
   void w2.close();
 
   const last = persistenceModule.loadLastConversation();
@@ -329,10 +331,72 @@ test.serial('loadLastConversation: returns the last written conversation', (t) =
   t.is(last!.id, id2);
 });
 
+test.serial('loadLastConversation: does not save last.json for empty conversation', (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
+  void writer.close();
+
+  const last = persistenceModule.loadLastConversation();
+  t.is(last, null);
+  t.false(fs.existsSync(path.join(testDir, 'last.json')));
+});
+
+test.serial('hasConversationContent: returns false for missing conversation', (t) => {
+  t.false(persistenceModule.hasConversationContent('non-existent-id'));
+});
+
+test.serial('hasConversationContent: returns false for empty conversation', (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
+  void writer.close();
+  t.false(persistenceModule.hasConversationContent(id));
+});
+
+test.serial('hasConversationContent: returns true for user_message', (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } });
+  void writer.close();
+  t.true(persistenceModule.hasConversationContent(id));
+});
+
+test.serial('hasConversationContent: returns true for assistant_final', (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
+  writer.append({
+    type: 'assistant_final',
+    message: { id: 'a1', sender: 'bot', status: 'finalized', text: 'hello' },
+    finalText: 'hello',
+    snapshot: emptySnapshot(),
+  });
+  void writer.close();
+  t.true(persistenceModule.hasConversationContent(id));
+});
+
+test.serial('hasConversationContent: skips corrupt lines and finds content', (t) => {
+  const id = persistenceModule.generateId();
+  const filePath = path.join(testDir, `${id}.jsonl`);
+  fs.writeFileSync(
+    filePath,
+    '{"v":1,"seq":1,"ts":"2026-05-26T00:00:00.000Z","event":{"type":"session_init","id":"' +
+      id +
+      '","createdAt":"2026-05-26T00:00:00.000Z"}}\n' +
+      'this is not json\n' +
+      '{"v":1,"seq":2,"ts":"2026-05-26T00:00:01.000Z","event":{"type":"user_message","message":{"id":"u1","sender":"user","text":"hi"}}}\n',
+    'utf-8',
+  );
+  t.true(persistenceModule.hasConversationContent(id));
+});
+
 test.serial('deleteConversation: removes the jsonl and clears last.json', (t) => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } });
   void writer.close();
   t.true(persistenceModule.deleteConversation(id));
   t.false(fs.existsSync(path.join(testDir, `${id}.jsonl`)));

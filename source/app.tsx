@@ -44,6 +44,7 @@ interface AppProps {
   onRotateWriter?: (newSessionId: string) => void;
   generateId: () => string;
   onSessionIdChange?: (newId: string, createdAt: string) => void;
+  onHasConversationContent?: (hasContent: boolean) => void;
 }
 
 export const appendStartupBannerId = (ids: string[]): string[] => [...ids, `startup-banner-${ids.length}`];
@@ -140,6 +141,7 @@ const App: FC<AppProps> = ({
   onRotateWriter,
   generateId,
   onSessionIdChange,
+  onHasConversationContent,
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -195,6 +197,12 @@ const App: FC<AppProps> = ({
     onRestoreInput: setInput,
     logWriter,
   });
+
+  // Notify cli.tsx when the conversation has content so it can decide whether
+  // to show the "To resume this conversation" message.
+  useEffect(() => {
+    onHasConversationContent?.(hasConversationContent(messages));
+  }, [messages, onHasConversationContent]);
 
   const handleClearConversation = useCallback(async () => {
     const newId = generateId();

@@ -8,6 +8,7 @@ import {
   type LogEvent,
   type SessionInitEvent,
 } from './conversation-log-events.js';
+import { saveLastConversation } from './conversation-persistence.js';
 
 const FSYNC_EVENTS = new Set<LogEvent['type']>(['user_message', 'assistant_final', 'undo', 'session_init']);
 const MAX_EVENT_BYTES = 256 * 1024;
@@ -50,10 +51,6 @@ function logPath(dir: string, sessionId: string): string {
 
 function lockPath(dir: string, sessionId: string): string {
   return path.join(dir, `${sessionId}.lock`);
-}
-
-function lastPointerPath(dir: string): string {
-  return path.join(dir, 'last.json');
 }
 
 function ensureDir(dir: string): void {
@@ -131,17 +128,6 @@ function releaseLock(dir: string, sessionId: string): void {
   }
 }
 
-function writeLastPointer(dir: string, sessionId: string): void {
-  const lp = lastPointerPath(dir);
-  const tmp = `${lp}.tmp`;
-  try {
-    fs.writeFileSync(tmp, JSON.stringify({ id: sessionId, updatedAt: new Date().toISOString() }), 'utf-8');
-    fs.renameSync(tmp, lp);
-  } catch {
-    // best-effort
-  }
-}
-
 class ConversationLogWriterImpl implements ConversationLogWriter {
   #sessionId: string;
   #dir: string;
@@ -188,7 +174,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
         } catch {
           // ignore fsync errors; data is in kernel buffer
         }
-        writeLastPointer(this.#dir, this.#sessionId);
+        saveLastConversation(this.#sessionId);
       }
     } catch (err: any) {
       if (!this.#writeErrorLogged) {
@@ -250,7 +236,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       }
       this.#fd = null;
     }
-    writeLastPointer(this.#dir, this.#sessionId);
+    saveLastConversation(this.#sessionId);
     releaseLock(this.#dir, this.#sessionId);
   }
 }

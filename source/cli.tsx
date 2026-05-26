@@ -481,6 +481,7 @@ if (hasPositionalPrompt) {
 let effectiveSessionId = generateId();
 let effectiveCreatedAt = new Date().toISOString();
 let initialMessages: Message[] = [];
+let effectiveHasConversationContent = false;
 
 if (resumedConversation) {
   effectiveSessionId = resumedConversation.id;
@@ -621,11 +622,15 @@ const { waitUntilExit } = render(
         onRotateWriter={(newId) => {
           logWriter.append({ type: 'session_cleared' });
           logWriter.rotate(newId, buildInitMeta(newId, new Date().toISOString()));
+          effectiveHasConversationContent = false;
         }}
         generateId={generateId}
         onSessionIdChange={(newId, createdAt) => {
           effectiveSessionId = newId;
           effectiveCreatedAt = createdAt;
+        }}
+        onHasConversationContent={(hasContent) => {
+          effectiveHasConversationContent = hasContent;
         }}
       />
     </InputProvider>
@@ -638,5 +643,7 @@ await logWriter.close();
 activeLogWriter = null;
 const resumeCmd = getResumeCommand(effectiveSessionId, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);
 printUsageOnce();
-console.log(`\nTo resume this conversation: ${resumeCmd}`);
+if (effectiveHasConversationContent) {
+  console.log(`\nTo resume this conversation: ${resumeCmd}`);
+}
 process.exit(0);

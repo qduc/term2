@@ -338,6 +338,49 @@ export function forkConversation(sourceId: string, newId: string): boolean {
   return true;
 }
 
+const CONTENT_EVENT_TYPES = new Set([
+  'user_message',
+  'assistant_final',
+  'command_message',
+  'subagent_started',
+  'error',
+]);
+
+export function hasConversationContent(id: string): boolean {
+  const filePath = getConversationPath(id);
+  if (!fs.existsSync(filePath)) {
+    return false;
+  }
+  const content = fs.readFileSync(filePath, 'utf-8');
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const envelope = JSON.parse(trimmed) as LogEnvelope;
+      if (envelope.event && CONTENT_EVENT_TYPES.has(envelope.event.type)) {
+        return true;
+      }
+    } catch {
+      // skip corrupt line
+    }
+  }
+  return false;
+}
+
+export function saveLastConversation(id: string): void {
+  if (!hasConversationContent(id)) {
+    return;
+  }
+  const lp = getLastConversationPath();
+  const tmp = `${lp}.tmp`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify({ id, updatedAt: new Date().toISOString() }), 'utf-8');
+    fs.renameSync(tmp, lp);
+  } catch {
+    // best-effort
+  }
+}
+
 export const __testing = {
   getConversationPath,
   getLockPath,

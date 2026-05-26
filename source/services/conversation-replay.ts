@@ -74,7 +74,7 @@ interface ReplayState {
   warnings: string[];
 }
 
-function applyEvent(state: ReplayState, event: LogEvent): void {
+function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
   const rawEvent = event as any;
   if (rawEvent.truncated) {
     state.warnings.push(
@@ -128,14 +128,47 @@ function applyEvent(state: ReplayState, event: LogEvent): void {
     case 'user_message': {
       state.messages.push(cloneMessage(event.message));
       state.trailingUserMessage = true;
+      state.history.push({
+        role: 'user',
+        type: 'message',
+        content: event.message.text ?? '',
+      });
       return;
     }
     case 'tool_started': {
       state.inFlightToolCalls.set(event.toolCallId, { callId: event.toolCallId, toolName: event.toolName });
+      const existing = state.toolLedger.find((e) => e.callId === event.toolCallId);
+      if (!existing) {
+        state.toolLedger.push({
+          turnId: 'turn-interrupted',
+          callId: event.toolCallId,
+          toolName: event.toolName,
+          arguments: event.arguments,
+          status: 'started',
+          startedAt: ts,
+        });
+      }
       return;
     }
     case 'tool_result': {
       state.inFlightToolCalls.delete(event.callId);
+      let existing = state.toolLedger.find((e) => e.callId === event.callId);
+      if (!existing) {
+        existing = {
+          turnId: 'turn-interrupted',
+          callId: event.callId,
+          toolName: event.toolName,
+          status: 'started',
+          startedAt: ts,
+        };
+        state.toolLedger.push(existing);
+      }
+      existing.status = event.status === 'failed' || event.status === 'aborted' ? event.status : 'completed';
+      existing.output = event.output;
+      existing.completedAt = ts;
+      if (event.historyItems) {
+        existing.historyItems = event.historyItems;
+      }
       return;
     }
     case 'command_message': {
@@ -241,7 +274,7 @@ export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
     if (envelope.event.type === 'subagent_completed' && envelope.event.result?.usage) {
       subagentUsage.add(envelope.event.result.usage);
     }
-    applyEvent(state, envelope.event);
+    applyEvent(state, envelope.event, envelope.ts);
   }
 
   // Mid-turn crash handling

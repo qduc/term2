@@ -161,3 +161,80 @@ test('replayEvents: truncated event is skipped and adds warning', (t) => {
   t.true(restored.replayWarnings[0].includes('truncated'));
   t.is(restored.history.length, 0);
 });
+
+test('replayEvents: reconstructs history and ledger on mid-turn interruption', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run tool' } }),
+    env({ type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: { command: 'echo 1' } }),
+    env({
+      type: 'tool_result',
+      callId: 'call-1',
+      toolName: 'shell',
+      status: 'completed',
+      output: '1\n',
+      historyItems: [
+        {
+          role: 'assistant',
+          type: 'message',
+          content: '',
+          tool_calls: [
+            {
+              type: 'function',
+              id: 'call-1',
+              function: { name: 'shell', arguments: '{"command":"echo 1"}' },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          type: 'function_call_result',
+          callId: 'call-1',
+          name: 'shell',
+          output: '1\n',
+        },
+      ],
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  // Replayed state should have:
+  // 1. Reconstructed history containing user message and tool call/result items, plus the recovery system message.
+  // 2. Completed tool in the toolLedger.
+  t.is(restored.history.length, 4); // user message, tool call, tool result, recovery system message
+  t.is((restored.history[0] as any).role, 'user');
+  t.is((restored.history[0] as any).content, 'run tool');
+  t.is((restored.history[1] as any).tool_calls[0].id, 'call-1');
+  t.is((restored.history[2] as any).callId, 'call-1');
+  t.is((restored.history[3] as any).role, 'system');
+  t.true(String((restored.history[3] as any).content).includes('Recovered 1 completed tool call/result pair'));
+
+  t.is(restored.toolLedger.length, 1);
+  t.is(restored.toolLedger[0].callId, 'call-1');
+  t.is(restored.toolLedger[0].status, 'completed');
+  t.deepEqual(restored.toolLedger[0].arguments, { command: 'echo 1' });
+});
+
+test('replayEvents: handles incomplete in-flight tool call on interruption', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run tool' } }),
+    env({ type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: { command: 'echo 1' } }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  // The in-flight tool should be marked as aborted in the toolLedger.
+  t.is(restored.toolLedger.length, 1);
+  t.is(restored.toolLedger[0].callId, 'call-1');
+  t.is(restored.toolLedger[0].status, 'aborted');
+  t.is(restored.toolLedger[0].failureReason, 'Session ended unexpectedly');
+
+  // History should have the user message and the system recovery message about dropped call.
+  t.is(restored.history.length, 2);
+  t.is((restored.history[0] as any).role, 'user');
+  t.is((restored.history[0] as any).content, 'run tool');
+  t.is((restored.history[1] as any).role, 'system');
+  t.true(String((restored.history[1] as any).content).includes('Dropped 1 incomplete tool call(s)'));
+});

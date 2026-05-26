@@ -1,17 +1,23 @@
 import test from 'ava';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { SettingsService } from '../services/settings-service.js';
 import { SETTING_KEYS } from '../services/settings-service.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TEST_BASE_DIR = path.join(__dirname, '../../test-settings-flex');
+const TEST_BASE_DIR = path.join(os.tmpdir(), `term2-test-settings-flex-${Math.random().toString(36).slice(2)}`);
 let testCounter = 0;
 
 const getTestSettingsDir = () => {
   testCounter += 1;
   return path.join(TEST_BASE_DIR, `test-${testCounter}`);
 };
+
+test.after.always(() => {
+  if (fs.existsSync(TEST_BASE_DIR)) {
+    fs.rmSync(TEST_BASE_DIR, { recursive: true, force: true });
+  }
+});
 
 test('OpenAI Flex Service Tier setting can be enabled', (t) => {
   const settings = new SettingsService({

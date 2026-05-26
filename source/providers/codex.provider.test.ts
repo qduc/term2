@@ -1,5 +1,6 @@
 import test from 'ava';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { getProvider } from './index.js';
 import {
@@ -25,8 +26,8 @@ function createFakeJwt(expiresInSeconds: number): string {
   return `${header}.${payload}.signature`;
 }
 
-// Temporary directory inside the workspace for safe testing
-const TEST_DIR = path.join(process.cwd(), 'temp-codex-test');
+// Temporary directory inside the system temp directory for safe testing
+const TEST_DIR = path.join(os.tmpdir(), `term2-temp-codex-test-${Math.random().toString(36).slice(2)}`);
 
 test.before(() => {
   if (fs.existsSync(TEST_DIR)) {

@@ -83,28 +83,6 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
     }
   }, [selectedIndex, scrollOffset]);
 
-  const open = useCallback(
-    (startIndex: number, _initialQuery = '') => {
-      // Preserve selection when already open to avoid resetting on re-renders
-      if (mode === 'path_completion') return;
-      setMode('path_completion');
-      setTriggerIndex(startIndex);
-      setSelectedIndex(0);
-      setScrollOffset(0);
-      // initialQuery is ignored because we derive it
-    },
-    [mode, setMode, setTriggerIndex, setSelectedIndex],
-  );
-
-  const close = useCallback(() => {
-    if (mode === 'path_completion') {
-      setMode('text');
-      setTriggerIndex(null);
-      setSelectedIndex(0);
-      setScrollOffset(0);
-    }
-  }, [mode, setMode, setTriggerIndex, setSelectedIndex]);
-
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -118,6 +96,30 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
       setLoading(false);
     }
   }, []);
+
+  const open = useCallback(
+    (startIndex: number, _initialQuery = '') => {
+      // Preserve selection when already open to avoid resetting on re-renders
+      if (mode === 'path_completion') return;
+      setMode('path_completion');
+      setTriggerIndex(startIndex);
+      setSelectedIndex(0);
+      setScrollOffset(0);
+      // initialQuery is ignored because we derive it
+      // Refresh in background to avoid stale entries; don't block open
+      refresh().catch(() => {});
+    },
+    [mode, setMode, setTriggerIndex, setSelectedIndex, refresh],
+  );
+
+  const close = useCallback(() => {
+    if (mode === 'path_completion') {
+      setMode('text');
+      setTriggerIndex(null);
+      setSelectedIndex(0);
+      setScrollOffset(0);
+    }
+  }, [mode, setMode, setTriggerIndex, setSelectedIndex]);
 
   // updateQuery removed
 

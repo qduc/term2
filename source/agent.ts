@@ -15,6 +15,7 @@ import type { ToolDefinition } from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import { default as createIgnore, type Ignore } from 'ignore';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { buildPromptSpec } from './prompts/prompt-constructor.js';
@@ -22,15 +23,154 @@ import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 
-function getTopLevelEntries(cwd: string, limit = 50): string {
+type ProjectTreeOptions = {
+  maxDepth?: number;
+  maxEntriesPerDir?: number;
+  maxTotalEntries?: number;
+  includeFiles?: boolean;
+  ignoredNames?: Set<string>;
+};
+
+const ALWAYS_IGNORE = ['.git', 'node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.cache', '.DS_Store'];
+
+const ALWAYS_INCLUDE = new Set([
+  'package.json',
+  'tsconfig.json',
+  'README.md',
+  'readme.md',
+  '.gitignore',
+  '.env.example',
+]);
+
+const SENSITIVE_PATTERNS = [/^\.env$/, /^\.env\./, /secret/i, /private/i, /credential/i, /token/i];
+
+function isSensitiveFile(name: string) {
+  return SENSITIVE_PATTERNS.some((pattern) => pattern.test(name));
+}
+
+function createProjectIgnore(cwd: string) {
+  const ig = (createIgnore as unknown as () => Ignore)();
+
+  ig.add(ALWAYS_IGNORE);
+
+  const gitignorePath = path.join(cwd, '.gitignore');
+
   try {
-    const entries = fs.readdirSync(cwd, { withFileTypes: true });
-    const names = entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
-    const shown = names.slice(0, limit);
-    const more = names.length > limit ? `, ...(+${names.length - limit} more)` : '';
-    return shown.join(', ') + more;
+    if (fs.existsSync(gitignorePath)) {
+      ig.add(fs.readFileSync(gitignorePath, 'utf8'));
+    }
+  } catch {
+    // If .gitignore cannot be read, continue with default ignores.
+  }
+
+  return {
+    ignores(relativePath: string, basename: string) {
+      const normalized = relativePath.split(path.sep).join('/');
+
+      if (ALWAYS_INCLUDE.has(basename)) {
+        return false;
+      }
+
+      return ig.ignores(normalized);
+    },
+  };
+}
+
+export function getProjectTreeForPrompt(cwd: string, options: ProjectTreeOptions = {}): string {
+  const { maxDepth = 3, maxEntriesPerDir = 50, maxTotalEntries = 250, includeFiles = true } = options;
+
+  let totalEntries = 0;
+  let omittedByLimit = 0;
+
+  const projectIgnore = createProjectIgnore(cwd);
+
+  function walk(dir: string, depth: number, prefix: string): string[] {
+    if (depth > maxDepth || totalEntries >= maxTotalEntries) return [];
+
+    let entries: fs.Dirent[];
+
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (e: any) {
+      return [`${prefix}└─ [failed to read: ${e.message}]`];
+    }
+
+    const filtered = entries
+      .filter((entry) => {
+        const absolutePath = path.join(dir, entry.name);
+        const relativePath = path.relative(cwd, absolutePath).split(path.sep).join('/');
+
+        if (isSensitiveFile(entry.name)) {
+          return false;
+        }
+
+        if (projectIgnore.ignores(relativePath, entry.name)) {
+          return false;
+        }
+
+        if (!includeFiles && !entry.isDirectory()) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (a.isDirectory() && !b.isDirectory()) return -1;
+        if (!a.isDirectory() && b.isDirectory()) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+    const shown = filtered.slice(0, maxEntriesPerDir);
+    omittedByLimit += Math.max(0, filtered.length - shown.length);
+
+    const lines: string[] = [];
+
+    shown.forEach((entry, index) => {
+      if (totalEntries >= maxTotalEntries) {
+        omittedByLimit += shown.length - index;
+        return;
+      }
+
+      totalEntries++;
+
+      const isLast = index === shown.length - 1;
+      const connector = isLast ? '└─ ' : '├─ ';
+      const childPrefix = prefix + (isLast ? '   ' : '│  ');
+      const displayName = entry.isDirectory() ? `${entry.name}/` : entry.name;
+
+      lines.push(`${prefix}${connector}${displayName}`);
+
+      if (entry.isDirectory() && depth < maxDepth) {
+        lines.push(...walk(path.join(dir, entry.name), depth + 1, childPrefix));
+      } else if (entry.isDirectory() && depth >= maxDepth) {
+        lines.push(`${childPrefix}└─ …`);
+      }
+    });
+
+    return lines;
+  }
+
+  try {
+    const lines = [
+      'Project structure:',
+      '.',
+      ...walk(cwd, 1, ''),
+      '',
+      'Project structure notes:',
+      `- Root: ${cwd}`,
+      `- Max depth: ${maxDepth}`,
+      `- Max entries per directory: ${maxEntriesPerDir}`,
+      `- Max total entries: ${maxTotalEntries}`,
+      `- Ignored via defaults and .gitignore`,
+    ];
+
+    if (omittedByLimit > 0) {
+      lines.push(`- Omitted due to limits: ${omittedByLimit}`);
+    }
+
+    return lines.join('\n');
   } catch (e: any) {
-    return `failed to read: ${e.message}`;
+    return `Project structure:\n[failed to read ${cwd}: ${e.message}]`;
   }
 }
 
@@ -54,11 +194,11 @@ export function getEnvInfo(
 
   // For remote sessions, we might not be able to list top-level entries efficiently or at all easily here synchronously
   // We'll skip top-level entries for now if remote, or maybe we can't get them sync.
-  // getTopLevelEntries is sync and uses fs.readdirSync. This won't work for remote.
+  // getProjectTreeForPrompt is sync and uses fs.readdirSync. This won't work for remote.
   // So if remote, we skip that part.
   let topLevel = '';
   if (!executionContext?.isRemote()) {
-    topLevel = `; top-level: ${getTopLevelEntries(cwd)}`;
+    topLevel = `; top-level: ${getProjectTreeForPrompt(cwd)}`;
   }
 
   return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd: ${cwd}${topLevel}; date: ${now}`;

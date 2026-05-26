@@ -54,6 +54,19 @@ test('buildPromptSpec composes file fragments in stable order', (t) => {
   ]);
 });
 
+test('buildPromptSpec always includes plan-mode-info in standard mode to keep system prompt cache-stable', (t) => {
+  const standard = buildPromptSpec({ model: 'gpt-4o', liteMode: false, planMode: false });
+  t.true(standard.fragmentFiles.includes('plan-mode-info.md'));
+});
+
+test('buildPromptSpec excludes plan-mode-info in lite and orchestrator modes', (t) => {
+  const lite = buildPromptSpec({ model: 'gpt-5.5', liteMode: true, planMode: false });
+  t.false(lite.fragmentFiles.includes('plan-mode-info.md'));
+
+  const orchestrator = buildPromptSpec({ model: 'gpt-5.5', liteMode: false, orchestratorMode: true, planMode: false });
+  t.false(orchestrator.fragmentFiles.includes('plan-mode-info.md'));
+});
+
 test('buildPromptSpec includes code context inline section when enabled and not orchestrator', (t) => {
   const standard = buildPromptSpec({
     model: 'gpt-4o',

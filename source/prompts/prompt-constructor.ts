@@ -31,7 +31,6 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     liteMode,
     orchestratorMode,
     mentorMode,
-    planMode,
     searchViaShell,
     codeContextEnabled,
     runSubagentEnabled,
@@ -64,7 +63,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     inlineSections.push(getSubagentDelegationAddendum({ orchestratorMode }));
   }
 
-  if (planMode) {
+  if (!liteMode && !orchestratorMode) {
     fragmentFiles.push('plan-mode-info.md');
   }
 

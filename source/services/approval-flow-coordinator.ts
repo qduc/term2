@@ -13,6 +13,8 @@ import {
   getString,
   getToolInfoFromInterruption,
 } from './interruption-info.js';
+import { parseToolCallArguments } from './tool-call-arguments.js';
+import { createInvalidToolCallDiagnostic } from './logging-contract.js';
 
 const noop = () => undefined;
 
@@ -120,11 +122,27 @@ export class ApprovalFlowCoordinator {
       const { toolName, rawArguments } = getToolInfoFromInterruption(interruption);
       const callId = getCallIdFromObject(interruption);
 
+      const parseResult = parseToolCallArguments(rawArguments, {
+        callId: callId ?? String(Date.now()),
+        toolName,
+        sessionId: this.deps.sessionId,
+        traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
+      });
+
+      if (parseResult.invalidJsonDiagnostic) {
+        const diagnostic = createInvalidToolCallDiagnostic(parseResult.invalidJsonDiagnostic);
+        this.deps.logger.error('Invalid tool call argument payload', {
+          ...diagnostic,
+          sessionId: this.deps.sessionId,
+          messageId: callId ?? String(Date.now()),
+        });
+      }
+
       toolStartedEvent = {
         type: 'tool_started',
         toolCallId: callId ?? String(Date.now()),
         toolName,
-        arguments: rawArguments,
+        arguments: parseResult.arguments,
       };
 
       const approve = getMethod<[unknown], void>(state, 'approve');

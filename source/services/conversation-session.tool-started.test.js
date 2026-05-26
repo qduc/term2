@@ -132,3 +132,113 @@ test('run() emits one diagnostic packet when tool arguments contain malformed JS
   t.is(packets[0].meta.traceId, 'trace-test-1');
   t.true(Array.isArray(packets[0].meta.validationErrors));
 });
+
+test('approval continuation does not persist duplicate tool_started when SDK replays function_call', async (t) => {
+  const callId = 'call-approval-replay';
+  const args = JSON.stringify({ command: 'git status' });
+  const state = { approve: () => undefined };
+  const interruption = { name: 'shell', callId, arguments: args };
+  const initialStream = new MockStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId,
+          name: 'shell',
+          arguments: args,
+        },
+      },
+    },
+  ]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = state;
+
+  const continuationStream = new MockStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId,
+          name: 'shell',
+          arguments: args,
+        },
+      },
+    },
+  ]);
+  continuationStream.finalOutput = 'done';
+
+  const mockClient = {
+    async startStream() {
+      return initialStream;
+    },
+    async continueRunStream() {
+      return continuationStream;
+    },
+  };
+
+  const { logger } = createMockLogger();
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger },
+  });
+  const persisted = [];
+  session.setLogSink((event) => persisted.push(event));
+
+  await session.sendMessage('hi');
+  await session.handleApprovalDecision('y');
+
+  const starts = persisted.filter((event) => event.type === 'tool_started' && event.toolCallId === callId);
+  t.is(starts.length, 1);
+  t.deepEqual(starts[0].arguments, { command: 'git status' });
+});
+
+test('run() emits one tool_started for duplicate function_call events with the same callId', async (t) => {
+  const stream = new MockStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId: 'call-dup',
+          name: 'shell',
+          arguments: JSON.stringify({ command: 'npm test' }),
+        },
+      },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId: 'call-dup',
+          name: 'shell',
+          arguments: JSON.stringify({ command: 'npm test' }),
+        },
+      },
+    },
+  ]);
+  stream.finalOutput = 'done';
+
+  const mockClient = {
+    async startStream() {
+      return stream;
+    },
+  };
+
+  const { logger } = createMockLogger();
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('hi')) {
+    emitted.push(ev);
+  }
+
+  const starts = emitted.filter((event) => event.type === 'tool_started' && event.toolCallId === 'call-dup');
+  t.is(starts.length, 1);
+  t.deepEqual(starts[0].arguments, { command: 'npm test' });
+});

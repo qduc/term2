@@ -97,6 +97,31 @@ test('prepareContinuation answer=y emits tool_started and approves', (t) => {
   }
 });
 
+test('prepareContinuation answer=y normalizes JSON string tool_started arguments', (t) => {
+  const state: any = { approve: () => undefined };
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state,
+    interruption: { name: 'shell', callId: 'c-json', arguments: JSON.stringify({ command: 'npm test' }) },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+  });
+
+  const plan = coord.prepareContinuation('y', undefined);
+  t.is(plan?.toolStartedEvent?.type, 'tool_started');
+  if (plan?.toolStartedEvent?.type === 'tool_started') {
+    t.deepEqual(plan.toolStartedEvent.arguments, { command: 'npm test' });
+  }
+});
+
 test('prepareContinuation rejection: with interceptor support, approves with installed interceptor', (t) => {
   let approved = false;
   let rejected = false;

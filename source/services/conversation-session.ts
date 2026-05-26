@@ -31,6 +31,7 @@ import {
   type SavedToolExecution,
 } from './tool-execution-ledger.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
+import { describeError } from '../utils/error-helpers.js';
 
 const asRecordLocal = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -129,6 +130,7 @@ export class ConversationSession {
   private approvalState = new ApprovalState();
   private toolCallArgumentsById = new Map<string, unknown>();
   private emittedInvalidToolCallPackets = new Set<string>();
+  private emittedToolStartedCallIds = new Set<string>();
   private shellAutoApproval: ShellAutoApprovalResolver;
   private approvalFlow: ApprovalFlowCoordinator;
   private inputSurgeGuard = new InputSurgeGuard();
@@ -297,6 +299,7 @@ export class ConversationSession {
     this.approvalState.clearPending();
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
+    this.emittedToolStartedCallIds.clear();
     this.toolLedger = new ToolExecutionLedger();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
@@ -313,6 +316,7 @@ export class ConversationSession {
     this.approvalState.clearPending();
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
+    this.emittedToolStartedCallIds.clear();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.markUndoOrRewind();
@@ -332,6 +336,7 @@ export class ConversationSession {
     this.approvalState.clearPending();
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
+    this.emittedToolStartedCallIds.clear();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.markUndoOrRewind();
@@ -359,6 +364,7 @@ export class ConversationSession {
     this.approvalState.clearPending();
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
+    this.emittedToolStartedCallIds.clear();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
     const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
@@ -470,6 +476,17 @@ export class ConversationSession {
     }
   }
 
+  #dedupeToolStarted(event: ConversationEvent): ConversationEvent | null {
+    if (event.type !== 'tool_started') {
+      return event;
+    }
+    if (this.emittedToolStartedCallIds.has(event.toolCallId)) {
+      return null;
+    }
+    this.emittedToolStartedCallIds.add(event.toolCallId);
+    return event;
+  }
+
   exportState(): {
     history: unknown[];
     previousResponseId: string | null;
@@ -505,6 +522,7 @@ export class ConversationSession {
       this.conversationStore.addImportedItem(item);
     }
     this.previousResponseId = state.previousResponseId;
+    this.emittedToolStartedCallIds.clear();
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.markResumedSession({
       updatedAtMs: state.updatedAt ? Date.parse(state.updatedAt) : null,
@@ -596,7 +614,7 @@ export class ConversationSession {
 
           const acc = createStreamAccumulator();
           acc.emittedCommandIds = new Set<string>(abortedContext.emittedCommandIds);
-          yield* processStreamEvents(
+          for await (const event of processStreamEvents(
             continuedStream,
             acc,
             {
@@ -621,7 +639,10 @@ export class ConversationSession {
               },
             },
             { logger: this.logger, sessionId: this.id },
-          );
+          )) {
+            const filtered = this.#dedupeToolStarted(event);
+            if (filtered) yield filtered;
+          }
 
           if (this.#isCurrentGeneration(gen)) {
             this.previousResponseId = continuedStream.lastResponseId ?? null;
@@ -728,7 +749,7 @@ export class ConversationSession {
       })) as AgentStream;
 
       const acc = createStreamAccumulator();
-      yield* processStreamEvents(
+      for await (const event of processStreamEvents(
         stream,
         acc,
         {
@@ -739,7 +760,10 @@ export class ConversationSession {
           onFunctionResultItem: (item) => this.toolLedger.recordFunctionResult(item),
         },
         { logger: this.logger, sessionId: this.id },
-      );
+      )) {
+        const filtered = this.#dedupeToolStarted(event);
+        if (filtered) yield filtered;
+      }
 
       if (this.#isCurrentGeneration(gen)) {
         this.previousResponseId = stream.lastResponseId ?? null;
@@ -926,7 +950,8 @@ export class ConversationSession {
     } = plan;
 
     if (toolStartedEvent) {
-      yield toolStartedEvent;
+      const filtered = this.#dedupeToolStarted(toolStartedEvent);
+      if (filtered) yield filtered;
     }
 
     // Restore cached tool-call arguments so continuation outputs can attach them
@@ -947,7 +972,7 @@ export class ConversationSession {
           })) as AgentStream;
 
           const acc = createStreamAccumulator();
-          yield* processStreamEvents(
+          for await (const event of processStreamEvents(
             stream,
             acc,
             {
@@ -972,7 +997,10 @@ export class ConversationSession {
               },
             },
             { logger: this.logger, sessionId: this.id },
-          );
+          )) {
+            const filtered = this.#dedupeToolStarted(event);
+            if (filtered) yield filtered;
+          }
 
           if (this.#isCurrentGeneration(gen)) {
             this.previousResponseId = stream.lastResponseId ?? null;

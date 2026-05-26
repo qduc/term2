@@ -5,6 +5,7 @@ import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
 import { createInvalidToolCallDiagnostic } from './logging-contract.js';
 import { asRecord, getString } from './interruption-info.js';
+import { parseToolCallArguments } from './tool-call-arguments.js';
 import type { AgentStream } from './agent-stream.js';
 
 function normalizeCodexRateLimitWindow(obj: unknown): CodexRateLimitWindow | undefined {
@@ -196,49 +197,28 @@ export async function* processStreamEvents(
           const toolName = getString(rawItem, 'name') ?? getString(eventItemRecord, 'name');
           const args = rawItem?.arguments ?? rawItem?.args ?? eventItemRecord?.arguments ?? eventItemRecord?.args;
 
-          // Providers sometimes surface arguments as a JSON string.
-          // Normalize so downstream UI can reliably render parameters.
-          const normalizedArgs = (() => {
-            if (typeof args !== 'string') return args;
-            const trimmed = args.trim();
-            if (!trimmed) return args;
-            try {
-              return JSON.parse(trimmed);
-            } catch {
-              if (
-                (trimmed.startsWith('{') || trimmed.startsWith('[')) &&
-                !emittedInvalidToolCallPackets.has(String(callId))
-              ) {
-                emittedInvalidToolCallPackets.add(String(callId));
-                const diagnostic = createInvalidToolCallDiagnostic({
-                  toolName: toolName ?? 'unknown',
-                  toolCallId: String(callId),
-                  rawPayload: trimmed,
-                  normalizedToolCall: {
-                    toolName: toolName ?? 'unknown',
-                    toolCallId: String(callId),
-                    arguments: args,
-                  },
-                  validationErrors: ['arguments must be valid JSON'],
-                  traceId: logger.getCorrelationId() ?? 'trace-unknown',
-                  retryContext: { sessionId },
-                });
+          const parseResult = parseToolCallArguments(args, {
+            callId: String(callId),
+            toolName: toolName ?? 'unknown',
+            sessionId,
+            traceId: logger.getCorrelationId() ?? 'trace-unknown',
+          });
 
-                logger.error('Invalid tool call argument payload', {
-                  ...diagnostic,
-                  sessionId,
-                  messageId: String(callId),
-                });
-              }
-              return args;
-            }
-          })();
+          if (parseResult.invalidJsonDiagnostic && !emittedInvalidToolCallPackets.has(String(callId))) {
+            emittedInvalidToolCallPackets.add(String(callId));
+            const diagnostic = createInvalidToolCallDiagnostic(parseResult.invalidJsonDiagnostic);
+            logger.error('Invalid tool call argument payload', {
+              ...diagnostic,
+              sessionId,
+              messageId: String(callId),
+            });
+          }
 
           yield {
             type: 'tool_started' as const,
             toolCallId: callId,
             toolName: toolName ?? 'unknown',
-            arguments: normalizedArgs,
+            arguments: parseResult.arguments,
           };
 
           logger.debug('Tool execution started', {

@@ -110,6 +110,58 @@ test('emits tool_started for function_call run_item_stream_event', async (t) => 
   t.deepEqual(toolStarted.arguments, { command: 'ls' });
 });
 
+test('emits one tool_started for duplicate function_call events with the same callId', async (t) => {
+  const functionCall = {
+    type: 'run_item_stream_event',
+    item: {
+      rawItem: {
+        type: 'function_call',
+        callId: 'call-dup',
+        name: 'shell',
+        arguments: JSON.stringify({ command: 'npm test' }),
+      },
+    },
+  };
+  const stream = makeStream([functionCall, functionCall]);
+  const acc = createStreamAccumulator();
+  const opts = baseOpts();
+  const events: any[] = [];
+
+  for await (const ev of processStreamEvents(stream, acc, opts, baseDeps())) {
+    events.push(ev);
+  }
+
+  const starts = events.filter((e) => e.type === 'tool_started');
+  t.is(starts.length, 2);
+  t.deepEqual(starts[0].arguments, { command: 'npm test' });
+  t.deepEqual(starts[1].arguments, { command: 'npm test' });
+});
+
+test('emits tool_started even when the callId was already emitted by approval handling', async (t) => {
+  const stream = makeStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId: 'call-approved',
+          name: 'shell',
+          arguments: JSON.stringify({ command: 'git status' }),
+        },
+      },
+    },
+  ]);
+  const acc = createStreamAccumulator();
+  const opts = baseOpts();
+  const events: any[] = [];
+
+  for await (const ev of processStreamEvents(stream, acc, opts, baseDeps())) {
+    events.push(ev);
+  }
+
+  t.true(events.some((e) => e.type === 'tool_started'));
+});
+
 test('invalid JSON arguments are deduped via emittedInvalidToolCallPackets', async (t) => {
   const events1 = [
     {

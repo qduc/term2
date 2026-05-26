@@ -474,6 +474,97 @@ function findMatchesInContent(content: string, searchContent: string): MatchInfo
   return { type: 'none' };
 }
 
+function prepareMatchContext(
+  operation: SearchReplaceFullOperation,
+  content: string,
+  editCache: SearchReplaceEditCache,
+): { eol: string; normalizedSearchContent: string; matchInfo: MatchInfo; fromCache: boolean } {
+  const cachedEdit = editCache.get(operation, content);
+  if (cachedEdit) {
+    const normalizedSearchContent = normalizeToEOL(
+      removeLeadingFilepathComment(operation.search_content, operation.path),
+      cachedEdit.eol,
+    );
+    return {
+      eol: cachedEdit.eol,
+      normalizedSearchContent,
+      matchInfo: cachedEdit.matchInfo,
+      fromCache: true,
+    };
+  }
+
+  const eol = detectEOL(content);
+  const normalizedSearchContent = normalizeToEOL(
+    removeLeadingFilepathComment(operation.search_content, operation.path),
+    eol,
+  );
+  const matchInfo = findMatchesInContent(content, normalizedSearchContent);
+  editCache.set(operation, matchInfo, content, eol);
+
+  return {
+    eol,
+    normalizedSearchContent,
+    matchInfo,
+    fromCache: false,
+  };
+}
+
+function evaluateApprovalForMatch(
+  matchInfo: MatchInfo,
+  insideCwd: boolean,
+  filePath: string,
+  loggingService: ILoggingService,
+): boolean {
+  if (matchInfo.type === 'none') {
+    loggingService.warn('search_replace validation: no match found - will fail in execute', {
+      path: filePath,
+    });
+    return false;
+  }
+
+  if (matchInfo.count > 1) {
+    loggingService.warn(`search_replace validation: multiple ${matchInfo.type} matches - will fail in execute`, {
+      path: filePath,
+      count: matchInfo.count,
+    });
+    return false;
+  }
+
+  if (matchInfo.type === 'exact') {
+    loggingService.debug('search_replace validation: exact match found', {
+      path: filePath,
+      count: matchInfo.count,
+    });
+    return insideCwd ? false : true;
+  }
+
+  if (matchInfo.type === 'gap') {
+    loggingService.debug('search_replace validation: gap match found', {
+      path: filePath,
+      count: matchInfo.count,
+    });
+    return insideCwd ? false : true;
+  }
+
+  if (matchInfo.type === 'relaxed') {
+    loggingService.debug('search_replace validation: relaxed match found', {
+      path: filePath,
+      count: matchInfo.count,
+    });
+    return insideCwd ? false : true;
+  }
+
+  if (matchInfo.type === 'normalized') {
+    loggingService.debug('search_replace validation: normalized match found', {
+      path: filePath,
+      count: matchInfo.count,
+    });
+    return insideCwd ? false : true;
+  }
+
+  return false;
+}
+
 interface ReplacementExecutionSuccess {
   success: true;
   newContent: string;
@@ -551,15 +642,21 @@ export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, in
   const parsedOutput = safeJsonParse(getOutputText(item));
   const replaceOutputItems = parsedOutput?.output ?? [];
 
-  // If JSON parsing failed or no output array, create error message
-  if (replaceOutputItems.length === 0) {
+  function getFormattedOperationArgs(item: any, replaceIndex = 0) {
     const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
     const args = normalizeToolArguments(normalizedArgs) ?? {};
-    const filePath = args?.path ?? 'unknown';
+    const replaceResult = replaceOutputItems[replaceIndex];
+    const filePath = args?.path ?? replaceResult?.path ?? 'unknown';
     const replacements = args?.replacements ?? [];
-    const firstRep = replacements[0] ?? {};
-    const searchContent = firstRep.search_content ?? '';
-    const replaceContent = firstRep.replace_content ?? '';
+    const operationArgs = replacements[replaceIndex] ?? {};
+    const searchContent = operationArgs?.search_content ?? '';
+    const replaceContent = operationArgs?.replace_content ?? '';
+    return { filePath, searchContent, replaceContent };
+  }
+
+  // If JSON parsing failed or no output array, create error message
+  if (replaceOutputItems.length === 0) {
+    const { filePath, searchContent, replaceContent } = getFormattedOperationArgs(item, 0);
     const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
     const output = getOutputText(item) || 'No output';
     const success = false;
@@ -582,13 +679,7 @@ export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, in
   // Search replace tool can have multiple operation outputs
   const messages: CommandMessage[] = [];
   for (const [replaceIndex, replaceResult] of replaceOutputItems.entries()) {
-    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
-    const args = normalizeToolArguments(normalizedArgs) ?? {};
-    const filePath = args?.path ?? replaceResult?.path ?? 'unknown';
-    const replacements = args?.replacements ?? [];
-    const operationArgs = replacements[replaceIndex] ?? {};
-    const searchContent = operationArgs?.search_content ?? '';
-    const replaceContent = operationArgs?.replace_content ?? '';
+    const { filePath, searchContent, replaceContent } = getFormattedOperationArgs(item, replaceIndex);
 
     const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
     const isHealed = replaceResult?.healed === true;
@@ -708,88 +799,10 @@ export function createSearchReplaceToolDefinition(deps: {
           return false;
         }
 
-        // Detect EOL and normalize search content
-        const eol = detectEOL(content);
-        const normalizedSearchContent = normalizeToEOL(removeLeadingFilepathComment(search_content, filePath), eol);
+        // Detect EOL, normalize search content, find matches, and cache result
+        const { matchInfo } = prepareMatchContext(operation, content, editCache);
 
-        // Find matches using shared logic with normalized content
-        const matchInfo = findMatchesInContent(content, normalizedSearchContent);
-
-        // Cache the result for execute phase
-        editCache.set(operation, matchInfo, content, eol);
-
-        if (matchInfo.type === 'exact') {
-          if (matchInfo.count > 1) {
-            loggingService.warn('search_replace validation: multiple exact matches - will fail in execute', {
-              path: filePath,
-              count: matchInfo.count,
-            });
-            return false;
-          }
-          loggingService.debug('search_replace validation: exact match found', {
-            path: filePath,
-            count: matchInfo.count,
-          });
-          if (insideCwd) {
-            return false;
-          }
-          return true;
-        }
-
-        if (matchInfo.type === 'relaxed') {
-          if (matchInfo.count > 1) {
-            loggingService.warn('search_replace validation: multiple relaxed matches - will fail in execute', {
-              path: filePath,
-              count: matchInfo.count,
-            });
-            return false;
-          }
-          loggingService.debug('search_replace validation: relaxed match found', {
-            path: filePath,
-            count: matchInfo.count,
-          });
-          return true;
-        }
-
-        if (matchInfo.type === 'normalized') {
-          if (matchInfo.count > 1) {
-            loggingService.warn('search_replace validation: multiple normalized matches - will fail in execute', {
-              path: filePath,
-              count: matchInfo.count,
-            });
-            return false;
-          }
-          loggingService.debug('search_replace validation: normalized match found', {
-            path: filePath,
-            count: matchInfo.count,
-          });
-          return true;
-        }
-
-        if (matchInfo.type === 'gap') {
-          if (matchInfo.count > 1) {
-            loggingService.warn('search_replace validation: multiple gap matches - will fail in execute', {
-              path: filePath,
-              count: matchInfo.count,
-            });
-            return false;
-          }
-          loggingService.debug('search_replace validation: gap match found', {
-            path: filePath,
-            count: matchInfo.count,
-          });
-          if (insideCwd) {
-            return false;
-          }
-          return true;
-        }
-
-        // matchInfo.type === 'none'
-        loggingService.warn('search_replace validation: no match found - will fail in execute', {
-          path: filePath,
-        });
-        // Auto-approve - execute will handle the error gracefully
-        return false;
+        return evaluateApprovalForMatch(matchInfo, insideCwd, filePath, loggingService);
       } catch (error: any) {
         loggingService.error('search_replace needsApproval error', {
           error: error?.message || String(error),
@@ -813,41 +826,28 @@ export function createSearchReplaceToolDefinition(deps: {
         return writeFile(p, c, 'utf8');
       };
 
+      const fail = (error: string, extra?: Record<string, unknown>) => ({
+        output: { success: false, error, ...extra },
+      });
+
       const applyToContent = async (operation: SearchReplaceFullOperation, content: string) => {
         const { path: filePath, search_content, replace_content } = operation;
 
         if (search_content === '') {
-          return {
-            output: {
-              success: false,
-              error:
-                'search_content must not be empty when editing an existing file. Provide search text or create a new file with an empty search.',
-            },
-          };
+          return fail(
+            'search_content must not be empty when editing an existing file. Provide search text or create a new file with an empty search.',
+          );
         }
 
         if (search_content === replace_content) {
-          return {
-            output: {
-              success: false,
-              error: 'search_content and replace_content are identical.',
-            },
-          };
+          return fail('search_content and replace_content are identical.');
         }
 
         const markerError = detectSummarizationMarkers(search_content);
         if (markerError) {
-          return {
-            output: {
-              success: false,
-              error: markerError,
-            },
-          };
+          return fail(markerError);
         }
 
-        let matchInfo: MatchInfo;
-        let eol: string;
-        let normalizedSearchContent: string;
         let usedHealing = false;
         let healingAttempted = false;
         let healingSucceeded = false;
@@ -855,27 +855,14 @@ export function createSearchReplaceToolDefinition(deps: {
         let matchTypeAfterHealing: MatchInfo['type'] = 'none';
         let healingFailureReason: string | undefined;
 
-        const cachedEdit = editCache.get(operation, content);
-        if (cachedEdit) {
-          matchInfo = cachedEdit.matchInfo;
-          eol = cachedEdit.eol;
-          normalizedSearchContent = normalizeToEOL(removeLeadingFilepathComment(search_content, filePath), eol);
-        } else {
-          eol = detectEOL(content);
-          normalizedSearchContent = normalizeToEOL(removeLeadingFilepathComment(search_content, filePath), eol);
-          matchInfo = findMatchesInContent(content, normalizedSearchContent);
-        }
+        let { eol, normalizedSearchContent, matchInfo } = prepareMatchContext(operation, content, editCache);
 
         if (matchInfo.type === 'none') {
           if (containsGapMarker(search_content)) {
-            return {
-              output: {
-                success: false,
-                error:
-                  (matchInfo.diagnostic ?? 'Gap pattern did not match. Recheck the head and tail anchor lines.') +
-                  ' Gap (<...>) edits are not auto-healed — fix the anchors and retry.',
-              },
-            };
+            return fail(
+              (matchInfo.diagnostic ?? 'Gap pattern did not match. Recheck the head and tail anchor lines.') +
+                ' Gap (<...>) edits are not auto-healed — fix the anchors and retry.',
+            );
           }
           const enableEditHealing = settingsService.get<boolean>('tools.enableEditHealing') ?? true;
           if (enableEditHealing) {
@@ -922,13 +909,10 @@ export function createSearchReplaceToolDefinition(deps: {
 
             if (!usedHealing) {
               const reasonSuffix = healingFailureReason ? ` Reason: ${healingFailureReason}.` : '';
-              return {
-                output: {
-                  success: false,
-                  error: `Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.`,
-                  healing_failure_reason: healingFailureReason,
-                },
-              };
+              return fail(
+                `Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.`,
+                { healing_failure_reason: healingFailureReason },
+              );
             }
           }
         }
@@ -939,12 +923,7 @@ export function createSearchReplaceToolDefinition(deps: {
         });
 
         if (!replacementResult.success) {
-          return {
-            output: {
-              success: false,
-              error: replacementResult.error,
-            },
-          };
+          return fail(replacementResult.error);
         }
 
         if (enableFileLogging) {
@@ -1042,7 +1021,7 @@ export function createSearchReplaceToolDefinition(deps: {
               if (!result.output.success) {
                 continue;
               }
-              nextContent = result.newContent!;
+              nextContent = (result as { newContent: string }).newContent;
               changed = true;
             }
 

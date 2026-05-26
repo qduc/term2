@@ -75,6 +75,13 @@ interface ReplayState {
 }
 
 function applyEvent(state: ReplayState, event: LogEvent): void {
+  const rawEvent = event as any;
+  if (rawEvent.truncated) {
+    state.warnings.push(
+      `Log event of type "${event.type}" was truncated (original size: ${rawEvent.originalSize} bytes) due to size limits.`,
+    );
+    return;
+  }
   switch (event.type) {
     case 'session_init': {
       state.id = event.id;

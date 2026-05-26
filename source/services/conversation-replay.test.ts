@@ -146,3 +146,18 @@ test('replayEvents: unknown event type is ignored gracefully', (t) => {
   const restored = replayEvents(envelopes);
   t.is(restored.previousResponseId, 'r1');
 });
+
+test('replayEvents: truncated event is skipped and adds warning', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({
+      type: 'assistant_final',
+      truncated: true,
+      originalSize: 500000,
+    } as any),
+  ];
+  const restored = replayEvents(envelopes);
+  t.is(restored.replayWarnings.length, 1);
+  t.true(restored.replayWarnings[0].includes('truncated'));
+  t.is(restored.history.length, 0);
+});

@@ -5,8 +5,6 @@ import path from 'node:path';
 import { getProvider } from './index.js';
 import {
   CodexTokenManager,
-  CODEX_MAX_RETRIES,
-  CODEX_REQUEST_TIMEOUT_MS,
   resolveTokenPath,
   getJwtExpiry,
   extractAccountIdFromClaims,
@@ -757,36 +755,4 @@ test.serial('Codex provider createRunner custom fetch injects chatgpt-account-id
       fs.unlinkSync(path.join(TEST_DIR, 'auth.json'));
     } catch {}
   }
-});
-
-test.serial('Codex provider configures a shorter request timeout without SDK retries', async (t) => {
-  const provider = getProvider('codex');
-  t.truthy(provider);
-  if (!provider?.createRunner) {
-    t.fail('createRunner is undefined');
-    return;
-  }
-
-  const deps = {
-    settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.3-codex' : undefined) },
-    loggingService: {
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      debug: () => {},
-    },
-  };
-
-  const runner = provider.createRunner(deps as any);
-  if (!runner) {
-    t.fail('runner is undefined');
-    return;
-  }
-
-  const modelProvider = runner.config.modelProvider;
-  const model = (await modelProvider.getModel('gpt-5.3-codex')) as any;
-  const client = model._client;
-
-  t.is(client.timeout, CODEX_REQUEST_TIMEOUT_MS);
-  t.is(client.maxRetries, CODEX_MAX_RETRIES);
 });

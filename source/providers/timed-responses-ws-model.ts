@@ -12,12 +12,21 @@ export type TimedWsOptions = {
 };
 
 const OriginalWebSocket = globalThis.WebSocket;
+const DefaultWebSocketFactory: WebSocketFactory = OriginalWebSocket
+  ? (url, opts) => new (OriginalWebSocket as any)(url, opts)
+  : (url, opts) => new WebSocket(url, opts as any);
 
 const wsContextStorage = new AsyncLocalStorage<{
   options: TimedWsOptions;
   wsFactory: WebSocketFactory;
   activeSocketRef: { socket: any | null };
 }>();
+
+function ensureTimedWebSocketProxyInstalled() {
+  if (globalThis.WebSocket !== (TimedWebSocketProxy as any)) {
+    globalThis.WebSocket = TimedWebSocketProxy as any;
+  }
+}
 
 class TimedWebSocketProxy {
   static readonly CONNECTING = 0;
@@ -41,7 +50,7 @@ class TimedWebSocketProxy {
 
   constructor(url: string, initOptions?: any) {
     const context = wsContextStorage.getStore();
-    const wsFactory = context?.wsFactory || ((u, o) => new (OriginalWebSocket as any)(u, o));
+    const wsFactory = context?.wsFactory || DefaultWebSocketFactory;
     const options = context?.options || { connectTimeoutMs: 0, idleTimeoutMs: 0 };
 
     if (context?.activeSocketRef) {
@@ -283,6 +292,8 @@ class TimedWebSocketProxy {
 }
 
 export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Model {
+  private readonly activeSocketRef = { socket: null as TimedWebSocketProxy | null };
+
   constructor(
     client: any,
     model: string,
@@ -292,6 +303,8 @@ export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Mod
     super(client, model, {
       reuseConnection: options.reuseConnection,
     });
+
+    ensureTimedWebSocketProxyInstalled();
   }
 
   override async getResponse(request: ModelRequest): Promise<ModelResponse> {
@@ -303,8 +316,6 @@ export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Mod
   }
 
   protected override async _fetchResponse(request: ModelRequest, stream: boolean): Promise<any> {
-    const originalWebSocket = globalThis.WebSocket;
-    const socketRef = { socket: null as any };
     const superFetch = (req: ModelRequest, str: boolean) => super._fetchResponse(req, str as false);
 
     const handleFetchError = (err: any) => {
@@ -315,7 +326,7 @@ export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Mod
         throw new Error('Aborted');
       }
 
-      const socket = socketRef.socket;
+      const socket = this.activeSocketRef.socket;
       if (socket) {
         if (socket.closeError) {
           throw socket.closeError;
@@ -325,7 +336,11 @@ export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Mod
           if (typeof socket.lastCloseCode === 'number') parts.push(`code=${socket.lastCloseCode}`);
           if (socket.lastCloseReason) parts.push(`reason="${socket.lastCloseReason}"`);
           const suffix = parts.length > 0 ? ` (${parts.join(', ')})` : '';
-          throw new Error(`WebSocket connection closed before response completed${suffix}`);
+          const masked = new Error(`WebSocket connection closed before response completed${suffix}`);
+          if (err instanceof Error) {
+            masked.cause = err;
+          }
+          throw masked;
         }
       }
       throw err;
@@ -333,25 +348,19 @@ export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Mod
 
     if (!stream) {
       try {
-        globalThis.WebSocket = TimedWebSocketProxy as any;
         return await wsContextStorage.run(
-          { options: this.options, wsFactory: this.wsFactory, activeSocketRef: socketRef },
+          { options: this.options, wsFactory: this.wsFactory, activeSocketRef: this.activeSocketRef },
           () => superFetch(request, false),
         );
       } catch (err: any) {
         handleFetchError(err);
-      } finally {
-        globalThis.WebSocket = originalWebSocket;
       }
     }
 
     // Stream is true: we return a wrapped async generator
     const generatorPromise = wsContextStorage.run(
-      { options: this.options, wsFactory: this.wsFactory, activeSocketRef: socketRef },
-      () => {
-        globalThis.WebSocket = TimedWebSocketProxy as any;
-        return superFetch(request, true);
-      },
+      { options: this.options, wsFactory: this.wsFactory, activeSocketRef: this.activeSocketRef },
+      () => superFetch(request, true),
     );
 
     const self = this;
@@ -359,12 +368,10 @@ export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Mod
       const generator = await generatorPromise;
       try {
         while (true) {
-          globalThis.WebSocket = TimedWebSocketProxy as any;
           const result = await wsContextStorage.run(
-            { options: self.options, wsFactory: self.wsFactory, activeSocketRef: socketRef },
+            { options: self.options, wsFactory: self.wsFactory, activeSocketRef: self.activeSocketRef },
             () => (generator as any).next(),
           );
-          globalThis.WebSocket = originalWebSocket;
           if (result.done) {
             break;
           }
@@ -372,8 +379,6 @@ export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Mod
         }
       } catch (err) {
         handleFetchError(err);
-      } finally {
-        globalThis.WebSocket = originalWebSocket;
       }
     };
 
@@ -407,5 +412,12 @@ export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Mod
       }
     }
     return super.getRetryAdvice(args);
+  }
+
+  async close(): Promise<void> {
+    const socket = this.activeSocketRef.socket;
+    if (socket) {
+      await socket.close();
+    }
   }
 }

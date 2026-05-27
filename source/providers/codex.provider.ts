@@ -237,8 +237,6 @@ export class CodexTokenManager {
 const execAsync = promisify(exec);
 
 const FALLBACK_CODEX_CLIENT_VERSION = '0.133.0';
-export const CODEX_REQUEST_TIMEOUT_MS = 5_000;
-export const CODEX_MAX_RETRIES = 3;
 
 interface VersionCache {
   version: string;
@@ -546,8 +544,6 @@ registerProvider({
     const openAIClient = new OpenAI({
       apiKey: 'placeholder',
       baseURL: 'https://chatgpt.com/backend-api/codex',
-      timeout: CODEX_REQUEST_TIMEOUT_MS,
-      maxRetries: CODEX_MAX_RETRIES,
       fetch: createProviderFetch({
         providerId: 'codex',
         defaultModel,

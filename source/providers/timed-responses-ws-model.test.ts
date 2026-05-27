@@ -174,6 +174,64 @@ test('TimedResponsesWSModel forwards transport overrides into the websocket hand
   t.is(seenConnections[0].headers.Authorization, 'Bearer auth-token');
 });
 
+test('TimedResponsesWSModel keeps the global WebSocket constructor stable during a request', async (t) => {
+  const mockWs = new MockWebSocket(1);
+  const mockClient = createMockClient();
+
+  const model = new TimedResponsesWSModel(
+    mockClient as any,
+    'gpt-4',
+    { connectTimeoutMs: 1000, idleTimeoutMs: 5000 },
+    () => mockWs as any,
+  );
+
+  const installedWebSocket = globalThis.WebSocket;
+
+  setTimeout(() => {
+    mockWs.emit('message', JSON.stringify({ type: 'response.created', response: { id: 'resp_global' } }));
+  }, 20);
+  setTimeout(() => {
+    mockWs.emit(
+      'message',
+      JSON.stringify({
+        type: 'response.completed',
+        response: {
+          id: 'resp_global',
+          output: [],
+          usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+        },
+      }),
+    );
+  }, 30);
+
+  const responsePromise = model.getResponse(createMockRequest('Hello'));
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  t.is(globalThis.WebSocket, installedWebSocket);
+
+  await t.notThrowsAsync(responsePromise);
+});
+
+test('TimedResponsesWSModel.close closes the active websocket', async (t) => {
+  const mockWs = new MockWebSocket();
+  const mockClient = createMockClient();
+
+  const model = new TimedResponsesWSModel(
+    mockClient as any,
+    'gpt-4',
+    { connectTimeoutMs: 1000, idleTimeoutMs: 5000 },
+    () => mockWs as any,
+  );
+
+  const responsePromise = model.getResponse(createMockRequest('Hello'));
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await model.close();
+
+  t.true(mockWs.closeCalls > 0);
+  await t.throwsAsync(responsePromise, { message: /WebSocket connection closed before response completed/ });
+});
+
 test('TimedResponsesWSModel closes the previous websocket before creating a new one when reuseConnection is false', async (t) => {
   const sockets: MockWebSocket[] = [];
   let secondFactorySawClosedFirst = false;

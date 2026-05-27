@@ -6,6 +6,7 @@ import WebSocket from 'ws';
 export type TimedWsOptions = {
   connectTimeoutMs: number;
   idleTimeoutMs: number;
+  firstFrameTimeoutMs?: number;
   reuseConnection?: boolean;
 };
 
@@ -193,9 +194,18 @@ export class TimedResponsesWSModel extends OpenAIResponsesModel implements Model
     connection: TimedWsConnection,
     signal?: AbortSignal,
   ): AsyncGenerator<any, void, unknown> {
+    let isFirstFrame = true;
     try {
       while (true) {
-        const frame = await connection.nextFrame(signal);
+        const firstFrameOverride =
+          isFirstFrame && typeof this.options.firstFrameTimeoutMs === 'number'
+            ? {
+                timeoutMs: this.options.firstFrameTimeoutMs,
+                timeoutErrorMessage: `WebSocket first frame timeout after ${this.options.firstFrameTimeoutMs}ms`,
+              }
+            : undefined;
+        const frame = await connection.nextFrame(signal, firstFrameOverride);
+        isFirstFrame = false;
         if (frame === null) {
           this.connection = null;
           this.connectionIdentity = null;
@@ -248,6 +258,7 @@ export class TimedResponsesWSModel extends OpenAIResponsesModel implements Model
         msg.includes('closed before opening') ||
         msg.includes('timed out before opening') ||
         msg.includes('connection timed out') ||
+        msg.includes('first frame timeout') ||
         msg.includes('aborted')
       ) {
         return {

@@ -49,6 +49,7 @@ export function isNetworkProtocolError(err: any): boolean {
     message.includes('websocket is not open') ||
     message.includes('websocket open timed out') ||
     message.includes('websocket idle timeout') ||
+    message.includes('websocket first frame timeout') ||
     message.includes('timed out before opening') ||
     message.includes('connection timed out') ||
     message.includes('socket hang up') ||
@@ -71,6 +72,18 @@ export function isNetworkProtocolError(err: any): boolean {
   }
 
   return false;
+}
+
+const MAX_WS_FIRST_FRAME_RETRIES = 2;
+
+function isFirstFrameTimeoutError(err: unknown): boolean {
+  if (!err || typeof (err as any).message !== 'string') return false;
+  return (err as any).message.toLowerCase().includes('websocket first frame timeout');
+}
+
+function isIdleTimeoutError(err: unknown): boolean {
+  if (!err || typeof (err as any).message !== 'string') return false;
+  return (err as any).message.toLowerCase().includes('websocket idle timeout');
 }
 
 export class FallbackResponsesModel implements Model {
@@ -130,52 +143,71 @@ export class FallbackResponsesModel implements Model {
       });
     }
 
-    try {
-      const response = await this.wsModel.getResponse(request);
+    let firstFrameRetries = 0;
+    while (true) {
+      try {
+        const response = await this.wsModel.getResponse(request);
 
-      // Log response complete
-      if (this.loggingService && this.providerId) {
-        const summary = {
-          transport: 'json' as const,
-          status: 200,
-          errorFrames: [],
-          malformedFrames: [],
-          unknownFrames: [],
-          payload: response.providerData || response,
-        };
-
-        this.loggingService.debug(`${this.providerId} ws response received`, {
-          eventType: `${eventPrefix}.response.received`,
-          category: 'provider',
-          phase: 'provider_response',
-          direction: 'received',
-          ...baseMeta,
-          status: 200,
-          text: response.output?.[0]?.type === 'message' ? (response.output[0] as any).content?.[0]?.text : undefined,
-          payload: summary,
-        });
-      }
-
-      return response;
-    } catch (error) {
-      if (isNetworkProtocolError(error)) {
+        // Log response complete
         if (this.loggingService && this.providerId) {
-          this.loggingService.error(`${this.providerId} ws request failed`, {
-            eventType: 'provider.response.failed',
+          const summary = {
+            transport: 'json' as const,
+            status: 200,
+            errorFrames: [],
+            malformedFrames: [],
+            unknownFrames: [],
+            payload: response.providerData || response,
+          };
+
+          this.loggingService.debug(`${this.providerId} ws response received`, {
+            eventType: `${eventPrefix}.response.received`,
             category: 'provider',
             phase: 'provider_response',
+            direction: 'received',
             ...baseMeta,
-            error: describeError(error),
+            status: 200,
+            text: response.output?.[0]?.type === 'message' ? (response.output[0] as any).content?.[0]?.text : undefined,
+            payload: summary,
           });
         }
 
-        this.state.isDowngraded = true;
-        if (this.onDowngrade) {
-          this.onDowngrade(error);
+        return response;
+      } catch (error) {
+        if (isFirstFrameTimeoutError(error) && firstFrameRetries < MAX_WS_FIRST_FRAME_RETRIES) {
+          firstFrameRetries++;
+          if (this.loggingService && this.providerId) {
+            this.loggingService.warn?.(`${this.providerId} ws first frame timeout, retrying`, {
+              eventType: 'provider.response.retry',
+              category: 'provider',
+              phase: 'provider_response',
+              ...baseMeta,
+              attempt: firstFrameRetries,
+              maxRetries: MAX_WS_FIRST_FRAME_RETRIES,
+              error: describeError(error),
+            });
+          }
+          continue;
         }
-        return await this.httpModel.getResponse(request);
+
+        if (isNetworkProtocolError(error)) {
+          if (this.loggingService && this.providerId) {
+            this.loggingService.error(`${this.providerId} ws request failed`, {
+              eventType: 'provider.response.failed',
+              category: 'provider',
+              phase: 'provider_response',
+              ...baseMeta,
+              error: describeError(error),
+            });
+          }
+
+          this.state.isDowngraded = true;
+          if (this.onDowngrade) {
+            this.onDowngrade(error);
+          }
+          return await this.httpModel.getResponse(request);
+        }
+        throw error;
       }
-      throw error;
     }
   }
 
@@ -227,67 +259,94 @@ export class FallbackResponsesModel implements Model {
       });
     }
 
-    let started = false;
-    const sseEvents: any[] = [];
-    try {
-      const stream = this.wsModel.getStreamedResponse(request);
-      for await (const event of stream) {
-        if (event.type === 'model' && event.event) {
-          sseEvents.push(event.event);
+    let firstFrameRetries = 0;
+    while (true) {
+      let started = false;
+      const sseEvents: any[] = [];
+      try {
+        const stream = this.wsModel.getStreamedResponse(request);
+        for await (const event of stream) {
+          if (event.type === 'model' && event.event) {
+            sseEvents.push(event.event);
+          }
+          started = true;
+          yield event;
         }
-        started = true;
-        yield event;
-      }
 
-      // Log response complete
-      if (this.loggingService && this.providerId && sseEvents.length > 0) {
-        const sseText = sseEvents.map((ev) => `data: ${JSON.stringify(ev)}`).join('\n\n');
+        // Log response complete
+        if (this.loggingService && this.providerId && sseEvents.length > 0) {
+          const sseText = sseEvents.map((ev) => `data: ${JSON.stringify(ev)}`).join('\n\n');
 
-        const fakeResponse = new Response(sseText, {
-          status: 200,
-          headers: { 'Content-Type': 'text/event-stream' },
-        });
+          const fakeResponse = new Response(sseText, {
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream' },
+          });
 
-        const summary = await summarizeReceivedTraffic(fakeResponse);
-        const summaryPayload = summary.payload as any;
-        const responseText = summaryPayload?.choices?.[0]?.delta?.content;
-        const toolCalls = summaryPayload?.choices?.[0]?.delta?.tool_calls;
+          const summary = await summarizeReceivedTraffic(fakeResponse);
+          const summaryPayload = summary.payload as any;
+          const responseText = summaryPayload?.choices?.[0]?.delta?.content;
+          const toolCalls = summaryPayload?.choices?.[0]?.delta?.tool_calls;
 
-        this.loggingService.debug(`${this.providerId} ws stream response received`, {
-          eventType: `${eventPrefix}.response.received`,
-          category: 'provider',
-          phase: 'provider_response',
-          direction: 'received',
-          ...baseMeta,
-          status: 200,
-          text: responseText,
-          toolCalls,
-          payload: summary,
-        });
-      }
-    } catch (error) {
-      if (isNetworkProtocolError(error)) {
-        if (this.loggingService && this.providerId) {
-          this.loggingService.error(`${this.providerId} ws stream request failed`, {
-            eventType: 'provider.response.failed',
+          this.loggingService.debug(`${this.providerId} ws stream response received`, {
+            eventType: `${eventPrefix}.response.received`,
             category: 'provider',
             phase: 'provider_response',
+            direction: 'received',
             ...baseMeta,
-            error: describeError(error),
+            status: 200,
+            text: responseText,
+            toolCalls,
+            payload: summary,
           });
         }
+        return;
+      } catch (error) {
+        if (!started && isFirstFrameTimeoutError(error) && firstFrameRetries < MAX_WS_FIRST_FRAME_RETRIES) {
+          firstFrameRetries++;
+          if (this.loggingService && this.providerId) {
+            this.loggingService.warn?.(`${this.providerId} ws stream first frame timeout, retrying`, {
+              eventType: 'provider.response.retry',
+              category: 'provider',
+              phase: 'provider_response',
+              ...baseMeta,
+              attempt: firstFrameRetries,
+              maxRetries: MAX_WS_FIRST_FRAME_RETRIES,
+              error: describeError(error),
+            });
+          }
+          continue;
+        }
 
-        this.state.isDowngraded = true;
-        if (this.onDowngrade) {
-          this.onDowngrade(error);
+        if (isNetworkProtocolError(error)) {
+          if (this.loggingService && this.providerId) {
+            this.loggingService.error(`${this.providerId} ws stream request failed`, {
+              eventType: 'provider.response.failed',
+              category: 'provider',
+              phase: 'provider_response',
+              ...baseMeta,
+              error: describeError(error),
+            });
+          }
+
+          // A single mid-stream idle timeout is likely a transient stall, not proof
+          // that the WS path is permanently broken — don't sentence the rest of the
+          // session to HTTP based on it. Pre-stream idle timeouts and all other
+          // network errors still flip the downgrade flag.
+          const isTransientMidStreamStall = started && isIdleTimeoutError(error);
+          if (!isTransientMidStreamStall) {
+            this.state.isDowngraded = true;
+            if (this.onDowngrade) {
+              this.onDowngrade(error);
+            }
+          }
+          if (!started) {
+            // Seamless fallback: no events yielded yet
+            yield* this.httpModel.getStreamedResponse(request);
+            return;
+          }
         }
-        if (!started) {
-          // Seamless fallback: no events yielded yet
-          yield* this.httpModel.getStreamedResponse(request);
-          return;
-        }
+        throw error;
       }
-      throw error;
     }
   }
 

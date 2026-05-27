@@ -81,11 +81,17 @@ export class TimedWsConnection {
     return new TimedWsConnection(ws, opts.idleTimeoutMs);
   }
 
-  async nextFrame(signal?: AbortSignal): Promise<string | null> {
+  async nextFrame(
+    signal?: AbortSignal,
+    override?: { timeoutMs: number; timeoutErrorMessage?: string },
+  ): Promise<string | null> {
     if (signal?.aborted) {
       this.ws.terminate();
       throw new Error('Aborted');
     }
+
+    const effectiveTimeoutMs = override?.timeoutMs ?? this.idleTimeoutMs;
+    const timeoutErrorMessage = override?.timeoutErrorMessage ?? `WebSocket idle timeout after ${this.idleTimeoutMs}ms`;
 
     return await new Promise<string | null>((resolve, reject) => {
       let settled = false;
@@ -100,9 +106,9 @@ export class TimedWsConnection {
       const timeout = setTimeout(() => {
         settle(() => {
           this.ws.terminate();
-          reject(new Error(`WebSocket idle timeout after ${this.idleTimeoutMs}ms`));
+          reject(new Error(timeoutErrorMessage));
         });
-      }, this.idleTimeoutMs);
+      }, effectiveTimeoutMs);
 
       const cleanup = () => {
         clearTimeout(timeout);

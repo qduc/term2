@@ -452,4 +452,103 @@ test('TimedResponsesWSModel.getRetryAdvice returns safe retry advice for connect
   const advice3 = model.getRetryAdvice({ error: error3 });
   t.false(advice3.suggested);
   t.is(advice3.replaySafety, 'unsafe');
+
+  const error4 = new Error('WebSocket first frame timeout after 5000ms');
+  const advice4 = model.getRetryAdvice({ error: error4 });
+  t.true(advice4.suggested);
+  t.is(advice4.replaySafety, 'safe');
+});
+
+test('TimedResponsesWSModel fails fast when no first frame arrives within firstFrameTimeoutMs', async (t) => {
+  const mockWs = new MockWebSocket(1);
+  const mockClient = createMockClient();
+
+  const model = new TimedResponsesWSModel(
+    mockClient as any,
+    'gpt-4',
+    { connectTimeoutMs: 1000, idleTimeoutMs: 5000, firstFrameTimeoutMs: 60 },
+    () => mockWs as any,
+  );
+
+  await t.throwsAsync(model.getResponse(createMockRequest('Hello')), {
+    message: /WebSocket first frame timeout after 60ms/,
+  });
+});
+
+test('TimedResponsesWSModel uses idleTimeoutMs for mid-stream gaps even when firstFrameTimeoutMs is set', async (t) => {
+  const mockWs = new MockWebSocket(1);
+  const mockClient = createMockClient();
+
+  const model = new TimedResponsesWSModel(
+    mockClient as any,
+    'gpt-4',
+    { connectTimeoutMs: 1000, idleTimeoutMs: 80, firstFrameTimeoutMs: 30 },
+    () => mockWs as any,
+  );
+
+  // First frame arrives within firstFrameTimeoutMs.
+  setTimeout(() => {
+    mockWs.emit('message', JSON.stringify({ type: 'response.created', response: { id: 'resp_x' } }));
+  }, 10);
+
+  // Second frame arrives after firstFrameTimeoutMs but within idleTimeoutMs.
+  setTimeout(() => {
+    mockWs.emit(
+      'message',
+      JSON.stringify({
+        type: 'response.completed',
+        response: {
+          id: 'resp_x',
+          output: [],
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        },
+      }),
+    );
+  }, 60);
+
+  const result = await model.getResponse(createMockRequest('Hello'));
+  t.truthy(result);
+});
+
+test('TimedResponsesWSModel applies firstFrameTimeoutMs to each request on a reused connection', async (t) => {
+  const mockWs = new MockWebSocket(1);
+  const mockClient = createMockClient();
+
+  let connectionCount = 0;
+  const model = new TimedResponsesWSModel(
+    mockClient as any,
+    'gpt-4',
+    { connectTimeoutMs: 1000, idleTimeoutMs: 5000, firstFrameTimeoutMs: 60, reuseConnection: true },
+    () => {
+      connectionCount++;
+      return mockWs as any;
+    },
+  );
+
+  // First request completes normally.
+  setTimeout(() => {
+    mockWs.emit('message', JSON.stringify({ type: 'response.created', response: { id: 'resp_a' } }));
+  }, 10);
+  setTimeout(() => {
+    mockWs.emit(
+      'message',
+      JSON.stringify({
+        type: 'response.completed',
+        response: {
+          id: 'resp_a',
+          output: [],
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        },
+      }),
+    );
+  }, 20);
+
+  await model.getResponse(createMockRequest('Hello 1'));
+
+  // Second request: no response, should hit firstFrameTimeoutMs, not idleTimeoutMs.
+  await t.throwsAsync(model.getResponse(createMockRequest('Hello 2')), {
+    message: /WebSocket first frame timeout after 60ms/,
+  });
+
+  t.is(connectionCount, 1, 'reused connection should be tried before failing');
 });

@@ -57,6 +57,7 @@ class FallbackOpenAIProvider implements ModelProvider {
     const wsModel = new TimedResponsesWSModel(this.openAIClient as any, model, {
       connectTimeoutMs: 15_000,
       idleTimeoutMs: 300_000,
+      firstFrameTimeoutMs: 5_000,
     });
     const httpModel = new OpenAIResponsesModel(this.openAIClient as any, model);
 

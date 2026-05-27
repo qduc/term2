@@ -169,6 +169,41 @@ test('TimedWsConnection.nextFrame returns null when connection closes', async (t
   t.is(frame, null);
 });
 
+test('TimedWsConnection.nextFrame timeout override fires before idleTimeoutMs', async (t) => {
+  const mockWs = new MockWebSocket('ws://test.com', {});
+  const wsFactory = () => mockWs as any;
+
+  const connection = await TimedWsConnection.connect(
+    'ws://test.com',
+    {},
+    { connectTimeoutMs: 1000, idleTimeoutMs: 5000 },
+    undefined,
+    wsFactory,
+  );
+
+  await t.throwsAsync(
+    connection.nextFrame(undefined, { timeoutMs: 50, timeoutErrorMessage: 'first frame timed out' }),
+    { message: 'first frame timed out' },
+  );
+});
+
+test('TimedWsConnection.nextFrame timeout override falls back to idleTimeoutMs when omitted', async (t) => {
+  const mockWs = new MockWebSocket('ws://test.com', {});
+  const wsFactory = () => mockWs as any;
+
+  const connection = await TimedWsConnection.connect(
+    'ws://test.com',
+    {},
+    { connectTimeoutMs: 1000, idleTimeoutMs: 75 },
+    undefined,
+    wsFactory,
+  );
+
+  await t.throwsAsync(connection.nextFrame(undefined, undefined), {
+    message: /WebSocket idle timeout after 75ms/,
+  });
+});
+
 test('TimedWsConnection.connect handles error event', async (t) => {
   const mockWs = new EventEmitter() as any;
   mockWs.readyState = 0;

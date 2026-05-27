@@ -427,5 +427,9 @@ test('CodexResponsesWSModel uses default timeouts when none are passed', (t) => 
 
   const model = new CodexResponsesWSModel(mockClient as any, 'gpt-5-codex', tokenManager as any);
 
-  t.deepEqual((model as any).options, { connectTimeoutMs: 15_000, idleTimeoutMs: 300_000 });
+  t.deepEqual((model as any).options, {
+    connectTimeoutMs: 15_000,
+    idleTimeoutMs: 300_000,
+    firstFrameTimeoutMs: 5_000,
+  });
 });

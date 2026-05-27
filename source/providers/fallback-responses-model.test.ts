@@ -26,6 +26,7 @@ test('isNetworkProtocolError correctly flags network protocol errors', (t) => {
   t.true(isNetworkProtocolError(new Error('unexpected server response: 502')));
   t.true(isNetworkProtocolError(new Error('Responses websocket connection timed out before opening after 15000ms')));
   t.true(isNetworkProtocolError(new Error('Responses websocket connection timed out')));
+  t.true(isNetworkProtocolError(new Error('WebSocket first frame timeout after 5000ms')));
   t.true(isNetworkProtocolError({ name: 'InvalidStateError', message: 'Socket is closing' }));
 
   // Exclusions (auth and rate limits)
@@ -374,4 +375,246 @@ test('FallbackResponsesModel logs streaming WS request start and response comple
   t.is(logs[1].meta.text, 'Hello'); // parsed delta content
   t.is(logs[1].meta.payload.transport, 'sse'); // parsed as text/event-stream sse
   t.is(logs[1].meta.payload.payload.id, 'resp_ws_stream_123');
+});
+
+test('FallbackResponsesModel.getResponse retries WS up to 2 times on first-frame timeout then downgrades', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+  let downgradeLogged = false;
+
+  const firstFrameError = new Error('WebSocket first frame timeout after 5000ms');
+  const expectedResponse: ModelResponse = { usage: {} as any, output: [] };
+
+  const wsModel = makeMockModel({
+    getResponse: async () => {
+      wsCalled++;
+      throw firstFrameError;
+    },
+  });
+  const httpModel = makeMockModel({
+    getResponse: async () => {
+      httpCalled++;
+      return expectedResponse;
+    },
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state, () => {
+    downgradeLogged = true;
+  });
+
+  const result = await model.getResponse({} as any);
+
+  t.is(wsCalled, 3, 'should attempt WS 3 times (initial + 2 retries)');
+  t.is(httpCalled, 1);
+  t.true(state.isDowngraded);
+  t.true(downgradeLogged);
+  t.is(result, expectedResponse);
+});
+
+test('FallbackResponsesModel.getResponse succeeds on retry after first-frame timeout without downgrading', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+
+  const firstFrameError = new Error('WebSocket first frame timeout after 5000ms');
+  const expectedResponse: ModelResponse = { usage: {} as any, output: [] };
+
+  const wsModel = makeMockModel({
+    getResponse: async () => {
+      wsCalled++;
+      if (wsCalled < 2) {
+        throw firstFrameError;
+      }
+      return expectedResponse;
+    },
+  });
+  const httpModel = makeMockModel({
+    getResponse: async () => {
+      httpCalled++;
+      return {} as any;
+    },
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state);
+
+  const result = await model.getResponse({} as any);
+
+  t.is(wsCalled, 2);
+  t.is(httpCalled, 0);
+  t.false(state.isDowngraded);
+  t.is(result, expectedResponse);
+});
+
+test('FallbackResponsesModel.getResponse downgrades immediately on non-first-frame network errors', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+
+  const wsError = new Error('WebSocket idle timeout after 300000ms');
+  const expectedResponse: ModelResponse = { usage: {} as any, output: [] };
+
+  const wsModel = makeMockModel({
+    getResponse: async () => {
+      wsCalled++;
+      throw wsError;
+    },
+  });
+  const httpModel = makeMockModel({
+    getResponse: async () => {
+      httpCalled++;
+      return expectedResponse;
+    },
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state);
+
+  const result = await model.getResponse({} as any);
+
+  t.is(wsCalled, 1, 'idle timeout should not trigger first-frame retry path');
+  t.is(httpCalled, 1);
+  t.true(state.isDowngraded);
+  t.is(result, expectedResponse);
+});
+
+test('FallbackResponsesModel.getStreamedResponse retries WS up to 2 times on first-frame timeout then downgrades', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+  let downgradeLogged = false;
+
+  const firstFrameError = new Error('WebSocket first frame timeout after 5000ms');
+  const wsModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      wsCalled++;
+      throw firstFrameError;
+    } as any,
+  });
+  const httpModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      httpCalled++;
+      yield { type: 'response_started' } as any;
+    } as any,
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state, () => {
+    downgradeLogged = true;
+  });
+
+  const events: any[] = [];
+  for await (const event of model.getStreamedResponse({} as any)) {
+    events.push(event);
+  }
+
+  t.is(wsCalled, 3, 'should attempt WS 3 times (initial + 2 retries)');
+  t.is(httpCalled, 1);
+  t.true(state.isDowngraded);
+  t.true(downgradeLogged);
+  t.deepEqual(events, [{ type: 'response_started' }]);
+});
+
+test('FallbackResponsesModel.getStreamedResponse does not retry once events have been yielded', async (t) => {
+  let wsCalled = 0;
+
+  const firstFrameError = new Error('WebSocket first frame timeout after 5000ms');
+  const wsModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      wsCalled++;
+      yield { type: 'output_text_delta', delta: 'partial' } as any;
+      throw firstFrameError;
+    } as any,
+  });
+  const httpModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      yield { type: 'output_text_delta', delta: 'fallback' } as any;
+    } as any,
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state);
+
+  const events: any[] = [];
+  await t.throwsAsync(
+    async () => {
+      for await (const event of model.getStreamedResponse({} as any)) {
+        events.push(event);
+      }
+    },
+    { message: /first frame timeout/ },
+  );
+
+  t.is(wsCalled, 1, 'should not retry once a frame has been yielded');
+  t.true(state.isDowngraded, 'still flips downgrade flag for future requests');
+  t.deepEqual(events, [{ type: 'output_text_delta', delta: 'partial' }]);
+});
+
+test('FallbackResponsesModel.getStreamedResponse does not flip downgrade flag on mid-stream idle timeout', async (t) => {
+  let wsCalled = 0;
+  let downgradeLogged = false;
+
+  const idleError = new Error('WebSocket idle timeout after 300000ms');
+  const wsModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      wsCalled++;
+      yield { type: 'output_text_delta', delta: 'partial' } as any;
+      throw idleError;
+    } as any,
+  });
+  const httpModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      yield { type: 'output_text_delta', delta: 'fallback' } as any;
+    } as any,
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state, () => {
+    downgradeLogged = true;
+  });
+
+  const events: any[] = [];
+  await t.throwsAsync(
+    async () => {
+      for await (const event of model.getStreamedResponse({} as any)) {
+        events.push(event);
+      }
+    },
+    { message: /idle timeout/ },
+  );
+
+  t.is(wsCalled, 1);
+  t.false(state.isDowngraded, 'one transient mid-stream stall should not flip the session-wide downgrade flag');
+  t.false(downgradeLogged);
+  t.deepEqual(events, [{ type: 'output_text_delta', delta: 'partial' }]);
+});
+
+test('FallbackResponsesModel.getStreamedResponse still flips downgrade on pre-stream idle timeout', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+
+  const idleError = new Error('WebSocket idle timeout after 300000ms');
+  const wsModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      wsCalled++;
+      throw idleError;
+    } as any,
+  });
+  const httpModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      httpCalled++;
+      yield { type: 'response_started' } as any;
+    } as any,
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state);
+
+  const events: any[] = [];
+  for await (const event of model.getStreamedResponse({} as any)) {
+    events.push(event);
+  }
+
+  t.is(wsCalled, 1);
+  t.is(httpCalled, 1);
+  t.true(state.isDowngraded, 'no events yielded → idle timeout still indicates a broken WS path');
+  t.deepEqual(events, [{ type: 'response_started' }]);
 });

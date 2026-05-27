@@ -66,7 +66,7 @@ export class CodexResponsesWSModel extends TimedResponsesWSModel {
     model: string,
     private readonly tokenManager: any,
     private readonly diagnosticLogger?: DiagnosticLogger,
-    options: any = { connectTimeoutMs: 15_000, idleTimeoutMs: 300_000 },
+    options: any = { connectTimeoutMs: 15_000, idleTimeoutMs: 300_000, firstFrameTimeoutMs: 5_000 },
   ) {
     super(client, model, options);
   }

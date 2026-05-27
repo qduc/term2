@@ -6,6 +6,7 @@ import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { FallbackResponsesModel } from './fallback-responses-model.js';
 import { TimedResponsesWSModel } from './timed-responses-ws-model.js';
+import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
@@ -55,9 +56,7 @@ class FallbackOpenAIProvider implements ModelProvider {
     }
 
     const wsModel = new TimedResponsesWSModel(this.openAIClient as any, model, {
-      connectTimeoutMs: 15_000,
-      idleTimeoutMs: 300_000,
-      firstFrameTimeoutMs: 5_000,
+      ...DEFAULT_TIMED_WS_TIMEOUTS,
     });
     const httpModel = new OpenAIResponsesModel(this.openAIClient as any, model);
 

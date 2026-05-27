@@ -3,6 +3,7 @@ import { getDefaultModel, ModelProvider, Model } from '@openai/agents-core';
 import OpenAI from 'openai';
 import { CodexResponsesModel, CodexResponsesWSModel } from './codex-responses-model.js';
 import { FallbackResponsesModel } from './fallback-responses-model.js';
+import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -434,10 +435,7 @@ class FallbackCodexProvider implements ModelProvider {
       resolvedModel,
       this.tokenManager,
       this.loggingService,
-      {
-        connectTimeoutMs: 15_000,
-        idleTimeoutMs: 300_000,
-      },
+      DEFAULT_TIMED_WS_TIMEOUTS,
     );
     const httpModel = new CodexResponsesModel(this.openAIClient as any, resolvedModel, this.loggingService);
 

@@ -434,6 +434,10 @@ class FallbackCodexProvider implements ModelProvider {
       resolvedModel,
       this.tokenManager,
       this.loggingService,
+      {
+        connectTimeoutMs: 15_000,
+        idleTimeoutMs: 300_000,
+      },
     );
     const httpModel = new CodexResponsesModel(this.openAIClient as any, resolvedModel, this.loggingService);
 

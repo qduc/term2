@@ -47,6 +47,10 @@ export function isNetworkProtocolError(err: any): boolean {
   if (
     message.includes('websocket connection closed') ||
     message.includes('websocket is not open') ||
+    message.includes('websocket open timed out') ||
+    message.includes('websocket idle timeout') ||
+    message.includes('timed out before opening') ||
+    message.includes('connection timed out') ||
     message.includes('socket hang up') ||
     message.includes('pong timeout') ||
     message.includes('unexpected server response:') || // e.g. unexpected server response: 502/503

@@ -1,6 +1,6 @@
 import test from 'ava';
 import { OpenAIResponsesModel } from '@openai/agents-openai';
-import { CodexResponsesModel, wrapCodexStream } from './codex-responses-model.js';
+import { CodexResponsesModel, CodexResponsesWSModel, wrapCodexStream } from './codex-responses-model.js';
 
 // Fixture mirrors the SSE shape that codex's responses endpoint emits: deltas
 // and output_item.done carry the assistant message, but the terminal
@@ -393,4 +393,39 @@ test.serial('CodexResponsesModel._buildResponsesCreateRequest forwards prompt_ca
   } finally {
     (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
   }
+});
+
+test('CodexResponsesWSModel extends TimedResponsesWSModel and configures timeouts', (t) => {
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  const model = new CodexResponsesWSModel(mockClient as any, 'gpt-5-codex', tokenManager as any, undefined, {
+    connectTimeoutMs: 1000,
+    idleTimeoutMs: 5000,
+  });
+
+  t.deepEqual((model as any).options, { connectTimeoutMs: 1000, idleTimeoutMs: 5000 });
+});
+
+test('CodexResponsesWSModel uses default timeouts when none are passed', (t) => {
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  const model = new CodexResponsesWSModel(mockClient as any, 'gpt-5-codex', tokenManager as any);
+
+  t.deepEqual((model as any).options, { connectTimeoutMs: 15_000, idleTimeoutMs: 300_000 });
 });

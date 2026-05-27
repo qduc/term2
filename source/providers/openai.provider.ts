@@ -1,10 +1,11 @@
 import { Runner, Model, ModelProvider } from '@openai/agents';
-import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
+import { OpenAIResponsesModel } from '@openai/agents-openai';
 import OpenAI from 'openai';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { FallbackResponsesModel } from './fallback-responses-model.js';
+import { TimedResponsesWSModel } from './timed-responses-ws-model.js';
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
@@ -53,8 +54,9 @@ class FallbackOpenAIProvider implements ModelProvider {
       return cached;
     }
 
-    const wsModel = new OpenAIResponsesWSModel(this.openAIClient as any, model, {
-      reuseConnection: true,
+    const wsModel = new TimedResponsesWSModel(this.openAIClient as any, model, {
+      connectTimeoutMs: 15_000,
+      idleTimeoutMs: 300_000,
     });
     const httpModel = new OpenAIResponsesModel(this.openAIClient as any, model);
 

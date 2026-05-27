@@ -1,4 +1,5 @@
-import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
+import { OpenAIResponsesModel } from '@openai/agents-openai';
+import { TimedResponsesWSModel } from './timed-responses-ws-model.js';
 
 type DiagnosticLogger = {
   warn?: (message: string, meta?: Record<string, unknown>) => void;
@@ -59,19 +60,19 @@ const summarizeReconstructedItems = (items: unknown[]): Record<string, unknown> 
 // `response.output` is empty or missing, swaps in the accumulated items so the
 // parent's existing conversion logic (`convertToOutputItem`) produces a normal
 // `response_done` event.
-export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
+export class CodexResponsesWSModel extends TimedResponsesWSModel {
   constructor(
     client: any,
     model: string,
     private readonly tokenManager: any,
     private readonly diagnosticLogger?: DiagnosticLogger,
-    options?: any,
+    options: any = { connectTimeoutMs: 15_000, idleTimeoutMs: 300_000 },
   ) {
     super(client, model, options);
   }
 
-  _buildResponsesCreateRequest(request: any, stream: boolean): any {
-    const built = (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
+  override _buildResponsesCreateRequest(request: any, stream: boolean): any {
+    const built = super._buildResponsesCreateRequest(request, stream);
     const requestData = { ...built.requestData };
 
     // Codex responses endpoint rejects temperature; always omit it.
@@ -98,7 +99,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     };
   }
 
-  async _fetchResponse(request: any, stream: boolean): Promise<any> {
+  protected override async _fetchResponse(request: any, stream: boolean): Promise<any> {
     const accessToken = await this.tokenManager.getOrRefreshAccessToken();
     const accountId = this.tokenManager.getAccountId();
 
@@ -123,7 +124,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       },
     };
 
-    const response = await (OpenAIResponsesWSModel.prototype as any)._fetchResponse.call(this, updatedRequest, stream);
+    const response = await super._fetchResponse(updatedRequest, stream);
     if (!stream) return response;
     return wrapCodexStream(response, this.diagnosticLogger);
   }

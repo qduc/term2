@@ -24,6 +24,8 @@ test('isNetworkProtocolError correctly flags network protocol errors', (t) => {
   t.true(isNetworkProtocolError(new Error('Responses websocket connection closed before a terminal response event.')));
   t.true(isNetworkProtocolError(new Error('Responses websocket is not open.')));
   t.true(isNetworkProtocolError(new Error('unexpected server response: 502')));
+  t.true(isNetworkProtocolError(new Error('Responses websocket connection timed out before opening after 15000ms')));
+  t.true(isNetworkProtocolError(new Error('Responses websocket connection timed out')));
   t.true(isNetworkProtocolError({ name: 'InvalidStateError', message: 'Socket is closing' }));
 
   // Exclusions (auth and rate limits)
@@ -267,6 +269,44 @@ test('FallbackResponsesModel logs unary WS request start, success, and failure e
   t.is(logs[1].level, 'error');
   t.is(logs[1].meta.eventType, 'provider.response.failed');
   t.is(logs[1].meta.error, 'websocket connection closed before opening');
+});
+
+test('FallbackResponsesModel falls back to HTTP when WebSocket times out', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+
+  const wsError = new Error('WebSocket open timed out after 15000ms');
+  const expectedResponse: ModelResponse = { usage: {} as any, output: [] };
+
+  const wsModel = makeMockModel({
+    getResponse: async () => {
+      wsCalled++;
+      throw wsError;
+    },
+  });
+
+  const httpModel = makeMockModel({
+    getResponse: async () => {
+      httpCalled++;
+      return expectedResponse;
+    },
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state);
+
+  const result = await model.getResponse({} as any);
+
+  t.is(wsCalled, 1);
+  t.is(httpCalled, 1);
+  t.true(state.isDowngraded);
+  t.is(result, expectedResponse);
+
+  // Subsequent calls should skip WS and use HTTP directly
+  const result2 = await model.getResponse({} as any);
+  t.is(wsCalled, 1);
+  t.is(httpCalled, 2);
+  t.is(result2, expectedResponse);
 });
 
 test('FallbackResponsesModel logs streaming WS request start and response completion events', async (t) => {

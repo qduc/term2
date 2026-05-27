@@ -271,6 +271,7 @@ export class OpenAIAgentClient {
           params,
           toolCallId,
           error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
         });
         return `Tool execution intercepted but failed: ${error instanceof Error ? error.message : String(error)}`;
       }
@@ -452,6 +453,7 @@ export class OpenAIAgentClient {
         provider: this.#provider,
         model: this.#model,
         error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
         inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
         inputLength: typeof userInput === 'string' ? userInput.length : undefined,
         inputItems: Array.isArray(userInput) ? userInput.length : undefined,
@@ -639,6 +641,7 @@ export class OpenAIAgentClient {
     } catch (error) {
       this.#logger.error('Agent chat failed', {
         error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
       });
       throw error; // Propagate error
     }
@@ -710,6 +713,7 @@ export class OpenAIAgentClient {
     } catch (error) {
       this.#logger.error('Agent structured chat failed', {
         error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
       });
       throw error;
     }
@@ -760,6 +764,7 @@ export class OpenAIAgentClient {
     } catch (error) {
       this.#logger.error('Mentor consultation failed', {
         error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
       });
       throw error;
     } finally {

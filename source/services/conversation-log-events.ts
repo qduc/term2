@@ -92,6 +92,7 @@ export interface ErrorLogEvent {
   type: 'error';
   message: string;
   kind?: string;
+  stack?: string;
 }
 
 export interface AssistantFinalEvent {

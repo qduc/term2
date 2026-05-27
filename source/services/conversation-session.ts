@@ -137,6 +137,7 @@ export class ConversationSession {
   private largeUncachedInputGuard = new LargeUncachedInputGuard();
   private toolLedger = new ToolExecutionLedger();
   private generation = 0;
+  #inputSurgeKind: string = 'delta';
 
   private settingsService?: ISettingsService;
   private pendingModeNotice: string | null = null;
@@ -304,6 +305,7 @@ export class ConversationSession {
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.reset();
+    this.#inputSurgeKind = 'delta';
     const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
     clearConversations?.call(this.agentClient);
   }
@@ -320,6 +322,7 @@ export class ConversationSession {
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.markUndoOrRewind();
+    this.#inputSurgeKind = 'delta';
     this.#log({ type: 'undo', removedUserTurns: 1, snapshot: this.getCurrentSnapshot() });
     return removed;
   }
@@ -340,6 +343,7 @@ export class ConversationSession {
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.markUndoOrRewind();
+    this.#inputSurgeKind = 'delta';
     this.#log({ type: 'undo', removedUserTurns: n, snapshot: this.getCurrentSnapshot() });
     return removed;
   }
@@ -451,7 +455,12 @@ export class ConversationSession {
         this.#log({ type: 'subagent_completed', result: event.result });
         return;
       case 'error':
-        this.#log({ type: 'error', message: event.message, ...(event.kind ? { kind: event.kind } : {}) });
+        this.#log({
+          type: 'error',
+          message: event.message,
+          ...(event.kind ? { kind: event.kind } : {}),
+          ...(event.stack ? { stack: event.stack } : {}),
+        });
         return;
       case 'final': {
         const snapshot = this.getCurrentSnapshot();
@@ -652,9 +661,15 @@ export class ConversationSession {
               source: 'abortResolution',
               stream: continuedStream,
             });
-            this.conversationStore.updateFromResult(continuedStream, {
-              historyKind: 'partial_replay',
-            });
+            const s = continuedStream as any;
+            const terminal = !continuedStream.interruptions || continuedStream.interruptions.length === 0;
+            if (terminal) {
+              if (this.#inputSurgeKind === 'delta') {
+                this.conversationStore.appendOutput(s.output as AgentInputItem[]);
+              } else {
+                this.conversationStore.replaceHistory(s.history as AgentInputItem[]);
+              }
+            }
           }
 
           // Check if another interruption occurred
@@ -704,6 +719,7 @@ export class ConversationSession {
       const { streamInput, inputSurgeKind, modeNoticeToPersist } = this.#buildOutgoingInput(turn, {
         includeTurn: false,
       });
+      this.#inputSurgeKind = inputSurgeKind;
       if (this.pendingModeNotice) {
         this.pendingModeNotice = null;
       }
@@ -775,10 +791,15 @@ export class ConversationSession {
           source: 'startStream',
           stream,
         });
-        this.conversationStore.updateFromResult(stream, {
-          historyKind: inputSurgeKind === 'delta' ? 'delta' : 'full_snapshot',
-          authoritative: inputSurgeKind !== 'delta',
-        });
+        const s = stream as any;
+        const terminal = !stream.interruptions || stream.interruptions.length === 0;
+        if (terminal) {
+          if (inputSurgeKind === 'delta') {
+            this.conversationStore.appendOutput(s.output as AgentInputItem[]);
+          } else {
+            this.conversationStore.replaceHistory(s.history as AgentInputItem[]);
+          }
+        }
       }
 
       const resolvedResult = yield* this.#buildAndResolve(
@@ -916,6 +937,7 @@ export class ConversationSession {
       yield {
         type: 'error',
         message: describeError(error),
+        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
         ...(droppedUserMessage ? { droppedUserMessage } : {}),
       };
       this.logger.error('Conversation stream error', {
@@ -925,6 +947,7 @@ export class ConversationSession {
         sessionId: this.id,
         traceId: this.logger.getCorrelationId(),
         errorMessage: describeError(error),
+        stack: error instanceof Error ? error.stack : undefined,
       });
       throw error;
     }
@@ -1015,9 +1038,15 @@ export class ConversationSession {
               source: 'continueRunStream',
               stream,
             });
-            this.conversationStore.updateFromResult(stream, {
-              historyKind: 'partial_replay',
-            });
+            const s = stream as any;
+            const terminal = !stream.interruptions || stream.interruptions.length === 0;
+            if (terminal) {
+              if (this.#inputSurgeKind === 'delta') {
+                this.conversationStore.appendOutput(s.output as AgentInputItem[]);
+              } else {
+                this.conversationStore.replaceHistory(s.history as AgentInputItem[]);
+              }
+            }
           }
 
           // Merge previously emitted command IDs with newly emitted ones
@@ -1078,9 +1107,19 @@ export class ConversationSession {
         }
       }
     } catch (error) {
+      this.logger.error('Conversation stream error during continuation', {
+        eventType: 'stream.failed',
+        category: 'stream',
+        phase: 'abort',
+        sessionId: this.id,
+        traceId: this.logger.getCorrelationId(),
+        errorMessage: describeError(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       yield {
         type: 'error',
         message: describeError(error),
+        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
       };
       throw error;
     } finally {

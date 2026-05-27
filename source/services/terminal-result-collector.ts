@@ -105,6 +105,16 @@ export async function collectTerminalResult(
         // Preserve the raw event so callers can inspect it without re-parsing the message.
         (err as any).eventKind = event.kind;
         (err as any).rawEvent = event;
+        if (event.stack) {
+          const stackLines = event.stack.split('\n');
+          const firstFrameIndex = stackLines.findIndex((line) => line.trim().startsWith('at '));
+          if (firstFrameIndex !== -1) {
+            const frames = stackLines.slice(firstFrameIndex);
+            err.stack = `${err.name}: ${err.message}\n${frames.join('\n')}`;
+          } else {
+            err.stack = event.stack;
+          }
+        }
         throw err;
       }
       default:

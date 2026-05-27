@@ -106,6 +106,7 @@ export interface ErrorEvent {
   type: 'error';
   message: string;
   kind?: string;
+  stack?: string;
   /**
    * Set when the session removed the just-added user turn from its store as part of
    * handling this error. UIs should drop the corresponding trailing user message and

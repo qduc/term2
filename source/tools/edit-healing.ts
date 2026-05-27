@@ -28,9 +28,9 @@ type HealingDeps = {
   ) => Promise<string>;
 };
 
-const DEFAULT_TIMEOUT_MS = 10000;
+const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.6;
-const DEFAULT_MAX_FILE_CHARS = 8000;
+const DEFAULT_MAX_FILE_CHARS = 8_000;
 
 const DELIMITER_CANDIDATES = ['---', '===', '<<<>>>', '|||', '###BOUNDARY###'];
 

@@ -1277,7 +1277,7 @@ test('undoLastUserTurn() returns null when no genuine user turn exists', async (
   t.is(result, null);
 });
 
-test('generation guard: gated run updateFromResult is skipped after undoLastUserTurn', async (t) => {
+test('generation guard: gated run store write is skipped after undoLastUserTurn', async (t) => {
   // Turn 1: run to completion so the store has msg1's history.
   const stream1 = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply1' }]);
   stream1.finalOutput = 'Reply1';
@@ -1363,7 +1363,7 @@ test('generation guard: gated run updateFromResult is skipped after undoLastUser
   const undone = session.undoLastUserTurn();
   t.deepEqual(undone, { text: 'msg2', imageCount: 0 });
 
-  // (d) Resolve the gate so the gated run completes (but its updateFromResult should be skipped).
+  // (d) Resolve the gate so the gated run completes (but its store write should be skipped).
   gateResolve();
   await msg2Done;
 

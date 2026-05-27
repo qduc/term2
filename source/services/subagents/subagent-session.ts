@@ -91,8 +91,8 @@ export class SubagentSession {
     };
   }
 
-  updateFromResult(result: any): void {
-    this.#store!.updateFromResult(result);
+  appendOutput(result: any): void {
+    this.#store!.appendOutput(result.output);
     if (result.responseId) {
       this.#previousResponseId = result.responseId;
     }

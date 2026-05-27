@@ -80,254 +80,76 @@ test('getLastUserMessage() returns the most recent user message text', (t) => {
   t.is(store.getLastUserMessage(), 'Second');
 });
 
-test('updateFromResult() merges run history without duplicating overlap', (t) => {
+test('appendOutput() appends items to existing history', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('Hi');
 
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'Hi' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hello!' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hello!' }] },
+  ] satisfies AgentInputItem[]);
 
-  let history = store.getHistory();
+  const history = store.getHistory();
   t.is(history.length, 2);
-  let last: any = history[history.length - 1];
+  const last: any = history[history.length - 1];
   t.is(last.role, 'assistant');
   t.is(last.content[0].text, 'Hello!');
 
-  // Next turn: user message is already in store; incoming history contains it too.
   store.addUserMessage('How are you?');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'How are you?' },
-      {
-        role: 'assistant',
-        type: 'message',
-        status: 'completed',
-        content: [{ type: 'output_text', text: 'Doing great.' }],
-      },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Doing great.' }],
+    },
+  ] satisfies AgentInputItem[]);
 
-  history = store.getHistory();
-  t.is(history.length, 4);
-  last = history[history.length - 1];
-  t.is(last.role, 'assistant');
-  t.is(last.content[0].text, 'Doing great.');
+  t.is(store.getHistory().length, 4);
 });
 
-test('updateFromResult() replaces history when incoming history is a superset', (t) => {
+test('replaceHistory() overwrites the store with a full transcript', (t) => {
   const store = new ConversationStore();
-  store.addUserMessage('One');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'One' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Ack' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.addUserMessage('Old');
 
-  store.addUserMessage('Two');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'One' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Ack' }] },
-      { role: 'user', type: 'message', content: 'Two' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Ack2' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.replaceHistory([
+    { role: 'user', type: 'message', content: 'New Q' },
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'New A' }] },
+  ] satisfies AgentInputItem[]);
 
   const history = store.getHistory();
-  t.is(history.length, 4);
-  const last: any = history[3];
-  t.is(last.content[0].text, 'Ack2');
-});
-
-test('updateFromResult() rejects reordered full-snapshot supersets', (t) => {
-  const store = new ConversationStore();
-
-  store.updateFromResult(
-    {
-      history: [
-        { role: 'user', type: 'message', content: 'A' },
-        { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'B' }] },
-      ] satisfies AgentInputItem[],
-    },
-    { historyKind: 'full_snapshot', authoritative: true },
-  );
-
-  store.updateFromResult(
-    {
-      history: [
-        { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'B' }] },
-        { role: 'user', type: 'message', content: 'A' },
-        { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'C' }] },
-      ] satisfies AgentInputItem[],
-    },
-    { historyKind: 'full_snapshot', authoritative: true },
-  );
-
-  const history = store.getHistory() as any[];
   t.is(history.length, 2);
-  t.is(history[0].content, 'A');
-  t.is(history[1].content[0].text, 'B');
+  t.is((history[0] as any).content, 'New Q');
+  t.is((history[1] as any).content[0].text, 'New A');
 });
 
-test('updateFromResult() treats tool callId as stable across full-history replays with changed item ids', (t) => {
+test('appendOutput() is a no-op on empty or non-array input', (t) => {
   const store = new ConversationStore();
-  store.addUserMessage('Inspect the repo');
-
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'Inspect the repo' },
-      { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
-      { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', output: { text: 'contents' } },
-    ] as any,
-  });
-
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'Inspect the repo' },
-      { type: 'function_call', id: 'fc_1_replayed', callId: 'call-read', name: 'read_file', arguments: '{}' },
-      { type: 'function_call_result', id: 'fcr_1_replayed', callId: 'call-read', output: { text: 'contents' } },
-      { type: 'function_call', id: 'fc_2', callId: 'call-grep', name: 'grep', arguments: '{}' },
-      { type: 'function_call_result', id: 'fcr_2', callId: 'call-grep', output: { text: 'matches' } },
-    ] as any,
-  });
-
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'Inspect the repo' },
-      { type: 'function_call', id: 'fc_1_replayed_again', callId: 'call-read', name: 'read_file', arguments: '{}' },
-      { type: 'function_call_result', id: 'fcr_1_replayed_again', callId: 'call-read', output: { text: 'contents' } },
-      { type: 'function_call', id: 'fc_2_replayed', callId: 'call-grep', name: 'grep', arguments: '{}' },
-      { type: 'function_call_result', id: 'fcr_2_replayed', callId: 'call-grep', output: { text: 'matches' } },
-      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Done' }] },
-    ] as any,
-  });
-
-  const history = store.getHistory() as any[];
-  t.is(history.length, 6);
-  t.is(history.filter((item) => (item.rawItem ?? item).callId === 'call-read').length, 2);
-  t.is(history.filter((item) => (item.rawItem ?? item).callId === 'call-grep').length, 2);
+  store.addUserMessage('A');
+  store.appendOutput([] as any);
+  store.appendOutput(null as any);
+  store.appendOutput(undefined as any);
+  t.is(store.getHistory().length, 1);
 });
 
-test('updateFromResult() collapses SDK replayed history prefixes', (t) => {
+test('replaceHistory() is a no-op on empty or non-array input', (t) => {
   const store = new ConversationStore();
-  store.addUserMessage('Investigate upgrade');
-
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'Investigate upgrade' },
-      { type: 'function_call', callId: 'call-search', name: 'web_search', arguments: '{}' },
-      { type: 'function_call_result', callId: 'call-search', name: 'web_search', output: { text: 'search results' } },
-      { role: 'user', type: 'message', content: 'Investigate upgrade' },
-      { type: 'function_call', callId: 'call-search', name: 'web_search', arguments: '{}' },
-      { type: 'function_call_result', callId: 'call-search', name: 'web_search', output: { text: 'search results' } },
-      { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
-      { type: 'function_call_result', callId: 'call-read', name: 'read_file', output: { text: 'file contents' } },
-      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Done' }] },
-    ] as any,
-  });
-
-  const history = store.getHistory() as any[];
-  t.is(history.length, 6);
-  t.is(history.filter((item) => (item.rawItem ?? item).callId === 'call-search').length, 2);
-  t.is(history.filter((item) => (item.rawItem ?? item).callId === 'call-read').length, 2);
-  t.is((history[0].rawItem ?? history[0]).content, 'Investigate upgrade');
-  t.is((history[5].rawItem ?? history[5]).role, 'assistant');
+  store.addUserMessage('A');
+  store.replaceHistory([] as any);
+  store.replaceHistory(null as any);
+  t.is(store.getHistory().length, 1);
+  t.is((store.getHistory()[0] as any).content, 'A');
 });
 
-test('updateFromResult() keeps repeated user text when it is not a tool replay', (t) => {
+test('appendOutput() returns deep clones (external mutation does not affect store)', (t) => {
   const store = new ConversationStore();
-
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'again' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'first' }] },
-      { role: 'user', type: 'message', content: 'again' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'second' }] },
-    ] satisfies AgentInputItem[],
-  });
-
+  const items: AgentInputItem[] = [
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Original' }] },
+  ];
+  store.appendOutput(items);
+  (items[0] as any).content[0].text = 'Mutated';
   const history = store.getHistory();
-  t.is(history.length, 4);
+  t.is((history[0] as any).content[0].text, 'Original');
 });
-
-test('updateFromResult() preserves reasoning_details across overlap merges', (t) => {
-  const store = new ConversationStore();
-
-  // Initial transcript where the assistant message has no reasoning_details.
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'First' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hello' }] },
-    ] satisfies AgentInputItem[],
-  });
-
-  // Later, the SDK returns incremental history starting with the last assistant
-  // message, now enriched with reasoning_details (common in tool flows).
-  const reasoning_details = [{ type: 'text', text: 'thinking' }];
-  store.updateFromResult({
-    history: [
-      {
-        role: 'assistant',
-        type: 'message',
-        content: 'Hello',
-        reasoning_details,
-      },
-      {
-        type: 'function_call',
-        id: 'call-1',
-        name: 'bash',
-        arguments: '{"cmd":"ls"}',
-      },
-      { type: 'function_call_result', callId: 'call-1', output: 'files\n' },
-    ] as any,
-  });
-
-  const history: any[] = store.getHistory() as any;
-  const assistantHello = history.find(
-    (item) => (item?.rawItem ?? item)?.role === 'assistant' && (item?.rawItem ?? item)?.content === 'Hello',
-  );
-  t.truthy(assistantHello);
-  t.deepEqual((assistantHello?.rawItem ?? assistantHello)?.reasoning_details, reasoning_details);
-});
-
-test('updateFromResult() preserves reasoning (reasoning tokens) across overlap merges', (t) => {
-  const store = new ConversationStore();
-
-  // Initial transcript where the assistant message has no reasoning field.
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'First' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hello' }] },
-    ] satisfies AgentInputItem[],
-  });
-
-  // Later, the SDK returns incremental history starting with the last assistant
-  // message, now enriched with OpenRouter-style reasoning.
-  store.updateFromResult({
-    history: [
-      {
-        role: 'assistant',
-        type: 'message',
-        content: 'Hello',
-        reasoning: 'Some hidden thinking',
-      },
-      { role: 'user', type: 'message', content: 'Next' },
-    ] as any,
-  });
-
-  const history: any[] = store.getHistory() as any;
-  const assistantHello = history.find(
-    (item) => (item?.rawItem ?? item)?.role === 'assistant' && (item?.rawItem ?? item)?.content === 'Hello',
-  );
-  t.truthy(assistantHello);
-  t.is((assistantHello?.rawItem ?? assistantHello)?.reasoning, 'Some hidden thinking');
-});
-
 test('clear() resets history', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('Hello');
@@ -356,19 +178,13 @@ test('addShellContext() appends shell history as user message', (t) => {
 test('removeLastUserTurn() removes the last user message and everything after it', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('First');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'First' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
+  ] satisfies AgentInputItem[]);
   store.addUserMessage('Second');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'Second' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 2' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 2' }] },
+  ] satisfies AgentInputItem[]);
 
   t.is(store.getHistory().length, 4);
 
@@ -383,11 +199,9 @@ test('removeLastUserTurn() removes the last user message and everything after it
 
 test('removeLastUserTurn() returns null when no user message exists', (t) => {
   const store = new ConversationStore();
-  store.updateFromResult({
-    history: [
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hi' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hi' }] },
+  ] satisfies AgentInputItem[]);
 
   const result = store.removeLastUserTurn();
 
@@ -409,17 +223,14 @@ test('removeLastUserTurn() clears history when only one user message exists', (t
 test('removeLastUserTurn() returns { text, imageCount: 0 } and removes turn + everything after it', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('hello');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'hello' },
-      {
-        role: 'assistant',
-        type: 'message',
-        status: 'completed',
-        content: [{ type: 'output_text', text: 'world' }],
-      },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'world' }],
+    },
+  ] satisfies AgentInputItem[]);
 
   const result = store.removeLastUserTurn();
 
@@ -430,17 +241,14 @@ test('removeLastUserTurn() returns { text, imageCount: 0 } and removes turn + ev
 test('removeLastUserTurn() skips trailing shell-context item and removes genuine user turn', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('A');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'A' },
-      {
-        role: 'assistant',
-        type: 'message',
-        status: 'completed',
-        content: [{ type: 'output_text', text: 'reply' }],
-      },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'reply' }],
+    },
+  ] satisfies AgentInputItem[]);
   store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
 
   const result = store.removeLastUserTurn();
@@ -482,12 +290,9 @@ test('removeLastUserTurn() returns null when only a shell-context item is presen
 test('listUserTurns() returns all genuine user turns with index and text', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('First');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'First' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
+  ] satisfies AgentInputItem[]);
   store.addUserMessage('Second');
 
   const turns = store.listUserTurns();
@@ -510,11 +315,9 @@ test('listUserTurns() excludes shell context items', (t) => {
 
 test('listUserTurns() returns empty array when no user turns', (t) => {
   const store = new ConversationStore();
-  store.updateFromResult({
-    history: [
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hi' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Hi' }] },
+  ] satisfies AgentInputItem[]);
 
   const turns = store.listUserTurns();
 
@@ -540,19 +343,13 @@ test('listUserTurns() includes imageCount for multimodal turns', (t) => {
 test('removeNLastUserTurns(1) behaves the same as removeLastUserTurn()', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('First');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'First' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
+  ] satisfies AgentInputItem[]);
   store.addUserMessage('Second');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'Second' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 2' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 2' }] },
+  ] satisfies AgentInputItem[]);
 
   const result = store.removeNLastUserTurns(1);
 
@@ -566,26 +363,17 @@ test('removeNLastUserTurns(1) behaves the same as removeLastUserTurn()', (t) => 
 test('removeNLastUserTurns(2) removes last 2 user turns and their responses', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('First');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'First' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 1' }] },
+  ] satisfies AgentInputItem[]);
   store.addUserMessage('Second');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'Second' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 2' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 2' }] },
+  ] satisfies AgentInputItem[]);
   store.addUserMessage('Third');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'Third' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 3' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply 3' }] },
+  ] satisfies AgentInputItem[]);
 
   const result = store.removeNLastUserTurns(2);
 
@@ -599,12 +387,9 @@ test('removeNLastUserTurns(2) removes last 2 user turns and their responses', (t
 test('removeNLastUserTurns(3) removes all when fewer than n turns exist', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('Only');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'Only' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Reply' }] },
+  ] satisfies AgentInputItem[]);
 
   const result = store.removeNLastUserTurns(3);
 
@@ -633,20 +418,14 @@ test('removeNLastUserTurns() returns null when no user turns exist', (t) => {
 test('removeNLastUserTurns() skips shell context items', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('A');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'A' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'reply' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'reply' }] },
+  ] satisfies AgentInputItem[]);
   store.addShellContext(`${SHELL_CONTEXT_PREFIX}\n\n$ ls\nExit: 0`);
   store.addUserMessage('B');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'B' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'reply2' }] },
-    ] satisfies AgentInputItem[],
-  });
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'reply2' }] },
+  ] satisfies AgentInputItem[]);
 
   // Remove both user turns (skipping shell context)
   const result = store.removeNLastUserTurns(2);
@@ -690,225 +469,4 @@ test('addModeNotice() ignores blank text', (t) => {
   store.addModeNotice('   ');
 
   t.is(store.getHistory().length, 1);
-});
-
-test('updateFromResult() handles continued streams with interleaved tool calls where prefix-match fails', (t) => {
-  const store = new ConversationStore();
-  store.addUserMessage('Test interleaved stream');
-
-  const historyPart1 = [
-    { role: 'user', type: 'message', content: 'Test interleaved stream' },
-    { role: 'assistant', type: 'message', content: 'Hello' },
-    { type: 'function_call', id: 'fc_1', callId: 'call_1', name: 'shell', arguments: '{}' },
-    { type: 'function_call_result', id: 'fcr_1', callId: 'call_1', output: 'ok' },
-    { type: 'function_call', id: 'fc_2', callId: 'call_2', name: 'shell', arguments: '{}' },
-    { type: 'function_call_result', id: 'fcr_2', callId: 'call_2', output: 'ok' },
-  ] as any[];
-
-  store.updateFromResult({ history: historyPart1 });
-
-  // In the continuation, a new tool call `call_3` is inserted *between* fc_2 and fcr_2,
-  // causing fcr_2 to shift position in the incoming history.
-  const historyPart2 = [
-    { role: 'user', type: 'message', content: 'Test interleaved stream' },
-    { role: 'assistant', type: 'message', content: 'Hello' },
-    { type: 'function_call', id: 'fc_1', callId: 'call_1', name: 'shell', arguments: '{}' },
-    { type: 'function_call_result', id: 'fcr_1', callId: 'call_1', output: 'ok' },
-    { type: 'function_call', id: 'fc_2', callId: 'call_2', name: 'shell', arguments: '{}' },
-    { type: 'function_call', id: 'fc_3', callId: 'call_3', name: 'shell', arguments: '{}' },
-    { type: 'function_call_result', id: 'fcr_2', callId: 'call_2', output: 'ok' },
-    { type: 'function_call_result', id: 'fcr_3', callId: 'call_3', output: 'ok' },
-  ] as any[];
-
-  store.updateFromResult({ history: historyPart2 });
-
-  const history = store.getHistory();
-  // It should merge them and deduplicate. The result should contain exactly one copy of call_1, call_2, and call_3.
-  const calls = history.filter((item: any) => item.type === 'function_call');
-  const results = history.filter((item: any) => item.type === 'function_call_result');
-
-  t.is(calls.length, 3);
-  t.is(results.length, 3);
-  t.deepEqual(
-    calls.map((c: any) => c.callId),
-    ['call_1', 'call_2', 'call_3'],
-  );
-  t.deepEqual(
-    results.map((r: any) => r.callId),
-    ['call_1', 'call_2', 'call_3'],
-  );
-});
-
-test('updateFromResult() handles repeated identical user messages without false overlap', (t) => {
-  const store = new ConversationStore();
-  store.addUserMessage('ok');
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'ok' },
-      {
-        role: 'assistant',
-        type: 'message',
-        status: 'completed',
-        content: [{ type: 'output_text', text: 'acknowledged' }],
-      },
-    ] satisfies AgentInputItem[],
-  });
-
-  // The user says 'ok' again.
-  store.addUserMessage('ok');
-
-  // The incoming history starts with 'ok' (the user message from the new turn).
-  // Because 'ok' is low-confidence, we should NOT match it as an overlap with the first 'ok'
-  // and instead match it with the second 'ok' at the tail of existing.
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'ok' },
-      { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'done' }] },
-    ] satisfies AgentInputItem[],
-  });
-
-  const history = store.getHistory();
-  t.is(history.length, 4);
-  t.is((history[0] as any).content, 'ok');
-  t.is((history[1] as any).content[0].text, 'acknowledged');
-  t.is((history[2] as any).content, 'ok');
-  t.is((history[3] as any).content[0].text, 'done');
-});
-
-test('updateFromResult() handles image-only messages and same text with different images', (t) => {
-  const store = new ConversationStore();
-
-  // Turn 1: user sends image A
-  store.addUserTurn({
-    text: 'describe this',
-    images: [{ id: 'img-a', data: 'AAAA', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
-  });
-
-  store.updateFromResult({
-    history: [
-      {
-        role: 'user',
-        type: 'message',
-        content: [
-          { type: 'input_text', text: 'describe this' },
-          { type: 'input_image', image: 'data:image/png;base64,AAAA', detail: 'auto' },
-        ],
-      },
-      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'an image of A' }] },
-    ] as any,
-  });
-
-  // Turn 2: user sends image B with the same text
-  store.addUserTurn({
-    text: 'describe this',
-    images: [{ id: 'img-b', data: 'BBBB', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
-  });
-
-  // We receive a new run result.
-  // Because the image content hashes are different, the signatures are different.
-  // This prevents false prefix matches or false overlap matches.
-  store.updateFromResult({
-    history: [
-      {
-        role: 'user',
-        type: 'message',
-        content: [
-          { type: 'input_text', text: 'describe this' },
-          { type: 'input_image', image: 'data:image/png;base64,BBBB', detail: 'auto' },
-        ],
-      },
-      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'an image of B' }] },
-    ] as any,
-  });
-
-  const history = store.getHistory();
-  t.is(history.length, 4);
-  t.is((history[1] as any).content[0].text, 'an image of A');
-  t.is((history[3] as any).content[0].text, 'an image of B');
-});
-
-test('updateFromResult() reject divergent full transcript replacement when signatures differ', (t) => {
-  const store = new ConversationStore();
-  store.addUserTurn({
-    text: 'analyze',
-    images: [{ id: 'img-a', data: 'AAAA', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }],
-  });
-
-  // Incoming has different image but same text. Should not match as prefix.
-  store.updateFromResult({
-    history: [
-      {
-        role: 'user',
-        type: 'message',
-        content: [
-          { type: 'input_text', text: 'analyze' },
-          { type: 'input_image', image: 'data:image/png;base64,BBBB', detail: 'auto' },
-        ],
-      },
-      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'reply' }] },
-    ] as any,
-  });
-
-  // Since it was divergent, they are appended rather than replacing.
-  const history = store.getHistory();
-  t.is(history.length, 3);
-});
-
-test('updateFromResult() supports suffix-prefix overlap search beyond 50 items', (t) => {
-  const store = new ConversationStore();
-
-  // Build a long history of 60 items in the store
-  for (let i = 1; i <= 60; i++) {
-    store.addUserMessage(`message-${i}`);
-  }
-
-  // The incoming result contains the last 15 items plus 5 new ones.
-  // The overlap is 15 items, which is > 50 if maxWindow existed.
-  const incomingHistory: AgentInputItem[] = [];
-  for (let i = 46; i <= 60; i++) {
-    incomingHistory.push({ role: 'user', type: 'message', content: `message-${i}` });
-  }
-  for (let i = 61; i <= 65; i++) {
-    incomingHistory.push({ role: 'user', type: 'message', content: `message-${i}` });
-  }
-
-  store.updateFromResult({ history: incomingHistory });
-
-  const history = store.getHistory();
-  // It should correctly merge the overlap and result in 65 items total.
-  t.is(history.length, 65);
-  t.is((history[64] as any).content, 'message-65');
-});
-
-test('updateFromResult() collapses exact prefix duplicates only when tool calls are present', (t) => {
-  const store = new ConversationStore();
-
-  // Tool call present: should collapse duplicate prefix
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'again' },
-      { type: 'function_call', callId: 'call-1', name: 'ls', arguments: '{}' },
-      { type: 'function_call_result', callId: 'call-1', output: 'ok' },
-      { role: 'user', type: 'message', content: 'again' },
-      { type: 'function_call', callId: 'call-1', name: 'ls', arguments: '{}' },
-      { type: 'function_call_result', callId: 'call-1', output: 'ok' },
-      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'done' }] },
-    ] as any,
-  });
-
-  t.is(store.getHistory().length, 4);
-
-  store.clear();
-
-  // No tool calls: should NOT collapse
-  store.updateFromResult({
-    history: [
-      { role: 'user', type: 'message', content: 'again' },
-      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first' }] },
-      { role: 'user', type: 'message', content: 'again' },
-      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first' }] },
-    ] as any,
-  });
-
-  t.is(store.getHistory().length, 4);
 });

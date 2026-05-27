@@ -363,7 +363,12 @@ export class SubagentManager {
       this.#emit({ type: 'subagent_completed', result });
       return result;
     } catch (error: any) {
-      this.#logger.error('Subagent run failed', { agentId, role: request.role, error: error?.message });
+      this.#logger.error('Subagent run failed', {
+        agentId,
+        role: request.role,
+        error: error?.message,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
 
       // Detect abort-like errors (user cancellation, stream abort) and
       // normalize to 'cancelled' status so the parent can distinguish
@@ -454,7 +459,7 @@ export class SubagentManager {
     };
 
     const result = await runWithProvider(mentorProvider, mentorRunner, mentorAgent, input, runOptions);
-    this.#mentorSession.updateFromResult(result);
+    this.#mentorSession.appendOutput(result);
 
     return {
       agentId,

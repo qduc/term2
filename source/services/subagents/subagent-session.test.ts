@@ -106,19 +106,19 @@ test('SubagentSession getRunOptions omits previousResponseId when chaining is un
   session.switchProvider('openai');
   session.ensureAgent(() => ({ name: 'Mentor' } as any));
   session.addUserMessage('hello');
-  session.updateFromResult({ responseId: 'resp-1', history: [] });
+  session.appendOutput({ responseId: 'resp-1', output: [] });
 
   const opts = session.getRunOptions(false, 1);
   t.false('previousResponseId' in opts);
 });
 
-test('SubagentSession updateFromResult tracks previousResponseId', (t) => {
+test('SubagentSession appendOutput tracks previousResponseId', (t) => {
   const session = new SubagentSession('id', 'mentor');
   session.switchProvider('openai');
   session.ensureAgent(() => ({ name: 'Mentor' } as any));
   session.addUserMessage('hello');
 
-  session.updateFromResult({ responseId: 'resp-abc', history: [] });
+  session.appendOutput({ responseId: 'resp-abc', output: [] });
   t.is(session.previousResponseId, 'resp-abc');
 });
 

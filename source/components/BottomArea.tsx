@@ -39,6 +39,8 @@ export type BottomAreaProps = {
   onHandoffConfirm?: () => void;
   onHandoffDecline?: () => void;
   onHandoffCancel?: () => void;
+  largeUncachedWarning?: import('../services/large-uncached-input-guard.js').LargeUncachedInputDecision | null;
+  hasPendingConfirmation?: boolean;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -64,6 +66,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   onHandoffConfirm,
   onHandoffDecline,
   onHandoffCancel,
+  largeUncachedWarning,
+  hasPendingConfirmation,
 }) => {
   const [dotCount, setDotCount] = useState(1);
 
@@ -120,6 +124,8 @@ const BottomArea: FC<BottomAreaProps> = ({
         sshInfo={sshInfo}
         lastUsage={lastUsage}
         lastCodexRateLimit={lastCodexRateLimit}
+        largeUncachedWarning={largeUncachedWarning}
+        hasPendingConfirmation={hasPendingConfirmation}
       />
     </Box>
   );

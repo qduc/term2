@@ -114,3 +114,29 @@ test('StatusBar renders Codex rate limits when valid, but hides them when invali
   t.false(outputInvalid.includes('NaN'));
   t.false(outputInvalid.includes('Invalid Date'));
 });
+
+test('StatusBar renders large uncached prompt warning and confirmation warning', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  // Test dynamic warning
+  const { lastFrame: lastFrameWarning } = render(
+    <StatusBar settingsService={settingsService} largeUncachedWarning={{ estimatedTokens: 72_100 }} />,
+  );
+  const outputWarning = lastFrameWarning() ?? '';
+  t.true(outputWarning.includes('⚠️ Cache Miss Risk: ~72k'));
+
+  // Test pending confirmation warning
+  const { lastFrame: lastFrameConfirm } = render(
+    <StatusBar
+      settingsService={settingsService}
+      largeUncachedWarning={{ estimatedTokens: 72_100 }}
+      hasPendingConfirmation={true}
+    />,
+  );
+  const outputConfirm = lastFrameConfirm() ?? '';
+  t.true(outputConfirm.includes('⚠️ Confirm Cache Miss: ~72k'));
+});

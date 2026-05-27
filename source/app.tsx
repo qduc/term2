@@ -146,9 +146,9 @@ const App: FC<AppProps> = ({
   const { exit } = useApp();
   const { stdout } = useStdout();
   const { setInput, setMode, setTriggerIndex } = useInputActions();
-  const { mode } = useInputState();
+  const { input, mode } = useInputState();
   const [handoffState, setHandoffState] = useState<HandoffState | null>(null);
-  const largeUncachedConfirmationRef = useRef<LargeUncachedConfirmation | null>(null);
+  const [largeUncachedConfirmation, setLargeUncachedConfirmation] = useState<LargeUncachedConfirmation | null>(null);
   const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
@@ -158,6 +158,18 @@ const App: FC<AppProps> = ({
 
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Compute largeUncachedWarning in real-time as the user types
+  const largeUncachedWarning = useMemo(() => {
+    if (!input || mode !== 'text' || input.startsWith('/')) return null;
+    const preview = conversationService.previewLargeUncachedInput({ text: input });
+    return preview.action === 'warn' ? preview : null;
+  }, [input, mode, conversationService]);
+
+  // Clear pending confirmation if user types/changes input after getting a warning
+  useEffect(() => {
+    setLargeUncachedConfirmation(null);
+  }, [input]);
 
   const {
     messages,
@@ -460,17 +472,17 @@ const App: FC<AppProps> = ({
         {
           const preview = conversationService.previewLargeUncachedInput(turn);
           const inputFingerprint = fingerprintUserTurn(turn);
-          const pending = largeUncachedConfirmationRef.current;
+          const pending = largeUncachedConfirmation;
           const confirmed =
             preview.action === 'warn' &&
             pending?.warningKey === preview.warningKey &&
             pending.inputFingerprint === inputFingerprint;
 
           if (preview.action === 'warn' && !confirmed) {
-            largeUncachedConfirmationRef.current = {
+            setLargeUncachedConfirmation({
               warningKey: preview.warningKey,
               inputFingerprint,
-            };
+            });
             loggingService.info('Large uncached input warning shown', {
               eventType: 'large_uncached_input_warning_shown',
               category: 'provider',
@@ -482,7 +494,7 @@ const App: FC<AppProps> = ({
             return;
           }
         }
-        largeUncachedConfirmationRef.current = null;
+        setLargeUncachedConfirmation(null);
         historyService.addMessage(turn);
         setInput('');
         await sendUserMessage(turn);
@@ -493,17 +505,17 @@ const App: FC<AppProps> = ({
     {
       const preview = conversationService.previewLargeUncachedInput(turn);
       const inputFingerprint = fingerprintUserTurn(turn);
-      const pending = largeUncachedConfirmationRef.current;
+      const pending = largeUncachedConfirmation;
       const confirmed =
         preview.action === 'warn' &&
         pending?.warningKey === preview.warningKey &&
         pending.inputFingerprint === inputFingerprint;
 
       if (preview.action === 'warn' && !confirmed) {
-        largeUncachedConfirmationRef.current = {
+        setLargeUncachedConfirmation({
           warningKey: preview.warningKey,
           inputFingerprint,
-        };
+        });
         loggingService.info('Large uncached input warning shown', {
           eventType: 'large_uncached_input_warning_shown',
           category: 'provider',
@@ -515,7 +527,7 @@ const App: FC<AppProps> = ({
         return;
       }
     }
-    largeUncachedConfirmationRef.current = null;
+    setLargeUncachedConfirmation(null);
     setInput('');
     await sendUserMessage(turn);
   };
@@ -559,6 +571,8 @@ const App: FC<AppProps> = ({
             onHandoffConfirm={handleHandoffConfirm}
             onHandoffDecline={handleHandoffDecline}
             onHandoffCancel={handleHandoffCancel}
+            largeUncachedWarning={largeUncachedWarning}
+            hasPendingConfirmation={largeUncachedConfirmation !== null}
           />
         </Box>
       </Box>

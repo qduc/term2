@@ -13,6 +13,8 @@ interface StatusBarProps {
   sshInfo?: SSHInfo;
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
+  largeUncachedWarning?: { estimatedTokens: number } | null;
+  hasPendingConfirmation?: boolean;
 }
 
 const StatusBar: FC<StatusBarProps> = ({
@@ -21,6 +23,8 @@ const StatusBar: FC<StatusBarProps> = ({
   sshInfo,
   lastUsage,
   lastCodexRateLimit,
+  largeUncachedWarning,
+  hasPendingConfirmation = false,
 }) => {
   const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
@@ -39,8 +43,19 @@ const StatusBar: FC<StatusBarProps> = ({
   const slate = '#64748b';
   const glow = '#fbbf24';
   const accent = '#0ed7b5';
+  const warnRed = '#ef4444';
 
   const usageText = formatFooterUsage(lastUsage);
+
+  const warningText = (() => {
+    if (hasPendingConfirmation && largeUncachedWarning) {
+      return `⚠️ Confirm Cache Miss: ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
+    }
+    if (largeUncachedWarning) {
+      return `⚠️ Cache Miss Risk: ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
+    }
+    return '';
+  })();
 
   const codexRateLimitText = (() => {
     if (!lastCodexRateLimit) return '';
@@ -175,10 +190,19 @@ const StatusBar: FC<StatusBarProps> = ({
           )}
         </Box>
 
-        {usageText && (
+        {warningText ? (
           <Box>
-            <Text color={slate}>{usageText}</Text>
+            <Text color={hasPendingConfirmation ? warnRed : glow} bold>
+              {warningText}
+            </Text>
+            {usageText && <Text color={slate}> │ {usageText}</Text>}
           </Box>
+        ) : (
+          usageText && (
+            <Box>
+              <Text color={slate}>{usageText}</Text>
+            </Box>
+          )
         )}
       </Box>
     </Box>

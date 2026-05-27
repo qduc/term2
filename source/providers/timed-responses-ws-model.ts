@@ -1,7 +1,8 @@
 import { Model, ModelRequest, ModelResponse, getCurrentTrace, withTrace } from '@openai/agents-core';
-import { OpenAIResponsesModel } from '@openai/agents-openai';
-import { TimedWsConnection, WebSocketFactory } from './timed-ws-connection.js';
+import { OpenAIResponsesWSModel } from '@openai/agents-openai';
+import { WebSocketFactory } from './timed-ws-connection.js';
 import WebSocket from 'ws';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 export type TimedWsOptions = {
   connectTimeoutMs: number;
@@ -10,136 +11,287 @@ export type TimedWsOptions = {
   reuseConnection?: boolean;
 };
 
-type PreparedWebSocketRequest = {
-  url: string;
-  headers: Record<string, string>;
-  signal?: AbortSignal;
-  identity: string;
-};
+const OriginalWebSocket = globalThis.WebSocket;
 
-export class TimedResponsesWSModel extends OpenAIResponsesModel implements Model {
-  private connection: TimedWsConnection | null = null;
-  private connectionPromise: Promise<TimedWsConnection> | null = null;
-  private connectionIdentity: string | null = null;
-  private connectionPromiseIdentity: string | null = null;
+const wsContextStorage = new AsyncLocalStorage<{
+  options: TimedWsOptions;
+  wsFactory: WebSocketFactory;
+  activeSocketRef: { socket: any | null };
+}>();
 
+class TimedWebSocketProxy {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+
+  readonly CONNECTING = 0;
+  readonly OPEN = 1;
+  readonly CLOSING = 2;
+  readonly CLOSED = 3;
+
+  private readonly rawSocket: any;
+  private timer: NodeJS.Timeout | null = null;
+  private readonly listeners: Record<string, Set<any>> = {};
+
+  isClosed = false;
+  lastCloseCode: number | null = null;
+  lastCloseReason: string | null = null;
+  closeError: Error | null = null;
+
+  constructor(url: string, initOptions?: any) {
+    const context = wsContextStorage.getStore();
+    const wsFactory = context?.wsFactory || ((u, o) => new (OriginalWebSocket as any)(u, o));
+    const options = context?.options || { connectTimeoutMs: 0, idleTimeoutMs: 0 };
+
+    if (context?.activeSocketRef) {
+      context.activeSocketRef.socket = this;
+    }
+
+    this.rawSocket = wsFactory(url, initOptions);
+
+    let connectTimer: NodeJS.Timeout | null = null;
+    if (options.connectTimeoutMs > 0) {
+      connectTimer = setTimeout(() => {
+        if (this.readyState === this.CONNECTING) {
+          const err = new Error(`WebSocket open timed out after ${options.connectTimeoutMs}ms`);
+          this.closeError = err;
+          this.emitError(err);
+          this.close(4000, err.message);
+        }
+      }, options.connectTimeoutMs);
+    }
+
+    const forwardEvent = (type: string, event: any) => {
+      const callbacks = this.listeners[type];
+      if (callbacks) {
+        let mappedEvent = event;
+        if (
+          type === 'message' &&
+          (typeof event === 'string' || (event && typeof event === 'object' && !('data' in event)))
+        ) {
+          mappedEvent = { data: event };
+        }
+        for (const cb of callbacks) {
+          try {
+            cb(mappedEvent);
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+    };
+
+    if (typeof this.rawSocket.addEventListener === 'function') {
+      this.rawSocket.addEventListener('open', (e: any) => {
+        if (connectTimer) clearTimeout(connectTimer);
+        this.startTimer(options, true);
+        forwardEvent('open', e);
+      });
+      this.rawSocket.addEventListener('message', (e: any) => {
+        this.startTimer(options, false);
+        forwardEvent('message', e);
+      });
+      this.rawSocket.addEventListener('close', (e: any) => {
+        if (connectTimer) clearTimeout(connectTimer);
+        this.clearTimer();
+        if (this.isClosed) return;
+        this.isClosed = true;
+        this.lastCloseCode = e?.code;
+        this.lastCloseReason = e?.reason;
+        forwardEvent('close', e);
+      });
+      this.rawSocket.addEventListener('error', (e: any) => {
+        if (connectTimer) clearTimeout(connectTimer);
+        this.clearTimer();
+        forwardEvent('error', e);
+      });
+    } else if (typeof this.rawSocket.on === 'function') {
+      this.rawSocket.on('open', (e: any) => {
+        if (connectTimer) clearTimeout(connectTimer);
+        this.startTimer(options, true);
+        forwardEvent('open', e);
+      });
+      this.rawSocket.on('message', (e: any) => {
+        this.startTimer(options, false);
+        forwardEvent('message', e);
+      });
+      this.rawSocket.on('close', (code: any, reason: any) => {
+        if (connectTimer) clearTimeout(connectTimer);
+        this.clearTimer();
+        if (this.isClosed) return;
+        this.isClosed = true;
+        this.lastCloseCode = code;
+        this.lastCloseReason = reason?.toString();
+        forwardEvent('close', { code, reason: reason?.toString(), wasClean: true });
+      });
+      this.rawSocket.on('error', (e: any) => {
+        if (connectTimer) clearTimeout(connectTimer);
+        this.clearTimer();
+        forwardEvent('error', e);
+      });
+    }
+  }
+
+  get readyState() {
+    return this.rawSocket.readyState;
+  }
+
+  send(data: any) {
+    const context = wsContextStorage.getStore();
+    const options = context?.options || { connectTimeoutMs: 0, idleTimeoutMs: 0 };
+    this.startTimer(options, true);
+    return this.rawSocket.send(data);
+  }
+
+  close(code?: number, reason?: string) {
+    this.clearTimer();
+    if (this.isClosed) return;
+    this.isClosed = true;
+    this.lastCloseCode = code ?? null;
+    this.lastCloseReason = reason ?? null;
+
+    const closeEvent = { code: code ?? 1000, reason: reason ?? '', wasClean: true };
+    const callbacks = this.listeners['close'];
+    if (callbacks) {
+      for (const cb of callbacks) {
+        try {
+          cb(closeEvent);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    if (typeof this.rawSocket.close === 'function') {
+      try {
+        return this.rawSocket.close(code, reason);
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  terminate() {
+    this.clearTimer();
+    if (this.isClosed) return;
+    this.isClosed = true;
+    this.lastCloseCode = 1006;
+    this.lastCloseReason = 'terminate';
+
+    const closeEvent = { code: 1006, reason: 'terminate', wasClean: false };
+    const callbacks = this.listeners['close'];
+    if (callbacks) {
+      for (const cb of callbacks) {
+        try {
+          cb(closeEvent);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    if (typeof this.rawSocket.terminate === 'function') {
+      try {
+        return this.rawSocket.terminate();
+      } catch (e) {
+        // ignore
+      }
+    } else if (typeof this.rawSocket.close === 'function') {
+      try {
+        return this.rawSocket.close();
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  ping() {
+    if (typeof this.rawSocket.ping === 'function') {
+      return this.rawSocket.ping();
+    }
+  }
+
+  addEventListener(type: string, callback: any, _opts?: any) {
+    if (!this.listeners[type]) {
+      this.listeners[type] = new Set();
+    }
+    this.listeners[type].add(callback);
+  }
+
+  removeEventListener(type: string, callback: any, _opts?: any) {
+    if (this.listeners[type]) {
+      this.listeners[type].delete(callback);
+    }
+  }
+
+  on(type: string, callback: any) {
+    this.addEventListener(type, callback);
+  }
+
+  off(type: string, callback: any) {
+    this.removeEventListener(type, callback);
+  }
+
+  private emitError(err: Error) {
+    const event = Object.assign(err, {
+      error: err,
+      message: err.message,
+    });
+
+    const callbacks = this.listeners['error'];
+    if (callbacks) {
+      for (const cb of callbacks) {
+        try {
+          cb(event);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+  }
+
+  private startTimer(options: TimedWsOptions, waitingForFirstFrame: boolean) {
+    this.clearTimer();
+
+    const timeoutMs =
+      waitingForFirstFrame && typeof options.firstFrameTimeoutMs === 'number'
+        ? options.firstFrameTimeoutMs
+        : options.idleTimeoutMs;
+
+    const timeoutMessage =
+      waitingForFirstFrame && typeof options.firstFrameTimeoutMs === 'number'
+        ? `WebSocket first frame timeout after ${options.firstFrameTimeoutMs}ms`
+        : `WebSocket idle timeout after ${options.idleTimeoutMs}ms`;
+
+    if (timeoutMs > 0) {
+      this.timer = setTimeout(() => {
+        const err = new Error(timeoutMessage);
+        this.closeError = err;
+        this.emitError(err);
+        this.close(4001, err.message);
+      }, timeoutMs);
+    }
+  }
+
+  private clearTimer() {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+  }
+}
+
+export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Model {
   constructor(
     client: any,
     model: string,
     private readonly options: TimedWsOptions,
     private readonly wsFactory: WebSocketFactory = (url, opts) => new WebSocket(url, opts as any),
   ) {
-    super(client, model);
-  }
-
-  private async getConnection(request: PreparedWebSocketRequest): Promise<TimedWsConnection> {
-    if (this.connection && this.options.reuseConnection !== false && this.connectionIdentity === request.identity) {
-      return this.connection;
-    }
-
-    if (this.connectionPromise) {
-      if (this.connectionPromiseIdentity === request.identity && this.options.reuseConnection !== false) {
-        return this.connectionPromise;
-      }
-
-      await this.connectionPromise.catch(() => undefined);
-    }
-
-    if (this.connection && (this.options.reuseConnection === false || this.connectionIdentity !== request.identity)) {
-      await this.connection.close();
-      this.connection = null;
-      this.connectionIdentity = null;
-    }
-
-    this.connectionPromiseIdentity = request.identity;
-    this.connectionPromise = this.createConnection(request);
-
-    try {
-      this.connection = await this.connectionPromise;
-      this.connectionIdentity = request.identity;
-      return this.connection;
-    } finally {
-      this.connectionPromise = null;
-      this.connectionPromiseIdentity = null;
-    }
-  }
-
-  private async createConnection(request: PreparedWebSocketRequest): Promise<TimedWsConnection> {
-    return await TimedWsConnection.connect(request.url, request.headers, this.options, request.signal, this.wsFactory);
-  }
-
-  private buildWebSocketUrl(built: any): string {
-    const baseURL = this._client.baseURL || 'https://api.openai.com';
-    const url = new URL(baseURL);
-
-    if (url.protocol === 'https:') {
-      url.protocol = 'wss:';
-    } else if (url.protocol === 'http:') {
-      url.protocol = 'ws:';
-    }
-
-    url.pathname = ensureResponsesWebSocketPath(url.pathname);
-    mergeQueryParamsIntoURL(url, (this._client as any)._options?.defaultQuery);
-    mergeQueryParamsIntoURL(url, built.transportExtraQuery);
-
-    return url.toString();
-  }
-
-  private async buildHeaders(
-    websocketURL: string,
-    signal?: AbortSignal,
-    extraHeaders?: Record<string, unknown>,
-  ): Promise<Record<string, string>> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    const client = this._client as any;
-    const url = new URL(websocketURL);
-    const authQuery = searchParamsToAuthHeaderQuery(url.searchParams);
-
-    // Get auth headers from the client
-    if (typeof client.authHeaders === 'function') {
-      const authHeaders = await this.withAbort(
-        Promise.resolve().then(() =>
-          client.authHeaders({
-            method: 'get',
-            path: url.pathname,
-            ...(authQuery ? { query: authQuery } : {}),
-          }),
-        ),
-        signal,
-      );
-      if (authHeaders) {
-        mergeHeadersIntoRecord(headers, authHeaders);
-      }
-    }
-
-    // Fallback to API key if authHeaders not available
-    if (!headers.Authorization && !headers.authorization) {
-      if (typeof client.apiKey === 'string' && client.apiKey !== 'Missing Key') {
-        headers['Authorization'] = `Bearer ${client.apiKey}`;
-      }
-    }
-
-    if (client.organization) {
-      headers['OpenAI-Organization'] = client.organization;
-    }
-
-    if (client.project) {
-      headers['OpenAI-Project'] = client.project;
-    }
-
-    // Add default headers from client options
-    if (client._options?.defaultHeaders) {
-      mergeHeadersIntoRecord(headers, client._options.defaultHeaders);
-    }
-
-    if (extraHeaders) {
-      mergeHeadersIntoRecord(headers, extraHeaders);
-    }
-
-    return headers;
+    super(client, model, {
+      reuseConnection: options.reuseConnection,
+    });
   }
 
   override async getResponse(request: ModelRequest): Promise<ModelResponse> {
@@ -151,114 +303,81 @@ export class TimedResponsesWSModel extends OpenAIResponsesModel implements Model
   }
 
   protected override async _fetchResponse(request: ModelRequest, stream: boolean): Promise<any> {
-    const built = this._buildResponsesCreateRequest(request, true);
-    const websocketURL = this.buildWebSocketUrl(built);
-    const headers = await this.buildHeaders(websocketURL, built.signal, built.transportExtraHeaders);
-    const connectionRequest: PreparedWebSocketRequest = {
-      url: websocketURL,
-      headers,
-      signal: built.signal,
-      identity: this.getConnectionIdentity(websocketURL, headers),
-    };
+    const originalWebSocket = globalThis.WebSocket;
+    const socketRef = { socket: null as any };
+    const superFetch = (req: ModelRequest, str: boolean) => super._fetchResponse(req, str as false);
 
-    const requestPayload = {
-      ...built.requestData,
-      type: 'response.create',
-      stream: true,
-    };
-
-    const connection = await this.getConnection(connectionRequest);
-    connection.send(JSON.stringify(requestPayload));
-
-    if (stream) {
-      return this.iterWebSocketEvents(connection, built.signal);
-    }
-
-    let finalResponse: any = null;
-    try {
-      for await (const event of this.iterWebSocketEvents(connection, built.signal)) {
-        if (this.isTerminalEvent(event)) {
-          finalResponse = event.response;
-        }
+    const handleFetchError = (err: any) => {
+      if (
+        err &&
+        (err.name === 'APIUserAbortError' || err.message === 'Request was aborted.' || request.signal?.aborted)
+      ) {
+        throw new Error('Aborted');
       }
-    } catch (error) {
-      throw error;
-    }
 
-    if (!finalResponse) {
-      throw new Error('Responses websocket stream ended without a terminal response event.');
-    }
-    return finalResponse;
-  }
-
-  private async *iterWebSocketEvents(
-    connection: TimedWsConnection,
-    signal?: AbortSignal,
-  ): AsyncGenerator<any, void, unknown> {
-    let isFirstFrame = true;
-    let receivedAnyEvent = false;
-    try {
-      while (true) {
-        const firstFrameOverride =
-          isFirstFrame && typeof this.options.firstFrameTimeoutMs === 'number'
-            ? {
-                timeoutMs: this.options.firstFrameTimeoutMs,
-                timeoutErrorMessage: `WebSocket first frame timeout after ${this.options.firstFrameTimeoutMs}ms`,
-              }
-            : undefined;
-        const frame = await connection.nextFrame(signal, firstFrameOverride);
-        isFirstFrame = false;
-        if (frame === null) {
-          const closeInfo = connection.getLastClose();
+      const socket = socketRef.socket;
+      if (socket) {
+        if (socket.closeError) {
+          throw socket.closeError;
+        }
+        if (socket.isClosed) {
           const parts: string[] = [];
-          if (typeof closeInfo?.code === 'number') parts.push(`code=${closeInfo.code}`);
-          if (closeInfo?.reason) parts.push(`reason="${closeInfo.reason}"`);
+          if (typeof socket.lastCloseCode === 'number') parts.push(`code=${socket.lastCloseCode}`);
+          if (socket.lastCloseReason) parts.push(`reason="${socket.lastCloseReason}"`);
           const suffix = parts.length > 0 ? ` (${parts.join(', ')})` : '';
-          this.connection = null;
-          this.connectionIdentity = null;
           throw new Error(`WebSocket connection closed before response completed${suffix}`);
         }
-
-        const event = JSON.parse(frame);
-        receivedAnyEvent = true;
-        yield event;
-
-        if (this.isTerminalEvent(event)) {
-          if (event.type === 'response.failed' || event.type === 'response.error' || event.type === 'error') {
-            throw new Error(event.response?.error?.message || event.error?.message || JSON.stringify(event));
-          }
-          return;
-        }
       }
-    } catch (error) {
-      if (receivedAnyEvent && error instanceof Error) {
-        (error as any).unsafeToReplay = true;
-      }
-      this.connection = null;
-      this.connectionIdentity = null;
-      throw error;
-    } finally {
-      if (this.options.reuseConnection === false) {
-        try {
-          await connection.close();
-        } finally {
-          if (this.connection === connection) {
-            this.connection = null;
-            this.connectionIdentity = null;
-          }
-        }
+      throw err;
+    };
+
+    if (!stream) {
+      try {
+        globalThis.WebSocket = TimedWebSocketProxy as any;
+        return await wsContextStorage.run(
+          { options: this.options, wsFactory: this.wsFactory, activeSocketRef: socketRef },
+          () => superFetch(request, false),
+        );
+      } catch (err: any) {
+        handleFetchError(err);
+      } finally {
+        globalThis.WebSocket = originalWebSocket;
       }
     }
-  }
 
-  private isTerminalEvent(event: any): boolean {
-    return (
-      event.type === 'response.completed' ||
-      event.type === 'response.failed' ||
-      event.type === 'response.incomplete' ||
-      event.type === 'response.error' ||
-      event.type === 'error'
+    // Stream is true: we return a wrapped async generator
+    const generatorPromise = wsContextStorage.run(
+      { options: this.options, wsFactory: this.wsFactory, activeSocketRef: socketRef },
+      () => {
+        globalThis.WebSocket = TimedWebSocketProxy as any;
+        return superFetch(request, true);
+      },
     );
+
+    const self = this;
+    const wrappedGenerator = async function* () {
+      const generator = await generatorPromise;
+      try {
+        while (true) {
+          globalThis.WebSocket = TimedWebSocketProxy as any;
+          const result = await wsContextStorage.run(
+            { options: self.options, wsFactory: self.wsFactory, activeSocketRef: socketRef },
+            () => (generator as any).next(),
+          );
+          globalThis.WebSocket = originalWebSocket;
+          if (result.done) {
+            break;
+          }
+          yield result.value;
+        }
+      } catch (err) {
+        handleFetchError(err);
+      } finally {
+        globalThis.WebSocket = originalWebSocket;
+      }
+    };
+
+    return wrappedGenerator();
   }
 
   override getRetryAdvice(args: any): any {
@@ -288,156 +407,5 @@ export class TimedResponsesWSModel extends OpenAIResponsesModel implements Model
       }
     }
     return super.getRetryAdvice(args);
-  }
-
-  async close(): Promise<void> {
-    if (this.connection) {
-      await this.connection.close();
-      this.connection = null;
-      this.connectionIdentity = null;
-    }
-  }
-
-  private getConnectionIdentity(url: string, headers: Record<string, string>): string {
-    const normalizedHeaders = Object.entries(headers)
-      .map(([key, value]) => [key.toLowerCase(), value])
-      .sort(([leftKey, leftValue], [rightKey, rightValue]) =>
-        `${leftKey}:${leftValue}`.localeCompare(`${rightKey}:${rightValue}`),
-      );
-
-    return JSON.stringify([url, normalizedHeaders]);
-  }
-
-  private async withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-    if (!signal) {
-      return await promise;
-    }
-
-    if (signal.aborted) {
-      throw new Error('Aborted');
-    }
-
-    return await new Promise<T>((resolve, reject) => {
-      const onAbort = () => {
-        reject(new Error('Aborted'));
-      };
-
-      signal.addEventListener('abort', onAbort, { once: true });
-
-      promise.then(
-        (value) => {
-          signal.removeEventListener('abort', onAbort);
-          resolve(value);
-        },
-        (error) => {
-          signal.removeEventListener('abort', onAbort);
-          reject(error);
-        },
-      );
-    });
-  }
-}
-
-function isRecordLike(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function ensureResponsesWebSocketPath(pathname: string): string {
-  const normalizedPath = pathname.replace(/\/+$/, '');
-  if (normalizedPath === '/responses' || normalizedPath.endsWith('/responses')) {
-    return normalizedPath;
-  }
-  return `${normalizedPath}/responses`;
-}
-
-function mergeQueryParamsIntoURL(url: URL, query: Record<string, unknown> | undefined): void {
-  if (!query) {
-    return;
-  }
-
-  for (const [key, rawValue] of Object.entries(query)) {
-    if (typeof rawValue === 'undefined') {
-      continue;
-    }
-
-    for (const existingKey of Array.from(url.searchParams.keys())) {
-      if (existingKey === key || existingKey.startsWith(`${key}[`)) {
-        url.searchParams.delete(existingKey);
-      }
-    }
-
-    if (rawValue === null) {
-      continue;
-    }
-
-    appendQueryParamValue(url, key, rawValue);
-  }
-}
-
-function appendQueryParamValue(url: URL, key: string, rawValue: unknown): void {
-  if (typeof rawValue === 'undefined' || rawValue === null) {
-    return;
-  }
-
-  if (Array.isArray(rawValue)) {
-    for (const value of rawValue) {
-      appendQueryParamValue(url, `${key}[]`, value);
-    }
-    return;
-  }
-
-  if (isRecordLike(rawValue)) {
-    for (const [nestedKey, nestedValue] of Object.entries(rawValue)) {
-      appendQueryParamValue(url, `${key}[${nestedKey}]`, nestedValue);
-    }
-    return;
-  }
-
-  if (rawValue instanceof Date) {
-    url.searchParams.append(key, rawValue.toISOString());
-    return;
-  }
-
-  url.searchParams.append(key, String(rawValue));
-}
-
-function searchParamsToAuthHeaderQuery(searchParams: URLSearchParams): Record<string, string | string[]> | undefined {
-  const query: Record<string, string | string[]> = {};
-  let hasEntries = false;
-
-  for (const [key, value] of searchParams.entries()) {
-    hasEntries = true;
-
-    const existingValue = query[key];
-    if (typeof existingValue === 'undefined') {
-      query[key] = value;
-      continue;
-    }
-
-    if (Array.isArray(existingValue)) {
-      existingValue.push(value);
-      continue;
-    }
-
-    query[key] = [existingValue, value];
-  }
-
-  return hasEntries ? query : undefined;
-}
-
-function mergeHeadersIntoRecord(
-  target: Record<string, string>,
-  headers: Record<string, unknown> | null | undefined,
-): void {
-  if (!headers) {
-    return;
-  }
-
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === 'undefined' || value === null) {
-      continue;
-    }
-
-    target[key] = String(value);
   }
 }

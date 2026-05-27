@@ -269,6 +269,11 @@ test('TimedResponsesWSModel.getResponse sends request and receives response', as
 
   t.truthy(result);
   t.is(mockWs.sent.length, 1);
+  const sentPayload = JSON.parse(mockWs.sent[0]);
+  t.is(sentPayload.type, 'response.create');
+  t.is(sentPayload.model, 'gpt-4');
+  t.is(sentPayload.stream, true);
+  t.deepEqual(sentPayload.input, [{ role: 'user', content: 'Hello' }]);
   t.truthy(result.output);
 });
 
@@ -373,6 +378,26 @@ test('TimedResponsesWSModel handles connection close', async (t) => {
   }, 10);
 
   await t.throwsAsync(model.getResponse(createMockRequest('Hello')), { message: /WebSocket connection closed/ });
+});
+
+test('TimedResponsesWSModel includes close code and reason in error message', async (t) => {
+  const mockWs = new MockWebSocket();
+  const mockClient = createMockClient();
+
+  const model = new TimedResponsesWSModel(
+    mockClient as any,
+    'gpt-4',
+    { connectTimeoutMs: 1000, idleTimeoutMs: 5000 },
+    () => mockWs as any,
+  );
+
+  setTimeout(() => {
+    mockWs.emit('close', 1008, Buffer.from('rate limit exceeded'));
+  }, 10);
+
+  await t.throwsAsync(model.getResponse(createMockRequest('Hello')), {
+    message: /WebSocket connection closed before response completed.*code=1008.*rate limit exceeded/,
+  });
 });
 
 test('TimedResponsesWSModel reuses connection for multiple requests', async (t) => {

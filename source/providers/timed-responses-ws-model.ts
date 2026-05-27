@@ -162,8 +162,9 @@ export class TimedResponsesWSModel extends OpenAIResponsesModel implements Model
     };
 
     const requestPayload = {
+      ...built.requestData,
       type: 'response.create',
-      response: built.requestData,
+      stream: true,
     };
 
     const connection = await this.getConnection(connectionRequest);
@@ -195,6 +196,7 @@ export class TimedResponsesWSModel extends OpenAIResponsesModel implements Model
     signal?: AbortSignal,
   ): AsyncGenerator<any, void, unknown> {
     let isFirstFrame = true;
+    let receivedAnyEvent = false;
     try {
       while (true) {
         const firstFrameOverride =
@@ -207,22 +209,31 @@ export class TimedResponsesWSModel extends OpenAIResponsesModel implements Model
         const frame = await connection.nextFrame(signal, firstFrameOverride);
         isFirstFrame = false;
         if (frame === null) {
+          const closeInfo = connection.getLastClose();
+          const parts: string[] = [];
+          if (typeof closeInfo?.code === 'number') parts.push(`code=${closeInfo.code}`);
+          if (closeInfo?.reason) parts.push(`reason="${closeInfo.reason}"`);
+          const suffix = parts.length > 0 ? ` (${parts.join(', ')})` : '';
           this.connection = null;
           this.connectionIdentity = null;
-          throw new Error('WebSocket connection closed before response completed');
+          throw new Error(`WebSocket connection closed before response completed${suffix}`);
         }
 
         const event = JSON.parse(frame);
+        receivedAnyEvent = true;
         yield event;
 
         if (this.isTerminalEvent(event)) {
-          if (event.type === 'response.failed' || event.type === 'response.error') {
-            throw new Error(event.response?.error?.message || 'Response failed');
+          if (event.type === 'response.failed' || event.type === 'response.error' || event.type === 'error') {
+            throw new Error(event.response?.error?.message || event.error?.message || JSON.stringify(event));
           }
           return;
         }
       }
     } catch (error) {
+      if (receivedAnyEvent && error instanceof Error) {
+        (error as any).unsafeToReplay = true;
+      }
       this.connection = null;
       this.connectionIdentity = null;
       throw error;
@@ -245,7 +256,8 @@ export class TimedResponsesWSModel extends OpenAIResponsesModel implements Model
       event.type === 'response.completed' ||
       event.type === 'response.failed' ||
       event.type === 'response.incomplete' ||
-      event.type === 'response.error'
+      event.type === 'response.error' ||
+      event.type === 'error'
     );
   }
 

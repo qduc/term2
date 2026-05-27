@@ -2,8 +2,34 @@ import WebSocket from 'ws';
 
 export type WebSocketFactory = (url: string, options: { headers: Record<string, string> }) => WebSocket;
 
+export type WebSocketCloseInfo = { code?: number; reason?: string };
+
+function describeCloseInfo(info: WebSocketCloseInfo | null): string {
+  if (!info) return '';
+  const parts: string[] = [];
+  if (typeof info.code === 'number') parts.push(`code=${info.code}`);
+  if (info.reason) parts.push(`reason="${info.reason}"`);
+  return parts.length > 0 ? ` (${parts.join(', ')})` : '';
+}
+
+function toCloseInfo(code?: number, reason?: WebSocket.RawData | Buffer | string): WebSocketCloseInfo {
+  const info: WebSocketCloseInfo = {};
+  if (typeof code === 'number') info.code = code;
+  if (reason) {
+    const text = typeof reason === 'string' ? reason : Buffer.isBuffer(reason) ? reason.toString() : String(reason);
+    if (text) info.reason = text;
+  }
+  return info;
+}
+
 export class TimedWsConnection {
+  private lastClose: WebSocketCloseInfo | null = null;
+
   private constructor(private readonly ws: WebSocket, private readonly idleTimeoutMs: number) {}
+
+  getLastClose(): WebSocketCloseInfo | null {
+    return this.lastClose;
+  }
 
   static async connect(
     url: string,
@@ -56,8 +82,9 @@ export class TimedWsConnection {
         settle(() => reject(err));
       };
 
-      const onClose = () => {
-        settle(() => reject(new Error('WebSocket closed before opening')));
+      const onClose = (code?: number, reason?: Buffer) => {
+        const info = toCloseInfo(code, reason);
+        settle(() => reject(new Error(`WebSocket closed before opening${describeCloseInfo(info)}`)));
       };
 
       const onAbort = () => {
@@ -128,7 +155,8 @@ export class TimedWsConnection {
         settle(() => reject(err));
       };
 
-      const onClose = () => {
+      const onClose = (code?: number, reason?: Buffer) => {
+        this.lastClose = toCloseInfo(code, reason);
         settle(() => resolve(null));
       };
 

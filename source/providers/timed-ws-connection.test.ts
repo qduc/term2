@@ -252,7 +252,58 @@ test('TimedWsConnection.connect handles close before open', async (t) => {
     mockWs.emit('close');
   }, 10);
 
-  await t.throwsAsync(connectionPromise, { message: 'WebSocket closed before opening' });
+  await t.throwsAsync(connectionPromise, { message: /WebSocket closed before opening/ });
+});
+
+test('TimedWsConnection.connect includes close code and reason in error', async (t) => {
+  const mockWs = new EventEmitter() as any;
+  mockWs.readyState = 0;
+  mockWs.terminate = () => {
+    mockWs.emit('close');
+  };
+  mockWs.on('error', () => {});
+
+  const wsFactory = () => mockWs;
+
+  const connectionPromise = TimedWsConnection.connect(
+    'ws://test.com',
+    {},
+    { connectTimeoutMs: 1000, idleTimeoutMs: 5000 },
+    undefined,
+    wsFactory,
+  );
+
+  setTimeout(() => {
+    mockWs.emit('close', 1008, Buffer.from('policy violation'));
+  }, 10);
+
+  await t.throwsAsync(connectionPromise, {
+    message: /WebSocket closed before opening.*code=1008.*policy violation/,
+  });
+});
+
+test('TimedWsConnection.nextFrame captures close code and reason via getLastClose', async (t) => {
+  const mockWs = new MockWebSocket('ws://test.com', {});
+  const wsFactory = () => mockWs as any;
+
+  const connection = await TimedWsConnection.connect(
+    'ws://test.com',
+    {},
+    { connectTimeoutMs: 1000, idleTimeoutMs: 5000 },
+    undefined,
+    wsFactory,
+  );
+
+  setTimeout(() => {
+    mockWs.emit('close', 1011, Buffer.from('internal server error'));
+  }, 10);
+
+  const frame = await connection.nextFrame();
+  t.is(frame, null);
+
+  const lastClose = connection.getLastClose();
+  t.is(lastClose?.code, 1011);
+  t.is(lastClose?.reason, 'internal server error');
 });
 
 test('TimedWsConnection.connect rejects immediately when the signal is already aborted', async (t) => {

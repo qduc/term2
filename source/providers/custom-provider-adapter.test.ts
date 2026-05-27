@@ -6,7 +6,7 @@ import {
   createCustomProviderModelProvider,
   sanitizeResponsesApiBody,
   type CustomProviderConfig,
-  OpencodeMinimaxHybridProvider,
+  OpencodeAnthropicFormatProvider,
 } from './openai-compatible.provider.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
@@ -167,7 +167,7 @@ test('createCustomProviderModelProvider Google type gets logging fetch wrapper',
   t.is(requestStartedEvent.meta.model, 'gemini-test');
 });
 
-test('createCustomProviderModelProvider uses OpencodeMinimaxHybridProvider for opencode type', async (t) => {
+test('createCustomProviderModelProvider uses OpencodeAnthropicFormatProvider for opencode type', async (t) => {
   const provider = createCustomProviderModelProvider(
     {
       ...baseConfig,
@@ -179,7 +179,7 @@ test('createCustomProviderModelProvider uses OpencodeMinimaxHybridProvider for o
     },
   );
 
-  t.true(provider instanceof OpencodeMinimaxHybridProvider);
+  t.true(provider instanceof OpencodeAnthropicFormatProvider);
 
   // When model name contains minimax (case-insensitive), it should return model not using OpenAIProvider
   const minimaxModel = await provider.getModel('Minimax-3.5-Turbo');

@@ -85,7 +85,7 @@ function buildProviderFetch(
   });
 }
 
-export class OpencodeMinimaxHybridProvider implements ModelProvider {
+export class OpencodeAnthropicFormatProvider implements ModelProvider {
   private readonly fallbackSessionId: string | undefined;
   private readonly models = new Map<string, Model | Promise<Model>>();
 
@@ -101,7 +101,7 @@ export class OpencodeMinimaxHybridProvider implements ModelProvider {
       return cached;
     }
 
-    if (resolvedModel.toLowerCase().includes('minimax')) {
+    if (resolvedModel.toLowerCase().includes('minimax') || resolvedModel.toLowerCase().includes('qwen')) {
       const isOpencode = isOpencodeProvider(this.config);
       const runtimeConfig = isOpencode
         ? resolveOpencodeRuntimeConfig(this.config.baseUrl, this.config.apiKey)
@@ -155,7 +155,7 @@ export class OpencodeMinimaxHybridProvider implements ModelProvider {
 export function createCustomProviderModelProvider(
   config: CustomProviderConfig,
   deps: CustomProviderRuntimeDeps,
-): OpenAIProvider | AiSdkAnthropicProvider | AiSdkGoogleProvider | OpencodeMinimaxHybridProvider {
+): OpenAIProvider | AiSdkAnthropicProvider | AiSdkGoogleProvider | OpencodeAnthropicFormatProvider {
   const providerType = config.type || 'openai-compatible';
   const resolveConfig = () => ({
     baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
@@ -196,7 +196,7 @@ export function createCustomProviderModelProvider(
         }),
       });
     case 'opencode':
-      return new OpencodeMinimaxHybridProvider(config, deps);
+      return new OpencodeAnthropicFormatProvider(config, deps);
     case 'openai-compatible':
     case 'llama.cpp':
     default: {

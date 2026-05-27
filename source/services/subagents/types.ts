@@ -10,6 +10,8 @@ export interface SubagentRequest {
   signal?: AbortSignal;
   /** SDK serialized run state for resuming a delegated agent-tool run (nested approvals). */
   resumeState?: string;
+  /** Name of the tool that invoked the subagent, if any. */
+  parentTool?: string;
 }
 
 export interface SubagentDefinition {

@@ -1271,3 +1271,19 @@ test('command_message: preserves running ids for batch completions matched by ca
     ],
   );
 });
+
+test('subagent_started: ignores event if parentTool is ask_mentor', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'mentor',
+    task: 'peer review this plan',
+    parentTool: 'ask_mentor',
+  } as ConversationEvent);
+
+  t.is(deps.calls.appendedMessages.length, 0);
+});

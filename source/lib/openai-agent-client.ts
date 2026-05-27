@@ -756,7 +756,7 @@ export class OpenAIAgentClient {
   #createMentor = async (question: string): Promise<string> => {
     this.#activeSubagentsCount++;
     try {
-      const result = await this.#subagentManager.run({ role: 'mentor', task: question });
+      const result = await this.#subagentManager.run({ role: 'mentor', task: question, parentTool: 'ask_mentor' });
       if (result.status === 'failed') {
         throw new Error(result.error || 'Mentor consultation failed');
       }
@@ -787,6 +787,7 @@ export class OpenAIAgentClient {
     const detailsRecord = details as { resumeState?: string; signal?: AbortSignal; toolCall?: unknown } | undefined;
     const request = {
       ...params,
+      parentTool: 'run_subagent',
       ...(detailsRecord?.resumeState ? { resumeState: detailsRecord.resumeState } : {}),
       ...(detailsRecord?.signal ? { signal: detailsRecord.signal } : {}),
     };

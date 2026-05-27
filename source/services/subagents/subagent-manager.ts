@@ -353,7 +353,13 @@ export class SubagentManager {
     const agentId = randomUUID();
 
     this.#logger.debug('SubagentManager.run', { agentId, role: request.role, taskLength: request.task.length });
-    this.#emit({ type: 'subagent_started', agentId, role: request.role, task: request.task });
+    this.#emit({
+      type: 'subagent_started',
+      agentId,
+      role: request.role,
+      task: request.task,
+      parentTool: request.parentTool,
+    });
 
     try {
       const result =

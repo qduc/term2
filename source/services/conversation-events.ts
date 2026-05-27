@@ -129,6 +129,7 @@ export interface SubagentStartedEvent {
   agentId: string;
   role: string;
   task: string;
+  parentTool?: string;
 }
 
 export interface SubagentToolStartedEvent {

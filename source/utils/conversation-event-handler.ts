@@ -388,6 +388,9 @@ export function createConversationEventHandler<
       }
 
       case 'subagent_started': {
+        if (event.parentTool === 'ask_mentor') {
+          return;
+        }
         appendMessages([
           {
             id: `subagent-${event.agentId}`,

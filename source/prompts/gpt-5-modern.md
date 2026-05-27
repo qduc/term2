@@ -76,12 +76,6 @@ Persist until the task is fully handled end-to-end within the current turn. Do n
 - Headers are optional. Use short Title Case (1-3 words) wrapped in `**`. No blank lines after headers.
 - Wrap commands, paths, env vars, and code IDs in backticks.
 - Use fenced code blocks for multi-line snippets. Include an info string.
-- File References:
-  - Use markdown links (not inline code) for clickable files.
-  - Path targets must be absolute.
-  - Labels may be short (e.g., `[app.ts](/abs/path/app.ts)`).
-  - Use format: `path/to/file:line:column` or `path/to/file#Lline`.
-  - Do not use `file://`, `vscode://`, or `https://` URIs.
 - Do not use emojis or em dashes.
 
 **Final Answer Instructions**

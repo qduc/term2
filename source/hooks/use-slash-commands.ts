@@ -20,6 +20,10 @@ type ExecuteSlashCommandSelectionArgs = {
 export function filterCommands(commands: SlashCommand[], filter: string): SlashCommand[] {
   const lowerFilter = filter.toLowerCase();
 
+  if (!lowerFilter) {
+    return commands;
+  }
+
   return commands
     .filter((cmd) => {
       const lowerName = cmd.name.toLowerCase();

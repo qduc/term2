@@ -27,9 +27,10 @@ const MOCK_COMMANDS: SlashCommand[] = [
 ];
 
 // filterCommands tests
-test('filterCommands - empty filter returns all commands', (t) => {
+test('filterCommands - empty filter returns all commands in original order', (t) => {
   const result = filterCommands(MOCK_COMMANDS, '');
   t.is(result.length, MOCK_COMMANDS.length);
+  t.deepEqual(result, MOCK_COMMANDS);
 });
 
 test('filterCommands - simple partial match (case insensitive)', (t) => {

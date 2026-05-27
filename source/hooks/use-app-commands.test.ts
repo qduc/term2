@@ -2,14 +2,12 @@ import test from 'ava';
 import React from 'react';
 import { render } from 'ink-testing-library';
 import type { Message } from './use-conversation.js';
-import {
-  createCopySlashCommand,
-  createRetrySlashCommand,
-  createUndoSlashCommand,
-  createUsageSlashCommand,
-  getLastFinalAssistantText,
-  useAppCommands,
-} from './use-app-commands.js';
+import { createCopySlashCommand } from '../commands/copy-command.js';
+import { createRetrySlashCommand } from '../commands/retry-command.js';
+import { createUndoSlashCommand } from '../commands/undo-command.js';
+import { createUsageSlashCommand } from '../commands/usage-command.js';
+import { useAppCommands } from './use-app-commands.js';
+import { getLastFinalAssistantText } from '../utils/message-utils.js';
 import { parseModelProviderArg } from '../utils/model-provider-arg.js';
 
 async function flushMicrotasks(): Promise<void> {

@@ -5,6 +5,12 @@ type DiagnosticLogger = {
 };
 
 const SUSPICIOUS_RECONSTRUCTED_OUTPUT_ITEM_COUNT = 20;
+const TERMINAL_RESPONSE_EVENT_TYPES = new Set([
+  'response.completed',
+  'response.failed',
+  'response.incomplete',
+  'response.error',
+]);
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -39,18 +45,19 @@ const summarizeReconstructedItems = (items: unknown[]): Record<string, unknown> 
   };
 };
 
-// Codex's `/backend-api/codex/responses` endpoint ships `response.completed`
-// with an empty `output` array even when the assistant message was already
-// delivered via `response.output_item.done`. The agents-SDK runner trusts
-// `response.completed.response.output` as the final output; with an empty
-// array it sees no items, decides the turn produced nothing, and re-runs the
-// same request until maxTurns — an infinite-retry loop.
+// Codex's `/backend-api/codex/responses` endpoint can ship terminal response
+// frames with either an empty `output` array or no `output` field at all, even
+// when the assistant message was already delivered via
+// `response.output_item.done`. The agents-SDK runner trusts terminal
+// `response.output` as the final output; when it is empty or missing it either
+// sees no items and re-runs the same request until maxTurns or crashes while
+// converting the terminal payload.
 //
 // This wrapper subclasses `OpenAIResponsesModel`, overrides the streaming
 // fetch path, and patches the terminal frame in flight: it accumulates raw
-// items from `response.output_item.done` and, only when the terminal
-// `response.output` is empty, swaps in the accumulated items so the parent's
-// existing conversion logic (`convertToOutputItem`) produces a normal
+// items from `response.output_item.done` and, only when terminal
+// `response.output` is empty or missing, swaps in the accumulated items so the
+// parent's existing conversion logic (`convertToOutputItem`) produces a normal
 // `response_done` event.
 export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   constructor(
@@ -168,9 +175,10 @@ export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: Diag
     const type = event?.type;
     if (type === 'response.output_item.done' && event.item) {
       accumulatedItems.push(event.item);
-    } else if (type === 'response.completed' && event.response) {
+    } else if (TERMINAL_RESPONSE_EVENT_TYPES.has(type) && event.response) {
       const output = event.response.output;
-      if (Array.isArray(output) && output.length === 0 && accumulatedItems.length > 0) {
+      const isMissingOrEmptyOutput = output === undefined || (Array.isArray(output) && output.length === 0);
+      if (isMissingOrEmptyOutput && accumulatedItems.length > 0) {
         const reconstructedOutput = accumulatedItems;
         accumulatedItems = [];
         if (reconstructedOutput.length >= SUSPICIOUS_RECONSTRUCTED_OUTPUT_ITEM_COUNT) {

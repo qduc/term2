@@ -56,6 +56,64 @@ test('wrapCodexStream reconstructs response.completed.output from streamed outpu
   t.is(completed.response.output[0], item);
 });
 
+test('wrapCodexStream reconstructs missing terminal response.output from streamed output_item.done items', async (t) => {
+  const item = {
+    type: 'message',
+    id: 'msg_missing_output',
+    role: 'assistant',
+    status: 'completed',
+    content: [{ type: 'output_text', text: 'Recovered' }],
+  };
+
+  const events = await collect(
+    wrapCodexStream(
+      makeStream([
+        { type: 'response.output_item.done', output_index: 0, item },
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp_missing_output',
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          },
+        },
+      ]),
+    ),
+  );
+
+  const completed = events.find((e: any) => e.type === 'response.completed') as any;
+  t.truthy(completed);
+  t.deepEqual(completed.response.output, [item]);
+});
+
+test('wrapCodexStream reconstructs missing output for non-completed terminal frames', async (t) => {
+  const item = {
+    type: 'message',
+    id: 'msg_incomplete',
+    role: 'assistant',
+    status: 'incomplete',
+    content: [{ type: 'output_text', text: 'Partial' }],
+  };
+
+  const events = await collect(
+    wrapCodexStream(
+      makeStream([
+        { type: 'response.output_item.done', output_index: 0, item },
+        {
+          type: 'response.incomplete',
+          response: {
+            id: 'resp_incomplete',
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          },
+        },
+      ]),
+    ),
+  );
+
+  const incomplete = events.find((e: any) => e.type === 'response.incomplete') as any;
+  t.truthy(incomplete);
+  t.deepEqual(incomplete.response.output, [item]);
+});
+
 test('wrapCodexStream leaves non-empty output untouched', async (t) => {
   const serverItem = { type: 'message', id: 'msg_real' };
   const streamedItem = { type: 'message', id: 'msg_accum' };
@@ -207,6 +265,46 @@ test.serial('CodexResponsesModel.getStreamedResponse yields response_done with r
     t.is(done.response.output[0].type, 'message');
     t.is(done.response.output[0].id, 'msg_1');
     t.is(done.response.output[0].role, 'assistant');
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._fetchResponse = original;
+  }
+});
+
+test.serial('CodexResponsesModel.getStreamedResponse tolerates missing terminal response.output', async (t) => {
+  const original = (OpenAIResponsesModel.prototype as any)._fetchResponse;
+  (OpenAIResponsesModel.prototype as any)._fetchResponse = async function () {
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_missing_output' } },
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: {
+          type: 'message',
+          id: 'msg_missing_output',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'Recovered' }],
+        },
+      },
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp_missing_output',
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        },
+      },
+    ]);
+  };
+
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
+    const events = await collect(model.getStreamedResponse(request));
+
+    const done = events.find((e: any) => e.type === 'response_done') as any;
+    t.truthy(done, 'expected a response_done event');
+    t.is(done.response.output.length, 1);
+    t.is(done.response.output[0].id, 'msg_missing_output');
   } finally {
     (OpenAIResponsesModel.prototype as any)._fetchResponse = original;
   }

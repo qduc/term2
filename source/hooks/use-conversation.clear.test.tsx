@@ -12,7 +12,7 @@ const loggingService = {
   error() {},
 } as any;
 
-test('useConversation triggers onClear and resets messages/sessionId', async (t) => {
+test.serial('useConversation triggers onClear and resets messages/sessionId', async (t) => {
   let onClearCalled = false;
   const mockConversationService = {
     sessionId: 'old-session-id',
@@ -61,4 +61,59 @@ test('useConversation triggers onClear and resets messages/sessionId', async (t)
   t.is(mockConversationService.sessionId, 'new-session-id');
   t.truthy(lastFrame);
   t.is(lastFrame!(), 'new-session-id|0');
+});
+
+test.serial('useConversation filters duplicate stack trace from rawEvent when logging error', async (t) => {
+  const loggedErrors: any[] = [];
+  const loggingServiceMock = {
+    debug() {},
+    error(_msg: string, meta?: any) {
+      loggedErrors.push(meta);
+    },
+  } as any;
+
+  const errorWithRawEvent = new Error('Test error');
+  (errorWithRawEvent as any).rawEvent = {
+    type: 'error',
+    message: 'Test error',
+    stack: 'Error: Test error\n    at dummy (file.ts:1:1)',
+  };
+
+  const mockConversationService = {
+    sessionId: 'session-id',
+    sendMessage: async () => {
+      throw errorWithRawEvent;
+    },
+  } as any;
+
+  let sendMsg: ((input: string) => Promise<void>) | undefined;
+
+  const Harness = () => {
+    const { sendUserMessage } = useConversation({
+      conversationService: mockConversationService,
+      loggingService: loggingServiceMock,
+    });
+    sendMsg = sendUserMessage;
+    return <Text>Harness</Text>;
+  };
+
+  await act(async () => {
+    render(<Harness />);
+  });
+
+  await act(async () => {
+    try {
+      await sendMsg!('hello');
+    } catch {
+      // Ignored in hook, error is handled and set in state/logged
+    }
+  });
+
+  t.is(loggedErrors.length, 1);
+  const meta = loggedErrors[0];
+  t.is(meta.error, 'Test error');
+  t.truthy(meta.stack);
+  t.truthy(meta.rawEvent);
+  t.is(meta.rawEvent.stack, undefined);
+  t.is(meta.rawEvent.message, 'Test error');
 });

@@ -296,7 +296,14 @@ export const useConversation = ({
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
           ...(error instanceof Error && (error as any).eventKind ? { eventKind: (error as any).eventKind } : {}),
-          ...(error instanceof Error && (error as any).rawEvent ? { rawEvent: (error as any).rawEvent } : {}),
+          ...(error instanceof Error && (error as any).rawEvent
+            ? {
+                rawEvent: (() => {
+                  const { stack, ...rest } = (error as any).rawEvent;
+                  return rest;
+                })(),
+              }
+            : {}),
         });
 
         // Don't show error messages for user-initiated aborts

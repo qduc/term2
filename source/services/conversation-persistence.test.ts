@@ -637,3 +637,135 @@ test.serial('saveLastConversation: updates entry when projectPath changes for sa
 // Suppress unused-event-import lint
 const _ev: LogEvent | null = null;
 void _ev;
+
+test.serial('writer + loadConversation: round-trips a v2 conversation with assistant_turn', (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({
+    id,
+    createdAt: '2026-05-26T00:00:00.000Z',
+    projectPath: '/workspace/y',
+    model: 'gpt-4o',
+    provider: 'openai',
+  });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run tool' } });
+  writer.append({ type: 'tool_started', toolCallId: 'call-v2', toolName: 'shell', arguments: 'ls' });
+  writer.append({
+    type: 'command_message',
+    message: {
+      id: 'cmd-v2',
+      sender: 'command',
+      status: 'completed',
+      command: 'ls',
+      output: 'file.txt',
+      success: true,
+      callId: 'call-v2',
+      toolName: 'shell',
+    },
+  });
+  writer.append({
+    type: 'assistant_turn',
+    turn: {
+      items: [
+        { type: 'reasoning', text: 'thinking about ls' },
+        { type: 'tool_call', callId: 'call-v2', toolName: 'shell', arguments: 'ls' },
+        { type: 'tool_result', callId: 'call-v2', toolName: 'shell', status: 'completed', output: 'file.txt' },
+        { type: 'assistant_text', text: 'here is the file' },
+      ],
+    },
+    snapshot: {
+      history: [
+        { role: 'user', type: 'message', content: 'run tool' } as any,
+        { role: 'assistant', type: 'message', content: 'here is the file' } as any,
+      ],
+      previousResponseId: 'resp-v2',
+      toolLedger: [
+        {
+          turnId: 'turn-1',
+          callId: 'call-v2',
+          toolName: 'shell',
+          status: 'completed',
+          startedAt: '2026-05-26T00:00:00.000Z',
+          completedAt: '2026-05-26T00:00:01.000Z',
+          arguments: 'ls',
+          output: 'file.txt',
+        },
+      ],
+      model: 'gpt-4o',
+      provider: 'openai',
+    },
+  });
+  void writer.close();
+
+  const restored = persistenceModule.loadConversation(id);
+  t.truthy(restored);
+  t.is(restored!.id, id);
+  t.is(restored!.previousResponseId, 'resp-v2');
+  t.is(restored!.history.length, 4);
+  t.deepEqual(restored!.history[0], { role: 'user', type: 'message', content: 'run tool' });
+  t.deepEqual(restored!.history[1], {
+    type: 'function_call',
+    callId: 'call-v2',
+    name: 'shell',
+    arguments: 'ls',
+    providerData: {
+      reasoning_content: 'thinking about ls',
+    },
+  });
+  t.deepEqual(restored!.history[2], {
+    type: 'function_call_result',
+    callId: 'call-v2',
+    name: 'shell',
+    output: 'file.txt',
+  });
+  t.deepEqual(restored!.history[3], {
+    role: 'assistant',
+    type: 'message',
+    status: 'completed',
+    content: [{ type: 'output_text', text: 'here is the file' }],
+  });
+  t.is(restored!.toolLedger.length, 1);
+  t.is(restored!.toolLedger[0].callId, 'call-v2');
+
+  // exact messages ordering: user, reasoning, command, bot
+  t.is(restored!.messages.length, 4);
+  t.is(restored!.messages[0].sender, 'user');
+  t.is(restored!.messages[1].sender, 'reasoning');
+  t.is(restored!.messages[1].text, 'thinking about ls');
+  t.is(restored!.messages[2].sender, 'command');
+  t.is(restored!.messages[2].status, 'completed');
+  t.is(restored!.messages[3].sender, 'bot');
+  t.is(restored!.messages[3].text, 'here is the file');
+});
+
+test.serial('replay: interrupted v2 logs without assistant_turn still recover from coarse events', (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'interrupted' } });
+  writer.append({ type: 'tool_started', toolCallId: 'call-coarse', toolName: 'shell', arguments: 'ls' });
+  writer.append({
+    type: 'command_message',
+    message: {
+      id: 'cmd-coarse',
+      sender: 'command',
+      status: 'completed',
+      command: 'ls',
+      output: 'some files',
+      success: true,
+      callId: 'call-coarse',
+      toolName: 'shell',
+    },
+  });
+  // No assistant_turn written!
+  void writer.close();
+
+  const restored = persistenceModule.loadConversation(id);
+  t.truthy(restored);
+  t.true(restored!.replayWarnings.some((w) => w.includes('interrupted')));
+  t.is(restored!.messages.length, 3); // user, command, system interrupted warning
+  t.is(restored!.messages[0].sender, 'user');
+  t.is(restored!.messages[1].sender, 'command');
+  t.is(restored!.messages[1].status, 'completed');
+  t.is(restored!.messages[2].sender, 'system');
+});

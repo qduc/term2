@@ -251,6 +251,113 @@ test('command messages dedup against emittedCommandIds', async (t) => {
   }
 });
 
+test('response outcome derives turnItems from provider items with metadata and reasoning ordering', async (t) => {
+  const stream = makeStream({
+    history: [],
+    newItems: [
+      {
+        type: 'function_call',
+        id: 'fc_1',
+        callId: 'call-1',
+        name: 'shell',
+        arguments: '{"command":"date"}',
+        providerData: {
+          reasoning_content: 'I should run date.',
+          reasoning_details: [{ type: 'summary_text', text: 'I should run date.' }],
+        },
+      },
+      {
+        type: 'function_call_result',
+        id: 'fr_1',
+        callId: 'call-1',
+        name: 'shell',
+        output: 'Mon Jan 01 00:00:00 UTC 2024',
+      },
+      {
+        role: 'assistant',
+        type: 'message',
+        id: 'msg_1',
+        content: [{ type: 'output_text', text: 'Done.' }],
+        providerData: {
+          reasoning_content: 'Final reflection.',
+          reasoning_details: [{ type: 'summary_text', text: 'Final reflection.' }],
+        },
+      },
+    ],
+  });
+
+  const outcome = await buildConversationResult(
+    {
+      result: stream,
+      toolCallArgumentsById: new Map(),
+      emittedCommandIds: new Set(),
+    },
+    makeDeps(),
+  );
+
+  t.is(outcome.kind, 'response');
+  if (outcome.kind === 'response') {
+    t.deepEqual(outcome.result.turnItems, [
+      {
+        type: 'reasoning',
+        text: 'I should run date.',
+        providerMetadata: {
+          reasoning_content: 'I should run date.',
+          reasoning_details: [{ type: 'summary_text', text: 'I should run date.' }],
+        },
+      },
+      {
+        type: 'tool_call',
+        callId: 'call-1',
+        toolName: 'shell',
+        arguments: '{"command":"date"}',
+        providerItem: {
+          type: 'function_call',
+          id: 'fc_1',
+          callId: 'call-1',
+          name: 'shell',
+          arguments: '{"command":"date"}',
+          providerData: {
+            reasoning_content: 'I should run date.',
+            reasoning_details: [{ type: 'summary_text', text: 'I should run date.' }],
+          },
+        },
+      },
+      {
+        type: 'tool_result',
+        callId: 'call-1',
+        toolName: 'shell',
+        status: 'completed',
+        output: 'Mon Jan 01 00:00:00 UTC 2024',
+        providerItem: {
+          type: 'function_call_result',
+          id: 'fr_1',
+          callId: 'call-1',
+          name: 'shell',
+          output: 'Mon Jan 01 00:00:00 UTC 2024',
+        },
+      },
+      {
+        type: 'reasoning',
+        text: 'Final reflection.',
+        providerMetadata: {
+          reasoning_content: 'Final reflection.',
+          reasoning_details: [{ type: 'summary_text', text: 'Final reflection.' }],
+        },
+      },
+      {
+        type: 'assistant_text',
+        text: 'Done.',
+        providerMetadata: {
+          reasoning_content: 'Final reflection.',
+          reasoning_details: [{ type: 'summary_text', text: 'Final reflection.' }],
+        },
+        providerItemId: 'msg_1',
+      },
+    ]);
+  }
+});
+
 test('toTerminalEvent shapes response into final event', (t) => {
   const event = toTerminalEvent({
     type: 'response',
@@ -330,5 +437,36 @@ test('response outcome preserves approval-rejected command messages for renderin
       rejectedMsg!.output.includes('not approved'),
       'Expected rejection message in output, but got: ' + rejectedMsg!.output,
     );
+  }
+});
+
+test('buildConversationResult and toTerminalEvent preserve turnItems', async (t) => {
+  const stream = makeStream({
+    finalOutput: 'Done.',
+    history: [],
+    newItems: [],
+  });
+  const turnItems = [
+    { type: 'reasoning' as const, text: 'Thinking' },
+    { type: 'assistant_text' as const, text: 'Done.' },
+  ];
+  const outcome = await buildConversationResult(
+    {
+      result: stream,
+      toolCallArgumentsById: new Map(),
+      turnItems,
+    },
+    makeDeps(),
+  );
+
+  t.is(outcome.kind, 'response');
+  if (outcome.kind === 'response') {
+    t.deepEqual(outcome.result.turnItems, turnItems);
+
+    const event = toTerminalEvent(outcome.result);
+    t.is(event.type, 'final');
+    if (event.type === 'final') {
+      t.deepEqual(event.turnItems, turnItems);
+    }
   }
 });

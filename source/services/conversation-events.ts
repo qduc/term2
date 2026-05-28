@@ -2,6 +2,7 @@ import type { CommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 import type { ApprovalDescriptor, LLMAdvisory } from '../contracts/conversation.js';
 import type { SubagentResult } from './subagents/types.js';
+import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 
 export type ConversationEvent =
   | TextDeltaEvent
@@ -100,6 +101,7 @@ export interface FinalResponseEvent {
   commandMessages?: CommandMessageEvent['message'][];
   /** Token usage for this turn. */
   usage?: NormalizedUsage;
+  turnItems?: PersistedAssistantTurnItem[];
 }
 
 export interface ErrorEvent {

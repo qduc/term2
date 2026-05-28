@@ -9,6 +9,8 @@ import { asRecord, getCallIdFromObject, getString, getToolInfoFromInterruption }
 import type { AgentStream } from './agent-stream.js';
 import type { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import type { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
+import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
+import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 
 export type ConversationResult = ConversationTerminal;
 
@@ -36,6 +38,7 @@ export interface ResultBuilderInput {
   emittedCommandIds?: Set<string>;
   usage?: NormalizedUsage;
   toolCallArgumentsById: Map<string, unknown>;
+  turnItems?: PersistedAssistantTurnItem[];
 }
 
 const resolveFinalText = (streamedText: string | undefined, completedText: string | undefined): string => {
@@ -140,6 +143,7 @@ export async function buildConversationResult(
   const items = result.newItems || result.history || [];
   attachCachedArguments(items, toolCallArgumentsById);
   const allCommandMessages = extractCommandMessages(items);
+  const derivedTurnItems = buildPersistedAssistantTurnItems(items);
 
   const commandMessages = emittedCommandIds
     ? allCommandMessages.filter((msg) => !emittedCommandIds.has(msg.id))
@@ -158,6 +162,7 @@ export async function buildConversationResult(
       finalText: resolveFinalText(finalOutputOverride, result.finalOutput),
       reasoningText: reasoningOutputOverride,
       usage: usage ?? extractUsage(result),
+      turnItems: derivedTurnItems.length > 0 ? derivedTurnItems : input.turnItems,
     },
   };
 }
@@ -183,5 +188,6 @@ export const toTerminalEvent = (result: ConversationResult): ConversationEvent =
     ...(result.reasoningText ? { reasoningText: result.reasoningText } : {}),
     ...(result.commandMessages?.length ? { commandMessages: result.commandMessages } : {}),
     ...(result.usage ? { usage: result.usage } : {}),
+    ...(result.turnItems ? { turnItems: result.turnItems } : {}),
   };
 };

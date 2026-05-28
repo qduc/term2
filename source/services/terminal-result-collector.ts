@@ -2,6 +2,7 @@ import type { ConversationEvent, FinalResponseEvent } from './conversation-event
 import type { ConversationResult } from './conversation-session.js';
 import type { CommandMessage } from '../tools/types.js';
 import { type NormalizedUsage } from '../utils/token-usage.js';
+import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 
 const isEmptyUsage = (usage: NormalizedUsage | undefined): boolean => !usage || Object.keys(usage).length === 0;
 
@@ -26,6 +27,20 @@ export async function collectTerminalResult(
   let finalText = '';
   let reasoningText = '';
   const commandMessages: CommandMessage[] = [];
+  const turnItems: PersistedAssistantTurnItem[] = [];
+  let currentReasoningBuffer = '';
+  let currentTextBuffer = '';
+
+  const flushBuffers = () => {
+    if (currentReasoningBuffer) {
+      turnItems.push({ type: 'reasoning', text: currentReasoningBuffer });
+      currentReasoningBuffer = '';
+    }
+    if (currentTextBuffer) {
+      turnItems.push({ type: 'assistant_text', text: currentTextBuffer });
+      currentTextBuffer = '';
+    }
+  };
 
   // Token usage is sourced from a single authoritative value: the Agents SDK
   // run-state accumulator, which is already cumulative for the entire run
@@ -51,11 +66,19 @@ export async function collectTerminalResult(
       case 'text_delta': {
         const full = event.fullText ?? '';
         onTextChunk?.(full, event.delta);
+        if (currentReasoningBuffer) {
+          flushBuffers();
+        }
+        currentTextBuffer += event.delta;
         break;
       }
       case 'reasoning_delta': {
         const full = event.fullText ?? '';
         onReasoningChunk?.(full, event.delta);
+        if (currentTextBuffer) {
+          flushBuffers();
+        }
+        currentReasoningBuffer += event.delta;
         break;
       }
       case 'command_message': {
@@ -97,6 +120,14 @@ export async function collectTerminalResult(
             commandMessages.push(msg);
           }
         }
+        if (event.turnItems) {
+          turnItems.length = 0;
+          turnItems.push(...event.turnItems);
+          currentReasoningBuffer = '';
+          currentTextBuffer = '';
+        } else {
+          flushBuffers();
+        }
         break;
       }
       case 'error': {
@@ -123,11 +154,13 @@ export async function collectTerminalResult(
   }
 
   const usage = resolvedUsage();
+  flushBuffers();
   return {
     type: 'response',
     commandMessages,
     finalText: finalText || 'Done.',
     ...(reasoningText ? { reasoningText } : {}),
     ...(usage ? { usage } : {}),
+    turnItems,
   };
 }

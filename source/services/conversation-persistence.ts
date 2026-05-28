@@ -285,7 +285,7 @@ export function listConversations(): ConversationListEntry[] {
               if (!firstUserMessage) {
                 firstUserMessage = envelope.event.message.text;
               }
-            } else if (envelope?.event?.type === 'assistant_final') {
+            } else if (envelope?.event?.type === 'assistant_final' || envelope?.event?.type === 'assistant_turn') {
               messageCount++;
             } else if (envelope?.event?.type === 'undo') {
               const undone = (envelope.event as any).removedUserTurns || 0;
@@ -355,6 +355,7 @@ export function forkConversation(sourceId: string, newId: string): boolean {
 const CONTENT_EVENT_TYPES = new Set([
   'user_message',
   'assistant_final',
+  'assistant_turn',
   'command_message',
   'subagent_started',
   'error',

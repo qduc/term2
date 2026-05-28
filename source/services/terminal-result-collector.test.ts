@@ -230,3 +230,55 @@ test('collectTerminalResult accumulates streamed callbacks and returns final res
     );
   }
 });
+
+test('collectTerminalResult preserves multiple reasoning and text segments in turnItems in order', async (t) => {
+  const result = await collectTerminalResult(
+    asAsyncIterable([
+      { type: 'reasoning_delta', delta: 'Think 1' },
+      { type: 'text_delta', delta: 'Hello' },
+      { type: 'reasoning_delta', delta: 'Think 2' },
+      { type: 'text_delta', delta: ' World' },
+      { type: 'final', finalText: 'Hello World' },
+    ]),
+  );
+
+  t.is(result.type, 'response');
+  if (result.type === 'response') {
+    t.is(result.finalText, 'Hello World');
+    t.deepEqual(result.turnItems, [
+      { type: 'reasoning', text: 'Think 1' },
+      { type: 'assistant_text', text: 'Hello' },
+      { type: 'reasoning', text: 'Think 2' },
+      { type: 'assistant_text', text: ' World' },
+    ]);
+  }
+});
+
+test('collectTerminalResult trusts event.turnItems if provided on final event', async (t) => {
+  const result = await collectTerminalResult(
+    asAsyncIterable([
+      { type: 'reasoning_delta', delta: 'Ignored delta' },
+      {
+        type: 'final',
+        finalText: 'Final text',
+        turnItems: [
+          { type: 'reasoning', text: 'Authoritative reasoning' },
+          { type: 'assistant_text', text: 'Authoritative text' },
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: 'ls' },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'ok' },
+        ],
+      },
+    ]),
+  );
+
+  t.is(result.type, 'response');
+  if (result.type === 'response') {
+    t.is(result.finalText, 'Final text');
+    t.deepEqual(result.turnItems, [
+      { type: 'reasoning', text: 'Authoritative reasoning' },
+      { type: 'assistant_text', text: 'Authoritative text' },
+      { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: 'ls' },
+      { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'ok' },
+    ]);
+  }
+});

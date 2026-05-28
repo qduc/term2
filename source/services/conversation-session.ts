@@ -35,6 +35,7 @@ import {
 } from './tool-execution-ledger.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
 import { describeError } from '../utils/error-helpers.js';
+import type { PersistedAssistantTurn, PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -118,6 +119,9 @@ export class ConversationSession {
   private toolLedger = new ToolExecutionLedger();
   private generation = 0;
   #inputSurgeKind: string = 'delta';
+  private currentPersistedTurnItems: PersistedAssistantTurnItem[] = [];
+  private currentReasoningBuffer = '';
+  private currentAssistantTextBuffer = '';
 
   private settingsService?: ISettingsService;
   private logSink: ((event: LogEvent) => void) | null = null;
@@ -265,6 +269,7 @@ export class ConversationSession {
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.reset();
     this.#inputSurgeKind = 'delta';
+    this.#resetPersistedTurnState();
     const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
     clearConversations?.call(this.agentClient);
   }
@@ -282,6 +287,7 @@ export class ConversationSession {
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.markUndoOrRewind();
     this.#inputSurgeKind = 'delta';
+    this.#resetPersistedTurnState();
     this.#log({ type: 'undo', removedUserTurns: 1, snapshot: this.getCurrentSnapshot() });
     return removed;
   }
@@ -303,6 +309,7 @@ export class ConversationSession {
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.markUndoOrRewind();
     this.#inputSurgeKind = 'delta';
+    this.#resetPersistedTurnState();
     this.#log({ type: 'undo', removedUserTurns: n, snapshot: this.getCurrentSnapshot() });
     return removed;
   }
@@ -364,6 +371,60 @@ export class ConversationSession {
     };
   }
 
+  #flushReasoningItem(): void {
+    if (this.currentReasoningBuffer) {
+      this.currentPersistedTurnItems.push({
+        type: 'reasoning',
+        text: this.currentReasoningBuffer,
+      });
+      this.currentReasoningBuffer = '';
+    }
+  }
+
+  #flushAssistantTextItem(): void {
+    if (this.currentAssistantTextBuffer) {
+      this.currentPersistedTurnItems.push({
+        type: 'assistant_text',
+        text: this.currentAssistantTextBuffer,
+      });
+      this.currentAssistantTextBuffer = '';
+    }
+  }
+
+  #recordToolCallItem(callId: string, toolName: string, args: unknown): void {
+    this.#flushReasoningItem();
+    this.#flushAssistantTextItem();
+    this.currentPersistedTurnItems.push({
+      type: 'tool_call',
+      callId,
+      toolName,
+      arguments: args,
+    });
+  }
+
+  #recordToolResultItem(
+    callId: string,
+    toolName: string,
+    status: 'completed' | 'failed' | 'aborted',
+    output: unknown,
+  ): void {
+    this.#flushReasoningItem();
+    this.#flushAssistantTextItem();
+    this.currentPersistedTurnItems.push({
+      type: 'tool_result',
+      callId,
+      toolName,
+      status,
+      output,
+    });
+  }
+
+  #resetPersistedTurnState(): void {
+    this.currentPersistedTurnItems = [];
+    this.currentReasoningBuffer = '';
+    this.currentAssistantTextBuffer = '';
+  }
+
   #log(event: LogEvent): void {
     if (!this.logSink) return;
     try {
@@ -380,7 +441,20 @@ export class ConversationSession {
   #dispatchEventToLog(event: ConversationEvent): void {
     if (!this.logSink) return;
     switch (event.type) {
+      case 'text_delta':
+        if (this.currentReasoningBuffer) {
+          this.#flushReasoningItem();
+        }
+        this.currentAssistantTextBuffer += event.delta;
+        return;
+      case 'reasoning_delta':
+        if (this.currentAssistantTextBuffer) {
+          this.#flushAssistantTextItem();
+        }
+        this.currentReasoningBuffer += event.delta;
+        return;
       case 'tool_started':
+        this.#recordToolCallItem(event.toolCallId, event.toolName, event.arguments);
         this.#log({
           type: 'tool_started',
           toolCallId: event.toolCallId,
@@ -390,6 +464,18 @@ export class ConversationSession {
         return;
       case 'command_message':
         this.#log({ type: 'command_message', message: event.message });
+        if (
+          event.message.callId &&
+          event.message.toolName &&
+          (event.message.status === 'completed' || event.message.status === 'failed')
+        ) {
+          this.#recordToolResultItem(
+            event.message.callId,
+            event.message.toolName,
+            event.message.status === 'failed' ? 'failed' : 'completed',
+            event.message.output,
+          );
+        }
         return;
       case 'approval_required':
         this.#log({
@@ -423,20 +509,39 @@ export class ConversationSession {
         return;
       case 'final': {
         const snapshot = this.getCurrentSnapshot();
-        this.#log({
-          type: 'assistant_final',
-          message: {
-            id: `bot-${snapshot.history.length}-${Date.now()}`,
-            sender: 'bot',
-            status: 'finalized',
+        this.#flushReasoningItem();
+        this.#flushAssistantTextItem();
+
+        const turnItemsToLog = event.turnItems ? [...event.turnItems] : [...this.currentPersistedTurnItems];
+        if (event.finalText && !turnItemsToLog.some((item) => item.type === 'assistant_text')) {
+          turnItemsToLog.push({
+            type: 'assistant_text',
             text: event.finalText,
-            ...(event.reasoningText ? { reasoningText: event.reasoningText } : {}),
-          },
-          finalText: event.finalText,
-          ...(event.reasoningText ? { reasoningText: event.reasoningText } : {}),
+          });
+        }
+
+        // Invariant check: if transcript contains tool_result, matching call IDs exist in snapshot.toolLedger
+        for (const item of turnItemsToLog) {
+          if (item.type === 'tool_result') {
+            const exists = snapshot.toolLedger.some((t) => t.callId === item.callId);
+            if (!exists) {
+              this.logger.warn(`Invariant violation: tool_result callId ${item.callId} not found in toolLedger`);
+            }
+          }
+        }
+
+        const turn: PersistedAssistantTurn = {
+          items: turnItemsToLog,
+        };
+
+        this.#log({
+          type: 'assistant_turn',
+          turn,
           ...(event.usage ? { usage: event.usage } : {}),
           snapshot,
         });
+
+        this.#resetPersistedTurnState();
         return;
       }
       default:
@@ -529,15 +634,18 @@ export class ConversationSession {
   async *run(
     input: string | UserTurn,
     {
-      hallucinationRetryCount = 0,
-      flexServiceTierFallbackCount = 0,
       skipUserMessage = false,
+      flexServiceTierFallbackCount = 0,
+      hallucinationRetryCount = 0,
     }: {
-      hallucinationRetryCount?: number;
-      flexServiceTierFallbackCount?: number;
       skipUserMessage?: boolean;
+      flexServiceTierFallbackCount?: number;
+      hallucinationRetryCount?: number;
     } = {},
   ): AsyncIterable<ConversationEvent> {
+    if (!skipUserMessage || hallucinationRetryCount > 0 || flexServiceTierFallbackCount > 0) {
+      this.#resetPersistedTurnState();
+    }
     const gen = this.generation;
     let stream: AgentStream | null = null;
     const turn = normalizeUserTurn(input);
@@ -1263,6 +1371,7 @@ export class ConversationSession {
         emittedCommandIds,
         usage,
         toolCallArgumentsById: this.toolCallArgumentsById,
+        turnItems: this.currentPersistedTurnItems,
       },
       {
         approvalFlow: this.approvalFlow,
@@ -1333,6 +1442,7 @@ export class ConversationSession {
       finalText: finalText || 'Done.',
       ...(reasoningText ? { reasoningText } : {}),
       ...(combinedUsage && Object.keys(combinedUsage).length > 0 ? { usage: combinedUsage } : {}),
+      turnItems: this.currentPersistedTurnItems,
     };
   }
 }

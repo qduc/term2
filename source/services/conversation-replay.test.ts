@@ -234,3 +234,180 @@ test('replayEvents: handles incomplete in-flight tool call on interruption', (t)
   t.is((restored.history[0] as any).role, 'user');
   t.is((restored.history[0] as any).content, 'run tool');
 });
+
+test('replayEvents: assistant_turn maps items to SavedMessage[] in correct order with stable call IDs', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'reasoning', text: 'thinking' },
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: 'ls' },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'files' },
+          { type: 'assistant_text', text: 'here is files' },
+        ],
+      },
+      usage: { prompt_tokens: 5, completion_tokens: 10, total_tokens: 15 },
+      snapshot: {
+        history: [],
+        previousResponseId: 'r1',
+        toolLedger: [],
+      },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  t.is(restored.messages.length, 4); // 1 user + 3 assistant_turn items (tool_result updates tool_call in-place)
+  t.is(restored.messages[0].sender, 'user');
+  t.is(restored.messages[1].sender, 'reasoning');
+  t.is(restored.messages[1].text, 'thinking');
+  t.is(restored.messages[2].sender, 'command');
+  t.is(restored.messages[2].callId, 'call-1');
+  t.is(restored.messages[2].status, 'completed');
+  t.is(restored.messages[2].success, true);
+  t.is(restored.messages[2].output, 'files');
+  t.is(restored.messages[3].sender, 'bot');
+  t.is(restored.messages[3].text, 'here is files');
+  t.deepEqual(restored.usage, { prompt_tokens: 5, completion_tokens: 10, total_tokens: 15 });
+});
+
+test('replayEvents: assistant_turn deduplicates earlier coarse command_message events from same turn', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } }),
+    // Coarse events emitted during execution
+    env({
+      type: 'command_message',
+      message: { id: 'cmd-coarse', sender: 'command', status: 'running', command: 'ls', output: '' },
+    }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: 'ls' },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'files' },
+          { type: 'assistant_text', text: 'done' },
+        ],
+      },
+      snapshot: {
+        history: [],
+        previousResponseId: 'r1',
+        toolLedger: [],
+      },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  // Coarse 'cmd-coarse' should be removed, replaced with replayed assistant turn messages.
+  t.is(restored.messages.length, 3); // 1 user + 1 command + 1 bot
+  t.is(restored.messages[0].sender, 'user');
+  t.is(restored.messages[1].sender, 'command');
+  t.is(restored.messages[1].callId, 'call-1');
+  t.is(restored.messages[1].status, 'completed');
+  t.is(restored.messages[2].sender, 'bot');
+  t.is(restored.messages[2].text, 'done');
+});
+
+test('replayEvents: assistant_turn rebuilds structured assistant history for resume', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run date' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          {
+            type: 'reasoning',
+            text: 'I should run date.',
+            providerMetadata: {
+              reasoning_content: 'I should run date.',
+              reasoning_details: [{ type: 'summary_text', text: 'I should run date.' }],
+            },
+          },
+          {
+            type: 'tool_call',
+            callId: 'call-1',
+            toolName: 'shell',
+            arguments: '{"command":"date"}',
+            providerItem: {
+              type: 'function_call',
+              id: 'fc_1',
+              callId: 'call-1',
+              name: 'shell',
+              arguments: '{"command":"date"}',
+            },
+          },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'shell',
+            status: 'completed',
+            output: 'Mon Jan 01 00:00:00 UTC 2024',
+            providerItem: {
+              type: 'function_call_result',
+              id: 'fr_1',
+              callId: 'call-1',
+              name: 'shell',
+              output: 'Mon Jan 01 00:00:00 UTC 2024',
+            },
+          },
+          {
+            type: 'reasoning',
+            text: 'Now answer.',
+            providerMetadata: {
+              reasoning_content: 'Now answer.',
+            },
+          },
+          {
+            type: 'assistant_text',
+            text: 'Done.',
+            providerMetadata: {
+              reasoning_content: 'Now answer.',
+            },
+            providerItemId: 'msg_1',
+          },
+        ],
+      },
+      snapshot: {
+        history: [],
+        previousResponseId: 'r1',
+        toolLedger: [],
+      },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  t.is(restored.history.length, 4);
+  t.deepEqual(restored.history[0], { role: 'user', type: 'message', content: 'run date' });
+  t.deepEqual(restored.history[1], {
+    type: 'function_call',
+    id: 'fc_1',
+    callId: 'call-1',
+    name: 'shell',
+    arguments: '{"command":"date"}',
+    providerData: {
+      reasoning_content: 'I should run date.',
+      reasoning_details: [{ type: 'summary_text', text: 'I should run date.' }],
+    },
+  });
+  t.deepEqual(restored.history[2], {
+    type: 'function_call_result',
+    id: 'fr_1',
+    callId: 'call-1',
+    name: 'shell',
+    output: 'Mon Jan 01 00:00:00 UTC 2024',
+  });
+  t.deepEqual(restored.history[3], {
+    role: 'assistant',
+    type: 'message',
+    id: 'msg_1',
+    status: 'completed',
+    content: [{ type: 'output_text', text: 'Done.' }],
+    providerData: {
+      reasoning_content: 'Now answer.',
+    },
+  });
+});

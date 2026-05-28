@@ -8,7 +8,8 @@ import {
 } from './tool-execution-ledger.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
 import type { LogEnvelope, LogEvent, StateSnapshot } from './conversation-log-events.js';
-import type { SavedAppMode, SavedMessage } from './conversation-persistence-types.js';
+import type { SavedAppMode, SavedMessage, PersistedAssistantTurn } from './conversation-persistence-types.js';
+import { synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
 
 export interface RestoredState {
   id: string;
@@ -72,6 +73,61 @@ interface ReplayState {
   trailingUserMessage: boolean;
   inFlightToolCalls: Map<string, InFlightToolCall>;
   warnings: string[];
+}
+
+function replayAssistantTurn(turn: PersistedAssistantTurn, turnId: string): SavedMessage[] {
+  const messages: SavedMessage[] = [];
+  let index = 0;
+  for (const item of turn.items) {
+    if (item.type === 'reasoning') {
+      messages.push({
+        id: `reasoning-${turnId}-${index++}`,
+        sender: 'reasoning',
+        text: item.text,
+      });
+    } else if (item.type === 'assistant_text') {
+      messages.push({
+        id: `bot-${turnId}-${index++}`,
+        sender: 'bot',
+        status: 'finalized',
+        text: item.text,
+      });
+    } else if (item.type === 'tool_call') {
+      messages.push({
+        id: `command-${item.callId}`,
+        sender: 'command',
+        status: 'running',
+        command: typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments),
+        output: '',
+        toolName: item.toolName,
+        toolArgs: item.arguments,
+        callId: item.callId,
+      } as SavedMessage);
+    } else if (item.type === 'tool_result') {
+      const existing = messages.find((m) => m.sender === 'command' && m.callId === item.callId);
+      if (existing) {
+        existing.status = item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed';
+        existing.output = typeof item.output === 'string' ? item.output : JSON.stringify(item.output);
+        if (item.status === 'failed') {
+          existing.success = false;
+        } else if (item.status === 'completed') {
+          existing.success = true;
+        }
+      } else {
+        messages.push({
+          id: `command-${item.callId}`,
+          sender: 'command',
+          status: item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed',
+          command: item.toolName,
+          output: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
+          success: item.status === 'completed',
+          toolName: item.toolName,
+          callId: item.callId,
+        } as SavedMessage);
+      }
+    }
+  }
+  return messages;
 }
 
 function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
@@ -223,6 +279,28 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       state.inFlightToolCalls.clear();
       return;
     }
+    case 'assistant_turn': {
+      const lastUserIndex = state.messages.map((m) => m.sender).lastIndexOf('user');
+      if (lastUserIndex !== -1) {
+        state.messages = state.messages.slice(0, lastUserIndex + 1);
+      } else {
+        state.messages = [];
+      }
+      const turnId = `bot-turn-${state.messages.length}-${ts}`;
+      const replayedMessages = replayAssistantTurn(event.turn, turnId);
+      for (const m of replayedMessages) {
+        state.messages.push(m);
+      }
+      const snap = cloneSnapshot(event.snapshot);
+      state.history = synthesizeHistoryFromAssistantTurn(state.history, event.turn);
+      state.previousResponseId = snap.previousResponseId;
+      state.toolLedger = snap.toolLedger;
+      state.snapshotModel = snap.model ?? state.snapshotModel;
+      state.snapshotProvider = snap.provider ?? state.snapshotProvider;
+      state.trailingUserMessage = false;
+      state.inFlightToolCalls.clear();
+      return;
+    }
     case 'undo': {
       let removed = 0;
       const target = Math.max(event.removedUserTurns, 1);
@@ -269,6 +347,9 @@ export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
   for (const envelope of envelopes) {
     if (!envelope || envelope.event == null) continue;
     if (envelope.event.type === 'assistant_final' && envelope.event.usage) {
+      usage.add(envelope.event.usage);
+    }
+    if (envelope.event.type === 'assistant_turn' && envelope.event.usage) {
       usage.add(envelope.event.usage);
     }
     if (envelope.event.type === 'subagent_completed' && envelope.event.result?.usage) {

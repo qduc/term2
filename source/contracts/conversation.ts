@@ -1,6 +1,7 @@
 import type { ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import type { CommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
+import type { PersistedAssistantTurnItem } from '../services/conversation-persistence-types.js';
 
 export type ReasoningEffortSetting = ModelSettingsReasoningEffort | 'default';
 
@@ -32,8 +33,10 @@ export interface FinalTerminal {
   type: 'response';
   commandMessages: CommandMessage[];
   finalText: string;
+  /** @deprecated derived compatibility only; turnItems is authoritative. */
   reasoningText?: string;
   usage?: NormalizedUsage;
+  turnItems?: PersistedAssistantTurnItem[];
 }
 
 export type ConversationTerminal = ApprovalRequiredTerminal | FinalTerminal;

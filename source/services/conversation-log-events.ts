@@ -3,9 +3,9 @@ import type { NormalizedUsage } from '../utils/token-usage.js';
 import type { CommandMessage } from '../tools/types.js';
 import type { SubagentResult } from './subagents/types.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
-import type { SavedAppMode, SavedMessage } from './conversation-persistence-types.js';
+import type { SavedAppMode, SavedMessage, PersistedAssistantTurn } from './conversation-persistence-types.js';
 
-export const LOG_ENVELOPE_VERSION = 1;
+export const LOG_ENVELOPE_VERSION = 2;
 
 export interface StateSnapshot {
   history: AgentInputItem[];
@@ -104,6 +104,13 @@ export interface AssistantFinalEvent {
   snapshot: StateSnapshot;
 }
 
+export interface AssistantTurnEvent {
+  type: 'assistant_turn';
+  turn: PersistedAssistantTurn;
+  usage?: NormalizedUsage;
+  snapshot: StateSnapshot;
+}
+
 export interface UndoEvent {
   type: 'undo';
   removedUserTurns: number;
@@ -127,11 +134,12 @@ export type LogEvent =
   | SubagentCompletedLogEvent
   | ErrorLogEvent
   | AssistantFinalEvent
+  | AssistantTurnEvent
   | UndoEvent
   | SessionClearedEvent;
 
 export interface LogEnvelope {
-  v: typeof LOG_ENVELOPE_VERSION;
+  v: number;
   seq: number;
   ts: string;
   event: LogEvent;

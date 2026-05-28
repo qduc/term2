@@ -36,14 +36,19 @@ const normalizeToolItem = (item: any): { toolName: string; arguments: any; outpu
     type === 'function_call_output' ||
     rawItem?.type === 'function_call_output' ||
     type === 'function_call_output_result' ||
-    rawItem?.type === 'function_call_output_result';
+    rawItem?.type === 'function_call_output_result' ||
+    type === 'apply_patch_call_output' ||
+    rawItem?.type === 'apply_patch_call_output';
   const isToolCallOutput = type === 'tool_call_output_item';
 
   if (!isFunctionResult && !isToolCallOutput) {
     return null;
   }
 
-  const toolName = rawItem?.name ?? item.name;
+  const toolName =
+    rawItem?.name ??
+    item.name ??
+    (type === 'apply_patch_call_output' || rawItem?.type === 'apply_patch_call_output' ? 'apply_patch' : undefined);
   if (!toolName) {
     return null;
   }
@@ -66,7 +71,7 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
     }
 
     const type = rawItem?.type ?? item?.type;
-    if (type !== 'function_call') {
+    if (type !== 'function_call' && type !== 'apply_patch_call') {
       continue;
     }
 
@@ -75,7 +80,8 @@ export const extractCommandMessages = (items: any[] = []): CommandMessage[] => {
       continue;
     }
 
-    const args = rawItem.arguments ?? rawItem.args ?? item?.arguments ?? item?.args;
+    const args =
+      rawItem.arguments ?? rawItem.args ?? rawItem.operation ?? item?.arguments ?? item?.args ?? item?.operation;
     if (!args) {
       continue;
     }

@@ -510,6 +510,57 @@ test('extracts failed apply_patch operation', (t) => {
   }
 });
 
+test('extracts native apply_patch_call output with diff args', (t) => {
+  const restore = withStubbedNow(1700000000650);
+
+  try {
+    const items = [
+      {
+        type: 'apply_patch_call',
+        callId: 'native-call-1',
+        status: 'completed',
+        operation: {
+          type: 'update_file',
+          path: 'native.txt',
+          diff: '@@ -1 +1 @@\n-old\n+new',
+        },
+      },
+      {
+        type: 'apply_patch_call_output',
+        output: 'Updated native.txt',
+        rawItem: {
+          type: 'apply_patch_call_output',
+          callId: 'native-call-1',
+          status: 'completed',
+          output: 'Updated native.txt',
+        },
+      },
+    ];
+
+    const messages = extractCommandMessages(items);
+
+    t.is(messages.length, 1);
+    t.deepEqual(messages[0], {
+      id: 'native-call-1-0',
+      callId: 'native-call-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'apply_patch update_file native.txt',
+      output: 'Updated native.txt',
+      success: true,
+      isApprovalRejection: false,
+      toolName: 'apply_patch',
+      toolArgs: {
+        path: 'native.txt',
+        diff: '@@ -1 +1 @@\n-old\n+new',
+        type: 'update_file',
+      },
+    });
+  } finally {
+    restore();
+  }
+});
+
 test('extracts ask_mentor output', (t) => {
   const restore = withStubbedNow(1700000000700);
 

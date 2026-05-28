@@ -25,6 +25,22 @@ test('shouldUseNativePatchTool returns true for OpenAI gpt-5.1 models', (t) => {
   );
 });
 
+test('shouldUseNativePatchTool returns true for OpenAI gpt-5.10 and newer models', (t) => {
+  t.true(
+    shouldUseNativePatchTool({
+      providerId: 'openai',
+      model: 'gpt-5.10',
+    }),
+  );
+
+  t.true(
+    shouldUseNativePatchTool({
+      providerId: 'openai',
+      model: 'gpt-6.0',
+    }),
+  );
+});
+
 test('shouldUseNativePatchTool returns false for OpenAI non-5.1 models', (t) => {
   t.false(
     shouldUseNativePatchTool({
@@ -52,6 +68,44 @@ test('shouldUseNativePatchTool honors provider model prefix capability', (t) => 
         supportsConversationChaining: false,
         supportsTracingControl: false,
         nativePatchModelPrefixes: ['custom-editor'],
+      },
+    }),
+  );
+});
+
+test('shouldUseNativePatchTool treats gpt model prefixes semantically', (t) => {
+  t.true(
+    shouldUseNativePatchTool({
+      providerId: 'custom-provider',
+      model: 'gpt-5.1-mini',
+      capabilities: {
+        supportsConversationChaining: false,
+        supportsTracingControl: false,
+        nativePatchModelPrefixes: ['gpt-5.1'],
+      },
+    }),
+  );
+
+  t.true(
+    shouldUseNativePatchTool({
+      providerId: 'custom-provider',
+      model: 'gpt-6.0',
+      capabilities: {
+        supportsConversationChaining: false,
+        supportsTracingControl: false,
+        nativePatchModelPrefixes: ['gpt-5.1'],
+      },
+    }),
+  );
+
+  t.false(
+    shouldUseNativePatchTool({
+      providerId: 'custom-provider',
+      model: 'gpt-5.0',
+      capabilities: {
+        supportsConversationChaining: false,
+        supportsTracingControl: false,
+        nativePatchModelPrefixes: ['gpt-5.1'],
       },
     }),
   );

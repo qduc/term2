@@ -567,6 +567,5 @@ registerProvider({
     supportsConversationChaining: false,
     supportsTracingControl: false,
     usesStrictToolSchema: true,
-    nativePatchModelPrefixes: ['gpt-5.1'],
   },
 });

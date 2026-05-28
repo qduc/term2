@@ -10,7 +10,7 @@ export const captureToolCallArguments = (item: any, toolCallArgumentsById: Map<s
     return;
   }
 
-  if (rawItem?.type !== 'function_call') {
+  if (rawItem?.type !== 'function_call' && rawItem?.type !== 'apply_patch_call') {
     return;
   }
 
@@ -19,7 +19,8 @@ export const captureToolCallArguments = (item: any, toolCallArgumentsById: Map<s
     return;
   }
 
-  const args = rawItem.arguments ?? rawItem.args ?? item?.arguments ?? item?.args;
+  const args =
+    rawItem.arguments ?? rawItem.args ?? rawItem.operation ?? item?.arguments ?? item?.args ?? item?.operation;
   if (!args) {
     return;
   }
@@ -37,7 +38,14 @@ export const attachCachedArguments = (items: any[] = [], toolCallArgumentsById: 
       continue;
     }
 
-    if (item.arguments || item.args || item?.rawItem?.arguments || item?.rawItem?.args) {
+    if (
+      item.arguments ||
+      item.args ||
+      item.operation ||
+      item?.rawItem?.arguments ||
+      item?.rawItem?.args ||
+      item?.rawItem?.operation
+    ) {
       continue;
     }
 

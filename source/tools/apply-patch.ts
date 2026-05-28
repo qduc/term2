@@ -78,17 +78,37 @@ function getApplyPatchOperations(params: ApplyPatchToolParams): ApplyPatchOperat
 
 export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
   const parsedOutput = safeJsonParse(getOutputText(item));
-  const patchOutputItems = parsedOutput?.output ?? [];
+  const patchOutputItems = Array.isArray(parsedOutput?.output) ? parsedOutput.output : [];
+  const rawItem = item?.rawItem ?? item;
+  const callId =
+    rawItem?.callId ??
+    rawItem?.call_id ??
+    rawItem?.tool_call_id ??
+    rawItem?.toolCallId ??
+    rawItem?.id ??
+    item?.callId ??
+    item?.call_id ??
+    item?.tool_call_id ??
+    item?.toolCallId ??
+    item?.id;
+  const argsFromMap = callId ? _toolCallArgumentsById.get(callId) : undefined;
+  const normalizedArgs =
+    normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments ?? argsFromMap ?? rawItem?.operation) ?? {};
+  const operationType = normalizedArgs?.type ?? rawItem?.operation?.type ?? 'unknown';
+  const filePath = normalizedArgs?.path ?? rawItem?.operation?.path ?? 'unknown';
+  const isNativePatchResult = rawItem?.type === 'apply_patch_call_output' || item?.type === 'apply_patch_call_output';
+  const rawStatus = rawItem?.status ?? item?.status;
 
-  // If JSON parsing failed or no output array, create error message
   if (patchOutputItems.length === 0) {
-    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
-    const args = normalizeToolArguments(normalizedArgs) ?? {};
-    const operationType = args?.type ?? 'unknown';
-    const filePath = args?.path ?? 'unknown';
     const command = `apply_patch ${operationType} ${filePath}`;
     const output = getOutputText(item) || 'No output';
-    const success = false;
+    const success = isNativePatchResult
+      ? rawStatus === 'completed' ||
+        (rawStatus !== 'failed' &&
+          !output.startsWith('Invalid patch') &&
+          !output.startsWith('Cannot update') &&
+          !output.startsWith('Error:'))
+      : false;
 
     return [
       createBaseMessage(item, index, 0, false, {
@@ -96,7 +116,11 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
         output,
         success,
         toolName: TOOL_NAME_APPLY_PATCH,
-        toolArgs: { path: filePath, diff: args?.diff ?? '', type: operationType },
+        toolArgs: {
+          path: filePath,
+          diff: normalizedArgs?.diff ?? '',
+          type: operationType,
+        },
       }),
     ];
   }
@@ -104,9 +128,9 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
   // Apply patch tool can have multiple operation outputs
   const messages: CommandMessage[] = [];
   for (const [patchIndex, patchResult] of patchOutputItems.entries()) {
-    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
-    const args = normalizeToolArguments(normalizedArgs) ?? {};
-    const operationArgs = Array.isArray(args?.operations) ? args.operations[patchIndex] : args;
+    const operationArgs = Array.isArray(normalizedArgs?.operations)
+      ? normalizedArgs.operations[patchIndex]
+      : normalizedArgs;
     const operationType = operationArgs?.type ?? patchResult?.operation ?? 'unknown';
     const filePath = operationArgs?.path ?? patchResult?.path ?? 'unknown';
 

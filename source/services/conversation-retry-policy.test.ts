@@ -189,6 +189,15 @@ test('isTransientRetryableError: generic errors with rate-limit message are retr
   t.true(isTransientRetryableError(new Error('rate_limit retry after 10s')));
 });
 
+test('isTransientRetryableError: websocket abnormal close 1006 is retryable but policy closes are not', (t) => {
+  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1006)')));
+  t.false(
+    isTransientRetryableError(
+      new Error('WebSocket connection closed before response completed (code=1008, reason="rate limit exceeded")'),
+    ),
+  );
+});
+
 test('isTransientRetryableError: terminated errors are retryable', (t) => {
   t.true(isTransientRetryableError('terminated'));
   t.true(isTransientRetryableError('terminated: other side closed'));

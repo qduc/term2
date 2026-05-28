@@ -540,6 +540,18 @@ test('TimedResponsesWSModel.getRetryAdvice returns safe retry advice for connect
   const advice4 = model.getRetryAdvice({ error: error4 });
   t.true(advice4.suggested);
   t.is(advice4.replaySafety, 'safe');
+
+  const error5 = new Error('WebSocket connection closed before response completed (code=1006)');
+  const advice5 = model.getRetryAdvice({ error: error5 });
+  t.true(advice5.suggested);
+  t.is(advice5.replaySafety, 'safe');
+
+  const error6 = new Error(
+    'WebSocket connection closed before response completed (code=1008, reason="rate limit exceeded")',
+  );
+  const advice6 = model.getRetryAdvice({ error: error6 });
+  t.false(advice6.suggested);
+  t.is(advice6.replaySafety, 'unsafe');
 });
 
 test('TimedResponsesWSModel fails fast when no first frame arrives within firstFrameTimeoutMs', async (t) => {

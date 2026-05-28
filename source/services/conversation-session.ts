@@ -637,13 +637,20 @@ export class ConversationSession {
       skipUserMessage = false,
       flexServiceTierFallbackCount = 0,
       hallucinationRetryCount = 0,
+      transientRetryCount = 0,
     }: {
       skipUserMessage?: boolean;
       flexServiceTierFallbackCount?: number;
       hallucinationRetryCount?: number;
+      transientRetryCount?: number;
     } = {},
   ): AsyncIterable<ConversationEvent> {
-    if (!skipUserMessage || hallucinationRetryCount > 0 || flexServiceTierFallbackCount > 0) {
+    if (
+      !skipUserMessage ||
+      hallucinationRetryCount > 0 ||
+      flexServiceTierFallbackCount > 0 ||
+      transientRetryCount > 0
+    ) {
       this.#resetPersistedTurnState();
     }
     const gen = this.generation;
@@ -948,6 +955,49 @@ export class ConversationSession {
         yield* this.run(turn, {
           skipUserMessage: true,
           flexServiceTierFallbackCount: flexServiceTierFallbackCount + 1,
+        });
+        return;
+      }
+
+      if (isTransientRetryableError(error) && transientRetryCount < MAX_TRANSIENT_RETRIES) {
+        const attempt = transientRetryCount + 1;
+        const delay = Math.min(500 * Math.pow(2, attempt - 1), 30000);
+
+        this.logger.warn('Transient upstream error detected, retrying turn', {
+          eventType: 'retry.transient',
+          category: 'retry',
+          phase: 'retry',
+          retryType: 'upstream',
+          retryAttempt: attempt,
+          attempt,
+          maxRetries: MAX_TRANSIENT_RETRIES,
+          sessionId: this.id,
+          traceId: this.logger.getCorrelationId(),
+          errorMessage: error instanceof Error ? error.message : String(error),
+          delayMs: delay,
+        });
+
+        yield {
+          type: 'retry',
+          toolName: 'turn',
+          attempt,
+          maxRetries: MAX_TRANSIENT_RETRIES,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          retryType: 'upstream',
+        };
+
+        if (!this.#isCurrentGeneration(gen)) return;
+
+        if (stream) {
+          this.toolLedger.import(ledgerSnapshot);
+        } else {
+          this.conversationStore.removeLastUserMessage();
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        yield* this.run(turn, {
+          skipUserMessage: Boolean(stream),
+          transientRetryCount: attempt,
         });
         return;
       }

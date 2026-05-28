@@ -81,6 +81,12 @@ function isFirstFrameTimeoutError(err: unknown): boolean {
   return (err as any).message.toLowerCase().includes('websocket first frame timeout');
 }
 
+function isRetryableAbnormalCloseError(err: unknown): boolean {
+  if (!err || typeof (err as any).message !== 'string') return false;
+  const message = (err as any).message.toLowerCase();
+  return message.includes('websocket connection closed before response completed') && message.includes('code=1006');
+}
+
 function isIdleTimeoutError(err: unknown): boolean {
   if (!err || typeof (err as any).message !== 'string') return false;
   return (err as any).message.toLowerCase().includes('websocket idle timeout');
@@ -173,10 +179,13 @@ export class FallbackResponsesModel implements Model {
 
         return response;
       } catch (error) {
-        if (isFirstFrameTimeoutError(error) && firstFrameRetries < MAX_WS_FIRST_FRAME_RETRIES) {
+        if (
+          (isFirstFrameTimeoutError(error) || isRetryableAbnormalCloseError(error)) &&
+          firstFrameRetries < MAX_WS_FIRST_FRAME_RETRIES
+        ) {
           firstFrameRetries++;
           if (this.loggingService && this.providerId) {
-            this.loggingService.warn?.(`${this.providerId} ws first frame timeout, retrying`, {
+            this.loggingService.warn?.(`${this.providerId} ws request failed before response start, retrying`, {
               eventType: 'provider.response.retry',
               category: 'provider',
               phase: 'provider_response',
@@ -301,10 +310,14 @@ export class FallbackResponsesModel implements Model {
         }
         return;
       } catch (error) {
-        if (!started && isFirstFrameTimeoutError(error) && firstFrameRetries < MAX_WS_FIRST_FRAME_RETRIES) {
+        if (
+          !started &&
+          (isFirstFrameTimeoutError(error) || isRetryableAbnormalCloseError(error)) &&
+          firstFrameRetries < MAX_WS_FIRST_FRAME_RETRIES
+        ) {
           firstFrameRetries++;
           if (this.loggingService && this.providerId) {
-            this.loggingService.warn?.(`${this.providerId} ws stream first frame timeout, retrying`, {
+            this.loggingService.warn?.(`${this.providerId} ws stream failed before response start, retrying`, {
               eventType: 'provider.response.retry',
               category: 'provider',
               phase: 'provider_response',

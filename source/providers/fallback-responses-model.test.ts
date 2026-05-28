@@ -477,6 +477,41 @@ test('FallbackResponsesModel.getResponse downgrades immediately on non-first-fra
   t.is(result, expectedResponse);
 });
 
+test('FallbackResponsesModel.getResponse retries abnormal websocket close 1006 before downgrading', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+
+  const abnormalCloseError = new Error('WebSocket connection closed before response completed (code=1006)');
+  const expectedResponse: ModelResponse = { usage: {} as any, output: [] };
+
+  const wsModel = makeMockModel({
+    getResponse: async () => {
+      wsCalled++;
+      if (wsCalled === 1) {
+        throw abnormalCloseError;
+      }
+
+      return expectedResponse;
+    },
+  });
+  const httpModel = makeMockModel({
+    getResponse: async () => {
+      httpCalled++;
+      return {} as any;
+    },
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state);
+
+  const result = await model.getResponse({} as any);
+
+  t.is(wsCalled, 2);
+  t.is(httpCalled, 0);
+  t.false(state.isDowngraded);
+  t.is(result, expectedResponse);
+});
+
 test('FallbackResponsesModel.getStreamedResponse retries WS up to 2 times on first-frame timeout then downgrades', async (t) => {
   let wsCalled = 0;
   let httpCalled = 0;
@@ -510,6 +545,42 @@ test('FallbackResponsesModel.getStreamedResponse retries WS up to 2 times on fir
   t.is(httpCalled, 1);
   t.true(state.isDowngraded);
   t.true(downgradeLogged);
+  t.deepEqual(events, [{ type: 'response_started' }]);
+});
+
+test('FallbackResponsesModel.getStreamedResponse retries abnormal websocket close 1006 before downgrading', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+
+  const abnormalCloseError = new Error('WebSocket connection closed before response completed (code=1006)');
+  const wsModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      wsCalled++;
+      if (wsCalled === 1) {
+        throw abnormalCloseError;
+      }
+
+      yield { type: 'response_started' } as any;
+    } as any,
+  });
+  const httpModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      httpCalled++;
+      yield { type: 'output_text_delta', delta: 'fallback' } as any;
+    } as any,
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state);
+
+  const events: any[] = [];
+  for await (const event of model.getStreamedResponse({} as any)) {
+    events.push(event);
+  }
+
+  t.is(wsCalled, 2);
+  t.is(httpCalled, 0);
+  t.false(state.isDowngraded);
   t.deepEqual(events, [{ type: 'response_started' }]);
 });
 

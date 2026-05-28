@@ -213,6 +213,52 @@ test('run() retries streamed recoverable errors without committing failed stream
   t.deepEqual(calls[1], [{ role: 'user', type: 'message', content: 'retry me' }]);
 });
 
+test('run() retries streamed transient websocket close 1006 by replaying the turn', async (t) => {
+  class FailingStream extends MockStream {
+    async *[Symbol.asyncIterator]() {
+      yield { type: 'response.output_text.delta', delta: 'partial' };
+      throw new Error('WebSocket connection closed before response completed (code=1006)');
+    }
+  }
+
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  successStream.finalOutput = 'Recovered';
+  successStream.history = [
+    { role: 'user', type: 'message', content: 'retry me' },
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Recovered' }] },
+  ];
+
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    async startStream(input) {
+      calls.push(input);
+      return calls.length === 1 ? new FailingStream() : successStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('retry me')) {
+    emitted.push(ev);
+  }
+
+  t.deepEqual(
+    emitted.map((event) => event.type),
+    ['text_delta', 'retry', 'text_delta', 'final'],
+  );
+  t.is(emitted[1].retryType, 'upstream');
+  t.is(calls.length, 2);
+  t.is(calls[0].length, 1);
+  t.deepEqual(calls[1], [{ role: 'user', type: 'message', content: 'retry me' }]);
+});
+
 test('run() exports completed tool pairs from a stream that later fails', async (t) => {
   class FailingStream extends MockStream {
     async *[Symbol.asyncIterator]() {

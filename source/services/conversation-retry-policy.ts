@@ -42,6 +42,9 @@ export const isTransientRetryableError = (error: unknown): boolean => {
       return true;
     }
     const message = String((error as any).message || '').toLowerCase();
+    if (message.includes('websocket connection closed before response completed')) {
+      return message.includes('code=1006');
+    }
     if (
       message.includes('rate limit') ||
       message.includes('too many requests') ||

@@ -11,6 +11,11 @@ export type TimedWsOptions = {
   reuseConnection?: boolean;
 };
 
+function isRetryableAbnormalCloseMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('closed before response completed') && normalized.includes('code=1006');
+}
+
 const OriginalWebSocket = globalThis.WebSocket;
 const DefaultWebSocketFactory: WebSocketFactory = OriginalWebSocket
   ? (url, opts) => new (OriginalWebSocket as any)(url, opts)
@@ -395,6 +400,7 @@ export class TimedResponsesWSModel extends OpenAIResponsesWSModel implements Mod
         msg.includes('timed out before opening') ||
         msg.includes('connection timed out') ||
         msg.includes('first frame timeout') ||
+        isRetryableAbnormalCloseMessage(msg) ||
         msg.includes('aborted')
       ) {
         return {

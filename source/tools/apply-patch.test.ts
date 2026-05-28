@@ -263,7 +263,7 @@ test.serial('execute: detailed error for unified diff headers', async (t) => {
     });
     const parsed = JSON.parse(result);
     t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('unified diff headers'));
+    t.true(parsed.output[0].error.includes('Remove standard file headers'));
   });
 });
 
@@ -281,7 +281,7 @@ test.serial('execute: detailed error for chunk headers with line numbers', async
     });
     const parsed = JSON.parse(result);
     t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('line numbers from your "@@" anchors'));
+    t.true(parsed.output[0].error.includes('Remove line numbers from "@@" headers'));
   });
 });
 
@@ -295,7 +295,7 @@ test.serial('execute: detailed error for leading line numbers', async (t) => {
     });
     const parsed = JSON.parse(result);
     t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('remove all line numbers'));
+    t.true(parsed.output[0].error.includes('Remove leading line numbers'));
   });
 });
 
@@ -309,7 +309,7 @@ test.serial('execute: detailed error for invalid line prefix', async (t) => {
     });
     const parsed = JSON.parse(result);
     t.false(parsed.output[0].success);
-    t.true(parsed.output[0].error.includes('does not start with a valid prefix'));
+    t.true(parsed.output[0].error.includes('Use only space, +, -, or @@ prefixes'));
   });
 });
 
@@ -328,7 +328,7 @@ test.serial('execute: detailed error for context block mismatch', async (t) => {
     });
     const parsed1 = JSON.parse(result1);
     t.false(parsed1.output[0].success);
-    t.true(parsed1.output[0].error.includes('could not be found anywhere in the file'));
+    t.true(parsed1.output[0].error.includes('context block was not found'));
 
     // Indentation mismatch (with a missing line to force application failure)
     const result2 = await tool.execute({
@@ -338,6 +338,6 @@ test.serial('execute: detailed error for context block mismatch', async (t) => {
     });
     const parsed2 = JSON.parse(result2);
     t.false(parsed2.output[0].success);
-    t.true(parsed2.output[0].error.includes('Indentation mismatch for "line two"'));
+    t.true(parsed2.output[0].error.includes('Mismatch details'));
   });
 });

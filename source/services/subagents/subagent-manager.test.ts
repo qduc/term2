@@ -471,7 +471,7 @@ test.beforeEach(() => {
   ensureBoundaryWorkerProviderRegistered();
 });
 
-test.serial('worker write tool rejects paths outside writeBoundary', async (t) => {
+test.serial('worker write tool rejects paths outside workspace', async (t) => {
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-boundary-'));
   t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
@@ -495,7 +495,6 @@ test.serial('worker write tool rejects paths outside writeBoundary', async (t) =
   await managerGpt.run({
     role: 'worker',
     task: 'update a file',
-    writeBoundary: ['.'],
   });
 
   t.is(boundaryWorkerCalls.length, 1);
@@ -557,7 +556,6 @@ test.serial('worker write tool rejects paths outside writeBoundary', async (t) =
   await managerNonGpt.run({
     role: 'worker',
     task: 'update a file',
-    writeBoundary: ['.'],
   });
 
   t.is(boundaryWorkerCalls.length, 1);
@@ -584,7 +582,7 @@ test.serial('worker write tool rejects paths outside writeBoundary', async (t) =
   t.false(batchOutsideParsed?.output?.[0]?.success ?? true);
 });
 
-test.serial('worker in-boundary write is auto-approved (boundary is the grant)', async (t) => {
+test.serial('worker writes are auto-approved within the workspace', async (t) => {
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-worker-approval-'));
   t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
@@ -608,7 +606,6 @@ test.serial('worker in-boundary write is auto-approved (boundary is the grant)',
   await manager.run({
     role: 'worker',
     task: 'update files',
-    writeBoundary: ['.'],
   });
 
   t.is(boundaryWorkerCalls.length, 1);
@@ -616,10 +613,9 @@ test.serial('worker in-boundary write is auto-approved (boundary is the grant)',
   const createFile = agent.tools.find((tool: any) => tool.name === 'create_file');
   t.truthy(createFile);
 
-  // The writeBoundary is the worker's permission grant: an in-boundary write
-  // requires no interactive approval (there is no foreground approval channel
-  // for a subagent running inside a blocked parent tool call). Standard mode is off
-  // but the write still does not need approval.
+  // In-boundary writes require no interactive approval (there is no foreground
+  // approval channel for a subagent running inside a blocked parent tool call).
+  // Standard mode is off but the write still does not need approval.
   const inBoundaryNeedsApproval = await createFile.needsApproval({}, { path: 'a.ts', content: 'x' });
   t.is(inBoundaryNeedsApproval, false);
 
@@ -629,7 +625,7 @@ test.serial('worker in-boundary write is auto-approved (boundary is the grant)',
   t.is(outBoundaryNeedsApproval, false);
 });
 
-test.serial('worker without explicit writeBoundary cannot write outside the workspace', async (t) => {
+test.serial('worker cannot write outside the workspace', async (t) => {
   const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-worker-default-boundary-'));
   t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
@@ -649,7 +645,7 @@ test.serial('worker without explicit writeBoundary cannot write outside the work
     executionContext: mockExecutionContext,
   });
 
-  // No writeBoundary passed -> defaults to the workspace root.
+  // Writes default to the workspace root.
   await manager.run({ role: 'worker', task: 'update a file' });
 
   const agent = boundaryWorkerCalls[boundaryWorkerCalls.length - 1].agent;
@@ -1494,7 +1490,7 @@ test.serial('run() does not retry worker after a mutating write tool was invoked
     onEvent: (event) => events.push(event),
   });
 
-  const result = await manager.run({ role: 'worker', task: 'do some work', writeBoundary: ['.'] });
+  const result = await manager.run({ role: 'worker', task: 'do some work' });
 
   t.is(result.status, 'failed');
   t.is(runCount, 1, 'must not retry when a write tool was invoked before the model error');

@@ -19,13 +19,6 @@ const runSubagentSchema = z.object({
       'The full task description. Include all relevant context, constraints, and the expected output format. ' +
         'The subagent has no access to your conversation history or reasoning.',
     ),
-  writeBoundary: z
-    .array(z.string())
-    .optional()
-    .describe(
-      'For worker role: restrict writes to these relative paths within the workspace. ' +
-        'Defaults to the workspace root when omitted.',
-    ),
 });
 
 export type RunSubagentParams = z.infer<typeof runSubagentSchema>;
@@ -217,9 +210,7 @@ export const createRunSubagentToolDefinition = (
     getSubagentsRolesSection() +
     '## Task Requirements\n' +
     'The task must be fully self-contained. Include all context, constraints, and the expected output format. ' +
-    'The subagent has no access to your conversation history or reasoning.\n\n' +
-    '## Write Boundary (worker only)\n' +
-    'Use `writeBoundary` to restrict which paths the worker may modify. Omit to allow writes anywhere in the workspace.',
+    'The subagent has no access to your conversation history or reasoning.',
   parameters: runSubagentSchema,
   needsApproval: () => false,
   execute: async (params, context, details) => {

@@ -17,7 +17,7 @@ You have a \`run_subagent\` tool. A subagent runs in its own context and returns
 - Spans more than ~2 files, or "where is / how does X work" → \`explorer\`.
 - Needs out-of-repo info (library docs, current best practices, version-specific behavior) → \`researcher\`.
 - About to commit to a non-trivial plan or tricky debugging direction and want it pressure-tested → \`mentor\`.
-- Scoped, verifiable unit of work (bug fix, refactor, feature behind a clear interface, migration, tests) with a checkable done condition → \`worker\` with a \`writeBoundary\`. If you don't yet know *where* the change goes, send an \`explorer\` first.${
+- Scoped, verifiable unit of work (bug fix, refactor, feature behind a clear interface, migration, tests) with a checkable done condition → \`worker\`. If you don't yet know *where* the change goes, send an \`explorer\` first.${
     orchestratorMode
       ? `
 
@@ -30,7 +30,7 @@ Otherwise, just do it yourself — especially when the task needs mid-flight cou
   const planningStep = `**Before any \`run_subagent\` call, plan silently:**
 1. Restate the user's objective in one sentence.
 2. Decompose into sub-objectives (one item, or zero, are both valid).
-3. For each delegated sub-objective specify: **role**, **scoped task** (written for the subagent, not the user), **context to embed** (paths, symbols, prior findings, constraints, things ruled out), **done condition**, and **writeBoundary** for workers.
+3. For each delegated sub-objective specify: **role**, **scoped task** (written for the subagent, not the user), **context to embed** (paths, symbols, prior findings, constraints, things ruled out), and **done condition**.
 
 "No delegation needed" is a legitimate conclusion. Don't delegate to justify having planned.
 

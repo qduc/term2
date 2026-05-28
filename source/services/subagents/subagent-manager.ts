@@ -486,7 +486,7 @@ export class SubagentManager {
     const toolCounts = new Map<string, number>();
     const filesChanged: string[] = [];
 
-    const toolDefinitions = this.#buildToolDefinitions(definition, request.writeBoundary, filesChanged, request.task);
+    const toolDefinitions = this.#buildToolDefinitions(definition, filesChanged, request.task);
 
     const providerId = definition.provider;
     let mutatingToolAttempted = false;
@@ -522,13 +522,7 @@ export class SubagentManager {
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     const agentsInstructions = this.#executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
 
-    const fullInstructions = [
-      definition.instructions,
-      `Environment: ${envInfo}${agentsInstructions}`,
-      request.writeBoundary?.length
-        ? `Write boundary: you may only write to paths within: ${request.writeBoundary.join(', ')}`
-        : '',
-    ]
+    const fullInstructions = [definition.instructions, `Environment: ${envInfo}${agentsInstructions}`]
       .filter(Boolean)
       .join('\n\n');
 
@@ -623,12 +617,7 @@ export class SubagentManager {
     }
   }
 
-  #buildToolDefinitions(
-    definition: SubagentDefinition,
-    writeBoundary: string[] | undefined,
-    filesChanged: string[],
-    taskContext: string,
-  ): ToolDefinition[] {
+  #buildToolDefinitions(definition: SubagentDefinition, filesChanged: string[], taskContext: string): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     const isRemote = this.#executionContext?.isRemote() ?? false;
@@ -663,7 +652,6 @@ export class SubagentManager {
             loggingService: this.#logger,
             executionContext: this.#executionContext,
           }),
-          writeBoundary,
           cwd,
           filesChanged,
           taskContext,
@@ -681,7 +669,6 @@ export class SubagentManager {
               loggingService: this.#logger,
               executionContext: this.#executionContext,
             }),
-            writeBoundary,
             cwd,
             filesChanged,
             (params: any) => this.#extractPathsFromApplyPatch(params),
@@ -695,7 +682,6 @@ export class SubagentManager {
               loggingService: this.#logger,
               executionContext: this.#executionContext,
             }),
-            writeBoundary,
             cwd,
             filesChanged,
             (params: any) => this.#extractPathsFromSearchReplace(params),
@@ -706,7 +692,6 @@ export class SubagentManager {
               loggingService: this.#logger,
               executionContext: this.#executionContext,
             }),
-            writeBoundary,
             cwd,
             filesChanged,
             (params: any) => (params?.path ? [params.path] : []),
@@ -820,13 +805,7 @@ export class SubagentManager {
     return [...new Set(paths)];
   }
 
-  #wrapShellTool(
-    definition: ToolDefinition,
-    writeBoundary: string[] | undefined,
-    cwd: string,
-    filesChanged: string[],
-    taskContext: string,
-  ): ToolDefinition {
+  #wrapShellTool(definition: ToolDefinition, cwd: string, filesChanged: string[], taskContext: string): ToolDefinition {
     const originalExecute = definition.execute.bind(definition);
 
     return {
@@ -855,7 +834,7 @@ export class SubagentManager {
         const extractedPaths = this.#extractPathsFromCommand(command, cwd);
         if (extractedPaths.length > 0) {
           for (const filePath of extractedPaths) {
-            if (!this.#isWithinWriteBoundary(filePath, writeBoundary, cwd)) {
+            if (!this.#isWithinWriteBoundary(filePath, cwd)) {
               return `Error: command blocked — target path "${filePath}" is outside the allowed write boundary. Command: ${command}`;
             }
           }
@@ -902,11 +881,9 @@ export class SubagentManager {
     }
   }
 
-  // An explicit writeBoundary narrows where a worker may write. When omitted it
-  // defaults to the workspace root, so writes outside the workspace are always
-  // rejected even without an explicit boundary.
-  #isWithinWriteBoundary(filePath: string, writeBoundary: string[] | undefined, cwd: string): boolean {
-    const boundaries = writeBoundary?.length ? writeBoundary : [cwd];
+  // Writes outside the workspace root are always rejected.
+  #isWithinWriteBoundary(filePath: string, cwd: string): boolean {
+    const boundaries = [cwd];
 
     const resolved = path.resolve(cwd, filePath);
     return boundaries.some((boundary) => {
@@ -917,7 +894,6 @@ export class SubagentManager {
 
   #wrapWriteTool(
     definition: ToolDefinition,
-    writeBoundary: string[] | undefined,
     cwd: string,
     filesChanged: string[],
     extractPaths: (params: any) => string[],
@@ -926,17 +902,16 @@ export class SubagentManager {
 
     return {
       ...definition,
-      // The writeBoundary is the worker's permission grant: in-boundary writes
-      // are auto-approved (there is no foreground approval channel for a
-      // subagent running inside a blocked parent tool call), and out-of-boundary
-      // writes are rejected deterministically by execute() below. Either way no
-      // interactive approval is required, so this never returns true.
+      // In-boundary writes are auto-approved (there is no foreground approval
+      // channel for a subagent running inside a blocked parent tool call), and
+      // out-of-boundary writes are rejected deterministically by execute() below.
+      // Either way no interactive approval is required, so this never returns true.
       needsApproval: () => false,
       execute: async (params: any, context?: unknown) => {
         const paths = extractPaths(params);
 
         for (const filePath of paths) {
-          if (!this.#isWithinWriteBoundary(filePath, writeBoundary, cwd)) {
+          if (!this.#isWithinWriteBoundary(filePath, cwd)) {
             return JSON.stringify({
               output: [
                 {

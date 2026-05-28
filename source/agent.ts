@@ -249,11 +249,7 @@ export const getAgentDefinition = (
     loggingService: ILoggingService;
     executionContext?: ExecutionContext;
     askMentor?: (question: string) => Promise<string>;
-    runSubagent?: (
-      params: { role: string; task: string; writeBoundary?: string[] },
-      context?: unknown,
-      details?: unknown,
-    ) => Promise<any>;
+    runSubagent?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
   },
   model?: string,
 ): AgentDefinition => {

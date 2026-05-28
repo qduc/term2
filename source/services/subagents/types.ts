@@ -5,7 +5,6 @@ export type SubagentRole = 'explorer' | 'worker' | 'researcher' | 'mentor' | str
 export interface SubagentRequest {
   role: SubagentRole;
   task: string;
-  writeBoundary?: string[];
   /** Parent tool/run cancellation signal. */
   signal?: AbortSignal;
   /** SDK serialized run state for resuming a delegated agent-tool run (nested approvals). */

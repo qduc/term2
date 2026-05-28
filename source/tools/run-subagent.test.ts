@@ -30,19 +30,6 @@ test('schema requires role and task', (t) => {
   t.false(tool.parameters.safeParse({ task: 'find files' }).success);
 });
 
-test('schema allows optional writeBoundary', (t) => {
-  const tool = createRunSubagentToolDefinition(async () => makeResult());
-
-  t.true(
-    tool.parameters.safeParse({
-      role: 'worker',
-      task: 'edit files',
-      writeBoundary: ['src/', 'tests/'],
-    }).success,
-  );
-  t.true(tool.parameters.safeParse({ role: 'worker', task: 'edit files' }).success);
-});
-
 test('execute returns plain-text SubagentResult', async (t) => {
   const expected = makeResult({ finalText: 'Answer here.' });
   const tool = createRunSubagentToolDefinition(async () => expected);
@@ -64,18 +51,6 @@ test('execute returns failed result as plain text on error', async (t) => {
   t.true(raw.includes('Status: failed'));
   t.true(raw.includes('Error: Connection failed'));
   t.false(raw.startsWith('{'));
-});
-
-test('execute passes writeBoundary to subagent runner', async (t) => {
-  let capturedParams: any = null;
-  const tool = createRunSubagentToolDefinition(async (params) => {
-    capturedParams = params;
-    return makeResult();
-  });
-
-  await tool.execute({ role: 'worker', task: 'update file', writeBoundary: ['src/'] });
-
-  t.deepEqual(capturedParams.writeBoundary, ['src/']);
 });
 
 test('execute passes tool invocation details to subagent runner', async (t) => {

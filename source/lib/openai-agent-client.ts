@@ -777,7 +777,7 @@ export class OpenAIAgentClient {
   };
 
   #runSubagent = async (
-    params: { role: string; task: string; writeBoundary?: string[] },
+    params: { role: string; task: string },
     _context?: unknown,
     details?: unknown,
   ): Promise<any> => {

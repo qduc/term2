@@ -124,13 +124,18 @@ export function getProjectTreeForPrompt(cwd: string, options: ProjectTreeOptions
     omittedByLimit += Math.max(0, filtered.length - shown.length);
 
     const lines: string[] = [];
+    const subdirs: Array<{ path: string; depth: number; prefix: string }> = [];
 
-    shown.forEach((entry, index) => {
+    // BFS: render all children at this level first, then recurse into subdirs.
+    // This guarantees breadth-first budget allocation — shallower entries
+    // always take priority over deeper ones.
+    for (let index = 0; index < shown.length; index++) {
       if (totalEntries >= maxTotalEntries) {
         omittedByLimit += shown.length - index;
-        return;
+        break;
       }
 
+      const entry = shown[index];
       totalEntries++;
 
       const isLast = index === shown.length - 1;
@@ -140,12 +145,27 @@ export function getProjectTreeForPrompt(cwd: string, options: ProjectTreeOptions
 
       lines.push(`${prefix}${connector}${displayName}`);
 
-      if (entry.isDirectory() && depth < maxDepth) {
-        lines.push(...walk(path.join(dir, entry.name), depth + 1, childPrefix));
-      } else if (entry.isDirectory() && depth >= maxDepth) {
-        lines.push(`${childPrefix}└─ …`);
+      if (entry.isDirectory()) {
+        if (depth >= maxDepth) {
+          lines.push(`${childPrefix}└─ …`);
+        } else {
+          subdirs.push({
+            path: path.join(dir, entry.name),
+            depth: depth + 1,
+            prefix: childPrefix,
+          });
+        }
       }
-    });
+    }
+
+    // Now recurse into collected subdirs (BFS step 2: children of children).
+    // Each subdir call starts a new breadth-first pass, but since they are
+    // processed after all current-level siblings are rendered, the budget
+    // naturally fills shallower levels first.
+    for (const subdir of subdirs) {
+      if (totalEntries >= maxTotalEntries) break;
+      lines.push(...walk(subdir.path, subdir.depth, subdir.prefix));
+    }
 
     return lines;
   }

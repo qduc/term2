@@ -4,6 +4,7 @@ import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
 
 export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
+const LEGACY_MODE_NOTICE_PREFIX = '[Mode Notice] ';
 
 /**
  * ConversationStore maintains the canonical conversation history for the app.
@@ -68,24 +69,6 @@ export class ConversationStore {
 
   addShellContext(historyText: string): void {
     const trimmed = historyText ?? '';
-    if (!trimmed.trim()) {
-      return;
-    }
-    const item: AgentInputItem = {
-      role: 'user',
-      type: 'message',
-      content: trimmed,
-    };
-    this.#history.push(item);
-  }
-
-  /**
-   * Append a mode-change notice as a persisted system message at the tail of
-   * the history. Append-only (never spliced mid-history) so the previously
-   * cached prefix stays byte-identical and only grows.
-   */
-  addModeNotice(text: string): void {
-    const trimmed = text ?? '';
     if (!trimmed.trim()) {
       return;
     }
@@ -215,6 +198,10 @@ export class ConversationStore {
     return result;
   }
 
+  static #isSyntheticUserMessage(text: string): boolean {
+    return text.startsWith(SHELL_CONTEXT_PREFIX) || text.startsWith(LEGACY_MODE_NOTICE_PREFIX);
+  }
+
   /**
    * Returns a list of genuine user turns (excluding shell context items),
    * each with their index in the history array, text, and image count.
@@ -226,7 +213,7 @@ export class ConversationStore {
       const raw = item?.rawItem ?? item;
       if (raw?.role !== 'user') continue;
       const text = ConversationStore.#extractText(raw);
-      if (text.startsWith(SHELL_CONTEXT_PREFIX)) continue;
+      if (ConversationStore.#isSyntheticUserMessage(text)) continue;
       const imageCount = ConversationStore.#extractImageCount(raw);
       turns.push({ index: i, text, imageCount });
     }
@@ -246,7 +233,7 @@ export class ConversationStore {
       const raw = item?.rawItem ?? item;
       if (raw?.role !== 'user') continue;
       const text = ConversationStore.#extractText(raw);
-      if (text.startsWith(SHELL_CONTEXT_PREFIX)) continue;
+      if (ConversationStore.#isSyntheticUserMessage(text)) continue;
       anchor = i;
       break;
     }
@@ -277,7 +264,7 @@ export class ConversationStore {
       const raw = item?.rawItem ?? item;
       if (raw?.role !== 'user') continue;
       const text = ConversationStore.#extractText(raw);
-      if (text.startsWith(SHELL_CONTEXT_PREFIX)) continue;
+      if (ConversationStore.#isSyntheticUserMessage(text)) continue;
       count++;
       if (count === n) {
         anchor = i;
@@ -292,7 +279,7 @@ export class ConversationStore {
         const raw = item?.rawItem ?? item;
         if (raw?.role !== 'user') continue;
         const text = ConversationStore.#extractText(raw);
-        if (text.startsWith(SHELL_CONTEXT_PREFIX)) continue;
+        if (ConversationStore.#isSyntheticUserMessage(text)) continue;
         anchor = i;
         break;
       }

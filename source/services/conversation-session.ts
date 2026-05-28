@@ -49,7 +49,6 @@ const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : [
 type BuiltOutgoingInput = {
   streamInput: string | AgentInputItem | AgentInputItem[];
   inputSurgeKind: 'delta' | 'full_history';
-  modeNoticeToPersist?: string;
 };
 
 type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
@@ -121,7 +120,6 @@ export class ConversationSession {
   #inputSurgeKind: string = 'delta';
 
   private settingsService?: ISettingsService;
-  private pendingModeNotice: string | null = null;
   private logSink: ((event: LogEvent) => void) | null = null;
 
   constructor(
@@ -207,28 +205,8 @@ export class ConversationSession {
     const history = this.#getCanonicalHistory();
     const outgoingHistory = includeTurn ? [...history, this.#makeUserInputItem(turn)] : history;
     const useChaining = supportsChaining && (!!this.previousResponseId || outgoingHistory.length <= 1);
-    const notice = this.pendingModeNotice;
     const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? turn.text;
     const chainedInput = turn.images?.length ? latestInput : turn.text;
-
-    if (notice) {
-      if (useChaining) {
-        const userItem: AgentInputItem =
-          typeof chainedInput === 'string' ? { role: 'user', type: 'message', content: chainedInput } : chainedInput;
-        const noticeItem: AgentInputItem = { role: 'system', type: 'message', content: notice };
-        return {
-          streamInput: [noticeItem, userItem],
-          inputSurgeKind: 'delta',
-        };
-      }
-
-      const noticeItem: AgentInputItem = { role: 'user', type: 'message', content: notice };
-      return {
-        streamInput: [...outgoingHistory, noticeItem],
-        inputSurgeKind: 'full_history',
-        modeNoticeToPersist: notice,
-      };
-    }
 
     return {
       streamInput: useChaining ? (typeof chainedInput === 'string' ? chainedInput : [chainedInput]) : outgoingHistory,
@@ -528,9 +506,6 @@ export class ConversationSession {
   addShellContext(historyText: string): void {
     this.conversationStore.addShellContext(historyText);
   }
-  queueModeNotice(text: string): void {
-    this.pendingModeNotice = text;
-  }
   /**
    * Abort the current running operation
    */
@@ -710,23 +685,10 @@ export class ConversationSession {
       // resync (fresh start with just the current message). After undo the chain
       // is severed (previousResponseId = null) while prior turns remain in the
       // local store, so we fall back to full-history mode to re-establish context.
-      const { streamInput, inputSurgeKind, modeNoticeToPersist } = this.#buildOutgoingInput(turn, {
+      const { streamInput, inputSurgeKind } = this.#buildOutgoingInput(turn, {
         includeTurn: false,
       });
       this.#inputSurgeKind = inputSurgeKind;
-      if (this.pendingModeNotice) {
-        this.pendingModeNotice = null;
-      }
-      if (modeNoticeToPersist) {
-        // Persist the notice at the tail (append-only) rather than splicing
-        // it before the last user turn or sending it as a one-shot item.
-        // Mid-history insertion adds a stray ephemeral cache breakpoint (see
-        // addCacheControlToLastTwoMessages) and a transient item makes
-        // consecutive requests diverge at the tail — both break the
-        // Claude/Qwen prompt cache. Appending keeps the cached prefix
-        // byte-identical and only growing.
-        this.conversationStore.addModeNotice(modeNoticeToPersist);
-      }
       const surgeDecision = this.inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind });
       if (surgeDecision.action === 'block') {
         let droppedUserMessage: { text: string; imageCount: number } | undefined;

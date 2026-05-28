@@ -25,7 +25,6 @@ test('useRuntimeSettings routes agent.provider changes through switchProvider', 
     setProvider(provider: string) {
       calls.push(`set:${provider}`);
     },
-    queueModeNotice() {},
   } as any;
 
   const Harness = () => {

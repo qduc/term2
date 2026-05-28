@@ -277,9 +277,9 @@ test('run() exports completed tool pairs from a stream that later fails', async 
   });
 
   const state = session.exportState();
-  // Reconciled history: user message + completed call/result pair + recovery notice.
+  // Reconciled history: user message + completed call/result pair.
   // The aborted second call has no result yet, so it is not pushed into history.
-  t.is(state.history.length, 4);
+  t.is(state.history.length, 3);
   t.is(state.toolLedger.length, 2);
   t.is(state.toolLedger[0].status, 'completed');
   t.is(state.toolLedger[1].status, 'aborted');
@@ -369,11 +369,6 @@ test('run() emits tool_recovery before error when a streamed turn fails after to
   const types = state.history.map((item) => item.rawItem?.type ?? item.type);
   t.true(types.includes('function_call'));
   t.true(types.includes('function_call_result') || types.includes('function_call_output'));
-  const hasRecoveryNotice = state.history.some((item) => {
-    const raw = item.rawItem ?? item;
-    return raw?.role === 'system' && typeof raw.content === 'string' && raw.content.startsWith('Recovered ');
-  });
-  t.true(hasRecoveryNotice);
 });
 
 test('importState() reconciles completed ledger pairs into canonical history', (t) => {
@@ -411,10 +406,9 @@ test('importState() reconciles completed ledger pairs into canonical history', (
   });
 
   const state = session.exportState();
-  t.is(state.history.length, 4);
+  t.is(state.history.length, 3);
   t.is(state.history[1].callId, 'call-read');
   t.is(state.history[2].callId, 'call-read');
-  t.is(state.history[3].role, 'system');
 });
 
 test('run() allows a follow-up after a long non-chaining run expands full history', async (t) => {
@@ -1565,7 +1559,7 @@ test('run() with image attachment does not throw when supportsChaining is true',
   t.is(receivedInput[0].content[1].type, 'input_image');
 });
 
-test('previewLargeUncachedInput() does not mutate history or consume pending mode notice', (t) => {
+test('previewLargeUncachedInput() does not mutate history', (t) => {
   const mockClient = {
     getProvider() {
       return 'codex';
@@ -1587,7 +1581,6 @@ test('previewLargeUncachedInput() does not mutate history or consume pending mod
     deps: { logger: mockLogger, settingsService },
   });
 
-  session.queueModeNotice('Plan mode enabled');
   const before = session.exportState();
 
   const decision = session.previewLargeUncachedInput('hello', 1_000);

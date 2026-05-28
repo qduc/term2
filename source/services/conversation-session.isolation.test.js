@@ -135,17 +135,15 @@ test('sessions do not share pending approval context', async (t) => {
   t.is(aFinal.finalText, 'Approved');
 });
 
-test('queueModeNotice inserts notice into stream input (chaining provider)', async (t) => {
+test('sendMessage() passes only the user delta in chaining mode after a mode toggle', async (t) => {
   const startCalls = [];
   const mockStream = new MockStream([]);
   mockStream.lastResponseId = 'resp-notice';
   mockStream.finalOutput = 'Ack';
 
-  let currentProvider = 'openai';
-
   const mockClient = {
     getProvider() {
-      return currentProvider;
+      return 'openai';
     },
     async startStream(text, options) {
       startCalls.push({ text, options });
@@ -158,18 +156,13 @@ test('queueModeNotice inserts notice into stream input (chaining provider)', asy
     deps: { logger: mockLogger },
   });
 
-  session.queueModeNotice('Mode change notice chaining');
   await session.sendMessage('User msg');
 
   t.is(startCalls.length, 1);
-  const passedHistory = startCalls[0].text;
-  t.true(Array.isArray(passedHistory));
-  t.is(passedHistory.length, 2);
-  t.deepEqual(passedHistory[0], { role: 'system', type: 'message', content: 'Mode change notice chaining' });
-  t.deepEqual(passedHistory[1], { role: 'user', type: 'message', content: 'User msg' });
+  t.is(startCalls[0].text, 'User msg');
 });
 
-test('queueModeNotice inserts notice into stream input (non-chaining provider)', async (t) => {
+test('sendMessage() persists only the real user turn in non-chaining mode', async (t) => {
   const startCalls = [];
   const mockStream = new MockStream([]);
   mockStream.lastResponseId = 'resp-notice';
@@ -190,31 +183,19 @@ test('queueModeNotice inserts notice into stream input (non-chaining provider)',
     deps: { logger: mockLogger },
   });
 
-  session.queueModeNotice('Mode change notice non-chaining');
   await session.sendMessage('User msg');
 
   t.is(startCalls.length, 1);
   const passedHistory = startCalls[0].text;
   t.true(Array.isArray(passedHistory));
-  // non-chaining passes full history with the notice appended at the tail:
-  // [UserTurn, SystemNotice]. It is appended (never spliced mid-history) so
-  // the previously cached prefix stays byte-identical.
-  t.is(passedHistory.length, 2);
+  t.is(passedHistory.length, 1);
   t.is(passedHistory[0].content, 'User msg');
-  t.deepEqual(passedHistory[1], { role: 'user', type: 'message', content: 'Mode change notice non-chaining' });
 
-  // The notice is persisted into the conversation store so it stays in history
-  // on subsequent turns (a transient notice would break the prompt cache).
   const persisted = session.exportState().history;
-  t.true(
-    persisted.some(
-      (item) =>
-        (item.rawItem ?? item).role === 'user' && (item.rawItem ?? item).content === 'Mode change notice non-chaining',
-    ),
-  );
+  t.deepEqual(persisted, passedHistory);
 });
 
-test('queueModeNotice persists append-only so the cached prefix only grows (non-chaining)', async (t) => {
+test('sendMessage() keeps full-history input free of synthetic mode notices across turns', async (t) => {
   const startCalls = [];
 
   const mockClient = {
@@ -239,8 +220,8 @@ test('queueModeNotice persists append-only so the cached prefix only grows (non-
   await session.sendMessage('First question');
   const turn1Input = startCalls[0].text;
 
-  // Turn 2: switch modes mid-session, then send another message.
-  session.queueModeNotice('Plan Mode toggled OFF');
+  // Turn 2: send another message after a mode change. No synthetic notice
+  // should appear in the provider input or persisted history.
   await session.sendMessage('Second question');
   const turn2Input = startCalls[1].text;
 
@@ -248,16 +229,15 @@ test('queueModeNotice persists append-only so the cached prefix only grows (non-
   await session.sendMessage('Third question');
   const turn3Input = startCalls[2].text;
 
-  // Turn 2's input is turn 1's prefix grown by the new user turn + the notice;
-  // turn 3's input is turn 2's input grown by the next user turn. Nothing is
-  // reordered or removed, so the prompt cache prefix only ever grows.
+  // Each full-history request should just be the prior canonical history plus
+  // the latest user turn. Nothing synthetic should be injected.
   t.deepEqual(turn2Input.slice(0, turn1Input.length), turn1Input);
   t.deepEqual(turn3Input.slice(0, turn2Input.length), turn2Input);
-
-  // The notice stays in history at a stable position across later turns.
-  const noticeIdx = turn3Input.findIndex(
-    (i) => (i.rawItem ?? i).role === 'user' && (i.rawItem ?? i).content === 'Plan Mode toggled OFF',
+  t.false(
+    turn3Input.some(
+      (item) =>
+        typeof (item.rawItem ?? item).content === 'string' &&
+        (item.rawItem ?? item).content.startsWith('[Mode Notice] '),
+    ),
   );
-  t.true(noticeIdx >= 0);
-  t.is((turn3Input[noticeIdx].rawItem ?? turn3Input[noticeIdx]).content, 'Plan Mode toggled OFF');
 });

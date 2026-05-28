@@ -2,6 +2,14 @@ import test from 'ava';
 import type { AgentInputItem } from '@openai/agents';
 import { ConversationStore, SHELL_CONTEXT_PREFIX } from './conversation-store.js';
 
+const addLegacyModeNotice = (store: ConversationStore, text: string) => {
+  store.addImportedItem({
+    role: 'user',
+    type: 'message',
+    content: `[Mode Notice] ${text}`,
+  } as AgentInputItem);
+};
+
 test('addUserMessage() appends a user message item', (t) => {
   const store = new ConversationStore();
   store.addUserMessage('Hello');
@@ -437,36 +445,62 @@ test('removeNLastUserTurns() skips shell context items', (t) => {
   t.is(history.length, 0);
 });
 
-test('addModeNotice() appends a persisted system message at the tail', (t) => {
+test('removeLastUserTurn() skips trailing legacy mode-notice item', (t) => {
   const store = new ConversationStore();
-  store.addUserMessage('First');
-  store.addModeNotice('Plan Mode ON');
+  store.addUserMessage('A');
+  store.appendOutput([
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'reply' }],
+    },
+  ] satisfies AgentInputItem[]);
+  addLegacyModeNotice(store, 'Plan Mode ON');
 
-  const history = store.getHistory();
-  t.is(history.length, 2);
-  t.is((history[0] as any).content, 'First');
-  t.is((history[1] as any).role, 'user');
-  t.is((history[1] as any).content, 'Plan Mode ON');
+  const result = store.removeLastUserTurn();
+
+  t.deepEqual(result, { text: 'A', imageCount: 0 });
+  t.is(store.getHistory().length, 0);
 });
 
-test('addModeNotice() preserves the existing prefix (append-only, never mid-history)', (t) => {
+test('removeLastUserTurn() returns null when only a legacy mode-notice item is present', (t) => {
   const store = new ConversationStore();
-  store.addUserMessage('First');
-  store.addUserMessage('Second');
-  const prefix = store.getHistory();
+  addLegacyModeNotice(store, 'Plan Mode ON');
 
-  store.addModeNotice('Plan Mode OFF');
+  const result = store.removeLastUserTurn();
 
-  const history = store.getHistory();
-  t.deepEqual(history.slice(0, prefix.length), prefix);
-  t.is(history.length, prefix.length + 1);
-  t.is((history[history.length - 1] as any).content, 'Plan Mode OFF');
-});
-
-test('addModeNotice() ignores blank text', (t) => {
-  const store = new ConversationStore();
-  store.addUserMessage('First');
-  store.addModeNotice('   ');
-
+  t.is(result, null);
   t.is(store.getHistory().length, 1);
+});
+
+test('listUserTurns() excludes legacy mode notice items', (t) => {
+  const store = new ConversationStore();
+  addLegacyModeNotice(store, 'Plan Mode ON');
+  store.addUserMessage('Hello');
+
+  const turns = store.listUserTurns();
+
+  t.is(turns.length, 1);
+  t.is(turns[0].text, 'Hello');
+});
+
+test('removeNLastUserTurns() skips legacy mode notice items', (t) => {
+  const store = new ConversationStore();
+  store.addUserMessage('A');
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'reply' }] },
+  ] satisfies AgentInputItem[]);
+  addLegacyModeNotice(store, 'Plan Mode ON');
+  store.addUserMessage('B');
+  store.appendOutput([
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'reply2' }] },
+  ] satisfies AgentInputItem[]);
+
+  // Remove both user turns (skipping legacy mode notice)
+  const result = store.removeNLastUserTurns(2);
+
+  t.deepEqual(result, { text: 'A', imageCount: 0 });
+  const history = store.getHistory();
+  t.is(history.length, 0);
 });

@@ -25,8 +25,12 @@ import {
   loadLastConversation,
   forkConversation,
   isConversationLocked,
+  listConversations,
+  deleteConversation,
+  hasConversationContent,
   type RestoredState,
 } from './services/conversation-persistence.js';
+import { formatResumeList } from './utils/resume-list.js';
 import { createConversationLogWriter, LockConflictError } from './services/conversation-log-writer.js';
 import { AGENT_AFFECTING_SETTINGS } from './services/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
@@ -52,6 +56,7 @@ const printUsageOnce = () => {
 
 type WriterHandle = ReturnType<typeof createConversationLogWriter> | null;
 let activeLogWriter: WriterHandle = null;
+let effectiveSessionId: string | undefined;
 
 // Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
 process.on('SIGINT', () => {
@@ -71,6 +76,13 @@ process.on('exit', () => {
       /* ignore */
     }
   }
+  try {
+    if (effectiveSessionId && !hasConversationContent(effectiveSessionId)) {
+      deleteConversation(effectiveSessionId);
+    }
+  } catch {
+    /* ignore */
+  }
 });
 
 const cli = meow(
@@ -89,7 +101,7 @@ const cli = meow(
           --ssh             Enable SSH mode (user@host)
           --remote-dir      Required remote working directory for SSH mode
           --ssh-port        Optional SSH port (default: 22)
-          -R, --resume      Resume a conversation (optionally provide UUID)
+          -R, --resume      Resume a conversation (optionally provide UUID, or "ls"/"list" to show recent)
 
         Examples
           $ term2 -m gpt-4o
@@ -98,6 +110,7 @@ const cli = meow(
                     $ term2 --auto-approve "list files in current dir"
           $ term2 --resume          # Resume last conversation
           $ term2 --resume <uuid>   # Resume specific conversation
+          $ term2 --resume ls       # List last 10 conversations
     `,
   {
     importMeta: import.meta,
@@ -153,6 +166,13 @@ const resumeTarget = resumeRequested ? cli.input[0]?.trim() : undefined;
 if (resumeRequested && cli.input.length > 1) {
   console.error('Error: --resume accepts at most one conversation id.');
   process.exit(1);
+}
+
+if (resumeRequested && (resumeTarget === 'ls' || resumeTarget === 'list')) {
+  const conversations = listConversations().slice(0, 10);
+  const formatted = formatResumeList(conversations);
+  console.log(formatted);
+  process.exit(0);
 }
 
 if (forkRequested && !resumeRequested) {
@@ -478,7 +498,7 @@ if (hasPositionalPrompt) {
 }
 
 // Generate session UUID and handle resume
-let effectiveSessionId = generateId();
+effectiveSessionId = generateId();
 let effectiveCreatedAt = new Date().toISOString();
 let initialMessages: Message[] = [];
 let effectiveHasConversationContent = false;

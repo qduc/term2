@@ -5,6 +5,7 @@ import envPaths from 'env-paths';
 import type { LogEnvelope } from './conversation-log-events.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
 
+import type { SavedAppMode } from './conversation-persistence-types.js';
 export type { SavedAppMode, SavedMessage } from './conversation-persistence-types.js';
 export type { RestoredState } from './conversation-replay.js';
 
@@ -19,7 +20,7 @@ export type LoadConversationForProjectResult =
   | { status: 'locked'; lockPath: string; lockInfo: { pid: number; startedAt: string; host: string } | null };
 
 function getConversationsDir(): string {
-  return conversationsDirOverride ?? CONVERSATIONS_DIR;
+  return conversationsDirOverride ?? process.env['TERM2_CONVERSATIONS_DIR'] ?? CONVERSATIONS_DIR;
 }
 
 export function getConversationsDirForTest(): string {
@@ -245,6 +246,11 @@ interface ConversationListEntry {
   updatedAt: string;
   projectPath?: string;
   sshHost?: string;
+  firstUserMessage?: string;
+  appMode?: SavedAppMode;
+  model?: string;
+  provider?: string;
+  messageCount?: number;
 }
 
 export function listConversations(): ConversationListEntry[] {
@@ -259,16 +265,52 @@ export function listConversations(): ConversationListEntry[] {
       const fp = path.join(dir, f);
       try {
         const stat = fs.statSync(fp);
-        const firstLine = readFirstLine(fp);
-        if (!firstLine) continue;
-        const envelope = JSON.parse(firstLine) as LogEnvelope;
-        if (envelope?.event?.type !== 'session_init') continue;
-        const init = envelope.event;
+        const content = fs.readFileSync(fp, 'utf-8');
+        const lines = content.split('\n');
+
+        let initEnvelope: LogEnvelope | null = null;
+        let firstUserMessage: string | undefined;
+        let messageCount = 0;
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const envelope = JSON.parse(trimmed) as LogEnvelope;
+            if (!initEnvelope && envelope?.event?.type === 'session_init') {
+              initEnvelope = envelope;
+            }
+            if (envelope?.event?.type === 'user_message') {
+              messageCount++;
+              if (!firstUserMessage) {
+                firstUserMessage = envelope.event.message.text;
+              }
+            } else if (envelope?.event?.type === 'assistant_final') {
+              messageCount++;
+            } else if (envelope?.event?.type === 'undo') {
+              const undone = (envelope.event as any).removedUserTurns || 0;
+              messageCount = Math.max(0, messageCount - undone * 2);
+            }
+          } catch {
+            // skip corrupt line
+          }
+        }
+
+        if (!initEnvelope || initEnvelope.event.type !== 'session_init') {
+          continue;
+        }
+
+        const init = initEnvelope.event;
         entries.push({
           id: init.id,
           updatedAt: stat.mtime.toISOString(),
           ...(init.projectPath ? { projectPath: init.projectPath } : {}),
           ...(init.sshHost ? { sshHost: init.sshHost } : {}),
+          firstUserMessage,
+          appMode: init.appMode,
+          model: init.model,
+          provider: init.provider,
+          messageCount,
         });
       } catch {
         // skip
@@ -277,29 +319,6 @@ export function listConversations(): ConversationListEntry[] {
     return entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   } catch {
     return [];
-  }
-}
-
-function readFirstLine(filePath: string): string | null {
-  const buf = Buffer.alloc(8192);
-  let fd: number | null = null;
-  try {
-    fd = fs.openSync(filePath, 'r');
-    const read = fs.readSync(fd, buf, 0, buf.length, 0);
-    if (read <= 0) return null;
-    const text = buf.subarray(0, read).toString('utf-8');
-    const nl = text.indexOf('\n');
-    return nl === -1 ? text : text.slice(0, nl);
-  } catch {
-    return null;
-  } finally {
-    if (fd !== null) {
-      try {
-        fs.closeSync(fd);
-      } catch {
-        // ignore
-      }
-    }
   }
 }
 

@@ -327,23 +327,5 @@ export function reconcileHistoryWithToolLedger(
     }
   }
 
-  const hasRecoveryNotice = next.some((item) => {
-    const raw = rawItem(item);
-    return (
-      raw?.role === 'system' &&
-      typeof raw.content === 'string' &&
-      raw.content.startsWith('Recovered ') &&
-      raw.content.includes('completed tool call/result pair')
-    );
-  });
-
-  if ((addedCompletedPairs > 0 || droppedIncompleteCalls > 0) && !hasRecoveryNotice) {
-    next.push({
-      role: 'system',
-      type: 'message',
-      content: createRecoveryMessage(addedCompletedPairs, droppedIncompleteCalls),
-    });
-  }
-
   return { history: next, addedCompletedPairs, droppedIncompleteCalls };
 }

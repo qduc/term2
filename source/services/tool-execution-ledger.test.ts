@@ -97,10 +97,9 @@ test('reconcileHistoryWithToolLedger appends completed pairs once and drops inco
   const first = reconcileHistoryWithToolLedger(history, ledger);
   t.is(first.addedCompletedPairs, 1);
   t.is(first.droppedIncompleteCalls, 1);
-  t.is(first.history.length, 4);
+  t.is(first.history.length, 3);
   t.is((first.history[1] as any).callId, 'call-read');
   t.is((first.history[2] as any).callId, 'call-read');
-  t.is((first.history[3] as any).role, 'system');
 
   const second = reconcileHistoryWithToolLedger(first.history, ledger);
   t.is(second.addedCompletedPairs, 0);

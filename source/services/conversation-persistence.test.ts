@@ -127,11 +127,7 @@ test.serial('replay: mid-turn crash with tool_started inserts recovery notice', 
   const restored = persistenceModule.loadConversation(id);
   t.truthy(restored);
   t.true(restored!.replayWarnings.some((w) => w.includes('interrupted')));
-  // Recovery system message present in history
-  const hasRecovery = restored!.history.some(
-    (item: any) => item?.role === 'system' && typeof item.content === 'string' && item.content.includes('Recovered'),
-  );
-  t.true(hasRecovery);
+
   // The interrupted system message is on UI messages
   t.true(restored!.messages.some((m) => m.sender === 'system' && String(m.text).includes('interrupted')));
 });

@@ -200,15 +200,13 @@ test('replayEvents: reconstructs history and ledger on mid-turn interruption', (
   const restored = replayEvents(envelopes);
 
   // Replayed state should have:
-  // 1. Reconstructed history containing user message and tool call/result items, plus the recovery system message.
+  // 1. Reconstructed history containing user message and tool call/result items.
   // 2. Completed tool in the toolLedger.
-  t.is(restored.history.length, 4); // user message, tool call, tool result, recovery system message
+  t.is(restored.history.length, 3); // user message, tool call, tool result
   t.is((restored.history[0] as any).role, 'user');
   t.is((restored.history[0] as any).content, 'run tool');
   t.is((restored.history[1] as any).tool_calls[0].id, 'call-1');
   t.is((restored.history[2] as any).callId, 'call-1');
-  t.is((restored.history[3] as any).role, 'system');
-  t.true(String((restored.history[3] as any).content).includes('Recovered 1 completed tool call/result pair'));
 
   t.is(restored.toolLedger.length, 1);
   t.is(restored.toolLedger[0].callId, 'call-1');
@@ -231,10 +229,8 @@ test('replayEvents: handles incomplete in-flight tool call on interruption', (t)
   t.is(restored.toolLedger[0].status, 'aborted');
   t.is(restored.toolLedger[0].failureReason, 'Session ended unexpectedly');
 
-  // History should have the user message and the system recovery message about dropped call.
-  t.is(restored.history.length, 2);
+  // History should have the user message.
+  t.is(restored.history.length, 1);
   t.is((restored.history[0] as any).role, 'user');
   t.is((restored.history[0] as any).content, 'run tool');
-  t.is((restored.history[1] as any).role, 'system');
-  t.true(String((restored.history[1] as any).content).includes('Dropped 1 incomplete tool call(s)'));
 });

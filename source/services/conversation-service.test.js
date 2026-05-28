@@ -829,6 +829,107 @@ test('abort() delegates to agent client and clears pending approval', async (t) 
   t.is(result, null);
 });
 
+test('abort() preserves the aborted tool turn in exported state and snapshot', async (t) => {
+  const interruption = {
+    name: 'shell',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ command: 'echo hi' }),
+    callId: 'call-abort',
+  };
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = {
+    approve() {},
+    reject() {},
+  };
+
+  const service = new ConversationService({
+    agentClient: {
+      abort() {},
+      async startStream() {
+        return initialStream;
+      },
+    },
+    deps: { logger: mockLogger },
+  });
+
+  const first = await service.sendMessage('run command');
+  t.is(first.type, 'approval_required');
+
+  service.abort();
+
+  const exported = service.exportState();
+  const snapshot = service.getCurrentSnapshot();
+
+  for (const state of [exported, snapshot]) {
+    t.deepEqual(
+      state.history.map((item) => item.type),
+      ['message', 'function_call', 'tool_call_output_item'],
+    );
+    t.is(state.history[1].callId, 'call-abort');
+    t.is(state.history[2].callId, 'call-abort');
+    t.is(state.history[2].output, 'Tool execution was not approved.');
+  }
+});
+
+test('switchProvider() after abort reuses the preserved tool turn in the next full-history request', async (t) => {
+  const interruption = {
+    name: 'shell',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ command: 'echo hi' }),
+    callId: 'call-abort',
+  };
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = {
+    approve() {},
+    reject() {},
+  };
+
+  const followupStream = new MockStream([]);
+  followupStream.finalOutput = 'Next';
+
+  const startCalls = [];
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    abort() {},
+    setProvider() {},
+    clearConversations() {},
+    async startStream(input) {
+      startCalls.push(input);
+      return startCalls.length === 1 ? initialStream : followupStream;
+    },
+  };
+
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const first = await service.sendMessage('run command');
+  t.is(first.type, 'approval_required');
+
+  service.abort();
+  service.switchProvider('openrouter');
+
+  const second = await service.sendMessage('next');
+  t.is(second.type, 'response');
+
+  t.is(startCalls.length, 2);
+  t.deepEqual(
+    startCalls[1].map((item) => item.type),
+    ['message', 'function_call', 'tool_call_output_item', 'message'],
+  );
+  t.is(startCalls[1][1].callId, 'call-abort');
+  t.is(startCalls[1][2].callId, 'call-abort');
+  t.is(startCalls[1][2].output, 'Tool execution was not approved.');
+  t.is(startCalls[1][3].content, 'next');
+});
+
 test('handleApprovalDecision() rejects interruption when answer is n', async (t) => {
   const interruption = {
     name: 'bash',

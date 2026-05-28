@@ -106,3 +106,201 @@ test('reconcileHistoryWithToolLedger appends completed pairs once and drops inco
   t.is(second.addedCompletedPairs, 0);
   t.is(second.history.length, first.history.length);
 });
+
+test('recordFunctionCall preserves existing historyItems on a duplicate call', (t) => {
+  const ledger = new ToolExecutionLedger();
+
+  // First call: record a function_call
+  ledger.recordFunctionCall({
+    rawItem: {
+      type: 'function_call',
+      id: 'fc_1',
+      callId: 'call-dup',
+      name: 'read_file',
+      arguments: JSON.stringify({ file_path: 'a.ts' }),
+    },
+  });
+
+  const savedBefore = ledger.export();
+  t.is(savedBefore.length, 1);
+  t.is(savedBefore[0].historyItems!.length, 1, 'initial function_call sets one historyItem');
+  t.is((savedBefore[0].historyItems![0] as any).id, 'fc_1');
+
+  // Now simulate a duplicate function_call for the same callId (still 'started' status)
+  ledger.recordFunctionCall({
+    rawItem: {
+      type: 'function_call',
+      id: 'fc_2',
+      callId: 'call-dup',
+      name: 'read_file',
+      arguments: JSON.stringify({ file_path: 'b.ts' }),
+    },
+  });
+
+  const savedAfter = ledger.export();
+  t.is(savedAfter.length, 1, 'no new entry created');
+  t.is(savedAfter[0].toolName, 'read_file');
+  t.is(savedAfter[0].arguments, JSON.stringify({ file_path: 'b.ts' }));
+  t.is(savedAfter[0].status, 'started');
+  // historyItems should NOT be overwritten — the original fc_1 item is preserved
+  t.is(savedAfter[0].historyItems!.length, 1, 'existing historyItems are preserved on duplicate call');
+  t.is((savedAfter[0].historyItems![0] as any).id, 'fc_1', 'original historyItem id preserved');
+});
+
+test('recordAbortedApproval scopes by callId when provided', (t) => {
+  const ledger = new ToolExecutionLedger();
+
+  // Record two function calls with different callIds
+  ledger.recordFunctionCall({
+    rawItem: {
+      type: 'function_call',
+      id: 'fc_1',
+      callId: 'call-a',
+      name: 'read_file',
+      arguments: '{}',
+    },
+  });
+  ledger.recordFunctionCall({
+    rawItem: {
+      type: 'function_call',
+      id: 'fc_2',
+      callId: 'call-b',
+      name: 'apply_patch',
+      arguments: '{}',
+    },
+  });
+
+  // Abort only call-a
+  ledger.recordAbortedApproval('rejected', 'Tool execution was not approved.', 'call-a');
+
+  const saved = ledger.export();
+  t.is(saved.length, 2);
+
+  const entryA = saved.find((e) => e.callId === 'call-a')!;
+  t.is(entryA.status, 'aborted');
+  t.is(entryA.failureReason, 'Tool execution was not approved.');
+  t.truthy(entryA.completedAt);
+  t.is(entryA.output, 'rejected');
+  t.is(entryA.historyItems!.length, 2);
+  t.is((entryA.historyItems![1] as any).type, 'function_call_output');
+  t.is((entryA.historyItems![1] as any).callId, 'call-a');
+
+  const entryB = saved.find((e) => e.callId === 'call-b')!;
+  t.is(entryB.status, 'started', 'call-b should remain started');
+});
+
+test('recordAbortedApproval aborts all matching entries when no callId is provided', (t) => {
+  const ledger = new ToolExecutionLedger();
+
+  // Record two started calls and one completed call
+  ledger.recordFunctionCall({
+    rawItem: {
+      type: 'function_call',
+      id: 'fc_1',
+      callId: 'call-a',
+      name: 'read_file',
+      arguments: '{}',
+    },
+  });
+  ledger.recordFunctionCall({
+    rawItem: {
+      type: 'function_call',
+      id: 'fc_2',
+      callId: 'call-b',
+      name: 'apply_patch',
+      arguments: '{}',
+    },
+  });
+  // Complete call-a
+  ledger.recordFunctionResult({
+    rawItem: {
+      type: 'function_call_result',
+      id: 'fcr_1',
+      callId: 'call-a',
+      name: 'read_file',
+      output: 'contents',
+    },
+  });
+
+  // Abort all pending (no callId) — should only affect call-b
+  ledger.recordAbortedApproval('batch abort');
+
+  const saved = ledger.export();
+  const entryA = saved.find((e) => e.callId === 'call-a')!;
+  t.is(entryA.status, 'completed', 'completed call should remain completed');
+
+  const entryB = saved.find((e) => e.callId === 'call-b')!;
+  t.is(entryB.status, 'aborted');
+  t.is(entryB.historyItems!.length, 2);
+  t.is((entryB.historyItems![1] as any).type, 'function_call_output');
+});
+
+test('recordAbortedApproval synthesizes function_call_output type items', (t) => {
+  const ledger = new ToolExecutionLedger();
+
+  ledger.recordFunctionCall({
+    rawItem: {
+      type: 'function_call',
+      id: 'fc_1',
+      callId: 'call-x',
+      name: 'shell',
+      arguments: '{"command":"echo hi"}',
+    },
+  });
+
+  ledger.recordAbortedApproval('user cancelled');
+
+  const saved = ledger.export();
+  t.is(saved.length, 1);
+  t.is(saved[0].status, 'aborted');
+  t.is(saved[0].output, 'user cancelled');
+  t.truthy(saved[0].historyItems);
+  t.is(saved[0].historyItems!.length, 2);
+  t.is((saved[0].historyItems![0] as any).type, 'function_call');
+  const resultItem = saved[0].historyItems![1] as Record<string, unknown>;
+  t.is(resultItem.type, 'function_call_output');
+  t.is(resultItem.callId, 'call-x');
+  t.is(resultItem.output, 'user cancelled');
+  // Should NOT have role: 'tool' or type: 'tool_call_output_item'
+  t.is((resultItem as any).role, undefined);
+});
+
+test('reconcileHistoryWithToolLedger does NOT count started or approval_required entries as dropped', (t) => {
+  const history = [{ role: 'user', type: 'message', content: 'continue' }];
+  const ledger: SavedToolExecution[] = [
+    {
+      turnId: 'turn-1',
+      callId: 'call-started',
+      toolName: 'read_file',
+      arguments: '{}',
+      status: 'started',
+      startedAt: '2026-05-26T00:00:00.000Z',
+      historyItems: [{ type: 'function_call', id: 'fc_1', callId: 'call-started', name: 'read_file', arguments: '{}' }],
+    },
+    {
+      turnId: 'turn-1',
+      callId: 'call-approval',
+      toolName: 'apply_patch',
+      arguments: '{}',
+      status: 'approval_required',
+      startedAt: '2026-05-26T00:00:01.000Z',
+      historyItems: [
+        { type: 'function_call', id: 'fc_2', callId: 'call-approval', name: 'apply_patch', arguments: '{}' },
+      ],
+    },
+    {
+      turnId: 'turn-1',
+      callId: 'call-aborted',
+      toolName: 'shell',
+      arguments: '{}',
+      status: 'aborted',
+      startedAt: '2026-05-26T00:00:02.000Z',
+      failureReason: 'user rejected',
+    },
+  ];
+
+  const result = reconcileHistoryWithToolLedger(history, ledger);
+  // Only the 'aborted' entry should be counted as dropped, not 'started' or 'approval_required'
+  t.is(result.droppedIncompleteCalls, 1);
+  t.is(result.addedCompletedPairs, 0);
+});

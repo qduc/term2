@@ -16,7 +16,7 @@ import { ApprovalState } from './approval-state.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ISettingsService } from './service-interfaces.js';
 import { collectTerminalResult } from './terminal-result-collector.js';
-import { getMethod } from './interruption-info.js';
+import { getMethod, getCallIdFromObject } from './interruption-info.js';
 import { createStreamAccumulator, processStreamEvents } from './stream-event-processor.js';
 import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
@@ -29,31 +29,12 @@ import {
   reconcileHistoryWithToolLedger,
   ToolExecutionLedger,
   type SavedToolExecution,
+  callIdOf,
+  toolNameOf,
+  outputOf,
 } from './tool-execution-ledger.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
 import { describeError } from '../utils/error-helpers.js';
-
-const asRecordLocal = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-const rawItemLocal = (item: unknown): Record<string, unknown> | null => {
-  const rec = asRecordLocal(item);
-  if (!rec) return null;
-  return asRecordLocal(rec.rawItem) ?? rec;
-};
-const callIdOfLocal = (item: unknown): string | null => {
-  const raw = rawItemLocal(item);
-  const cid = raw?.callId ?? raw?.call_id ?? raw?.tool_call_id ?? raw?.toolCallId ?? raw?.id;
-  return typeof cid === 'string' && cid ? cid : null;
-};
-const toolNameOfLocal = (item: unknown): string => {
-  const raw = rawItemLocal(item);
-  const name = raw?.name ?? asRecordLocal(item)?.name;
-  return typeof name === 'string' && name ? name : 'unknown';
-};
-const outputOfLocal = (item: unknown): unknown => {
-  const raw = rawItemLocal(item);
-  return raw?.output ?? asRecordLocal(item)?.output;
-};
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -223,7 +204,7 @@ export class ConversationSession {
   #buildOutgoingInput(turn: UserTurn, { includeTurn }: { includeTurn: boolean }): BuiltOutgoingInput {
     const provider = this.#getProviderForGuard() ?? 'openai';
     const supportsChaining = supportsConversationChaining(provider);
-    const history = this.conversationStore.getHistory();
+    const history = this.#getCanonicalHistory();
     const outgoingHistory = includeTurn ? [...history, this.#makeUserInputItem(turn)] : history;
     const useChaining = supportsChaining && (!!this.previousResponseId || outgoingHistory.length <= 1);
     const notice = this.pendingModeNotice;
@@ -397,7 +378,7 @@ export class ConversationSession {
       : this.settingsService?.get<string>('agent.provider');
     const model = this.settingsService?.get<string>('agent.model');
     return {
-      history: this.conversationStore.getHistory(),
+      history: this.#getCanonicalHistory(),
       previousResponseId: this.previousResponseId,
       toolLedger: this.toolLedger.export(),
       ...(model ? { model } : {}),
@@ -496,13 +477,18 @@ export class ConversationSession {
     return event;
   }
 
+  #getCanonicalHistory(): AgentInputItem[] {
+    return reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolLedger.export())
+      .history as AgentInputItem[];
+  }
+
   exportState(): {
     history: unknown[];
     previousResponseId: string | null;
     toolLedger: SavedToolExecution[];
   } {
     return {
-      history: this.conversationStore.getHistory(),
+      history: this.#getCanonicalHistory(),
       previousResponseId: this.previousResponseId,
       toolLedger: this.toolLedger.export(),
     };
@@ -549,7 +535,15 @@ export class ConversationSession {
    * Abort the current running operation
    */
   abort(): void {
-    this.approvalFlow.abort();
+    const pending = this.approvalFlow.getPending();
+    const callId = pending ? getCallIdFromObject(pending.interruption) : undefined;
+    if (this.approvalFlow.abort()) {
+      this.toolLedger.recordAbortedApproval(
+        'Tool execution was not approved.',
+        'Tool execution was not approved.',
+        callId,
+      );
+    }
   }
 
   /**
@@ -633,15 +627,15 @@ export class ConversationSession {
               onFunctionCallItem: (item) => this.toolLedger.recordFunctionCall(item),
               onFunctionResultItem: (item) => {
                 this.toolLedger.recordFunctionResult(item);
-                const cid = callIdOfLocal(item);
+                const cid = callIdOf(item);
                 if (cid && this.logSink) {
                   const entry = this.toolLedger.export().find((e) => e.callId === cid);
                   this.#log({
                     type: 'tool_result',
                     callId: cid,
-                    toolName: entry?.toolName ?? toolNameOfLocal(item),
+                    toolName: entry?.toolName ?? toolNameOf(item),
                     status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
-                    output: entry?.output ?? outputOfLocal(item),
+                    output: entry?.output ?? outputOf(item),
                     ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
                   });
                 }
@@ -828,6 +822,14 @@ export class ConversationSession {
       });
 
       if (resolvedResult.type === 'approval_required') {
+        if (resolvedResult.approval.callId) {
+          this.toolLedger.recordFunctionCall({
+            type: 'function_call',
+            callId: resolvedResult.approval.callId,
+            name: resolvedResult.approval.toolName,
+            arguments: resolvedResult.approval.argumentsText,
+          });
+        }
         this.logger.debug('Tool approval required', {
           eventType: 'approval.required',
           category: 'approval',
@@ -924,6 +926,16 @@ export class ConversationSession {
       }
       if (stream && this.#isCurrentGeneration(gen)) {
         this.toolLedger.markOpenCallsAborted(error instanceof Error ? error.message : String(error));
+        // Persist completed tool call/result pairs (and the recovery notice) into
+        // canonical history so the next user turn doesn't ship a request with two
+        // consecutive user messages and no record of the tool activity.
+        const reconciled = reconcileHistoryWithToolLedger(
+          this.conversationStore.getHistory(),
+          this.toolLedger.export(),
+        );
+        if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
+          this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+        }
         const recoverySummary = this.toolLedger.getRecoverySummary();
         if (recoverySummary) {
           yield {
@@ -971,6 +983,15 @@ export class ConversationSession {
       return;
     }
 
+    if (answer !== 'y') {
+      const interruption = plan.pendingApprovalContext.interruption;
+      const callId = getCallIdFromObject(interruption);
+      const output = rejectionReason
+        ? `Tool execution was not approved. User's reason: ${rejectionReason}`
+        : 'Tool execution was not approved.';
+      this.toolLedger.recordAbortedApproval(output, output, callId);
+    }
+
     const {
       pendingApprovalContext: { state, toolCallArgumentsById, emittedCommandIds: previouslyEmittedIds },
       toolStartedEvent,
@@ -1010,15 +1031,15 @@ export class ConversationSession {
               onFunctionCallItem: (item) => this.toolLedger.recordFunctionCall(item),
               onFunctionResultItem: (item) => {
                 this.toolLedger.recordFunctionResult(item);
-                const cid = callIdOfLocal(item);
+                const cid = callIdOf(item);
                 if (cid && this.logSink) {
                   const entry = this.toolLedger.export().find((e) => e.callId === cid);
                   this.#log({
                     type: 'tool_result',
                     callId: cid,
-                    toolName: entry?.toolName ?? toolNameOfLocal(item),
+                    toolName: entry?.toolName ?? toolNameOf(item),
                     status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
-                    output: entry?.output ?? outputOfLocal(item),
+                    output: entry?.output ?? outputOf(item),
                     ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
                   });
                 }
@@ -1062,6 +1083,14 @@ export class ConversationSession {
           );
 
           if (resolvedResult.type === 'approval_required') {
+            if (resolvedResult.approval.callId) {
+              this.toolLedger.recordFunctionCall({
+                type: 'function_call',
+                callId: resolvedResult.approval.callId,
+                name: resolvedResult.approval.toolName,
+                arguments: resolvedResult.approval.argumentsText,
+              });
+            }
             this.logger.debug('Tool approval required', {
               eventType: 'approval.required',
               category: 'approval',

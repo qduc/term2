@@ -8,11 +8,17 @@ type GptVersion = {
 };
 
 function parseGptVersion(value: string): GptVersion | null {
-  const match = value.trim().match(/^gpt-(\d+)(?:\.(\d+))?/i);
+  const trimmed = value.trim();
+  const match = trimmed.match(/^gpt-(\d+)(?:\.(\d+))?/i);
   if (!match) {
     return null;
   }
-
+  // Reject ambiguous exact-match multi-digit versions like 'gpt-50'.
+  // A valid GPT version prefix should either have a minor version or a suffix.
+  const afterMatch = trimmed.slice(match[0].length);
+  if (!afterMatch && match[1].length > 1 && !match[2]) {
+    return null;
+  }
   return {
     major: Number(match[1]),
     minor: Number(match[2] ?? '0'),

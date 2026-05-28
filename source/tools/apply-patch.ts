@@ -76,7 +76,7 @@ function getApplyPatchOperations(params: ApplyPatchToolParams): ApplyPatchOperat
   ];
 }
 
-export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
+export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const parsedOutput = safeJsonParse(getOutputText(item));
   const patchOutputItems = Array.isArray(parsedOutput?.output) ? parsedOutput.output : [];
   const rawItem = item?.rawItem ?? item;
@@ -91,7 +91,7 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
     item?.tool_call_id ??
     item?.toolCallId ??
     item?.id;
-  const argsFromMap = callId ? _toolCallArgumentsById.get(callId) : undefined;
+  const argsFromMap = callId ? toolCallArgumentsById.get(callId) : undefined;
   const normalizedArgs =
     normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments ?? argsFromMap ?? rawItem?.operation) ?? {};
   const operationType = normalizedArgs?.type ?? rawItem?.operation?.type ?? 'unknown';
@@ -103,11 +103,10 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
     const command = `apply_patch ${operationType} ${filePath}`;
     const output = getOutputText(item) || 'No output';
     const success = isNativePatchResult
-      ? rawStatus === 'completed' ||
-        (rawStatus !== 'failed' &&
-          !output.startsWith('Invalid patch') &&
-          !output.startsWith('Cannot update') &&
-          !output.startsWith('Error:'))
+      ? rawStatus !== 'failed' &&
+        !output.startsWith('Invalid patch') &&
+        !output.startsWith('Cannot update') &&
+        !output.startsWith('Error:')
       : false;
 
     return [

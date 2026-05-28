@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import fs from 'fs';
 
 export interface ClipboardCommandCandidate {
   command: string;
@@ -10,11 +11,21 @@ export interface ClipboardRunResult {
   errorMessage?: string;
 }
 
+export type TtyWriter = (data: string) => void;
+
+export interface Osc52Options {
+  env?: NodeJS.ProcessEnv;
+  getTtyWriter?: () => TtyWriter | null;
+}
+
 export interface CopyToClipboardOptions {
   platform?: NodeJS.Platform;
   env?: NodeJS.ProcessEnv;
   runCommand?: (command: string, args: string[], input: string) => ClipboardRunResult | Promise<ClipboardRunResult>;
+  getTtyWriter?: () => TtyWriter | null;
 }
+
+const OSC52_MAX_BYTES = 70 * 1024;
 
 export function getClipboardCommandCandidates(
   platform: NodeJS.Platform,
@@ -106,12 +117,80 @@ function defaultRunClipboardCommand(command: string, args: string[], input: stri
   });
 }
 
-export async function copyToClipboard(text: string, options: CopyToClipboardOptions = {}): Promise<void> {
-  const platform = options.platform ?? process.platform;
-  const env = options.env ?? process.env;
-  const runCommand = options.runCommand ?? defaultRunClipboardCommand;
-  const candidates = getClipboardCommandCandidates(platform, env);
+function defaultGetTtyWriter(): TtyWriter | null {
+  if (process.stdout.isTTY) {
+    return (data) => void process.stdout.write(data);
+  }
 
+  try {
+    const fd = fs.openSync('/dev/tty', 'w');
+    return (data) => {
+      try {
+        fs.writeSync(fd, data);
+      } finally {
+        fs.closeSync(fd);
+      }
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildOsc52Sequence(text: string, env: NodeJS.ProcessEnv): string {
+  const encoded = Buffer.from(text, 'utf8').toString('base64');
+  const inner = `\x1b]52;c;${encoded}\x07`;
+
+  if (env.TMUX) {
+    // tmux DCS passthrough: double each ESC in the inner sequence
+    const escaped = inner.replace(/\x1b/g, '\x1b\x1b');
+    return `\x1bPtmux;\x1b${escaped}\x1b\\`;
+  }
+
+  if (env.TERM?.startsWith('screen')) {
+    // screen DCS passthrough: chunk at 768 chars to stay within screen's buffer limit
+    const CHUNK_SIZE = 768;
+    let result = '';
+    for (let i = 0; i < inner.length; i += CHUNK_SIZE) {
+      result += `\x1bP${inner.slice(i, i + CHUNK_SIZE)}\x1b\\`;
+    }
+    return result;
+  }
+
+  return inner;
+}
+
+export async function copyViaOsc52(text: string, options: Osc52Options = {}): Promise<void> {
+  const env = options.env ?? process.env;
+  const getTtyWriter = options.getTtyWriter ?? defaultGetTtyWriter;
+
+  if (Buffer.byteLength(text, 'utf8') > OSC52_MAX_BYTES) {
+    throw new Error(
+      `Response too large to copy over SSH (${Buffer.byteLength(
+        text,
+        'utf8',
+      )} bytes; limit is ${OSC52_MAX_BYTES} bytes)`,
+    );
+  }
+
+  const writer = getTtyWriter();
+  if (!writer) {
+    throw new Error('No TTY available for OSC 52 clipboard write');
+  }
+
+  writer(buildOsc52Sequence(text, env));
+}
+
+function isSSHSession(env: NodeJS.ProcessEnv): boolean {
+  return !!(env.SSH_CONNECTION || env.SSH_TTY || env.SSH_CLIENT);
+}
+
+async function runNativeCopy(
+  text: string,
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+  runCommand: (command: string, args: string[], input: string) => ClipboardRunResult | Promise<ClipboardRunResult>,
+): Promise<void> {
+  const candidates = getClipboardCommandCandidates(platform, env);
   let lastError = '';
 
   for (const candidate of candidates) {
@@ -123,7 +202,38 @@ export async function copyToClipboard(text: string, options: CopyToClipboardOpti
     lastError = result.errorMessage ?? '';
   }
 
-  const supportedCommands = candidates.map((candidate) => candidate.command).join(', ');
+  const supportedCommands = candidates.map((c) => c.command).join(', ');
   const detail = lastError ? ` Last error: ${lastError}` : '';
   throw new Error(`Clipboard is unavailable on this system. Tried: ${supportedCommands}.${detail}`);
+}
+
+export async function copyToClipboard(text: string, options: CopyToClipboardOptions = {}): Promise<void> {
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+  const runCommand = options.runCommand ?? defaultRunClipboardCommand;
+  const getTtyWriter = options.getTtyWriter ?? defaultGetTtyWriter;
+
+  if (isSSHSession(env)) {
+    // Native clipboard on the remote host would be the wrong machine's clipboard.
+    await copyViaOsc52(text, { env, getTtyWriter });
+    return;
+  }
+
+  // Local: try native first.
+  try {
+    await runNativeCopy(text, platform, env, runCommand);
+    return;
+  } catch (nativeErr) {
+    // Native failed — try OSC 52 if the content fits and a TTY is available.
+    if (Buffer.byteLength(text, 'utf8') > OSC52_MAX_BYTES) {
+      throw nativeErr;
+    }
+
+    const ttyWriter = getTtyWriter();
+    if (!ttyWriter) {
+      throw nativeErr;
+    }
+
+    ttyWriter(buildOsc52Sequence(text, env));
+  }
 }

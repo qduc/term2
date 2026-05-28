@@ -573,6 +573,20 @@ const App: FC<AppProps> = ({
             onHandoffCancel={handleHandoffCancel}
             largeUncachedWarning={largeUncachedWarning}
             hasPendingConfirmation={largeUncachedConfirmation !== null}
+            onSlashTabComplete={(command) => {
+              if (command.name === 'undo') {
+                const userMessages = getUserMessages().map((m) => ({ uiIndex: m.uiIndex, text: m.text }));
+                if (userMessages.length === 0) {
+                  addSystemMessage('Nothing to undo.');
+                  return true;
+                }
+                if (undoMenuRef.current) {
+                  undoMenuRef.current.open(userMessages);
+                }
+                return true;
+              }
+              return false;
+            }}
           />
         </Box>
       </Box>

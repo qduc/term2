@@ -41,6 +41,7 @@ export type BottomAreaProps = {
   onHandoffCancel?: () => void;
   largeUncachedWarning?: import('../services/large-uncached-input-guard.js').LargeUncachedInputDecision | null;
   hasPendingConfirmation?: boolean;
+  onSlashTabComplete?: (command: SlashCommand) => boolean;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -68,6 +69,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   onHandoffCancel,
   largeUncachedWarning,
   hasPendingConfirmation,
+  onSlashTabComplete,
 }) => {
   const [dotCount, setDotCount] = useState(1);
 
@@ -114,6 +116,7 @@ const BottomArea: FC<BottomAreaProps> = ({
             undoMenuRef={undoMenuRef}
             onUndoSelect={onUndoSelect}
             onSettingChange={onSettingChange}
+            onSlashTabComplete={onSlashTabComplete}
           />
         ) : null}
       </Box>

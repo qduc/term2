@@ -322,7 +322,7 @@ test('executeSlashCommandSelection clears input after successful command executi
   t.is(input, '');
 });
 
-test('executeSlashCommandSelection keeps autocomplete value for expectsArgs commands', (t) => {
+test('executeSlashCommandSelection autocompletes and executes for expectsArgs commands', (t) => {
   let input = '/mod';
   let closed = false;
   let actionCalled = false;
@@ -332,9 +332,10 @@ test('executeSlashCommandSelection keeps autocomplete value for expectsArgs comm
       name: 'model',
       description: 'Change model',
       expectsArgs: true,
+      // Real model command returns false on no-args (keeps input for further typing)
       action: () => {
         actionCalled = true;
-        return true;
+        return false;
       },
     },
     filter: 'mod',
@@ -346,7 +347,38 @@ test('executeSlashCommandSelection keeps autocomplete value for expectsArgs comm
     },
   });
 
-  t.false(actionCalled);
-  t.false(closed);
+  t.true(actionCalled);
+  t.true(closed);
   t.is(input, '/model ');
+});
+
+test('executeSlashCommandSelection executes undo command after autocomplete', (t) => {
+  let input = '/un';
+  let closed = false;
+  let undoMenuOpened = false;
+
+  executeSlashCommandSelection({
+    command: {
+      name: 'undo',
+      description: 'Undo the last user message',
+      expectsArgs: true,
+      // Real undo command returns true when opening undo menu
+      action: () => {
+        undoMenuOpened = true;
+        return true;
+      },
+    },
+    filter: 'un',
+    setInput: (next) => {
+      input = next;
+    },
+    close: () => {
+      closed = true;
+    },
+  });
+
+  t.true(undoMenuOpened, 'undo menu should open after selecting undo from slash menu');
+  t.true(closed, 'slash menu should close');
+  // Action returns true → setInput('') clears the input
+  t.is(input, '');
 });

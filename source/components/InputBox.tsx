@@ -63,6 +63,7 @@ type Props = {
   onUndoSelect?: (item: UndoItem) => void;
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
   onSettingChange?: (key: string, value: any) => void;
+  onSlashTabComplete?: (command: SlashCommand) => boolean;
 };
 
 const InputBox: FC<Props> = ({
@@ -76,6 +77,7 @@ const InputBox: FC<Props> = ({
   onUndoSelect,
   undoMenuRef,
   onSettingChange,
+  onSlashTabComplete,
 }) => {
   const { input: value, setInput: onChange, mode, setMode, cursorOffset, setCursorOffset } = useInputContext();
   const [images, setImages] = useState<ImageRef[]>([]);
@@ -323,6 +325,7 @@ const InputBox: FC<Props> = ({
     insertSelectedModel,
     onSubmit: submitTextOnly,
     onSlashCommandRemount: remountInput,
+    onSlashTabComplete,
     onUndoSelect,
   });
 

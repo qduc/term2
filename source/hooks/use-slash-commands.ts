@@ -74,6 +74,13 @@ export function executeSlashCommandSelection({
 
   if (shouldAutocomplete(command, filter)) {
     setInput(`/${command.name} `);
+    // Close slash menu first so mode-changing actions (e.g. /undo opening
+    // undo_selection) can take effect; later setMode calls win.
+    close();
+    const shouldClose = command.action();
+    if (shouldClose !== false) {
+      setInput('');
+    }
     return;
   }
 

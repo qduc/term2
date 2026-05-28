@@ -29,7 +29,13 @@ type Movable = {
 type Settings = Movable & {
   switchCategory: (direction?: 'next' | 'prev') => void;
 };
-type Slash = Movable & { executeSelected: () => void; completeSelected: () => void };
+import type { SlashCommand } from '../slash-commands.js';
+
+type Slash = Movable & {
+  executeSelected: () => void;
+  completeSelected: () => void;
+  getSelectedItem: () => SlashCommand | undefined;
+};
 type Models = Movable & { canSwitchProvider: boolean; toggleProvider: (direction?: 'next' | 'prev') => void };
 type Undo = Movable & {
   confirmSelection: (onSelect: (item: import('../hooks/use-undo-selection.js').UndoItem) => void) => void;
@@ -49,6 +55,7 @@ type Options = {
   insertSelectedModel: (submitAfterInsert: boolean) => boolean;
   onSubmit: (value: string) => void;
   onSlashCommandRemount: () => void;
+  onSlashTabComplete?: (command: SlashCommand) => boolean;
   onUndoSelect?: (item: import('../hooks/use-undo-selection.js').UndoItem) => void;
 };
 
@@ -66,6 +73,7 @@ export const useModeHandlers = ({
   insertSelectedModel,
   onSubmit,
   onSlashCommandRemount,
+  onSlashTabComplete,
   onUndoSelect,
 }: Options): Record<InputMode, ModeHandler> => {
   return useMemo(
@@ -82,6 +90,10 @@ export const useModeHandlers = ({
         moveHome: slash.moveHome,
         moveEnd: slash.moveEnd,
         onTab: () => {
+          const selected = slash.getSelectedItem();
+          if (selected && onSlashTabComplete && onSlashTabComplete(selected)) {
+            return 'handled';
+          }
           slash.completeSelected();
           onSlashCommandRemount();
           return 'handled';
@@ -195,6 +207,7 @@ export const useModeHandlers = ({
       insertSelectedModel,
       onSubmit,
       onSlashCommandRemount,
+      onSlashTabComplete,
       onUndoSelect,
     ],
   );

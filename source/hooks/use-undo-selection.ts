@@ -63,7 +63,9 @@ export const useUndoSelection = (): UndoSelectionResult => {
       setItems(userMessages);
       setMode('undo_selection');
       setScrollOffset(0);
-      selection.moveEnd();
+      // Use setSelectedIndex directly because selection.moveEnd() would read the
+      // stale items.length from its closure (items hasn't re-rendered yet).
+      selection.setSelectedIndex(Math.max(0, userMessages.length - 1));
     },
     [setMode, selection],
   );

@@ -1,3 +1,54 @@
+## [0.7.1] - 2026-05-29
+
+### Features
+- Introduce `TimedResponsesWSModel` with configurable timeouts and enhanced WebSocket error handling
+- Add `firstFrameTimeoutMs` for configurable WebSocket connection timeouts
+- Improve WebSocket error handling with close code and reason tracking
+- Add automatic retry for transient WebSocket 1006 connection closures
+- Add `--resume ls` and metadata-rich conversation listing for session management
+- Implement OSC 52 clipboard support for improved SSH clipboard handling
+- Add `assistant_turn` events and persisted turn item support for more robust conversation replay
+- Handle reasoning in `rawContent` for persisted turn items, improving reasoning round-trip across sessions
+- Enhance continuation handling and logging in conversation sessions
+- Add large uncached input warnings and confirmation prompts in the status bar
+- Enhance error logging with stack traces and improved formatting
+- Enhance `/undo` and `/retry` commands to handle image attachments
+- Add `parentTool` to `subagent_started` events for mentor subagent parent tracking
+- Handle mid-turn interruptions and incomplete tool batches during conversation replay
+- Extend `apply_patch_call` support and improve argument normalization
+- Enhance tool execution ledger and conversation session state management for recovery
+- Adjust Codex provider request timeout and retry policy
+- Tab-completing `/undo` now opens the undo selection menu directly
+
+### Bug Fixes
+- Fix missing `rawContent` in replayed reasoning items during conversation restoration
+- Fix conversation store history duplication after interrupted tool batches
+- Fix reordered full-snapshot supersets being incorrectly accepted in `updateFromClient`
+- Fix missing or empty terminal response output in `CodexResponsesModel`
+- Fix `use-conversation` logging stack property leaked through `rawEvent`
+- Fix flaky test suite: resolve race conditions, timing sensitivity, and open handles
+- Increase default timeout for edit healing model
+
+### Improvements
+- Refactor conversation event logging: replace `assistant_final` with `assistant_turn` and streamline session logging
+- Optimize project tree rendering with breadth-first search for improved performance
+- Remove mode notice handling and related code for clarity
+- Remove `writeBoundary` parameter from subagent definitions
+- Remove redundant recovery message checks from conversation replay and tool execution tests
+- Improve patch error messages for clarity and consistency
+- Centralize WebSocket timeouts in `DEFAULT_TIMED_WS_TIMEOUTS`
+- Simplify `ConversationStore` API with identity-aware merge strategy
+- Refactor app commands hook for cleaner structure
+- Rename `OpencodeMinimaxHybridProvider` to `OpencodeAnthropicFormatProvider`
+- Use system temp directory for test files and add cleanup logic
+- Streamline assistant guidelines and update test command in package.json
+
+### Internal/Chores
+- Remove unused `CODEX_REQUEST_TIMEOUT_MS` and `CODEX_MAX_RETRIES` constants
+- Remove file reference guidelines from GPT-5 prompt
+- Update `SHELL_AUTO_APPROVAL_PROMPT_VERSION` to v5 and refine approval prompt
+- Update readme and AGENTS.md
+
 ## [0.7.0] - 2026-05-26
 
 ### Features

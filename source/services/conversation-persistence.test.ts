@@ -680,6 +680,7 @@ test.serial('writer + loadConversation: round-trips a v2 conversation with assis
   t.deepEqual(restored!.history[1], {
     type: 'reasoning',
     content: [{ type: 'reasoning_text', text: 'thinking about ls' }],
+    rawContent: [{ type: 'reasoning_text', text: 'thinking about ls' }],
   });
   t.deepEqual(restored!.history[2], {
     type: 'function_call',

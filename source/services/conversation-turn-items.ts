@@ -365,6 +365,7 @@ export function synthesizeHistoryFromAssistantTurn(
       type: 'reasoning',
       ...(providerItemId ? { id: providerItemId } : {}),
       content: text ? [{ type: 'reasoning_text', text }] : [],
+      rawContent: text ? [{ type: 'reasoning_text', text }] : [],
       ...(providerData ? { providerData } : {}),
     } as unknown as AgentInputItem);
   };

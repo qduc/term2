@@ -492,6 +492,7 @@ test('replayEvents: assistant_turn rebuilds structured assistant history for res
   t.deepEqual(restored.history[1], {
     type: 'reasoning',
     content: [{ type: 'reasoning_text', text: 'I should run date.' }],
+    rawContent: [{ type: 'reasoning_text', text: 'I should run date.' }],
     providerData: {
       reasoning_details: [{ type: 'summary_text', text: 'I should run date.' }],
     },
@@ -513,6 +514,7 @@ test('replayEvents: assistant_turn rebuilds structured assistant history for res
   t.deepEqual(restored.history[4], {
     type: 'reasoning',
     content: [{ type: 'reasoning_text', text: 'Now answer.' }],
+    rawContent: [{ type: 'reasoning_text', text: 'Now answer.' }],
   });
   t.deepEqual(restored.history[5], {
     role: 'assistant',

@@ -577,14 +577,14 @@ test('TimedResponsesWSModel uses idleTimeoutMs for mid-stream gaps even when fir
   const model = new TimedResponsesWSModel(
     mockClient as any,
     'gpt-4',
-    { connectTimeoutMs: 1000, idleTimeoutMs: 80, firstFrameTimeoutMs: 30 },
+    { connectTimeoutMs: 1000, idleTimeoutMs: 300, firstFrameTimeoutMs: 100 },
     () => mockWs as any,
   );
 
-  // First frame arrives within firstFrameTimeoutMs.
+  // First frame arrives comfortably within firstFrameTimeoutMs.
   setTimeout(() => {
     mockWs.emit('message', JSON.stringify({ type: 'response.created', response: { id: 'resp_x' } }));
-  }, 10);
+  }, 25);
 
   // Second frame arrives after firstFrameTimeoutMs but within idleTimeoutMs.
   setTimeout(() => {
@@ -599,7 +599,7 @@ test('TimedResponsesWSModel uses idleTimeoutMs for mid-stream gaps even when fir
         },
       }),
     );
-  }, 60);
+  }, 170);
 
   const result = await model.getResponse(createMockRequest('Hello'));
   t.truthy(result);

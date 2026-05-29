@@ -47,6 +47,7 @@ class TimedWebSocketProxy {
   private readonly rawSocket: any;
   private timer: NodeJS.Timeout | null = null;
   private readonly listeners: Record<string, Set<any>> = {};
+  private awaitingFirstFrame = true;
 
   isClosed = false;
   lastCloseCode: number | null = null;
@@ -103,6 +104,7 @@ class TimedWebSocketProxy {
         forwardEvent('open', e);
       });
       this.rawSocket.addEventListener('message', (e: any) => {
+        this.awaitingFirstFrame = false;
         this.startTimer(options, false);
         forwardEvent('message', e);
       });
@@ -127,6 +129,7 @@ class TimedWebSocketProxy {
         forwardEvent('open', e);
       });
       this.rawSocket.on('message', (e: any) => {
+        this.awaitingFirstFrame = false;
         this.startTimer(options, false);
         forwardEvent('message', e);
       });
@@ -154,6 +157,7 @@ class TimedWebSocketProxy {
   send(data: any) {
     const context = wsContextStorage.getStore();
     const options = context?.options || { connectTimeoutMs: 0, idleTimeoutMs: 0 };
+    this.awaitingFirstFrame = true;
     this.startTimer(options, true);
     return this.rawSocket.send(data);
   }
@@ -268,13 +272,14 @@ class TimedWebSocketProxy {
   private startTimer(options: TimedWsOptions, waitingForFirstFrame: boolean) {
     this.clearTimer();
 
+    const isFirstFrameWindow = waitingForFirstFrame && this.awaitingFirstFrame;
     const timeoutMs =
-      waitingForFirstFrame && typeof options.firstFrameTimeoutMs === 'number'
+      isFirstFrameWindow && typeof options.firstFrameTimeoutMs === 'number'
         ? options.firstFrameTimeoutMs
         : options.idleTimeoutMs;
 
     const timeoutMessage =
-      waitingForFirstFrame && typeof options.firstFrameTimeoutMs === 'number'
+      isFirstFrameWindow && typeof options.firstFrameTimeoutMs === 'number'
         ? `WebSocket first frame timeout after ${options.firstFrameTimeoutMs}ms`
         : `WebSocket idle timeout after ${options.idleTimeoutMs}ms`;
 

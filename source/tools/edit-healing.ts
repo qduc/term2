@@ -196,16 +196,22 @@ async function runHealingPrompt(
     process.env.OPENAI_API_KEY = apiKey;
   }
 
+  let timeoutHandle: NodeJS.Timeout | null = null;
   try {
     const runPromise = runner ? runner.run(agent, prompt, options) : run(agent, prompt, options);
 
     const result = await Promise.race([
       runPromise,
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Edit healing timed out')), timeoutMs)),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error('Edit healing timed out')), timeoutMs);
+      }),
     ]);
 
     return extractModelText(result);
   } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
     if (providerId === 'openai' && apiKey && previousApiKey === undefined) {
       delete process.env.OPENAI_API_KEY;
     } else if (providerId === 'openai' && apiKey && previousApiKey !== undefined) {

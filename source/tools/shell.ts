@@ -74,6 +74,18 @@ function stripRedundantCd(command: string, cwd: string): string {
   return command;
 }
 
+/**
+ * Strip RTK's "No hook installed" warning from stderr output.
+ * The rtk binary prints this banner to stderr when its git hook is not installed.
+ */
+function stripRtkWarning(text: string): string {
+  if (!text) return text;
+  return text
+    .split('\n')
+    .filter((line) => !line.includes('[rtk] /!\\ No hook installed'))
+    .join('\n');
+}
+
 function isMutatingCommand(command: string, cwd: string, log: ILoggingService): boolean {
   return validateCommandSafety(stripRedundantCd(command, cwd), log); // true = YELLOW/RED
 }
@@ -286,7 +298,7 @@ export function createShellToolDefinition(deps: {
         });
 
         const stdout = result.stdout ?? '';
-        const stderr = result.stderr ?? '';
+        const stderr = stripRtkWarning(result.stderr ?? '');
         const exitCode = result.exitCode ?? null;
         const outcome: ShellCommandResult['outcome'] = result.timedOut
           ? { type: 'timeout' }

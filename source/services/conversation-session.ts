@@ -1455,6 +1455,7 @@ export class ConversationSession {
     let continuationApprovalUsage: NormalizedUsage | undefined;
     const commandMessages: CommandMessage[] = [];
     let approvalRequiredResult: ConversationResult | undefined;
+    let continuationTurnItems: PersistedAssistantTurnItem[] | undefined;
 
     for await (const event of this['continue']({ answer: 'y' })) {
       if (event.type === 'approval_required') {
@@ -1485,7 +1486,9 @@ export class ConversationSession {
         if (event.commandMessages) {
           commandMessages.push(...event.commandMessages);
         }
-        yield event;
+        if (event.turnItems) {
+          continuationTurnItems = event.turnItems;
+        }
       } else {
         yield event;
       }
@@ -1506,7 +1509,7 @@ export class ConversationSession {
       finalText: finalText || 'Done.',
       ...(reasoningText ? { reasoningText } : {}),
       ...(combinedUsage && Object.keys(combinedUsage).length > 0 ? { usage: combinedUsage } : {}),
-      turnItems: this.currentPersistedTurnItems,
+      turnItems: continuationTurnItems ?? this.currentPersistedTurnItems,
     };
   }
 }

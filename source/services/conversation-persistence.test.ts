@@ -804,3 +804,119 @@ test.serial('replay: interrupted v2 logs without assistant_turn still recover fr
   t.is(restored!.messages[1].status, 'completed');
   t.is(restored!.messages[2].sender, 'system');
 });
+
+test.serial(
+  'session logging with auto-approved tool continuation writes only one assistant_turn containing all details',
+  async (t) => {
+    const id = persistenceModule.generateId();
+    const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+    writer.init({
+      id,
+      createdAt: '2026-05-26T00:00:00.000Z',
+      projectPath: '/workspace/autoapprove',
+      model: 'gpt-5',
+      provider: 'openai',
+    });
+
+    const stream1 = new MockStream();
+    stream1.state = {
+      approve: () => {},
+    };
+    stream1.interruptions = [
+      {
+        name: 'shell',
+        arguments: { command: 'echo hello' },
+        callId: 'call-1',
+        agent: { name: 'Agent' },
+      },
+    ];
+
+    let continueCalled = false;
+    const mockAgentClient = {
+      getProvider: () => 'openai',
+      startStream: async () => stream1,
+      continueRunStream: async () => {
+        continueCalled = true;
+        const stream2 = new MockStream();
+        stream2.newItems = [
+          {
+            type: 'function_call',
+            callId: 'call-1',
+            name: 'shell',
+            arguments: { command: 'echo hello' },
+          },
+          {
+            type: 'function_call_result',
+            callId: 'call-1',
+            name: 'shell',
+            output: 'hello\n',
+          },
+          {
+            role: 'assistant',
+            type: 'message',
+            content: [{ type: 'output_text', text: 'Done continuation.' }],
+          },
+        ];
+        stream2.output = [
+          {
+            role: 'assistant',
+            type: 'message',
+            status: 'completed',
+            content: [{ type: 'output_text', text: 'Done continuation.' }],
+          },
+        ];
+        return stream2;
+      },
+    } as any;
+
+    const session = new ConversationSession(id, {
+      agentClient: mockAgentClient,
+      deps: {
+        logger: stubLogger,
+        settingsService: createMockSettingsService({
+          'agent.model': 'gpt-5',
+          'agent.provider': 'openai',
+        }),
+      },
+      sessionStartedAt: '2026-05-26T00:00:00.000Z',
+    });
+
+    // Inject a mock shellAutoApproval resolver that auto-approves
+    (session as any).shellAutoApproval = {
+      resolveAdvisoryForInterruption: async () => ({ model: 'gpt-5', reasoning: 'allow', decision: 'approve' }),
+      shouldAutoApprove: () => true,
+      clearCache: () => {},
+    };
+
+    session.setLogSink((event) => writer.append(event));
+
+    const result = await session.sendMessage('hello');
+    t.is(result.type, 'response');
+    t.true(continueCalled);
+    await writer.close();
+
+    // Read raw file contents to check what was written to disk
+    const filePath = path.join(testDir, `${id}.jsonl`);
+    const envelopes = fs
+      .readFileSync(filePath, 'utf-8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+
+    const assistantTurnEnvelopes = envelopes.filter((env) => env.event?.type === 'assistant_turn');
+
+    // Verify that EXACTLY one assistant_turn event was logged!
+    t.is(assistantTurnEnvelopes.length, 1);
+
+    const turnEvent = assistantTurnEnvelopes[0].event;
+    t.truthy(turnEvent);
+    t.is(turnEvent.turn.items.length, 3); // tool_call, tool_result, assistant_text
+
+    t.is(turnEvent.turn.items[0].type, 'tool_call');
+    t.is(turnEvent.turn.items[0].callId, 'call-1');
+    t.is(turnEvent.turn.items[1].type, 'tool_result');
+    t.is(turnEvent.turn.items[1].callId, 'call-1');
+    t.is(turnEvent.turn.items[2].type, 'assistant_text');
+    t.is(turnEvent.turn.items[2].text, 'Done continuation.');
+  },
+);

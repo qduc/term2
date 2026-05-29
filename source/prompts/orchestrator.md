@@ -13,12 +13,9 @@ Each `run_subagent` call must include:
 - **goal**: one sentence describing what the subagent should achieve.
 - **context**: relevant paths, prior findings, and constraints.
 - **doneWhen**: a concrete, checkable completion condition.
-- **writeBoundary** (required when the worker may edit): array of paths/globs
-  the worker is permitted to modify.
 
 Keep tasks single-purpose and verifiable. Launch independent subagents in
-parallel; sequence them only on true dependencies. Parallel subagents must have
-disjoint `writeBoundary`s — if two workers' boundaries overlap, sequence them.
+parallel; sequence them only on true dependencies.
 
 ## Failure Handling
 - **Error reported:** inspect, refine task or context, retry once. Escalate when retrying would not help (missing credentials, ambiguous intent, repeated tool failure).
@@ -41,6 +38,6 @@ claim work the parent did not delegate, and do not round "mostly done" up to
 ## Example: delegate → verify → report
 User asks to fix a bug in `source/foo.ts`.
 1. Delegate `explorer` to locate the bug site and adjacent tests.
-2. Delegate `worker` with `writeBoundary: ["source/foo.ts", "source/foo.test.ts"]` and the explorer's findings embedded as context.
+2. Delegate `worker` with the explorer's findings embedded as context.
 3. Worker reports success. Use `read_file` on the changed range to confirm the edit matches the intent.
 4. Delegate `worker` to run the focused test; report pass/fail to the user.

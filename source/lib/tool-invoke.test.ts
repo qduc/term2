@@ -224,14 +224,14 @@ test('normalizeToolInput with schema filters sentinel values for optional fields
     path: z.string(),
     start_line: z.number().optional(),
     end_line: z.number().optional(),
-    writeBoundary: z.array(z.string()).optional(),
+    tags: z.array(z.string()).optional(),
   });
 
   const input = {
     path: 'README.md',
     start_line: 'None',
     end_line: 'null',
-    writeBoundary: 'null',
+    tags: 'null',
   };
 
   const result = normalizeToolInput(input, schema);
@@ -313,7 +313,7 @@ test('wrapToolInvoke intercepts InvalidToolInputError result string and formats 
 
 test('normalizeToolInput with schema coerces stringified array and object inputs', (t) => {
   const schema = z.object({
-    writeBoundary: z.array(z.string()).optional(),
+    tags: z.array(z.string()).optional(),
     config: z
       .object({
         debug: z.boolean(),
@@ -322,28 +322,28 @@ test('normalizeToolInput with schema coerces stringified array and object inputs
   });
 
   const input = {
-    writeBoundary: '["src", "tests"]',
+    tags: '["src", "tests"]',
     config: '{"debug": true}',
   };
 
   const result = normalizeToolInput(input, schema);
   t.deepEqual(JSON.parse(result), {
-    writeBoundary: ['src', 'tests'],
+    tags: ['src', 'tests'],
     config: { debug: true },
   });
 });
 
 test('normalizeToolInput with schema coerces empty stringified array', (t) => {
   const schema = z.object({
-    writeBoundary: z.array(z.string()).optional(),
+    tags: z.array(z.string()).optional(),
   });
 
   const input = {
-    writeBoundary: '[]',
+    tags: '[]',
   };
 
   const result = normalizeToolInput(input, schema);
   t.deepEqual(JSON.parse(result), {
-    writeBoundary: [],
+    tags: [],
   });
 });

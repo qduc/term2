@@ -64,6 +64,7 @@ type Props = {
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
   onSettingChange?: (key: string, value: any) => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
+  promptLabel?: string;
 };
 
 const InputBox: FC<Props> = ({
@@ -78,6 +79,7 @@ const InputBox: FC<Props> = ({
   undoMenuRef,
   onSettingChange,
   onSlashTabComplete,
+  promptLabel,
 }) => {
   const { input: value, setInput: onChange, mode, setMode, cursorOffset, setCursorOffset } = useInputContext();
   const [images, setImages] = useState<ImageRef[]>([]);
@@ -87,7 +89,7 @@ const InputBox: FC<Props> = ({
   const lockedCursorRef = useRef<number | null>(null);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
   const settingsFilterRef = useRef('');
-  const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode });
+  const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel });
 
   // Hooks
   const slash = useSlashCommands({
@@ -553,7 +555,9 @@ const InputBox: FC<Props> = ({
         settingsService={settingsService}
       />
       <Box>
-        {waitingForRejectionReason ? (
+        {promptLabel ? (
+          <Text color="#22d3ee">{promptLabel}</Text>
+        ) : waitingForRejectionReason ? (
           <Text color="yellow">Why? </Text>
         ) : isShellMode ? (
           <Text color="green">$ </Text>

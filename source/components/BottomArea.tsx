@@ -117,6 +117,7 @@ const BottomArea: FC<BottomAreaProps> = ({
             onUndoSelect={onUndoSelect}
             onSettingChange={onSettingChange}
             onSlashTabComplete={onSlashTabComplete}
+            promptLabel={handoffState?.stage === 'entering_message' ? 'Handoff message: ' : undefined}
           />
         ) : null}
       </Box>

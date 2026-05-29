@@ -7,12 +7,18 @@ export type InputWidthOptions = {
   terminalColumns?: number;
   waitingForRejectionReason: boolean;
   isShellMode: boolean;
+  promptLabel?: string;
 };
 
 const getPromptWidth = ({
   waitingForRejectionReason,
   isShellMode,
+  promptLabel,
 }: Omit<InputWidthOptions, 'terminalColumns'>): number => {
+  if (promptLabel) {
+    return promptLabel.length;
+  }
+
   if (waitingForRejectionReason) {
     return REJECTION_PROMPT_WIDTH;
   }
@@ -28,6 +34,7 @@ export const calculateInputWidth = ({
   terminalColumns,
   waitingForRejectionReason,
   isShellMode,
+  promptLabel,
 }: InputWidthOptions): number =>
   Math.max(
     0,
@@ -36,5 +43,6 @@ export const calculateInputWidth = ({
       getPromptWidth({
         waitingForRejectionReason,
         isShellMode,
+        promptLabel,
       }),
   );

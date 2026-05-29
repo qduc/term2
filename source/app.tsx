@@ -73,10 +73,11 @@ export const scheduleExitSideEffects = (
   }, 0);
 };
 
-export type HandoffStage = 'confirm_model' | 'selecting_model';
+export type HandoffStage = 'entering_message' | 'confirm_model' | 'selecting_model';
 export interface HandoffState {
   capturedText: string;
   stage: HandoffStage;
+  handoffMessage?: string;
 }
 
 interface LargeUncachedConfirmation {
@@ -239,9 +240,11 @@ const App: FC<AppProps> = ({
 
   useEffect(() => {
     if (handoffState?.stage === 'selecting_model' && mode === 'text') {
+      const handoffMsg = handoffState.handoffMessage || 'Implement this';
+      const text = handoffState.capturedText;
       setHandoffState(null);
       setInput('');
-      void sendUserMessage({ text: `Implement this:\n\n${handoffState.capturedText}` });
+      void sendUserMessage({ text: `${handoffMsg}:\n\n${text}` });
     }
   }, [mode, sendUserMessage, setInput, handoffState]);
 
@@ -298,11 +301,12 @@ const App: FC<AppProps> = ({
 
   const handleHandoffDecline = useCallback(async () => {
     const text = handoffState?.capturedText;
+    const handoffMsg = handoffState?.handoffMessage || 'Implement this';
     await clearConversationAndRefreshBanner();
     setHandoffState(null);
     setInput('');
     if (text) {
-      await sendUserMessage({ text: `Implement this:\n\n${text}` });
+      await sendUserMessage({ text: `${handoffMsg}:\n\n${text}` });
     }
   }, [handoffState, clearConversationAndRefreshBanner, sendUserMessage, setInput]);
 
@@ -313,7 +317,7 @@ const App: FC<AppProps> = ({
   }, [addSystemMessage, setInput]);
 
   const handleHandoff = useCallback((capturedText: string) => {
-    setHandoffState({ capturedText, stage: 'confirm_model' });
+    setHandoffState({ capturedText, stage: 'entering_message' });
   }, []);
 
   const { slashCommands, cycleAppModes } = useAppCommands({
@@ -361,7 +365,7 @@ const App: FC<AppProps> = ({
     }
   });
 
-  // Handle Esc to stop processing or cancel rejection reason
+  // Handle Esc to stop processing or cancel rejection reason or handoff
   useInput((_input: string, key) => {
     if (key.escape && waitingForRejectionReason) {
       // Cancel rejection reason input and return to approval prompt
@@ -374,6 +378,12 @@ const App: FC<AppProps> = ({
       stopProcessing();
       addSystemMessage('Stopped');
       setWaitingForRejectionReason(false);
+      return;
+    }
+
+    if (key.escape && handoffState && handoffState.stage === 'entering_message') {
+      handleHandoffCancel();
+      return;
     }
   });
 
@@ -421,6 +431,16 @@ const App: FC<AppProps> = ({
 
     // Handoff flow interception
     if (handoffState) {
+      if (handoffState.stage === 'entering_message') {
+        const handoffMessage = value.trim() || 'Implement this';
+        setHandoffState({
+          ...handoffState,
+          handoffMessage,
+          stage: 'confirm_model',
+        });
+        setInput('');
+        return;
+      }
       if (handoffState.stage === 'selecting_model') {
         // Model was selected from popup → model text submitted as message
         const parsedInput = parseInput(value);
@@ -436,9 +456,10 @@ const App: FC<AppProps> = ({
           setModel(modelId);
         }
         const text = handoffState.capturedText;
+        const handoffMsg = handoffState.handoffMessage || 'Implement this';
         setHandoffState(null);
         setInput('');
-        await sendUserMessage({ text: `Implement this:\n\n${text}` });
+        await sendUserMessage({ text: `${handoffMsg}:\n\n${text}` });
         return;
       }
     }

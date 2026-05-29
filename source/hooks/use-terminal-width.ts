@@ -4,11 +4,12 @@ import { calculateInputWidth } from '../components/Input/input-width.js';
 type Options = {
   waitingForRejectionReason: boolean;
   isShellMode: boolean;
+  promptLabel?: string;
 };
 
 const RESIZE_DEBOUNCE_MS = 120;
 
-export const useTerminalWidth = ({ waitingForRejectionReason, isShellMode }: Options): number => {
+export const useTerminalWidth = ({ waitingForRejectionReason, isShellMode, promptLabel }: Options): number => {
   const [terminalWidth, setTerminalWidth] = useState(0);
 
   useEffect(() => {
@@ -17,6 +18,7 @@ export const useTerminalWidth = ({ waitingForRejectionReason, isShellMode }: Opt
         terminalColumns: process.stdout.columns,
         waitingForRejectionReason,
         isShellMode,
+        promptLabel,
       });
 
     setTerminalWidth(compute());

@@ -43,15 +43,16 @@ const renderBottomArea = (props: typeof baseProps) =>
   );
 
 test('BottomArea shows input when idle', (t) => {
-  const { lastFrame } = renderBottomArea(baseProps);
+  const { lastFrame, unmount } = renderBottomArea(baseProps);
   const output = lastFrame() ?? '';
   t.true(output.includes('❯'));
   t.false(output.includes('processing'));
   t.false(output.includes('Allow this action?'));
+  unmount();
 });
 
 test('BottomArea shows approval prompt when waiting for approval', (t) => {
-  const { lastFrame } = renderBottomArea({
+  const { lastFrame, unmount } = renderBottomArea({
     ...baseProps,
     pendingApproval: {
       agentName: 'Agent',
@@ -66,10 +67,11 @@ test('BottomArea shows approval prompt when waiting for approval', (t) => {
   t.true(output.includes('Approve'));
   t.true(output.includes('Reject'));
   t.false(output.includes('processing'));
+  unmount();
 });
 
 test('BottomArea shows processing indicator when busy', (t) => {
-  const { lastFrame } = renderBottomArea({
+  const { lastFrame, unmount } = renderBottomArea({
     ...baseProps,
     isProcessing: true,
   });
@@ -77,10 +79,11 @@ test('BottomArea shows processing indicator when busy', (t) => {
   t.true(output.includes('processing.'));
   t.false(output.includes('Allow this action?'));
   t.false(output.includes('❯'));
+  unmount();
 });
 
 test('BottomArea shows handoff confirmation prompt when handoffState is confirm_model', (t) => {
-  const { lastFrame } = renderBottomArea({
+  const { lastFrame, unmount } = renderBottomArea({
     ...baseProps,
     handoffState: {
       capturedText: 'some test code',
@@ -92,4 +95,20 @@ test('BottomArea shows handoff confirmation prompt when handoffState is confirm_
   t.true(output.includes('Yes'));
   t.true(output.includes('No'));
   t.false(output.includes('Allow this action?'));
+  unmount();
+});
+
+test('BottomArea shows input with handoff message prompt when handoffState is entering_message', (t) => {
+  const { lastFrame, unmount } = renderBottomArea({
+    ...baseProps,
+    handoffState: {
+      capturedText: 'some test code',
+      stage: 'entering_message',
+    },
+  });
+  const output = lastFrame() ?? '';
+  t.true(output.includes('Handoff message:'));
+  t.false(output.includes('Allow this action?'));
+  t.false(output.includes('processing'));
+  unmount();
 });

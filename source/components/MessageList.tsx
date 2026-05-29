@@ -112,6 +112,13 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
   const previousActiveMessageIdsRef = useRef<Set<string>>(new Set());
 
   const { staticItems, deferredHistory } = useMemo(() => {
+    if (history.length === 0 && active.length === 0) {
+      staticItemsRef.current = staticItemsRef.current.filter((item) => item.kind === 'banner');
+      committedMessageSignaturesRef.current.clear();
+      candidateMessageSignaturesRef.current.clear();
+      previousActiveMessageIdsRef.current.clear();
+    }
+
     const additions: StaticItem[] = [];
     const deferred: MessageLike[] = [];
     const hasActiveMessages = active.length > 0;

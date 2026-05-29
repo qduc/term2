@@ -90,6 +90,7 @@ test('MessageList appends a fresh startup banner after clearing conversation his
 
   const output = renderer.lastFrame() ?? '';
   t.is(countOccurrences(output, 'term²'), 2);
+  t.false(output.includes('one'));
 });
 
 test('MessageList moves a message from active to static without duplicating it', (t) => {

@@ -1,10 +1,5 @@
 import { z } from 'zod';
 
-// Import providers to ensure they're registered before schema construction
-import '../providers/index.js';
-import { getAllProviders } from '../providers/index.js';
-import { getAllWebSearchProviders } from '../providers/web-search/index.js';
-
 // Define schemas for validation
 export const AgentSettingsSchema = z.object({
   model: z.string().min(1).default('gpt-5.1'),
@@ -221,27 +216,15 @@ export const CustomProviderSchema = z
  * These are only loaded from environment variables.
  */
 export function getSensitiveSettingKeys(): Set<string> {
-  const keys = new Set<string>(['app.shellPath']);
-
-  // Add provider-specific sensitive keys
-  for (const provider of getAllProviders()) {
-    if (provider.sensitiveSettingKeys) {
-      for (const key of provider.sensitiveSettingKeys) {
-        keys.add(key);
-      }
-    }
-  }
-
-  // Add web search provider-specific sensitive keys
-  for (const provider of getAllWebSearchProviders()) {
-    if (provider.sensitiveSettingKeys) {
-      for (const key of provider.sensitiveSettingKeys) {
-        keys.add(key);
-      }
-    }
-  }
-
-  return keys;
+  return new Set<string>([
+    'app.shellPath',
+    'agent.openrouter.apiKey',
+    'agent.openrouter.baseUrl',
+    'agent.openrouter.referrer',
+    'agent.openrouter.title',
+    'webSearch.tavily.apiKey',
+    'webSearch.exa.apiKey',
+  ]);
 }
 
 export const SENSITIVE_SETTING_KEYS = getSensitiveSettingKeys();

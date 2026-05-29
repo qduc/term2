@@ -645,6 +645,7 @@ export class ProviderTrafficArtifactStore {
     };
     fs.mkdirSync(path.dirname(requestPath), { recursive: true });
     fs.appendFileSync(requestPath, `\n${JSON.stringify(receivedRecord, null, 2)}\n`, 'utf8');
+    this.#requestPaths.delete(input.requestId);
     this.#touchDailyIndex(dayDir, {
       sessionId: input.sessionId,
       sessionDir: sessionDirName,

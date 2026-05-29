@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
 import { LoggingService } from './logging-service.js';
-import { getProvider, upsertProvider } from '../providers/index.js';
-import { createOpenAICompatibleProviderDefinition } from '../providers/openai-compatible.provider.js';
+import { getProvider, upsertProvider } from '../providers/registry.js';
+import { createOpenAICompatibleProviderDefinition } from '../providers/openai-compatible-lazy.js';
 import {
   DEFAULT_SETTINGS,
   OPTIONAL_DEFAULT_KEYS,

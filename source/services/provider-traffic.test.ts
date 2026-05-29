@@ -563,3 +563,62 @@ test('ProviderTrafficArtifactStore places evaluator requests under evaluator sub
   t.is(records[0]?.direction, 'sent');
   t.is(records[1]?.direction, 'received');
 });
+
+test('recordRequestComplete removes completed request path from map so a second completion without a fresh start gets a new path', (t) => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+
+  const requestId = 'test-req-id';
+  const startedAt = '2026-06-01T10:00:00.000Z';
+
+  // Start the request — stores the computed path in the internal map
+  store.recordRequestStart({
+    requestId,
+    timestamp: '2026-06-01T10:00:01.000Z',
+    provider: 'openai',
+    model: 'gpt-4',
+    sessionId: 'session-cleanup',
+    sessionStartedAt: startedAt,
+    mode: 'standard',
+    sentBody: { messages: [{ role: 'user', content: 'hello' }] },
+  });
+
+  // First completion — uses the stored path, then (after fix) removes it
+  store.recordRequestComplete({
+    requestId,
+    timestamp: '2026-06-01T10:00:05.000Z',
+    provider: 'openai',
+    model: 'gpt-4',
+    sessionId: 'session-cleanup',
+    sessionStartedAt: startedAt,
+    mode: 'standard',
+    receivedSummary: { status: 200 },
+  });
+
+  // Second completion, same requestId, no fresh start — must fall back to #pathsFor
+  store.recordRequestComplete({
+    requestId,
+    timestamp: '2026-06-01T10:00:10.000Z',
+    provider: 'openai',
+    model: 'gpt-4',
+    sessionId: 'session-cleanup',
+    sessionStartedAt: startedAt,
+    mode: 'standard',
+    receivedSummary: { status: 200 },
+  });
+
+  const dayDir = path.join(rootDir, '2026-06-01');
+  const sessionDir = path.join(dayDir, '10-00-00_sessi');
+
+  // The file created by recordRequestStart holds sent + first received (2 records)
+  const startFile = path.join(sessionDir, '10-00-01.000Z_test-.jsonl');
+  t.true(fs.existsSync(startFile), 'start file should exist');
+  t.is(readRequestFile(startFile).length, 2, 'start file should have sent + first received');
+
+  // The second completion MUST write to a NEW file, not reuse the stored path
+  const secondFile = path.join(sessionDir, '10-00-10.000Z_test-.jsonl');
+  t.true(fs.existsSync(secondFile), 'second completion must create a new file, not reuse the old one');
+  const secondRecords = readRequestFile(secondFile);
+  t.is(secondRecords.length, 1, 'new file should have exactly one received record');
+  t.is(secondRecords[0]?.timestamp, '2026-06-01T10:00:10.000Z');
+});

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { fetchWebPage } from '@qduc/web-fetch';
 import { writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -73,6 +72,7 @@ export const createWebFetchToolDefinition = (deps: {
       const { url, max_chars = DEFAULT_MAX_CHARS, heading: targetHeadings, continuation_token } = params;
 
       try {
+        const { fetchWebPage } = await import('@qduc/web-fetch');
         // For initial fetches, get as much content as the library can return.
         // For continuation requests, pass the user's max_chars through unchanged.
         const isContinuation = !!continuation_token;

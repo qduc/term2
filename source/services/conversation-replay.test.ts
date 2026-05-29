@@ -380,34 +380,42 @@ test('replayEvents: assistant_turn rebuilds structured assistant history for res
 
   const restored = replayEvents(envelopes);
 
-  t.is(restored.history.length, 4);
+  // Reasoning is reconstructed as standalone history items (matching live SDK output)
+  // rather than folded into the adjacent tool_call / assistant message providerData.
+  // The reasoning text lives in the item's `content`; signature-bearing fields like
+  // `reasoning_details` are preserved on the standalone item's providerData.
+  t.is(restored.history.length, 6);
   t.deepEqual(restored.history[0], { role: 'user', type: 'message', content: 'run date' });
   t.deepEqual(restored.history[1], {
+    type: 'reasoning',
+    content: [{ type: 'reasoning_text', text: 'I should run date.' }],
+    providerData: {
+      reasoning_details: [{ type: 'summary_text', text: 'I should run date.' }],
+    },
+  });
+  t.deepEqual(restored.history[2], {
     type: 'function_call',
     id: 'fc_1',
     callId: 'call-1',
     name: 'shell',
     arguments: '{"command":"date"}',
-    providerData: {
-      reasoning_content: 'I should run date.',
-      reasoning_details: [{ type: 'summary_text', text: 'I should run date.' }],
-    },
   });
-  t.deepEqual(restored.history[2], {
+  t.deepEqual(restored.history[3], {
     type: 'function_call_result',
     id: 'fr_1',
     callId: 'call-1',
     name: 'shell',
     output: 'Mon Jan 01 00:00:00 UTC 2024',
   });
-  t.deepEqual(restored.history[3], {
+  t.deepEqual(restored.history[4], {
+    type: 'reasoning',
+    content: [{ type: 'reasoning_text', text: 'Now answer.' }],
+  });
+  t.deepEqual(restored.history[5], {
     role: 'assistant',
     type: 'message',
     id: 'msg_1',
     status: 'completed',
     content: [{ type: 'output_text', text: 'Done.' }],
-    providerData: {
-      reasoning_content: 'Now answer.',
-    },
   });
 });

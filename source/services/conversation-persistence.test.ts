@@ -701,24 +701,29 @@ test.serial('writer + loadConversation: round-trips a v2 conversation with assis
   t.truthy(restored);
   t.is(restored!.id, id);
   t.is(restored!.previousResponseId, 'resp-v2');
-  t.is(restored!.history.length, 4);
+  // Reasoning is reconstructed as a standalone history item (matching the live SDK
+  // output), NOT folded into the following tool_call's providerData. Folding caused
+  // the reasoning_content to be serialized onto both the assistant message and the
+  // tool call (duplicate reasoning_content) by the chat-completions converter.
+  t.is(restored!.history.length, 5);
   t.deepEqual(restored!.history[0], { role: 'user', type: 'message', content: 'run tool' });
   t.deepEqual(restored!.history[1], {
+    type: 'reasoning',
+    content: [{ type: 'reasoning_text', text: 'thinking about ls' }],
+  });
+  t.deepEqual(restored!.history[2], {
     type: 'function_call',
     callId: 'call-v2',
     name: 'shell',
     arguments: 'ls',
-    providerData: {
-      reasoning_content: 'thinking about ls',
-    },
   });
-  t.deepEqual(restored!.history[2], {
+  t.deepEqual(restored!.history[3], {
     type: 'function_call_result',
     callId: 'call-v2',
     name: 'shell',
     output: 'file.txt',
   });
-  t.deepEqual(restored!.history[3], {
+  t.deepEqual(restored!.history[4], {
     role: 'assistant',
     type: 'message',
     status: 'completed',

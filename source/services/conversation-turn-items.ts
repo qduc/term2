@@ -46,9 +46,40 @@ const extractTextParts = (content: unknown): string => {
     .join('');
 };
 
+// Some providers store reasoning in a `rawContent` array of
+// `{ type: 'reasoning_text', text }` parts (rather than in `content`, `text`,
+// or `reasoning_content`). Pull text out of those parts.
+const extractReasoningParts = (content: unknown): string => {
+  if (!Array.isArray(content)) {
+    return '';
+  }
+  return content
+    .filter((part) => {
+      const record = asRecord(part);
+      const type = getString(record?.type);
+      return (type === 'reasoning_text' || type === 'reasoning') && typeof record?.text === 'string';
+    })
+    .map((part) => String((part as { text: string }).text))
+    .join('');
+};
+
 const cloneRecord = (value: unknown): Record<string, unknown> | undefined => {
   const record = asRecord(value);
   return record ? clone(record) : undefined;
+};
+
+// Reasoning is reconstructed as standalone history items, so any reasoning fields
+// that may have been captured on an adjacent tool-call or assistant message's
+// providerData must be removed to avoid the reasoning being emitted twice (once on
+// the message and once on the standalone item) by the chat-completions converter.
+const stripReasoningFields = (
+  providerData: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined => {
+  if (!providerData) {
+    return undefined;
+  }
+  const { reasoning: _reasoning, reasoning_content: _rc, reasoning_details: _rd, ...rest } = providerData;
+  return Object.keys(rest).length > 0 ? rest : undefined;
 };
 
 const getProviderMetadata = (item: unknown): Record<string, unknown> | undefined => {
@@ -99,6 +130,11 @@ const getReasoningText = (item: unknown): string => {
     return fromMetadata;
   }
 
+  const fromRawContent = extractReasoningParts(raw.rawContent) || extractReasoningParts(asRecord(item)?.rawContent);
+  if (fromRawContent) {
+    return fromRawContent;
+  }
+
   return extractTextParts(raw.content);
 };
 
@@ -107,51 +143,34 @@ const getProviderItemId = (item: unknown): string | undefined => {
   return getString(raw?.id) ?? getString(asRecord(item)?.id);
 };
 
-const mergeProviderData = (
-  base: Record<string, unknown> | undefined,
-  reasoningItems: PersistedReasoningItem[],
-): Record<string, unknown> | undefined => {
-  const merged = base ? clone(base) : {};
-  let reasoningContent = getString(merged.reasoning_content) ?? '';
-  const reasoningDetails: unknown[] = Array.isArray(merged.reasoning_details) ? clone(merged.reasoning_details) : [];
-  const appendReasoningContent = (value: string): void => {
-    if (!value) {
-      return;
-    }
-    if (reasoningContent.endsWith(value)) {
-      return;
-    }
-    reasoningContent += value;
-  };
+/**
+ * Builds the `providerData` for a reconstructed standalone reasoning item from a
+ * run of consecutive persisted reasoning items. The reasoning *text* is carried
+ * separately in the item's `content` (see {@link synthesizeHistoryFromAssistantTurn}),
+ * so this intentionally omits `reasoning_content` to avoid the text being emitted
+ * twice. Signature-bearing fields such as `reasoning_details` are preserved so
+ * providers that require them (e.g. OpenRouter) keep working.
+ */
+const mergeReasoningProviderData = (reasoningItems: PersistedReasoningItem[]): Record<string, unknown> | undefined => {
+  const merged: Record<string, unknown> = {};
+  const reasoningDetails: unknown[] = [];
 
   for (const item of reasoningItems) {
-    if (item.providerMetadata) {
-      for (const [key, value] of Object.entries(item.providerMetadata)) {
-        if (key === 'reasoning_content' || key === 'reasoning_details') {
-          continue;
-        }
-        merged[key] = clone(value);
-      }
-      const metadataReasoning = getString(item.providerMetadata.reasoning_content);
-      if (metadataReasoning) {
-        appendReasoningContent(metadataReasoning);
-      }
-      const metadataDetails = item.providerMetadata.reasoning_details;
-      if (Array.isArray(metadataDetails)) {
-        reasoningDetails.push(...clone(metadataDetails));
-      }
+    if (!item.providerMetadata) {
+      continue;
     }
-    if (item.text) {
-      const metadataReasoning = getString(item.providerMetadata?.reasoning_content);
-      if (!metadataReasoning) {
-        appendReasoningContent(item.text);
+    for (const [key, value] of Object.entries(item.providerMetadata)) {
+      if (key === 'reasoning_content' || key === 'reasoning_details') {
+        continue;
       }
+      merged[key] = clone(value);
+    }
+    const metadataDetails = item.providerMetadata.reasoning_details;
+    if (Array.isArray(metadataDetails)) {
+      reasoningDetails.push(...clone(metadataDetails));
     }
   }
 
-  if (reasoningContent) {
-    merged.reasoning_content = reasoningContent;
-  }
   if (reasoningDetails.length > 0) {
     merged.reasoning_details = reasoningDetails;
   }
@@ -320,10 +339,34 @@ export function synthesizeHistoryFromAssistantTurn(
   const history = clone([...baseHistory]);
   const pendingReasoning: PersistedReasoningItem[] = [];
 
-  const consumeReasoning = (baseProviderData?: Record<string, unknown>): Record<string, unknown> | undefined => {
-    const merged = mergeProviderData(baseProviderData, pendingReasoning);
+  // Flush buffered reasoning as a standalone history item. The SDK's
+  // chat-completions converter reads `content[0].text` and attaches the reasoning
+  // to the following assistant/tool-call message at message level. We deliberately
+  // do NOT fold the reasoning into the next item's providerData: doing so makes the
+  // text serialize onto both the assistant message and the tool call (duplicate
+  // reasoning_content).
+  const flushPendingReasoning = (): void => {
+    if (pendingReasoning.length === 0) {
+      return;
+    }
+    const text = pendingReasoning
+      .map((r) => r.text ?? '')
+      .filter(Boolean)
+      .join('');
+    const providerData = mergeReasoningProviderData(pendingReasoning);
+    const providerItemId = pendingReasoning.find((r) => r.providerItemId)?.providerItemId;
     pendingReasoning.length = 0;
-    return merged;
+
+    if (!text && !providerData) {
+      return;
+    }
+
+    history.push({
+      type: 'reasoning',
+      ...(providerItemId ? { id: providerItemId } : {}),
+      content: text ? [{ type: 'reasoning_text', text }] : [],
+      ...(providerData ? { providerData } : {}),
+    } as unknown as AgentInputItem);
   };
 
   for (const item of turn.items) {
@@ -332,9 +375,11 @@ export function synthesizeHistoryFromAssistantTurn(
       continue;
     }
 
+    flushPendingReasoning();
+
     if (item.type === 'tool_call') {
       const raw = cloneRecord(item.providerItem) ?? {};
-      const providerData = consumeReasoning(cloneRecord(raw.providerData));
+      const providerData = stripReasoningFields(cloneRecord(raw.providerData));
       const callId = getString(raw.callId) ?? getString(raw.call_id) ?? getString(raw.tool_call_id) ?? item.callId;
       const toolName = getString(raw.name) ?? item.toolName;
       history.push({
@@ -362,7 +407,7 @@ export function synthesizeHistoryFromAssistantTurn(
     }
 
     if (item.type === 'assistant_text') {
-      const providerData = consumeReasoning(item.providerMetadata);
+      const providerData = stripReasoningFields(cloneRecord(item.providerMetadata));
       history.push({
         role: 'assistant',
         type: 'message',
@@ -374,16 +419,7 @@ export function synthesizeHistoryFromAssistantTurn(
     }
   }
 
-  if (pendingReasoning.length > 0) {
-    for (const reasoning of pendingReasoning) {
-      history.push({
-        type: 'reasoning',
-        ...(reasoning.providerItemId ? { id: reasoning.providerItemId } : {}),
-        ...(reasoning.text ? { text: reasoning.text } : {}),
-        ...(reasoning.providerMetadata ? { providerData: reasoning.providerMetadata } : {}),
-      } as AgentInputItem);
-    }
-  }
+  flushPendingReasoning();
 
   return history;
 }

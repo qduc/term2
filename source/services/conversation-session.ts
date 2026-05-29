@@ -33,7 +33,7 @@ import {
   toolNameOf,
   outputOf,
 } from './tool-execution-ledger.js';
-import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
+import type { AssistantTurnState, LogEvent, StateSnapshot } from './conversation-log-events.js';
 import { describeError } from '../utils/error-helpers.js';
 import type { PersistedAssistantTurn, PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 
@@ -371,6 +371,19 @@ export class ConversationSession {
     };
   }
 
+  #getCurrentAssistantTurnState(): AssistantTurnState {
+    const getProvider = getMethod<[], string>(this.agentClient, 'getProvider');
+    const provider = getProvider
+      ? getProvider.call(this.agentClient)
+      : this.settingsService?.get<string>('agent.provider');
+    const model = this.settingsService?.get<string>('agent.model');
+    return {
+      previousResponseId: this.previousResponseId,
+      ...(model ? { model } : {}),
+      ...(provider ? { provider } : {}),
+    };
+  }
+
   #flushReasoningItem(): void {
     if (this.currentReasoningBuffer) {
       this.currentPersistedTurnItems.push({
@@ -508,7 +521,8 @@ export class ConversationSession {
         });
         return;
       case 'final': {
-        const snapshot = this.getCurrentSnapshot();
+        const turnState = this.#getCurrentAssistantTurnState();
+        const toolLedger = this.toolLedger.export();
         this.#flushReasoningItem();
         this.#flushAssistantTextItem();
 
@@ -520,10 +534,10 @@ export class ConversationSession {
           });
         }
 
-        // Invariant check: if transcript contains tool_result, matching call IDs exist in snapshot.toolLedger
+        // Invariant check: if transcript contains tool_result, matching call IDs exist in the live tool ledger.
         for (const item of turnItemsToLog) {
           if (item.type === 'tool_result') {
-            const exists = snapshot.toolLedger.some((t) => t.callId === item.callId);
+            const exists = toolLedger.some((t) => t.callId === item.callId);
             if (!exists) {
               this.logger.warn(`Invariant violation: tool_result callId ${item.callId} not found in toolLedger`);
             }
@@ -538,7 +552,7 @@ export class ConversationSession {
           type: 'assistant_turn',
           turn,
           ...(event.usage ? { usage: event.usage } : {}),
-          snapshot,
+          state: turnState,
         });
 
         this.#resetPersistedTurnState();

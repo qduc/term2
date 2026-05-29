@@ -6,6 +6,8 @@ import path from 'node:path';
 import * as persistenceModule from './conversation-persistence.js';
 import { createConversationLogWriter, LockConflictError } from './conversation-log-writer.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
+import { ConversationSession } from './conversation-session.js';
+import { createMockSettingsService } from './settings-service.mock.js';
 
 let testDir = '';
 
@@ -26,6 +28,27 @@ const stubLogger = {
 
 function emptySnapshot(): StateSnapshot {
   return { history: [], previousResponseId: null, toolLedger: [] };
+}
+
+function assistantTurn(text: string, previousResponseId: string | null = 'r1'): LogEvent {
+  return {
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text }] },
+    state: { previousResponseId },
+  };
+}
+
+class MockStream {
+  completed = Promise.resolve(undefined);
+  lastResponseId = 'resp-v3';
+  interruptions: unknown[] = [];
+  state = {};
+  newItems: unknown[] = [];
+  history: unknown[] = [];
+  output: unknown[] = [];
+  finalOutput = 'Done.';
+
+  async *[Symbol.asyncIterator](): AsyncIterable<unknown> {}
 }
 
 test.beforeEach(() => {
@@ -73,19 +96,9 @@ test.serial('writer + loadConversation: round-trips a basic conversation', (t) =
   });
   writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
   writer.append({
-    type: 'assistant_final',
-    message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'hi there' },
-    finalText: 'hi there',
-    snapshot: {
-      history: [
-        { role: 'user', type: 'message', content: 'hello' } as any,
-        { role: 'assistant', type: 'message', content: 'hi there' } as any,
-      ],
-      previousResponseId: 'resp-1',
-      toolLedger: [],
-      model: 'gpt-4o',
-      provider: 'openai',
-    },
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text: 'hi there' }] },
+    state: { previousResponseId: 'resp-1', model: 'gpt-4o', provider: 'openai' },
   });
   void writer.close();
 
@@ -109,16 +122,7 @@ test.serial('replay: mid-turn crash with tool_started inserts recovery notice', 
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   // First turn completes cleanly
   writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'do it' } });
-  writer.append({
-    type: 'assistant_final',
-    message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'done' },
-    finalText: 'done',
-    snapshot: {
-      history: [{ role: 'user', type: 'message', content: 'do it' } as any],
-      previousResponseId: 'r1',
-      toolLedger: [],
-    },
-  });
+  writer.append(assistantTurn('done'));
   // Second turn: user submits, tool starts, then crash
   writer.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'more' } });
   writer.append({ type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: {} });
@@ -132,7 +136,7 @@ test.serial('replay: mid-turn crash with tool_started inserts recovery notice', 
   t.true(restored!.messages.some((m) => m.sender === 'system' && String(m.text).includes('interrupted')));
 });
 
-test.serial('replay: user_message only with no assistant_final flags interruption', (t) => {
+test.serial('replay: user_message only with no assistant_turn flags interruption', (t) => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
@@ -151,10 +155,9 @@ test.serial('replay: settings_changed updates restored model', (t) => {
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z', model: 'gpt-4o' });
   writer.append({ type: 'settings_changed', key: 'agent.model', value: 'gpt-5' });
   writer.append({
-    type: 'assistant_final',
-    message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'ok' },
-    finalText: 'ok',
-    snapshot: { history: [], previousResponseId: null, toolLedger: [], model: 'gpt-5' },
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text: 'ok' }] },
+    state: { previousResponseId: null, model: 'gpt-5' },
   });
   void writer.close();
 
@@ -167,27 +170,9 @@ test.serial('replay: undo with snapshot replaces state', (t) => {
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'first' } });
-  writer.append({
-    type: 'assistant_final',
-    message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'A' },
-    finalText: 'A',
-    snapshot: {
-      history: [{ role: 'user', type: 'message', content: 'first' } as any],
-      previousResponseId: 'r1',
-      toolLedger: [],
-    },
-  });
+  writer.append(assistantTurn('A'));
   writer.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'second' } });
-  writer.append({
-    type: 'assistant_final',
-    message: { id: 'b2', sender: 'bot', status: 'finalized', text: 'B' },
-    finalText: 'B',
-    snapshot: {
-      history: [{ role: 'user', type: 'message', content: 'first' } as any],
-      previousResponseId: 'r2',
-      toolLedger: [],
-    },
-  });
+  writer.append(assistantTurn('B', 'r2'));
   writer.append({ type: 'undo', removedUserTurns: 1, snapshot: emptySnapshot() });
   void writer.close();
 
@@ -206,18 +191,17 @@ test.serial('replay: corrupt line is skipped', (t) => {
     ts: '2026-05-26T00:00:00.000Z',
     event: { type: 'session_init', id, createdAt: '2026-05-26T00:00:00.000Z' },
   });
-  const goodFinal = JSON.stringify({
-    v: 1,
+  const goodTurn = JSON.stringify({
+    v: 3,
     seq: 3,
     ts: '2026-05-26T00:00:01.000Z',
     event: {
-      type: 'assistant_final',
-      message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'ok' },
-      finalText: 'ok',
-      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'ok' }] },
+      state: { previousResponseId: 'r1' },
     },
   });
-  fs.writeFileSync(filePath, `${goodInit}\n{not json\n${goodFinal}\n`, 'utf-8');
+  fs.writeFileSync(filePath, `${goodInit}\n{not json\n${goodTurn}\n`, 'utf-8');
 
   const restored = persistenceModule.loadConversation(id);
   t.is(restored!.previousResponseId, 'r1');
@@ -247,16 +231,7 @@ test.serial('forkConversation: copies the source jsonl to a new id', (t) => {
   const dstId = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: srcId, dir: testDir, logger: stubLogger });
   writer.init({ id: srcId, createdAt: '2026-05-26T00:00:00.000Z' });
-  writer.append({
-    type: 'assistant_final',
-    message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'A' },
-    finalText: 'A',
-    snapshot: {
-      history: [{ role: 'user', type: 'message', content: 'hi' } as any],
-      previousResponseId: 'r1',
-      toolLedger: [],
-    },
-  });
+  writer.append(assistantTurn('A'));
   void writer.close();
 
   t.true(persistenceModule.forkConversation(srcId, dstId));
@@ -359,18 +334,29 @@ test.serial('hasConversationContent: returns true for user_message', (t) => {
   t.true(persistenceModule.hasConversationContent(id));
 });
 
-test.serial('hasConversationContent: returns true for assistant_final', (t) => {
+test.serial('hasConversationContent: returns true for assistant_turn', (t) => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
   writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
-  writer.append({
-    type: 'assistant_final',
-    message: { id: 'a1', sender: 'bot', status: 'finalized', text: 'hello' },
-    finalText: 'hello',
-    snapshot: emptySnapshot(),
-  });
+  writer.append(assistantTurn('hello'));
   void writer.close();
   t.true(persistenceModule.hasConversationContent(id));
+});
+
+test.serial('hasConversationContent: ignores unsupported assistant_final events', (t) => {
+  const id = persistenceModule.generateId();
+  const filePath = path.join(testDir, `${id}.jsonl`);
+  fs.writeFileSync(
+    filePath,
+    JSON.stringify({
+      v: 1,
+      seq: 1,
+      ts: '2026-05-26T00:00:00.000Z',
+      event: { type: 'assistant_final', message: { id: 'a1', sender: 'bot', text: 'legacy' } },
+    }) + '\n',
+    'utf-8',
+  );
+  t.false(persistenceModule.hasConversationContent(id));
 });
 
 test.serial('hasConversationContent: skips corrupt lines and finds content', (t) => {
@@ -437,39 +423,26 @@ test.serial('subagent_completed and corresponding records omit nestedRunResult',
     }),
   });
 
-  // 3. Log assistant_final event with nestedRunResult in snapshot
+  // 3. Log assistant_turn event with nestedRunResult in turn items
   writer.append({
-    type: 'assistant_final',
-    message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'all done' },
-    finalText: 'all done',
-    snapshot: {
-      history: [
+    type: 'assistant_turn',
+    turn: {
+      items: [
         {
-          role: 'tool',
-          type: 'function_call_result',
-          name: 'run_subagent',
-          output: JSON.stringify({
-            status: 'completed',
-            finalText: 'Snapshot result text',
-            nestedRunResult: { state: { internalStuff: 'hidden' } },
-          }),
-        } as any,
-      ],
-      previousResponseId: 'resp-1',
-      toolLedger: [
-        {
-          turnId: 'turn-1',
+          type: 'tool_result',
           callId: 'call-subagent-1',
           toolName: 'run_subagent',
           status: 'completed',
-          startedAt: '2026-05-26T00:00:00.000Z',
-          output: {
+          output: JSON.stringify({
             status: 'completed',
+            finalText: 'Turn result text',
             nestedRunResult: { state: { internalStuff: 'hidden' } },
-          },
-        } as any,
+          }),
+        },
+        { type: 'assistant_text', text: 'all done' },
       ],
     },
+    state: { previousResponseId: 'resp-1' },
   });
 
   void writer.close();
@@ -498,16 +471,13 @@ test.serial('subagent_completed and corresponding records omit nestedRunResult',
   t.is(parsedOutput.finalText, 'Result text');
   t.is(parsedOutput.nestedRunResult, undefined);
 
-  // Find assistant_final and check snapshot
-  const finalEnv = envelopes.find((env) => env.event?.type === 'assistant_final');
-  t.truthy(finalEnv);
-  const snapHistoryOutput = JSON.parse(finalEnv.event.snapshot.history[0].output);
-  t.is(snapHistoryOutput.status, 'completed');
-  t.is(snapHistoryOutput.finalText, 'Snapshot result text');
-  t.is(snapHistoryOutput.nestedRunResult, undefined);
-
-  t.is(finalEnv.event.snapshot.toolLedger[0].output.status, 'completed');
-  t.is(finalEnv.event.snapshot.toolLedger[0].output.nestedRunResult, undefined);
+  // Find assistant_turn and check turn items
+  const turnEnv = envelopes.find((env) => env.event?.type === 'assistant_turn');
+  t.truthy(turnEnv);
+  const turnOutput = JSON.parse(turnEnv.event.turn.items[0].output);
+  t.is(turnOutput.status, 'completed');
+  t.is(turnOutput.finalText, 'Turn result text');
+  t.is(turnOutput.nestedRunResult, undefined);
 });
 
 test.serial('saveLastConversation: stores per-project last conversation', (t) => {
@@ -741,6 +711,66 @@ test.serial('writer + loadConversation: round-trips a v2 conversation with assis
   t.is(restored!.messages[2].status, 'completed');
   t.is(restored!.messages[3].sender, 'bot');
   t.is(restored!.messages[3].text, 'here is the file');
+});
+
+test.serial('session logging writes compact v3 assistant_turn state without cumulative snapshot', async (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({
+    id,
+    createdAt: '2026-05-26T00:00:00.000Z',
+    projectPath: '/workspace/v3',
+    model: 'gpt-5',
+    provider: 'openai',
+  });
+
+  const stream = new MockStream();
+  stream.output = [
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Done.' }],
+    },
+  ];
+  const session = new ConversationSession(id, {
+    agentClient: {
+      startStream: async () => stream,
+      getProvider: () => 'openai',
+    } as any,
+    deps: {
+      logger: stubLogger,
+      settingsService: createMockSettingsService({
+        'agent.model': 'gpt-5',
+        'agent.provider': 'openai',
+      }),
+    },
+    sessionStartedAt: '2026-05-26T00:00:00.000Z',
+  });
+  session.setLogSink((event) => writer.append(event));
+
+  const result = await session.sendMessage('hello');
+  t.is(result.type, 'response');
+  await writer.close();
+
+  const filePath = path.join(testDir, `${id}.jsonl`);
+  const envelopes = fs
+    .readFileSync(filePath, 'utf-8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const turnEnvelope = envelopes.find((env) => env.event?.type === 'assistant_turn');
+
+  t.truthy(turnEnvelope);
+  t.is(turnEnvelope.v, 3);
+  t.deepEqual(turnEnvelope.event.state, {
+    previousResponseId: 'resp-v3',
+    model: 'gpt-5',
+    provider: 'openai',
+  });
+  t.is(turnEnvelope.event.snapshot, undefined);
+  t.is(turnEnvelope.event.turn.items.length, 1);
+  t.is(turnEnvelope.event.turn.items[0].text, 'Done.');
 });
 
 test.serial('replay: interrupted v2 logs without assistant_turn still recover from coarse events', (t) => {

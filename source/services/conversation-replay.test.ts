@@ -41,39 +41,139 @@ test('replayEvents: session_init populates session metadata', (t) => {
   t.is(restored.reasoningEffort, 'high');
 });
 
-test('replayEvents: assistant_final snapshot replaces history', (t) => {
+test('replayEvents: unsupported assistant_final is ignored', (t) => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
-    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } }),
-    env({
-      type: 'assistant_final',
-      message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'ok' },
-      finalText: 'ok',
-      snapshot: {
-        history: [{ role: 'user', type: 'message', content: 'hi' } as any],
-        previousResponseId: 'r1',
-        toolLedger: [],
-      },
-    }),
+    {
+      v: 1,
+      seq: 2,
+      ts: new Date().toISOString(),
+      event: {
+        type: 'assistant_final',
+        message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'ok' },
+        finalText: 'ok',
+        snapshot: {
+          history: [{ role: 'user', type: 'message', content: 'hi' } as any],
+          previousResponseId: 'r1',
+          toolLedger: [],
+        },
+      } as any,
+    },
   ];
   const restored = replayEvents(envelopes);
-  t.is(restored.history.length, 1);
-  t.is(restored.previousResponseId, 'r1');
-  t.is(restored.messages.length, 2);
+  t.is(restored.history.length, 0);
+  t.is(restored.previousResponseId, null);
+  t.is(restored.messages.length, 0);
 });
 
 test('replayEvents: cross-model invalidation nulls previousResponseId', (t) => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z', model: 'gpt-4o' }),
     env({
-      type: 'assistant_final',
-      message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'ok' },
-      finalText: 'ok',
-      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [], model: 'gpt-5' },
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'ok' }] },
+      state: { previousResponseId: 'r1', model: 'gpt-5' },
     }),
     env({ type: 'settings_changed', key: 'agent.model', value: 'gpt-4o' }),
   ];
   const restored = replayEvents(envelopes);
+  t.is(restored.previousResponseId, null);
+});
+
+test('replayEvents: v3 assistant_turn restores state without cumulative snapshot', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z', model: 'gpt-5', provider: 'openai' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{"command":"pwd"}' },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: '/repo' },
+          { type: 'assistant_text', text: 'The current directory is /repo.' },
+        ],
+      },
+      usage: { prompt_tokens: 7, completion_tokens: 8, total_tokens: 15 },
+      state: {
+        previousResponseId: 'resp-v3',
+        model: 'gpt-5',
+        provider: 'openai',
+      },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  t.is(restored.previousResponseId, 'resp-v3');
+  t.is(restored.model, 'gpt-5');
+  t.is(restored.provider, 'openai');
+  t.deepEqual(restored.usage, { prompt_tokens: 7, completion_tokens: 8, total_tokens: 15 });
+  t.deepEqual(restored.history, [
+    { role: 'user', type: 'message', content: 'run pwd' },
+    { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
+    { type: 'function_call_result', callId: 'call-1', name: 'shell', output: '/repo' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'The current directory is /repo.' }],
+    },
+  ]);
+  t.is(restored.toolLedger.length, 1);
+  t.like(restored.toolLedger[0], {
+    callId: 'call-1',
+    toolName: 'shell',
+    arguments: '{"command":"pwd"}',
+    status: 'completed',
+    output: '/repo',
+  });
+  t.is(restored.messages.length, 3);
+  t.is(restored.messages[1].sender, 'command');
+  t.is(restored.messages[1].status, 'completed');
+  t.is(restored.messages[2].text, 'The current directory is /repo.');
+});
+
+test('replayEvents: v3 assistant_turn preserves coarse tool_result ledger and avoids duplicates', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } }),
+    env({ type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: '{"command":"pwd"}' }),
+    env({ type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: '/repo' }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{"command":"pwd"}' },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: '/repo' },
+          { type: 'assistant_text', text: 'Done.' },
+        ],
+      },
+      state: { previousResponseId: 'resp-v3' },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  t.is(restored.toolLedger.length, 1);
+  t.is(restored.toolLedger[0].callId, 'call-1');
+  t.is(restored.toolLedger[0].output, '/repo');
+  t.is(restored.history.filter((item: any) => item.callId === 'call-1').length, 2);
+  t.false(restored.replayWarnings.some((warning) => warning.includes('duplicated')));
+});
+
+test('replayEvents: v3 assistant_turn compact state participates in cross-model invalidation', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z', model: 'gpt-5' }),
+    env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'ok' }] },
+      state: { previousResponseId: 'resp-v3', model: 'gpt-5' },
+    }),
+    env({ type: 'settings_changed', key: 'agent.model', value: 'gpt-4o' }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
   t.is(restored.previousResponseId, null);
 });
 
@@ -94,10 +194,15 @@ test('replayEvents: tool_started followed by tool_result clears in-flight (no wa
     env({ type: 'tool_started', toolCallId: 'c1', toolName: 'shell', arguments: {} }),
     env({ type: 'tool_result', callId: 'c1', toolName: 'shell', status: 'completed', output: 'ok' }),
     env({
-      type: 'assistant_final',
-      message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'done' },
-      finalText: 'done',
-      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'c1', toolName: 'shell', arguments: {} },
+          { type: 'tool_result', callId: 'c1', toolName: 'shell', status: 'completed', output: 'ok' },
+          { type: 'assistant_text', text: 'done' },
+        ],
+      },
+      state: { previousResponseId: 'r1' },
     }),
   ];
   const restored = replayEvents(envelopes);
@@ -121,10 +226,9 @@ test('replayEvents: subagent_started + subagent_completed cleans up activity mes
       },
     }),
     env({
-      type: 'assistant_final',
-      message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'all done' },
-      finalText: 'all done',
-      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'all done' }] },
+      state: { previousResponseId: 'r1' },
     }),
   ];
   const restored = replayEvents(envelopes);
@@ -137,10 +241,9 @@ test('replayEvents: unknown event type is ignored gracefully', (t) => {
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
     { v: LOG_ENVELOPE_VERSION, seq: 99, ts: '', event: { type: 'made_up_event' } as any },
     env({
-      type: 'assistant_final',
-      message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'ok' },
-      finalText: 'ok',
-      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'ok' }] },
+      state: { previousResponseId: 'r1' },
     }),
   ];
   const restored = replayEvents(envelopes);
@@ -151,7 +254,7 @@ test('replayEvents: truncated event is skipped and adds warning', (t) => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
     env({
-      type: 'assistant_final',
+      type: 'assistant_turn',
       truncated: true,
       originalSize: 500000,
     } as any),

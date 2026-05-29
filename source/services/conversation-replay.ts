@@ -7,8 +7,13 @@ import {
   type SavedToolExecution,
 } from './tool-execution-ledger.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
-import type { LogEnvelope, LogEvent, StateSnapshot } from './conversation-log-events.js';
-import type { SavedAppMode, SavedMessage, PersistedAssistantTurn } from './conversation-persistence-types.js';
+import type { AssistantTurnState, LogEnvelope, LogEvent, StateSnapshot } from './conversation-log-events.js';
+import type {
+  SavedAppMode,
+  SavedMessage,
+  PersistedAssistantTurn,
+  PersistedAssistantTurnItem,
+} from './conversation-persistence-types.js';
 import { synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
 
 export interface RestoredState {
@@ -49,6 +54,14 @@ const cloneMessage = (msg: SavedMessage): SavedMessage => {
   }
 };
 
+const cloneValue = <T>(value: T): T => {
+  try {
+    return structuredClone(value);
+  } catch {
+    return JSON.parse(JSON.stringify(value)) as T;
+  }
+};
+
 interface InFlightToolCall {
   callId: string;
   toolName: string;
@@ -74,6 +87,102 @@ interface ReplayState {
   inFlightToolCalls: Map<string, InFlightToolCall>;
   warnings: string[];
 }
+
+const makeHistoryItemForToolCall = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>): unknown => {
+  const raw = item.providerItem;
+  if (raw && typeof raw === 'object') {
+    return cloneValue(raw);
+  }
+  return {
+    type: 'function_call',
+    callId: item.callId,
+    name: item.toolName,
+    arguments: item.arguments,
+  };
+};
+
+const makeHistoryItemForToolResult = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_result' }>): unknown => {
+  const raw = item.providerItem;
+  if (raw && typeof raw === 'object') {
+    return cloneValue(raw);
+  }
+  return {
+    type: 'function_call_result',
+    callId: item.callId,
+    name: item.toolName,
+    output: item.output,
+  };
+};
+
+function mergeAssistantTurnIntoLedger(state: ReplayState, turn: PersistedAssistantTurn, ts: string): void {
+  const calls = new Map<string, Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>>();
+  for (const item of turn.items) {
+    if (item.type === 'tool_call') {
+      calls.set(item.callId, item);
+      const existing = state.toolLedger.find((entry) => entry.callId === item.callId);
+      if (!existing) {
+        state.toolLedger.push({
+          turnId: `turn-${state.messages.filter((message) => message.sender === 'user').length || 1}`,
+          callId: item.callId,
+          toolName: item.toolName,
+          arguments: item.arguments,
+          status: 'started',
+          startedAt: ts,
+          historyItems: [makeHistoryItemForToolCall(item)],
+        });
+      } else {
+        existing.toolName = item.toolName;
+        existing.arguments = item.arguments;
+        if (!existing.historyItems || existing.historyItems.length === 0) {
+          existing.historyItems = [makeHistoryItemForToolCall(item)];
+        }
+      }
+      continue;
+    }
+
+    if (item.type !== 'tool_result') {
+      continue;
+    }
+
+    let existing = state.toolLedger.find((entry) => entry.callId === item.callId);
+    if (!existing) {
+      const call = calls.get(item.callId);
+      existing = {
+        turnId: `turn-${state.messages.filter((message) => message.sender === 'user').length || 1}`,
+        callId: item.callId,
+        toolName: item.toolName,
+        arguments: call?.arguments,
+        status: 'started',
+        startedAt: ts,
+        historyItems: call ? [makeHistoryItemForToolCall(call)] : [],
+      };
+      state.toolLedger.push(existing);
+    }
+
+    const callHistoryItem = existing.historyItems?.find((historyItem) => {
+      const record = historyItem && typeof historyItem === 'object' ? (historyItem as Record<string, unknown>) : null;
+      return record?.type === 'function_call';
+    });
+    existing.toolName = item.toolName;
+    existing.status = item.status;
+    existing.output = item.output;
+    existing.completedAt = ts;
+    existing.historyItems = callHistoryItem
+      ? [callHistoryItem, makeHistoryItemForToolResult(item)]
+      : [makeHistoryItemForToolResult(item)];
+  }
+}
+
+const stateFromAssistantTurn = (event: Extract<LogEvent, { type: 'assistant_turn' }>): AssistantTurnState => {
+  if (event.state) {
+    return event.state;
+  }
+  return {
+    previousResponseId: event.snapshot?.previousResponseId ?? null,
+    ...(event.snapshot?.model ? { model: event.snapshot.model } : {}),
+    ...(event.snapshot?.provider ? { provider: event.snapshot.provider } : {}),
+  };
+};
 
 function replayAssistantTurn(turn: PersistedAssistantTurn, turnId: string): SavedMessage[] {
   const messages: SavedMessage[] = [];
@@ -267,18 +376,6 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       });
       return;
     }
-    case 'assistant_final': {
-      state.messages.push(cloneMessage(event.message));
-      const snap = cloneSnapshot(event.snapshot);
-      state.history = snap.history;
-      state.previousResponseId = snap.previousResponseId;
-      state.toolLedger = snap.toolLedger;
-      state.snapshotModel = snap.model ?? state.snapshotModel;
-      state.snapshotProvider = snap.provider ?? state.snapshotProvider;
-      state.trailingUserMessage = false;
-      state.inFlightToolCalls.clear();
-      return;
-    }
     case 'assistant_turn': {
       const lastUserIndex = state.messages.map((m) => m.sender).lastIndexOf('user');
       if (lastUserIndex !== -1) {
@@ -291,12 +388,17 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       for (const m of replayedMessages) {
         state.messages.push(m);
       }
-      const snap = cloneSnapshot(event.snapshot);
+      const compactState = stateFromAssistantTurn(event);
       state.history = synthesizeHistoryFromAssistantTurn(state.history, event.turn);
-      state.previousResponseId = snap.previousResponseId;
-      state.toolLedger = snap.toolLedger;
-      state.snapshotModel = snap.model ?? state.snapshotModel;
-      state.snapshotProvider = snap.provider ?? state.snapshotProvider;
+      if (event.snapshot) {
+        const snap = cloneSnapshot(event.snapshot);
+        state.toolLedger = snap.toolLedger;
+      } else {
+        mergeAssistantTurnIntoLedger(state, event.turn, ts);
+      }
+      state.previousResponseId = compactState.previousResponseId;
+      state.snapshotModel = compactState.model ?? state.snapshotModel;
+      state.snapshotProvider = compactState.provider ?? state.snapshotProvider;
       state.trailingUserMessage = false;
       state.inFlightToolCalls.clear();
       return;
@@ -346,9 +448,6 @@ export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
 
   for (const envelope of envelopes) {
     if (!envelope || envelope.event == null) continue;
-    if (envelope.event.type === 'assistant_final' && envelope.event.usage) {
-      usage.add(envelope.event.usage);
-    }
     if (envelope.event.type === 'assistant_turn' && envelope.event.usage) {
       usage.add(envelope.event.usage);
     }

@@ -35,10 +35,9 @@ test.serial('clear rotates writer: old session file remains, new file begins fre
   writer.init({ id: oldId, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/test/project' });
   writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello in old session' } });
   writer.append({
-    type: 'assistant_final',
-    message: { id: 'b1', sender: 'bot', status: 'finalized', text: 'reply' },
-    finalText: 'reply',
-    snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text: 'reply' }] },
+    state: { previousResponseId: 'r1' },
   });
 
   const oldPath = path.join(testDir, `${oldId}.jsonl`);
@@ -58,7 +57,7 @@ test.serial('clear rotates writer: old session file remains, new file begins fre
   t.truthy(restored);
   t.is(restored!.previousResponseId, 'r1');
 
-  // New file has no assistant_final yet → empty restored state
+  // New file has no assistant turn yet → empty restored state
   const newRestored = persistenceModule.loadConversation(newId);
   t.is(newRestored!.previousResponseId, null);
   t.is(newRestored!.messages.length, 0);

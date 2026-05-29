@@ -5,12 +5,18 @@ import type { SubagentResult } from './subagents/types.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
 import type { SavedAppMode, SavedMessage, PersistedAssistantTurn } from './conversation-persistence-types.js';
 
-export const LOG_ENVELOPE_VERSION = 2;
+export const LOG_ENVELOPE_VERSION = 3;
 
 export interface StateSnapshot {
   history: AgentInputItem[];
   previousResponseId: string | null;
   toolLedger: SavedToolExecution[];
+  model?: string;
+  provider?: string;
+}
+
+export interface AssistantTurnState {
+  previousResponseId: string | null;
   model?: string;
   provider?: string;
 }
@@ -95,20 +101,13 @@ export interface ErrorLogEvent {
   stack?: string;
 }
 
-export interface AssistantFinalEvent {
-  type: 'assistant_final';
-  message: SavedMessage;
-  finalText: string;
-  reasoningText?: string;
-  usage?: NormalizedUsage;
-  snapshot: StateSnapshot;
-}
-
 export interface AssistantTurnEvent {
   type: 'assistant_turn';
   turn: PersistedAssistantTurn;
   usage?: NormalizedUsage;
-  snapshot: StateSnapshot;
+  state?: AssistantTurnState;
+  /** Present in v2 logs. New v3 logs use `state` to avoid cumulative snapshots. */
+  snapshot?: StateSnapshot;
 }
 
 export interface UndoEvent {
@@ -133,7 +132,6 @@ export type LogEvent =
   | SubagentStartedLogEvent
   | SubagentCompletedLogEvent
   | ErrorLogEvent
-  | AssistantFinalEvent
   | AssistantTurnEvent
   | UndoEvent
   | SessionClearedEvent;

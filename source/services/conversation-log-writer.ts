@@ -10,13 +10,7 @@ import {
 } from './conversation-log-events.js';
 import { saveLastConversation } from './conversation-persistence.js';
 
-const FSYNC_EVENTS = new Set<LogEvent['type']>([
-  'user_message',
-  'assistant_final',
-  'assistant_turn',
-  'undo',
-  'session_init',
-]);
+const FSYNC_EVENTS = new Set<LogEvent['type']>(['user_message', 'assistant_turn', 'undo', 'session_init']);
 const MAX_EVENT_BYTES = 256 * 1024;
 
 export interface ConversationLogWriter {

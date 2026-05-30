@@ -52,6 +52,9 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER]: 'Provider for the auto-approval model (optional)',
   [SETTING_KEYS.APP_PLAN_MODE]: 'Plan mode: read-only research and implementation planning (true|false)',
   [SETTING_KEYS.APP_ORCHESTRATOR_MODE]: 'Delegate tool-backed work through subagents (true|false)',
+  [SETTING_KEYS.APP_NOTIFICATIONS]: 'Enable desktop notifications when the terminal is unfocused (true|false)',
+  [SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL]: 'Notify when the agent needs tool-call approval (true|false)',
+  [SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE]: 'Notify when the agent finishes responding (true|false)',
   [SETTING_KEYS.WEB_SEARCH_PROVIDER]: 'Web search provider (tavily, exa)',
   [SETTING_KEYS.APP_SEARCH_VIA_SHELL]:
     'Use shell commands (ripgrep/find) for codebase search instead of built-in tools (true|false)',
@@ -146,7 +149,10 @@ export function getSettingCategory(key: string): SettingsCategory {
     key === SETTING_KEYS.UI_HISTORY_SIZE ||
     key === SETTING_KEYS.UI_PASTE_THRESHOLD ||
     key === SETTING_KEYS.LOGGING_LOG_LEVEL ||
-    key === SETTING_KEYS.LOGGING_DISABLE
+    key === SETTING_KEYS.LOGGING_DISABLE ||
+    key === SETTING_KEYS.APP_NOTIFICATIONS ||
+    key === SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL ||
+    key === SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE
   ) {
     return findCategoryById('uiLogging');
   }

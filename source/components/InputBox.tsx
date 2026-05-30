@@ -555,6 +555,18 @@ const InputBox: FC<Props> = ({
     [loggingService],
   );
 
+  // Wrap MultilineInput's onChange to strip terminal focus-reporting sequences
+  // (\x1b[I = focus-in, \x1b[O = focus-out) that may arrive while the terminal
+  // delivers DEC mode ?1004 events and MultilineInput doesn't recognise them.
+  const handleMultilineChange = useCallback(
+    (newValue: string) => {
+      // eslint-disable-next-line no-control-regex
+      const filtered = newValue.replace(/\x1b\[I|\x1b\[O/g, '');
+      onChange(filtered);
+    },
+    [onChange],
+  );
+
   return (
     <Box flexDirection="column">
       <PopupManager
@@ -576,7 +588,7 @@ const InputBox: FC<Props> = ({
           value={value}
           width={terminalWidth}
           isActive={mode === 'text'}
-          onChange={onChange}
+          onChange={handleMultilineChange}
           onSubmit={handleWrapperSubmit}
           onCursorChange={handleCursorChange}
           cursorOverride={cursorOverride ?? undefined}

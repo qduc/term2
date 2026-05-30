@@ -139,6 +139,21 @@ export const AppSettingsSchema = z.object({
   liteMode: z.boolean().optional().default(false),
   planMode: z.boolean().optional().default(false),
   orchestratorMode: z.boolean().optional().default(false),
+  notifications: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe('Enable desktop notifications when the terminal is unfocused (true|false)'),
+  notificationsOnApproval: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe('Notify when the agent pauses awaiting tool-call approval (true|false)'),
+  notificationsOnComplete: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe('Notify when the agent finishes responding (true|false)'),
   searchViaShell: z
     .union([z.boolean(), z.enum(['auto', 'on', 'off'])])
     .transform((val) => (typeof val === 'boolean' ? (val ? 'on' : 'off') : val))
@@ -323,6 +338,9 @@ export interface SettingsWithSources {
     liteMode: SettingWithSource<boolean>;
     planMode: SettingWithSource<boolean>;
     orchestratorMode: SettingWithSource<boolean>;
+    notifications: SettingWithSource<boolean>;
+    notificationsOnApproval: SettingWithSource<boolean>;
+    notificationsOnComplete: SettingWithSource<boolean>;
     searchViaShell: SettingWithSource<'auto' | 'on' | 'off'>;
   };
   tools: {
@@ -396,6 +414,9 @@ export const SETTING_KEYS = {
   APP_LITE_MODE: 'app.liteMode',
   APP_PLAN_MODE: 'app.planMode',
   APP_ORCHESTRATOR_MODE: 'app.orchestratorMode',
+  APP_NOTIFICATIONS: 'app.notifications',
+  APP_NOTIFICATIONS_ON_APPROVAL: 'app.notificationsOnApproval',
+  APP_NOTIFICATIONS_ON_COMPLETE: 'app.notificationsOnComplete',
   APP_SEARCH_VIA_SHELL: 'app.searchViaShell',
   TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
   TOOLS_ENABLE_EDIT_HEALING: 'tools.enableEditHealing',
@@ -433,6 +454,9 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_LITE_MODE,
   SETTING_KEYS.APP_PLAN_MODE,
   SETTING_KEYS.APP_ORCHESTRATOR_MODE,
+  SETTING_KEYS.APP_NOTIFICATIONS,
+  SETTING_KEYS.APP_NOTIFICATIONS_ON_APPROVAL,
+  SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE,
   SETTING_KEYS.APP_SEARCH_VIA_SHELL,
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
   SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
@@ -543,6 +567,9 @@ export const DEFAULT_SETTINGS: SettingsData = {
     liteMode: false,
     planMode: false,
     orchestratorMode: false,
+    notifications: true,
+    notificationsOnApproval: true,
+    notificationsOnComplete: true,
     searchViaShell: 'auto',
   },
   tools: {

@@ -81,6 +81,11 @@ const dummySettingsService = {
   onChange: () => () => {},
 } as any;
 
+export interface ConversationNotifier {
+  approvalNeeded(): void;
+  turnComplete(): void;
+}
+
 export const useConversation = ({
   conversationService,
   loggingService,
@@ -92,6 +97,7 @@ export const useConversation = ({
   settingsService,
   onRestoreInput,
   logWriter,
+  notifier,
 }: {
   conversationService: ConversationService;
   loggingService: ILoggingService;
@@ -109,6 +115,8 @@ export const useConversation = ({
    */
   onRestoreInput?: (text: string) => void;
   logWriter?: { append: (event: any) => void };
+  /** Optional notifier to fire desktop notifications on approval/completion events. */
+  notifier?: ConversationNotifier;
 }) => {
   const [messages, setMessages] = useState<Message[]>(() =>
     appendMessagesCapped([], initialMessages, MAX_MESSAGE_COUNT),
@@ -187,6 +195,7 @@ export const useConversation = ({
         });
         // Set waiting state AFTER adding approval message to ensure proper render order
         setWaitingForApproval(true);
+        notifier?.approvalNeeded();
         return;
       }
 
@@ -226,12 +235,13 @@ export const useConversation = ({
       });
       setWaitingForApproval(false);
       setPendingApproval(null);
+      notifier?.turnComplete();
       if (result.usage) {
         usageAccumulator?.add(result.usage);
         setLastUsage(latestStreamedUsage ?? result.usage);
       }
     },
-    [annotateCommandMessage, trimMessages, usageAccumulator],
+    [annotateCommandMessage, trimMessages, usageAccumulator, notifier],
   );
 
   const sendUserMessage = useCallback(

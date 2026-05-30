@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import fs from 'fs';
+import { getTtyWriter as defaultGetTtyWriter, wrapForMultiplexer, type TtyWriter } from './tty-osc.js';
 
 export interface ClipboardCommandCandidate {
   command: string;
@@ -11,7 +11,8 @@ export interface ClipboardRunResult {
   errorMessage?: string;
 }
 
-export type TtyWriter = (data: string) => void;
+// Re-export TtyWriter so callers that imported it from clipboard.ts continue to work
+export type { TtyWriter } from './tty-osc.js';
 
 export interface Osc52Options {
   env?: NodeJS.ProcessEnv;
@@ -117,46 +118,10 @@ function defaultRunClipboardCommand(command: string, args: string[], input: stri
   });
 }
 
-function defaultGetTtyWriter(): TtyWriter | null {
-  if (process.stdout.isTTY) {
-    return (data) => void process.stdout.write(data);
-  }
-
-  try {
-    const fd = fs.openSync('/dev/tty', 'w');
-    return (data) => {
-      try {
-        fs.writeSync(fd, data);
-      } finally {
-        fs.closeSync(fd);
-      }
-    };
-  } catch {
-    return null;
-  }
-}
-
 function buildOsc52Sequence(text: string, env: NodeJS.ProcessEnv): string {
   const encoded = Buffer.from(text, 'utf8').toString('base64');
   const inner = `\x1b]52;c;${encoded}\x07`;
-
-  if (env.TMUX) {
-    // tmux DCS passthrough: double each ESC in the inner sequence
-    const escaped = inner.replace(/\x1b/g, '\x1b\x1b');
-    return `\x1bPtmux;\x1b${escaped}\x1b\\`;
-  }
-
-  if (env.TERM?.startsWith('screen')) {
-    // screen DCS passthrough: chunk at 768 chars to stay within screen's buffer limit
-    const CHUNK_SIZE = 768;
-    let result = '';
-    for (let i = 0; i < inner.length; i += CHUNK_SIZE) {
-      result += `\x1bP${inner.slice(i, i + CHUNK_SIZE)}\x1b\\`;
-    }
-    return result;
-  }
-
-  return inner;
+  return wrapForMultiplexer(inner, env);
 }
 
 export async function copyViaOsc52(text: string, options: Osc52Options = {}): Promise<void> {

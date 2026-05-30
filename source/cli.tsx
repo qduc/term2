@@ -60,14 +60,29 @@ let effectiveSessionId: string | undefined;
 
 // Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
 process.on('SIGINT', () => {
+  if (process.stdout.isTTY) {
+    process.stdout.write('\x1b[?1004l');
+  }
   void (activeLogWriter ? activeLogWriter.flush() : Promise.resolve()).finally(() => {
     printUsageOnce();
     process.exit(130);
   });
 });
 
+process.on('SIGTERM', () => {
+  if (process.stdout.isTTY) {
+    process.stdout.write('\x1b[?1004l');
+  }
+  void (activeLogWriter ? activeLogWriter.flush() : Promise.resolve()).finally(() => {
+    process.exit(143);
+  });
+});
+
 // Best-effort release of lock + close on uncatchable exits (caught process.exit).
 process.on('exit', () => {
+  if (process.stdout.isTTY) {
+    process.stdout.write('\x1b[?1004l');
+  }
   if (activeLogWriter) {
     try {
       // Synchronous close path: the writer's close() does sync work and unlinks the lock.

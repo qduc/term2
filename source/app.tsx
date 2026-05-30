@@ -1,4 +1,5 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { sendNotification } from './services/notification-service.js';
 import { useInputActions, useInputState } from './context/InputContext.js';
 import { parseModelProviderArg } from './utils/model-provider-arg.js';
 
@@ -112,6 +113,51 @@ const App: FC<AppProps> = ({
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
 
+  // ── Focus tracking ──────────────────────────────────────────────────────────
+  // Default to "focused" so we stay silent when focus state is unknown.
+  // DEC mode ?1004 focus-reporting sends ESC[I (focus in) / ESC[O (focus out).
+  const focusedRef = useRef(true);
+
+  // Enable terminal focus-reporting on mount; disable on unmount.
+  useEffect(() => {
+    stdout.write('\x1b[?1004h');
+    return () => {
+      stdout.write('\x1b[?1004l');
+    };
+  }, [stdout]);
+
+  // Track focus state from CSI focus-in/out sequences delivered by Ink.
+  useInput((rawInput: string) => {
+    if (rawInput === '\x1b[I') {
+      focusedRef.current = true;
+      return;
+    }
+    if (rawInput === '\x1b[O') {
+      focusedRef.current = false;
+      return;
+    }
+  });
+
+  // Notifier passed into useConversation to fire desktop notifications when
+  // the terminal is unfocused.
+  const notifier = useMemo(
+    () => ({
+      approvalNeeded() {
+        if (focusedRef.current) return;
+        if (!settingsService.get<boolean>('app.notifications')) return;
+        if (!settingsService.get<boolean>('app.notificationsOnApproval')) return;
+        sendNotification('Approval needed', 'Agent is waiting for your approval');
+      },
+      turnComplete() {
+        if (focusedRef.current) return;
+        if (!settingsService.get<boolean>('app.notifications')) return;
+        if (!settingsService.get<boolean>('app.notificationsOnComplete')) return;
+        sendNotification('Response ready', 'Agent has finished responding');
+      },
+    }),
+    [settingsService],
+  );
+
   // Compute largeUncachedWarning in real-time as the user types
   const largeUncachedWarning = useMemo(() => {
     if (!input || mode !== 'text' || input.startsWith('/')) return null;
@@ -156,6 +202,7 @@ const App: FC<AppProps> = ({
     settingsService,
     onRestoreInput: setInput,
     logWriter,
+    notifier,
   });
 
   // Notify cli.tsx when the conversation has content so it can decide whether

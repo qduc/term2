@@ -87,8 +87,13 @@ const StatusBar: FC<StatusBarProps> = ({
     ) {
       const days = Math.round(secondary.window_minutes / (60 * 24));
       const resetDate = new Date(secondary.reset_at * 1000);
-      const dateStr = resetDate.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
-      parts.push(`${days}D: ${secondary.used_percent}% (${dateStr})`);
+      const nowMs = Date.now();
+      const diffMs = resetDate.getTime() - nowMs;
+      const within24Hours = diffMs >= 0 && diffMs < 24 * 60 * 60 * 1000;
+      const timeStr = within24Hours
+        ? resetDate.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : resetDate.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+      parts.push(`${days}D: ${secondary.used_percent}% (${timeStr})`);
     }
     return parts.join(' / ');
   })();

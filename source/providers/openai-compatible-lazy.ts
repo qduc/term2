@@ -11,30 +11,34 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     label,
     isRuntimeDefined: true,
     createRunner: ({ settingsService, loggingService }) => {
+      let cachedProvider: { getModel: (modelName?: string) => any } | null = null;
+
       return new Runner({
         tracingDisabled: true,
         modelProvider: {
           getModel: async (modelName?: string) => {
-            const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
-            const list = settingsService.get('providers');
-            const entry = Array.isArray(list) ? list.find((p: any) => p && p.name === providerId) : null;
-            if (!entry) {
-              throw new Error(
-                `Custom provider '${providerId}' is not configured. ` +
-                  `Please add it to settings.json under "providers".`,
-              );
+            if (!cachedProvider) {
+              const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
+              const list = settingsService.get('providers');
+              const entry = Array.isArray(list) ? list.find((p: any) => p && p.name === providerId) : null;
+              if (!entry) {
+                throw new Error(
+                  `Custom provider '${providerId}' is not configured. ` +
+                    `Please add it to settings.json under "providers".`,
+                );
+              }
+              const resolvedConfig: CustomProviderConfig = {
+                name: String(entry.name),
+                type: entry.type ? String(entry.type) : 'openai-compatible',
+                baseUrl: entry.baseUrl ? String(entry.baseUrl) : undefined,
+                apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
+              };
+              cachedProvider = createCustomProviderModelProvider(resolvedConfig, {
+                defaultModel: settingsService.get('agent.model') || '',
+                loggingService,
+              });
             }
-            const resolvedConfig: CustomProviderConfig = {
-              name: String(entry.name),
-              type: entry.type ? String(entry.type) : 'openai-compatible',
-              baseUrl: entry.baseUrl ? String(entry.baseUrl) : undefined,
-              apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
-            };
-            const realProvider = createCustomProviderModelProvider(resolvedConfig, {
-              defaultModel: settingsService.get('agent.model') || '',
-              loggingService,
-            });
-            return realProvider.getModel(modelName);
+            return cachedProvider.getModel(modelName);
           },
         },
       });

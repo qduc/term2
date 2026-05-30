@@ -1,6 +1,8 @@
 import test from 'ava';
+import { withTrace } from '@openai/agents-core';
 import { OpenAIResponsesModel } from '@openai/agents-openai';
 import { CodexResponsesModel, CodexResponsesWSModel, wrapCodexStream } from './codex-responses-model.js';
+import { TimedResponsesWSModel } from './timed-responses-ws-model.js';
 import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
 
 // Fixture mirrors the SSE shape that codex's responses endpoint emits: deltas
@@ -431,4 +433,146 @@ test('CodexResponsesWSModel uses default timeouts when none are passed', (t) => 
   t.deepEqual((model as any).options, {
     ...DEFAULT_TIMED_WS_TIMEOUTS,
   });
+});
+
+test.serial('CodexResponsesModel.getResponse (unary) intercepts and runs as stream under the hood', async (t) => {
+  const original = (OpenAIResponsesModel.prototype as any)._fetchResponse;
+  let receivedStreamArg = false;
+
+  (OpenAIResponsesModel.prototype as any)._fetchResponse = async function (_request: any, stream: boolean) {
+    receivedStreamArg = stream;
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_unary' } },
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: {
+          type: 'message',
+          id: 'msg_unary',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'Hello Unary!' }],
+        },
+      },
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp_unary',
+          output: [],
+          usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
+        },
+      },
+    ]);
+  };
+
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
+
+    // Call getResponse which defaults to stream: false
+    const response = await withTrace('test', () => model.getResponse(request));
+
+    t.true(receivedStreamArg, 'should have forced stream: true internally');
+    t.is(response.responseId, 'resp_unary');
+    t.is(response.output.length, 1);
+    t.is(response.output[0].id, 'msg_unary');
+    t.is(response.usage.totalTokens, 5);
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._fetchResponse = original;
+  }
+});
+
+test.serial('CodexResponsesWSModel.getResponse (unary) intercepts and runs as stream under the hood', async (t) => {
+  const original = (TimedResponsesWSModel.prototype as any)._fetchResponse;
+  let receivedStreamArg = false;
+
+  (TimedResponsesWSModel.prototype as any)._fetchResponse = async function (_request: any, stream: boolean) {
+    receivedStreamArg = stream;
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_ws_unary' } },
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: {
+          type: 'message',
+          id: 'msg_ws_unary',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'Hello WS Unary!' }],
+        },
+      },
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp_ws_unary',
+          output: [],
+          usage: { input_tokens: 3, output_tokens: 4, total_tokens: 7 },
+        },
+      },
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(mockClient as any, 'gpt-5-codex', tokenManager as any);
+    const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
+
+    // Call getResponse which defaults to stream: false
+    const response = await model.getResponse(request);
+
+    t.true(receivedStreamArg, 'should have forced stream: true internally');
+    t.is(response.responseId, 'resp_ws_unary');
+    t.is(response.output.length, 1);
+    t.is(response.output[0].id, 'msg_ws_unary');
+    t.is(response.usage.totalTokens, 7);
+  } finally {
+    (TimedResponsesWSModel.prototype as any)._fetchResponse = original;
+  }
+});
+
+test('wrapCodexStream throws a detailed stream error when receiving response.error event', async (t) => {
+  const errorObj = { message: 'Some specific API error description' };
+  const eventStream = wrapCodexStream(makeStream([{ type: 'response.error', error: errorObj }]));
+
+  const error = await t.throwsAsync(async () => {
+    for await (const _ of eventStream) {
+    }
+  });
+
+  t.true(error instanceof Error);
+  t.is(error.message, 'Codex provider stream error: Some specific API error description');
+});
+
+test('wrapCodexStream throws a detailed provider error when receiving a failed response status', async (t) => {
+  const errorObj = { message: 'Model context length exceeded' };
+  const eventStream = wrapCodexStream(
+    makeStream([
+      {
+        type: 'response.failed',
+        response: {
+          id: 'resp_failed_1',
+          output: [],
+          status: 'failed',
+          error: errorObj,
+        },
+      },
+    ]),
+  );
+
+  const error = await t.throwsAsync(async () => {
+    for await (const _ of eventStream) {
+    }
+  });
+
+  t.true(error instanceof Error);
+  t.is(error.message, 'Codex provider error: Model context length exceeded');
 });

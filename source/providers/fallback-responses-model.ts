@@ -92,6 +92,17 @@ function isIdleTimeoutError(err: unknown): boolean {
   return (err as any).message.toLowerCase().includes('websocket idle timeout');
 }
 
+// The SDK's convertToOutputItem crashes with TypeError when the WS model returns
+// a failed API response that has no `output` field. Treat it as a WS-path failure
+// so we can fall back to the HTTP model.
+function isWsResponseOutputMissing(err: unknown): boolean {
+  return (
+    err instanceof TypeError &&
+    typeof (err as TypeError).message === 'string' &&
+    (err as TypeError).message.includes("'map'")
+  );
+}
+
 export class FallbackResponsesModel implements Model {
   constructor(
     private readonly wsModel: Model,
@@ -198,7 +209,7 @@ export class FallbackResponsesModel implements Model {
           continue;
         }
 
-        if (isNetworkProtocolError(error)) {
+        if (isNetworkProtocolError(error) || isWsResponseOutputMissing(error)) {
           if (this.loggingService && this.providerId) {
             this.loggingService.error(`${this.providerId} ws request failed`, {
               eventType: 'provider.response.failed',

@@ -121,6 +121,42 @@ test('FallbackResponsesModel.getResponse immediately throws non-network errors w
   t.false(state.isDowngraded);
 });
 
+test('FallbackResponsesModel.getResponse falls back to HTTP when WS returns response with undefined output (SDK convertToOutputItem crash)', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+  let downgradeFired = false;
+
+  const sdkCrash = new TypeError("Cannot read properties of undefined (reading 'map')");
+
+  const wsModel = makeMockModel({
+    getResponse: async () => {
+      wsCalled++;
+      throw sdkCrash;
+    },
+  });
+
+  const httpResponse = { output: [], usage: {} } as any;
+  const httpModel = makeMockModel({
+    getResponse: async () => {
+      httpCalled++;
+      return httpResponse;
+    },
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state, () => {
+    downgradeFired = true;
+  });
+
+  const result = await model.getResponse({} as any);
+
+  t.is(wsCalled, 1);
+  t.is(httpCalled, 1);
+  t.is(result, httpResponse);
+  t.true(state.isDowngraded);
+  t.true(downgradeFired);
+});
+
 test('FallbackResponsesModel.getStreamedResponse falls back seamlessly if error occurs before any events', async (t) => {
   let wsCalled = 0;
   let httpCalled = 0;

@@ -283,6 +283,7 @@ export class ConversationSession {
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
     this.emittedToolStartedCallIds.clear();
+    this.toolLedger = new ToolExecutionLedger();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.markUndoOrRewind();
@@ -305,6 +306,7 @@ export class ConversationSession {
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
     this.emittedToolStartedCallIds.clear();
+    this.toolLedger = new ToolExecutionLedger();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
     this.largeUncachedInputGuard.markUndoOrRewind();

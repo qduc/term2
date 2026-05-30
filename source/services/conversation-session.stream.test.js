@@ -1848,3 +1848,110 @@ test('switchProvider() clears provider continuity but preserves transcript histo
     ['First message', 'Second message'],
   );
 });
+
+test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injected on retry', async (t) => {
+  // Turn 1: run with a tool call so the tool ledger records an entry.
+  const toolCallId = 'call_abc123';
+  const turn1Events = [
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId: toolCallId,
+          name: 'shell',
+          arguments: '{"command":"echo hello"}',
+        },
+      },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call_output',
+          callId: toolCallId,
+          output: 'hello',
+        },
+      },
+    },
+    { type: 'response.output_text.delta', delta: 'Done' },
+  ];
+
+  const stream1 = new MockStream(turn1Events);
+  stream1.finalOutput = 'Done';
+  stream1.history = [
+    { role: 'user', type: 'message', content: 'run echo hello' },
+    {
+      type: 'function_call',
+      callId: toolCallId,
+      name: 'shell',
+      arguments: '{"command":"echo hello"}',
+    },
+    {
+      type: 'function_call_output',
+      callId: toolCallId,
+      output: 'hello',
+    },
+    {
+      role: 'assistant',
+      type: 'message',
+      content: [{ type: 'output_text', text: 'Done' }],
+    },
+  ];
+
+  // Turn 2 (after undo + retry): capture what input the model receives.
+  let retryInput;
+  const stream2 = new MockStream([{ type: 'response.output_text.delta', delta: 'Retried' }]);
+  stream2.finalOutput = 'Retried';
+  stream2.history = [
+    { role: 'user', type: 'message', content: 'run echo hello' },
+    {
+      role: 'assistant',
+      type: 'message',
+      content: [{ type: 'output_text', text: 'Retried' }],
+    },
+  ];
+
+  let callCount = 0;
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    async startStream(input) {
+      callCount++;
+      if (callCount === 1) return stream1;
+      retryInput = input;
+      return stream2;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  // Run turn 1 to completion — tool ledger now has the tool call entry.
+  for await (const _ of session.run('run echo hello')) {
+    // consume
+  }
+
+  // Verify ledger has entries before undo.
+  const stateBefore = session.exportState();
+  t.true(stateBefore.toolLedger.length > 0, 'tool ledger should have entries before undo');
+
+  // Undo the turn.
+  session.undoLastUserTurn();
+
+  // Verify ledger is cleared after undo.
+  const stateAfter = session.exportState();
+  t.is(stateAfter.toolLedger.length, 0, 'tool ledger must be empty after undo');
+
+  // Retry the same message — the model must NOT see the old tool call/result pair.
+  for await (const _ of session.run('run echo hello')) {
+    // consume
+  }
+
+  t.true(Array.isArray(retryInput), 'retry should send full history');
+  const callIds = retryInput.filter((item) => item.callId || item.call_id).map((item) => item.callId || item.call_id);
+  t.false(callIds.includes(toolCallId), 'retried history must NOT contain old tool call IDs');
+});

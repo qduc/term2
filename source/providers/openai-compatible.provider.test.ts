@@ -4,6 +4,7 @@ import {
   createCustomProviderModelProvider,
   createOpenAICompatibleProviderDefinition,
 } from './openai-compatible.provider.js';
+import { createOpenAICompatibleProviderDefinition as createLazyProviderDefinition } from './openai-compatible-lazy.js';
 import type { ProviderDeps } from './registry.js';
 
 setTracingDisabled(true);
@@ -758,6 +759,42 @@ test('opencode provider type keeps the fallback session ID stable across turns',
 
   t.is(captured.length, 2);
   t.is(captured[1].headers['x-opencode-session'], firstSessionId);
+});
+
+test('lazy opencode provider reuses the same model provider instance across getModel calls (regression: was recreated per turn, resetting session ID)', async (t) => {
+  const deps: ProviderDeps = {
+    settingsService: {
+      get: (key: string) => {
+        if (key === 'providers') return [{ name: 'opencode-lazy-test', type: 'opencode' }];
+        if (key === 'agent.model') return 'provider-model';
+        return undefined;
+      },
+    } as any,
+    loggingService: {
+      debug: () => {},
+      error: () => {},
+      getCorrelationId: () => undefined,
+      getTrafficContext: () => null,
+    } as any,
+  };
+
+  const definition = createLazyProviderDefinition({ name: 'opencode-lazy-test', type: 'opencode' });
+  const runner = definition.createRunner!(deps)!;
+  const modelProvider = (runner as any).config?.modelProvider;
+  t.truthy(modelProvider, 'runner should expose a modelProvider via config');
+
+  // Wrap getModel to track how many distinct underlying provider instances are created.
+  // The lazy provider wraps a cached inner provider; the model instances it returns are
+  // cached by the inner OpencodeAnthropicFormatProvider.  If the inner provider is
+  // recreated on each call, different model instances will be returned for the same name.
+  const model1 = await modelProvider.getModel('provider-model');
+  const model2 = await modelProvider.getModel('provider-model');
+
+  t.is(
+    model1,
+    model2,
+    'same model instance must be returned on repeated getModel calls — a new instance means a new session ID',
+  );
 });
 
 test('opencode provider type caches model instances across getModel calls', async (t) => {

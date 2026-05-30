@@ -17,26 +17,6 @@ const SettingsValueSelectionMenu: FC<Props> = ({ settingKey, items, selectedInde
       items={items}
       selectedIndex={selectedIndex}
       borderColor={items.length === 0 ? 'red' : 'cyan'}
-      title={
-        <Box>
-          <Text color="gray">Value for </Text>
-          <Text color="cyan" bold>
-            {settingKey}
-          </Text>
-          <Text color="gray"> · </Text>
-          {query ? (
-            <Text>
-              Filter: "
-              <Text color="white" bold>
-                {query}
-              </Text>
-              "
-            </Text>
-          ) : (
-            <Text color="gray">{isNumericSettings ? 'Select or type custom value' : 'Select a value'}</Text>
-          )}
-        </Box>
-      }
       fallbackText={
         <Box flexDirection="column">
           <Text color="red" bold>

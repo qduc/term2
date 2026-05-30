@@ -83,34 +83,6 @@ const SettingsSelectionMenu: FC<Props> = ({
         scrollOffset={scrollOffset}
         maxHeight={VISIBLE_COUNT}
         borderColor={items.length === 0 ? 'red' : 'cyan'}
-        title={
-          <Box>
-            <Text bold color="cyan">
-              ⚙ Settings
-            </Text>
-            <Text color="gray"> · </Text>
-            <Text color="#22d3ee">
-              {isSearchingAll ? 'Searching all sections' : activeCategory?.label ?? 'Settings'}
-            </Text>
-            <Text color="gray"> · </Text>
-            {query ? (
-              <Text>
-                Searching: "
-                <Text color="white" bold>
-                  {query}
-                </Text>
-                "
-              </Text>
-            ) : (
-              <Text color="gray">Type to filter</Text>
-            )}
-          </Box>
-        }
-        headerRight={
-          <Text color="#64748b">
-            {items.length} item{items.length === 1 ? '' : 's'}
-          </Text>
-        }
         fallbackText={
           <Box flexDirection="column">
             <Text bold color="red">

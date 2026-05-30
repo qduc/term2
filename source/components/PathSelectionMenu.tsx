@@ -32,12 +32,6 @@ const PathSelectionMenu: FC<Props> = ({
       loading={loading}
       loadingText="Loading project paths…"
       error={error ? `Unable to load paths: ${error}` : null}
-      title={
-        <Text color="#64748b">
-          @{query || '*'} · {items.length} suggestion
-          {items.length === 1 ? '' : 's'}
-        </Text>
-      }
       fallbackText={`No matches for "@${query}"`}
       footer="Enter → insert with space · Tab → insert w/o trailing space · Esc → cancel · ↑↓ → scroll"
       footerOutsideBorder={true}

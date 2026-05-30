@@ -26,11 +26,6 @@ const UndoSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, 
       scrollOffset={scrollOffset}
       maxHeight={maxHeight}
       borderColor="yellow"
-      title={
-        <Text color="yellow" bold>
-          Undo to message
-        </Text>
-      }
       fallbackText={<Text color="yellow">No messages to undo</Text>}
       footer="Enter → undo here · Esc → cancel · ↑↓ → navigate"
       footerOutsideBorder={true}

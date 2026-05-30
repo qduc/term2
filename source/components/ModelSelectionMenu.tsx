@@ -85,11 +85,6 @@ const ModelSelectionMenu: FC<Props> = ({
         loading={loading}
         loadingText={loading ? `Loading models${provider ? ` from ${provider}` : ''}…` : 'Loading...'}
         error={error ? `Unable to load models: ${error}` : null}
-        headerRight={
-          <Text color="#64748b">
-            {items.length} suggestion{items.length === 1 ? '' : 's'}
-          </Text>
-        }
         fallbackText={<Text color="#64748b">No models match "{query || '*'}"</Text>}
         footer={<Text color="#64748b">Enter → set model · Esc → cancel · ↑↓ → scroll</Text>}
         footerOutsideBorder={true}

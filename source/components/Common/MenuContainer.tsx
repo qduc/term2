@@ -8,10 +8,6 @@ type Props<T> = {
   maxHeight?: number;
   borderColor: string;
 
-  // Custom headers/titles
-  title?: ReactNode;
-  headerRight?: ReactNode; // e.g. pagination or queries
-
   // States
   loading?: boolean;
   loadingText?: string;
@@ -33,8 +29,6 @@ export function MenuContainer<T>({
   scrollOffset = 0,
   maxHeight = 10,
   borderColor,
-  title,
-  headerRight,
   loading = false,
   loadingText = 'Loading...',
   error = null,
@@ -73,37 +67,6 @@ export function MenuContainer<T>({
 
   const content = (
     <Box borderStyle="round" borderColor={borderColor} paddingX={1} flexDirection="column">
-      {(title || headerRight || items.length > maxHeight) && (
-        <Box
-          justifyContent="space-between"
-          marginBottom={1}
-          borderStyle="single"
-          borderBottom={true}
-          borderLeft={false}
-          borderRight={false}
-          borderTop={false}
-          borderColor="gray"
-        >
-          <Box>
-            {typeof title === 'string' ? (
-              <Text bold color={borderColor}>
-                {title}
-              </Text>
-            ) : (
-              title
-            )}
-          </Box>
-          <Box>
-            {headerRight}
-            {items.length > maxHeight && (
-              <Text color="#64748b">
-                {' '}
-                · {scrollOffset + 1}-{Math.min(scrollOffset + maxHeight, items.length)}/{items.length}
-              </Text>
-            )}
-          </Box>
-        </Box>
-      )}
       {hasScrollUp && <Text color="#64748b">↑ {scrollOffset} more</Text>}
       {visibleItems.map((item, visibleIndex) => {
         const actualIndex = scrollOffset + visibleIndex;

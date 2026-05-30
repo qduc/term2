@@ -81,8 +81,16 @@ const InputBox: FC<Props> = ({
   onSlashTabComplete,
   promptLabel,
 }) => {
-  const { input: value, setInput: onChange, mode, setMode, cursorOffset, setCursorOffset } = useInputContext();
-  const [images, setImages] = useState<ImageRef[]>([]);
+  const {
+    input: value,
+    setInput: onChange,
+    mode,
+    setMode,
+    cursorOffset,
+    setCursorOffset,
+    images,
+    setImages,
+  } = useInputContext();
 
   const escPressedRef = useRef(false);
   const cursorOffsetRef = useRef(cursorOffset);
@@ -305,7 +313,6 @@ const InputBox: FC<Props> = ({
       setCursorOverride(result.nextCursor);
       models.close();
       if (submitAfterInsert) {
-        setImages([]);
         submitTextOnly(result.nextValue);
       }
       return true;

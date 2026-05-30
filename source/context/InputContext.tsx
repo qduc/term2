@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useMemo, useState, ReactNode } from 'react';
+import type { ImageRef } from 'ink-prompt';
 
 export type InputMode =
   | 'text'
@@ -14,6 +15,7 @@ interface InputState {
   mode: InputMode;
   cursorOffset: number;
   triggerIndex: number | null;
+  images: ImageRef[];
 }
 
 interface InputActions {
@@ -21,6 +23,7 @@ interface InputActions {
   setMode: (mode: InputMode) => void;
   setCursorOffset: (offset: number) => void;
   setTriggerIndex: (index: number | null) => void;
+  setImages: React.Dispatch<React.SetStateAction<ImageRef[]>>;
 }
 
 const InputStateContext = createContext<InputState | undefined>(undefined);
@@ -31,13 +34,14 @@ export const InputProvider = ({ children }: { children: ReactNode }) => {
   const [mode, setMode] = useState<InputMode>('text');
   const [cursorOffset, setCursorOffset] = useState(0);
   const [triggerIndex, setTriggerIndex] = useState<number | null>(null);
+  const [images, setImages] = useState<ImageRef[]>([]);
 
   const state = useMemo<InputState>(
-    () => ({ input, mode, cursorOffset, triggerIndex }),
-    [input, mode, cursorOffset, triggerIndex],
+    () => ({ input, mode, cursorOffset, triggerIndex, images }),
+    [input, mode, cursorOffset, triggerIndex, images],
   );
 
-  const actions = useMemo<InputActions>(() => ({ setInput, setMode, setCursorOffset, setTriggerIndex }), []);
+  const actions = useMemo<InputActions>(() => ({ setInput, setMode, setCursorOffset, setTriggerIndex, setImages }), []);
 
   return (
     <InputStateContext.Provider value={state}>

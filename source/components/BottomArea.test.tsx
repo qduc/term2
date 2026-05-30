@@ -98,6 +98,21 @@ test('BottomArea shows handoff confirmation prompt when handoffState is confirm_
   unmount();
 });
 
+test('BottomArea shows large uncached confirmation prompt when pending turn exists', (t) => {
+  const { lastFrame, unmount } = renderBottomArea({
+    ...baseProps,
+    pendingLargeUncachedTurn: { text: 'Describe this', images: [] },
+    pendingLargeUncachedTokens: 72_100,
+  });
+
+  const output = lastFrame() ?? '';
+  t.true(output.includes('Send ~72k tokens anyway?'));
+  t.true(output.includes('Send'));
+  t.true(output.includes('Cancel'));
+  t.false(output.includes('Allow this action?'));
+  unmount();
+});
+
 test('BottomArea shows input with handoff message prompt when handoffState is entering_message', (t) => {
   const { lastFrame, unmount } = renderBottomArea({
     ...baseProps,

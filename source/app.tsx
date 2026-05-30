@@ -22,10 +22,6 @@ import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumula
 import type { Message } from './hooks/use-conversation.js';
 import type { UndoItem } from './hooks/use-undo-selection.js';
 import { resolveSlashCommand } from './slash-commands.js';
-import type {
-  LargeUncachedInputDecision,
-  LargeUncachedInputWarningReason,
-} from './services/large-uncached-input-guard.js';
 
 interface AppProps {
   conversationService: ConversationService;
@@ -80,51 +76,6 @@ export interface HandoffState {
   handoffMessage?: string;
 }
 
-interface LargeUncachedConfirmation {
-  warningKey: string;
-  inputFingerprint: string;
-}
-
-const fingerprintUserTurn = (turn: UserTurn): string =>
-  JSON.stringify({
-    text: turn.text,
-    images: (turn.images ?? []).map((image) => ({
-      id: image.id,
-      byteSize: image.byteSize,
-      mimeType: image.mimeType,
-    })),
-  });
-
-const reasonLabel = (reason: LargeUncachedInputWarningReason): string => {
-  switch (reason) {
-    case 'provider_changed':
-      return 'the provider changed';
-    case 'model_changed':
-      return 'the model changed';
-    case 'reasoning_effort_changed':
-      return 'the reasoning effort changed';
-    case 'mode_changed':
-      return 'the prompt/tool mode changed';
-    case 'resumed_session_stale':
-      return 'the resumed session is older than 5m';
-    case 'resumed_session_unknown_age':
-      return 'the resumed session age is unknown';
-    case 'idle_timeout':
-      return 'the session was idle for over 5m';
-    case 'undo_rewind':
-      return 'undo/rewind changed the prompt prefix';
-    default:
-      return 'the prompt cache may be stale';
-  }
-};
-
-export const formatLargeUncachedInputWarning = (decision: LargeUncachedInputDecision): string => {
-  const estimatedTokens = Math.round(decision.estimatedTokens / 1_000);
-  const reasonText =
-    decision.reasons.length > 0 ? decision.reasons.map(reasonLabel).join(', ') : 'the prompt cache may be stale';
-  return `Large uncached prompt warning: this send is estimated at ~${estimatedTokens}k input tokens and may miss prompt cache because ${reasonText}. Press Enter again to send anyway, or edit/clear/undo first.`;
-};
-
 const App: FC<AppProps> = ({
   conversationService,
   settingsService,
@@ -146,10 +97,11 @@ const App: FC<AppProps> = ({
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const { setInput, setMode, setTriggerIndex } = useInputActions();
+  const { setInput, setMode, setTriggerIndex, setImages } = useInputActions();
   const { input, mode } = useInputState();
   const [handoffState, setHandoffState] = useState<HandoffState | null>(null);
-  const [largeUncachedConfirmation, setLargeUncachedConfirmation] = useState<LargeUncachedConfirmation | null>(null);
+  const [pendingLargeUncachedTurn, setPendingLargeUncachedTurn] = useState<UserTurn | null>(null);
+  const [pendingLargeUncachedTokens, setPendingLargeUncachedTokens] = useState<number>(0);
   const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
@@ -166,11 +118,6 @@ const App: FC<AppProps> = ({
     const preview = conversationService.previewLargeUncachedInput({ text: input });
     return preview.action === 'warn' ? preview : null;
   }, [input, mode, conversationService]);
-
-  // Clear pending confirmation if user types/changes input after getting a warning
-  useEffect(() => {
-    setLargeUncachedConfirmation(null);
-  }, [input]);
 
   const {
     messages,
@@ -316,6 +263,26 @@ const App: FC<AppProps> = ({
     addSystemMessage('Handoff cancelled');
   }, [addSystemMessage, setInput]);
 
+  const handleLargeUncachedApprove = useCallback(async () => {
+    const turn = pendingLargeUncachedTurn;
+    if (!turn) return;
+    setPendingLargeUncachedTurn(null);
+    setPendingLargeUncachedTokens(0);
+    setImages([]);
+    historyService.addMessage(turn);
+    setInput('');
+    await sendUserMessage(turn);
+  }, [pendingLargeUncachedTurn, historyService, sendUserMessage, setImages, setInput]);
+
+  const handleLargeUncachedDecline = useCallback(() => {
+    const turn = pendingLargeUncachedTurn;
+    if (!turn) return;
+    setPendingLargeUncachedTurn(null);
+    setPendingLargeUncachedTokens(0);
+    // Restore the text to the input box
+    queueMicrotask(() => setInput(turn.text || ''));
+  }, [pendingLargeUncachedTurn, setInput]);
+
   const handleHandoff = useCallback((capturedText: string) => {
     setHandoffState({ capturedText, stage: 'entering_message' });
   }, []);
@@ -399,6 +366,10 @@ const App: FC<AppProps> = ({
   useInput((input: string, key) => {
     const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
     if (!isShiftTab) return;
+
+    if (pendingLargeUncachedTurn) {
+      return;
+    }
 
     if (liteMode) {
       toggleShellMode();
@@ -492,18 +463,10 @@ const App: FC<AppProps> = ({
         // Regular message, send to AI agent
         {
           const preview = conversationService.previewLargeUncachedInput(turn);
-          const inputFingerprint = fingerprintUserTurn(turn);
-          const pending = largeUncachedConfirmation;
-          const confirmed =
-            preview.action === 'warn' &&
-            pending?.warningKey === preview.warningKey &&
-            pending.inputFingerprint === inputFingerprint;
 
-          if (preview.action === 'warn' && !confirmed) {
-            setLargeUncachedConfirmation({
-              warningKey: preview.warningKey,
-              inputFingerprint,
-            });
+          if (preview.action === 'warn') {
+            setPendingLargeUncachedTurn(turn);
+            setPendingLargeUncachedTokens(preview.estimatedTokens);
             loggingService.info('Large uncached input warning shown', {
               eventType: 'large_uncached_input_warning_shown',
               category: 'provider',
@@ -511,11 +474,9 @@ const App: FC<AppProps> = ({
               estimatedBytes: preview.estimatedBytes,
               reasons: preview.reasons,
             });
-            addSystemMessage(formatLargeUncachedInputWarning(preview));
             return;
           }
         }
-        setLargeUncachedConfirmation(null);
         historyService.addMessage(turn);
         setInput('');
         await sendUserMessage(turn);
@@ -525,18 +486,10 @@ const App: FC<AppProps> = ({
     // Fallback: unknown slash command, send as message
     {
       const preview = conversationService.previewLargeUncachedInput(turn);
-      const inputFingerprint = fingerprintUserTurn(turn);
-      const pending = largeUncachedConfirmation;
-      const confirmed =
-        preview.action === 'warn' &&
-        pending?.warningKey === preview.warningKey &&
-        pending.inputFingerprint === inputFingerprint;
 
-      if (preview.action === 'warn' && !confirmed) {
-        setLargeUncachedConfirmation({
-          warningKey: preview.warningKey,
-          inputFingerprint,
-        });
+      if (preview.action === 'warn') {
+        setPendingLargeUncachedTurn(turn);
+        setPendingLargeUncachedTokens(preview.estimatedTokens);
         loggingService.info('Large uncached input warning shown', {
           eventType: 'large_uncached_input_warning_shown',
           category: 'provider',
@@ -544,11 +497,9 @@ const App: FC<AppProps> = ({
           estimatedBytes: preview.estimatedBytes,
           reasons: preview.reasons,
         });
-        addSystemMessage(formatLargeUncachedInputWarning(preview));
         return;
       }
     }
-    setLargeUncachedConfirmation(null);
     setInput('');
     await sendUserMessage(turn);
   };
@@ -593,7 +544,10 @@ const App: FC<AppProps> = ({
             onHandoffDecline={handleHandoffDecline}
             onHandoffCancel={handleHandoffCancel}
             largeUncachedWarning={largeUncachedWarning}
-            hasPendingConfirmation={largeUncachedConfirmation !== null}
+            pendingLargeUncachedTurn={pendingLargeUncachedTurn}
+            pendingLargeUncachedTokens={pendingLargeUncachedTokens}
+            onLargeUncachedApprove={handleLargeUncachedApprove}
+            onLargeUncachedDecline={handleLargeUncachedDecline}
             onSlashTabComplete={(command) => {
               if (command.name === 'undo') {
                 const userMessages = getUserMessages().map((m) => ({ uiIndex: m.uiIndex, text: m.text }));

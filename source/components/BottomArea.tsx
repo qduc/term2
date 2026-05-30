@@ -4,6 +4,7 @@ import ApprovalPrompt from './ApprovalPrompt.js';
 import InputBox from './InputBox.js';
 import StatusBar from './StatusBar.js';
 import HandoffConfirmationPrompt from './HandoffConfirmationPrompt.js';
+import LargeUncachedConfirmationPrompt from './LargeUncachedConfirmationPrompt.js';
 import type { HandoffState } from '../app.js';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings-service.js';
@@ -40,7 +41,10 @@ export type BottomAreaProps = {
   onHandoffDecline?: () => void;
   onHandoffCancel?: () => void;
   largeUncachedWarning?: import('../services/large-uncached-input-guard.js').LargeUncachedInputDecision | null;
-  hasPendingConfirmation?: boolean;
+  pendingLargeUncachedTurn?: UserTurn | null;
+  pendingLargeUncachedTokens?: number;
+  onLargeUncachedApprove?: () => void;
+  onLargeUncachedDecline?: () => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
 };
 
@@ -68,7 +72,10 @@ const BottomArea: FC<BottomAreaProps> = ({
   onHandoffDecline,
   onHandoffCancel,
   largeUncachedWarning,
-  hasPendingConfirmation,
+  pendingLargeUncachedTurn,
+  pendingLargeUncachedTokens = 0,
+  onLargeUncachedApprove,
+  onLargeUncachedDecline,
   onSlashTabComplete,
 }) => {
   const [dotCount, setDotCount] = useState(1);
@@ -87,9 +94,18 @@ const BottomArea: FC<BottomAreaProps> = ({
   }, [isProcessing]);
 
   const showHandoffConfirm = handoffState?.stage === 'confirm_model';
+  const showLargeUncachedPrompt = Boolean(pendingLargeUncachedTurn);
   const showApprovalPrompt =
-    !showHandoffConfirm && waitingForApproval && !isProcessing && !waitingForRejectionReason && pendingApproval;
-  const showInput = !showHandoffConfirm && ((!isProcessing && !waitingForApproval) || waitingForRejectionReason);
+    !showHandoffConfirm &&
+    !showLargeUncachedPrompt &&
+    waitingForApproval &&
+    !isProcessing &&
+    !waitingForRejectionReason &&
+    pendingApproval;
+  const showInput =
+    !showHandoffConfirm &&
+    !showLargeUncachedPrompt &&
+    ((!isProcessing && !waitingForApproval) || waitingForRejectionReason);
 
   return (
     <Box flexDirection="column" width="100%">
@@ -99,6 +115,12 @@ const BottomArea: FC<BottomAreaProps> = ({
             onConfirm={onHandoffConfirm || (() => {})}
             onDecline={onHandoffDecline || (() => {})}
             onCancel={onHandoffCancel || (() => {})}
+          />
+        ) : showLargeUncachedPrompt ? (
+          <LargeUncachedConfirmationPrompt
+            estimatedTokens={pendingLargeUncachedTokens || 0}
+            onConfirm={onLargeUncachedApprove || (() => {})}
+            onDecline={onLargeUncachedDecline || (() => {})}
           />
         ) : showApprovalPrompt ? (
           <ApprovalPrompt approval={pendingApproval} onApprove={onApprove} onReject={onReject} />
@@ -129,7 +151,7 @@ const BottomArea: FC<BottomAreaProps> = ({
         lastUsage={lastUsage}
         lastCodexRateLimit={lastCodexRateLimit}
         largeUncachedWarning={largeUncachedWarning}
-        hasPendingConfirmation={hasPendingConfirmation}
+        hasPendingConfirmation={pendingLargeUncachedTurn !== null && pendingLargeUncachedTokens > 0}
       />
     </Box>
   );

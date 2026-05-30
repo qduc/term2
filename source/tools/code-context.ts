@@ -21,7 +21,7 @@ import {
   fileExists,
   getProvider,
   providers,
-} from './language-providers.js';
+} from './languages/index.js';
 
 const execFilePromise = util.promisify(execFile);
 

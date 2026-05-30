@@ -431,3 +431,335 @@ test.serial('outline: JSON files extract top-level keys as declarations', async 
     t.true(result.includes('scripts'));
   });
 });
+
+test.serial('outline: Python files extract imports and declarations', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'src/example.py';
+    const absPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(
+      absPath,
+      [
+        'import os',
+        'from sys import argv',
+        'from collections import (',
+        '    defaultdict,',
+        '    OrderedDict as OD',
+        ')',
+        '# some comment def hidden',
+        'class MyClass:',
+        '    def nested_method(self):',
+        '        pass',
+        'def my_func():',
+        '    pass',
+        'async def my_async_func():',
+        '    pass',
+      ].join('\n'),
+    );
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    t.true(result.includes('FILE src/example.py'));
+    t.true(result.includes('LANG python'));
+    t.true(result.includes('IMPORTS'));
+    t.true(result.includes('DECLARATIONS'));
+    t.regex(result, /os: os/);
+    t.regex(result, /sys: argv/);
+    t.regex(result, /collections: defaultdict OD/);
+    t.regex(result, /class MyClass/);
+    t.regex(result, /function my_func/);
+    t.regex(result, /async function my_async_func/);
+    t.false(result.includes('nested_method')); // nested method is indented
+  });
+});
+
+test.serial('outline: Go files extract imports and declarations with visibility', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'src/example.go';
+    const absPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(
+      absPath,
+      [
+        'package main',
+        'import "fmt"',
+        'import (',
+        '    "os"',
+        '    "path/filepath"',
+        '    alias "net/http"',
+        ')',
+        'type MyStruct struct{}',
+        'type MyInterface interface{}',
+        'const MyConst = 42',
+        'var MyVar = "hello"',
+        'const (',
+        '    Const1 = 1',
+        '    const2 = 2',
+        ')',
+        'var (',
+        '    Var1 = 1',
+        '    var2 = 2',
+        ')',
+        'func ExportedFunc() {}',
+        'func privateFunc() {}',
+        'func (m *MyStruct) Method() {}',
+      ].join('\n'),
+    );
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    t.true(result.includes('FILE src/example.go'));
+    t.true(result.includes('LANG go'));
+    t.true(result.includes('IMPORTS'));
+    t.true(result.includes('EXPORTS'));
+    t.true(result.includes('DECLARATIONS'));
+
+    t.regex(result, /fmt: side-effect/);
+    t.regex(result, /os: side-effect/);
+    t.regex(result, /path\/filepath: side-effect/);
+    t.regex(result, /net\/http: alias/);
+
+    t.regex(result, /type MyStruct line=\d+ exported/);
+    t.regex(result, /interface MyInterface line=\d+ exported/);
+    t.regex(result, /const MyConst line=\d+ exported/);
+    t.regex(result, /var MyVar line=\d+ exported/);
+    t.regex(result, /const Const1 line=\d+ exported/);
+    t.regex(result, /const const2 line=\d+\s*$/m); // not exported
+    t.regex(result, /var Var1 line=\d+ exported/);
+    t.regex(result, /var var2 line=\d+\s*$/m); // not exported
+    t.regex(result, /function ExportedFunc line=\d+ exported/);
+    t.regex(result, /function privateFunc line=\d+\s*$/m); // not exported
+    t.regex(result, /method Method line=\d+ exported/);
+
+    // exports
+    t.regex(result, /export type MyStruct line=\d+/);
+    t.regex(result, /export interface MyInterface line=\d+/);
+    t.regex(result, /export const MyConst line=\d+/);
+    t.regex(result, /export var MyVar line=\d+/);
+    t.regex(result, /export const Const1 line=\d+/);
+    t.regex(result, /export var Var1 line=\d+/);
+    t.regex(result, /export function ExportedFunc line=\d+/);
+    t.regex(result, /export method Method line=\d+/);
+    t.false(result.includes('const2 line=') && result.includes('export const const2'));
+  });
+});
+
+test.serial('outline: Rust files extract imports and declarations with visibility', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'src/example.rs';
+    const absPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(
+      absPath,
+      [
+        'use std::collections::HashMap;',
+        'pub use std::io::{self, Write};',
+        'use std::fs as my_fs;',
+        'pub struct PublicStruct;',
+        'struct PrivateStruct;',
+        'pub enum PublicEnum {}',
+        'pub trait PublicTrait {}',
+        'pub type PublicType = i32;',
+        'pub const MY_CONST: i32 = 123;',
+        'pub fn public_fn() {}',
+        'fn private_fn() {}',
+      ].join('\n'),
+    );
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    t.true(result.includes('FILE src/example.rs'));
+    t.true(result.includes('LANG rust'));
+    t.true(result.includes('IMPORTS'));
+    t.true(result.includes('EXPORTS'));
+    t.true(result.includes('DECLARATIONS'));
+
+    t.regex(result, /std::collections: HashMap/);
+    t.regex(result, /std::io: self Write/);
+    t.regex(result, /std: my_fs/);
+
+    t.regex(result, /type PublicStruct line=\d+ exported/);
+    t.regex(result, /type PrivateStruct line=\d+\s*$/m); // not exported
+    t.regex(result, /enum PublicEnum line=\d+ exported/);
+    t.regex(result, /interface PublicTrait line=\d+ exported/);
+    t.regex(result, /type PublicType line=\d+ exported/);
+    t.regex(result, /const MY_CONST line=\d+ exported/);
+    t.regex(result, /function public_fn line=\d+ exported/);
+    t.regex(result, /function private_fn line=\d+\s*$/m); // not exported
+
+    // exports
+    t.regex(result, /export type PublicStruct line=\d+/);
+    t.regex(result, /export enum PublicEnum line=\d+/);
+    t.regex(result, /export interface PublicTrait line=\d+/);
+    t.regex(result, /export type PublicType line=\d+/);
+    t.regex(result, /export const MY_CONST line=\d+/);
+    t.regex(result, /export function public_fn line=\d+/);
+  });
+});
+
+test.serial('outline: Java files extract imports and declarations', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'src/Example.java';
+    const absPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(
+      absPath,
+      [
+        'package com.example;',
+        'import java.util.List;',
+        'import static org.junit.Assert.assertEquals;',
+        'public class Example {',
+        '    public Example() {}',
+        '    public void doSomething() {}',
+        '    private String calculate() { return "java"; }',
+        '}',
+      ].join('\n'),
+    );
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    t.true(result.includes('FILE src/Example.java'));
+    t.true(result.includes('LANG java'));
+    t.regex(result, /java.util.List: List line=2/);
+    t.regex(result, /org.junit.Assert.assertEquals: assertEquals line=3/);
+    t.regex(result, /class Example line=4 exported/);
+    t.regex(result, /method Example line=5 exported/);
+    t.regex(result, /method doSomething line=6 exported/);
+    t.regex(result, /method calculate line=7/);
+    t.false(result.includes('method calculate line=7 exported'));
+  });
+});
+
+test.serial('outline: C# files extract imports and declarations', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'src/Example.cs';
+    const absPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(
+      absPath,
+      [
+        'using System;',
+        'using System.Collections.Generic;',
+        'namespace App {',
+        '    public class Example {',
+        '        public Example() {}',
+        '        public void DoSomething() {}',
+        '        private string GetName() { return "cs"; }',
+        '    }',
+        '    public struct MyStruct {}',
+        '}',
+      ].join('\n'),
+    );
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    t.true(result.includes('FILE src/Example.cs'));
+    t.true(result.includes('LANG csharp'));
+    t.regex(result, /System: System line=1/);
+    t.regex(result, /System.Collections.Generic: Generic line=2/);
+    t.regex(result, /class Example line=4 exported/);
+    t.regex(result, /method Example line=5 exported/);
+    t.regex(result, /method DoSomething line=6 exported/);
+    t.regex(result, /method GetName line=7/);
+    t.regex(result, /class MyStruct line=9 exported/);
+  });
+});
+
+test.serial('outline: C/C++ files extract imports and declarations', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'src/example.cpp';
+    const absPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(
+      absPath,
+      [
+        '#include <vector>',
+        '#include "helper.h"',
+        'struct Point {',
+        '    int x;',
+        '};',
+        'class Calculator {',
+        'public:',
+        '    int add(int a, int b) { return a + b; }',
+        '};',
+        'int main() {',
+        '    return 0;',
+        '}',
+      ].join('\n'),
+    );
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    t.true(result.includes('FILE src/example.cpp'));
+    t.true(result.includes('LANG cpp'));
+    t.regex(result, /<vector>: side-effect line=1/);
+    t.regex(result, /\.\/helper.h: side-effect line=2/);
+    t.regex(result, /class Point line=3 exported/);
+    t.regex(result, /class Calculator line=6 exported/);
+    t.regex(result, /method add line=8 exported/);
+    t.regex(result, /function main line=10 exported/);
+  });
+});
+
+test.serial('outline: Ruby files extract imports and declarations', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'src/example.rb';
+    const absPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(
+      absPath,
+      [
+        "require 'json'",
+        "require_relative 'helper'",
+        'module MyModule',
+        '    class MyClass',
+        '    end',
+        'end',
+        'def top_level_method',
+        'end',
+      ].join('\n'),
+    );
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    t.true(result.includes('FILE src/example.rb'));
+    t.true(result.includes('LANG ruby'));
+    t.regex(result, /json: side-effect line=1/);
+    t.regex(result, /helper: side-effect line=2/);
+    t.regex(result, /class MyModule line=3 exported/);
+    t.regex(result, /class MyClass line=4 exported/);
+    t.regex(result, /function top_level_method line=7 exported/);
+  });
+});
+
+test.serial('outline: PHP files extract imports and declarations', async (t) => {
+  await withTempWorkspace(async (dir) => {
+    const filePath = 'src/example.php';
+    const absPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(
+      absPath,
+      [
+        '<?php',
+        'namespace App\\Core;',
+        'use App\\Utils\\Helper;',
+        'class Controller {',
+        '    public function index() {}',
+        '}',
+        'interface Service {}',
+        'function global_func() {}',
+      ].join('\n'),
+    );
+
+    const result = await readCodeOutlineToolDefinition.execute({ path: filePath });
+
+    t.true(result.includes('FILE src/example.php'));
+    t.true(result.includes('LANG php'));
+    t.regex(result, /App\\Core: side-effect line=2/);
+    t.regex(result, /App\\Utils\\Helper: side-effect line=3/);
+    t.regex(result, /class Controller line=4 exported/);
+    t.regex(result, /function index line=5 exported/);
+    t.regex(result, /interface Service line=7 exported/);
+    t.regex(result, /function global_func line=8 exported/);
+  });
+});

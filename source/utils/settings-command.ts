@@ -70,6 +70,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.agent.retryAttempts.source,
     },
     {
+      key: SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS,
+      value: settings.agent.maxParallelToolCalls.value,
+      source: settings.agent.maxParallelToolCalls.source,
+    },
+    {
       key: SETTING_KEYS.SHELL_TIMEOUT,
       value: settings.shell.timeout.value,
       source: settings.shell.timeout.source,
@@ -195,6 +200,15 @@ export function createSettingsCommand({
         }
         if (parsedValue < 0 || parsedValue > 2) {
           addSystemMessage(`Error: ${SETTING_KEYS.AGENT_TEMPERATURE} must be between 0 and 2`);
+          return true;
+        }
+      }
+
+      if (key === SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS) {
+        if (typeof parsedValue !== 'number' || !Number.isInteger(parsedValue) || parsedValue < 1) {
+          addSystemMessage(
+            `Error: ${SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS} must be a whole number greater than or equal to 1`,
+          );
           return true;
         }
       }

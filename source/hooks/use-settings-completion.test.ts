@@ -15,6 +15,7 @@ const MOCK_SETTING_KEYS = {
   AGENT_PROVIDER: 'agent.provider',
   AGENT_MAX_TURNS: 'agent.maxTurns',
   AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
+  AGENT_MAX_PARALLEL_TOOL_CALLS: 'agent.maxParallelToolCalls',
   AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl',
   AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer',
@@ -43,6 +44,7 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
   'agent.provider': 'AI provider (openai, openrouter)',
   'agent.maxTurns': 'Maximum conversation turns',
   'agent.retryAttempts': 'Number of retry attempts for failed requests',
+  'agent.maxParallelToolCalls': 'Maximum number of tool calls allowed to run at the same time',
   'agent.openrouter.apiKey': 'OpenRouter API key',
   'agent.openrouter.baseUrl': 'OpenRouter base URL',
   'agent.openrouter.referrer': 'OpenRouter referrer',
@@ -138,6 +140,7 @@ test('buildSettingsList - includes all non-sensitive setting keys', (t) => {
     'agent.model',
     'agent.reasoningEffort',
     'agent.maxTurns',
+    'agent.maxParallelToolCalls',
     'shell.timeout',
     'logging.logLevel',
   ];
@@ -251,6 +254,7 @@ test('getSettingCategory - groups settings by task-oriented menu tabs', (t) => {
   t.is(getSettingCategory('shell.autoApproveMode').id, 'approvals');
   t.is(getSettingCategory('shell.timeout').id, 'shell');
   t.is(getSettingCategory('app.searchViaShell').id, 'search');
+  t.is(getSettingCategory('agent.maxParallelToolCalls').id, 'advanced');
   t.is(getSettingCategory('agent.subagentWorkerModel').id, 'subagents');
   t.is(getSettingCategory('ui.pasteThreshold').id, 'uiLogging');
 });

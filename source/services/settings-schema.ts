@@ -11,6 +11,12 @@ export const AgentSettingsSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   maxTurns: z.number().int().positive().default(100),
   retryAttempts: z.number().int().nonnegative().default(2),
+  maxParallelToolCalls: z
+    .number()
+    .int()
+    .positive()
+    .default(3)
+    .describe('Maximum number of tool calls allowed to run at the same time'),
   // NOTE: We do NOT validate provider existence here because the provider
   // registry can be extended at runtime from settings.json (custom providers).
   // We validate/fallback after SettingsService loads and registers runtime providers.
@@ -272,6 +278,7 @@ export interface SettingsWithSources {
     temperature: SettingWithSource<number | undefined>;
     maxTurns: SettingWithSource<number>;
     retryAttempts: SettingWithSource<number>;
+    maxParallelToolCalls: SettingWithSource<number>;
     provider: SettingWithSource<string>;
     openrouter: SettingWithSource<any>;
     mentorModel: SettingWithSource<string | undefined>;
@@ -352,6 +359,7 @@ export const SETTING_KEYS = {
   AGENT_PROVIDER: 'agent.provider',
   AGENT_MAX_TURNS: 'agent.maxTurns',
   AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
+  AGENT_MAX_PARALLEL_TOOL_CALLS: 'agent.maxParallelToolCalls',
   AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey', // Sensitive - env only
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
   AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer', // Sensitive - env only
@@ -411,6 +419,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_TEMPERATURE,
   SETTING_KEYS.AGENT_PROVIDER,
   SETTING_KEYS.AGENT_RETRY_ATTEMPTS,
+  SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS,
   SETTING_KEYS.AGENT_MENTOR_MODEL,
   SETTING_KEYS.AGENT_MENTOR_PROVIDER,
   SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
@@ -486,6 +495,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     reasoningEffort: 'default',
     maxTurns: 100,
     retryAttempts: 2,
+    maxParallelToolCalls: 3,
     provider: 'openai',
     openrouter: {
       // defaults empty; can be provided via env or config

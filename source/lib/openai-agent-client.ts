@@ -24,6 +24,7 @@ import { isFlexServiceTierTimeout } from '../utils/flex-service-tier.js';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
 import type { ConversationEvent } from '../services/conversation-events.js';
 import { fetchModels, getModelDefaultReasoningLevel } from '../services/model-service.js';
+import { ToolExecutionLimiter } from './tool-execution-limiter.js';
 
 /**
  * Wraps a tool definition's needsApproval so that structurally invalid params
@@ -94,6 +95,7 @@ export class OpenAIAgentClient {
   #currentCorrelationId: string | null = null;
   #retryCallback: (() => void) | null = null;
   #runner: Runner | null = null;
+  #toolExecutionLimiter: ToolExecutionLimiter;
   #serviceTierOverrideForNextRequest: 'standard' | null = null;
   #toolInterceptors: ((name: string, params: any, toolCallId?: string) => Promise<string | null>)[] = [];
   #logger: ILoggingService;
@@ -155,6 +157,7 @@ export class OpenAIAgentClient {
       settingsService: this.#settings,
       executionContext: this.#executionContext,
     });
+    this.#toolExecutionLimiter = new ToolExecutionLimiter(() => this.#getMaxParallelToolCalls());
     this.#reasoningEffort = reasoningEffort;
     this.#temperature = this.#settings.get<number | undefined>('agent.temperature');
     this.#provider = this.#settings.get<string>('agent.provider') || 'openai';
@@ -197,6 +200,10 @@ export class OpenAIAgentClient {
       ];
       if (rebuildKeys.includes(changedKey)) {
         this.#refreshAgent();
+      }
+
+      if (changedKey === 'agent.maxParallelToolCalls') {
+        this.#toolExecutionLimiter.notifyLimitChanged();
       }
     });
 
@@ -277,6 +284,16 @@ export class OpenAIAgentClient {
       }
     }
     return null;
+  }
+
+  #getMaxParallelToolCalls(): number {
+    const rawValue = this.#settings.get<number | undefined>('agent.maxParallelToolCalls');
+    const numericValue = Number(rawValue);
+    if (!Number.isFinite(numericValue)) {
+      return 3;
+    }
+
+    return Math.max(1, Math.floor(numericValue));
   }
 
   #getProviderCapabilities(providerId: string): {
@@ -906,6 +923,34 @@ export class OpenAIAgentClient {
       providerId: this.#provider,
       capabilities: providerCapabilities,
     });
+    const executeWithToolConcurrency = async <T>(
+      details: any,
+      runTask: (wrappedDetails: any) => Promise<T>,
+    ): Promise<T> => {
+      const parentSignal = this.#currentAbortController?.signal;
+      const toolSignal = details?.signal;
+      const combined = combineAbortSignals(parentSignal, toolSignal);
+      const combinedSignal = combined?.signal;
+      const cleanupSignal = combined?.cleanup;
+
+      const wrappedDetails = details
+        ? Object.create(Object.getPrototypeOf(details), {
+            ...Object.getOwnPropertyDescriptors(details),
+            ...(combinedSignal
+              ? { signal: { value: combinedSignal, writable: true, enumerable: true, configurable: true } }
+              : {}),
+          })
+        : combinedSignal
+        ? { signal: combinedSignal }
+        : undefined;
+
+      try {
+        return await this.#toolExecutionLimiter.run(() => runTask(wrappedDetails), combinedSignal);
+      } finally {
+        cleanupSignal?.();
+      }
+    };
+
     const tools: Tool[] = toolDefinitions
       .filter((definition) => {
         // Exclude custom apply_patch if we're using native one
@@ -946,31 +991,11 @@ export class OpenAIAgentClient {
                 return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
               }
 
-              // Combine parent abort signal with any tool timeout signal passed by details
-              const parentSignal = this.#currentAbortController?.signal;
-              const toolSignal = details?.signal;
-              const combined = combineAbortSignals(parentSignal, toolSignal);
-              const combinedSignal = combined?.signal;
-              const cleanupSignal = combined?.cleanup;
-
-              const wrappedDetails = details
-                ? Object.create(Object.getPrototypeOf(details), {
-                    ...Object.getOwnPropertyDescriptors(details),
-                    ...(combinedSignal
-                      ? { signal: { value: combinedSignal, writable: true, enumerable: true, configurable: true } }
-                      : {}),
-                  })
-                : combinedSignal
-                ? { signal: combinedSignal }
-                : undefined;
-
-              try {
+              return executeWithToolConcurrency(details, async (wrappedDetails) => {
                 // Normal execution with combined abort signal
                 const result = await definition.execute(params, _context, wrappedDetails);
                 return trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
-              } finally {
-                cleanupSignal?.();
-              }
+              });
             },
           }),
           definition.parameters,
@@ -1016,9 +1041,11 @@ export class OpenAIAgentClient {
             const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');
             return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
           }
-          const result = await originalInvoke.call(nativePatchTool, runContext, normalizedInput, details);
           const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');
-          return trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+          return executeWithToolConcurrency(details, async (wrappedDetails) => {
+            const result = await originalInvoke.call(nativePatchTool, runContext, normalizedInput, wrappedDetails);
+            return trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+          });
         };
       }
 

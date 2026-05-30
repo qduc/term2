@@ -130,6 +130,20 @@ test('SettingsSchema includes app.orchestratorMode, which defaults to false and 
   t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.APP_ORCHESTRATOR_MODE));
 });
 
+test('SettingsSchema includes agent.maxParallelToolCalls, which defaults to 3 and is modifiable at runtime', (t) => {
+  const parsed = SettingsSchema.parse({ agent: {} });
+  t.is(parsed.agent?.maxParallelToolCalls, 3);
+
+  const parsedValue = SettingsSchema.parse({ agent: { maxParallelToolCalls: 6 } });
+  t.is(parsedValue.agent?.maxParallelToolCalls, 6);
+
+  t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS));
+});
+
+test('SettingsSchema rejects non-positive agent.maxParallelToolCalls values', (t) => {
+  t.throws(() => SettingsSchema.parse({ agent: { maxParallelToolCalls: 0 } }));
+});
+
 test('startup normalization: persisted orchestratorMode=true with implicit lite (positional prompt) does not produce liteMode=true', (t) => {
   // Simulate the cli.tsx startup logic:
   // - persisted/resumed settings have orchestratorMode: true

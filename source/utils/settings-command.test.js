@@ -14,6 +14,7 @@ const baseSettings = {
     provider: { value: 'openai', source: 'default' },
     maxTurns: { value: 20, source: 'default' },
     retryAttempts: { value: 2, source: 'default' },
+    maxParallelToolCalls: { value: 3, source: 'default' },
   },
   shell: {
     timeout: { value: 120000, source: 'default' },
@@ -66,6 +67,7 @@ test('formatSettingsSummary renders values with sources', (t) => {
   t.true(summary.includes('agent.model: gpt-5.1 (default)'));
   t.true(summary.includes('shell.timeout: 120000 (default)'));
   t.true(summary.includes('logging.logLevel: info (default)'));
+  t.true(summary.includes('agent.maxParallelToolCalls: 3 (default)'));
 });
 
 test('viewing all settings with no args prompts for autocomplete', (t) => {
@@ -103,6 +105,16 @@ test('setting runtime-modifiable values updates service and applies runtime hook
   t.deepEqual(deps.setCalls, [{ key: 'agent.model', value: 'gpt-4o' }]);
   t.deepEqual(deps.applied, [{ key: 'agent.model', value: 'gpt-4o' }]);
   t.true(deps.messages[0].includes('Set agent.model to gpt-4o'));
+});
+
+test('setting agent.maxParallelToolCalls validates positive integers', (t) => {
+  const deps = createDeps();
+  const command = createSettingsCommand(deps);
+  command.action('agent.maxParallelToolCalls 0');
+
+  t.deepEqual(deps.setCalls, []);
+  t.deepEqual(deps.applied, []);
+  t.true(deps.messages[0].includes('greater than or equal to 1'));
 });
 
 test('refuses to set startup-only values at runtime', (t) => {

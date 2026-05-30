@@ -80,6 +80,7 @@ test('SettingsService initializes with defaults', async (t) => {
   t.is(service.get('agent.temperature'), undefined);
   t.is(service.get('agent.maxTurns'), 100);
   t.is(service.get('agent.retryAttempts'), 2);
+  t.is(service.get('agent.maxParallelToolCalls'), 3);
   t.is(service.get('shell.timeout'), 120000);
   t.is(service.get('shell.maxOutputLines'), 1000);
   t.is(service.get('shell.maxOutputChars'), 10000);
@@ -344,6 +345,10 @@ test('set() modifies runtime-modifiable settings', async (t) => {
   service.set('agent.temperature', 0.2);
   t.is(service.get('agent.temperature'), 0.2);
   t.is(service.getSource('agent.temperature'), 'cli');
+
+  service.set('agent.maxParallelToolCalls', 5);
+  t.is(service.get('agent.maxParallelToolCalls'), 5);
+  t.is(service.getSource('agent.maxParallelToolCalls'), 'cli');
 });
 
 test('set() throws for startup-only settings', async (t) => {
@@ -372,6 +377,7 @@ test('isRuntimeModifiable identifies correct settings', async (t) => {
   t.true(service.isRuntimeModifiable('agent.reasoningEffort'));
   t.true(service.isRuntimeModifiable('agent.temperature'));
   t.true(service.isRuntimeModifiable('agent.retryAttempts'));
+  t.true(service.isRuntimeModifiable('agent.maxParallelToolCalls'));
   t.true(service.isRuntimeModifiable('tools.editHealingModel'));
   t.true(service.isRuntimeModifiable('tools.editHealingProvider'));
   t.true(service.isRuntimeModifiable('shell.timeout'));
@@ -454,6 +460,8 @@ test('getAll() returns all settings with sources', async (t) => {
   t.is(all.agent.model.source, 'cli');
   t.is(all.agent.reasoningEffort.value, 'default');
   t.is(all.agent.reasoningEffort.source, 'default');
+  t.is(all.agent.maxParallelToolCalls.value, 3);
+  t.is(all.agent.maxParallelToolCalls.source, 'default');
 });
 
 test('getAll() maps optional nested values and sources for agent.temperature and webSearch.tavily', async (t) => {

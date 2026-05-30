@@ -260,6 +260,38 @@ test.serial('listConversations: lists sessions sorted by mtime desc', (t) => {
   t.is(list[0].projectPath, '/p2');
 });
 
+test.serial('listConversations: filters sessions by workspace and ssh host', (t) => {
+  const id1 = persistenceModule.generateId();
+  const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
+  w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/p1' });
+  void w1.close();
+
+  const id2 = persistenceModule.generateId();
+  const w2 = createConversationLogWriter({ sessionId: id2, dir: testDir, logger: stubLogger });
+  w2.init({ id: id2, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/p2' });
+  void w2.close();
+
+  const id3 = persistenceModule.generateId();
+  const w3 = createConversationLogWriter({ sessionId: id3, dir: testDir, logger: stubLogger });
+  w3.init({ id: id3, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/workspace/p1', sshHost: 'host1' });
+  void w3.close();
+
+  // Filter for local /workspace/p1
+  const listP1Local = persistenceModule.listConversations('/workspace/p1');
+  t.is(listP1Local.length, 1);
+  t.is(listP1Local[0].id, id1);
+
+  // Filter for remote /workspace/p1 on host1
+  const listP1Host1 = persistenceModule.listConversations('/workspace/p1', 'host1');
+  t.is(listP1Host1.length, 1);
+  t.is(listP1Host1[0].id, id3);
+
+  // Filter for /workspace/p2
+  const listP2Local = persistenceModule.listConversations('/workspace/p2');
+  t.is(listP2Local.length, 1);
+  t.is(listP2Local[0].id, id2);
+});
+
 test.serial('loadConversation: returns null when expected project path differs', (t) => {
   const id = persistenceModule.generateId();
   const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });

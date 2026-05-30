@@ -253,7 +253,7 @@ interface ConversationListEntry {
   messageCount?: number;
 }
 
-export function listConversations(): ConversationListEntry[] {
+export function listConversations(expectedProjectPath?: string, expectedSshHost?: string): ConversationListEntry[] {
   const dir = getConversationsDir();
   try {
     if (!fs.existsSync(dir)) {
@@ -301,7 +301,7 @@ export function listConversations(): ConversationListEntry[] {
         }
 
         const init = initEnvelope.event;
-        entries.push({
+        const entry: ConversationListEntry = {
           id: init.id,
           updatedAt: stat.mtime.toISOString(),
           ...(init.projectPath ? { projectPath: init.projectPath } : {}),
@@ -311,7 +311,15 @@ export function listConversations(): ConversationListEntry[] {
           model: init.model,
           provider: init.provider,
           messageCount,
-        });
+        };
+
+        if (expectedProjectPath !== undefined || expectedSshHost !== undefined) {
+          if (!matchesEntryContext(entry, expectedProjectPath, expectedSshHost)) {
+            continue;
+          }
+        }
+
+        entries.push(entry);
       } catch {
         // skip
       }

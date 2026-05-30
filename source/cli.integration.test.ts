@@ -53,9 +53,26 @@ test('CLI --resume ls prints list of conversations and exits', (t) => {
   };
   fs.writeFileSync(filePath, JSON.stringify(initEnvelope) + '\n' + JSON.stringify(userEnvelope) + '\n', 'utf-8');
 
-  // Also touch the file so listConversations gets mtime
+  // Create a second mock conversation from a different project path
+  const otherConvId = 'b22d4fae-7dec-11d0-a765-00a0c91e6bf6';
+  const otherFilePath = path.join(testDir, `${otherConvId}.jsonl`);
+  const otherInitEnvelope = {
+    v: 1,
+    seq: 1,
+    ts: '2026-05-28T14:40:16.000Z',
+    event: {
+      type: 'session_init',
+      id: otherConvId,
+      createdAt: '2026-05-28T14:40:16.000Z',
+      projectPath: '/Users/qduc/src/other-project',
+    },
+  };
+  fs.writeFileSync(otherFilePath, JSON.stringify(otherInitEnvelope) + '\n', 'utf-8');
+
+  // Also touch the files so listConversations gets mtime
   const now = new Date();
   fs.utimesSync(filePath, now, now);
+  fs.utimesSync(otherFilePath, now, now);
 
   // Run the built CLI script with environment variable and --resume ls
   // We point to dist/cli.js. Since the test runner compiles TS, dist/cli.js is up to date.
@@ -71,6 +88,7 @@ test('CLI --resume ls prints list of conversations and exits', (t) => {
 
   t.true(stdout.includes('Recent Conversations (last 10):'));
   t.true(stdout.includes(convId));
+  t.false(stdout.includes(otherConvId));
   t.false(stdout.includes('/Users/qduc/src/term2'));
   t.true(stdout.includes('hello this is a test prompt'));
   t.true(stdout.includes('1 message'));
@@ -111,4 +129,29 @@ test('CLI --resume list also works', (t) => {
 
   t.true(stdout.includes('Recent Conversations (last 10):'));
   t.true(stdout.includes(convId));
+});
+
+test('CLI --resume prints message and exits when no conversation is found', (t) => {
+  const cliPath = path.resolve('dist/cli.js');
+
+  let error: any;
+  let stderr = '';
+  try {
+    execSync(`node ${cliPath} --resume dummy`, {
+      env: {
+        ...process.env,
+        TERM2_CONVERSATIONS_DIR: testDir,
+        DISABLE_LOGGING: '1',
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (err: any) {
+    error = err;
+    stderr = err.stderr.toString();
+  }
+
+  t.truthy(error);
+  t.is(error.status, 1);
+  t.true(stderr.includes('No conversation found to resume (dummy).'));
+  t.true(stderr.includes('Run "term2 --resume ls" to list available conversations.'));
 });

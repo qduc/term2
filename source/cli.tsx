@@ -163,13 +163,20 @@ const resumeRequested = Boolean(cli.flags.resume);
 const forkRequested = Boolean(cli.flags.fork);
 const resumeTarget = resumeRequested ? cli.input[0]?.trim() : undefined;
 
+const resumeProjectPath = cli.flags.ssh ? cli.flags.remoteDir?.trim() || undefined : process.cwd();
+const expectedSshHost = cli.flags.ssh
+  ? cli.flags.ssh.includes('@')
+    ? cli.flags.ssh.split('@')[1]
+    : cli.flags.ssh
+  : undefined;
+
 if (resumeRequested && cli.input.length > 1) {
   console.error('Error: --resume accepts at most one conversation id.');
   process.exit(1);
 }
 
 if (resumeRequested && (resumeTarget === 'ls' || resumeTarget === 'list')) {
-  const conversations = listConversations().slice(0, 10);
+  const conversations = listConversations(resumeProjectPath, expectedSshHost).slice(0, 10);
   const formatted = formatResumeList(conversations);
   console.log(formatted);
   process.exit(0);
@@ -222,12 +229,6 @@ const validatedReasoningEffort: ModelSettingsReasoningEffort | undefined =
     ? (reasoningEffort as ModelSettingsReasoningEffort)
     : undefined;
 
-const resumeProjectPath = cli.flags.ssh ? cli.flags.remoteDir?.trim() || undefined : process.cwd();
-const expectedSshHost = cli.flags.ssh
-  ? cli.flags.ssh.includes('@')
-    ? cli.flags.ssh.split('@')[1]
-    : cli.flags.ssh
-  : undefined;
 let resumedConversation: RestoredState | null = null;
 let resumedSourceId: string | undefined;
 if (resumeRequested) {
@@ -515,7 +516,9 @@ if (resumedConversation) {
   }
 } else if (resumeRequested) {
   const target = resumeTarget ?? 'last';
-  console.warn(`No conversation found to resume (${target}). Starting new conversation.`);
+  console.error(`No conversation found to resume (${target}).`);
+  console.error('Run "term2 --resume ls" to list available conversations.');
+  process.exit(1);
 }
 
 // Refuse to open a session whose log file is locked by another writer (live or stale).

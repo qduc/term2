@@ -5,7 +5,10 @@ import { parseModelProviderArg } from './utils/model-provider-arg.js';
 
 import { Box, useApp, useInput, useStdout } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
-import MessageList, { MESSAGE_HORIZONTAL_PADDING } from './components/MessageList.js';
+import MessageList, {
+  EMPTY_RESTORED_STATIC_MESSAGE_IDS,
+  MESSAGE_HORIZONTAL_PADDING,
+} from './components/MessageList.js';
 import BottomArea from './components/BottomArea.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import type { ConversationService } from './services/conversation-service.js';
@@ -37,6 +40,7 @@ interface AppProps {
   onExitUsage?: () => void;
   sessionId: string;
   initialMessages?: Message[];
+  restoredStaticMessageIds?: string[];
   logWriter?: { append: (event: any) => void };
   onRotateWriter?: (newSessionId: string) => void;
   generateId: () => string;
@@ -90,6 +94,7 @@ const App: FC<AppProps> = ({
   onExitUsage,
   sessionId: initialSessionId,
   initialMessages = [],
+  restoredStaticMessageIds = EMPTY_RESTORED_STATIC_MESSAGE_IDS,
   logWriter,
   onRotateWriter,
   generateId,
@@ -594,6 +599,7 @@ const App: FC<AppProps> = ({
             bannerItems={startupBannerIds}
             settingsService={settingsService}
             isShellMode={isShellMode}
+            restoredStaticMessageIds={restoredStaticMessageIds}
           />
         </Box>
 

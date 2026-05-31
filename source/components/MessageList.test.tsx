@@ -1,7 +1,7 @@
 import test from 'ava';
 import React from 'react';
 import { render } from 'ink-testing-library';
-import MessageList, { splitStaticHistory } from './MessageList.js';
+import MessageList, { splitStaticHistory, shouldCommitMessageToStatic } from './MessageList.js';
 import { createMockSettingsService } from '../services/settings-service.mock.js';
 
 const countOccurrences = (text, pattern) => text.split(pattern).length - 1;
@@ -54,6 +54,21 @@ test('MessageList retains static history across rerenders', (t) => {
   const output = renderer.lastFrame() ?? '';
   t.true(output.includes('one'));
   t.true(output.includes('two'));
+});
+
+test('MessageList commits restored finalized messages to Static on initial render', (t) => {
+  const renderer = render(
+    <MessageList
+      messages={[{ id: 'restored-bot', sender: 'bot', status: 'finalized', text: 'restored answer' }]}
+      restoredStaticMessageIds={['restored-bot']}
+    />,
+  );
+
+  const output = renderer.lastFrame() ?? '';
+  // Ink writes <Static> items separately from the live frame; dynamic-only
+  // rendering produces a single frame for this input.
+  t.true(renderer.frames.length > 1);
+  t.true(output.includes('restored answer'));
 });
 
 test('MessageList updates static history when a message with the same id is corrected', (t) => {
@@ -214,6 +229,30 @@ test('MessageList renders active and static wrapped text with the same line brea
 
   t.true(activeLines.length > 1);
   t.deepEqual(staticLines, activeLines);
+});
+
+test('shouldCommitMessageToStatic commits restored finalized history immediately on first render', (t) => {
+  t.true(
+    shouldCommitMessageToStatic({
+      hasActiveMessages: false,
+      hasExistingStaticHistory: false,
+      wasPreviouslyActive: false,
+      hasPendingCandidateSignature: false,
+      isRestoredMessage: true,
+    }),
+  );
+});
+
+test('shouldCommitMessageToStatic keeps fresh finalized messages deferred on first render', (t) => {
+  t.false(
+    shouldCommitMessageToStatic({
+      hasActiveMessages: false,
+      hasExistingStaticHistory: false,
+      wasPreviouslyActive: false,
+      hasPendingCandidateSignature: false,
+      isRestoredMessage: false,
+    }),
+  );
 });
 
 test('splitStaticHistory keeps running command messages active regardless of position', (t) => {

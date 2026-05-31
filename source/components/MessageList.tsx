@@ -11,6 +11,7 @@ type Props = {
   bannerItems?: string[];
   settingsService?: SettingsService;
   isShellMode?: boolean;
+  restoredStaticMessageIds?: readonly string[];
 };
 
 type MessageLike = {
@@ -34,6 +35,7 @@ type StaticMessageItem = {
 type StaticItem = StaticBannerItem | StaticMessageItem;
 
 export const MESSAGE_HORIZONTAL_PADDING = 2;
+export const EMPTY_RESTORED_STATIC_MESSAGE_IDS: readonly string[] = [];
 
 const canRenderStatically = (message: MessageLike) => {
   if (message.sender === 'reasoning') {
@@ -92,11 +94,44 @@ const createMessageSignature = (message: MessageLike) => {
   }
 };
 
-const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, isShellMode = false }) => {
+export const shouldCommitMessageToStatic = ({
+  hasActiveMessages,
+  hasExistingStaticHistory,
+  wasPreviouslyActive,
+  hasPendingCandidateSignature,
+  isRestoredMessage,
+}: {
+  hasActiveMessages: boolean;
+  hasExistingStaticHistory: boolean;
+  wasPreviouslyActive: boolean;
+  hasPendingCandidateSignature: boolean;
+  isRestoredMessage: boolean;
+}) => {
+  if (hasActiveMessages || wasPreviouslyActive) {
+    return true;
+  }
+
+  // Resumed conversations can arrive with a fully finalized history and no
+  // live tail. Commit that backlog immediately so Ink can keep it in Static.
+  if (isRestoredMessage && !hasExistingStaticHistory) {
+    return true;
+  }
+
+  return hasPendingCandidateSignature;
+};
+
+const MessageList: FC<Props> = ({
+  messages,
+  bannerItems = [],
+  settingsService,
+  isShellMode = false,
+  restoredStaticMessageIds = EMPTY_RESTORED_STATIC_MESSAGE_IDS,
+}) => {
   const { stdout } = useStdout();
 
   const terminalColumns = stdout.columns || 80;
   const contentWidth = Math.max(1, terminalColumns - MESSAGE_HORIZONTAL_PADDING * 2);
+  const restoredStaticMessageIdSet = useMemo(() => new Set(restoredStaticMessageIds), [restoredStaticMessageIds]);
 
   // Use useMemo to prevent array recreation on every render.
   // This stabilizes the references passed to Static and the active Box,
@@ -123,6 +158,7 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
     const deferred: MessageLike[] = [];
     const hasActiveMessages = active.length > 0;
     const previousActiveMessageIds = previousActiveMessageIdsRef.current;
+    const hasExistingStaticHistory = staticItemsRef.current.some((item) => item.kind === 'message');
 
     for (const bannerId of bannerItems) {
       if (seenBannerIdsRef.current.has(bannerId)) {
@@ -154,7 +190,13 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
         continue;
       }
 
-      const shouldCommitImmediately = hasActiveMessages || previousActiveMessageIds.has(message.id);
+      const shouldCommitImmediately = shouldCommitMessageToStatic({
+        hasActiveMessages,
+        hasExistingStaticHistory,
+        wasPreviouslyActive: previousActiveMessageIds.has(message.id),
+        hasPendingCandidateSignature: candidateMessageSignaturesRef.current.get(message.id) === signature,
+        isRestoredMessage: restoredStaticMessageIdSet.has(message.id),
+      });
       if (!shouldCommitImmediately && candidateMessageSignaturesRef.current.get(message.id) !== signature) {
         candidateMessageSignaturesRef.current.set(message.id, signature);
         deferred.push(message);
@@ -173,7 +215,7 @@ const MessageList: FC<Props> = ({ messages, bannerItems = [], settingsService, i
     previousActiveMessageIdsRef.current = new Set(active.map((message) => message.id));
 
     return { staticItems: staticItemsRef.current, deferredHistory: deferred };
-  }, [active, bannerItems, history]);
+  }, [active, bannerItems, history, restoredStaticMessageIdSet]);
 
   const dynamicItems = useMemo(() => [...deferredHistory, ...active], [deferredHistory, active]);
 

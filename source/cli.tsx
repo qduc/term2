@@ -517,12 +517,14 @@ if (hasPositionalPrompt) {
 effectiveSessionId = generateId();
 let effectiveCreatedAt = new Date().toISOString();
 let initialMessages: Message[] = [];
+let restoredStaticMessageIds: string[] = [];
 let effectiveHasConversationContent = false;
 
 if (resumedConversation) {
   effectiveSessionId = resumedConversation.id;
   effectiveCreatedAt = resumedConversation.createdAt;
   initialMessages = resumedConversation.messages as Message[];
+  restoredStaticMessageIds = initialMessages.map((message) => message.id);
   if (resumedConversation.usage) {
     sessionUsageAccumulator.add(resumedConversation.usage);
   }
@@ -656,6 +658,7 @@ const { waitUntilExit } = render(
         onExitUsage={printUsageOnce}
         sessionId={effectiveSessionId}
         initialMessages={initialMessages}
+        restoredStaticMessageIds={restoredStaticMessageIds}
         logWriter={logWriter}
         onRotateWriter={(newId) => {
           logWriter.append({ type: 'session_cleared' });

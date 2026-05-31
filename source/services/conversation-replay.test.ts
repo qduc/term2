@@ -367,6 +367,7 @@ test('replayEvents: assistant_turn maps items to SavedMessage[] in correct order
   t.is(restored.messages[0].sender, 'user');
   t.is(restored.messages[1].sender, 'reasoning');
   t.is(restored.messages[1].text, 'thinking');
+  t.is(restored.messages[1].status, 'finalized');
   t.is(restored.messages[2].sender, 'command');
   t.is(restored.messages[2].callId, 'call-1');
   t.is(restored.messages[2].status, 'completed');

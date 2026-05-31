@@ -193,6 +193,7 @@ function replayAssistantTurn(turn: PersistedAssistantTurn, turnId: string, usage
       messages.push({
         id: `reasoning-${turnId}-${index++}`,
         sender: 'reasoning',
+        status: 'finalized',
         text: item.text,
       });
     } else if (item.type === 'assistant_text') {

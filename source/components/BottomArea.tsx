@@ -36,6 +36,7 @@ export type BottomAreaProps = {
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
   onUndoSelect?: (item: UndoItem) => void;
   onSettingChange?: (key: string, value: any) => void;
+  onSystemMessage?: (text: string) => void;
   handoffState?: HandoffState | null;
   onHandoffConfirm?: () => void;
   onHandoffDecline?: () => void;
@@ -68,6 +69,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   undoMenuRef,
   onUndoSelect,
   onSettingChange,
+  onSystemMessage,
   handoffState,
   onHandoffConfirm,
   onHandoffDecline,
@@ -140,6 +142,7 @@ const BottomArea: FC<BottomAreaProps> = ({
             undoMenuRef={undoMenuRef}
             onUndoSelect={onUndoSelect}
             onSettingChange={onSettingChange}
+            onSystemMessage={onSystemMessage}
             onSlashTabComplete={onSlashTabComplete}
             promptLabel={
               handoffState?.stage === 'entering_message'

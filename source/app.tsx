@@ -624,6 +624,7 @@ const App: FC<AppProps> = ({
             undoMenuRef={undoMenuRef}
             onUndoSelect={handleUndoSelect}
             onSettingChange={applyRuntimeSetting}
+            onSystemMessage={addSystemMessage}
             handoffState={handoffState}
             onHandoffConfirm={handleHandoffConfirm}
             onHandoffDecline={handleHandoffDecline}

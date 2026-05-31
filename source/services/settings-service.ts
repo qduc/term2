@@ -276,6 +276,55 @@ export class SettingsService {
     return SENSITIVE_SETTING_KEYS.has(key);
   }
 
+  private validateAndApplySetting(key: string, value: any): void {
+    const nextSettings = structuredClone(this.settings);
+    const keys = key.split('.');
+    let obj: any = nextSettings;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!obj[keys[i]]) {
+        obj[keys[i]] = {};
+      }
+
+      obj = obj[keys[i]];
+    }
+
+    obj[keys[keys.length - 1]] = value;
+
+    const result = SettingsSchema.safeParse(nextSettings);
+    if (!result.success) {
+      const matchingIssue = result.error.issues.find((issue) => issue.path.join('.') === key) ?? result.error.issues[0];
+      const issuePath = matchingIssue?.path?.join('.') || key;
+      const issueMessage = matchingIssue?.message || 'Invalid setting value';
+      throw new Error(`Invalid value for '${issuePath}': ${issueMessage}`);
+    }
+
+    this.settings = result.data as SettingsData;
+    this.validateSelectedProvider();
+  }
+
+  private normalizeExclusiveAppModes(key: string, value: any): void {
+    if (
+      !key.startsWith('app.') ||
+      (key !== 'app.orchestratorMode' &&
+        key !== 'app.liteMode' &&
+        key !== 'app.planMode' &&
+        key !== 'app.mentorMode') ||
+      value !== true
+    ) {
+      return;
+    }
+
+    const app = this.settings.app ?? {};
+    this.settings.app = {
+      ...app,
+      orchestratorMode: key === 'app.orchestratorMode',
+      liteMode: key === 'app.liteMode',
+      planMode: key === 'app.planMode',
+      mentorMode: key === 'app.mentorMode',
+    };
+  }
+
   /**
    * Set a setting value (runtime modification)
    * Only runtime-modifiable settings can be changed.
@@ -292,21 +341,8 @@ export class SettingsService {
       throw new Error(`Cannot modify '${key}' at runtime. Requires restart.`);
     }
 
-    const keys = key.split('.');
-    let obj: any = this.settings;
-
-    // Navigate to parent
-    for (let i = 0; i < keys.length - 1; i++) {
-      if (!obj[keys[i]]) {
-        obj[keys[i]] = {};
-      }
-
-      obj = obj[keys[i]];
-    }
-
-    // Set value
-    const lastKey = keys[keys.length - 1];
-    obj[lastKey] = value;
+    this.validateAndApplySetting(key, value);
+    this.normalizeExclusiveAppModes(key, value);
 
     // Track source as 'cli' for runtime-set values
     this.sources.set(key, 'cli');
@@ -320,15 +356,6 @@ export class SettingsService {
       (key === 'app.orchestratorMode' || key === 'app.liteMode' || key === 'app.planMode' || key === 'app.mentorMode')
     ) {
       if (value === true) {
-        const app = this.settings.app ?? {};
-        const normalized = {
-          orchestratorMode: key === 'app.orchestratorMode',
-          liteMode: key === 'app.liteMode',
-          planMode: key === 'app.planMode',
-          mentorMode: key === 'app.mentorMode',
-        };
-        this.settings.app = { ...app, ...normalized };
-        // Update source entries for cleared sibling modes
         for (const modeKey of ['app.orchestratorMode', 'app.liteMode', 'app.planMode', 'app.mentorMode'] as const) {
           if (modeKey !== key) {
             this.sources.set(modeKey, 'cli');
@@ -367,6 +394,30 @@ export class SettingsService {
     // Persist to file unless the caller explicitly opts out
     const persist = options?.persist !== false;
     if (persist && !this.disableFilePersistence) {
+      this.saveToFile();
+    }
+
+    this.notifyChange(key);
+  }
+
+  /**
+   * Persist a setting even if it only takes effect after restart.
+   * This still validates against the full schema and updates in-memory state
+   * so the settings UI reflects the saved value immediately.
+   */
+  setPersistent(key: string, value: any): void {
+    if (this.isSensitive(key)) {
+      throw new Error(
+        `Cannot modify '${key}' - it is a sensitive setting that can only be configured via environment variables.`,
+      );
+    }
+
+    this.validateAndApplySetting(key, value);
+    this.normalizeExclusiveAppModes(key, value);
+
+    this.sources.set(key, 'cli');
+
+    if (!this.disableFilePersistence) {
       this.saveToFile();
     }
 

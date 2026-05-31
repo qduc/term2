@@ -473,6 +473,115 @@ test('settings value completion resets setting and reopens settings menu targeti
   t.true(frame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
 });
 
+test('settings value completion prefers typed custom numeric value over the selected current value', async (t) => {
+  const settingsService = createMockSettingsService({
+    'shell.timeout': 120000,
+  });
+
+  const mockSettingsCommand: SlashCommand = {
+    name: '/settings',
+    description: 'Settings',
+    action: () => {},
+    completion: {
+      type: 'settings',
+      trigger: '/settings ',
+      resetTrigger: '/settings reset ',
+    },
+  };
+
+  const { stdin } = render(
+    <InputProvider>
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        slashCommands={[...mockSlashCommands, mockSettingsCommand]}
+      />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(5);
+  await writeInput(stdin, '/settings shell.timeout 60000');
+  await flushReactUpdates(30);
+  await writeInput(stdin, '\r');
+  await flushReactUpdates(40);
+
+  t.is(settingsService.get('shell.timeout'), 60000);
+});
+
+test('settings value completion persists startup-only settings for the next session', async (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.maxTurns': 100,
+  });
+
+  const mockSettingsCommand: SlashCommand = {
+    name: '/settings',
+    description: 'Settings',
+    action: () => {},
+    completion: {
+      type: 'settings',
+      trigger: '/settings ',
+      resetTrigger: '/settings reset ',
+    },
+  };
+
+  const { stdin } = render(
+    <InputProvider>
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        slashCommands={[...mockSlashCommands, mockSettingsCommand]}
+      />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(5);
+  await writeInput(stdin, '/settings agent.maxTurns 30');
+  await flushReactUpdates(30);
+  await writeInput(stdin, '\r');
+  await flushReactUpdates(40);
+
+  t.is(settingsService.get('agent.maxTurns'), 30);
+});
+
+test('settings value completion shows restart notice for startup-only settings', async (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.maxTurns': 100,
+  });
+  const systemMessages: string[] = [];
+
+  const mockSettingsCommand: SlashCommand = {
+    name: '/settings',
+    description: 'Settings',
+    action: () => {},
+    completion: {
+      type: 'settings',
+      trigger: '/settings ',
+      resetTrigger: '/settings reset ',
+    },
+  };
+
+  const { stdin } = render(
+    <InputProvider>
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        slashCommands={[...mockSlashCommands, mockSettingsCommand]}
+        onSystemMessage={(text) => {
+          systemMessages.push(text);
+        }}
+      />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(5);
+  await writeInput(stdin, '/settings agent.maxTurns 30');
+  await flushReactUpdates(30);
+  await writeInput(stdin, '\r');
+  await flushReactUpdates(40);
+
+  t.deepEqual(systemMessages, ['Saved agent.maxTurns = 30. This setting applies after restart.']);
+});
+
 test('InputBox ignores focus sequences when not in text mode', async (t) => {
   const TestHarness = () => (
     <InputProvider>
@@ -485,14 +594,14 @@ test('InputBox ignores focus sequences when not in text mode', async (t) => {
 
   // Trigger slash commands mode by writing "/"
   await writeInput(stdin, '/');
-  await flushReactUpdates(20);
+  await flushReactUpdates(45);
 
   let frame = lastFrame() ?? '';
   t.true(frame.includes('Input:/|Mode:slash_commands'), frame);
 
   // Write focus-in sequence
   await writeInput(stdin, '\x1b[I');
-  await flushReactUpdates(20);
+  await flushReactUpdates(30);
 
   frame = lastFrame() ?? '';
   // Input should still be "/"
@@ -500,7 +609,7 @@ test('InputBox ignores focus sequences when not in text mode', async (t) => {
 
   // Write focus-out sequence
   await writeInput(stdin, '\x1b[O');
-  await flushReactUpdates(20);
+  await flushReactUpdates(30);
 
   frame = lastFrame() ?? '';
   // Input should still be "/"
@@ -536,4 +645,46 @@ test('InputBox ignores focus sequences when in text mode', async (t) => {
   frame = lastFrame() ?? '';
   // Input should still be empty
   t.true(frame.includes('Input:|Mode:text'), frame);
+});
+
+test('settings value completion shows current custom settings value in suggestions list', async (t) => {
+  const originalColumns = process.stdout.columns;
+  process.stdout.columns = 80;
+  t.teardown(() => {
+    process.stdout.columns = originalColumns;
+  });
+
+  const settingsService = createMockSettingsService({
+    'agent.maxTurns': 35,
+  });
+
+  const mockSettingsCommand: SlashCommand = {
+    name: '/settings',
+    description: 'Settings',
+    action: () => {},
+    completion: {
+      type: 'settings',
+      trigger: '/settings ',
+      resetTrigger: '/settings reset ',
+    },
+  };
+
+  const { lastFrame, stdin } = render(
+    <InputProvider>
+      <InputBox
+        {...defaultProps}
+        settingsService={settingsService}
+        slashCommands={[...mockSlashCommands, mockSettingsCommand]}
+      />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(5);
+
+  // Write trigger value to enter settings value completion mode
+  await writeInput(stdin, '/settings agent.maxTurns ');
+  await flushReactUpdates(45);
+
+  const frame = lastFrame() ?? '';
+  t.true(frame.includes('35 — Current value'), `Should show current custom value in completion list, got:\n${frame}`);
 });

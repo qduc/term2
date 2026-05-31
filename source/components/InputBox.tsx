@@ -63,6 +63,7 @@ type Props = {
   onUndoSelect?: (item: UndoItem) => void;
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
   onSettingChange?: (key: string, value: any) => void;
+  onSystemMessage?: (text: string) => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
   promptLabel?: string;
   allowEmptySubmit?: boolean;
@@ -70,6 +71,20 @@ type Props = {
 
 const isFocusReportingSequence = (input: string): boolean => {
   return input === '\x1b[I' || input === '\x1b[O' || input === '[I' || input === '[O';
+};
+
+const parseSubmittedSettingValue = (submittedValue: string, startsWithSettingsTrigger: boolean): any => {
+  const parts = submittedValue.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) {
+    return undefined;
+  }
+
+  const valueParts = startsWithSettingsTrigger ? parts.slice(2) : parts.slice(1);
+  if (valueParts.length === 0) {
+    return undefined;
+  }
+
+  return parseSettingValue(valueParts.join(' '));
 };
 
 const InputBox: FC<Props> = ({
@@ -83,6 +98,7 @@ const InputBox: FC<Props> = ({
   onUndoSelect,
   undoMenuRef,
   onSettingChange,
+  onSystemMessage,
   onSlashTabComplete,
   promptLabel,
   allowEmptySubmit = false,
@@ -224,27 +240,30 @@ const InputBox: FC<Props> = ({
       if (submitAfterInsert && key) {
         // Apply the setting directly
         const suggestion = settingsValue.getSelectedItem();
-        let parsedValue: any;
+        const submittedValue = typedValue ?? value;
+        const startsWithSettingsTrigger = submittedValue.startsWith(SETTINGS_TRIGGER);
+        const parsedTypedValue = typedValue
+          ? parseSubmittedSettingValue(submittedValue, startsWithSettingsTrigger)
+          : undefined;
+        const parsedSuggestionValue = suggestion ? parseSettingValue(suggestion.value) : undefined;
+        const shouldPreferTypedNumericValue =
+          settingsValue.isNumericSettings &&
+          parsedTypedValue !== undefined &&
+          String(parsedTypedValue) !== suggestion?.value;
 
-        if (suggestion) {
-          parsedValue = parseSettingValue(suggestion.value);
-        } else if (typedValue) {
-          // Extract value from the typed input.
-          // For /settings trigger: format is "/settings <key> <value>"
-          // For direct triggers like /effort: format is "/effort <value>"
-          const parts = typedValue.split(/\s+/).filter(Boolean);
-          if (parts.length >= 2) {
-            const valueParts = typedValue.startsWith(SETTINGS_TRIGGER) ? parts.slice(2) : parts.slice(1);
-            if (valueParts.length > 0) {
-              parsedValue = parseSettingValue(valueParts.join(' '));
-            }
-          }
-        }
+        const parsedValue = shouldPreferTypedNumericValue
+          ? parsedTypedValue
+          : parsedSuggestionValue ?? parsedTypedValue;
 
         if (parsedValue !== undefined) {
           try {
-            settingsService.set(key, parsedValue);
-            onSettingChange?.(key, parsedValue);
+            if (settingsService.isRuntimeModifiable(key)) {
+              settingsService.set(key, parsedValue);
+              onSettingChange?.(key, parsedValue);
+            } else {
+              settingsService.setPersistent(key, parsedValue);
+              onSystemMessage?.(`Saved ${key} = ${parsedValue}. This setting applies after restart.`);
+            }
           } catch {
             // Continue even if setting fails
           }
@@ -256,7 +275,6 @@ const InputBox: FC<Props> = ({
         // Only restore the settings completion menu when the input came from
         // /settings. Direct triggers like /effort or /auto-approve are top-level
         // menus — just close and clear the input after saving.
-        const submittedValue = typedValue ?? value;
         if (submittedValue.startsWith(SETTINGS_TRIGGER)) {
           reopenSettingsMenu(key);
         } else {
@@ -279,7 +297,7 @@ const InputBox: FC<Props> = ({
       settingsValue.close();
       return true;
     },
-    [settingsValue, value, onChange, cursorOffset, settingsService, onSettingChange],
+    [settingsValue, value, onChange, cursorOffset, settingsService, onSettingChange, onSystemMessage],
   );
 
   const insertSelectedModel = useCallback(

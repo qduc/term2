@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { scoreSubsequence } from '../utils/subsequence-filter.js';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings-service.js';
+import { SettingsSchema } from '../services/settings-schema.js';
 import { useSelection } from './use-selection.js';
 
 export type SettingValueSuggestion = {
@@ -11,16 +12,46 @@ export type SettingValueSuggestion = {
 
 const MAX_RESULTS = 10;
 
-const NUMBER_SETTING_KEYS = new Set([
-  'agent.temperature',
-  'agent.maxTurns',
-  'agent.retryAttempts',
-  'shell.timeout',
-  'shell.maxOutputLines',
-  'shell.maxOutputChars',
-  'ui.historySize',
-  'ssh.port',
-]);
+export function isNumberSetting(key: string): boolean {
+  const parts = key.split('.');
+  let currentSchema: any = SettingsSchema;
+
+  for (const part of parts) {
+    if (!currentSchema) return false;
+
+    // Unwrap wrappers like optional, default, nullable, effects
+    while (currentSchema.type) {
+      const typeName = currentSchema.type;
+      if (typeName === 'optional' || typeName === 'nullable' || typeName === 'default') {
+        currentSchema = currentSchema.def.innerType;
+      } else if (typeName === 'effects') {
+        currentSchema = currentSchema.def.schema;
+      } else {
+        break;
+      }
+    }
+
+    if (currentSchema.type === 'object' && currentSchema.def && currentSchema.def.shape) {
+      currentSchema = currentSchema.def.shape[part];
+    } else {
+      return false;
+    }
+  }
+
+  // Unwrap the final schema
+  while (currentSchema && currentSchema.type) {
+    const typeName = currentSchema.type;
+    if (typeName === 'optional' || typeName === 'nullable' || typeName === 'default') {
+      currentSchema = currentSchema.def.innerType;
+    } else if (typeName === 'effects') {
+      currentSchema = currentSchema.def.schema;
+    } else {
+      break;
+    }
+  }
+
+  return currentSchema && currentSchema.type === 'number';
+}
 
 const REASONING_EFFORT_VALUE_SUGGESTIONS: SettingValueSuggestion[] = [
   { value: 'none', description: 'No reasoning (fastest)' },
@@ -147,7 +178,7 @@ export function filterSettingValueSuggestionsByQuery(
 
   // For number settings, if the query itself is a valid number and not already
   // in the results as an exact match, add it as a "Custom value" option.
-  if (key && NUMBER_SETTING_KEYS.has(key) && trimmed && !results.some((r) => r.value === trimmed)) {
+  if (key && isNumberSetting(key) && trimmed && !results.some((r) => r.value === trimmed)) {
     const numValue = Number(trimmed);
     if (!isNaN(numValue)) {
       // Add to the START of results so it's the default choice
@@ -192,8 +223,23 @@ export const useSettingsValueCompletion = (
     if (!settingKey) return [];
     // settingsVersion is used to allow refresh when values change.
     void settingsVersion;
-    return buildSettingValueSuggestions(settingKey);
-  }, [settingKey, settingsVersion]);
+    const suggestions = [...buildSettingValueSuggestions(settingKey)];
+    try {
+      const currentValue = settingsService.get(settingKey);
+      if (currentValue !== undefined) {
+        const currentValueStr = String(currentValue);
+        if (!suggestions.some((s) => s.value === currentValueStr)) {
+          suggestions.unshift({
+            value: currentValueStr,
+            description: 'Current value',
+          });
+        }
+      }
+    } catch {
+      // Ignore
+    }
+    return suggestions;
+  }, [settingKey, settingsVersion, settingsService]);
 
   const filteredEntries = useMemo(() => {
     return filterSettingValueSuggestionsByQuery(allSuggestions, query, MAX_RESULTS, settingKey ?? undefined);
@@ -214,12 +260,21 @@ export const useSettingsValueCompletion = (
       // Get current value from settingsService and find it in suggestions
       try {
         const currentValue = settingsService.get(key);
-        const suggestions = buildSettingValueSuggestions(key);
-        const currentIndex =
-          currentValue !== undefined ? suggestions.findIndex((s) => s.value === String(currentValue)) : -1;
+        if (currentValue !== undefined) {
+          const currentValueStr = String(currentValue);
+          const suggestions = buildSettingValueSuggestions(key);
+          const hasCurrent = suggestions.some((s) => s.value === currentValueStr);
 
-        // If current value found in suggestions, select it; otherwise default to 0
-        setSelectedIndex(currentIndex >= 0 ? currentIndex : 0);
+          if (hasCurrent) {
+            const index = suggestions.findIndex((s) => s.value === currentValueStr);
+            setSelectedIndex(index >= 0 ? index : 0);
+          } else {
+            // Since it's not in suggestions, it will be prepended as "Current value" at index 0.
+            setSelectedIndex(0);
+          }
+        } else {
+          setSelectedIndex(0);
+        }
       } catch {
         // If there's an error getting the value, default to first item
         setSelectedIndex(0);
@@ -249,7 +304,7 @@ export const useSettingsValueCompletion = (
   }, [settingKey, settingsService, close, options]);
 
   const isNumericSettings = useMemo(() => {
-    return settingKey ? NUMBER_SETTING_KEYS.has(settingKey) : false;
+    return settingKey ? isNumberSetting(settingKey) : false;
   }, [settingKey]);
 
   return {

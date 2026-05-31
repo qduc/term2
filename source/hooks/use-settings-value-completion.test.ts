@@ -2,6 +2,7 @@ import test from 'ava';
 import {
   buildSettingValueSuggestions,
   filterSettingValueSuggestionsByQuery,
+  isNumberSetting,
   type SettingValueSuggestion,
 } from './use-settings-value-completion.js';
 
@@ -74,4 +75,22 @@ test('filterSettingValueSuggestionsByQuery does not include non-number custom va
   const result = filterSettingValueSuggestionsByQuery(suggestions, 'abc', 10, 'ui.historySize');
 
   t.is(result.length, 0);
+});
+
+test('isNumberSetting returns true for number setting keys', (t) => {
+  t.true(isNumberSetting('agent.maxTurns'));
+  t.true(isNumberSetting('agent.temperature'));
+  t.true(isNumberSetting('agent.retryAttempts'));
+  t.true(isNumberSetting('agent.maxParallelToolCalls'));
+  t.true(isNumberSetting('shell.timeout'));
+  t.true(isNumberSetting('ui.pasteThreshold'));
+  t.true(isNumberSetting('ssh.port'));
+});
+
+test('isNumberSetting returns false for non-number setting keys', (t) => {
+  t.false(isNumberSetting('agent.model'));
+  t.false(isNumberSetting('agent.provider'));
+  t.false(isNumberSetting('logging.logLevel'));
+  t.false(isNumberSetting('app.mentorMode'));
+  t.false(isNumberSetting('tools.enableEditHealing'));
 });

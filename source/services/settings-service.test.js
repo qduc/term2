@@ -365,6 +365,35 @@ test('set() throws for startup-only settings', async (t) => {
   t.true(error.message.includes('Cannot modify') && error.message.includes('at runtime'));
 });
 
+test('setPersistent() saves startup-only settings after validating them', async (t) => {
+  const settingsDir = getTestSettingsDir();
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+    disableFilePersistence: true,
+  });
+
+  service.setPersistent('agent.maxTurns', 30);
+
+  t.is(service.get('agent.maxTurns'), 30);
+  t.is(service.getSource('agent.maxTurns'), 'cli');
+});
+
+test('setPersistent() rejects invalid values', async (t) => {
+  const settingsDir = getTestSettingsDir();
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+    disableFilePersistence: true,
+  });
+
+  const error = t.throws(() => {
+    service.setPersistent('agent.maxTurns', 0);
+  });
+
+  t.true(error.message.includes("Invalid value for 'agent.maxTurns'"));
+});
+
 test('isRuntimeModifiable identifies correct settings', async (t) => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({

@@ -10,7 +10,9 @@ export type { SavedAppMode, SavedMessage } from './conversation-persistence-type
 export type { RestoredState } from './conversation-replay.js';
 
 const paths = envPaths('term2');
-const CONVERSATIONS_DIR = path.join(paths.log, 'conversations');
+const CONVERSATIONS_DIR = path.join(paths.data, 'conversations');
+const LOG_CONVERSATIONS_DIR = path.join(paths.log, 'conversations');
+const MIGRATION_SENTINEL = '.migrated-from-log';
 let conversationsDirOverride: string | null = null;
 
 export type LoadConversationForProjectResult =
@@ -36,6 +38,41 @@ function ensureConversationsDir(): string {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+
+  const defaultDbDir = process.env['TERM2_TEST_DB_DIR'] || CONVERSATIONS_DIR;
+  const defaultLogDir = process.env['TERM2_TEST_LOG_DIR'] || LOG_CONVERSATIONS_DIR;
+  const migrationSentinelPath = path.join(defaultDbDir, MIGRATION_SENTINEL);
+
+  // Migrate files from the legacy log directory only once when using the default data path.
+  if (dir === defaultDbDir && !fs.existsSync(migrationSentinelPath) && fs.existsSync(defaultLogDir)) {
+    try {
+      const files = fs.readdirSync(defaultLogDir);
+      for (const file of files) {
+        if (file.endsWith('.jsonl') || file === 'last.json') {
+          const src = path.join(defaultLogDir, file);
+          const dst = path.join(defaultDbDir, file);
+          if (!fs.existsSync(dst)) {
+            try {
+              fs.renameSync(src, dst);
+            } catch {
+              fs.copyFileSync(src, dst);
+              fs.unlinkSync(src);
+            }
+          } else {
+            try {
+              fs.unlinkSync(src);
+            } catch {
+              // best-effort cleanup to prevent re-migration of stale files
+            }
+          }
+        }
+      }
+      fs.writeFileSync(migrationSentinelPath, '', 'utf-8');
+    } catch {
+      // ignore errors during automatic migration
+    }
+  }
+
   return dir;
 }
 
@@ -133,6 +170,7 @@ export function loadConversation(
   expectedProjectPath?: string,
   expectedSshHost?: string,
 ): RestoredState | null {
+  ensureConversationsDir();
   const filePath = getConversationPath(id);
   try {
     if (!fs.existsSync(filePath)) {
@@ -158,6 +196,7 @@ export function loadConversationForProject(
   expectedProjectPath: string,
   expectedSshHost?: string,
 ): LoadConversationForProjectResult {
+  ensureConversationsDir();
   const filePath = getConversationPath(id);
   if (!fs.existsSync(filePath)) {
     return { status: 'not_found' };
@@ -175,6 +214,7 @@ export function loadConversationForProject(
 }
 
 export function loadLastConversation(expectedProjectPath?: string, expectedSshHost?: string): RestoredState | null {
+  ensureConversationsDir();
   const file = readLastConversationFile();
   const candidates = file.entries.filter((e) => matchesEntryContext(e, expectedProjectPath, expectedSshHost));
   const mostRecent = candidates.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
@@ -254,6 +294,7 @@ interface ConversationListEntry {
 }
 
 export function listConversations(expectedProjectPath?: string, expectedSshHost?: string): ConversationListEntry[] {
+  ensureConversationsDir();
   const dir = getConversationsDir();
   try {
     if (!fs.existsSync(dir)) {
@@ -462,6 +503,7 @@ function matchesEntryContext(
 }
 
 export function saveLastConversation(id: string, projectPath?: string, sshHost?: string): void {
+  ensureConversationsDir();
   if (!hasConversationContent(id)) {
     return;
   }

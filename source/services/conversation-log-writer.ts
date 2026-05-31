@@ -202,12 +202,11 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       return;
     }
     const sanitizedEvent = sanitizeSubagentResult(event) as LogEvent;
-    const safeEvent = truncateForLog(sanitizedEvent);
     const envelope: LogEnvelope = {
       v: LOG_ENVELOPE_VERSION,
       seq: ++this.#seq,
       ts: new Date().toISOString(),
-      event: safeEvent,
+      event: sanitizedEvent,
     };
     const line = JSON.stringify(envelope) + '\n';
     try {

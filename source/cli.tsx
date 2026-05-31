@@ -584,7 +584,7 @@ if (resumedConversation) {
 
 // Open the append-only log writer for the active session.
 import envPaths from 'env-paths';
-const logWriterDir = path.join(envPaths('term2').log, 'conversations');
+const logWriterDir = path.join(envPaths('term2').data, 'conversations');
 const logWriter = createConversationLogWriter({ sessionId: effectiveSessionId, dir: logWriterDir, logger });
 function buildInitMeta(id: string, createdAt: string) {
   const cwd = executionContext?.getCwd();

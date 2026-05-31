@@ -953,3 +953,72 @@ test.serial(
     t.is(turnEvent.turn.items[2].text, 'Done continuation.');
   },
 );
+
+test.serial('ensureConversationsDir: automatically migrates files from log to data directory', (t) => {
+  const logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-log-'));
+  const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-db-'));
+
+  try {
+    // Create dummy files in the old log directory
+    const testFile1 = 'test-session-1.jsonl';
+    const testFile2 = 'last.json';
+    const otherFile = 'unrelated.txt';
+
+    fs.writeFileSync(path.join(logDir, testFile1), 'envelope 1', 'utf-8');
+    fs.writeFileSync(path.join(logDir, testFile2), 'last data', 'utf-8');
+    fs.writeFileSync(path.join(logDir, otherFile), 'text', 'utf-8');
+
+    // Setup environments and trigger ensureConversationsDir by setting test override
+    process.env['TERM2_TEST_LOG_DIR'] = logDir;
+    process.env['TERM2_TEST_DB_DIR'] = dbDir;
+    persistenceModule.setConversationsDirForTest(dbDir);
+
+    // Call loadConversation for a non-existent ID to trigger ensureConversationsDir
+    persistenceModule.loadConversation('non-existent-id');
+
+    // Verify files are migrated
+    t.true(fs.existsSync(path.join(dbDir, testFile1)));
+    t.true(fs.existsSync(path.join(dbDir, testFile2)));
+    t.false(fs.existsSync(path.join(dbDir, otherFile))); // Unrelated files should not be migrated
+    t.false(fs.existsSync(path.join(logDir, testFile1)));
+    t.false(fs.existsSync(path.join(logDir, testFile2)));
+
+    t.is(fs.readFileSync(path.join(dbDir, testFile1), 'utf-8'), 'envelope 1');
+    t.is(fs.readFileSync(path.join(dbDir, testFile2), 'utf-8'), 'last data');
+  } finally {
+    // Cleanup
+    delete process.env['TERM2_TEST_LOG_DIR'];
+    delete process.env['TERM2_TEST_DB_DIR'];
+    fs.rmSync(logDir, { recursive: true, force: true });
+    fs.rmSync(dbDir, { recursive: true, force: true });
+  }
+});
+
+test.serial('ensureConversationsDir: migrated conversations are not resurrected after deletion', (t) => {
+  const logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-log-'));
+  const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-db-'));
+
+  try {
+    const migratedId = 'migrated-session';
+    fs.writeFileSync(path.join(logDir, `${migratedId}.jsonl`), 'stub', 'utf-8');
+
+    process.env['TERM2_TEST_LOG_DIR'] = logDir;
+    process.env['TERM2_TEST_DB_DIR'] = dbDir;
+    persistenceModule.setConversationsDirForTest(dbDir);
+
+    persistenceModule.loadConversation('non-existent-id');
+    t.true(fs.existsSync(path.join(dbDir, `${migratedId}.jsonl`)));
+
+    t.true(persistenceModule.deleteConversation(migratedId));
+    t.false(fs.existsSync(path.join(dbDir, `${migratedId}.jsonl`)));
+
+    persistenceModule.loadConversation('another-non-existent-id');
+    t.false(fs.existsSync(path.join(dbDir, `${migratedId}.jsonl`)));
+    t.false(fs.existsSync(path.join(logDir, `${migratedId}.jsonl`)));
+  } finally {
+    delete process.env['TERM2_TEST_LOG_DIR'];
+    delete process.env['TERM2_TEST_DB_DIR'];
+    fs.rmSync(logDir, { recursive: true, force: true });
+    fs.rmSync(dbDir, { recursive: true, force: true });
+  }
+});

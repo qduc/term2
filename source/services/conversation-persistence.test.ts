@@ -39,6 +39,7 @@ function assistantTurn(text: string, previousResponseId: string | null = 'r1'): 
 }
 
 class MockStream {
+  events: unknown[];
   completed = Promise.resolve(undefined);
   lastResponseId = 'resp-v3';
   interruptions: unknown[] = [];
@@ -48,7 +49,15 @@ class MockStream {
   output: unknown[] = [];
   finalOutput = 'Done.';
 
-  async *[Symbol.asyncIterator](): AsyncIterable<unknown> {}
+  constructor(events: unknown[] = []) {
+    this.events = events;
+  }
+
+  async *[Symbol.asyncIterator](): AsyncIterable<unknown> {
+    for (const event of this.events) {
+      yield event;
+    }
+  }
 }
 
 test.beforeEach(() => {
@@ -801,9 +810,121 @@ test.serial('session logging writes compact v3 assistant_turn state without cumu
     model: 'gpt-5',
     provider: 'openai',
   });
+  t.is(turnEnvelope.event.displayUsage, undefined);
   t.is(turnEnvelope.event.snapshot, undefined);
   t.is(turnEnvelope.event.turn.items.length, 1);
   t.is(turnEnvelope.event.turn.items[0].text, 'Done.');
+});
+
+test.serial('session logging persists displayUsage separately from cumulative assistant_turn usage', async (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({
+    id,
+    createdAt: '2026-05-26T00:00:00.000Z',
+    projectPath: '/workspace/display-usage',
+    model: 'gpt-5',
+    provider: 'openai',
+  });
+
+  const initialStream = new MockStream([
+    {
+      type: 'response.done',
+      response: {
+        usage: { input_tokens: 100, output_tokens: 10 },
+      },
+    },
+  ]);
+  initialStream.state = {
+    approve: () => {},
+    usage: { inputTokens: 120, outputTokens: 12, totalTokens: 132 },
+  };
+  initialStream.interruptions = [
+    {
+      name: 'shell',
+      arguments: { command: 'ls' },
+      callId: 'call-1',
+      agent: { name: 'Agent' },
+    },
+  ];
+
+  const continuationStream = new MockStream([
+    {
+      type: 'response.done',
+      response: {
+        usage: { input_tokens: 175, output_tokens: 18 },
+      },
+    },
+  ]);
+  continuationStream.newItems = [
+    {
+      type: 'function_call',
+      callId: 'call-1',
+      name: 'shell',
+      arguments: { command: 'ls' },
+    },
+    {
+      type: 'function_call_result',
+      callId: 'call-1',
+      name: 'shell',
+      output: 'files',
+    },
+    {
+      role: 'assistant',
+      type: 'message',
+      content: [{ type: 'output_text', text: 'Done.' }],
+    },
+  ];
+  continuationStream.output = [
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Done.' }],
+    },
+  ];
+  continuationStream.state = {
+    usage: { inputTokens: 300, outputTokens: 50, totalTokens: 350 },
+  };
+
+  const session = new ConversationSession(id, {
+    agentClient: {
+      getProvider: () => 'openai',
+      startStream: async () => initialStream,
+      continueRunStream: async () => continuationStream,
+    } as any,
+    deps: {
+      logger: stubLogger,
+      settingsService: createMockSettingsService({
+        'agent.model': 'gpt-5',
+        'agent.provider': 'openai',
+      }),
+    },
+    sessionStartedAt: '2026-05-26T00:00:00.000Z',
+  });
+
+  (session as any).shellAutoApproval = {
+    resolveAdvisoryForInterruption: async () => ({ model: 'gpt-5', reasoning: 'allow', decision: 'approve' }),
+    shouldAutoApprove: () => true,
+    clearCache: () => {},
+  };
+
+  session.setLogSink((event) => writer.append(event));
+
+  await session.sendMessage('hello');
+  await writer.close();
+
+  const filePath = path.join(testDir, `${id}.jsonl`);
+  const envelopes = fs
+    .readFileSync(filePath, 'utf-8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const turnEnvelope = envelopes.find((env) => env.event?.type === 'assistant_turn');
+
+  t.truthy(turnEnvelope);
+  t.deepEqual(turnEnvelope.event.usage, { prompt_tokens: 300, completion_tokens: 50, total_tokens: 350 });
+  t.deepEqual(turnEnvelope.event.displayUsage, { prompt_tokens: 175, completion_tokens: 18, total_tokens: 193 });
 });
 
 test.serial('replay: interrupted v2 logs without assistant_turn still recover from coarse events', (t) => {

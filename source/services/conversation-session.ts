@@ -122,6 +122,7 @@ export class ConversationSession {
   private currentPersistedTurnItems: PersistedAssistantTurnItem[] = [];
   private currentReasoningBuffer = '';
   private currentAssistantTextBuffer = '';
+  private currentDisplayUsage: NormalizedUsage | undefined;
 
   private settingsService?: ISettingsService;
   private logSink: ((event: LogEvent) => void) | null = null;
@@ -218,17 +219,12 @@ export class ConversationSession {
     };
   }
 
-  previewLargeUncachedInput(
-    input: string | UserTurn,
-    now = Date.now(),
-    actualPromptTokens?: number,
-  ): LargeUncachedInputDecision {
+  previewLargeUncachedInput(input: string | UserTurn, now = Date.now()): LargeUncachedInputDecision {
     const turn = normalizeUserTurn(input);
     const { streamInput } = this.#buildOutgoingInput(turn, { includeTurn: true });
     return this.largeUncachedInputGuard.inspect({
       input: streamInput,
       now,
-      actualPromptTokens,
       provider: this.#getProviderForGuard(),
       model: this.#getModelForGuard(),
       reasoningEffort: this.#getReasoningEffortForGuard(),
@@ -443,6 +439,7 @@ export class ConversationSession {
     this.currentPersistedTurnItems = [];
     this.currentReasoningBuffer = '';
     this.currentAssistantTextBuffer = '';
+    this.currentDisplayUsage = undefined;
   }
 
   #log(event: LogEvent): void {
@@ -461,6 +458,9 @@ export class ConversationSession {
   #dispatchEventToLog(event: ConversationEvent): void {
     if (!this.logSink) return;
     switch (event.type) {
+      case 'usage_update':
+        this.currentDisplayUsage = event.usage;
+        return;
       case 'text_delta':
         if (this.currentReasoningBuffer) {
           this.#flushReasoningItem();
@@ -559,6 +559,7 @@ export class ConversationSession {
           type: 'assistant_turn',
           turn,
           ...(event.usage ? { usage: event.usage } : {}),
+          ...(this.currentDisplayUsage ? { displayUsage: this.currentDisplayUsage } : {}),
           state: turnState,
         });
 

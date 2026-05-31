@@ -184,7 +184,16 @@ const stateFromAssistantTurn = (event: Extract<LogEvent, { type: 'assistant_turn
   };
 };
 
-function replayAssistantTurn(turn: PersistedAssistantTurn, turnId: string, usage?: NormalizedUsage): SavedMessage[] {
+function shouldReuseCumulativeUsageAsDisplayUsage(turn: PersistedAssistantTurn): boolean {
+  return !turn.items.some((item) => item.type === 'tool_call' || item.type === 'tool_result');
+}
+
+function replayAssistantTurn(
+  turn: PersistedAssistantTurn,
+  turnId: string,
+  usage?: NormalizedUsage,
+  displayUsage?: NormalizedUsage,
+): SavedMessage[] {
   const messages: SavedMessage[] = [];
   let index = 0;
   let lastAssistantMessage: SavedMessage | null = null;
@@ -240,8 +249,15 @@ function replayAssistantTurn(turn: PersistedAssistantTurn, turnId: string, usage
       }
     }
   }
-  if (usage && Object.keys(usage).length > 0 && lastAssistantMessage) {
-    lastAssistantMessage.usage = usage;
+  const usageForDisplay =
+    displayUsage && Object.keys(displayUsage).length > 0
+      ? displayUsage
+      : usage && Object.keys(usage).length > 0 && shouldReuseCumulativeUsageAsDisplayUsage(turn)
+      ? usage
+      : undefined;
+
+  if (usageForDisplay && lastAssistantMessage) {
+    lastAssistantMessage.usage = usageForDisplay;
   }
   return messages;
 }
@@ -391,7 +407,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
         state.messages = [];
       }
       const turnId = `bot-turn-${state.messages.length}-${ts}`;
-      const replayedMessages = replayAssistantTurn(event.turn, turnId, event.usage);
+      const replayedMessages = replayAssistantTurn(event.turn, turnId, event.usage, event.displayUsage);
       for (const m of replayedMessages) {
         state.messages.push(m);
       }

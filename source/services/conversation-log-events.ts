@@ -104,7 +104,10 @@ export interface ErrorLogEvent {
 export interface AssistantTurnEvent {
   type: 'assistant_turn';
   turn: PersistedAssistantTurn;
+  /** Whole-run cumulative usage for this assistant turn. */
   usage?: NormalizedUsage;
+  /** Footer-compatible usage from the last streamed model turn, when available. */
+  displayUsage?: NormalizedUsage;
   state?: AssistantTurnState;
   /** Present in v2 logs. New v3 logs use `state` to avoid cumulative snapshots. */
   snapshot?: StateSnapshot;

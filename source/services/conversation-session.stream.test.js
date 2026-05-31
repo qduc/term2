@@ -1719,6 +1719,34 @@ test('previewLargeUncachedInput() does not mutate history', (t) => {
   t.deepEqual(session.exportState(), before);
 });
 
+test('previewLargeUncachedInput() estimates from outgoing input instead of accepting accumulated session usage overrides', (t) => {
+  const mockClient = {
+    getProvider() {
+      return 'codex';
+    },
+  };
+  const settings = new Map([
+    ['agent.model', 'gpt-5'],
+    ['agent.provider', 'codex'],
+    ['agent.reasoningEffort', 'medium'],
+  ]);
+  const settingsService = {
+    get(key) {
+      return settings.get(key);
+    },
+  };
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, settingsService },
+  });
+
+  const large = 'x'.repeat(64_000 * 4);
+  const decision = session.previewLargeUncachedInput(large, 1_000);
+
+  t.is(decision.action, 'allow');
+  t.true(decision.estimatedTokens >= 64_000);
+});
+
 test('sendMessage() records successful large guard state after provider request completion', async (t) => {
   const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'ok' }]);
   firstStream.finalOutput = 'ok';

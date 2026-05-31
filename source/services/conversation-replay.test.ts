@@ -131,7 +131,7 @@ test('replayEvents: v3 assistant_turn restores state without cumulative snapshot
   t.is(restored.messages[1].sender, 'command');
   t.is(restored.messages[1].status, 'completed');
   t.is(restored.messages[2].text, 'The current directory is /repo.');
-  t.deepEqual(restored.messages[2].usage, { prompt_tokens: 7, completion_tokens: 8, total_tokens: 15 });
+  t.is(restored.messages[2].usage, undefined);
 });
 
 test('replayEvents: v3 assistant_turn preserves coarse tool_result ledger and avoids duplicates', (t) => {
@@ -375,7 +375,67 @@ test('replayEvents: assistant_turn maps items to SavedMessage[] in correct order
   t.is(restored.messages[2].output, 'files');
   t.is(restored.messages[3].sender, 'bot');
   t.is(restored.messages[3].text, 'here is files');
+  t.is(restored.messages[3].usage, undefined);
   t.deepEqual(restored.usage, { prompt_tokens: 5, completion_tokens: 10, total_tokens: 15 });
+});
+
+test('replayEvents: assistant_turn prefers persisted displayUsage for resumed footer usage', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run ls' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: 'ls' },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'files' },
+          { type: 'assistant_text', text: 'done' },
+        ],
+      },
+      usage: { prompt_tokens: 6000, completion_tokens: 280, total_tokens: 6280 },
+      displayUsage: { prompt_tokens: 3000, completion_tokens: 120, total_tokens: 3120 },
+      snapshot: {
+        history: [],
+        previousResponseId: 'r1',
+        toolLedger: [],
+      },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  t.is(restored.messages[2].sender, 'bot');
+  t.deepEqual(restored.messages[2].usage, { prompt_tokens: 3000, completion_tokens: 120, total_tokens: 3120 });
+  t.deepEqual(restored.usage, { prompt_tokens: 6000, completion_tokens: 280, total_tokens: 6280 });
+});
+
+test('replayEvents: assistant_turn does not infer resumed footer usage from cumulative usage for tool turns', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run ls' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: 'ls' },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'files' },
+          { type: 'assistant_text', text: 'done' },
+        ],
+      },
+      usage: { prompt_tokens: 6000, completion_tokens: 280, total_tokens: 6280 },
+      snapshot: {
+        history: [],
+        previousResponseId: 'r1',
+        toolLedger: [],
+      },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  t.is(restored.messages[2].sender, 'bot');
+  t.is(restored.messages[2].usage, undefined);
+  t.deepEqual(restored.usage, { prompt_tokens: 6000, completion_tokens: 280, total_tokens: 6280 });
 });
 
 test('replayEvents: assistant_turn deduplicates earlier coarse command_message events from same turn', (t) => {

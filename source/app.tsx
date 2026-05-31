@@ -193,9 +193,9 @@ const App: FC<AppProps> = ({
   // Compute largeUncachedWarning in real-time as the user types
   const largeUncachedWarning = useMemo(() => {
     if (!input || mode !== 'text' || input.startsWith('/')) return null;
-    const preview = conversationService.previewLargeUncachedInput({ text: input }, Date.now(), sessionPromptTokens);
+    const preview = conversationService.previewLargeUncachedInput({ text: input }, Date.now());
     return preview.action === 'warn' ? preview : null;
-  }, [input, mode, conversationService, sessionPromptTokens]);
+  }, [input, mode, conversationService]);
 
   const {
     messages,
@@ -541,7 +541,7 @@ const App: FC<AppProps> = ({
       case 'message':
         // Regular message, send to AI agent
         {
-          const preview = conversationService.previewLargeUncachedInput(turn, Date.now(), sessionPromptTokens);
+          const preview = conversationService.previewLargeUncachedInput(turn, Date.now());
 
           if (preview.action === 'warn') {
             setPendingLargeUncachedTurn(turn);
@@ -564,7 +564,7 @@ const App: FC<AppProps> = ({
 
     // Fallback: unknown slash command, send as message
     {
-      const preview = conversationService.previewLargeUncachedInput(turn, Date.now(), sessionPromptTokens);
+      const preview = conversationService.previewLargeUncachedInput(turn, Date.now());
 
       if (preview.action === 'warn') {
         setPendingLargeUncachedTurn(turn);

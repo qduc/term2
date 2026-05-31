@@ -1,4 +1,7 @@
 const fileListEl = document.getElementById('files');
+const fileSearchInput = document.getElementById('fileSearch');
+const clearFileSearchBtn = document.getElementById('clearFileSearch');
+const collapseAllBtn = document.getElementById('collapseAllFiles');
 const logsTable = document.getElementById('logsTable');
 const logsBody = document.getElementById('logsBody');
 const info = document.getElementById('info'); // Empty state container
@@ -389,22 +392,163 @@ function startWatch(file) {
   } catch (_) {}
 }
 
-function renderFiles(files) {
-  fileListEl.innerHTML = '';
-  files.forEach((f) => {
-    const li = document.createElement('li');
-    li.textContent = f.name;
-    li.title = `Size: ${f.size} bytes\nModified: ${new Date(f.mtime).toLocaleString()}`;
-    if (selectedFile === f.name) li.classList.add('active');
+let allFiles = [];
 
-    li.addEventListener('click', () => {
-      // Update UI selection immediately
-      document.querySelectorAll('.file-list li').forEach((el) => el.classList.remove('active'));
-      li.classList.add('active');
-      selectFile(f.name);
-    });
-    fileListEl.appendChild(li);
+function buildTree(files) {
+  const root = { name: 'root', isDirectory: true, children: {}, filesCount: 0, path: '' };
+
+  files.forEach((file) => {
+    const parts = file.name.split('/');
+    let current = root;
+    current.filesCount++;
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isLast = i === parts.length - 1;
+
+      if (isLast) {
+        current.children[part] = {
+          name: part,
+          path: file.name,
+          size: file.size,
+          mtime: file.mtime,
+          isFile: true,
+        };
+      } else {
+        if (!current.children[part]) {
+          const folderPath = current.path ? `${current.path}/${part}` : part;
+          current.children[part] = {
+            name: part,
+            path: folderPath,
+            isDirectory: true,
+            children: {},
+            filesCount: 0,
+          };
+        }
+        current.children[part].filesCount++;
+        current = current.children[part];
+      }
+    }
   });
+
+  return root;
+}
+
+function renderTree(treeNode, container, depth = 0, autoExpand = false, searchQuery = '') {
+  const keys = Object.keys(treeNode.children).sort((a, b) => {
+    const nodeA = treeNode.children[a];
+    const nodeB = treeNode.children[b];
+    if (nodeA.isDirectory && !nodeB.isDirectory) return -1;
+    if (!nodeA.isDirectory && nodeB.isDirectory) return 1;
+    return a.localeCompare(b);
+  });
+
+  const pathParts = selectedFile ? selectedFile.split('/') : [];
+  const parentPaths = [];
+  let accumulated = '';
+  for (let i = 0; i < pathParts.length - 1; i++) {
+    accumulated = accumulated ? `${accumulated}/${pathParts[i]}` : pathParts[i];
+    parentPaths.push(accumulated);
+  }
+
+  keys.forEach((key) => {
+    const child = treeNode.children[key];
+    const li = document.createElement('li');
+
+    if (child.isDirectory) {
+      li.className = 'folder-node';
+      li.dataset.path = child.path;
+      const folderId = `folder:${child.path}`;
+      const isCollapsed = localStorage.getItem(folderId) === 'collapsed';
+      const forceExpand = parentPaths.includes(child.path);
+
+      if (autoExpand || forceExpand || !isCollapsed) {
+        li.classList.add('expanded');
+      }
+
+      const header = document.createElement('div');
+      header.className = 'folder-header';
+      header.style.paddingLeft = `${depth * 12 + 8}px`;
+
+      header.innerHTML = `
+        <span class="chevron">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </span>
+        <span class="folder-icon-wrapper">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="folder-icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        </span>
+        <span class="folder-name">${escapeHtml(child.name)}</span>
+        <span class="file-count">${child.filesCount}</span>
+      `;
+
+      const ul = document.createElement('ul');
+      ul.className = 'folder-children';
+
+      header.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const expanded = li.classList.toggle('expanded');
+        localStorage.setItem(folderId, expanded ? 'expanded' : 'collapsed');
+      });
+
+      li.appendChild(header);
+      li.appendChild(ul);
+      container.appendChild(li);
+
+      renderTree(child, ul, depth + 1, autoExpand, searchQuery);
+    } else {
+      li.className = 'file-node';
+      li.style.paddingLeft = `${depth * 12 + 24}px`;
+      li.title = `Size: ${child.size} bytes\nModified: ${new Date(child.mtime).toLocaleString()}`;
+      if (selectedFile === child.path) li.classList.add('active');
+
+      li.innerHTML = `
+        <span class="file-icon-wrapper">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="file-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+        </span>
+        <span class="file-name">${escapeHtml(child.name)}</span>
+      `;
+
+      li.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelectorAll('.file-list li.file-node').forEach((el) => el.classList.remove('active'));
+        li.classList.add('active');
+        selectFile(child.path);
+      });
+
+      container.appendChild(li);
+    }
+  });
+}
+
+function filterAndRenderFiles() {
+  const query = fileSearchInput.value.trim().toLowerCase();
+  if (query) {
+    clearFileSearchBtn.classList.remove('hidden');
+  } else {
+    clearFileSearchBtn.classList.add('hidden');
+  }
+
+  const filtered = allFiles.filter((f) => f.name.toLowerCase().includes(query));
+  fileListEl.innerHTML = '';
+
+  if (filtered.length === 0) {
+    const empty = document.createElement('li');
+    empty.style.textAlign = 'center';
+    empty.style.color = 'var(--text-dim)';
+    empty.style.padding = '12px';
+    empty.style.fontSize = '12px';
+    empty.textContent = 'No matching log files';
+    fileListEl.appendChild(empty);
+    return;
+  }
+
+  const tree = buildTree(filtered);
+  renderTree(tree, fileListEl, 0, !!query, query);
+}
+
+function renderFiles(files) {
+  allFiles = files;
+  filterAndRenderFiles();
 }
 
 async function loadFiles() {
@@ -561,6 +705,26 @@ advancedFiltersBtn.addEventListener('click', () => {
 linesInput.addEventListener('change', () => {
   // Reload when lines count changes
   if (selectedFile) loadPreview();
+});
+
+// File search & collapse listeners
+fileSearchInput.addEventListener('input', () => {
+  filterAndRenderFiles();
+});
+
+clearFileSearchBtn.addEventListener('click', () => {
+  fileSearchInput.value = '';
+  filterAndRenderFiles();
+});
+
+collapseAllBtn.addEventListener('click', () => {
+  document.querySelectorAll('.folder-node').forEach((li) => {
+    li.classList.remove('expanded');
+    const path = li.dataset.path;
+    if (path) {
+      localStorage.setItem(`folder:${path}`, 'collapsed');
+    }
+  });
 });
 
 // --- Resizer Logic ---

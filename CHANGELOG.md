@@ -1,3 +1,38 @@
+## [0.7.2] - 2026-05-31
+
+### Features
+- Add `maxParallelToolCalls` runtime setting for configuring parallel tool execution
+- Add notification support when agent needs approval or finishes a task
+- Display usage data (token counts) when resuming a conversation
+- Enhance focus handling and input sequence fixes
+- Add robust large uncached input handling with confirmation prompt
+- Enhance handoff flow with dynamic message prompts and input handling
+- Implement lazy-load to reduce memory usage
+- Improve conversation filtering and error handling in `--resume ls`
+- Add function to strip RTK's "No hook installed" warning from stderr output
+
+### Bug Fixes
+- Fix render performance issue when resuming conversation
+- Fix wrong token usage display and token estimation in large uncached input warning
+- Prevent truncation when saving conversation
+- Fix streamed transient retries to preserve completed tool-call progress for non-chaining providers
+- Fix retry command to correctly send back tool calls after user message
+- Fix StatusBar time display for resets within 24 hours
+- Fix fallback responses crash when missing `output` in WebSocket responses
+- Fix memory leak
+- Fix GPT prompts to follow Codex guidelines
+
+### Improvements
+- Rename `estimatedTokens` to `accumulatedInputTokens` in LargeUncachedConfirmationPrompt for clarity
+- Split language providers per file and add more language definitions
+- Remove title and headerRight props from multiple selection menus for cleaner UI
+- Replace `writeBoundary` with `tags` in schemas and update related tests
+- Cache custom provider instance to improve model retrieval performance
+
+### Internal/Chores
+- Bump `ink-prompt` to v0.3.0
+- Add regression test for lazy provider instance reuse across `getModel` calls
+
 ## [0.7.1] - 2026-05-29
 
 ### Features

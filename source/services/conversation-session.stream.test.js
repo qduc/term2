@@ -259,6 +259,90 @@ test('run() retries streamed transient websocket close 1006 by replaying the tur
   t.deepEqual(calls[1], [{ role: 'user', type: 'message', content: 'retry me' }]);
 });
 
+test('run() retries non-chaining streamed transient errors from completed tool call history', async (t) => {
+  class FailingStream extends MockStream {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call',
+            id: 'fc_1',
+            callId: 'call-read',
+            name: 'read_file',
+            arguments: '{}',
+          },
+        },
+      };
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call_result',
+            id: 'fcr_1',
+            callId: 'call-read',
+            name: 'read_file',
+            output: 'contents',
+          },
+        },
+      };
+      throw new Error('WebSocket connection closed before response completed (code=1006)');
+    }
+  }
+
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  successStream.finalOutput = 'Recovered';
+  successStream.history = [
+    { role: 'user', type: 'message', content: 'inspect' },
+    { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
+    { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', name: 'read_file', output: 'contents' },
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Recovered' }] },
+  ];
+
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    async startStream(input) {
+      calls.push(input);
+      return calls.length === 1 ? new FailingStream() : successStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('inspect')) {
+    emitted.push(ev);
+  }
+
+  t.deepEqual(
+    emitted.map((event) => event.type),
+    ['tool_started', 'command_message', 'retry', 'text_delta', 'final'],
+  );
+  t.is(calls.length, 2);
+  t.deepEqual(
+    calls[1].map((item) => item.type),
+    ['message', 'function_call', 'function_call_result'],
+  );
+  t.deepEqual(
+    calls[1].filter((item) => item.role === 'user').map((item) => item.content),
+    ['inspect'],
+  );
+  t.deepEqual(
+    calls[1].filter((item) => item.callId === 'call-read').map((item) => item.type),
+    ['function_call', 'function_call_result'],
+  );
+
+  const state = session.exportState();
+  t.is(state.toolLedger.filter((entry) => entry.callId === 'call-read').length, 1);
+  t.is(state.toolLedger.find((entry) => entry.callId === 'call-read').status, 'completed');
+});
+
 test('run() exports completed tool pairs from a stream that later fails', async (t) => {
   class FailingStream extends MockStream {
     async *[Symbol.asyncIterator]() {

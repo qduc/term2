@@ -94,7 +94,11 @@ npx prettier --write <file1, file2, file3> # Fix formatting issues in files you 
 - Add regression tests for bugs.
 - Maintain tests like production code: refactor or delete when they stop providing value.
 
-## Provider Traffic Log Files
+## Log Files
+
+App logs are stored as JSONL files. Log root by platform:
+- **Linux**: `~/.local/state/term2-nodejs/logs/`
+- **macOS**: `~/Library/Logs/term2-nodejs/logs/`
 
 Traffic logs are stored as JSONL files and can be large. Log root by platform:
 - **Linux**: `~/.local/state/term2-nodejs/logs/provider-traffic/`

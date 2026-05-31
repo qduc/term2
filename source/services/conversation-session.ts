@@ -1005,7 +1005,20 @@ export class ConversationSession {
         if (!this.#isCurrentGeneration(gen)) return;
 
         if (stream) {
-          this.toolLedger.import(ledgerSnapshot);
+          const provider = this.#getProviderForGuard() ?? 'openai';
+          const supportsChaining = supportsConversationChaining(provider);
+          if (supportsChaining) {
+            this.toolLedger.import(ledgerSnapshot);
+          } else {
+            this.toolLedger.markOpenCallsAborted(error instanceof Error ? error.message : String(error));
+            const reconciled = reconcileHistoryWithToolLedger(
+              this.conversationStore.getHistory(),
+              this.toolLedger.export(),
+            );
+            if (reconciled.addedCompletedPairs > 0) {
+              this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+            }
+          }
         } else {
           this.conversationStore.removeLastUserMessage();
         }

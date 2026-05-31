@@ -748,8 +748,8 @@ Subagent logs and outputs stream in real-time within the terminal, allowing you 
 term2 automatically saves your conversation history, settings, and provider state at the end of each session. This allows you to resume any past chat exactly where you left off.
 
 - **Auto-save**: Every active chat session is saved on exit or interrupt to your system's log directory:
-  - **Linux**: `~/.local/state/term2/log/conversations/`
-  - **macOS**: `~/Library/Logs/term2/conversations/`
+  - **Linux**: `~/.local/state/term2-nodejs/log/conversations/`
+  - **macOS**: `~/Library/Logs/term2-nodejs/conversations/`
 - **Resume Last Session**: Run `term2 --resume` to reload the most recent conversation.
 - **Resume Specific Session**: Use `term2 --resume <session-uuid>` to load a specific conversation history.
 - **Listing Sessions**: You can inspect saved sessions and their UUIDs in the log or state files.

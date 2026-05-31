@@ -37,6 +37,7 @@ export interface BotMessage {
   text: string;
   status?: 'streaming' | 'finalized';
   reasoningText?: string;
+  usage?: NormalizedUsage;
 }
 
 export type CommandMessage = BaseCommandMessage & {
@@ -75,6 +76,20 @@ export type Message =
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 const MAX_MESSAGE_COUNT = 300;
+
+const getInitialLastUsage = (messages: Message[]): NormalizedUsage | null => {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.sender !== 'bot') {
+      continue;
+    }
+    const usage = (message as BotMessage).usage;
+    if (usage && Object.keys(usage).length > 0) {
+      return usage;
+    }
+  }
+  return null;
+};
 
 const dummySettingsService = {
   get: () => 'openai',
@@ -125,7 +140,7 @@ export const useConversation = ({
   const [waitingForRejectionReason, setWaitingForRejectionReason] = useState<boolean>(false);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(null);
+  const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(() => getInitialLastUsage(initialMessages));
   const [lastCodexRateLimit, setLastCodexRateLimit] = useState<CodexRateLimitInfo | null>(null);
   const setCodexRateLimit = setLastCodexRateLimit;
   const approvedContextRef = useRef<ApprovedToolContext | null>(null);

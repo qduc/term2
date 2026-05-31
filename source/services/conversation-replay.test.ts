@@ -131,6 +131,7 @@ test('replayEvents: v3 assistant_turn restores state without cumulative snapshot
   t.is(restored.messages[1].sender, 'command');
   t.is(restored.messages[1].status, 'completed');
   t.is(restored.messages[2].text, 'The current directory is /repo.');
+  t.deepEqual(restored.messages[2].usage, { prompt_tokens: 7, completion_tokens: 8, total_tokens: 15 });
 });
 
 test('replayEvents: v3 assistant_turn preserves coarse tool_result ledger and avoids duplicates', (t) => {

@@ -184,9 +184,10 @@ const stateFromAssistantTurn = (event: Extract<LogEvent, { type: 'assistant_turn
   };
 };
 
-function replayAssistantTurn(turn: PersistedAssistantTurn, turnId: string): SavedMessage[] {
+function replayAssistantTurn(turn: PersistedAssistantTurn, turnId: string, usage?: NormalizedUsage): SavedMessage[] {
   const messages: SavedMessage[] = [];
   let index = 0;
+  let lastAssistantMessage: SavedMessage | null = null;
   for (const item of turn.items) {
     if (item.type === 'reasoning') {
       messages.push({
@@ -195,12 +196,14 @@ function replayAssistantTurn(turn: PersistedAssistantTurn, turnId: string): Save
         text: item.text,
       });
     } else if (item.type === 'assistant_text') {
-      messages.push({
+      const assistantMessage = {
         id: `bot-${turnId}-${index++}`,
         sender: 'bot',
         status: 'finalized',
         text: item.text,
-      });
+      } as SavedMessage;
+      messages.push(assistantMessage);
+      lastAssistantMessage = assistantMessage;
     } else if (item.type === 'tool_call') {
       messages.push({
         id: `command-${item.callId}`,
@@ -235,6 +238,9 @@ function replayAssistantTurn(turn: PersistedAssistantTurn, turnId: string): Save
         } as SavedMessage);
       }
     }
+  }
+  if (usage && Object.keys(usage).length > 0 && lastAssistantMessage) {
+    lastAssistantMessage.usage = usage;
   }
   return messages;
 }
@@ -384,7 +390,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
         state.messages = [];
       }
       const turnId = `bot-turn-${state.messages.length}-${ts}`;
-      const replayedMessages = replayAssistantTurn(event.turn, turnId);
+      const replayedMessages = replayAssistantTurn(event.turn, turnId, event.usage);
       for (const m of replayedMessages) {
         state.messages.push(m);
       }

@@ -1610,3 +1610,62 @@ test.serial('corrective retry task for behavior error instructs model to produce
   t.true(retryInput.includes('final'), 'corrective prompt for behavior should instruct to produce a final answer');
   t.true(retryInput.includes('Do not call'), 'should tell model not to call more tools');
 });
+
+test.serial('subagent run injects warning into tool output when turns left <= 5', async (t) => {
+  let executeOutput: string | null = null;
+
+  registerProvider({
+    id: 'mock-subagent-maxturns-provider',
+    label: 'Mock Subagent MaxTurns Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any, _input: any, options: any) => {
+          if (options.callModelInputFilter) {
+            // Simulate 96 turns
+            for (let i = 0; i < 96; i++) {
+              await options.callModelInputFilter({
+                modelData: { input: [] },
+                agent,
+                context: options.context,
+              });
+            }
+          }
+
+          // Execute a tool to see if the warning is injected
+          const readFileTool = agent.tools.find((tool: any) => tool.name === 'read_file');
+          if (readFileTool) {
+            const mockRunContext = {
+              context: options.context,
+            };
+            executeOutput = await readFileTool.invoke(
+              mockRunContext as any,
+              JSON.stringify({ path: 'package.json' }),
+              {},
+            );
+          }
+
+          return {
+            status: 'completed',
+            finalOutput: 'done',
+            history: [],
+            messages: [],
+          };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-subagent-maxturns-provider',
+    }),
+  });
+
+  await manager.run({ role: 'explorer', task: 'mock task' });
+
+  t.truthy(executeOutput);
+  t.true(executeOutput!.includes('approaching the maximum turn limit'), 'should contain max turns warning');
+  t.true(executeOutput!.includes('4 turns left'), 'should indicate correct number of turns left');
+});

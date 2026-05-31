@@ -28,7 +28,7 @@ test('CLI --resume ls prints list of conversations and exits', (t) => {
       type: 'session_init',
       id: convId,
       createdAt: '2026-05-28T14:40:16.000Z',
-      projectPath: '/Users/qduc/src/term2',
+      projectPath: process.cwd(),
       model: 'gpt-4o',
       appMode: {
         mentorMode: false,
@@ -89,7 +89,7 @@ test('CLI --resume ls prints list of conversations and exits', (t) => {
   t.true(stdout.includes('Recent Conversations (last 10):'));
   t.true(stdout.includes(convId));
   t.false(stdout.includes(otherConvId));
-  t.false(stdout.includes('/Users/qduc/src/term2'));
+  t.false(stdout.includes(process.cwd()));
   t.true(stdout.includes('hello this is a test prompt'));
   t.true(stdout.includes('1 message'));
   t.true(stdout.includes('model: gpt-4o'));
@@ -109,7 +109,7 @@ test('CLI --resume list also works', (t) => {
       type: 'session_init',
       id: convId,
       createdAt: '2026-05-28T14:40:16.000Z',
-      projectPath: '/Users/qduc/src/term2',
+      projectPath: process.cwd(),
     },
   };
   fs.writeFileSync(filePath, JSON.stringify(initEnvelope) + '\n', 'utf-8');

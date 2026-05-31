@@ -30,7 +30,7 @@ import { createSearchReplaceToolDefinition } from '../../tools/search-replace.js
 import { createCreateFileToolDefinition } from '../../tools/create-file.js';
 import { createShellToolDefinition } from '../../tools/shell.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
-import { trimToolOutput } from '../../utils/trim-tool-output.js';
+import { trimToolOutput, injectWarningIntoToolOutput } from '../../utils/trim-tool-output.js';
 import { extractUsage, normalizeAgentRunUsage } from '../../utils/token-usage.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { tryAcquireFileLock } from '../../tools/file-locks.js';
@@ -155,7 +155,19 @@ function buildAgentTools(
           const maxOutputLength = options.settings.get<number | undefined>('shell.maxOutputChars');
           const result = await definition.execute(params, _context, details);
           options.onToolComplete?.(definition.name);
-          return trimToolOutput(result, undefined, maxOutputLength ?? undefined);
+          let trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
+
+          // Inject warning when turns are approaching maxTurns
+          const userContext: any = _context?.context;
+          if (userContext && typeof userContext.turnCount === 'number' && typeof userContext.maxTurns === 'number') {
+            const turnsLeft = userContext.maxTurns - userContext.turnCount;
+            if (turnsLeft >= 0 && turnsLeft <= 5) {
+              const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
+              trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
+            }
+          }
+
+          return trimmedResult;
         },
       }),
     ),
@@ -459,8 +471,19 @@ export class SubagentManager {
     const providerDef = getProvider(mentorProvider);
     const supportsChaining = providerDef?.capabilities?.supportsConversationChaining ?? false;
     const input = this.#mentorSession.getInput(task, supportsChaining);
+    const subagentContext = {
+      turnCount: 0,
+      maxTurns: definition.maxTurns,
+    };
     const runOptions = {
       ...this.#mentorSession.getRunOptions(supportsChaining, definition.maxTurns),
+      context: subagentContext,
+      callModelInputFilter: (args: any) => {
+        if (args.context) {
+          args.context.turnCount = (args.context.turnCount ?? 0) + 1;
+        }
+        return args.modelData;
+      },
       ...(signal ? { signal } : {}),
     };
 
@@ -548,11 +571,22 @@ export class SubagentManager {
 
     while (true) {
       try {
+        const subagentContext = {
+          turnCount: 0,
+          maxTurns: definition.maxTurns,
+        };
         const result = await executeWithRetry({
           operation: () =>
             runWithProvider(providerId, runner, agent, runInput, {
               stream: false,
               maxTurns: definition.maxTurns,
+              context: subagentContext,
+              callModelInputFilter: (args: any) => {
+                if (args.context) {
+                  args.context.turnCount = (args.context.turnCount ?? 0) + 1;
+                }
+                return args.modelData;
+              },
               ...(request.signal ? { signal: request.signal } : {}),
             }),
           retryAttempts: this.#settings.get<number>('agent.retryAttempts') ?? 2,

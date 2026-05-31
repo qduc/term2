@@ -16,7 +16,7 @@ import { normalizeToolInput, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { createEditorImpl } from './editor-impl.js';
-import { trimToolOutput } from '../utils/trim-tool-output.js';
+import { trimToolOutput, injectWarningIntoToolOutput } from '../utils/trim-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 import { executeWithRetry } from './retry-executor.js';
 import { shouldUseNativePatchTool, shouldUseStrictToolSchema } from './tool-selection-policy.js';
@@ -447,10 +447,21 @@ export class OpenAIAgentClient {
     });
 
     try {
+      const userContext: any = {
+        turnCount: 0,
+        maxTurns: this.#maxTurns,
+      };
       const options: any = {
         stream: true,
         maxTurns: this.#maxTurns,
         signal,
+        context: userContext,
+        callModelInputFilter: (args: any) => {
+          if (args.context) {
+            args.context.turnCount = (args.context.turnCount ?? 0) + 1;
+          }
+          return args.modelData;
+        },
       };
       const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
@@ -487,8 +498,32 @@ export class OpenAIAgentClient {
     this.#currentAbortController = new AbortController();
     const signal = this.#currentAbortController.signal;
 
+    let userContext: any;
+    if (state && state._context) {
+      userContext = state._context.context;
+      if (!userContext) {
+        userContext = {};
+        state._context.context = userContext;
+      }
+    } else {
+      userContext = {
+        turnCount: 0,
+      };
+    }
+    userContext.maxTurns = this.#maxTurns;
+    if (typeof userContext.turnCount !== 'number') {
+      userContext.turnCount = 0;
+    }
+
     const options: any = {
       signal,
+      context: userContext,
+      callModelInputFilter: (args: any) => {
+        if (args.context) {
+          args.context.turnCount = (args.context.turnCount ?? 0) + 1;
+        }
+        return args.modelData;
+      },
     };
     const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
@@ -508,10 +543,34 @@ export class OpenAIAgentClient {
     this.#currentAbortController = new AbortController();
     const signal = this.#currentAbortController.signal;
 
+    let userContext: any;
+    if (state && state._context) {
+      userContext = state._context.context;
+      if (!userContext) {
+        userContext = {};
+        state._context.context = userContext;
+      }
+    } else {
+      userContext = {
+        turnCount: 0,
+      };
+    }
+    userContext.maxTurns = this.#maxTurns;
+    if (typeof userContext.turnCount !== 'number') {
+      userContext.turnCount = 0;
+    }
+
     const options: any = {
       stream: true,
       maxTurns: this.#maxTurns,
       signal,
+      context: userContext,
+      callModelInputFilter: (args: any) => {
+        if (args.context) {
+          args.context.turnCount = (args.context.turnCount ?? 0) + 1;
+        }
+        return args.modelData;
+      },
     };
     const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
@@ -994,7 +1053,23 @@ export class OpenAIAgentClient {
               return executeWithToolConcurrency(details, async (wrappedDetails) => {
                 // Normal execution with combined abort signal
                 const result = await definition.execute(params, _context, wrappedDetails);
-                return trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+                let trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+
+                // Inject warning when turns are approaching maxTurns
+                const userContext: any = _context?.context;
+                if (
+                  userContext &&
+                  typeof userContext.turnCount === 'number' &&
+                  typeof userContext.maxTurns === 'number'
+                ) {
+                  const turnsLeft = userContext.maxTurns - userContext.turnCount;
+                  if (turnsLeft >= 0 && turnsLeft <= 5) {
+                    const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
+                    trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
+                  }
+                }
+
+                return trimmedResult;
               });
             },
           }),
@@ -1044,7 +1119,19 @@ export class OpenAIAgentClient {
           const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');
           return executeWithToolConcurrency(details, async (wrappedDetails) => {
             const result = await originalInvoke.call(nativePatchTool, runContext, normalizedInput, wrappedDetails);
-            return trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+            let trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+
+            // Inject warning when turns are approaching maxTurns
+            const userContext: any = runContext?.context;
+            if (userContext && typeof userContext.turnCount === 'number' && typeof userContext.maxTurns === 'number') {
+              const turnsLeft = userContext.maxTurns - userContext.turnCount;
+              if (turnsLeft >= 0 && turnsLeft <= 5) {
+                const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
+                trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
+              }
+            }
+
+            return trimmedResult;
           });
         };
       }

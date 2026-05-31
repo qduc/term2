@@ -724,3 +724,65 @@ test.serial('codex chat resolves default_reasoning_level if agent.reasoningEffor
   t.truthy(agent);
   t.is(agent.modelSettings?.reasoning?.effort, 'medium');
 });
+
+test.serial('main agent client injects warning into tool output when turns left <= 5', async (t) => {
+  let executeOutput: string | null = null;
+
+  registerProvider({
+    id: 'mock-provider-maxturns',
+    label: 'Mock Provider MaxTurns',
+    createRunner: () =>
+      ({
+        run: async (agent: any, _input: any, options: any) => {
+          if (options.callModelInputFilter) {
+            // Simulate 96 turns
+            for (let i = 0; i < 96; i++) {
+              await options.callModelInputFilter({
+                modelData: { input: [] },
+                agent,
+                context: options.context,
+              });
+            }
+          }
+
+          // Execute a tool to see if the warning is injected
+          const readFileTool = agent.tools.find((tool: any) => tool.name === 'read_file');
+          if (readFileTool) {
+            const mockRunContext = {
+              context: options.context,
+            };
+            executeOutput = await readFileTool.invoke(
+              mockRunContext as any,
+              JSON.stringify({ path: 'package.json' }),
+              {},
+            );
+          }
+
+          return {
+            status: 'completed',
+            finalOutput: 'done',
+            history: [],
+            messages: [],
+          };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const settings = createMockSettings({
+    'agent.provider': 'mock-provider-maxturns',
+    'agent.model': 'mock-model',
+  });
+
+  const client = new OpenAIAgentClient({
+    maxTurns: 100,
+    deps: { logger: createMockLogger(), settings },
+  });
+
+  // Trigger startStream to initiate the provider run with correct context
+  await client.startStream('Hello');
+
+  t.truthy(executeOutput);
+  t.true(executeOutput!.includes('approaching the maximum turn limit'), 'should contain max turns warning');
+  t.true(executeOutput!.includes('4 turns left'), 'should indicate correct number of turns left');
+});

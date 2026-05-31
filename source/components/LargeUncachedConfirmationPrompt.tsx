@@ -2,13 +2,13 @@ import React, { FC, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 
 interface LargeUncachedConfirmationPromptProps {
-  estimatedTokens: number;
+  accumulatedInputTokens: number;
   onConfirm: () => void;
   onDecline: () => void;
 }
 
 const LargeUncachedConfirmationPrompt: FC<LargeUncachedConfirmationPromptProps> = ({
-  estimatedTokens,
+  accumulatedInputTokens,
   onConfirm,
   onDecline,
 }) => {
@@ -45,7 +45,9 @@ const LargeUncachedConfirmationPrompt: FC<LargeUncachedConfirmationPromptProps> 
 
   return (
     <Box flexDirection="column">
-      <Text color="yellow">Send ~{Math.round(estimatedTokens / 1_000)}k tokens anyway? (may miss prompt cache)</Text>
+      <Text color="yellow">
+        Send {Math.round(accumulatedInputTokens / 1_000)}k tokens anyway? (may miss prompt cache)
+      </Text>
       <Box flexDirection="column" marginLeft={1}>
         <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Send</Text>
         <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Cancel</Text>

@@ -270,7 +270,10 @@ export function mergeUsage(
   return normalizeUsage(merged) ?? merged;
 }
 
-export function formatFooterUsage(usage: NormalizedUsage | null | undefined): string {
+export function formatFooterUsage(
+  usage: NormalizedUsage | null | undefined,
+  options: { cacheWarning?: boolean } = {},
+): string {
   if (!usage) return '';
 
   const parts: string[] = [];
@@ -278,7 +281,9 @@ export function formatFooterUsage(usage: NormalizedUsage | null | undefined): st
     let promptPart = `${usage.prompt_tokens.toLocaleString()} in`;
     const promptDetails: string[] = [];
     if (usage.cache_read_tokens != null) {
-      promptDetails.push(`${usage.cache_read_tokens.toLocaleString()} cached`);
+      const cacheLabel = options.cacheWarning ? 'uncached' : 'cached';
+      const cachePrefix = options.cacheWarning ? '⚠️ ' : '';
+      promptDetails.push(`${cachePrefix}${usage.cache_read_tokens.toLocaleString()} ${cacheLabel}`);
     }
     if (usage.cache_creation_tokens != null) {
       promptDetails.push(`${usage.cache_creation_tokens.toLocaleString()} cache write`);

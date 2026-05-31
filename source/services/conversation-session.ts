@@ -218,12 +218,17 @@ export class ConversationSession {
     };
   }
 
-  previewLargeUncachedInput(input: string | UserTurn, now = Date.now()): LargeUncachedInputDecision {
+  previewLargeUncachedInput(
+    input: string | UserTurn,
+    now = Date.now(),
+    actualPromptTokens?: number,
+  ): LargeUncachedInputDecision {
     const turn = normalizeUserTurn(input);
     const { streamInput } = this.#buildOutgoingInput(turn, { includeTurn: true });
     return this.largeUncachedInputGuard.inspect({
       input: streamInput,
       now,
+      actualPromptTokens,
       provider: this.#getProviderForGuard(),
       model: this.#getModelForGuard(),
       reasoningEffort: this.#getReasoningEffortForGuard(),

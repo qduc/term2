@@ -109,6 +109,8 @@ const App: FC<AppProps> = ({
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
   const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
+  const sessionPromptTokens = sessionUsage.get().prompt_tokens;
+  const accumulatedInputTokens = sessionPromptTokens ?? 0;
 
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
@@ -191,9 +193,9 @@ const App: FC<AppProps> = ({
   // Compute largeUncachedWarning in real-time as the user types
   const largeUncachedWarning = useMemo(() => {
     if (!input || mode !== 'text' || input.startsWith('/')) return null;
-    const preview = conversationService.previewLargeUncachedInput({ text: input });
+    const preview = conversationService.previewLargeUncachedInput({ text: input }, Date.now(), sessionPromptTokens);
     return preview.action === 'warn' ? preview : null;
-  }, [input, mode, conversationService]);
+  }, [input, mode, conversationService, sessionPromptTokens]);
 
   const {
     messages,
@@ -539,7 +541,7 @@ const App: FC<AppProps> = ({
       case 'message':
         // Regular message, send to AI agent
         {
-          const preview = conversationService.previewLargeUncachedInput(turn);
+          const preview = conversationService.previewLargeUncachedInput(turn, Date.now(), sessionPromptTokens);
 
           if (preview.action === 'warn') {
             setPendingLargeUncachedTurn(turn);
@@ -562,7 +564,7 @@ const App: FC<AppProps> = ({
 
     // Fallback: unknown slash command, send as message
     {
-      const preview = conversationService.previewLargeUncachedInput(turn);
+      const preview = conversationService.previewLargeUncachedInput(turn, Date.now(), sessionPromptTokens);
 
       if (preview.action === 'warn') {
         setPendingLargeUncachedTurn(turn);
@@ -620,6 +622,7 @@ const App: FC<AppProps> = ({
             onHandoffConfirm={handleHandoffConfirm}
             onHandoffDecline={handleHandoffDecline}
             onHandoffCancel={handleHandoffCancel}
+            accumulatedInputTokens={accumulatedInputTokens}
             largeUncachedWarning={largeUncachedWarning}
             pendingLargeUncachedTurn={pendingLargeUncachedTurn}
             pendingLargeUncachedTokens={pendingLargeUncachedTokens}

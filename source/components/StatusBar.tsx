@@ -45,16 +45,19 @@ const StatusBar: FC<StatusBarProps> = ({
   const accent = '#0ed7b5';
   const warnRed = '#ef4444';
 
-  const usageText = formatFooterUsage(lastUsage);
+  const usageHasCacheRead = lastUsage?.cache_read_tokens != null;
+  const usageHasIntegratedWarning = Boolean(largeUncachedWarning && usageHasCacheRead);
+  const usageText = formatFooterUsage(lastUsage, { cacheWarning: usageHasIntegratedWarning });
+  const usageColor = largeUncachedWarning ? (hasPendingConfirmation ? warnRed : glow) : slate;
 
   const warningText = (() => {
-    if (hasPendingConfirmation && largeUncachedWarning) {
+    if (!largeUncachedWarning || usageHasIntegratedWarning) {
+      return '';
+    }
+    if (hasPendingConfirmation) {
       return `⚠️ Confirm Cache Miss: ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
     }
-    if (largeUncachedWarning) {
-      return `⚠️ Cache Miss Risk: ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
-    }
-    return '';
+    return `⚠️ Cache Miss Risk: ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
   })();
 
   const codexRateLimitText = (() => {
@@ -195,17 +198,18 @@ const StatusBar: FC<StatusBarProps> = ({
           )}
         </Box>
 
-        {warningText ? (
+        {usageText ? (
           <Box>
-            <Text color={hasPendingConfirmation ? warnRed : glow} bold>
-              {warningText}
+            <Text color={usageColor} bold={Boolean(largeUncachedWarning)}>
+              {usageText}
             </Text>
-            {usageText && <Text color={slate}> │ {usageText}</Text>}
           </Box>
         ) : (
-          usageText && (
+          warningText && (
             <Box>
-              <Text color={slate}>{usageText}</Text>
+              <Text color={hasPendingConfirmation ? warnRed : glow} bold>
+                {warningText}
+              </Text>
             </Box>
           )
         )}

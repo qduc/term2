@@ -19,6 +19,7 @@ export type LargeUncachedInputWarningReason =
 export interface LargeUncachedInputContext {
   input: unknown;
   now: number;
+  actualPromptTokens?: number;
   provider?: string | null;
   model?: string | null;
   reasoningEffort?: string | null;
@@ -117,14 +118,15 @@ export class LargeUncachedInputGuard {
   inspect(context: LargeUncachedInputContext): LargeUncachedInputDecision {
     const estimatedBytes = getSerializedInputBytes(context.input);
     const estimatedTokens = estimateTokens(estimatedBytes);
+    const tokenCount = context.actualPromptTokens ?? estimatedTokens;
     const reasons: LargeUncachedInputWarningReason[] = [];
 
-    if (!this.#config.enabled || estimatedTokens < this.#config.largePromptTokenThreshold) {
+    if (!this.#config.enabled || tokenCount < this.#config.largePromptTokenThreshold) {
       return {
         action: 'allow',
         warningKey: warningKeyFor(context.input, reasons, context),
         reasons,
-        estimatedTokens,
+        estimatedTokens: tokenCount,
         estimatedBytes,
       };
     }
@@ -170,7 +172,7 @@ export class LargeUncachedInputGuard {
       action: reasons.length > 0 ? 'warn' : 'allow',
       warningKey: warningKeyFor(context.input, reasons, context),
       reasons,
-      estimatedTokens,
+      estimatedTokens: tokenCount,
       estimatedBytes,
     };
   }

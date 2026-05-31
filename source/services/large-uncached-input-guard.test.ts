@@ -71,6 +71,42 @@ test('does not warn below threshold', (t) => {
   t.is(decision.action, 'allow');
 });
 
+test('uses actual token usage when available and falls back to the estimate otherwise', (t) => {
+  const guard = new LargeUncachedInputGuard();
+  guard.recordSuccessfulInput({
+    input: largeInput(),
+    now: 1_000,
+    provider: 'openai',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  const actualDecision = guard.inspect({
+    input: largeInput(),
+    now: 1_000 + DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.idleMs + 1,
+    actualPromptTokens: 1_000,
+    provider: 'openai',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  const estimatedDecision = guard.inspect({
+    input: largeInput(),
+    now: 1_000 + DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.idleMs + 1,
+    provider: 'openai',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  t.is(actualDecision.action, 'allow');
+  t.is(actualDecision.estimatedTokens, 1_000);
+  t.is(estimatedDecision.action, 'warn');
+  t.true(estimatedDecision.reasons.includes('idle_timeout'));
+});
+
 test('warns after idle time exceeds five minutes', (t) => {
   const guard = new LargeUncachedInputGuard();
   guard.recordSuccessfulInput({

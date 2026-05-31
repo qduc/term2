@@ -40,6 +40,7 @@ export type BottomAreaProps = {
   onHandoffConfirm?: () => void;
   onHandoffDecline?: () => void;
   onHandoffCancel?: () => void;
+  accumulatedInputTokens?: number;
   largeUncachedWarning?: import('../services/large-uncached-input-guard.js').LargeUncachedInputDecision | null;
   pendingLargeUncachedTurn?: UserTurn | null;
   pendingLargeUncachedTokens?: number;
@@ -71,6 +72,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   onHandoffConfirm,
   onHandoffDecline,
   onHandoffCancel,
+  accumulatedInputTokens,
   largeUncachedWarning,
   pendingLargeUncachedTurn,
   pendingLargeUncachedTokens = 0,
@@ -118,7 +120,7 @@ const BottomArea: FC<BottomAreaProps> = ({
           />
         ) : showLargeUncachedPrompt ? (
           <LargeUncachedConfirmationPrompt
-            estimatedTokens={pendingLargeUncachedTokens || 0}
+            accumulatedInputTokens={accumulatedInputTokens ?? 0}
             onConfirm={onLargeUncachedApprove || (() => {})}
             onDecline={onLargeUncachedDecline || (() => {})}
           />

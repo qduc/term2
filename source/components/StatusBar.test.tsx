@@ -122,21 +122,35 @@ test('StatusBar renders large uncached prompt warning and confirmation warning',
     'shell.autoApproveMode': 'off',
   });
 
+  const lastUsage = {
+    prompt_tokens: 63_561,
+    completion_tokens: 856,
+    cache_read_tokens: 62_000,
+  };
+
   // Test dynamic warning
   const { lastFrame: lastFrameWarning } = render(
-    <StatusBar settingsService={settingsService} largeUncachedWarning={{ estimatedTokens: 72_100 }} />,
+    <StatusBar
+      settingsService={settingsService}
+      lastUsage={lastUsage}
+      largeUncachedWarning={{ estimatedTokens: 72_100 }}
+    />,
   );
   const outputWarning = lastFrameWarning() ?? '';
-  t.true(outputWarning.includes('⚠️ Cache Miss Risk: ~72k'));
+  t.true(outputWarning.includes('Tok: 63,561 in (⚠️ 62,000 uncached) / 856 out'));
+  t.false(outputWarning.includes('Cache Miss Risk'));
+  t.false(outputWarning.includes('Confirm Cache Miss'));
 
   // Test pending confirmation warning
   const { lastFrame: lastFrameConfirm } = render(
     <StatusBar
       settingsService={settingsService}
+      lastUsage={lastUsage}
       largeUncachedWarning={{ estimatedTokens: 72_100 }}
       hasPendingConfirmation={true}
     />,
   );
   const outputConfirm = lastFrameConfirm() ?? '';
-  t.true(outputConfirm.includes('⚠️ Confirm Cache Miss: ~72k'));
+  t.true(outputConfirm.includes('Tok: 63,561 in (⚠️ 62,000 uncached) / 856 out'));
+  t.false(outputConfirm.includes('Confirm Cache Miss'));
 });

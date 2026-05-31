@@ -3,13 +3,18 @@ import { getTtyWriter, writeOscSequence, type TtyWriter } from '../utils/tty-osc
 export interface NotificationOptions {
   env?: NodeJS.ProcessEnv;
   getTtyWriter?: () => TtyWriter | null;
+  logger?: {
+    info: (msg: string, meta?: any) => void;
+    debug: (msg: string, meta?: any) => void;
+    warn: (msg: string, meta?: any) => void;
+  };
 }
 
 /**
  * Terminals that support OSC 777 (notify;title;message).
  * Identified by TERM_PROGRAM or TERM environment variables.
  */
-const OSC777_TERM_PROGRAMS = new Set(['ghostty', 'kitty', 'wezterm', 'foot', 'iterm.app', 'iterm2']);
+const OSC777_TERM_PROGRAMS = new Set(['ghostty', 'kitty', 'wezterm', 'foot', 'WarpTerminal']);
 const OSC777_TERM_PREFIXES = ['xterm-kitty', 'foot'];
 
 function supportsOsc777(env: NodeJS.ProcessEnv): boolean {
@@ -57,6 +62,25 @@ export function buildNotificationSequence(title: string, message: string, env: N
 export function sendNotification(title: string, message: string, opts: NotificationOptions = {}): void {
   const env = opts.env ?? process.env;
   const getWriter = opts.getTtyWriter ?? getTtyWriter;
+  const logger = opts.logger;
+
+  if (logger) {
+    logger.debug('sendNotification called', {
+      title,
+      message,
+      termProgram: env.TERM_PROGRAM,
+      term: env.TERM,
+      supportsOsc777: supportsOsc777(env),
+    });
+  }
+
   const inner = buildNotificationSequence(title, message, env);
+
+  if (logger) {
+    logger.debug('sendNotification built sequence', {
+      sequence: JSON.stringify(inner),
+    });
+  }
+
   writeOscSequence(inner, { env, getTtyWriter: getWriter });
 }

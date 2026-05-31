@@ -67,6 +67,10 @@ type Props = {
   promptLabel?: string;
 };
 
+const isFocusReportingSequence = (input: string): boolean => {
+  return input === '\x1b[I' || input === '\x1b[O' || input === '[I' || input === '[O';
+};
+
 const InputBox: FC<Props> = ({
   onSubmit,
   slashCommands,
@@ -407,6 +411,12 @@ const InputBox: FC<Props> = ({
     } = stateRef.current;
     const currentCursor = cursorOffsetRef.current;
     if (currentMode === 'text') return;
+
+    // Ignore focus-in and focus-out escape sequences (both raw and split variants)
+    if (isFocusReportingSequence(_input)) {
+      return;
+    }
+
     const hasMoveLeft = Boolean(currentHandlers[currentMode].moveLeft);
     const hasMoveRight = Boolean(currentHandlers[currentMode].moveRight);
 
@@ -598,6 +608,7 @@ const InputBox: FC<Props> = ({
           onImagesChange={handleImagesChange}
           onPasteError={handlePasteError}
           pasteThreshold={settingsService.get<number | undefined>('ui.pasteThreshold')}
+          ignoreInput={isFocusReportingSequence}
         />
       </Box>
       {escHintVisible && <Text color="#64748b">Press ESC again to clear input</Text>}

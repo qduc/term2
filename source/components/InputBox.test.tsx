@@ -456,3 +456,68 @@ test('settings value completion resets setting and reopens settings menu targeti
   t.true(frame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
   t.true(frame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
 });
+
+test('InputBox ignores focus sequences when not in text mode', async (t) => {
+  const TestHarness = () => (
+    <InputProvider>
+      <StateDisplay />
+      <InputBox {...defaultProps} />
+    </InputProvider>
+  );
+
+  const { lastFrame, stdin } = render(<TestHarness />);
+
+  // Trigger slash commands mode by writing "/"
+  await writeInput(stdin, '/');
+  await flushReactUpdates(20);
+
+  let frame = lastFrame() ?? '';
+  t.true(frame.includes('Input:/|Mode:slash_commands'), frame);
+
+  // Write focus-in sequence
+  await writeInput(stdin, '\x1b[I');
+  await flushReactUpdates(20);
+
+  frame = lastFrame() ?? '';
+  // Input should still be "/"
+  t.true(frame.includes('Input:/|Mode:slash_commands'), frame);
+
+  // Write focus-out sequence
+  await writeInput(stdin, '\x1b[O');
+  await flushReactUpdates(20);
+
+  frame = lastFrame() ?? '';
+  // Input should still be "/"
+  t.true(frame.includes('Input:/|Mode:slash_commands'), frame);
+});
+
+test('InputBox ignores focus sequences when in text mode', async (t) => {
+  const TestHarness = () => (
+    <InputProvider>
+      <StateDisplay />
+      <InputBox {...defaultProps} />
+    </InputProvider>
+  );
+
+  const { lastFrame, stdin } = render(<TestHarness />);
+  await flushReactUpdates(5);
+
+  let frame = lastFrame() ?? '';
+  t.true(frame.includes('Input:|Mode:text'), frame);
+
+  // Write focus-in sequence
+  await writeInput(stdin, '\x1b[I');
+  await flushReactUpdates(20);
+
+  frame = lastFrame() ?? '';
+  // Input should still be empty
+  t.true(frame.includes('Input:|Mode:text'), frame);
+
+  // Write focus-out sequence
+  await writeInput(stdin, '\x1b[O');
+  await flushReactUpdates(20);
+
+  frame = lastFrame() ?? '';
+  // Input should still be empty
+  t.true(frame.includes('Input:|Mode:text'), frame);
+});

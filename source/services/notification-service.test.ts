@@ -28,9 +28,9 @@ test('buildNotificationSequence uses OSC 777 for foot', (t) => {
   t.is(seq, '\x1b]777;notify;T;M\x07');
 });
 
-test('buildNotificationSequence uses OSC 777 for iterm2', (t) => {
+test('buildNotificationSequence uses OSC 9 for iterm2', (t) => {
   const seq = buildNotificationSequence('T', 'M', { TERM_PROGRAM: 'iTerm.app' });
-  t.is(seq, '\x1b]777;notify;T;M\x07');
+  t.is(seq, '\x1b]9;M\x07');
 });
 
 test('buildNotificationSequence uses OSC 9 for generic xterm', (t) => {

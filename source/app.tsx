@@ -128,13 +128,33 @@ const App: FC<AppProps> = ({
 
   // Track focus state from CSI focus-in/out sequences delivered by Ink.
   useInput((rawInput: string) => {
-    if (rawInput === '\x1b[I') {
+    loggingService.debug('Received terminal raw input sequence', {
+      rawInput: JSON.stringify(rawInput),
+      length: rawInput.length,
+    });
+
+    if (rawInput === '\x1b[I' || rawInput === '[I') {
+      loggingService.debug('Terminal focus changed to IN (focused)', {
+        prevFocused: focusedRef.current,
+      });
       focusedRef.current = true;
       return;
     }
-    if (rawInput === '\x1b[O') {
+    if (rawInput === '\x1b[O' || rawInput === '[O') {
+      loggingService.debug('Terminal focus changed to OUT (unfocused)', {
+        prevFocused: focusedRef.current,
+      });
       focusedRef.current = false;
       return;
+    }
+
+    // Heuristic: If we receive any key input from the user while marked as unfocused,
+    // they must have focused the window to type.
+    if (!focusedRef.current) {
+      loggingService.debug('Terminal focus restored via user input heuristic', {
+        rawInput: JSON.stringify(rawInput),
+      });
+      focusedRef.current = true;
     }
   });
 
@@ -143,19 +163,29 @@ const App: FC<AppProps> = ({
   const notifier = useMemo(
     () => ({
       approvalNeeded() {
+        loggingService.debug('notifier.approvalNeeded check', {
+          focused: focusedRef.current,
+          appNotifications: settingsService.get<boolean>('app.notifications'),
+          appNotificationsOnApproval: settingsService.get<boolean>('app.notificationsOnApproval'),
+        });
         if (focusedRef.current) return;
         if (!settingsService.get<boolean>('app.notifications')) return;
         if (!settingsService.get<boolean>('app.notificationsOnApproval')) return;
-        sendNotification('Approval needed', 'Agent is waiting for your approval');
+        sendNotification('Approval needed', 'Agent is waiting for your approval', { logger: loggingService });
       },
       turnComplete() {
+        loggingService.debug('notifier.turnComplete check', {
+          focused: focusedRef.current,
+          appNotifications: settingsService.get<boolean>('app.notifications'),
+          appNotificationsOnComplete: settingsService.get<boolean>('app.notificationsOnComplete'),
+        });
         if (focusedRef.current) return;
         if (!settingsService.get<boolean>('app.notifications')) return;
         if (!settingsService.get<boolean>('app.notificationsOnComplete')) return;
-        sendNotification('Response ready', 'Agent has finished responding');
+        sendNotification('Response ready', 'Agent has finished responding', { logger: loggingService });
       },
     }),
-    [settingsService],
+    [settingsService, loggingService],
   );
 
   // Compute largeUncachedWarning in real-time as the user types
@@ -514,7 +544,7 @@ const App: FC<AppProps> = ({
           if (preview.action === 'warn') {
             setPendingLargeUncachedTurn(turn);
             setPendingLargeUncachedTokens(preview.estimatedTokens);
-            loggingService.info('Large uncached input warning shown', {
+            loggingService.debug('Large uncached input warning shown', {
               eventType: 'large_uncached_input_warning_shown',
               category: 'provider',
               estimatedTokens: preview.estimatedTokens,
@@ -537,7 +567,7 @@ const App: FC<AppProps> = ({
       if (preview.action === 'warn') {
         setPendingLargeUncachedTurn(turn);
         setPendingLargeUncachedTokens(preview.estimatedTokens);
-        loggingService.info('Large uncached input warning shown', {
+        loggingService.debug('Large uncached input warning shown', {
           eventType: 'large_uncached_input_warning_shown',
           category: 'provider',
           estimatedTokens: preview.estimatedTokens,

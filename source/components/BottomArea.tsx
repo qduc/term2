@@ -141,7 +141,12 @@ const BottomArea: FC<BottomAreaProps> = ({
             onUndoSelect={onUndoSelect}
             onSettingChange={onSettingChange}
             onSlashTabComplete={onSlashTabComplete}
-            promptLabel={handoffState?.stage === 'entering_message' ? 'Handoff message: ' : undefined}
+            promptLabel={
+              handoffState?.stage === 'entering_message'
+                ? 'Handoff message (enter to use default message): '
+                : undefined
+            }
+            allowEmptySubmit={handoffState?.stage === 'entering_message'}
           />
         ) : null}
       </Box>

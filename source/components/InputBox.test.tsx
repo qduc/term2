@@ -48,7 +48,7 @@ const defaultProps = {
 };
 
 // Helper to wrap InputBox with InputProvider
-const TestInputBox = (props: typeof defaultProps) => (
+const TestInputBox = (props: any) => (
   <InputProvider>
     <InputBox {...props} />
   </InputProvider>
@@ -107,19 +107,35 @@ test('InputBox shows the shell prompt when in shell mode', (t) => {
   t.true(output!.includes('$'));
 });
 
-test('InputBox can be submitted', (t) => {
+test('InputBox onSubmit is not called on empty input when allowEmptySubmit is false', async (t) => {
   let submitted = false;
   const onSubmit = () => {
     submitted = true;
   };
 
-  render(<TestInputBox {...defaultProps} onSubmit={onSubmit} />);
+  const { stdin } = render(<TestInputBox {...defaultProps} onSubmit={onSubmit} allowEmptySubmit={false} />);
 
-  // Note: We can't easily test actual submission in this unit test
-  // because it requires user input simulation which is complex with MultilineInput
-  // This test just verifies the component renders with the onSubmit prop
+  await writeInput(stdin, '\r');
+  await flushReactUpdates(5);
+
   t.false(submitted);
-  t.pass();
+});
+
+test('InputBox onSubmit is called on empty input when allowEmptySubmit is true', async (t) => {
+  let submitted = false;
+  let submittedTurn: any = null;
+  const onSubmit = (turn: any) => {
+    submitted = true;
+    submittedTurn = turn;
+  };
+
+  const { stdin } = render(<TestInputBox {...defaultProps} onSubmit={onSubmit} allowEmptySubmit={true} />);
+
+  await writeInput(stdin, '\r');
+  await flushReactUpdates(5);
+
+  t.true(submitted);
+  t.deepEqual(submittedTurn, { text: '' });
 });
 
 test('InputBox accepts slash commands prop', (t) => {

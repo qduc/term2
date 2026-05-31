@@ -65,6 +65,7 @@ type Props = {
   onSettingChange?: (key: string, value: any) => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
   promptLabel?: string;
+  allowEmptySubmit?: boolean;
 };
 
 const isFocusReportingSequence = (input: string): boolean => {
@@ -84,6 +85,7 @@ const InputBox: FC<Props> = ({
   onSettingChange,
   onSlashTabComplete,
   promptLabel,
+  allowEmptySubmit = false,
 }) => {
   const {
     input: value,
@@ -551,11 +553,11 @@ const InputBox: FC<Props> = ({
     (submittedValue: string, submittedImages?: ImageRef[]) => {
       if (mode !== 'text' && modeHandlers[mode].onSubmit?.(submittedValue) === 'handled') return;
       const turnImages = submittedImages ?? images;
-      if (!submittedValue.trim() && turnImages.length === 0) return;
+      if (!allowEmptySubmit && !submittedValue.trim() && turnImages.length === 0) return;
       setImages([]);
       void onSubmit({ text: submittedValue, ...(turnImages.length ? { images: turnImages } : {}) });
     },
-    [mode, modeHandlers, onSubmit, images],
+    [mode, modeHandlers, onSubmit, images, allowEmptySubmit],
   );
 
   const handlePasteError = useCallback(

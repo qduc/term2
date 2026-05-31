@@ -466,7 +466,7 @@ const App: FC<AppProps> = ({
   const handleSubmit = async (turn: UserTurn): Promise<void> => {
     const value = turn.text;
     const hasImages = Boolean(turn.images?.length);
-    if (!hasUserTurnContent(turn)) return;
+    if (!hasUserTurnContent(turn) && handoffState?.stage !== 'entering_message') return;
 
     // If waiting for rejection reason, handle it
     if (waitingForRejectionReason) {

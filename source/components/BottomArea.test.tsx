@@ -123,7 +123,7 @@ test('BottomArea shows input with handoff message prompt when handoffState is en
     },
   });
   const output = lastFrame() ?? '';
-  t.true(output.includes('Handoff message:'));
+  t.true(output.includes('Handoff message (optional):'));
   t.false(output.includes('Allow this action?'));
   t.false(output.includes('processing'));
   unmount();

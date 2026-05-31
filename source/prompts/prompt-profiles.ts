@@ -34,7 +34,7 @@ export const PROMPT_PROFILES: PromptProfile[] = [
   },
   {
     id: 'gpt-5.5',
-    basePromptFile: 'gpt-5-modern.md',
+    basePromptFile: 'gpt-5.5.md',
     // fragmentFiles: ['fragments/gpt-5.5.md'],
     matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5.5'),
   },

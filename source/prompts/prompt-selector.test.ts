@@ -43,7 +43,7 @@ test('getPromptPath selects modern gpt-5 prompt for all non-codex gpt-5 models',
   );
   t.is(
     getPromptPath({ basePromptDir, model: 'gpt-5.5-2026-04-23', liteMode: false }),
-    path.join(basePromptDir, 'gpt-5-modern.md'),
+    path.join(basePromptDir, 'gpt-5.5.md'),
   );
 });
 

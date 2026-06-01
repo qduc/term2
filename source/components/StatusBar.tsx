@@ -15,6 +15,7 @@ interface StatusBarProps {
   lastCodexRateLimit?: CodexRateLimitInfo | null;
   largeUncachedWarning?: { estimatedTokens: number } | null;
   hasPendingConfirmation?: boolean;
+  pendingLargeUncachedTokens?: number;
 }
 
 const StatusBar: FC<StatusBarProps> = ({
@@ -25,6 +26,7 @@ const StatusBar: FC<StatusBarProps> = ({
   lastCodexRateLimit,
   largeUncachedWarning,
   hasPendingConfirmation = false,
+  pendingLargeUncachedTokens,
 }) => {
   const mentorMode = useSetting<boolean>(settingsService, 'app.mentorMode') ?? false;
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
@@ -55,7 +57,8 @@ const StatusBar: FC<StatusBarProps> = ({
       return '';
     }
     if (hasPendingConfirmation) {
-      return `⚠️ Confirm Cache Miss: ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
+      const tokens = pendingLargeUncachedTokens ?? largeUncachedWarning.estimatedTokens;
+      return `⚠️ Confirm Cache Miss: ~${Math.round(tokens / 1000)}k`;
     }
     return `⚠️ Cache Miss Risk: ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
   })();

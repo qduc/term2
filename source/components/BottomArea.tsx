@@ -161,6 +161,7 @@ const BottomArea: FC<BottomAreaProps> = ({
         lastCodexRateLimit={lastCodexRateLimit}
         largeUncachedWarning={largeUncachedWarning}
         hasPendingConfirmation={pendingLargeUncachedTurn !== null && pendingLargeUncachedTokens > 0}
+        pendingLargeUncachedTokens={pendingLargeUncachedTokens}
       />
     </Box>
   );

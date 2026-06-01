@@ -26,6 +26,30 @@ import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumula
 import type { Message } from './hooks/use-conversation.js';
 import type { UndoItem } from './hooks/use-undo-selection.js';
 import { resolveSlashCommand } from './slash-commands.js';
+import { getSerializedInputBytes } from './services/large-uncached-input-guard.js';
+
+const estimateLastTurnTokens = (turn: UserTurn): number => {
+  const images = turn.images ?? [];
+  let inputItem: unknown;
+  if (images.length === 0) {
+    inputItem = turn.text ?? '';
+  } else {
+    const content: any[] = [];
+    if (turn.text) {
+      content.push({ type: 'input_text', text: turn.text });
+    }
+    for (const image of images) {
+      content.push({
+        type: 'input_image',
+        image: `data:${image.mimeType};base64,${image.data}`,
+        detail: 'auto',
+      });
+    }
+    inputItem = { role: 'user', type: 'message', content };
+  }
+  const bytes = getSerializedInputBytes(inputItem);
+  return Math.ceil(bytes / 4);
+};
 
 interface AppProps {
   conversationService: ConversationService;
@@ -104,7 +128,7 @@ const App: FC<AppProps> = ({
   const { exit } = useApp();
   const { stdout } = useStdout();
   const { setInput, setMode, setTriggerIndex, setImages } = useInputActions();
-  const { input, mode } = useInputState();
+  const { input, mode, images } = useInputState();
   const [handoffState, setHandoffState] = useState<HandoffState | null>(null);
   const [pendingLargeUncachedTurn, setPendingLargeUncachedTurn] = useState<UserTurn | null>(null);
   const [pendingLargeUncachedTokens, setPendingLargeUncachedTokens] = useState<number>(0);
@@ -199,8 +223,14 @@ const App: FC<AppProps> = ({
   const largeUncachedWarning = useMemo(() => {
     if (!input || mode !== 'text' || input.startsWith('/')) return null;
     const preview = conversationService.previewLargeUncachedInput({ text: input }, Date.now());
-    return preview.action === 'warn' ? preview : null;
-  }, [input, mode, conversationService]);
+    if (preview.action === 'warn') {
+      return {
+        ...preview,
+        estimatedTokens: estimateLastTurnTokens({ text: input, images }),
+      };
+    }
+    return null;
+  }, [input, mode, conversationService, images]);
 
   const {
     messages,
@@ -550,7 +580,7 @@ const App: FC<AppProps> = ({
 
           if (preview.action === 'warn') {
             setPendingLargeUncachedTurn(turn);
-            setPendingLargeUncachedTokens(preview.estimatedTokens);
+            setPendingLargeUncachedTokens(estimateLastTurnTokens(turn));
             loggingService.debug('Large uncached input warning shown', {
               eventType: 'large_uncached_input_warning_shown',
               category: 'provider',
@@ -573,7 +603,7 @@ const App: FC<AppProps> = ({
 
       if (preview.action === 'warn') {
         setPendingLargeUncachedTurn(turn);
-        setPendingLargeUncachedTokens(preview.estimatedTokens);
+        setPendingLargeUncachedTokens(estimateLastTurnTokens(turn));
         loggingService.debug('Large uncached input warning shown', {
           eventType: 'large_uncached_input_warning_shown',
           category: 'provider',

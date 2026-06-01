@@ -154,3 +154,24 @@ test('StatusBar renders large uncached prompt warning and confirmation warning',
   t.true(outputConfirm.includes('Tok: 63,561 in (⚠️ 62,000 uncached) / 856 out'));
   t.false(outputConfirm.includes('Confirm Cache Miss'));
 });
+
+test('StatusBar renders Confirm Cache Miss using pendingLargeUncachedTokens', (t) => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = render(
+    <StatusBar
+      settingsService={settingsService}
+      largeUncachedWarning={{ estimatedTokens: 100_000 }}
+      hasPendingConfirmation={true}
+      pendingLargeUncachedTokens={20_000}
+    />,
+  );
+
+  const output = lastFrame() ?? '';
+  // Math.round(20_000 / 1000) = 20
+  t.true(output.includes('Confirm Cache Miss: ~20k'));
+});

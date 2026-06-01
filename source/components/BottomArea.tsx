@@ -74,7 +74,6 @@ const BottomArea: FC<BottomAreaProps> = ({
   onHandoffConfirm,
   onHandoffDecline,
   onHandoffCancel,
-  accumulatedInputTokens,
   largeUncachedWarning,
   pendingLargeUncachedTurn,
   pendingLargeUncachedTokens = 0,
@@ -122,7 +121,7 @@ const BottomArea: FC<BottomAreaProps> = ({
           />
         ) : showLargeUncachedPrompt ? (
           <LargeUncachedConfirmationPrompt
-            accumulatedInputTokens={accumulatedInputTokens ?? 0}
+            accumulatedInputTokens={pendingLargeUncachedTokens ?? 0}
             onConfirm={onLargeUncachedApprove || (() => {})}
             onDecline={onLargeUncachedDecline || (() => {})}
           />

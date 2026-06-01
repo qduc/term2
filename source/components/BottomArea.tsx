@@ -35,6 +35,7 @@ export type BottomAreaProps = {
   sshInfo?: SSHInfo;
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
   onUndoSelect?: (item: UndoItem) => void;
+  providersMenuRef?: React.MutableRefObject<{ open: () => void } | null>;
   onSettingChange?: (key: string, value: any) => void;
   onSystemMessage?: (text: string) => void;
   handoffState?: HandoffState | null;
@@ -67,6 +68,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   lastCodexRateLimit,
   undoMenuRef,
   onUndoSelect,
+  providersMenuRef,
   onSettingChange,
   onSystemMessage,
   handoffState,
@@ -139,6 +141,7 @@ const BottomArea: FC<BottomAreaProps> = ({
             historyService={historyService}
             undoMenuRef={undoMenuRef}
             onUndoSelect={onUndoSelect}
+            providersMenuRef={providersMenuRef}
             onSettingChange={onSettingChange}
             onSystemMessage={onSystemMessage}
             onSlashTabComplete={onSlashTabComplete}

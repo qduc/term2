@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { InputMode } from '../context/InputContext.js';
 import { SETTINGS_TRIGGER } from '../components/Input/triggers.js';
+import type { ProviderSelectionPhase } from './use-provider-selection.js';
 
 export type SubmitResult = 'handled' | 'fallthrough';
 
@@ -40,6 +41,14 @@ type Models = Movable & { canSwitchProvider: boolean; toggleProvider: (direction
 type Undo = Movable & {
   confirmSelection: (onSelect: (item: import('../hooks/use-undo-selection.js').UndoItem) => void) => void;
 };
+type Providers = {
+  phase: ProviderSelectionPhase;
+  moveUp: () => void;
+  moveDown: () => void;
+  selectItem: () => void;
+  goBack: () => void;
+  handleTextInputSubmit: (value: string) => boolean;
+};
 
 type Options = {
   slash: Slash;
@@ -48,6 +57,7 @@ type Options = {
   settingsValue: Movable;
   models: Models;
   undo: Undo;
+  providers: Providers;
   insertSelectedPath: (appendTrailingSpace: boolean) => boolean;
   insertSelectedSetting: () => boolean;
   insertSelectedSettingValue: (submitAfterInsert: boolean, typedValue?: string) => boolean;
@@ -66,6 +76,7 @@ export const useModeHandlers = ({
   settingsValue,
   models,
   undo,
+  providers,
   insertSelectedPath,
   insertSelectedSetting,
   insertSelectedSettingValue,
@@ -192,6 +203,24 @@ export const useModeHandlers = ({
           return 'handled';
         },
       },
+      provider_selection: {
+        moveUp: providers.moveUp,
+        moveDown: providers.moveDown,
+        onSubmit: (submittedValue: string) => {
+          if (
+            providers.phase === 'wizard_name' ||
+            providers.phase === 'wizard_url' ||
+            providers.phase === 'wizard_key'
+          ) {
+            providers.handleTextInputSubmit(submittedValue);
+            return 'handled';
+          }
+
+          providers.selectItem();
+          return 'handled';
+        },
+        onReset: providers.goBack,
+      },
     }),
     [
       slash,
@@ -200,6 +229,7 @@ export const useModeHandlers = ({
       settingsValue,
       models,
       undo,
+      providers,
       insertSelectedPath,
       insertSelectedSetting,
       insertSelectedSettingValue,

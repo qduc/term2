@@ -6,6 +6,7 @@ import type { useSettingsCompletion } from '../../hooks/use-settings-completion.
 import type { useSettingsValueCompletion } from '../../hooks/use-settings-value-completion.js';
 import type { useModelSelection } from '../../hooks/use-model-selection.js';
 import type { useUndoSelection } from '../../hooks/use-undo-selection.js';
+import type { useProviderSelection } from '../../hooks/use-provider-selection.js';
 
 type PopupProps = ComponentProps<typeof PopupManager>;
 
@@ -16,6 +17,7 @@ type Sources = {
   settingsValue: ReturnType<typeof useSettingsValueCompletion>;
   models: ReturnType<typeof useModelSelection>;
   undo: ReturnType<typeof useUndoSelection>;
+  providers: ReturnType<typeof useProviderSelection>;
 };
 
 export const toPopupProps = ({
@@ -25,6 +27,7 @@ export const toPopupProps = ({
   settingsValue,
   models,
   undo,
+  providers,
 }: Sources): Omit<PopupProps, 'settingsService'> => ({
   slash: {
     isOpen: slash.isOpen,
@@ -77,5 +80,15 @@ export const toPopupProps = ({
     items: undo.items,
     selectedIndex: undo.selectedIndex,
     scrollOffset: undo.scrollOffset,
+  },
+  providers: {
+    isOpen: providers.isOpen,
+    phase: providers.phase,
+    selectedIndex: providers.selectedIndex,
+    scrollOffset: providers.scrollOffset,
+    activeItems: providers.getActiveItems(),
+    errorMessage: providers.errorMessage,
+    selectedProviderName: providers.selectedProvider?.label,
+    draft: providers.draft,
   },
 });

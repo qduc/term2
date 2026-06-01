@@ -281,6 +281,7 @@ const TestHookWrapper = ({
     setModel: () => {},
     undoLastUserMessage: () => null,
     openUndoMenu: () => {},
+    openProvidersMenu: () => {},
     sendUserMessage: async () => {},
     listUserTurns: () => [],
   });
@@ -547,6 +548,7 @@ test('useAppCommands /handoff when assistant response exists copies, clears, mes
       setModel: () => {},
       undoLastUserMessage: () => null,
       openUndoMenu: () => {},
+      openProvidersMenu: () => {},
       onHandoff: (text) => {
         handoffText = text;
       },

@@ -2,7 +2,7 @@ import test from 'ava';
 import React, { useEffect, useRef } from 'react';
 import { render } from 'ink-testing-library';
 import { Box, Text } from 'ink';
-import InputBox, { calculateInputWidth } from './InputBox.js';
+import InputBox, { calculateInputWidth, getProviderWizardPromptLabel } from './InputBox.js';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
 import SettingsSelectionMenu from './SettingsSelectionMenu.js';
 import { computeModelInsertion } from './Input/insertions.js';
@@ -105,6 +105,20 @@ test('InputBox shows the shell prompt when in shell mode', (t) => {
   const output = lastFrame();
   t.truthy(output);
   t.true(output!.includes('$'));
+});
+
+test('getProviderWizardPromptLabel maps provider wizard phases to prompt labels', (t) => {
+  t.is(getProviderWizardPromptLabel('wizard_name'), 'Enter Provider Name: ');
+  t.is(getProviderWizardPromptLabel('wizard_url'), 'Enter Base API URL: ');
+  t.is(getProviderWizardPromptLabel('wizard_key'), 'Enter API Key: ');
+  t.is(getProviderWizardPromptLabel('list' as any), undefined);
+});
+
+test('InputBox renders the provided prompt label', (t) => {
+  const { lastFrame } = render(<TestInputBox {...defaultProps} promptLabel="Enter Provider Name: " />);
+  const output = lastFrame();
+  t.truthy(output);
+  t.true(output!.includes('Enter Provider Name:'));
 });
 
 test('InputBox onSubmit is not called on empty input when allowEmptySubmit is false', async (t) => {

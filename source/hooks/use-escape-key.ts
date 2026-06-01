@@ -25,6 +25,10 @@ type ModelsHandle = {
   close: () => void;
 };
 
+type ProviderSelectionHandle = {
+  goBack: () => void;
+};
+
 type Options = {
   mode: InputMode;
   setMode: (mode: InputMode) => void;
@@ -33,6 +37,7 @@ type Options = {
   settings: SettingsHandle;
   settingsValue: SettingsValueHandle;
   models?: ModelsHandle;
+  providerSelection?: ProviderSelectionHandle;
   setCursorOverride: (cursor: number | null) => void;
   dismissedCompletionRef: MutableRefObject<CompletionDismissal>;
   inputRevisionRef: MutableRefObject<number>;
@@ -46,6 +51,7 @@ export const useEscapeKey = ({
   settings,
   settingsValue,
   models,
+  providerSelection,
   setCursorOverride,
   dismissedCompletionRef,
   inputRevisionRef,
@@ -53,8 +59,8 @@ export const useEscapeKey = ({
   const [escHintVisible, setEscHintVisible] = useState(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const stateRef = useRef({ mode, escHintVisible, value, settingsValue, models });
-  stateRef.current = { mode, escHintVisible, value, settingsValue, models };
+  const stateRef = useRef({ mode, escHintVisible, value, settings, settingsValue, models, providerSelection });
+  stateRef.current = { mode, escHintVisible, value, settings, settingsValue, models, providerSelection };
 
   useEffect(() => {
     return () => {
@@ -69,8 +75,10 @@ export const useEscapeKey = ({
       mode: currentMode,
       escHintVisible: currentEscHintVisible,
       value: currentValue,
+      settings: currentSettings,
       settingsValue: currentSettingsValue,
       models: currentModels,
+      providerSelection: currentProviderSelection,
     } = stateRef.current;
 
     if (currentMode !== 'text') {
@@ -83,13 +91,18 @@ export const useEscapeKey = ({
 
           const previousKey = currentModels.modelSettingConfig.modelKey;
           currentModels.close();
-          settings.open(prefix.length, previousKey);
+          currentSettings.open(prefix.length, previousKey);
           return;
         }
 
         // Non-settings-backed: clear input and exit to text mode
         onChange('');
         setMode('text');
+        return;
+      }
+
+      if (currentMode === 'provider_selection') {
+        currentProviderSelection?.goBack();
         return;
       }
 
@@ -101,7 +114,7 @@ export const useEscapeKey = ({
 
           const previousKey = currentSettingsValue.settingKey;
           currentSettingsValue.close();
-          settings.open(prefix.length, previousKey);
+          currentSettings.open(prefix.length, previousKey);
           return;
         }
       }

@@ -23,6 +23,7 @@ const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as Inp
     onChange,
     settings: { open: () => {} } as any,
     settingsValue: { settingKey: null, close: () => {} } as any,
+    providerSelection: { goBack: () => {} } as any,
     setCursorOverride,
     dismissedCompletionRef,
     inputRevisionRef,
@@ -344,6 +345,7 @@ test('pressing ESC in model_selection mode with settings-backed model setting re
       } as any,
       settingsValue: { settingKey: null, close: () => {} } as any,
       models: mockModels,
+      providerSelection: { goBack: () => {} } as any,
       setCursorOverride,
       dismissedCompletionRef,
       inputRevisionRef,
@@ -407,6 +409,7 @@ test('pressing ESC in non-settings settings_value_completion mode keeps trigger 
       settings: { open: () => {} } as any,
       // settingKey is null because this completion was opened from a non-/settings command
       settingsValue: { settingKey: null, close: () => {} } as any,
+      providerSelection: { goBack: () => {} } as any,
       setCursorOverride,
       dismissedCompletionRef,
       inputRevisionRef,
@@ -431,5 +434,115 @@ test('pressing ESC in non-settings settings_value_completion mode keeps trigger 
   t.true(
     frame.includes('Value: /effort'),
     'Inline settings-value trigger text must be preserved when cancelling the popup',
+  );
+});
+
+test('pressing ESC in provider_selection calls goBack', async (t) => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+  let goBackCalls = 0;
+
+  const ProviderSelectionTestComponent = () => {
+    const [value, onChange] = useState('');
+    const [mode, setMode] = useState<InputMode>('provider_selection');
+    const dismissedCompletionRef = { current: null } as any;
+    const inputRevisionRef = { current: 0 };
+    const [, setCursorOverride] = useState<number | null>(null);
+
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
+
+    useEscapeKey({
+      mode,
+      setMode,
+      value,
+      onChange,
+      settings: { open: () => {} } as any,
+      settingsValue: { settingKey: null, close: () => {} } as any,
+      providerSelection: { goBack: () => goBackCalls++ } as any,
+      setCursorOverride,
+      dismissedCompletionRef,
+      inputRevisionRef,
+    });
+
+    return (
+      <Box flexDirection="column">
+        <Text>Mode: {mode}</Text>
+      </Box>
+    );
+  };
+
+  const { lastFrame } = await renderAndFlush(<ProviderSelectionTestComponent />);
+  t.true(lastFrame()!.includes('Mode: provider_selection'));
+
+  await pressEscape(inputEmitter!);
+
+  t.is(goBackCalls, 1);
+  t.true(lastFrame()!.includes('Mode: provider_selection'));
+});
+
+test('pressing ESC in provider_selection calls the LATEST goBack function (verifying ref is not stale)', async (t) => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+  let lastGoBackCalledWith: number | null = null;
+  let triggerUpdate: (() => void) | null = null;
+
+  const ProviderSelectionStaleClosureHarness = () => {
+    const [value, onChange] = useState('');
+    const [mode, setMode] = useState<InputMode>('provider_selection');
+    const [version, setVersion] = useState(1);
+    const dismissedCompletionRef = { current: null } as any;
+    const inputRevisionRef = { current: 0 };
+    const [, setCursorOverride] = useState<number | null>(null);
+
+    triggerUpdate = () => setVersion((v) => v + 1);
+
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
+
+    useEscapeKey({
+      mode,
+      setMode,
+      value,
+      onChange,
+      settings: { open: () => {} } as any,
+      settingsValue: { settingKey: null, close: () => {} } as any,
+      providerSelection: {
+        goBack: () => {
+          lastGoBackCalledWith = version;
+        },
+      },
+      setCursorOverride,
+      dismissedCompletionRef,
+      inputRevisionRef,
+    });
+
+    return (
+      <Box flexDirection="column">
+        <Text>Mode: {mode}</Text>
+        <Text>Version: {version}</Text>
+      </Box>
+    );
+  };
+
+  const { lastFrame } = await renderAndFlush(<ProviderSelectionStaleClosureHarness />);
+  t.true(lastFrame()!.includes('Mode: provider_selection'));
+  t.true(lastFrame()!.includes('Version: 1'));
+
+  // Trigger re-render to change providerSelection identity and implementation
+  await act(async () => {
+    triggerUpdate!();
+  });
+  await flushReactUpdates(5);
+
+  t.true(lastFrame()!.includes('Version: 2'));
+
+  // Press ESC
+  await pressEscape(inputEmitter!);
+
+  t.is(
+    lastGoBackCalledWith as any,
+    2,
+    'Should call the goBack function from the latest render, not the initial render',
   );
 });

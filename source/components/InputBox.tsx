@@ -11,6 +11,8 @@ import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { useSettingsValueCompletion } from '../hooks/use-settings-value-completion.js';
 import { useModelSelection } from '../hooks/use-model-selection.js';
 import { useUndoSelection } from '../hooks/use-undo-selection.js';
+import { useProviderSelection } from '../hooks/use-provider-selection.js';
+import type { ProviderSelectionPhase } from '../hooks/use-provider-selection.js';
 import { PopupManager } from './Input/PopupManager.js';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings-service.js';
@@ -62,6 +64,7 @@ type Props = {
   historyService: HistoryService;
   onUndoSelect?: (item: UndoItem) => void;
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
+  providersMenuRef?: React.MutableRefObject<{ open: () => void } | null>;
   onSettingChange?: (key: string, value: any) => void;
   onSystemMessage?: (text: string) => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
@@ -87,6 +90,13 @@ const parseSubmittedSettingValue = (submittedValue: string, startsWithSettingsTr
   return parseSettingValue(valueParts.join(' '));
 };
 
+export const getProviderWizardPromptLabel = (phase: ProviderSelectionPhase): string | undefined => {
+  if (phase === 'wizard_name') return 'Enter Provider Name: ';
+  if (phase === 'wizard_url') return 'Enter Base API URL: ';
+  if (phase === 'wizard_key') return 'Enter API Key: ';
+  return undefined;
+};
+
 const InputBox: FC<Props> = ({
   onSubmit,
   slashCommands,
@@ -97,6 +107,7 @@ const InputBox: FC<Props> = ({
   historyService,
   onUndoSelect,
   undoMenuRef,
+  providersMenuRef,
   onSettingChange,
   onSystemMessage,
   onSlashTabComplete,
@@ -120,7 +131,6 @@ const InputBox: FC<Props> = ({
   const lockedCursorRef = useRef<number | null>(null);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
   const settingsFilterRef = useRef('');
-  const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel });
 
   // Hooks
   const slash = useSlashCommands({
@@ -150,6 +160,11 @@ const InputBox: FC<Props> = ({
     settingsService,
   });
   const undo = useUndoSelection();
+  const providers = useProviderSelection(settingsService);
+
+  const providerWizardPromptLabel = getProviderWizardPromptLabel(providers.phase);
+  const activePromptLabel = providerWizardPromptLabel ?? promptLabel;
+  const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel: activePromptLabel });
 
   // Wire up the undo menu ref so app.tsx can open the menu
   useEffect(() => {
@@ -162,6 +177,18 @@ const InputBox: FC<Props> = ({
       }
     };
   }, [undo.open, undoMenuRef]);
+
+  // Wire up the providers menu ref so app.tsx can control it
+  useEffect(() => {
+    if (providersMenuRef) {
+      providersMenuRef.current = { open: providers.open };
+    }
+    return () => {
+      if (providersMenuRef) {
+        providersMenuRef.current = null;
+      }
+    };
+  }, [providers.open, providersMenuRef]);
 
   const { navigateUp, navigateDown } = useInputHistory(historyService);
 
@@ -352,6 +379,7 @@ const InputBox: FC<Props> = ({
     settingsValue,
     models,
     undo,
+    providers,
     insertSelectedPath,
     insertSelectedSetting,
     insertSelectedSettingValue,
@@ -395,6 +423,7 @@ const InputBox: FC<Props> = ({
     settings,
     settingsValue,
     models,
+    providerSelection: providers,
     setCursorOverride,
     dismissedCompletionRef,
     inputRevisionRef,
@@ -603,12 +632,12 @@ const InputBox: FC<Props> = ({
   return (
     <Box flexDirection="column">
       <PopupManager
-        {...toPopupProps({ slash, path, settings, settingsValue, models, undo })}
+        {...toPopupProps({ slash, path, settings, settingsValue, models, undo, providers })}
         settingsService={settingsService}
       />
       <Box>
-        {promptLabel ? (
-          <Text color="#22d3ee">{promptLabel}</Text>
+        {activePromptLabel ? (
+          <Text color="#22d3ee">{activePromptLabel}</Text>
         ) : waitingForRejectionReason ? (
           <Text color="yellow">Why? </Text>
         ) : isShellMode ? (

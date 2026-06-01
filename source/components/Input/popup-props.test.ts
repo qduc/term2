@@ -65,6 +65,15 @@ test('toPopupProps forwards slash scrollOffset', (t) => {
       selectedIndex: 0,
       scrollOffset: 0,
     } as any,
+    providers: {
+      isOpen: false,
+      phase: 'list',
+      selectedIndex: 0,
+      getActiveItems: () => [],
+      errorMessage: null,
+      selectedProvider: null,
+      draft: null,
+    } as any,
   });
 
   t.is(props.slash.scrollOffset, 3);

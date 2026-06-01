@@ -133,6 +133,7 @@ const App: FC<AppProps> = ({
   const [pendingLargeUncachedTurn, setPendingLargeUncachedTurn] = useState<UserTurn | null>(null);
   const [pendingLargeUncachedTokens, setPendingLargeUncachedTokens] = useState<number>(0);
   const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
+  const providersMenuRef = useRef<{ open: () => void } | null>(null);
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
@@ -420,6 +421,11 @@ const App: FC<AppProps> = ({
         undoMenuRef.current.open(userMessages);
       }
     },
+    openProvidersMenu: () => {
+      if (providersMenuRef.current) {
+        providersMenuRef.current.open();
+      }
+    },
     onHandoff: handleHandoff,
     sendUserMessage,
     listUserTurns: () => conversationService.listUserTurns(),
@@ -650,6 +656,7 @@ const App: FC<AppProps> = ({
             lastCodexRateLimit={lastCodexRateLimit}
             undoMenuRef={undoMenuRef}
             onUndoSelect={handleUndoSelect}
+            providersMenuRef={providersMenuRef}
             onSettingChange={applyRuntimeSetting}
             onSystemMessage={addSystemMessage}
             handoffState={handoffState}

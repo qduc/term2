@@ -8,7 +8,8 @@ export type InputMode =
   | 'settings_completion'
   | 'settings_value_completion'
   | 'model_selection'
-  | 'undo_selection';
+  | 'undo_selection'
+  | 'provider_selection';
 
 interface InputState {
   input: string;

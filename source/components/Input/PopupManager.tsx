@@ -6,12 +6,14 @@ import SettingsSelectionMenu from '../SettingsSelectionMenu.js';
 import SettingsValueSelectionMenu from '../SettingsValueSelectionMenu.js';
 import ModelSelectionMenu from '../ModelSelectionMenu.js';
 import UndoSelectionMenu from '../UndoSelectionMenu.js';
+import ProviderSelectionMenu from '../ProviderSelectionMenu.js';
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
 import type { SettingCompletionItem, SettingsCategory } from '../../hooks/use-settings-completion.js';
 import type { SettingValueSuggestion } from '../../hooks/use-settings-value-completion.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import type { SettingsService } from '../../services/settings-service.js';
 import type { UndoItem } from '../../hooks/use-undo-selection.js';
+import type { ProviderSelectionMenuItem } from '../../hooks/use-provider-selection.js';
 
 interface PopupManagerProps {
   slash: {
@@ -67,6 +69,16 @@ interface PopupManagerProps {
     selectedIndex: number;
     scrollOffset?: number;
   };
+  providers: {
+    isOpen: boolean;
+    phase: import('../../hooks/use-provider-selection.js').ProviderSelectionPhase;
+    selectedIndex: number;
+    scrollOffset?: number;
+    activeItems: ProviderSelectionMenuItem[];
+    errorMessage: string | null;
+    selectedProviderName?: string;
+    draft: import('../../hooks/use-provider-selection.js').CustomProviderDraft | null;
+  };
   settingsService: SettingsService;
 }
 
@@ -77,6 +89,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
   settings,
   settingsValue,
   undo,
+  providers,
   settingsService,
 }) => {
   return (
@@ -135,6 +148,17 @@ export const PopupManager: FC<PopupManagerProps> = ({
       )}
       {undo.isOpen && (
         <UndoSelectionMenu items={undo.items} selectedIndex={undo.selectedIndex} scrollOffset={undo.scrollOffset} />
+      )}
+      {providers.isOpen && (
+        <ProviderSelectionMenu
+          phase={providers.phase}
+          selectedIndex={providers.selectedIndex}
+          scrollOffset={providers.scrollOffset}
+          activeItems={providers.activeItems}
+          errorMessage={providers.errorMessage}
+          selectedProviderName={providers.selectedProviderName}
+          draft={providers.draft}
+        />
       )}
     </>
   );

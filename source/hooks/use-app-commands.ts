@@ -28,6 +28,7 @@ interface UseAppCommandsProps {
   setModel: (model: string) => void;
   undoLastUserMessage: () => { text: string; images?: UserTurn['images'] } | null;
   openUndoMenu: () => void;
+  openProvidersMenu: () => void;
   onUndo?: () => void;
   onHandoff?: (capturedText: string) => void;
   sendUserMessage: (input: string | UserTurn) => Promise<void>;
@@ -52,6 +53,7 @@ export const useAppCommands = ({
   messages,
   undoLastUserMessage,
   openUndoMenu,
+  openProvidersMenu,
   onUndo,
   onHandoff,
   sendUserMessage,
@@ -121,6 +123,14 @@ export const useAppCommands = ({
       },
       createHandoffSlashCommand({ messages, addSystemMessage, onHandoff }),
       createGuardedSettingsCommand({ settingsService, addSystemMessage, applyRuntimeSetting, setInput, messages }),
+      {
+        name: 'providers',
+        description: 'Manage API providers (list, add, edit, delete)',
+        action: () => {
+          openProvidersMenu();
+          return true;
+        },
+      },
       createQuitSlashCommand(exit),
     ],
     [
@@ -135,10 +145,11 @@ export const useAppCommands = ({
       settingsService,
       undoLastUserMessage,
       openUndoMenu,
+      openProvidersMenu,
       onUndo,
+      onHandoff,
       sendUserMessage,
       listUserTurns,
-      onHandoff,
       togglePlanMode,
     ],
   );

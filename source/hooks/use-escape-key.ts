@@ -1,7 +1,13 @@
-import { MutableRefObject, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useInput } from 'ink';
 import type { InputMode } from '../context/InputContext.js';
+import type { MutableRefObject } from 'react';
 import { SETTINGS_TRIGGER } from '../components/Input/triggers.js';
+
+export type CompletionDismissal = {
+  type: 'path' | 'settings_value';
+  inputRevision: number;
+} | null;
 
 const ESC_HINT_TIMEOUT_MS = 2000;
 
@@ -28,7 +34,8 @@ type Options = {
   settingsValue: SettingsValueHandle;
   models?: ModelsHandle;
   setCursorOverride: (cursor: number | null) => void;
-  escPressedRef: MutableRefObject<boolean>;
+  dismissedCompletionRef: MutableRefObject<CompletionDismissal>;
+  inputRevisionRef: MutableRefObject<number>;
 };
 
 export const useEscapeKey = ({
@@ -40,7 +47,8 @@ export const useEscapeKey = ({
   settingsValue,
   models,
   setCursorOverride,
-  escPressedRef,
+  dismissedCompletionRef,
+  inputRevisionRef,
 }: Options): { escHintVisible: boolean } => {
   const [escHintVisible, setEscHintVisible] = useState(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -64,8 +72,6 @@ export const useEscapeKey = ({
       settingsValue: currentSettingsValue,
       models: currentModels,
     } = stateRef.current;
-
-    escPressedRef.current = true;
 
     if (currentMode !== 'text') {
       if (currentMode === 'model_selection') {
@@ -100,13 +106,23 @@ export const useEscapeKey = ({
         }
       }
 
-      if (
-        currentMode === 'slash_commands' ||
-        currentMode === 'path_completion' ||
-        currentMode === 'settings_completion' ||
-        currentMode === 'settings_value_completion'
-      ) {
+      if (currentMode === 'slash_commands' || currentMode === 'settings_completion') {
         onChange('');
+        setMode('text');
+        return;
+      }
+
+      if (currentMode === 'path_completion' || currentMode === 'settings_value_completion') {
+        // Cancelling an inline completion popup must not destroy the buffer.
+        // The trigger character/text the user typed stays in place; only the
+        // popup closes. dismissedCompletionRef records this dismissal for the
+        // current inputRevision so unrelated re-renders (e.g. async refresh
+        // completing) cannot re-open the popup. The dismissal is cleared when
+        // the user edits the value or moves the cursor.
+        dismissedCompletionRef.current = {
+          type: currentMode === 'path_completion' ? 'path' : 'settings_value',
+          inputRevision: inputRevisionRef.current,
+        };
         setMode('text');
         return;
       }

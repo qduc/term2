@@ -1,6 +1,6 @@
 import React, { FC, useEffect, useState, useRef, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { useEscapeKey } from '../hooks/use-escape-key.js';
+import { useEscapeKey, type CompletionDismissal } from '../hooks/use-escape-key.js';
 import { useTriggerDetection } from '../hooks/use-trigger-detection.js';
 import { MultilineInput } from 'ink-prompt';
 import type { ImageRef, PasteErrorReason } from 'ink-prompt';
@@ -114,7 +114,8 @@ const InputBox: FC<Props> = ({
     setImages,
   } = useInputContext();
 
-  const escPressedRef = useRef(false);
+  const dismissedCompletionRef = useRef<CompletionDismissal>(null);
+  const inputRevisionRef = useRef(0);
   const cursorOffsetRef = useRef(cursorOffset);
   const lockedCursorRef = useRef<number | null>(null);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
@@ -395,7 +396,8 @@ const InputBox: FC<Props> = ({
     settingsValue,
     models,
     setCursorOverride,
-    escPressedRef,
+    dismissedCompletionRef,
+    inputRevisionRef,
   });
 
   useEffect(() => {
@@ -408,7 +410,8 @@ const InputBox: FC<Props> = ({
     value,
     cursorOffset,
     mode,
-    escPressedRef,
+    dismissedCompletionRef,
+    inputRevisionRef,
     slash,
     path,
     settings,
@@ -614,7 +617,7 @@ const InputBox: FC<Props> = ({
           <Text color="#22d3ee">❯ </Text>
         )}
         <MultilineInput
-          key={`${mode}-${inputKey}`}
+          key={inputKey}
           value={value}
           width={terminalWidth}
           isActive={mode === 'text'}

@@ -1,7 +1,8 @@
-import { MutableRefObject, useEffect } from 'react';
+import { MutableRefObject, useEffect, useRef } from 'react';
 import type { InputMode } from '../context/InputContext.js';
 import { determineActiveMenu } from '../components/Input/determine-active-menu.js';
 import type { SlashCommand } from '../slash-commands.js';
+import type { CompletionDismissal } from './use-escape-key.js';
 
 type MenuHandle = {
   open: (...args: never[]) => void;
@@ -18,7 +19,8 @@ type Options = {
   value: string;
   cursorOffset: number;
   mode: InputMode;
-  escPressedRef: MutableRefObject<boolean>;
+  dismissedCompletionRef: MutableRefObject<CompletionDismissal>;
+  inputRevisionRef: MutableRefObject<number>;
   slash: SlashHandle;
   path: PathHandle;
   settings: SettingsHandle;
@@ -36,7 +38,8 @@ export const useTriggerDetection = ({
   value,
   cursorOffset,
   mode,
-  escPressedRef,
+  dismissedCompletionRef,
+  inputRevisionRef,
   slash,
   path,
   settings,
@@ -44,10 +47,22 @@ export const useTriggerDetection = ({
   models,
   slashCommands,
 }: Options): void => {
+  const previousValueRef = useRef(value);
+  const previousCursorRef = useRef(cursorOffset);
+
   useEffect(() => {
-    if (escPressedRef.current) {
-      escPressedRef.current = false;
-      return;
+    // Detect value changes → bump revision + clear dismissal.
+    if (value !== previousValueRef.current) {
+      inputRevisionRef.current += 1;
+      dismissedCompletionRef.current = null;
+      previousValueRef.current = value;
+    }
+
+    // Detect cursor movement → clear dismissal so navigation keys (arrows,
+    // home/end) allow the popup to re-trigger immediately.
+    if (cursorOffset !== previousCursorRef.current) {
+      dismissedCompletionRef.current = null;
+      previousCursorRef.current = cursorOffset;
     }
 
     const active = determineActiveMenu(value, cursorOffset, slashCommands);
@@ -63,20 +78,38 @@ export const useTriggerDetection = ({
         settings.open(active.startIndex);
         return;
 
-      case 'settings_value':
+      case 'settings_value': {
+        // Respect dismissal from ESC for settings_value popups.
+        if (
+          dismissedCompletionRef.current?.type === 'settings_value' &&
+          dismissedCompletionRef.current.inputRevision === inputRevisionRef.current
+        ) {
+          return;
+        }
+
         closeAll([slash, path, settings, models]);
         settingsValue.open(active.key, active.startIndex);
         return;
+      }
 
       case 'slash':
         closeAll([path, settings, settingsValue, models]);
         slash.open();
         return;
 
-      case 'path':
+      case 'path': {
+        // Respect dismissal from ESC for path_completion popups.
+        if (
+          dismissedCompletionRef.current?.type === 'path' &&
+          dismissedCompletionRef.current.inputRevision === inputRevisionRef.current
+        ) {
+          return;
+        }
+
         closeAll([slash, settings, settingsValue, models]);
         path.open(active.trigger.start);
         return;
+      }
 
       case 'none':
         if (mode === 'model_selection') {
@@ -89,7 +122,19 @@ export const useTriggerDetection = ({
         closeAll([slash, path, settings, settingsValue, models]);
         return;
     }
-  }, [value, cursorOffset, mode, slash, path, settings, settingsValue, models, slashCommands, escPressedRef]);
+  }, [
+    value,
+    cursorOffset,
+    mode,
+    slash,
+    path,
+    settings,
+    settingsValue,
+    models,
+    slashCommands,
+    dismissedCompletionRef,
+    inputRevisionRef,
+  ]);
 };
 
 // Re-export for callers that want to inspect the dispatch shape directly.

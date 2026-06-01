@@ -12,7 +12,8 @@ import { Box, Text, useInput, useStdin } from 'ink';
 const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as InputMode }) => {
   const [value, onChange] = useState(initialValue);
   const [mode, setMode] = useState<InputMode>(initialMode);
-  const escPressedRef = { current: false };
+  const dismissedCompletionRef = { current: null } as any;
+  const inputRevisionRef = { current: 0 };
   const [, setCursorOverride] = useState<number | null>(null);
 
   const { escHintVisible } = useEscapeKey({
@@ -23,7 +24,8 @@ const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as Inp
     settings: { open: () => {} } as any,
     settingsValue: { settingKey: null, close: () => {} } as any,
     setCursorOverride,
-    escPressedRef,
+    dismissedCompletionRef,
+    inputRevisionRef,
   });
 
   return (
@@ -126,7 +128,8 @@ test('pressing ESC in model_selection mode clears input and switches to text mod
   const ModelSelectionTestComponent = () => {
     const [value, onChange] = useState('/model ');
     const [mode, setMode] = useState<InputMode>('model_selection');
-    const escPressedRef = { current: false };
+    const dismissedCompletionRef = { current: null } as any;
+    const inputRevisionRef = { current: 0 };
     const [, setCursorOverride] = useState<number | null>(null);
 
     modes.push(mode);
@@ -143,7 +146,8 @@ test('pressing ESC in model_selection mode clears input and switches to text mod
       settings: { open: () => {} } as any,
       settingsValue: { settingKey: null, close: () => {} } as any,
       setCursorOverride,
-      escPressedRef,
+      dismissedCompletionRef,
+      inputRevisionRef,
     });
 
     return (
@@ -179,7 +183,8 @@ test('pressing ESC in slash_commands mode clears input and switches to text mode
   const SlashTestComponent = () => {
     const [value, onChange] = useState('/cle');
     const [mode, setMode] = useState<InputMode>('slash_commands');
-    const escPressedRef = { current: false };
+    const dismissedCompletionRef = { current: null } as any;
+    const inputRevisionRef = { current: 0 };
     const [, setCursorOverride] = useState<number | null>(null);
     useCaptureInputEmitter((emitter) => {
       inputEmitter = emitter;
@@ -193,7 +198,8 @@ test('pressing ESC in slash_commands mode clears input and switches to text mode
       settings: { open: () => {} } as any,
       settingsValue: { settingKey: null, close: () => {} } as any,
       setCursorOverride,
-      escPressedRef,
+      dismissedCompletionRef,
+      inputRevisionRef,
     });
 
     return (
@@ -215,12 +221,13 @@ test('pressing ESC in slash_commands mode clears input and switches to text mode
   t.false(frame.includes('/cle'), 'Input trigger text should be cleared');
 });
 
-test('pressing ESC in path_completion mode clears input and switches to text mode', async (t) => {
+test('pressing ESC in path_completion mode keeps input and switches to text mode', async (t) => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const PathTestComponent = () => {
     const [value, onChange] = useState('@src/foo');
     const [mode, setMode] = useState<InputMode>('path_completion');
-    const escPressedRef = { current: false };
+    const dismissedCompletionRef = { current: null } as any;
+    const inputRevisionRef = { current: 0 };
     const [, setCursorOverride] = useState<number | null>(null);
     useCaptureInputEmitter((emitter) => {
       inputEmitter = emitter;
@@ -234,7 +241,8 @@ test('pressing ESC in path_completion mode clears input and switches to text mod
       settings: { open: () => {} } as any,
       settingsValue: { settingKey: null, close: () => {} } as any,
       setCursorOverride,
-      escPressedRef,
+      dismissedCompletionRef,
+      inputRevisionRef,
     });
 
     return (
@@ -253,7 +261,7 @@ test('pressing ESC in path_completion mode clears input and switches to text mod
 
   const frame = lastFrame()!;
   t.true(frame.includes('Mode: text'), 'Mode should switch to text');
-  t.false(frame.includes('@src/foo'), 'Input trigger text should be cleared');
+  t.true(frame.includes('Value: @src/foo'), 'Inline path trigger text must be preserved when cancelling the popup');
 });
 
 test('pressing ESC in settings_completion mode clears input and switches to text mode', async (t) => {
@@ -261,7 +269,8 @@ test('pressing ESC in settings_completion mode clears input and switches to text
   const SettingsTestComponent = () => {
     const [value, onChange] = useState('/settings ');
     const [mode, setMode] = useState<InputMode>('settings_completion');
-    const escPressedRef = { current: false };
+    const dismissedCompletionRef = { current: null } as any;
+    const inputRevisionRef = { current: 0 };
     const [, setCursorOverride] = useState<number | null>(null);
     useCaptureInputEmitter((emitter) => {
       inputEmitter = emitter;
@@ -275,7 +284,8 @@ test('pressing ESC in settings_completion mode clears input and switches to text
       settings: { open: () => {} } as any,
       settingsValue: { settingKey: null, close: () => {} } as any,
       setCursorOverride,
-      escPressedRef,
+      dismissedCompletionRef,
+      inputRevisionRef,
     });
 
     return (
@@ -306,7 +316,8 @@ test('pressing ESC in model_selection mode with settings-backed model setting re
   const SettingsBackedModelComponent = () => {
     const [value, onChange] = useState('/settings agent.model ');
     const [mode, setMode] = useState<InputMode>('model_selection');
-    const escPressedRef = { current: false };
+    const dismissedCompletionRef = { current: null } as any;
+    const inputRevisionRef = { current: 0 };
     const [cursorOverride, setCursorOverride] = useState<number | null>(null);
 
     cursorOverrides.push(cursorOverride);
@@ -334,7 +345,8 @@ test('pressing ESC in model_selection mode with settings-backed model setting re
       settingsValue: { settingKey: null, close: () => {} } as any,
       models: mockModels,
       setCursorOverride,
-      escPressedRef,
+      dismissedCompletionRef,
+      inputRevisionRef,
     });
 
     return (
@@ -373,4 +385,51 @@ test('pressing ESC in model_selection mode with settings-backed model setting re
     t.is(settingsOpenArgs!.initialSelectionKey, 'agent.model', 'Settings should open with agent.model key');
     t.is(settingsOpenArgs!.startIndex, SETTINGS_TRIGGER.length, 'Settings should open at trigger length');
   }
+});
+
+test('pressing ESC in non-settings settings_value_completion mode keeps trigger text and switches to text mode', async (t) => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+  const SettingsValueTestComponent = () => {
+    const [value, onChange] = useState('/effort ');
+    const [mode, setMode] = useState<InputMode>('settings_value_completion');
+    const dismissedCompletionRef = { current: null } as any;
+    const inputRevisionRef = { current: 0 };
+    const [, setCursorOverride] = useState<number | null>(null);
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
+
+    useEscapeKey({
+      mode,
+      setMode,
+      value,
+      onChange,
+      settings: { open: () => {} } as any,
+      // settingKey is null because this completion was opened from a non-/settings command
+      settingsValue: { settingKey: null, close: () => {} } as any,
+      setCursorOverride,
+      dismissedCompletionRef,
+      inputRevisionRef,
+    });
+
+    return (
+      <Box flexDirection="column">
+        <Text>Mode: {mode}</Text>
+        <Text>Value: {value}</Text>
+      </Box>
+    );
+  };
+
+  const { lastFrame } = await renderAndFlush(<SettingsValueTestComponent />);
+
+  t.true(lastFrame()!.includes('Mode: settings_value_completion'), 'Initial mode should be settings_value_completion');
+
+  await pressEscape(inputEmitter!);
+
+  const frame = lastFrame()!;
+  t.true(frame.includes('Mode: text'), 'Mode should switch to text');
+  t.true(
+    frame.includes('Value: /effort'),
+    'Inline settings-value trigger text must be preserved when cancelling the popup',
+  );
 });

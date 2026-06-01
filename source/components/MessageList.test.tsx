@@ -255,6 +255,30 @@ test('shouldCommitMessageToStatic keeps fresh finalized messages deferred on fir
   );
 });
 
+test('shouldCommitMessageToStatic commits completed commands immediately on first render', (t) => {
+  t.true(
+    shouldCommitMessageToStatic({
+      hasActiveMessages: false,
+      hasExistingStaticHistory: false,
+      wasPreviouslyActive: false,
+      hasPendingCandidateSignature: false,
+      isRestoredMessage: false,
+      isCompletedCommand: true,
+    }),
+  );
+});
+
+test('MessageList commits a first-seen completed command directly to Static', (t) => {
+  const renderer = render(
+    <MessageList
+      messages={[{ id: 'done-command', sender: 'command', status: 'completed', command: 'pwd', output: '/repo' }]}
+    />,
+  );
+
+  t.true(renderer.frames.length > 1);
+  t.true((renderer.lastFrame() ?? '').includes('/repo'));
+});
+
 test('splitStaticHistory keeps running command messages active regardless of position', (t) => {
   const messages = [
     ...Array.from({ length: 25 }, (_, index) => ({
@@ -283,6 +307,20 @@ test('splitStaticHistory keeps running command messages active regardless of pos
   // Only the prefix before the running command can be static without reordering output.
   t.true(history.some((message) => message.id === 'msg-0'));
   t.true(active.some((message) => message.id === 'tail-24'));
+});
+
+test('splitStaticHistory keeps completed commands behind an earlier running command active', (t) => {
+  const messages = [
+    { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },
+    { id: 'running-command', sender: 'command', status: 'running', command: 'npm test', output: '' },
+    { id: 'completed-command', sender: 'command', status: 'completed', command: 'pwd', output: '/repo' },
+  ];
+
+  const { history, active } = splitStaticHistory(messages);
+
+  t.true(active.some((message) => message.id === 'running-command'));
+  t.true(active.some((message) => message.id === 'completed-command'));
+  t.false(history.some((message) => message.id === 'completed-command'));
 });
 
 test('splitStaticHistory keeps bot text before a running command active', (t) => {

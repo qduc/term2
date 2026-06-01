@@ -100,13 +100,19 @@ export const shouldCommitMessageToStatic = ({
   wasPreviouslyActive,
   hasPendingCandidateSignature,
   isRestoredMessage,
+  isCompletedCommand = false,
 }: {
   hasActiveMessages: boolean;
   hasExistingStaticHistory: boolean;
   wasPreviouslyActive: boolean;
   hasPendingCandidateSignature: boolean;
   isRestoredMessage: boolean;
+  isCompletedCommand?: boolean;
 }) => {
+  if (isCompletedCommand) {
+    return true;
+  }
+
   if (hasActiveMessages || wasPreviouslyActive) {
     return true;
   }
@@ -179,6 +185,8 @@ const MessageList: FC<Props> = ({
     for (const message of history) {
       const signature = createMessageSignature(message);
       const committedSignature = committedMessageSignaturesRef.current.get(message.id);
+      const isCompletedCommand =
+        message.sender === 'command' && message.status !== 'pending' && message.status !== 'running';
 
       if (committedSignature === signature) {
         continue;
@@ -196,6 +204,7 @@ const MessageList: FC<Props> = ({
         wasPreviouslyActive: previousActiveMessageIds.has(message.id),
         hasPendingCandidateSignature: candidateMessageSignaturesRef.current.get(message.id) === signature,
         isRestoredMessage: restoredStaticMessageIdSet.has(message.id),
+        isCompletedCommand,
       });
       if (!shouldCommitImmediately && candidateMessageSignaturesRef.current.get(message.id) !== signature) {
         candidateMessageSignaturesRef.current.set(message.id, signature);

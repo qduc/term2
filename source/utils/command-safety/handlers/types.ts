@@ -1,11 +1,17 @@
 import { SafetyStatus } from '../constants.js';
 
+export interface CommandExecutionMetadata {
+  requiresSandbox?: boolean;
+  sandboxReason?: string;
+}
+
 /**
  * Result from a command handler
  */
 export interface CommandHandlerResult {
   status: SafetyStatus;
   reasons: string[];
+  execution?: CommandExecutionMetadata;
 }
 
 /**

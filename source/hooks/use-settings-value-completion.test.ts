@@ -32,8 +32,11 @@ test('buildSettingValueSuggestions returns enum suggestions for webSearch.provid
 });
 
 test('buildSettingValueSuggestions returns boolean suggestions for boolean settings', (t) => {
-  const result = buildSettingValueSuggestions('logging.suppressConsoleOutput');
-  t.deepEqual(result.map((r) => r.value).sort(), ['false', 'true']);
+  const loggingResult = buildSettingValueSuggestions('logging.suppressConsoleOutput');
+  const sandboxResult = buildSettingValueSuggestions('shell.autoAllowSandboxedCommands');
+
+  t.deepEqual(loggingResult.map((r) => r.value).sort(), ['false', 'true']);
+  t.deepEqual(sandboxResult.map((r) => r.value).sort(), ['false', 'true']);
 });
 
 test('filterSettingValueSuggestionsByQuery filters by partial match', (t) => {

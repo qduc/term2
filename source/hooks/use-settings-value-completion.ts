@@ -90,6 +90,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   'logging.logLevel': [{ value: 'debug' }, { value: 'info' }, { value: 'warn' }, { value: 'error' }],
   'logging.suppressConsoleOutput': [{ value: 'true' }, { value: 'false' }],
   'tools.enableEditHealing': [{ value: 'true' }, { value: 'false' }],
+  'shell.autoAllowSandboxedCommands': [{ value: 'true' }, { value: 'false' }],
   'agent.useFlexServiceTier': [
     { value: 'true', description: 'Enable Flex Service Tier (lower cost)' },
     { value: 'false', description: 'Use standard service tier' },

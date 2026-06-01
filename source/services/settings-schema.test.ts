@@ -140,6 +140,16 @@ test('SettingsSchema includes agent.maxParallelToolCalls, which defaults to 3 an
   t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS));
 });
 
+test('SettingsSchema includes shell.autoAllowSandboxedCommands, which defaults to false and is modifiable at runtime', (t) => {
+  const parsed = SettingsSchema.parse({ shell: {} });
+  t.is(parsed.shell?.autoAllowSandboxedCommands, false);
+
+  const parsedTrue = SettingsSchema.parse({ shell: { autoAllowSandboxedCommands: true } });
+  t.is(parsedTrue.shell?.autoAllowSandboxedCommands, true);
+
+  t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SHELL_AUTO_ALLOW_SANDBOXED_COMMANDS));
+});
+
 test('SettingsSchema rejects non-positive agent.maxParallelToolCalls values', (t) => {
   t.throws(() => SettingsSchema.parse({ agent: { maxParallelToolCalls: 0 } }));
 });

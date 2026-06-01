@@ -41,6 +41,8 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.SHELL_TIMEOUT]: 'Shell command timeout in milliseconds',
   [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Maximum lines of shell output to capture',
   [SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS]: 'Maximum characters of shell output to capture',
+  [SETTING_KEYS.SHELL_AUTO_ALLOW_SANDBOXED_COMMANDS]:
+    'Automatically allow sandboxed shell commands when a local sandbox is available',
   [SETTING_KEYS.UI_HISTORY_SIZE]: 'Number of history items to keep',
   [SETTING_KEYS.LOGGING_LOG_LEVEL]: 'Logging level (debug, info, warn, error)',
   [SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE]: 'Suppress console output (true|false) to avoid interfering with Ink UI',
@@ -124,7 +126,11 @@ export function getSettingCategory(key: string): SettingsCategory {
     return findCategoryById('modes');
   }
 
-  if (key === SETTING_KEYS.SHELL_AUTO_APPROVE_MODE || key === SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL) {
+  if (
+    key === SETTING_KEYS.SHELL_AUTO_APPROVE_MODE ||
+    key === SETTING_KEYS.SHELL_AUTO_ALLOW_SANDBOXED_COMMANDS ||
+    key === SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL
+  ) {
     return findCategoryById('approvals');
   }
 

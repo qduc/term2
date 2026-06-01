@@ -103,6 +103,11 @@ export const ShellSettingsSchema = z.object({
   maxOutputLines: z.number().int().positive().default(1000),
   maxOutputChars: z.number().int().positive().default(10000),
   autoApproveMode: z.enum(['off', 'advisory', 'auto']).default('off').describe('Mode for shell command auto-approval'),
+  autoAllowSandboxedCommands: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Automatically allow sandboxed shell commands when a local sandbox is available'),
   useRtkCompression: z.boolean().optional().default(false).describe('Use RTK to compress shell command output'),
 });
 
@@ -317,6 +322,7 @@ export interface SettingsWithSources {
     maxOutputLines: SettingWithSource<number>;
     maxOutputChars: SettingWithSource<number>;
     autoApproveMode: SettingWithSource<'off' | 'advisory' | 'auto'>;
+    autoAllowSandboxedCommands: SettingWithSource<boolean>;
     useRtkCompression: SettingWithSource<boolean>;
   };
   ui: {
@@ -390,6 +396,7 @@ export const SETTING_KEYS = {
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
   SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
   SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
+  SHELL_AUTO_ALLOW_SANDBOXED_COMMANDS: 'shell.autoAllowSandboxedCommands',
   SHELL_USE_RTK_COMPRESSION: 'shell.useRtkCompression',
   AGENT_AUTO_APPROVE_MODEL: 'agent.autoApproveModel',
   AGENT_AUTO_APPROVE_PROVIDER: 'agent.autoApproveProvider',
@@ -459,6 +466,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE,
   SETTING_KEYS.APP_SEARCH_VIA_SHELL,
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
+  SETTING_KEYS.SHELL_AUTO_ALLOW_SANDBOXED_COMMANDS,
   SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
   SETTING_KEYS.UI_PASTE_THRESHOLD,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
@@ -546,6 +554,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     maxOutputLines: 1000,
     maxOutputChars: 10000,
     autoApproveMode: 'off',
+    autoAllowSandboxedCommands: false,
     useRtkCompression: false,
   },
   ui: {

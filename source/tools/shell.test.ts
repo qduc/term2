@@ -35,6 +35,30 @@ function createFakeRtk(t: any): string {
   return rtkPath;
 }
 
+function createMockSandboxSession(overrides: Partial<Record<string, any>> = {}): any {
+  return {
+    exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    stop: async () => {},
+    shutdown: async () => {},
+    delete: async () => {},
+    close: async () => {},
+    ...overrides,
+  };
+}
+
+function createSandboxExecutionContext(session: any, counter?: { createCount: number }): ExecutionContext {
+  return new ExecutionContext(undefined, undefined, {
+    sandboxClientFactory: () => ({
+      create: async () => {
+        if (counter) {
+          counter.createCount += 1;
+        }
+        return session;
+      },
+    }),
+  });
+}
+
 test.serial('shell execute restores previous correlation id after command execution', async (t) => {
   let clearCorrelationCalls = 0;
   let currentCorrelationId: string | undefined = 'trace-parent';
@@ -318,4 +342,210 @@ test.serial('shell needsApproval classifications in planMode false', async (t) =
 
   t.true(await tool.needsApproval({ command: 'touch /tmp/somefile_test' }));
   t.false(await tool.needsApproval({ command: 'ls' }));
+});
+
+test.serial('shell execute routes sandbox-required commands to local sandbox session', async (t) => {
+  let installCalled = false;
+  let execArgs: any;
+  const session = createMockSandboxSession({
+    exec: async (args: any) => {
+      execArgs = args;
+      return { stdout: 'sandbox\n', stderr: '', exitCode: 0 };
+    },
+  });
+  const executionContext = createSandboxExecutionContext(session);
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    executionContext,
+    rtkInstaller: async () => {
+      installCalled = true;
+      return createFakeRtk(t);
+    },
+  });
+
+  const output = await tool.execute({
+    command: 'node -e "console.log(\'sandbox\')"',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(output.includes('exit 0'));
+  t.true(output.includes('sandbox'));
+  t.deepEqual(execArgs, {
+    cmd: 'node -e "console.log(\'sandbox\')"',
+    workdir: executionContext.getSandboxWorkdir(),
+    yieldTimeMs: 60000,
+  });
+  t.false(installCalled);
+});
+
+test.serial('shell needsApproval respects auto-allow sandboxed commands locally', async (t) => {
+  const localTool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.autoAllowSandboxedCommands': false }),
+    executionContext: new ExecutionContext(),
+  });
+
+  const autoAllowTool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.autoAllowSandboxedCommands': true }),
+    executionContext: new ExecutionContext(),
+  });
+
+  t.true(await localTool.needsApproval({ command: 'node -e "console.log(1)"' }));
+  t.false(await autoAllowTool.needsApproval({ command: 'node -e "console.log(1)"' }));
+});
+
+test.serial('shell execute keeps sandbox-required commands on SSH host path', async (t) => {
+  let installCalled = false;
+  let executedCommand: string | undefined;
+  const sshService: ISSHService = {
+    connect: async () => {},
+    disconnect: async () => {},
+    isConnected: () => true,
+    executeCommand: async (cmd: string) => {
+      executedCommand = cmd;
+      return { stdout: 'remote\n', stderr: '', exitCode: 0, timedOut: false };
+    },
+    readFile: async () => '',
+    writeFile: async () => {},
+    mkdir: async () => {},
+  };
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({
+      'shell.useRtkCompression': true,
+      'shell.autoAllowSandboxedCommands': true,
+    }),
+    executionContext: new ExecutionContext(sshService, '/remote/workspace'),
+    rtkInstaller: async () => {
+      installCalled = true;
+      return createFakeRtk(t);
+    },
+  });
+
+  const output = await tool.execute({
+    command: 'node -e "console.log(1)"',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(output.includes('remote'));
+  t.is(executedCommand, 'node -e "console.log(1)"');
+  t.false(installCalled);
+  t.true(await tool.needsApproval({ command: 'node -e "console.log(1)"' }));
+});
+
+test.serial('shell execute blocks sandbox-required commands before sandbox creation in plan mode', async (t) => {
+  let createCount = 0;
+  const executionContext = new ExecutionContext(undefined, undefined, {
+    sandboxClientFactory: () => ({
+      create: async () => {
+        createCount += 1;
+        return createMockSandboxSession();
+      },
+    }),
+  });
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'app.planMode': true }),
+    executionContext,
+  });
+
+  const output = await tool.execute({
+    command: 'node -e "console.log(1)"',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(output.includes('plan mode is read-only'));
+  t.is(createCount, 0);
+});
+
+test.serial('shell execute returns timeout output and stops the sandbox process', async (t) => {
+  let stopCount = 0;
+  const session = createMockSandboxSession({
+    exec: async () => ({ stdout: 'partial\n', stderr: '', exitCode: null, sessionId: 1 }),
+    stop: async () => {
+      stopCount += 1;
+    },
+  });
+  const executionContext = createSandboxExecutionContext(session);
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+    executionContext,
+  });
+
+  const output = await tool.execute({
+    command: 'node -e "console.log(1)"',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(output.startsWith('timeout'));
+  t.true(output.includes('partial'));
+  t.is(stopCount, 1);
+});
+
+test.serial('shell execute aborts sandbox execution and stops the sandbox process', async (t) => {
+  let stopCount = 0;
+  const session = createMockSandboxSession({
+    exec: async () => new Promise(() => {}),
+    stop: async () => {
+      stopCount += 1;
+    },
+  });
+  const executionContext = createSandboxExecutionContext(session);
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+    executionContext,
+  });
+
+  const abortController = new AbortController();
+  const outputPromise = tool.execute(
+    {
+      command: 'node -e "console.log(1)"',
+      timeout_ms: 60000,
+      max_output_length: 10000,
+    },
+    undefined,
+    { signal: abortController.signal },
+  );
+
+  queueMicrotask(() => abortController.abort());
+  const output = await outputPromise;
+
+  t.true(output.startsWith('timeout'));
+  t.is(stopCount, 1);
+});
+
+test.serial('shell execute returns an explicit error when sandbox creation fails', async (t) => {
+  const executionContext = new ExecutionContext(undefined, undefined, {
+    sandboxClientFactory: () => ({
+      create: async () => {
+        throw new Error('sandbox unavailable');
+      },
+    }),
+  });
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+    executionContext,
+  });
+
+  const output = await tool.execute({
+    command: 'node -e "console.log(1)"',
+    timeout_ms: 60000,
+    max_output_length: 10000,
+  });
+
+  t.true(output.includes('Error: failed to execute sandboxed shell command: sandbox unavailable'));
 });

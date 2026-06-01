@@ -3,7 +3,7 @@ import process from 'process';
 import path from 'path';
 import { randomUUID } from 'node:crypto';
 import { relaxedNumber } from './utils.js';
-import { validateCommandSafety } from '../utils/command-safety/index.js';
+import { classifyCommandDetailed, SafetyStatus } from '../utils/command-safety/index.js';
 import { logValidationError as logValidationErrorUtil } from '../utils/command-logger.js';
 import { executeShellCommand } from '../utils/execute-shell.js';
 import {
@@ -86,8 +86,134 @@ function stripRtkWarning(text: string): string {
     .join('\n');
 }
 
-function isMutatingCommand(command: string, cwd: string, log: ILoggingService): boolean {
-  return validateCommandSafety(stripRedundantCd(command, cwd), log); // true = YELLOW/RED
+type ShellCommandClassification = {
+  optimizedCommand: string;
+  classification: ReturnType<typeof classifyCommandDetailed>;
+};
+
+type SandboxSessionLike = {
+  exec: (args: { cmd: string; workdir?: string; yieldTimeMs?: number }) => Promise<{
+    stdout?: string;
+    stderr?: string;
+    exitCode?: number | null;
+    sessionId?: number;
+  }>;
+  stop?: () => Promise<void>;
+  shutdown?: () => Promise<void>;
+  delete?: () => Promise<void>;
+  close?: () => Promise<void>;
+};
+
+function classifyShellCommand(command: string, cwd: string, log: ILoggingService): ShellCommandClassification {
+  const optimizedCommand = stripRedundantCd(command, cwd);
+  return {
+    optimizedCommand,
+    classification: classifyCommandDetailed(optimizedCommand, log),
+  };
+}
+
+function isSandboxRequired(classification: ReturnType<typeof classifyCommandDetailed>): boolean {
+  return classification.execution?.requiresSandbox === true;
+}
+
+function canAutoAllowSandboxedCommand(
+  classification: ReturnType<typeof classifyCommandDetailed>,
+  sandboxAvailable: boolean,
+  autoAllowSandboxedCommands: boolean,
+): boolean {
+  return (
+    classification.status === SafetyStatus.YELLOW &&
+    isSandboxRequired(classification) &&
+    sandboxAvailable &&
+    autoAllowSandboxedCommands
+  );
+}
+
+async function stopSandboxProcess(session: SandboxSessionLike): Promise<void> {
+  const stopOperations: Array<() => Promise<void>> = [];
+
+  if (session.stop) {
+    stopOperations.push(() => session.stop!());
+  }
+  if (session.shutdown) {
+    stopOperations.push(() => session.shutdown!());
+  }
+  if (session.delete) {
+    stopOperations.push(() => session.delete!());
+  }
+  if (session.close) {
+    stopOperations.push(() => session.close!());
+  }
+
+  for (const stop of stopOperations) {
+    try {
+      await stop();
+      return;
+    } catch {
+      // Try the next cleanup hook.
+    }
+  }
+}
+
+async function executeSandboxShellCommand(
+  session: SandboxSessionLike,
+  command: string,
+  options: {
+    workdir: string;
+    timeout?: number;
+    signal?: AbortSignal;
+  },
+): Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }> {
+  const signal = options.signal;
+  const execPromise = session.exec({
+    cmd: command,
+    workdir: options.workdir,
+    yieldTimeMs: options.timeout,
+  });
+
+  let abortListener: (() => void) | undefined;
+
+  const result = signal
+    ? await Promise.race([
+        execPromise,
+        new Promise<{ aborted: true }>((resolve) => {
+          if (signal.aborted) {
+            void stopSandboxProcess(session).finally(() => resolve({ aborted: true }));
+            return;
+          }
+
+          abortListener = () => {
+            void stopSandboxProcess(session).finally(() => resolve({ aborted: true }));
+          };
+          signal.addEventListener('abort', abortListener, { once: true });
+        }),
+      ])
+    : await execPromise;
+
+  if (abortListener) {
+    signal?.removeEventListener('abort', abortListener);
+  }
+
+  if ('aborted' in result) {
+    return {
+      stdout: '',
+      stderr: '',
+      exitCode: null,
+      timedOut: true,
+    };
+  }
+
+  const timedOut = result.sessionId !== undefined;
+  if (timedOut) {
+    await stopSandboxProcess(session);
+  }
+
+  return {
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+    exitCode: result.exitCode ?? null,
+    timedOut,
+  };
 }
 
 const coerceCommandText = (value: unknown): string => {
@@ -209,6 +335,16 @@ export function createShellToolDefinition(deps: {
 
   // Create command logger function with dependencies
   const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
+  let sandboxExecutionChain: Promise<void> = Promise.resolve();
+
+  const runSandboxSequentially = async <T>(task: () => Promise<T>): Promise<T> => {
+    const run = sandboxExecutionChain.then(task, task);
+    sandboxExecutionChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return await run;
+  };
 
   return {
     name: 'shell',
@@ -219,16 +355,25 @@ export function createShellToolDefinition(deps: {
     needsApproval: async (params) => {
       try {
         const cwd = executionContext?.getCwd() || process.cwd();
-        const isDangerous = isMutatingCommand(params.command, cwd, loggingService);
+        const { optimizedCommand, classification } = classifyShellCommand(params.command, cwd, loggingService);
+        const sandboxAvailable = executionContext?.isSandboxAvailable() ?? false;
+        const autoAllowSandboxedCommands = settingsService.get<boolean>('shell.autoAllowSandboxedCommands');
+        const autoAllowed = canAutoAllowSandboxedCommand(classification, sandboxAvailable, autoAllowSandboxedCommands);
+        const requiresApproval = classification.status !== SafetyStatus.GREEN && !autoAllowed;
 
         // Log security event for all shell commands with dangerous flag
         loggingService.security('Shell tool needsApproval check', {
           commands: [params.command.substring(0, 100)], // Truncate for safety
-          optimizedCommand: stripRedundantCd(params.command, cwd).substring(0, 100),
-          isDangerous,
+          optimizedCommand: optimizedCommand.substring(0, 100),
+          status: classification.status,
+          reasons: classification.reasons,
+          requiresSandbox: isSandboxRequired(classification),
+          sandboxAvailable,
+          autoAllowSandboxedCommands,
+          requiresApproval,
         });
 
-        return isDangerous;
+        return requiresApproval;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logValidationError(`Validation failed: ${errorMessage}`);
@@ -241,10 +386,14 @@ export function createShellToolDefinition(deps: {
     },
     execute: async ({ command, timeout_ms, max_output_length }, _context, details) => {
       const cwd = executionContext?.getCwd() || process.cwd();
-      if (settingsService.get<boolean>('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {
+      const { optimizedCommand, classification } = classifyShellCommand(command, cwd, loggingService);
+      const sandboxRequired = isSandboxRequired(classification);
+      const sshService = executionContext?.getSSHService();
+      const sandboxAvailable = executionContext?.isSandboxAvailable() ?? false;
+
+      if (settingsService.get<boolean>('app.planMode') && classification.status !== SafetyStatus.GREEN) {
         return `Error: plan mode is read-only. Command not executed: ${command}`;
       }
-      const sshService = executionContext?.getSSHService();
       const previousCorrelationId = loggingService.getCorrelationId();
       const correlationId = randomUUID();
 
@@ -260,14 +409,16 @@ export function createShellToolDefinition(deps: {
 
         loggingService.debug('Shell command execution started', {
           commandCount: 1,
-          commands: [command],
+          commands: [optimizedCommand],
           timeout,
           workingDirectory: cwd,
           maxOutputLength,
+          status: classification.status,
+          reasons: classification.reasons,
+          requiresSandbox: sandboxRequired,
+          route: sandboxRequired && !sshService ? 'sandbox' : 'host',
         });
 
-        // Strip redundant 'cd <path> &&' if it targets the current directory
-        const optimizedCommand = stripRedundantCd(command, cwd);
         if (optimizedCommand !== command) {
           loggingService.debug('Stripped redundant cd command', {
             original: command,
@@ -276,26 +427,54 @@ export function createShellToolDefinition(deps: {
           });
         }
 
-        let commandToRun = optimizedCommand;
-        if (
-          !sshService &&
-          settingsService.get<boolean>('shell.useRtkCompression') &&
-          isRtkSupportedCommand(optimizedCommand)
-        ) {
-          const rtkPath = await rtkInstaller({ loggingService });
-          if (rtkPath) {
-            commandToRun = wrapWithRtk(optimizedCommand, rtkPath);
-            loggingService.debug('Wrapped command with rtk', { rtkPath, original: optimizedCommand });
-          }
-        }
+        let result: { stdout: string; stderr: string; exitCode: number | null; timedOut: boolean };
 
-        const result = await executeShellCommand(commandToRun, {
-          cwd,
-          timeout,
-          maxBuffer: 1024 * 1024, // 1MB max buffer
-          signal: (details as { signal?: AbortSignal } | undefined)?.signal,
-          sshService,
-        });
+        if (sandboxRequired && !sshService) {
+          if (!executionContext || !sandboxAvailable) {
+            return `Error: sandboxed shell command requires a local sandbox session, but none is available. Command not executed: ${command}`;
+          }
+
+          const sandboxWorkdir = executionContext.getSandboxWorkdir();
+          try {
+            result = await runSandboxSequentially(async () => {
+              const session = await executionContext.getOrCreateSandboxSession();
+              return await executeSandboxShellCommand(session, optimizedCommand, {
+                workdir: sandboxWorkdir,
+                timeout,
+                signal: (details as { signal?: AbortSignal } | undefined)?.signal,
+              });
+            });
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            loggingService.error('Sandbox shell command execution error', {
+              error: errorMessage,
+              command: optimizedCommand.substring(0, 100),
+            });
+            return `Error: failed to execute sandboxed shell command: ${errorMessage}`;
+          }
+        } else {
+          let commandToRun = optimizedCommand;
+          if (
+            !sshService &&
+            settingsService.get<boolean>('shell.useRtkCompression') &&
+            isRtkSupportedCommand(optimizedCommand) &&
+            !sandboxRequired
+          ) {
+            const rtkPath = await rtkInstaller({ loggingService });
+            if (rtkPath) {
+              commandToRun = wrapWithRtk(optimizedCommand, rtkPath);
+              loggingService.debug('Wrapped command with rtk', { rtkPath, original: optimizedCommand });
+            }
+          }
+
+          result = await executeShellCommand(commandToRun, {
+            cwd,
+            timeout,
+            maxBuffer: 1024 * 1024, // 1MB max buffer
+            signal: (details as { signal?: AbortSignal } | undefined)?.signal,
+            sshService,
+          });
+        }
 
         const stdout = result.stdout ?? '';
         const stderr = stripRtkWarning(result.stderr ?? '');

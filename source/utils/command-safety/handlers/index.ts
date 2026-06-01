@@ -2,6 +2,7 @@ import type { CommandHandler } from './types.js';
 import { gitHandler } from './git-handler.js';
 import { findHandler } from './find-handler.js';
 import { sedHandler } from './sed-handler.js';
+import { scriptHandler } from './script-handler.js';
 
 /**
  * Registry of command-specific handlers
@@ -10,6 +11,14 @@ export const commandHandlers = new Map<string, CommandHandler>([
   ['git', gitHandler],
   ['find', findHandler],
   ['sed', sedHandler],
+  ['node', scriptHandler],
+  ['nodejs', scriptHandler],
+  ['python', scriptHandler],
+  ['python3', scriptHandler],
+  ['bash', scriptHandler],
+  ['sh', scriptHandler],
+  ['zsh', scriptHandler],
+  ['dash', scriptHandler],
 ]);
 
 /**

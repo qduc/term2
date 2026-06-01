@@ -26,6 +26,7 @@ const MOCK_SETTING_KEYS = {
   SHELL_TIMEOUT: 'shell.timeout',
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
   SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
+  SHELL_AUTO_ALLOW_SANDBOXED_COMMANDS: 'shell.autoAllowSandboxedCommands',
   UI_HISTORY_SIZE: 'ui.historySize',
   LOGGING_LOG_LEVEL: 'logging.logLevel',
   LOGGING_DISABLE: 'logging.disableLogging',
@@ -55,6 +56,7 @@ const MOCK_DESCRIPTIONS: Record<string, string> = {
   'shell.timeout': 'Shell command timeout in milliseconds',
   'shell.maxOutputLines': 'Maximum lines of shell output to capture',
   'shell.maxOutputChars': 'Maximum characters of shell output to capture',
+  'shell.autoAllowSandboxedCommands': 'Automatically allow sandboxed shell commands when a local sandbox is available',
   'ui.historySize': 'Number of history items to keep',
   'logging.logLevel': 'Logging level (debug, info, warn, error)',
   'logging.disableLogging': 'Disable all logging',
@@ -252,6 +254,7 @@ test('getSettingCategory - groups settings by task-oriented menu tabs', (t) => {
   t.is(getSettingCategory('agent.model').id, 'model');
   t.is(getSettingCategory('agent.mentorModel').id, 'model');
   t.is(getSettingCategory('shell.autoApproveMode').id, 'approvals');
+  t.is(getSettingCategory('shell.autoAllowSandboxedCommands').id, 'approvals');
   t.is(getSettingCategory('shell.timeout').id, 'shell');
   t.is(getSettingCategory('app.searchViaShell').id, 'search');
   t.is(getSettingCategory('agent.maxParallelToolCalls').id, 'advanced');

@@ -40,6 +40,8 @@ test('buildSettingsWithSources maps nested values and sources including optional
   t.is(result.app.planMode.source, 'default');
   t.is(result.app.orchestratorMode.value, settings.app.orchestratorMode);
   t.is(result.app.orchestratorMode.source, 'default');
+  t.is(result.shell.autoAllowSandboxedCommands.value, settings.shell.autoAllowSandboxedCommands);
+  t.is(result.shell.autoAllowSandboxedCommands.source, 'default');
   t.is(result.agent.maxParallelToolCalls.value, settings.agent.maxParallelToolCalls);
   t.is(result.agent.maxParallelToolCalls.source, 'default');
 });

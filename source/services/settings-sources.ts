@@ -24,6 +24,7 @@ const SETTINGS_SOURCE_KEYS = {
     maxOutputLines: 'shell.maxOutputLines',
     maxOutputChars: 'shell.maxOutputChars',
     autoApproveMode: 'shell.autoApproveMode',
+    autoAllowSandboxedCommands: 'shell.autoAllowSandboxedCommands',
     useRtkCompression: 'shell.useRtkCompression',
   },
   ui: {

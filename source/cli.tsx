@@ -65,24 +65,34 @@ type WriterHandle = ReturnType<typeof createConversationLogWriter> | null;
 let activeLogWriter: WriterHandle = null;
 let effectiveSessionId: string | undefined;
 
-// Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
-process.on('SIGINT', () => {
+const shutdown = async (exitCode: number) => {
   if (process.stdout.isTTY) {
     process.stdout.write('\x1b[?1004l');
   }
-  void (activeLogWriter ? activeLogWriter.flush() : Promise.resolve()).finally(() => {
-    printUsageOnce();
-    process.exit(130);
-  });
+
+  try {
+    await executionContext?.closeSandboxSession();
+  } catch {
+    /* best effort */
+  }
+
+  try {
+    await (activeLogWriter ? activeLogWriter.flush() : Promise.resolve());
+  } catch {
+    /* best effort */
+  }
+
+  printUsageOnce();
+  process.exit(exitCode);
+};
+
+// Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
+process.on('SIGINT', () => {
+  void shutdown(130);
 });
 
 process.on('SIGTERM', () => {
-  if (process.stdout.isTTY) {
-    process.stdout.write('\x1b[?1004l');
-  }
-  void (activeLogWriter ? activeLogWriter.flush() : Promise.resolve()).finally(() => {
-    process.exit(143);
-  });
+  void shutdown(143);
 });
 
 // Best-effort release of lock + close on uncatchable exits (caught process.exit).
@@ -90,6 +100,7 @@ process.on('exit', () => {
   if (process.stdout.isTTY) {
     process.stdout.write('\x1b[?1004l');
   }
+  void executionContext?.closeSandboxSession();
   if (activeLogWriter) {
     try {
       // Synchronous close path: the writer's close() does sync work and unlinks the lock.
@@ -498,6 +509,7 @@ if (sshFlag) {
       if (sshService?.isConnected()) {
         sshService.disconnect();
       }
+      void executionContext?.closeSandboxSession();
     };
     process.on('exit', cleanup);
     process.on('SIGINT', cleanup);

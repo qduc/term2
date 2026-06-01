@@ -5,6 +5,8 @@ import { hasFindDangerousExecution, hasFindSuspiciousFlags } from './find-helper
 import { analyzePathRisk } from './path-analysis.js';
 import { getCommandHandler } from './handlers/index.js';
 import type { CommandHandlerHelpers } from './handlers/index.js';
+import type { CommandExecutionMetadata } from './handlers/types.js';
+import { scriptHandler } from './handlers/script-handler.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 
 const nullLoggingService: ILoggingService = {
@@ -32,6 +34,7 @@ function hasUnparsedTrailingInput(commandString: string, ast: { commands?: unkno
 export interface ClassifyCommandResult {
   status: SafetyStatus;
   reasons: string[];
+  execution: CommandExecutionMetadata;
 }
 
 /**
@@ -50,6 +53,7 @@ export function classifyCommandDetailed(
   loggingService?: ILoggingService,
 ): ClassifyCommandResult {
   const reasons: string[] = [];
+  const execution: CommandExecutionMetadata = {};
   const truncatedCommand = commandString.substring(0, 200);
   const logger = getLogger(loggingService);
 
@@ -67,6 +71,7 @@ export function classifyCommandDetailed(
     return {
       status: SafetyStatus.YELLOW,
       reasons: [`YELLOW: failed to parse command (${e instanceof Error ? e.message : String(e)})`],
+      execution,
     };
   }
   if (ast.errors && ast.errors.length > 0) {
@@ -77,12 +82,14 @@ export function classifyCommandDetailed(
     return {
       status: SafetyStatus.YELLOW,
       reasons: [`YELLOW: failed to parse command (${ast.errors.map((e) => e.message).join('; ')})`],
+      execution,
     };
   }
   if (hasUnparsedTrailingInput(commandString, ast)) {
     return {
       status: SafetyStatus.YELLOW,
       reasons: ['YELLOW: failed to parse complete command'],
+      execution,
     };
   }
   let worstStatus: SafetyStatus = SafetyStatus.GREEN;
@@ -114,9 +121,6 @@ export function classifyCommandDetailed(
           upgradeStatus(SafetyStatus.RED, `blocked command: ${name}`);
           return;
         }
-        if (!ALLOWED_COMMANDS.has(name)) {
-          upgradeStatus(SafetyStatus.YELLOW, `unknown or unlisted command: ${name}`);
-        }
       }
 
       const cmdName = typeof name === 'string' ? name : undefined;
@@ -133,12 +137,41 @@ export function classifyCommandDetailed(
           };
           const result = handler.handle(node, helpers);
           upgradeStatus(result.status, result.reasons.join('; '));
+          if (result.execution?.requiresSandbox) {
+            execution.requiresSandbox = true;
+            if (result.execution.sandboxReason) {
+              execution.sandboxReason = execution.sandboxReason
+                ? `${execution.sandboxReason}; ${result.execution.sandboxReason}`
+                : result.execution.sandboxReason;
+            }
+          }
           traverse(node.name);
           traverse(node.prefix);
           traverse(node.suffix);
           traverse(node.redirects);
           return;
         }
+
+        const helpers: CommandHandlerHelpers = {
+          extractWordText,
+          analyzePathRisk: analyzePathRiskWithLogger,
+          hasFindDangerousExecution,
+          hasFindSuspiciousFlags,
+        };
+        const result = scriptHandler.handle(node, helpers);
+        upgradeStatus(result.status, result.reasons.join('; '));
+        if (result.execution?.requiresSandbox) {
+          execution.requiresSandbox = true;
+          if (result.execution.sandboxReason) {
+            execution.sandboxReason = execution.sandboxReason
+              ? `${execution.sandboxReason}; ${result.execution.sandboxReason}`
+              : result.execution.sandboxReason;
+          }
+        }
+      }
+
+      if (typeof name === 'string' && !ALLOWED_COMMANDS.has(name)) {
+        upgradeStatus(SafetyStatus.YELLOW, `unknown or unlisted command: ${name}`);
       }
 
       // Handle redirects
@@ -211,9 +244,10 @@ export function classifyCommandDetailed(
     command: truncatedCommand,
     status: worstStatus,
     reasons,
+    execution,
   });
 
-  return { status: worstStatus, reasons };
+  return { status: worstStatus, reasons, execution };
 }
 
 /**

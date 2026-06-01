@@ -30,7 +30,8 @@ import { createSearchReplaceToolDefinition } from '../../tools/search-replace.js
 import { createCreateFileToolDefinition } from '../../tools/create-file.js';
 import { createShellToolDefinition } from '../../tools/shell.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
-import { trimToolOutput, injectWarningIntoToolOutput } from '../../utils/trim-tool-output.js';
+import { trimToolOutput } from '../../utils/trim-tool-output.js';
+import { injectWarningIntoToolOutput } from '../../utils/inject-warning-into-tool-output.js';
 import { extractUsage, normalizeAgentRunUsage } from '../../utils/token-usage.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { tryAcquireFileLock } from '../../tools/file-locks.js';

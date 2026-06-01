@@ -138,9 +138,6 @@ const App: FC<AppProps> = ({
   const liteMode = useSetting<boolean>(settingsService, 'app.liteMode') ?? false;
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
   const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
-  const sessionPromptTokens = sessionUsage.get().prompt_tokens;
-  const accumulatedInputTokens = sessionPromptTokens ?? 0;
-
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -659,7 +656,6 @@ const App: FC<AppProps> = ({
             onHandoffConfirm={handleHandoffConfirm}
             onHandoffDecline={handleHandoffDecline}
             onHandoffCancel={handleHandoffCancel}
-            accumulatedInputTokens={accumulatedInputTokens}
             largeUncachedWarning={largeUncachedWarning}
             pendingLargeUncachedTurn={pendingLargeUncachedTurn}
             pendingLargeUncachedTokens={pendingLargeUncachedTokens}

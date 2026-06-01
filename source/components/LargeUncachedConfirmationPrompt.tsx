@@ -1,17 +1,14 @@
 import React, { FC, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
+import type { NormalizedUsage } from '../utils/token-usage.js';
 
 interface LargeUncachedConfirmationPromptProps {
-  accumulatedInputTokens: number;
+  usage: NormalizedUsage | null | undefined;
   onConfirm: () => void;
   onDecline: () => void;
 }
 
-const LargeUncachedConfirmationPrompt: FC<LargeUncachedConfirmationPromptProps> = ({
-  accumulatedInputTokens,
-  onConfirm,
-  onDecline,
-}) => {
+const LargeUncachedConfirmationPrompt: FC<LargeUncachedConfirmationPromptProps> = ({ usage, onConfirm, onDecline }) => {
   const [selectedIndex, setSelectedIndex] = useState(0); // 0 = Send, 1 = Cancel
 
   useInput((input, key) => {
@@ -43,10 +40,16 @@ const LargeUncachedConfirmationPrompt: FC<LargeUncachedConfirmationPromptProps> 
     }
   });
 
+  const promptTokens = usage?.prompt_tokens ?? 0;
+  const cacheReadTokens = usage?.cache_read_tokens;
+
   return (
     <Box flexDirection="column">
       <Text color="yellow">
-        Send {Math.round(accumulatedInputTokens / 1_000)}k tokens anyway? (may miss prompt cache)
+        Send {promptTokens.toLocaleString()} tokens anyway?
+        {cacheReadTokens != null
+          ? ` (\u26A0\uFE0F ${cacheReadTokens.toLocaleString()} uncached)`
+          : ' (may miss prompt cache)'}
       </Text>
       <Box flexDirection="column" marginLeft={1}>
         <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Send</Text>

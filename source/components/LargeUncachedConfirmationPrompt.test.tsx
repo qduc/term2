@@ -28,11 +28,12 @@ const pressEscape = async (emitter: { emit: (event: string, input: string) => vo
 
 test('LargeUncachedConfirmationPrompt renders prompt and choices', (t) => {
   const { lastFrame } = render(
-    <LargeUncachedConfirmationPrompt accumulatedInputTokens={72_100} onConfirm={() => {}} onDecline={() => {}} />,
+    <LargeUncachedConfirmationPrompt usage={{ prompt_tokens: 72_100 }} onConfirm={() => {}} onDecline={() => {}} />,
   );
 
   const output = lastFrame() ?? '';
-  t.true(output.includes('Send 72k tokens anyway?'));
+  t.true(output.includes('Send 72,100 tokens anyway?'));
+  t.true(output.includes('may miss prompt cache'));
   t.true(output.includes('Send'));
   t.true(output.includes('Cancel'));
 });
@@ -48,7 +49,7 @@ test('LargeUncachedConfirmationPrompt declines on escape', async (t) => {
 
     return (
       <LargeUncachedConfirmationPrompt
-        accumulatedInputTokens={72_100}
+        usage={{ prompt_tokens: 72_100 }}
         onConfirm={() => {}}
         onDecline={() => {
           declined = true;
@@ -62,6 +63,6 @@ test('LargeUncachedConfirmationPrompt declines on escape', async (t) => {
   await flushReactUpdates(2);
   await pressEscape(inputEmitter!);
 
-  t.true((lastFrame() ?? '').includes('Send 72k tokens anyway?'));
+  t.true((lastFrame() ?? '').includes('Send 72,100 tokens anyway?'));
   t.true(declined);
 });

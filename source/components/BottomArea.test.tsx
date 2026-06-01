@@ -103,11 +103,12 @@ test('BottomArea shows large uncached confirmation prompt when pending turn exis
     ...baseProps,
     pendingLargeUncachedTurn: { text: 'Describe this', images: [] },
     pendingLargeUncachedTokens: 72_100,
-    accumulatedInputTokens: 72_100,
+    lastUsage: { prompt_tokens: 72_100 },
   });
 
   const output = lastFrame() ?? '';
-  t.true(output.includes('Send 72k tokens anyway?'));
+  t.true(output.includes('Send 72,100 tokens anyway?'));
+  t.true(output.includes('may miss prompt cache'));
   t.true(output.includes('Send'));
   t.true(output.includes('Cancel'));
   t.false(output.includes('Allow this action?'));

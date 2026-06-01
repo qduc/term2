@@ -254,6 +254,24 @@ test('createUsageAccumulator subtracts cached input on every model turn', (t) =>
   });
 });
 
+test('createUsageAccumulator accumulates already billable input without subtracting cached tokens again', (t) => {
+  const accumulator = createUsageAccumulator();
+
+  accumulator.add({ prompt_tokens: 200, completion_tokens: 100, cache_read_tokens: 800 }, { alreadyBillable: true });
+  t.deepEqual(accumulator.get(), {
+    prompt_tokens: 200,
+    completion_tokens: 100,
+    cache_read_tokens: 800,
+  });
+
+  accumulator.add({ prompt_tokens: 200, completion_tokens: 100, cache_read_tokens: 800 }, { alreadyBillable: true });
+  t.deepEqual(accumulator.get(), {
+    prompt_tokens: 400,
+    completion_tokens: 200,
+    cache_read_tokens: 1600,
+  });
+});
+
 test('formatSessionTokenUsage matches slash command output', (t) => {
   t.is(
     formatSessionTokenUsage({

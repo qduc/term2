@@ -158,7 +158,7 @@ test('CLI --resume prints message and exits when no conversation is found', (t) 
 
 test('CLI prompts before starting in non-lite mode from home directory', (t) => {
   const cliPath = path.resolve('dist/cli.js');
-  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-'));
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
 
   let error: any;
   let stderr = '';
@@ -189,7 +189,7 @@ test('CLI prompts before starting in non-lite mode from home directory', (t) => 
 
 test('CLI prompts before starting in non-lite mode from root directory', (t) => {
   const cliPath = path.resolve('dist/cli.js');
-  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-'));
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
 
   let error: any;
   let stderr = '';

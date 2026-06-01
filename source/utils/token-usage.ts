@@ -14,7 +14,7 @@ export interface NormalizedUsage {
 }
 
 export interface UsageAccumulator {
-  add(usage: NormalizedUsage | null | undefined): void;
+  add(usage: NormalizedUsage | null | undefined, options?: { alreadyBillable?: boolean }): void;
   reset(): void;
   get(): NormalizedUsage;
 }
@@ -345,8 +345,12 @@ export function createUsageAccumulator(initialUsage?: NormalizedUsage | null): U
   let accumulated = addBillableSessionTokenUsage(undefined, initialUsage);
 
   return {
-    add(usage) {
-      accumulated = addBillableSessionTokenUsage(accumulated, usage);
+    add(usage, options) {
+      if (options?.alreadyBillable) {
+        accumulated = addTokenUsage(accumulated, usage);
+      } else {
+        accumulated = addBillableSessionTokenUsage(accumulated, usage);
+      }
     },
     reset() {
       accumulated = {};

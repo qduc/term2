@@ -559,10 +559,10 @@ if (resumedConversation) {
   initialMessages = resumedConversation.messages as Message[];
   restoredStaticMessageIds = initialMessages.map((message) => message.id);
   if (resumedConversation.usage) {
-    sessionUsageAccumulator.add(resumedConversation.usage);
+    sessionUsageAccumulator.add(resumedConversation.usage, { alreadyBillable: true });
   }
   if (resumedConversation.subagentUsage) {
-    subagentUsageAccumulator.add(resumedConversation.subagentUsage);
+    subagentUsageAccumulator.add(resumedConversation.subagentUsage, { alreadyBillable: true });
   }
 } else if (resumeRequested) {
   const target = resumeTarget ?? 'last';

@@ -9,6 +9,7 @@ type Props = {
   query: string;
   loading?: boolean;
   error?: string | null;
+  warning?: string | null;
   scrollOffset?: number;
   maxHeight?: number;
 };
@@ -19,33 +20,37 @@ const PathSelectionMenu: FC<Props> = ({
   query,
   loading = false,
   error = null,
+  warning = null,
   scrollOffset = 0,
   maxHeight = 10,
 }) => {
   return (
-    <MenuContainer
-      items={items}
-      selectedIndex={selectedIndex}
-      scrollOffset={scrollOffset}
-      maxHeight={maxHeight}
-      borderColor="cyan"
-      loading={loading}
-      loadingText="Loading project paths…"
-      error={error ? `Unable to load paths: ${error}` : null}
-      fallbackText={`No matches for "@${query}"`}
-      footer="Enter → insert with space · Tab → insert w/o trailing space · Esc → cancel · ↑↓ → scroll"
-      footerOutsideBorder={true}
-      renderItem={(item, _index, isSelected) => {
-        const icon = item.type === 'directory' ? '📁' : '📄';
-        return (
-          <Box key={item.path}>
-            <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
-              {icon} {item.path}
-            </Text>
-          </Box>
-        );
-      }}
-    />
+    <Box flexDirection="column">
+      {warning && <Text color="yellow">{warning}</Text>}
+      <MenuContainer
+        items={items}
+        selectedIndex={selectedIndex}
+        scrollOffset={scrollOffset}
+        maxHeight={maxHeight}
+        borderColor="cyan"
+        loading={loading}
+        loadingText="Loading project paths…"
+        error={error ? `Unable to load paths: ${error}` : null}
+        fallbackText={`No matches for "@${query}"`}
+        footer="Enter → insert with space · Tab → insert w/o trailing space · Esc → cancel · ↑↓ → scroll"
+        footerOutsideBorder={true}
+        renderItem={(item, _index, isSelected) => {
+          const icon = item.type === 'directory' ? '📁' : '📄';
+          return (
+            <Box key={item.path}>
+              <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
+                {icon} {item.path}
+              </Text>
+            </Box>
+          );
+        }}
+      />
+    </Box>
   );
 };
 

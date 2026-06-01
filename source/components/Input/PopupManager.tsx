@@ -29,6 +29,7 @@ interface PopupManagerProps {
     query: string;
     loading: boolean;
     error: string | null;
+    warning: string | null;
   };
   models: {
     isOpen: boolean;
@@ -101,6 +102,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
           query={path.query}
           loading={path.loading}
           error={path.error}
+          warning={path.warning}
         />
       )}
       {slash.isOpen && (

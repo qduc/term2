@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getWorkspaceEntries, refreshWorkspaceEntries, type PathEntry } from '../services/file-service.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  getWorkspaceEntries,
+  getWorkspaceEntriesMeta,
+  refreshWorkspaceEntries,
+  type PathEntry,
+  type WorkspaceEntriesMeta,
+} from '../services/file-service.js';
 import { filterPathEntries } from './path-completion-filter.js';
 import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
@@ -9,9 +15,36 @@ export type PathCompletionItem = PathEntry;
 
 const MAX_RESULTS = 100;
 
-export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) => {
+type UsePathCompletionDeps = {
+  loggingService?: ILoggingService;
+  getWorkspaceEntries?: typeof getWorkspaceEntries;
+  refreshWorkspaceEntries?: typeof refreshWorkspaceEntries;
+  getWorkspaceEntriesMeta?: typeof getWorkspaceEntriesMeta;
+};
+
+// Builds an accurate warning for whichever truncation actually occurred. The
+// total-entry limit is the only cap on the workspace listing, so any warning
+// must be specific to that cause.
+export const buildWorkspaceLimitWarning = (
+  meta: Pick<WorkspaceEntriesMeta, 'truncatedByTotalLimit' | 'limit'>,
+): string | null => {
+  if (meta.truncatedByTotalLimit) {
+    return `Path completion is limited to ${meta.limit} entries because this repo is too large. Showing a best-effort breadth-first sample.`;
+  }
+  return null;
+};
+
+export const usePathCompletion = (deps?: UsePathCompletionDeps) => {
   const logger = deps?.loggingService;
+  const loadWorkspaceEntries = deps?.getWorkspaceEntries ?? getWorkspaceEntries;
+  const reloadWorkspaceEntries = deps?.refreshWorkspaceEntries ?? refreshWorkspaceEntries;
+  const loadWorkspaceEntriesMeta = deps?.getWorkspaceEntriesMeta ?? getWorkspaceEntriesMeta;
   const { mode, setMode, input, triggerIndex, setTriggerIndex, cursorOffset } = useInputContext();
+
+  // Logging is a side effect only; an unstable logger reference must not cause
+  // workspace loading effects to re-run on every render.
+  const loggerRef = useRef(logger);
+  loggerRef.current = logger;
 
   const isOpen = mode === 'path_completion';
 
@@ -31,33 +64,59 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
   const [entries, setEntries] = useState<PathEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+
+  const syncWorkspaceWarning = useCallback((meta: WorkspaceEntriesMeta) => {
+    const warningText = buildWorkspaceLimitWarning(meta);
+    setWarning(warningText);
+
+    if (!warningText) {
+      return;
+    }
+
+    const details = {
+      limit: meta.limit,
+      totalEntries: meta.totalEntries,
+      truncatedByTotalLimit: meta.truncatedByTotalLimit,
+    };
+    const currentLogger = loggerRef.current;
+    if (currentLogger) {
+      currentLogger.warn('Path completion truncated the workspace listing', details);
+    } else {
+      console.warn('[use-path-completion] Path completion truncated the workspace listing', details);
+    }
+  }, []);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setWarning(null);
     try {
-      const paths = await getWorkspaceEntries();
+      const paths = await loadWorkspaceEntries();
       setEntries(paths);
+      syncWorkspaceWarning(loadWorkspaceEntriesMeta());
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
+      setWarning(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadWorkspaceEntries, loadWorkspaceEntriesMeta, syncWorkspaceWarning]);
 
   useEffect(() => {
     loadEntries().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      if (logger) {
-        logger.error('Failed to load workspace entries', {
+      const currentLogger = loggerRef.current;
+      if (currentLogger) {
+        currentLogger.error('Failed to load workspace entries', {
           error: message,
         });
       } else {
         console.error('[use-path-completion] Failed to load workspace entries', message);
       }
     });
-  }, [loadEntries, logger]);
+  }, [loadEntries]);
 
   const filteredEntries = useMemo(() => {
     return filterPathEntries(entries, query, MAX_RESULTS);
@@ -86,16 +145,19 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setWarning(null);
     try {
-      const paths = await refreshWorkspaceEntries();
+      const paths = await reloadWorkspaceEntries();
       setEntries(paths);
+      syncWorkspaceWarning(loadWorkspaceEntriesMeta());
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
+      setWarning(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [reloadWorkspaceEntries, loadWorkspaceEntriesMeta, syncWorkspaceWarning]);
 
   const open = useCallback(
     (startIndex: number, _initialQuery = '') => {
@@ -133,6 +195,7 @@ export const usePathCompletion = (deps?: { loggingService?: ILoggingService }) =
     scrollOffset,
     loading,
     error,
+    warning,
     open,
     close,
     moveUp,

@@ -41,6 +41,7 @@ export const toPopupProps = ({
     query: path.query,
     loading: path.loading,
     error: path.error,
+    warning: path.warning,
   },
   models: {
     isOpen: models.isOpen,

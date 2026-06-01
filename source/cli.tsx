@@ -38,7 +38,14 @@ import { normalizeAppModes } from './services/settings-schema.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import { createInterface } from 'node:readline/promises';
+import { stdin as nodeStdin, stdout as nodeStdout } from 'node:process';
 import type { Message } from './hooks/use-conversation.js';
+import {
+  confirmHomeDirectoryStart,
+  HOME_DIRECTORY_START_WARNING,
+  shouldWarnOnHomeDirectoryStart,
+} from './utils/home-directory-start-guard.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -208,6 +215,32 @@ const hasPositionalPrompt = positionalPrompt.length > 0;
 // If the user passed an explicit empty prompt (e.g. `term2 ""`), show help.
 if (!resumeRequested && cli.input.length > 0 && !hasPositionalPrompt) {
   cli.showHelp(0);
+}
+
+const needsHomeDirectoryConfirmation = shouldWarnOnHomeDirectoryStart({
+  cwd: path.resolve(process.cwd()),
+  homeDir: path.resolve(os.homedir()),
+  isNonLiteStart:
+    !cli.flags.lite && !resumeRequested && !cli.flags.ssh && (!hasPositionalPrompt || cli.flags.autoApprove),
+});
+
+if (needsHomeDirectoryConfirmation) {
+  if (!nodeStdin.isTTY || !nodeStdout.isTTY) {
+    console.error(HOME_DIRECTORY_START_WARNING.trimEnd());
+    console.error('Cancelled.');
+    process.exit(1);
+  }
+
+  const rl = createInterface({ input: nodeStdin, output: nodeStdout });
+  try {
+    const confirmed = await confirmHomeDirectoryStart(() => rl.question(HOME_DIRECTORY_START_WARNING));
+    if (!confirmed) {
+      console.error('Cancelled.');
+      process.exit(1);
+    }
+  } finally {
+    rl.close();
+  }
 }
 
 const rawModelFlag = cli.flags.model;

@@ -1,5 +1,5 @@
 import test from 'ava';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -154,4 +154,66 @@ test('CLI --resume prints message and exits when no conversation is found', (t) 
   t.is(error.status, 1);
   t.true(stderr.includes('No conversation found to resume (dummy).'));
   t.true(stderr.includes('Run "term2 --resume ls" to list available conversations.'));
+});
+
+test('CLI prompts before starting in non-lite mode from home directory', (t) => {
+  const cliPath = path.resolve('dist/cli.js');
+  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-'));
+
+  let error: any;
+  let stderr = '';
+  try {
+    execFileSync('node', [cliPath], {
+      env: {
+        ...process.env,
+        HOME: tempHome,
+        TERM2_CONVERSATIONS_DIR: testDir,
+        DISABLE_LOGGING: '1',
+      },
+      cwd: tempHome,
+      input: 'n\n',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (err: any) {
+    error = err;
+    stderr = err.stderr.toString();
+  }
+
+  fs.rmSync(tempHome, { recursive: true, force: true });
+
+  t.truthy(error);
+  t.is(error.status, 1);
+  t.true(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.'));
+  t.true(stderr.includes('Cancelled.'));
+});
+
+test('CLI prompts before starting in non-lite mode from root directory', (t) => {
+  const cliPath = path.resolve('dist/cli.js');
+  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-'));
+
+  let error: any;
+  let stderr = '';
+  try {
+    execFileSync('node', [cliPath], {
+      env: {
+        ...process.env,
+        HOME: tempHome,
+        TERM2_CONVERSATIONS_DIR: testDir,
+        DISABLE_LOGGING: '1',
+      },
+      cwd: '/',
+      input: 'n\n',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (err: any) {
+    error = err;
+    stderr = err.stderr.toString();
+  }
+
+  fs.rmSync(tempHome, { recursive: true, force: true });
+
+  t.truthy(error);
+  t.is(error.status, 1);
+  t.true(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.'));
+  t.true(stderr.includes('Cancelled.'));
 });

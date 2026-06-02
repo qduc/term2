@@ -28,8 +28,8 @@ test('ProviderSelectionMenu renders structured provider items without built-in/c
       phase: 'list',
       selectedIndex: 0,
       activeItems: [
-        { kind: 'provider', id: 'openai', label: 'OpenAI', isActive: true },
-        { kind: 'provider', id: 'custom-ollama', label: 'custom-ollama', isActive: false },
+        { kind: 'provider', id: 'openai', label: 'OpenAI', isActive: true, isCustom: false },
+        { kind: 'provider', id: 'custom-ollama', label: 'custom-ollama', isActive: false, isCustom: true },
         { kind: 'add-provider', label: 'Add Custom Provider' },
       ],
       errorMessage: null,

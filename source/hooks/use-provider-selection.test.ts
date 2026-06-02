@@ -80,7 +80,7 @@ test.serial('useProviderSelection - lists registered and custom providers on ope
   });
 });
 
-test.serial('useProviderSelection - selects a provider to perform actions', async (t) => {
+test.serial('useProviderSelection - selecting a custom provider opens edit_fields directly', async (t) => {
   const customProviders = [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }];
   const settingsService = createMockSettingsService(customProviders, 'openai');
   let hook: ReturnType<typeof useProviderSelection> | undefined;
@@ -120,9 +120,172 @@ test.serial('useProviderSelection - selects a provider to perform actions', asyn
   });
   await flush();
 
-  t.is(hook!.phase, 'provider_actions');
-  t.is(hook!.selectedProvider?.id, 'custom-ollama');
-  t.true(hook!.selectedProvider?.isCustom);
+  t.is(hook!.phase, 'edit_fields');
+  t.is(hook!.selectedIndex, 0);
+  t.is(hook!.draft?.name, 'custom-ollama');
+  t.is(hook!.draft?.baseUrl, 'http://localhost:11434/v1');
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+test.serial('useProviderSelection - selecting a built-in provider is a no-op', async (t) => {
+  const settingsService = createMockSettingsService([], 'openai');
+  let hook: ReturnType<typeof useProviderSelection> | undefined;
+  let renderer: any;
+
+  await act(async () => {
+    renderer = render(
+      React.createElement(
+        InputProvider as any,
+        {},
+        React.createElement(TestComponent, {
+          settingsService,
+          onHookResult: (h) => {
+            hook = h;
+          },
+        }),
+      ),
+    );
+  });
+
+  await act(async () => {
+    hook!.open();
+  });
+  await flush();
+
+  // Move to the openai built-in (index 0 in default list).
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'list');
+  t.is(hook!.selectedIndex, 0);
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+test.serial('useProviderSelection - requestDelete on a custom provider opens confirm_delete', async (t) => {
+  const customProviders = [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }];
+  const settingsService = createMockSettingsService(customProviders, 'openai');
+  let hook: ReturnType<typeof useProviderSelection> | undefined;
+  let renderer: any;
+
+  await act(async () => {
+    renderer = render(
+      React.createElement(
+        InputProvider as any,
+        {},
+        React.createElement(TestComponent, {
+          settingsService,
+          onHookResult: (h) => {
+            hook = h;
+          },
+        }),
+      ),
+    );
+  });
+
+  await act(async () => {
+    hook!.open();
+  });
+  await flush();
+
+  // Navigate to custom-ollama
+  await act(async () => {
+    const idx = hook!.items.findIndex((item) => item.id === 'custom-ollama');
+    for (let i = 0; i < idx; i++) {
+      hook!.moveDown();
+    }
+  });
+  await flush();
+
+  await act(async () => {
+    hook!.requestDelete();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'confirm_delete');
+  // Default cursor should be on "No, keep it" for safety.
+  t.is(hook!.selectedIndex, 1);
+
+  // Confirming "No, keep it" returns to the list.
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+  t.is(hook!.phase, 'list');
+  t.is(settingsService.get('providers').length, 1);
+
+  // Now request delete again, this time confirm "Yes".
+  await act(async () => {
+    const idx = hook!.items.findIndex((item) => item.id === 'custom-ollama');
+    for (let i = 0; i < idx; i++) {
+      hook!.moveDown();
+    }
+  });
+  await flush();
+  await act(async () => {
+    hook!.requestDelete();
+  });
+  await flush();
+  t.is(hook!.phase, 'confirm_delete');
+
+  await act(async () => {
+    hook!.moveUp(); // move from default "No" to "Yes"
+  });
+  await flush();
+  t.is(hook!.selectedIndex, 0);
+
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+  t.is(hook!.phase, 'list');
+  t.is(settingsService.get('providers').length, 0);
+  t.is(settingsService.get('agent.provider'), 'openai');
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+test.serial('useProviderSelection - requestDelete on a built-in is a no-op', async (t) => {
+  const settingsService = createMockSettingsService([], 'openai');
+  let hook: ReturnType<typeof useProviderSelection> | undefined;
+  let renderer: any;
+
+  await act(async () => {
+    renderer = render(
+      React.createElement(
+        InputProvider as any,
+        {},
+        React.createElement(TestComponent, {
+          settingsService,
+          onHookResult: (h) => {
+            hook = h;
+          },
+        }),
+      ),
+    );
+  });
+
+  await act(async () => {
+    hook!.open();
+  });
+  await flush();
+
+  // openai is at index 0 in the built-ins.
+  await act(async () => {
+    hook!.requestDelete();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'list');
 
   await act(async () => {
     renderer.unmount();
@@ -296,11 +459,7 @@ test.serial('useProviderSelection - goBack returns wizard fields to the correct 
   });
   await flush();
 
-  await act(async () => {
-    hook!.selectItem();
-  });
-  await flush();
-
+  // Enter on a custom provider jumps straight to edit_fields.
   await act(async () => {
     hook!.selectItem();
   });
@@ -309,6 +468,7 @@ test.serial('useProviderSelection - goBack returns wizard fields to the correct 
   t.is(hook!.phase, 'edit_fields');
   t.is(hook!.selectedIndex, 0);
 
+  // Enter on the Name field opens the name editor.
   await act(async () => {
     hook!.selectItem();
   });
@@ -449,16 +609,13 @@ test.serial('useProviderSelection - unchanged provider names are allowed when ed
   });
   await flush();
 
+  // Enter on the custom provider goes directly to edit_fields.
   await act(async () => {
     hook!.selectItem();
   });
   await flush();
 
-  await act(async () => {
-    hook!.selectItem();
-  });
-  await flush();
-
+  // Enter on the Name field opens the name editor.
   await act(async () => {
     hook!.selectItem();
   });

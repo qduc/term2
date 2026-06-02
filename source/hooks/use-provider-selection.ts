@@ -6,7 +6,6 @@ import { createOpenAICompatibleProviderDefinition } from '../providers/openai-co
 
 export type ProviderSelectionPhase =
   | 'list'
-  | 'provider_actions'
   | 'edit_fields'
   | 'wizard_name'
   | 'wizard_type'
@@ -43,6 +42,7 @@ export type ProviderSelectionMenuItem =
       id: string;
       label: string;
       isActive: boolean;
+      isCustom: boolean;
     }
   | {
       kind: 'add-provider';
@@ -107,8 +107,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
   const [phase, setPhase] = useState<ProviderSelectionPhase>('list');
   const [items, setItems] = useState<ProviderSelectionItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [selectedProvider, setSelectedProvider] = useState<ProviderSelectionItem | null>(null);
   const [draft, setDraft] = useState<CustomProviderDraft | null>(null);
+  const [editingOriginalName, setEditingOriginalName] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<'name' | 'type' | 'baseUrl' | 'apiKey' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -178,8 +178,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       loadProviders();
       setPhase('list');
       setSelectedIndex(0);
-      setSelectedProvider(null);
       setDraft(null);
+      setEditingOriginalName(null);
       setEditingField(null);
       setErrorMessage(null);
     }
@@ -216,8 +216,6 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     switch (phase) {
       case 'list':
         return items.length + 1; // plus "Add Custom Provider"
-      case 'provider_actions':
-        return selectedProvider?.isCustom ? 3 : 1; // custom: edit, delete, back. built-in: back.
       case 'wizard_type':
         return PROVIDER_TYPES.length;
       case 'edit_fields':
@@ -233,17 +231,15 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     switch (phase) {
       case 'list':
         return [
-          ...items.map((i) => ({ kind: 'provider' as const, id: i.id, label: i.label, isActive: i.isActive })),
+          ...items.map((i) => ({
+            kind: 'provider' as const,
+            id: i.id,
+            label: i.label,
+            isActive: i.isActive,
+            isCustom: i.isCustom,
+          })),
           { kind: 'add-provider' as const, label: 'Add Custom Provider' },
         ];
-      case 'provider_actions':
-        return selectedProvider?.isCustom
-          ? [
-              { kind: 'action' as const, label: 'Edit Provider Details' },
-              { kind: 'action' as const, label: 'Delete Provider', tone: 'destructive' as const },
-              { kind: 'action' as const, label: 'Go Back' },
-            ]
-          : [{ kind: 'action' as const, label: 'Go Back' }];
       case 'wizard_type':
         return PROVIDER_TYPES.map((type) => ({ kind: 'type' as const, label: type }));
       case 'edit_fields':
@@ -294,20 +290,9 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         // Provider selected
         const provider = items[index]!;
         if (provider.isCustom) {
-          setSelectedProvider(provider);
-          setPhase('provider_actions');
-          setSelectedIndex(0);
-        } else {
-          setSelectedIndex(index);
-        }
-      }
-    } else if (phase === 'provider_actions') {
-      const isCustom = selectedProvider?.isCustom;
-      if (isCustom && index === 0) {
-        // "Edit Provider"
-        if (selectedProvider) {
+          // Edit custom provider directly
           const list = settingsService.get<any[]>('providers') || [];
-          const found = list.find((p: any) => p && p.name === selectedProvider.id);
+          const found = list.find((p: any) => p && p.name === provider.id);
           if (found) {
             setDraft({
               name: found.name,
@@ -317,23 +302,17 @@ export const useProviderSelection = (settingsService: SettingsService) => {
             });
           } else {
             setDraft({
-              name: selectedProvider.id,
+              name: provider.id,
               type: 'openai-compatible',
               baseUrl: '',
               apiKey: '',
             });
           }
+          setEditingOriginalName(found ? found.name : null);
           setPhase('edit_fields');
           setSelectedIndex(0);
         }
-      } else if (isCustom && index === 1) {
-        // "Delete Provider"
-        setPhase('confirm_delete');
-        setSelectedIndex(DELETE_CONFIRM_DEFAULT_INDEX); // default to 'No' for safety
-      } else {
-        // Go Back (index 2 for custom, index 0 for built-in)
-        setPhase('list');
-        setSelectedIndex(0);
+        // Built-in providers: no-op (activation lives in the model menu).
       }
     } else if (phase === 'wizard_type') {
       const selectedType = PROVIDER_TYPES[index]!;
@@ -381,36 +360,35 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     } else if (phase === 'confirm_delete') {
       if (index === 0) {
         // Yes, delete
-        if (selectedProvider) {
+        if (editingOriginalName) {
           const list = settingsService.get<any[]>('providers') || [];
-          const updated = list.filter((p: any) => p && p.name !== selectedProvider.id);
+          const updated = list.filter((p: any) => p && p.name !== editingOriginalName);
           settingsService.setPersistent('providers', updated);
-          unregisterProvider(selectedProvider.id);
+          unregisterProvider(editingOriginalName);
 
           // If active provider was deleted, fallback
           const activeProvider = settingsService.get<string>('agent.provider');
-          if (activeProvider === selectedProvider.id) {
+          if (activeProvider === editingOriginalName) {
             settingsService.set('agent.provider', 'openai');
           }
           loadProviders();
         }
         setPhase('list');
         setSelectedIndex(0);
+        setEditingOriginalName(null);
       } else {
         // No, keep
-        setPhase('provider_actions');
+        setPhase('list');
         setSelectedIndex(0);
+        setEditingOriginalName(null);
       }
     }
-  }, [phase, selectedIndex, items, selectedProvider, draft, editingField, settingsService, loadProviders]);
+  }, [phase, selectedIndex, items, editingOriginalName, draft, editingField, settingsService, loadProviders]);
 
   const goBack = useCallback(() => {
     setErrorMessage(null);
     if (phase === 'list') {
       close();
-    } else if (phase === 'provider_actions') {
-      setPhase('list');
-      setSelectedIndex(0);
     } else if (phase === 'wizard_name') {
       if (editingField) {
         setPhase('edit_fields');
@@ -451,9 +429,11 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       setPhase('list');
       setSelectedIndex(0);
       setDraft(null);
+      setEditingOriginalName(null);
     } else if (phase === 'confirm_delete') {
-      setPhase('provider_actions');
+      setPhase('list');
       setSelectedIndex(0);
+      setEditingOriginalName(null);
     }
   }, [phase, editingField, close]);
 
@@ -470,8 +450,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         }
         // Check for name conflict
         const isRename = editingField !== null;
-        const originalName = selectedProvider?.id;
-        if (hasProviderNameConflict(settingsService, val, isRename ? originalName : undefined)) {
+        const originalName = isRename ? editingOriginalName ?? undefined : undefined;
+        if (hasProviderNameConflict(settingsService, val, originalName)) {
           setErrorMessage(`Provider with name '${val}' already exists.`);
           return false;
         }
@@ -543,7 +523,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
       return false;
     },
-    [phase, draft, editingField, selectedProvider, settingsService],
+    [phase, draft, editingField, editingOriginalName, settingsService],
   );
 
   const saveDraft = () => {
@@ -557,8 +537,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       return;
     }
 
-    const originalName = selectedProvider?.id;
-    if (hasProviderNameConflict(settingsService, draft.name, selectedProvider ? originalName : undefined)) {
+    const originalName = editingOriginalName;
+    if (hasProviderNameConflict(settingsService, draft.name, originalName ?? undefined)) {
       setPhase('edit_fields');
       setSelectedIndex(0);
       setErrorMessage(`Provider with name '${draft.name}' already exists.`);
@@ -576,14 +556,14 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
     try {
       const list = settingsService.get<any[]>('providers') || [];
-      const isEdit = selectedProvider !== null;
+      const isEdit = originalName !== null;
       let updatedList;
 
-      if (isEdit && selectedProvider) {
+      if (isEdit && originalName) {
         // If name changed, delete old provider
-        updatedList = list.filter((p: any) => p && p.name !== selectedProvider.id);
-        if (selectedProvider.id !== draft.name) {
-          unregisterProvider(selectedProvider.id);
+        updatedList = list.filter((p: any) => p && p.name !== originalName);
+        if (originalName !== draft.name) {
+          unregisterProvider(originalName);
         }
       } else {
         updatedList = [...list];
@@ -609,7 +589,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       upsertProvider(def);
 
       // If active provider was edited and its name changed, update the active setting
-      if (isEdit && selectedProvider && selectedProvider.id === settingsService.get('agent.provider')) {
+      if (isEdit && originalName && originalName === settingsService.get('agent.provider')) {
         settingsService.set('agent.provider', draft.name);
       }
 
@@ -617,11 +597,24 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       setPhase('list');
       setSelectedIndex(0);
       setDraft(null);
-      setSelectedProvider(null);
+      setEditingOriginalName(null);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to save provider.');
     }
   };
+
+  const requestDelete = useCallback(() => {
+    if (phase !== 'list') return;
+    const index = Math.min(selectedIndex, items.length - 1);
+    if (index < 0 || index >= items.length) return;
+    const provider = items[index]!;
+    if (!provider.isCustom) return; // only custom providers can be deleted
+    setEditingOriginalName(provider.id);
+    setPhase('confirm_delete');
+    setSelectedIndex(DELETE_CONFIRM_DEFAULT_INDEX); // default to 'No' for safety
+  }, [phase, selectedIndex, items]);
+
+  const selectedProviderName = editingOriginalName ?? undefined;
 
   return {
     isOpen,
@@ -629,15 +622,16 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     items,
     selectedIndex,
     scrollOffset,
-    selectedProvider,
     draft,
     errorMessage,
+    selectedProviderName,
     open,
     close,
     moveUp,
     moveDown,
     selectItem,
     goBack,
+    requestDelete,
     getActiveItems,
     handleTextInputSubmit,
   };

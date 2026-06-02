@@ -548,6 +548,10 @@ const InputBox: FC<Props> = ({
     }
     if (key.delete) {
       if (currentMode === 'undo_selection') return;
+      if (currentMode === 'provider_selection') {
+        currentHandlers[currentMode].onDelete?.();
+        return;
+      }
       if (currentCursor >= currentValue.length) return;
       const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
       changeInput(nextValue);

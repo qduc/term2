@@ -17,6 +17,7 @@ export type ModeHandler = {
   onTab?: () => void;
   onSubmit?: (submittedValue: string) => SubmitResult;
   onReset?: () => void;
+  onDelete?: () => void;
 };
 
 type Movable = {
@@ -47,6 +48,7 @@ type Providers = {
   moveDown: () => void;
   selectItem: () => void;
   goBack: () => void;
+  requestDelete: () => void;
   handleTextInputSubmit: (value: string) => boolean;
 };
 
@@ -220,6 +222,11 @@ export const useModeHandlers = ({
           return 'handled';
         },
         onReset: providers.goBack,
+        onDelete: () => {
+          if (providers.phase === 'list') {
+            providers.requestDelete();
+          }
+        },
       },
     }),
     [

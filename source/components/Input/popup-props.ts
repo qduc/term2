@@ -88,7 +88,7 @@ export const toPopupProps = ({
     scrollOffset: providers.scrollOffset,
     activeItems: providers.getActiveItems(),
     errorMessage: providers.errorMessage,
-    selectedProviderName: providers.selectedProvider?.label,
+    selectedProviderName: providers.selectedProviderName,
     draft: providers.draft,
   },
 });

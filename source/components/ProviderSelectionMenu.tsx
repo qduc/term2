@@ -30,8 +30,6 @@ const ProviderSelectionMenu: FC<Props> = ({
     switch (phase) {
       case 'list':
         return 'Provider Management';
-      case 'provider_actions':
-        return `Actions: ${selectedProviderName}`;
       case 'wizard_type':
         return 'Step 2: Provider Type';
       case 'edit_fields':
@@ -52,8 +50,7 @@ const ProviderSelectionMenu: FC<Props> = ({
   const getFooter = () => {
     switch (phase) {
       case 'list':
-        return 'Enter → Select · Esc → Close Menu · ↑↓ → Navigate';
-      case 'provider_actions':
+        return 'Enter → Edit custom provider · Del → Delete custom provider · Esc → Close Menu · ↑↓ → Navigate';
       case 'confirm_delete':
       case 'wizard_type':
         return 'Enter → Select · Esc → Go Back · ↑↓ → Navigate';
@@ -163,8 +160,16 @@ const ProviderSelectionMenu: FC<Props> = ({
           let bold = isSelected;
 
           if (item.kind === 'provider') {
-            prefix = item.isActive ? '● ' : '  ';
-            color = item.isActive ? (isSelected ? 'green' : 'cyan') : isSelected ? 'green' : 'white';
+            if (item.isActive) {
+              prefix = '● ';
+              color = isSelected ? 'green' : 'cyan';
+            } else {
+              // Built-in (non-active): greyed out, not actionable on Enter.
+              // Custom providers remain bright so they look interactive.
+              const isBuiltIn = !item.isCustom;
+              prefix = isBuiltIn ? '— ' : '  ';
+              color = isBuiltIn ? 'gray' : isSelected ? 'green' : 'white';
+            }
           } else if (item.kind === 'add-provider') {
             prefix = '+ ';
             color = isSelected ? 'green' : 'yellow';

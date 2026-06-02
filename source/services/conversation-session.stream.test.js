@@ -1694,7 +1694,7 @@ test('run() with image attachment does not throw when supportsChaining is true',
   t.is(receivedInput[0].content[1].type, 'input_image');
 });
 
-test('previewLargeUncachedInput() does not mutate history', (t) => {
+test('previewLargeUncachedInput() does not mutate history or consume pending mode notice', (t) => {
   const mockClient = {
     getProvider() {
       return 'codex';
@@ -1716,6 +1716,7 @@ test('previewLargeUncachedInput() does not mutate history', (t) => {
     deps: { logger: mockLogger, settingsService, sessionContextService },
   });
 
+  session.queueModeNotice('Plan mode enabled');
   const before = session.exportState();
 
   const decision = session.previewLargeUncachedInput('hello', 1_000);

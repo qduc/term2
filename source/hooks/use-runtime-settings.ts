@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { ConversationService } from '../services/conversation-service.js';
 import type { SettingsService } from '../services/settings-service.js';
 import { setTrimConfig } from '../utils/output-trim.js';
+import { planModeNotice } from '../services/mode-notices.js';
 
 interface UseRuntimeSettingsProps {
   setModel: (model: string) => void;
@@ -82,8 +83,7 @@ export const useRuntimeSettings = ({
 
       if (key === 'app.planMode') {
         // Exclusivity enforcement is owned by the slash-command handlers.
-        // No runtime side-effect is needed here; mode-change feedback is a
-        // transient UI system message owned by the command layer.
+        conversationService.queueModeNotice(planModeNotice(Boolean(value)));
         return;
       }
 

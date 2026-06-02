@@ -126,6 +126,7 @@ export class ConversationSession {
 
   private settingsService?: ISettingsService;
   private sessionContextService: ISessionContextService;
+  private pendingModeNotice: string | null = null;
   private logSink: ((event: LogEvent) => void) | null = null;
 
   constructor(
@@ -211,14 +212,24 @@ export class ConversationSession {
     return { role: 'user', type: 'message', content } as AgentInputItem;
   }
 
+  #turnWithModeNotice(turn: UserTurn, notice: string | null): UserTurn {
+    if (!notice?.trim()) {
+      return turn;
+    }
+
+    const text = turn.text ? `${notice}\n\n${turn.text}` : notice;
+    return { ...turn, text };
+  }
+
   #buildOutgoingInput(turn: UserTurn, { includeTurn }: { includeTurn: boolean }): BuiltOutgoingInput {
     const provider = this.#getProviderForGuard() ?? 'openai';
     const supportsChaining = supportsConversationChaining(provider);
     const history = this.#getCanonicalHistory();
-    const outgoingHistory = includeTurn ? [...history, this.#makeUserInputItem(turn)] : history;
+    const effectiveTurn = includeTurn ? this.#turnWithModeNotice(turn, this.pendingModeNotice) : turn;
+    const outgoingHistory = includeTurn ? [...history, this.#makeUserInputItem(effectiveTurn)] : history;
     const useChaining = supportsChaining && (!!this.previousResponseId || outgoingHistory.length <= 1);
-    const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? turn.text;
-    const chainedInput = turn.images?.length ? latestInput : turn.text;
+    const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
+    const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;
 
     return {
       streamInput: useChaining ? (typeof chainedInput === 'string' ? chainedInput : [chainedInput]) : outgoingHistory,
@@ -637,6 +648,9 @@ export class ConversationSession {
   addShellContext(historyText: string): void {
     this.conversationStore.addShellContext(historyText);
   }
+  queueModeNotice(text: string): void {
+    this.pendingModeNotice = text;
+  }
   /**
    * Abort the current running operation
    */
@@ -681,7 +695,7 @@ export class ConversationSession {
     }
     const gen = this.generation;
     let stream: AgentStream | null = null;
-    const turn = normalizeUserTurn(input);
+    const turn = this.#turnWithModeNotice(normalizeUserTurn(input), this.pendingModeNotice);
     const text = turn.text;
     let addedUserMessage = false;
     const ledgerSnapshot = this.toolLedger.export();
@@ -856,6 +870,10 @@ export class ConversationSession {
           ...(droppedUserMessage ? { droppedUserMessage } : {}),
         };
         return;
+      }
+
+      if (this.pendingModeNotice) {
+        this.pendingModeNotice = null;
       }
 
       stream = (await this.agentClient.startStream(streamInput, {

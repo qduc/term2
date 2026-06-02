@@ -110,6 +110,10 @@ export class ConversationService {
     this.#session.addShellContext(historyText);
   }
 
+  queueModeNotice(text: string): void {
+    this.#session.queueModeNotice(text);
+  }
+
   abort(): void {
     this.#session.abort();
   }

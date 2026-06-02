@@ -140,15 +140,17 @@ test('sessions do not share pending approval context', async (t) => {
   t.is(aFinal.finalText, 'Approved');
 });
 
-test('sendMessage() passes only the user delta in chaining mode after a mode toggle', async (t) => {
+test('queueModeNotice prefixes the next user message in stream input (chaining provider)', async (t) => {
   const startCalls = [];
   const mockStream = new MockStream([]);
   mockStream.lastResponseId = 'resp-notice';
   mockStream.finalOutput = 'Ack';
 
+  let currentProvider = 'openai';
+
   const mockClient = {
     getProvider() {
-      return 'openai';
+      return currentProvider;
     },
     async startStream(text, options) {
       startCalls.push({ text, options });
@@ -161,13 +163,14 @@ test('sendMessage() passes only the user delta in chaining mode after a mode tog
     deps: { logger: mockLogger, sessionContextService },
   });
 
+  session.queueModeNotice('Mode change notice chaining');
   await session.sendMessage('User msg');
 
   t.is(startCalls.length, 1);
-  t.is(startCalls[0].text, 'User msg');
+  t.is(startCalls[0].text, 'Mode change notice chaining\n\nUser msg');
 });
 
-test('sendMessage() persists only the real user turn in non-chaining mode', async (t) => {
+test('queueModeNotice prefixes the next user message in stream input (non-chaining provider)', async (t) => {
   const startCalls = [];
   const mockStream = new MockStream([]);
   mockStream.lastResponseId = 'resp-notice';
@@ -188,19 +191,26 @@ test('sendMessage() persists only the real user turn in non-chaining mode', asyn
     deps: { logger: mockLogger, sessionContextService },
   });
 
+  session.queueModeNotice('Mode change notice non-chaining');
   await session.sendMessage('User msg');
 
   t.is(startCalls.length, 1);
   const passedHistory = startCalls[0].text;
   t.true(Array.isArray(passedHistory));
   t.is(passedHistory.length, 1);
-  t.is(passedHistory[0].content, 'User msg');
+  t.deepEqual(passedHistory[0], {
+    role: 'user',
+    type: 'message',
+    content: 'Mode change notice non-chaining\n\nUser msg',
+  });
 
+  // The notice is persisted as part of the user turn, not as a separate turn.
   const persisted = session.exportState().history;
-  t.deepEqual(persisted, passedHistory);
+  t.is(persisted.length, 1);
+  t.is((persisted[0].rawItem ?? persisted[0]).content, 'Mode change notice non-chaining\n\nUser msg');
 });
 
-test('sendMessage() keeps full-history input free of synthetic mode notices across turns', async (t) => {
+test('queueModeNotice preserves prefix stability by modifying only the next user turn (non-chaining)', async (t) => {
   const startCalls = [];
 
   const mockClient = {
@@ -225,8 +235,8 @@ test('sendMessage() keeps full-history input free of synthetic mode notices acro
   await session.sendMessage('First question');
   const turn1Input = startCalls[0].text;
 
-  // Turn 2: send another message after a mode change. No synthetic notice
-  // should appear in the provider input or persisted history.
+  // Turn 2: switch modes mid-session, then send another message.
+  session.queueModeNotice('Plan Mode toggled OFF');
   await session.sendMessage('Second question');
   const turn2Input = startCalls[1].text;
 
@@ -234,15 +244,16 @@ test('sendMessage() keeps full-history input free of synthetic mode notices acro
   await session.sendMessage('Third question');
   const turn3Input = startCalls[2].text;
 
-  // Each full-history request should just be the prior canonical history plus
-  // the latest user turn. Nothing synthetic should be injected.
+  // Turn 2's input is turn 1's prefix grown by the next user turn with the
+  // notice prefixed. Turn 3's input is turn 2's input grown by the next user
+  // turn. Nothing is reordered or removed, so the prompt cache prefix grows.
   t.deepEqual(turn2Input.slice(0, turn1Input.length), turn1Input);
   t.deepEqual(turn3Input.slice(0, turn2Input.length), turn2Input);
-  t.false(
-    turn3Input.some(
-      (item) =>
-        typeof (item.rawItem ?? item).content === 'string' &&
-        (item.rawItem ?? item).content.startsWith('[Mode Notice] '),
-    ),
+
+  // The notice stays attached to the user turn at a stable position.
+  const noticeIdx = turn3Input.findIndex(
+    (i) => (i.rawItem ?? i).role === 'user' && (i.rawItem ?? i).content === 'Plan Mode toggled OFF\n\nSecond question',
   );
+  t.true(noticeIdx >= 0);
+  t.is((turn3Input[noticeIdx].rawItem ?? turn3Input[noticeIdx]).content, 'Plan Mode toggled OFF\n\nSecond question');
 });

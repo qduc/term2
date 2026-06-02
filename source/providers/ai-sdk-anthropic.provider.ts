@@ -8,13 +8,19 @@ type AiSdkAnthropicModelLike = {
   doStream: (options: any) => PromiseLike<any> | any;
 };
 
-function isAnthropicModel(modelId: string): boolean {
+export type AnthropicPromptCachingPredicate = (modelId: string) => boolean;
+
+function defaultAnthropicPromptCachingPredicate(modelId: string): boolean {
   const lowerModelId = modelId.toLowerCase();
   return lowerModelId.includes('anthropic') || lowerModelId.includes('claude');
 }
 
-export function addAnthropicPromptCachingToMessages(messages: any[], modelId?: string): any[] {
-  if (!Array.isArray(messages) || messages.length === 0 || !modelId || !isAnthropicModel(modelId)) {
+export function addAnthropicPromptCachingToMessages(
+  messages: any[],
+  modelId?: string,
+  shouldApplyPromptCaching: AnthropicPromptCachingPredicate = defaultAnthropicPromptCachingPredicate,
+): any[] {
+  if (!Array.isArray(messages) || messages.length === 0 || !modelId || !shouldApplyPromptCaching(modelId)) {
     return messages;
   }
 
@@ -57,30 +63,39 @@ export function addAnthropicPromptCachingToMessages(messages: any[], modelId?: s
   return next;
 }
 
-const anthropicPromptCachingMiddleware: LanguageModelMiddleware = {
-  specificationVersion: 'v3',
-  transformParams: ({ params, model }: any): any => {
-    const input = params as any;
-    if (!Array.isArray(input?.messages) && !Array.isArray(input?.prompt)) {
-      return input;
-    }
+function createAnthropicPromptCachingMiddleware(
+  shouldApplyPromptCaching: AnthropicPromptCachingPredicate,
+): LanguageModelMiddleware {
+  return {
+    specificationVersion: 'v3',
+    transformParams: ({ params, model }: any): any => {
+      const input = params as any;
+      if (!Array.isArray(input?.messages) && !Array.isArray(input?.prompt)) {
+        return input;
+      }
 
-    const modelId = typeof model === 'string' ? model : model?.modelId;
+      const modelId = typeof model === 'string' ? model : model?.modelId;
 
-    return {
-      ...input,
-      ...(Array.isArray(input.messages)
-        ? { messages: addAnthropicPromptCachingToMessages(input.messages, modelId) }
-        : {}),
-      ...(Array.isArray(input.prompt) ? { prompt: addAnthropicPromptCachingToMessages(input.prompt, modelId) } : {}),
-    };
-  },
-};
+      return {
+        ...input,
+        ...(Array.isArray(input.messages)
+          ? { messages: addAnthropicPromptCachingToMessages(input.messages, modelId, shouldApplyPromptCaching) }
+          : {}),
+        ...(Array.isArray(input.prompt)
+          ? { prompt: addAnthropicPromptCachingToMessages(input.prompt, modelId, shouldApplyPromptCaching) }
+          : {}),
+      };
+    },
+  };
+}
 
-function withAnthropicPromptCaching<T extends AiSdkAnthropicModelLike>(model: T): T {
+function withAnthropicPromptCaching<T extends AiSdkAnthropicModelLike>(
+  model: T,
+  shouldApplyPromptCaching: AnthropicPromptCachingPredicate,
+): T {
   return wrapLanguageModel({
     model: model as any,
-    middleware: anthropicPromptCachingMiddleware,
+    middleware: createAnthropicPromptCachingMiddleware(shouldApplyPromptCaching),
   }) as unknown as T;
 }
 
@@ -95,21 +110,24 @@ export class AiSdkAnthropicProvider implements ModelProvider {
   #defaultModel: string;
   #resolveConfig: () => AiSdkAnthropicConfig;
   #createProvider: AiSdkAnthropicProviderFactory;
+  #shouldApplyPromptCaching: AnthropicPromptCachingPredicate;
 
   constructor(deps: {
     defaultModel: string;
     resolveConfig: () => AiSdkAnthropicConfig;
     createProvider?: AiSdkAnthropicProviderFactory;
+    shouldApplyPromptCaching?: AnthropicPromptCachingPredicate;
   }) {
     this.#defaultModel = deps.defaultModel;
     this.#resolveConfig = deps.resolveConfig;
     this.#createProvider = deps.createProvider ?? (createAnthropic as AiSdkAnthropicProviderFactory);
+    this.#shouldApplyPromptCaching = deps.shouldApplyPromptCaching ?? defaultAnthropicPromptCachingPredicate;
   }
 
   getModel(modelName?: string): Promise<Model> | Model {
     const config = this.#resolveConfig();
     const provider = this.#createProvider(config);
-    const model = withAnthropicPromptCaching(provider(modelName || this.#defaultModel));
+    const model = withAnthropicPromptCaching(provider(modelName || this.#defaultModel), this.#shouldApplyPromptCaching);
 
     return adaptAiSdkModelForAgents(model, undefined, 'anthropic');
   }

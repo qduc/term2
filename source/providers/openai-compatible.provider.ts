@@ -9,9 +9,11 @@ import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
 import { type ModelProvider, type Model } from '@openai/agents-core';
-import { generateOpencodeSessionId, isOpencodeProvider, resolveOpencodeRuntimeConfig } from './opencode.provider.js';
+import { isOpencodeProvider, resolveOpencodeRuntimeConfig } from './opencode.provider.js';
+import { generateOpencodeSessionId } from './opencode-session.js';
+import { selectOpencodeModelTransport, shouldApplyOpencodeAnthropicPromptCaching } from './opencode-routing.js';
+import { createAnthropicMiddleware } from './anthropic-middleware.js';
 import {
-  createCacheControlMiddleware,
   createOpenAICompatibleMiddleware,
   createOpenAIResponsesMiddleware,
   sanitizeResponsesApiBody,
@@ -94,41 +96,40 @@ export class OpencodeAnthropicFormatProvider implements ModelProvider {
     this.fallbackSessionId = isOpencode ? generateOpencodeSessionId() : undefined;
   }
 
-  getModel(modelName?: string): Promise<Model> | Model {
-    const resolvedModel = modelName || this.deps.defaultModel || '';
-    const cached = this.models.get(resolvedModel);
-    if (cached) {
-      return cached;
-    }
-
-    if (resolvedModel.toLowerCase().includes('minimax') || resolvedModel.toLowerCase().includes('qwen')) {
-      const isOpencode = isOpencodeProvider(this.config);
-      const runtimeConfig = isOpencode
-        ? resolveOpencodeRuntimeConfig(this.config.baseUrl, this.config.apiKey)
-        : { baseUrl: this.config.baseUrl ?? '', apiKey: this.config.apiKey };
-
-      const anthropicProvider = new AiSdkAnthropicProvider({
-        defaultModel: resolvedModel,
-        resolveConfig: () => ({
-          baseURL: runtimeConfig.baseUrl ? normalizeBaseUrl(runtimeConfig.baseUrl) : undefined,
-          apiKey: runtimeConfig.apiKey,
-          fetch: buildProviderFetch(this.config, this.deps, [createCacheControlMiddleware()]),
-          name: this.config.name,
-          headers: {
-            'anthropic-version': '2023-06-01',
-          },
-        }),
-      });
-      const model = anthropicProvider.getModel(resolvedModel);
-      this.models.set(resolvedModel, model);
-      return model;
-    }
-
-    const isOpencode = isOpencodeProvider(this.config);
-    const runtimeConfig = isOpencode
+  private resolveRuntimeConfig(): { baseUrl: string; apiKey: string | undefined } {
+    return isOpencodeProvider(this.config)
       ? resolveOpencodeRuntimeConfig(this.config.baseUrl, this.config.apiKey)
       : { baseUrl: this.config.baseUrl ?? '', apiKey: this.config.apiKey };
+  }
 
+  private buildAnthropicModel(resolvedModel: string, runtimeConfig: { baseUrl: string; apiKey: string | undefined }) {
+    const anthropicProvider = new AiSdkAnthropicProvider({
+      defaultModel: resolvedModel,
+      shouldApplyPromptCaching: shouldApplyOpencodeAnthropicPromptCaching,
+      resolveConfig: () => ({
+        baseURL: runtimeConfig.baseUrl ? normalizeBaseUrl(runtimeConfig.baseUrl) : undefined,
+        apiKey: runtimeConfig.apiKey,
+        fetch: buildProviderFetch(this.config, this.deps, [
+          createAnthropicMiddleware(
+            this.config.type || 'opencode',
+            runtimeConfig.baseUrl,
+            this.deps.loggingService,
+            this.fallbackSessionId,
+          ),
+        ]),
+        name: this.config.name,
+        headers: {
+          'anthropic-version': '2023-06-01',
+        },
+      }),
+    });
+    return anthropicProvider.getModel(resolvedModel);
+  }
+
+  private buildOpenAICompatibleModel(
+    resolvedModel: string,
+    runtimeConfig: { baseUrl: string; apiKey: string | undefined },
+  ) {
     const openAIClient = new OpenAI({
       baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
       apiKey: runtimeConfig.apiKey || 'no-key',
@@ -146,7 +147,21 @@ export class OpencodeAnthropicFormatProvider implements ModelProvider {
       openAIClient: openAIClient as any,
       useResponses: false,
     });
-    const model = openaiProvider.getModel(resolvedModel);
+    return openaiProvider.getModel(resolvedModel);
+  }
+
+  getModel(modelName?: string): Promise<Model> | Model {
+    const resolvedModel = modelName || this.deps.defaultModel || '';
+    const cached = this.models.get(resolvedModel);
+    if (cached) {
+      return cached;
+    }
+
+    const runtimeConfig = this.resolveRuntimeConfig();
+    const model =
+      selectOpencodeModelTransport(resolvedModel) === 'anthropic-messages'
+        ? this.buildAnthropicModel(resolvedModel, runtimeConfig)
+        : this.buildOpenAICompatibleModel(resolvedModel, runtimeConfig);
     this.models.set(resolvedModel, model);
     return model;
   }
@@ -181,7 +196,9 @@ export function createCustomProviderModelProvider(
         defaultModel: deps.defaultModel,
         resolveConfig: () => ({
           ...resolveConfig(),
-          fetch: buildProviderFetch(config, deps, [createCacheControlMiddleware()]),
+          fetch: buildProviderFetch(config, deps, [
+            createAnthropicMiddleware(config.type || 'anthropic', config.baseUrl, deps.loggingService),
+          ]),
           headers: {
             'anthropic-version': '2023-06-01',
           },

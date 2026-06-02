@@ -699,6 +699,76 @@ test('opencode provider type uses default base URL and falls back to OPENCODE_AP
   t.truthy(captured[0].headers['x-opencode-session']);
 });
 
+test('opencode qwen models use Anthropic messages transport with session header', async (t) => {
+  const captured: CapturedRequest[] = [];
+  process.env.OPENCODE_API_KEY = 'env-opencode-key';
+  t.teardown(() => {
+    delete process.env.OPENCODE_API_KEY;
+  });
+
+  const provider = createCustomProviderModelProvider(
+    {
+      name: 'opencode-test',
+      type: 'opencode',
+    },
+    {
+      defaultModel: 'qwen3-coder',
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const headers: Record<string, string> = {};
+        const rawHeaders = init?.headers as any;
+        if (rawHeaders) {
+          if (typeof rawHeaders.forEach === 'function') {
+            rawHeaders.forEach((v: string, k: string) => {
+              headers[k.toLowerCase()] = String(v);
+            });
+          } else {
+            for (const [k, v] of Object.entries(rawHeaders as Record<string, string>)) {
+              headers[k.toLowerCase()] = String(v);
+            }
+          }
+        }
+        const rawBody = typeof init?.body === 'string' ? init.body : '';
+        captured.push({
+          url: typeof input === 'string' ? input : (input as URL).toString(),
+          body: rawBody ? JSON.parse(rawBody) : null,
+          headers,
+        });
+        return new Response(
+          JSON.stringify({
+            id: 'msg_test',
+            type: 'message',
+            role: 'assistant',
+            model: 'qwen3-coder',
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }) as typeof fetch,
+    },
+  );
+
+  const model = await provider.getModel('qwen3-coder');
+
+  await runUnderTrace(() =>
+    model.getResponse({
+      ...baseRequest,
+      input: [{ role: 'user', content: 'hello' }] as any,
+      modelSettings: { reasoning: { effort: 'high' } },
+    } as any),
+  );
+
+  t.is(captured.length, 1);
+  t.regex(captured[0].url, /^https:\/\/opencode\.ai\/v1\/messages(\?|$)/);
+  t.is(captured[0].headers['x-api-key'], 'env-opencode-key');
+  t.truthy(captured[0].headers['x-opencode-session']);
+  t.is(captured[0].body.model, 'qwen3-coder');
+  t.is(captured[0].body.reasoning_effort, undefined);
+  t.truthy(captured[0].body.messages[0].content[0].cache_control);
+});
+
 test('opencode provider type keeps the fallback session ID stable across turns', async (t) => {
   const captured: CapturedRequest[] = [];
   process.env.OPENCODE_API_KEY = 'env-opencode-key';

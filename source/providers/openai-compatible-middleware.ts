@@ -3,12 +3,7 @@ import type { FetchMiddleware } from './fetch/compose.js';
 import { mergeAssistantMessages } from './ai-sdk-message-normalizer.js';
 import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
 import { applyLlamaCppRequestTransform } from './llama-cpp.provider.js';
-import {
-  generateOpencodeSessionId,
-  isOpencodeProvider,
-  resolveOpencodeSessionId,
-  withOpencodeSessionHeader,
-} from './opencode.provider.js';
+import { createOpencodeSessionInjector } from './opencode-session.js';
 
 function preserveReasoningContentForOpenAICompatibleMessages(messages: any[]): any[] {
   return messages.map((message) => {
@@ -86,8 +81,10 @@ export function createOpenAICompatibleMiddleware(
   loggingService?: ILoggingService,
   fallbackSessionIdOverride?: string,
 ): FetchMiddleware {
-  const isOpencode = isOpencodeProvider({ type: providerType, baseUrl });
-  const fallbackSessionId = isOpencode ? fallbackSessionIdOverride ?? generateOpencodeSessionId() : undefined;
+  const injectSession = createOpencodeSessionInjector(
+    { type: providerType, baseUrl },
+    { loggingService, fallbackSessionIdOverride },
+  );
 
   return async (ctx, next) => {
     if (typeof ctx.init?.body === 'string') {
@@ -107,16 +104,11 @@ export function createOpenAICompatibleMiddleware(
           changed = true;
         }
 
-        const opencodeSessionId = isOpencode ? resolveOpencodeSessionId(loggingService, fallbackSessionId) : undefined;
-
-        if (isOpencode && opencodeSessionId) {
-          changed = true;
-        }
-
-        if (changed) {
+        if (changed || injectSession) {
           let newInit: RequestInit = { ...ctx.init, body: JSON.stringify(body) };
-          if (isOpencode && opencodeSessionId) {
-            newInit = withOpencodeSessionHeader(newInit, opencodeSessionId);
+          if (injectSession) {
+            const sessionInit = injectSession(newInit);
+            if (sessionInit) newInit = sessionInit;
           }
           return next({ url: ctx.url, init: newInit });
         }

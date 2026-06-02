@@ -86,6 +86,26 @@ test('addAnthropicPromptCachingToMessages leaves non-Anthropic models unchanged'
   t.is(result, messages);
 });
 
+test('addAnthropicPromptCachingToMessages leaves qwen models unchanged by default', (t) => {
+  const messages = [{ role: 'user', content: 'hello' }];
+
+  const result = addAnthropicPromptCachingToMessages(messages, 'qwen3-coder');
+
+  t.is(result, messages);
+});
+
+test('addAnthropicPromptCachingToMessages supports provider-specific caching predicates', (t) => {
+  const messages = [{ role: 'user', content: 'hello' }];
+
+  const result = addAnthropicPromptCachingToMessages(messages, 'qwen3-coder', (modelId) => modelId.includes('qwen'));
+
+  t.deepEqual(result[0].providerOptions, {
+    anthropic: {
+      cacheControl: { type: 'ephemeral' },
+    },
+  });
+});
+
 test('AiSdkAnthropicProvider can be instantiated for Anthropic models', (t) => {
   const provider = new AiSdkAnthropicProvider({
     defaultModel: 'claude-sonnet-4-5',

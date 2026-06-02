@@ -1007,6 +1007,8 @@ test('isSensitive() identifies sensitive settings', async (t) => {
   t.false(service.isSensitive('logging.logLevel'));
   t.false(service.isSensitive('agent.openrouter.apiKey'));
   t.false(service.isSensitive('agent.openai.apiKey'));
+  t.false(service.isSensitive('webSearch.tavily.apiKey'));
+  t.false(service.isSensitive('webSearch.exa.apiKey'));
 });
 
 test('set() throws for sensitive settings', async (t) => {

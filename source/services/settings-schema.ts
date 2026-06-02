@@ -247,8 +247,6 @@ export function getSensitiveSettingKeys(): Set<string> {
     'agent.openrouter.baseUrl',
     'agent.openrouter.referrer',
     'agent.openrouter.title',
-    'webSearch.tavily.apiKey',
-    'webSearch.exa.apiKey',
   ]);
 }
 
@@ -483,6 +481,8 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
   SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
   SETTING_KEYS.WEB_SEARCH_PROVIDER,
+  SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY,
+  SETTING_KEYS.WEB_SEARCH_EXA_API_KEY,
 ]);
 
 export interface AppModes {

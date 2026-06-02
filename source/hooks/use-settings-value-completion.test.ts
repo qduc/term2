@@ -3,6 +3,7 @@ import {
   buildSettingValueSuggestions,
   filterSettingValueSuggestionsByQuery,
   isNumberSetting,
+  isStringSetting,
   type SettingValueSuggestion,
 } from './use-settings-value-completion.js';
 
@@ -93,4 +94,73 @@ test('isNumberSetting returns false for non-number setting keys', (t) => {
   t.false(isNumberSetting('logging.logLevel'));
   t.false(isNumberSetting('app.mentorMode'));
   t.false(isNumberSetting('tools.enableEditHealing'));
+});
+
+test('isStringSetting returns true for string setting keys', (t) => {
+  t.true(isStringSetting('agent.model'));
+  t.true(isStringSetting('agent.provider'));
+  t.true(isStringSetting('webSearch.exa.apiKey'));
+  t.true(isStringSetting('webSearch.tavily.apiKey'));
+  t.true(isStringSetting('webSearch.provider'));
+  t.true(isStringSetting('ssh.host'));
+  t.true(isStringSetting('app.shellPath'));
+});
+
+test('isStringSetting returns false for non-string setting keys', (t) => {
+  t.false(isStringSetting('agent.maxTurns'));
+  t.false(isStringSetting('agent.temperature'));
+  t.false(isStringSetting('ssh.port'));
+  t.false(isStringSetting('logging.logLevel'));
+  t.false(isStringSetting('logging.suppressConsoleOutput'));
+  t.false(isStringSetting('app.mentorMode'));
+  t.false(isStringSetting('tools.enableEditHealing'));
+});
+
+test('filterSettingValueSuggestionsByQuery includes custom string value for string settings without predefined suggestions', (t) => {
+  const suggestions: SettingValueSuggestion[] = [];
+
+  const result = filterSettingValueSuggestionsByQuery(suggestions, 'my-api-key', 10, 'webSearch.exa.apiKey');
+
+  t.true(result.length >= 1);
+  t.is(result[0]?.value, 'my-api-key');
+  t.is(result[0]?.description, 'Custom value');
+});
+
+test('filterSettingValueSuggestionsByQuery does not include custom string if already present', (t) => {
+  const suggestions: SettingValueSuggestion[] = [{ value: 'current-key', description: 'Current value' }];
+
+  const result = filterSettingValueSuggestionsByQuery(suggestions, 'current-key', 10, 'webSearch.exa.apiKey');
+
+  t.true(result.length >= 1);
+  t.is(result[0]?.value, 'current-key');
+  t.not(result[0]?.description, 'Custom value');
+  t.false(result.some((r) => r.description === 'Custom value'));
+});
+
+test('filterSettingValueSuggestionsByQuery does not include custom string for string settings with predefined suggestions', (t) => {
+  const suggestions: SettingValueSuggestion[] = [
+    { value: 'openai', description: 'OpenAI official API' },
+    { value: 'openrouter', description: 'OpenRouter.ai' },
+    { value: 'openai-compatible', description: 'Local models/Ollama' },
+    { value: 'anthropic', description: 'Anthropic Claude' },
+    { value: 'google', description: 'Google Gemini' },
+    { value: 'codex', description: 'ChatGPT Codex (OAuth)' },
+  ];
+
+  const result = filterSettingValueSuggestionsByQuery(suggestions, 'custom-provider', 10, 'agent.provider');
+
+  t.false(result.some((r) => r.description === 'Custom value'));
+});
+
+test('filterSettingValueSuggestionsByQuery does not include custom string for empty query', (t) => {
+  const suggestions: SettingValueSuggestion[] = [];
+
+  const result = filterSettingValueSuggestionsByQuery(suggestions, '', 10, 'webSearch.exa.apiKey');
+
+  t.false(result.some((r) => r.description === 'Custom value'));
+});
+
+test('buildSettingValueSuggestions returns no predefined values for free-form API key settings', (t) => {
+  t.deepEqual(buildSettingValueSuggestions('webSearch.exa.apiKey'), []);
+  t.deepEqual(buildSettingValueSuggestions('webSearch.tavily.apiKey'), []);
 });

@@ -53,6 +53,47 @@ export function isNumberSetting(key: string): boolean {
   return currentSchema && currentSchema.type === 'number';
 }
 
+export function isStringSetting(key: string): boolean {
+  const parts = key.split('.');
+  let currentSchema: any = SettingsSchema;
+
+  for (const part of parts) {
+    if (!currentSchema) return false;
+
+    // Unwrap wrappers like optional, default, nullable, effects
+    while (currentSchema.type) {
+      const typeName = currentSchema.type;
+      if (typeName === 'optional' || typeName === 'nullable' || typeName === 'default') {
+        currentSchema = currentSchema.def.innerType;
+      } else if (typeName === 'effects') {
+        currentSchema = currentSchema.def.schema;
+      } else {
+        break;
+      }
+    }
+
+    if (currentSchema.type === 'object' && currentSchema.def && currentSchema.def.shape) {
+      currentSchema = currentSchema.def.shape[part];
+    } else {
+      return false;
+    }
+  }
+
+  // Unwrap the final schema
+  while (currentSchema && currentSchema.type) {
+    const typeName = currentSchema.type;
+    if (typeName === 'optional' || typeName === 'nullable' || typeName === 'default') {
+      currentSchema = currentSchema.def.innerType;
+    } else if (typeName === 'effects') {
+      currentSchema = currentSchema.def.schema;
+    } else {
+      break;
+    }
+  }
+
+  return currentSchema && currentSchema.type === 'string';
+}
+
 const REASONING_EFFORT_VALUE_SUGGESTIONS: SettingValueSuggestion[] = [
   { value: 'none', description: 'No reasoning (fastest)' },
   { value: 'minimal', description: 'Very low reasoning' },
@@ -190,6 +231,17 @@ export function filterSettingValueSuggestionsByQuery(
     }
   }
 
+  // For string settings without predefined suggestions, allow free-form input.
+  if (key && isStringSetting(key) && trimmed && !results.some((r) => r.value === trimmed)) {
+    const hasPredefined = (VALUE_SUGGESTIONS_BY_KEY[key]?.length ?? 0) > 0;
+    if (!hasPredefined) {
+      results.unshift({
+        value: trimmed,
+        description: 'Custom value',
+      });
+    }
+  }
+
   return results.slice(0, maxResults);
 }
 
@@ -307,6 +359,15 @@ export const useSettingsValueCompletion = (
     return settingKey ? isNumberSetting(settingKey) : false;
   }, [settingKey]);
 
+  // Free-form string: string setting with no predefined suggestions.
+  // These are settings like api keys, model names, hostnames, etc.
+  // Users should type a value freely; the empty state should not show an error.
+  const isFreeFormString = useMemo(() => {
+    if (!settingKey) return false;
+    if (!isStringSetting(settingKey)) return false;
+    return buildSettingValueSuggestions(settingKey).length === 0;
+  }, [settingKey]);
+
   return {
     isOpen,
     triggerIndex,
@@ -325,5 +386,6 @@ export const useSettingsValueCompletion = (
     pageDown,
     getSelectedItem,
     isNumericSettings,
+    isFreeFormString,
   };
 };

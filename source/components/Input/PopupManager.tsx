@@ -62,6 +62,7 @@ interface PopupManagerProps {
     selectedIndex: number;
     query: string;
     isNumericSettings?: boolean;
+    isFreeFormString?: boolean;
   };
   undo: {
     isOpen: boolean;
@@ -144,6 +145,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
           selectedIndex={settingsValue.selectedIndex}
           query={settingsValue.query}
           isNumericSettings={settingsValue.isNumericSettings}
+          isFreeFormString={settingsValue.isFreeFormString}
         />
       )}
       {undo.isOpen && (

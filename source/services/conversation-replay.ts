@@ -15,6 +15,7 @@ import type {
   PersistedAssistantTurnItem,
 } from './conversation-persistence-types.js';
 import { synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
+import { formatPatchOutputItems, coerceToText } from '../tools/format-helpers.js';
 
 export interface RestoredState {
   id: string;
@@ -188,6 +189,56 @@ function shouldReuseCumulativeUsageAsDisplayUsage(turn: PersistedAssistantTurn):
   return !turn.items.some((item) => item.type === 'tool_call' || item.type === 'tool_result');
 }
 
+/**
+ * Extracts a human-readable display string from a parsed tool output object.
+ * Many tools (apply_patch, create_file, search_replace) return JSON-stringified
+ * objects. This function unwraps common shapes to show meaningful text.
+ */
+function extractDisplayOutput(parsed: Record<string, unknown>): string {
+  // Error messages first — they're the most important to surface.
+  if (typeof parsed.error === 'string' && parsed.error) {
+    return parsed.error;
+  }
+
+  // Success message (create_file, search_replace).
+  if (typeof parsed.message === 'string' && parsed.message) {
+    return parsed.message;
+  }
+
+  // apply_patch / search_replace shape: { output: [{ success, path?, message?, error? }, ...] }
+  if (Array.isArray(parsed.output) && parsed.output.length > 0) {
+    const joined = formatPatchOutputItems(parsed.output);
+    if (joined) {
+      return joined;
+    }
+  }
+
+  // AI-SDK / OpenAI Responses content-part shapes: { type: 'text' | 'output_text', text }.
+  // These are what land in tool_result.output when a provider wraps a plain string.
+  const type = parsed.type;
+  if ((type === 'text' || type === 'output_text') && typeof parsed.text === 'string' && parsed.text) {
+    return parsed.text;
+  }
+
+  // Generic content-part array: { content: [{ type: 'text', text: '...' }, ...] }.
+  if (Array.isArray(parsed.content) && parsed.content.length > 0) {
+    const joined = coerceToText(parsed.content);
+    if (joined) {
+      return joined;
+    }
+  }
+
+  // Generic fallback: show summary keys only.
+  const summaryKeys = ['success', 'type', 'path', 'count', 'status'];
+  const summary = summaryKeys.filter((k) => k in parsed).map((k) => `${k}=${String(parsed[k])}`);
+  if (summary.length > 0) {
+    return summary.join(', ');
+  }
+
+  // Last resort: pretty-print the whole object.
+  return JSON.stringify(parsed, null, 2);
+}
+
 function replayAssistantTurn(
   turn: PersistedAssistantTurn,
   turnId: string,
@@ -215,21 +266,71 @@ function replayAssistantTurn(
       messages.push(assistantMessage);
       lastAssistantMessage = assistantMessage;
     } else if (item.type === 'tool_call') {
+      // Persisted arguments are often JSON strings from the SDK (e.g.
+      // '{"command":"ls"}') and need to be parsed so the display component
+      // receives a proper object for its special rendering branches and so
+      // the command field is a human-readable string, not raw JSON.
+      const parsedArgs: unknown =
+        typeof item.arguments === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(item.arguments);
+              } catch {
+                return item.arguments;
+              }
+            })()
+          : item.arguments;
+
+      const command =
+        typeof parsedArgs === 'object' && parsedArgs !== null
+          ? (parsedArgs as Record<string, unknown>).command ??
+            (parsedArgs as Record<string, unknown>).question ??
+            (parsedArgs as Record<string, unknown>).pattern ??
+            (parsedArgs as Record<string, unknown>).query ??
+            (parsedArgs as Record<string, unknown>).path ??
+            (parsedArgs as Record<string, unknown>).task ??
+            ''
+          : typeof parsedArgs === 'string'
+          ? parsedArgs
+          : '';
+
       messages.push({
         id: `command-${item.callId}`,
         sender: 'command',
         status: 'running',
-        command: typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments),
+        command: command || item.toolName,
         output: '',
         toolName: item.toolName,
-        toolArgs: item.arguments,
+        toolArgs: parsedArgs,
         callId: item.callId,
       } as SavedMessage);
     } else if (item.type === 'tool_result') {
+      // Persisted outputs can be JSON strings (e.g. apply_patch returns
+      // JSON.stringify({ output: [...] }), create_file returns
+      // JSON.stringify({ success, path, message })) and need to be parsed so
+      // the display shows meaningful text instead of raw JSON.
+      const parsedOutput: unknown =
+        typeof item.output === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(item.output);
+              } catch {
+                return item.output;
+              }
+            })()
+          : item.output;
+
+      const outputText =
+        typeof parsedOutput === 'object' && parsedOutput !== null
+          ? extractDisplayOutput(parsedOutput as Record<string, unknown>)
+          : typeof parsedOutput === 'string'
+          ? parsedOutput
+          : JSON.stringify(parsedOutput);
+
       const existing = messages.find((m) => m.sender === 'command' && m.callId === item.callId);
       if (existing) {
         existing.status = item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed';
-        existing.output = typeof item.output === 'string' ? item.output : JSON.stringify(item.output);
+        existing.output = outputText;
         if (item.status === 'failed') {
           existing.success = false;
         } else if (item.status === 'completed') {
@@ -241,7 +342,7 @@ function replayAssistantTurn(
           sender: 'command',
           status: item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed',
           command: item.toolName,
-          output: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
+          output: outputText,
           success: item.status === 'completed',
           toolName: item.toolName,
           callId: item.callId,

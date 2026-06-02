@@ -5,7 +5,13 @@ import { applyDiff } from '@openai/agents';
 import { resolveWorkspacePath } from './utils.js';
 import type { ToolDefinition, CommandMessage, FormatCommandMessage } from './types.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
-import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
+import {
+  getOutputText,
+  safeJsonParse,
+  normalizeToolArguments,
+  createBaseMessage,
+  pickPatchOutputItemText,
+} from './format-helpers.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { withFileLock } from './file-locks.js';
 import { TOOL_NAME_APPLY_PATCH } from './tool-names.js';
@@ -134,7 +140,7 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
     const filePath = operationArgs?.path ?? patchResult?.path ?? 'unknown';
 
     const command = `apply_patch ${operationType} ${filePath}`;
-    const output = patchResult?.message ?? patchResult?.error ?? 'No output';
+    const output = pickPatchOutputItemText(patchResult) || 'No output';
     const success = patchResult?.success ?? false;
 
     messages.push(

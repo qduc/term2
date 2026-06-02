@@ -379,6 +379,324 @@ test('replayEvents: assistant_turn maps items to SavedMessage[] in correct order
   t.deepEqual(restored.usage, { prompt_tokens: 5, completion_tokens: 10, total_tokens: 15 });
 });
 
+test('replayEvents: assistant_turn renders apply_patch success output from parsed message field', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'patch it' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'apply_patch', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'apply_patch',
+            status: 'completed',
+            output: JSON.stringify({
+              output: [{ success: true, operation: 'update_file', path: 'src/foo.ts', message: 'Updated src/foo.ts' }],
+            }),
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  t.truthy(command);
+  t.is(command?.output, 'Updated src/foo.ts');
+});
+
+test('replayEvents: assistant_turn renders apply_patch failure output from parsed error field', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'patch it' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'apply_patch', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'apply_patch',
+            status: 'failed',
+            output: JSON.stringify({
+              output: [{ success: false, error: 'Invalid patch: context mismatch' }],
+            }),
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  t.truthy(command);
+  t.is(command?.output, 'Invalid patch: context mismatch');
+  t.is(command?.status, 'failed');
+  t.is(command?.success, false);
+});
+
+test('replayEvents: assistant_turn joins multi-item apply_patch results with newlines preserving order', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'patch both' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'apply_patch', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'apply_patch',
+            status: 'completed',
+            output: JSON.stringify({
+              output: [
+                { success: true, operation: 'update_file', path: 'a.ts', message: 'Updated a.ts' },
+                { success: false, error: 'Invalid patch: bad context' },
+              ],
+            }),
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  t.is(command?.output, 'Updated a.ts\nInvalid patch: bad context');
+});
+
+test('replayEvents: assistant_turn falls back to path when apply_patch item has no message and no error', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'patch it' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'apply_patch', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'apply_patch',
+            status: 'completed',
+            output: JSON.stringify({ output: [{ success: true, path: 'legacy.ts' }] }),
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  t.is(command?.output, 'legacy.ts');
+});
+
+test('replayEvents: assistant_turn renders create_file success output from parsed message field', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'make file' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'create_file', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'create_file',
+            status: 'completed',
+            output: JSON.stringify({ success: true, path: 'new.ts', message: 'Created new.ts' }),
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  t.is(command?.output, 'Created new.ts');
+});
+
+test('replayEvents: assistant_turn renders create_file failure output from parsed error field', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'make file' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'create_file', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'create_file',
+            status: 'failed',
+            output: JSON.stringify({ success: false, error: 'Error: File already exists at new.ts' }),
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  t.is(command?.output, 'Error: File already exists at new.ts');
+  t.is(command?.status, 'failed');
+});
+
+test('replayEvents: assistant_turn falls through to JSON pretty-print for unknown tool output shape', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'weird tool' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'shell',
+            status: 'completed',
+            output: JSON.stringify({ unexpected: { nested: 1 } }),
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  // No error/message/path/summary keys; pretty-printed JSON is the contract.
+  t.regex(command?.output as string, /^\{\n  "unexpected": \{/);
+});
+
+test('replayEvents: assistant_turn unwraps AI-SDK style { type: text, text } wrapper from JSON string', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run something' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'shell',
+            status: 'completed',
+            output: JSON.stringify({ type: 'text', text: 'hello world' }),
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  t.is(command?.output, 'hello world');
+});
+
+test('replayEvents: assistant_turn unwraps OpenAI Responses { type: output_text, text } wrapper from JSON string', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run something' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'shell',
+            status: 'completed',
+            output: JSON.stringify({ type: 'output_text', text: 'Tue May 12 18:40:41 +07 2026' }),
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  t.is(command?.output, 'Tue May 12 18:40:41 +07 2026');
+});
+
+test('replayEvents: assistant_turn unwraps { content: [...] } content-parts array from JSON string', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run something' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'shell',
+            status: 'completed',
+            output: JSON.stringify({
+              content: [
+                { type: 'text', text: 'first' },
+                { type: 'text', text: 'second' },
+              ],
+            }),
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  t.is(command?.output, 'first\nsecond');
+});
+
+test('replayEvents: assistant_turn unwraps { type: text, text } wrapper when tool_result.output is already an object', (t) => {
+  // Some tool results are persisted as raw objects (not JSON strings).
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run something' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: '{}' },
+          {
+            type: 'tool_result',
+            callId: 'call-1',
+            toolName: 'shell',
+            status: 'completed',
+            output: { type: 'text', text: 'plain output' } as unknown as string,
+          },
+        ],
+      },
+      snapshot: { history: [], previousResponseId: 'r1', toolLedger: [] },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const command = restored.messages.find((m) => m.sender === 'command' && m.callId === 'call-1');
+  t.is(command?.output, 'plain output');
+});
+
 test('replayEvents: assistant_turn prefers persisted displayUsage for resumed footer usage', (t) => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),

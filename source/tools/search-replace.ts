@@ -4,7 +4,13 @@ import path from 'path';
 import { resolveWorkspacePath } from './utils.js';
 import type { ToolDefinition, CommandMessage, FormatCommandMessage } from './types.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
-import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
+import {
+  getOutputText,
+  safeJsonParse,
+  normalizeToolArguments,
+  createBaseMessage,
+  pickPatchOutputItemText,
+} from './format-helpers.js';
 import { healSearchReplaceParams } from './edit-healing.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { getApprovalPresentationCapability } from './tool-capabilities.js';
@@ -683,7 +689,7 @@ export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, in
 
     const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
     const isHealed = replaceResult?.healed === true;
-    let output = replaceResult?.message ?? replaceResult?.error ?? 'No output';
+    let output = pickPatchOutputItemText(replaceResult) || 'No output';
     if (isHealed && !String(output).includes('healed')) {
       output = `${output} (healed)`;
     }

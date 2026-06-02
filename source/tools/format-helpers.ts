@@ -125,6 +125,36 @@ export const normalizeToolArguments = (value: unknown): any => {
 };
 
 /**
+ * Picks the most informative display string from a single patch-style result item
+ * (`apply_patch` / `search_replace`). Order: explicit error → success message →
+ * file path. Returns an empty string when none of those fields are present so
+ * callers can filter it out.
+ */
+export const pickPatchOutputItemText = (item: unknown): string => {
+  if (!item || typeof item !== 'object') return '';
+  const record = item as Record<string, unknown>;
+  if (typeof record.error === 'string' && record.error) return record.error;
+  if (typeof record.message === 'string' && record.message) return record.message;
+  if (typeof record.path === 'string' && record.path) return record.path;
+  return '';
+};
+
+/**
+ * Joins the per-operation text from an array of patch-style result items
+ * (`apply_patch` / `search_replace`) using newlines. Used by live tool
+ * formatters and by the conversation replay path so the two stay in sync.
+ */
+export const formatPatchOutputItems = (items: unknown): string => {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const parts: string[] = [];
+  for (const item of items) {
+    const text = pickPatchOutputItemText(item);
+    if (text) parts.push(text);
+  }
+  return parts.join('\n');
+};
+
+/**
  * Generates a stable ID for a command message.
  */
 export const generateMessageId = (item: any, index: number, subIndex: number = 0): string => {

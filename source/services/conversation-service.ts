@@ -1,5 +1,5 @@
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
-import type { ILoggingService, ISettingsService } from './service-interfaces.js';
+import type { ILoggingService, ISettingsService, ISessionContextService } from './service-interfaces.js';
 import { ConversationSession } from './conversation-session.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
@@ -17,7 +17,11 @@ export type { CommandMessage } from './conversation-session.js';
 export class ConversationService {
   #session: ConversationSession;
   readonly #agentClient: OpenAIAgentClient;
-  readonly #deps: { logger: ILoggingService; settingsService?: ISettingsService };
+  readonly #deps: {
+    logger: ILoggingService;
+    settingsService?: ISettingsService;
+    sessionContextService: ISessionContextService;
+  };
 
   constructor({
     agentClient,
@@ -26,7 +30,11 @@ export class ConversationService {
     sessionStartedAt,
   }: {
     agentClient: OpenAIAgentClient;
-    deps: { logger: ILoggingService; settingsService?: ISettingsService };
+    deps: {
+      logger: ILoggingService;
+      settingsService?: ISettingsService;
+      sessionContextService: ISessionContextService;
+    };
     sessionId?: string;
     sessionStartedAt?: string;
   }) {

@@ -1,5 +1,5 @@
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
-import type { ILoggingService, ISettingsService } from './service-interfaces.js';
+import type { ILoggingService, ISettingsService, ISessionContextService } from './service-interfaces.js';
 import type { ConversationStore } from './conversation-store.js';
 import type { LLMAdvisory } from '../contracts/conversation.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
@@ -12,6 +12,7 @@ export interface ShellAutoApprovalResolverDeps {
   agentClient: OpenAIAgentClient;
   logger: ILoggingService;
   settingsService?: ISettingsService;
+  sessionContextService: ISessionContextService;
 }
 
 export class ShellAutoApprovalResolver {
@@ -58,6 +59,7 @@ export class ShellAutoApprovalResolver {
         settingsService: this.deps.settingsService,
         agentClient: this.deps.agentClient,
         logger: this.deps.logger,
+        sessionContextService: this.deps.sessionContextService,
       });
       for (const [id, advisory] of results) {
         this.advisoriesByCallId.set(id, advisory);
@@ -75,6 +77,7 @@ export class ShellAutoApprovalResolver {
       settingsService: this.deps.settingsService,
       agentClient: this.deps.agentClient,
       logger: this.deps.logger,
+      sessionContextService: this.deps.sessionContextService,
     });
     return single.get('__single__');
   }

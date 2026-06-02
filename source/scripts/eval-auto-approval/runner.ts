@@ -2,6 +2,7 @@ import meow from 'meow';
 import { loadDataset, filterDataset, Case } from './dataset.js';
 import { createMockSettingsService } from '../../services/settings-service.mock.js';
 import { LoggingService } from '../../services/logging-service.js';
+import { SessionContextService } from '../../services/session-context-service.js';
 import { OpenAIAgentClient } from '../../lib/openai-agent-client.js';
 import {
   evaluateShellAutoApprovalAdvisories,
@@ -183,6 +184,7 @@ async function run() {
   console.log(`Saving results to: ${baseOutputPath}.{${reportFormats.join(',')}}`);
 
   const logger = new LoggingService({ disableLogging: true });
+  const sessionContextService = new SessionContextService();
 
   const cache = new ResponseCache('eval/auto-approval/.cache');
   const results: ModelResultRecord[] = [];
@@ -204,6 +206,7 @@ async function run() {
       deps: {
         logger,
         settings: settingsService,
+        sessionContextService,
       },
     });
 
@@ -238,6 +241,7 @@ async function run() {
                 settingsService,
                 agentClient,
                 logger,
+                sessionContextService,
                 throwOnError: true,
               }),
             maxRetries: 2,

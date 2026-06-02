@@ -3,6 +3,11 @@ import { OpenAIAgentClient } from './openai-agent-client.js';
 import { registerProvider } from '../providers/registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 
+const createSessionContextService = () => ({
+  runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  getContext: () => null,
+});
+
 // Mock Logger
 const mockLogger: ILoggingService = {
   debug: () => {},
@@ -70,6 +75,7 @@ test.serial('OpenAIAgentClient.chatJson passes outputType into the temporary Age
     deps: {
       logger: mockLogger,
       settings: createMockSettings('mock-provider-chat'),
+      sessionContextService: createSessionContextService() as any,
     },
   });
 
@@ -110,6 +116,7 @@ test.serial('OpenAIAgentClient.chat falls back to messages if finalOutput is mis
     deps: {
       logger: mockLogger,
       settings: createMockSettings('mock-provider-chat'),
+      sessionContextService: createSessionContextService() as any,
     },
   });
 
@@ -124,6 +131,7 @@ test.serial('disables Agents SDK tracing for non-OpenAI providers', async (t) =>
     deps: {
       logger: mockLogger,
       settings: createMockSettings('mock-provider-chat'),
+      sessionContextService: createSessionContextService() as any,
     },
   });
 
@@ -139,6 +147,7 @@ test.serial('keeps Agents SDK tracing enabled when provider supports it', async 
     deps: {
       logger: mockLogger,
       settings: createMockSettings('mock-provider-chat-tracing'),
+      sessionContextService: createSessionContextService() as any,
     },
   });
 

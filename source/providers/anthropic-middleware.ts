@@ -1,4 +1,4 @@
-import type { ILoggingService } from '../services/service-interfaces.js';
+import type { ISessionContextService } from '../services/service-interfaces.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { createOpencodeSessionInjector } from './opencode-session.js';
 
@@ -15,20 +15,20 @@ import { createOpencodeSessionInjector } from './opencode-session.js';
  *
  * @param providerType - Provider type (e.g. `'anthropic'`, `'opencode'`).
  * @param baseUrl      - Base URL used for opencode host detection.
- * @param loggingService - Optional logging service for resolving traffic context.
+ * @param sessionContextService - Optional session context service used to derive
+ *   a stable opencode session identifier.
  * @param fallbackSessionIdOverride - Optional explicit session ID override
  *   (takes precedence over traffic context).
  */
 export function createAnthropicMiddleware(
   providerType: string,
   baseUrl?: string,
-  loggingService?: ILoggingService,
-  fallbackSessionIdOverride?: string,
+  options?: {
+    sessionContextService?: ISessionContextService;
+    fallbackSessionIdOverride?: string;
+  },
 ): FetchMiddleware {
-  const injectSession = createOpencodeSessionInjector(
-    { type: providerType, baseUrl },
-    { loggingService, fallbackSessionIdOverride },
-  );
+  const injectSession = createOpencodeSessionInjector({ type: providerType, baseUrl }, options);
 
   return async (ctx, next) => {
     if (injectSession) {

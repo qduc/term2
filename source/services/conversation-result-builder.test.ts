@@ -35,11 +35,16 @@ const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off') => {
   const settingsService: any = {
     get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? (mode as unknown as T) : undefined),
   };
+  const sessionContextService = {
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    getContext: () => null,
+  };
   const shellAutoApproval = new ShellAutoApprovalResolver({
     conversationStore,
     agentClient,
     logger,
     settingsService,
+    sessionContextService,
   });
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient,
@@ -208,6 +213,10 @@ test('auto_approve outcome when LLM advises approval and mode=auto', async (t) =
     agentClient,
     logger,
     settingsService,
+    sessionContextService: {
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      getContext: () => null,
+    },
   });
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient,

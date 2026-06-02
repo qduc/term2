@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import type { ILoggingService } from '../services/service-interfaces.js';
+import type { ISessionContextService } from '../services/service-interfaces.js';
 import { injectHeaders } from './fetch/logging-middleware.js';
 import { isOpencodeProvider, type OpencodeProviderIdentity } from './opencode.provider.js';
 
@@ -9,7 +9,28 @@ const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRS
  * Generates a session ID in the format `ses_<12_hex_timestamp><14_base62_random>`.
  * Total length: 30 characters.
  */
-export function generateOpencodeSessionId(): string {
+export function generateOpencodeSessionId(effectiveSessionId?: string): string {
+  if (effectiveSessionId) {
+    const hexPool = '0123456789abcdef';
+    let seed = 0;
+    for (let i = 0; i < effectiveSessionId.length; i++) {
+      seed = (seed * 31 + effectiveSessionId.charCodeAt(i)) | 0;
+    }
+    let state = Math.abs(seed);
+    const nextRand = () => {
+      state = (state * 1103515245 + 12345) & 0x7fffffff;
+      return state;
+    };
+    let result = '';
+    for (let i = 0; i < 12; i++) {
+      result += hexPool[nextRand() % 16];
+    }
+    for (let i = 0; i < 14; i++) {
+      result += BASE62_ALPHABET[nextRand() % 62];
+    }
+    return `ses_${result}`;
+  }
+
   const timestamp = Date.now().toString(16).padStart(12, '0').slice(0, 12);
   const bytes = randomBytes(11);
   let value = 0n;
@@ -24,11 +45,21 @@ export function generateOpencodeSessionId(): string {
   return `ses_${timestamp}${random}`;
 }
 
-export function resolveOpencodeSessionId(
-  loggingService?: ILoggingService,
-  fallbackSessionId?: string,
-): string | undefined {
-  return fallbackSessionId || loggingService?.getTrafficContext?.()?.sessionId;
+export function resolveOpencodeSessionId(options: {
+  sessionContextService?: ISessionContextService;
+  fallbackSessionId?: string;
+  fallbackSessionIdOverride?: string;
+}): string | undefined {
+  if (options.fallbackSessionIdOverride) {
+    return options.fallbackSessionIdOverride;
+  }
+
+  const trafficSessionId = options.sessionContextService?.getContext()?.sessionId;
+  if (trafficSessionId) {
+    return generateOpencodeSessionId(trafficSessionId);
+  }
+
+  return options.fallbackSessionId;
 }
 
 export function withOpencodeSessionHeader(init: RequestInit, sessionId: string): RequestInit {
@@ -45,16 +76,20 @@ export type OpencodeSessionInjector = (init: RequestInit) => RequestInit | null;
 export function createOpencodeSessionInjector(
   identity: OpencodeProviderIdentity,
   options?: {
-    loggingService?: ILoggingService;
+    sessionContextService?: ISessionContextService;
     fallbackSessionIdOverride?: string;
   },
 ): OpencodeSessionInjector | null {
   if (!isOpencodeProvider(identity)) return null;
 
-  const fallbackSessionId = options?.fallbackSessionIdOverride ?? generateOpencodeSessionId();
+  const fallbackSessionId = generateOpencodeSessionId();
 
   return (init: RequestInit) => {
-    const sessionId = resolveOpencodeSessionId(options?.loggingService, fallbackSessionId);
+    const sessionId = resolveOpencodeSessionId({
+      sessionContextService: options?.sessionContextService,
+      fallbackSessionId,
+      fallbackSessionIdOverride: options?.fallbackSessionIdOverride,
+    });
     if (!sessionId) return null;
     return withOpencodeSessionHeader(init, sessionId);
   };

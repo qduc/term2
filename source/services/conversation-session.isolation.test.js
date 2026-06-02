@@ -12,6 +12,11 @@ const mockLogger = {
   clearCorrelationId: () => {},
 };
 
+const sessionContextService = {
+  runWithContext: (_context, fn) => fn(),
+  getContext: () => null,
+};
+
 class MockStream {
   constructor(events) {
     this.events = events;
@@ -54,11 +59,11 @@ test('sessions do not share previousResponseId', async (t) => {
 
   const sessionA = new ConversationSession('A', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const sessionB = new ConversationSession('B', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   await sessionA.sendMessage('A1');
@@ -113,11 +118,11 @@ test('sessions do not share pending approval context', async (t) => {
 
   const sessionA = new ConversationSession('A', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const sessionB = new ConversationSession('B', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const approvalResult = await sessionA.sendMessage('needs approval');
@@ -153,7 +158,7 @@ test('sendMessage() passes only the user delta in chaining mode after a mode tog
 
   const session = new ConversationSession('notice-test-chaining', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   await session.sendMessage('User msg');
@@ -180,7 +185,7 @@ test('sendMessage() persists only the real user turn in non-chaining mode', asyn
 
   const session = new ConversationSession('notice-test-non-chaining', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   await session.sendMessage('User msg');
@@ -213,7 +218,7 @@ test('sendMessage() keeps full-history input free of synthetic mode notices acro
 
   const session = new ConversationSession('notice-prefix-stability', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   // Turn 1: establish a conversation prefix with no notice.

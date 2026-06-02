@@ -2,6 +2,11 @@ import test from 'ava';
 import { ModelBehaviorError } from '@openai/agents';
 import { ConversationService } from './conversation-service.js';
 
+const createSessionContextService = () => ({
+  runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  getContext: () => null,
+});
+
 const mockLogger = {
   info: () => {},
   warn: () => {},
@@ -56,7 +61,7 @@ test('integration: streamed response emits deltas and final output', async (t) =
         return stream;
       },
     } as any,
-    deps: { logger: mockLogger as any },
+    deps: { logger: mockLogger as any, sessionContextService: createSessionContextService() as any },
   });
 
   const chunks: Array<{ full: string; chunk: string }> = [];
@@ -121,7 +126,7 @@ test('integration: approval round-trip (approval_required -> continue -> final)'
         return continuationStream;
       },
     } as any,
-    deps: { logger: mockLogger as any },
+    deps: { logger: mockLogger as any, sessionContextService: createSessionContextService() as any },
   });
 
   const first = await service.sendMessage('run command');
@@ -158,7 +163,7 @@ test('integration: hallucination retry retries once and succeeds', async (t) => 
         return successfulStream;
       },
     } as any,
-    deps: { logger: mockLogger as any },
+    deps: { logger: mockLogger as any, sessionContextService: createSessionContextService() as any },
   });
 
   const result = await service.sendMessage('do something', {
@@ -245,7 +250,7 @@ test('integration: terminal-write gate prevents store write on interrupted strea
         return continuationStream;
       },
     } as any,
-    deps: { logger: mockLogger as any },
+    deps: { logger: mockLogger as any, sessionContextService: createSessionContextService() as any },
   });
 
   // Step 1: sendMessage triggers approval

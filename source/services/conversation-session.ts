@@ -1,5 +1,5 @@
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
-import type { ILoggingService } from './service-interfaces.js';
+import type { ILoggingService, ISessionContextService } from './service-interfaces.js';
 import { ConversationStore } from './conversation-store.js';
 import type { AgentInputItem } from '@openai/agents';
 import {
@@ -125,6 +125,7 @@ export class ConversationSession {
   private currentDisplayUsage: NormalizedUsage | undefined;
 
   private settingsService?: ISettingsService;
+  private sessionContextService: ISessionContextService;
   private logSink: ((event: LogEvent) => void) | null = null;
 
   constructor(
@@ -135,7 +136,11 @@ export class ConversationSession {
       sessionStartedAt,
     }: {
       agentClient: OpenAIAgentClient;
-      deps: { logger: ILoggingService; settingsService?: ISettingsService };
+      deps: {
+        logger: ILoggingService;
+        settingsService?: ISettingsService;
+        sessionContextService: ISessionContextService;
+      };
       sessionStartedAt?: string;
     },
   ) {
@@ -144,12 +149,14 @@ export class ConversationSession {
     this.agentClient = agentClient;
     this.logger = deps.logger;
     this.settingsService = deps.settingsService;
+    this.sessionContextService = deps.sessionContextService;
     this.conversationStore = new ConversationStore();
     this.shellAutoApproval = new ShellAutoApprovalResolver({
       conversationStore: this.conversationStore,
       agentClient: this.agentClient,
       logger: this.logger,
       settingsService: this.settingsService,
+      sessionContextService: this.sessionContextService,
     });
     this.approvalFlow = new ApprovalFlowCoordinator({
       agentClient: this.agentClient,
@@ -238,10 +245,7 @@ export class ConversationSession {
   }
 
   #withTrafficContext<T>(currentTurn: string | undefined, fn: () => T): T {
-    const runner = this.logger.runWithTrafficContext;
-    if (!runner) return fn();
-    return runner.call(
-      this.logger,
+    return this.sessionContextService.runWithContext(
       {
         sessionId: this.id,
         sessionStartedAt: this.startedAt,
@@ -250,7 +254,7 @@ export class ConversationSession {
         traceId: this.logger.getCorrelationId(),
       },
       fn,
-    ) as T;
+    );
   }
 
   #isCurrentGeneration(gen: number): boolean {

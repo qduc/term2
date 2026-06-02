@@ -4,6 +4,11 @@ import { LoggingService } from './logging-service.js';
 import { ConversationStore } from './conversation-store.js';
 import type { LLMAdvisory } from '../contracts/conversation.js';
 
+const createSessionContextService = () => ({
+  runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  getContext: () => null,
+});
+
 const logger = new LoggingService({ disableLogging: true });
 
 const makeMockSettings = (mode: 'off' | 'advisory' | 'auto') => ({
@@ -30,6 +35,7 @@ test('non-shell tools return undefined advisory', async (t) => {
     agentClient: makeMockAgentClient({}),
     logger,
     settingsService: makeMockSettings('auto') as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   const advisory = await resolver.resolveAdvisoryForInterruption({
@@ -46,6 +52,7 @@ test('getAutoApproveMode reads setting', (t) => {
     agentClient: makeMockAgentClient({}),
     logger,
     settingsService: makeMockSettings('advisory') as any,
+    sessionContextService: createSessionContextService() as any,
   });
   t.is(resolver.getAutoApproveMode(), 'advisory');
 });
@@ -56,6 +63,7 @@ test('shouldAutoApprove requires auto mode + approved + llm source', (t) => {
     agentClient: makeMockAgentClient({}),
     logger,
     settingsService: makeMockSettings('auto') as any,
+    sessionContextService: createSessionContextService() as any,
   });
   t.true(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'llm' })));
   t.false(resolver.shouldAutoApprove(makeAdvisory({ approved: false, source: 'llm' })));
@@ -69,6 +77,7 @@ test('shouldAutoApprove returns false when mode is not auto', (t) => {
     agentClient: makeMockAgentClient({}),
     logger,
     settingsService: makeMockSettings('advisory') as any,
+    sessionContextService: createSessionContextService() as any,
   });
   t.false(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'llm' })));
 });
@@ -86,6 +95,7 @@ test('clearCache empties cached advisories so next eval re-runs LLM', async (t) 
     agentClient,
     logger,
     settingsService: makeMockSettings('auto') as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   const interruption = { name: 'shell', arguments: { command: 'ls' }, callId: 'c1' };
@@ -114,6 +124,7 @@ test('interruption without callId uses inline __single__ evaluation', async (t) 
     agentClient,
     logger,
     settingsService: makeMockSettings('auto') as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   const interruption = { name: 'shell', arguments: { command: 'ls' } };

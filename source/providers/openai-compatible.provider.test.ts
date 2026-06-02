@@ -23,6 +23,7 @@ function buildProvider(
   providerType = 'openai-compatible',
   baseUrl = 'https://provider.test/v1',
   loggingService?: ProviderDeps['loggingService'],
+  sessionContextService?: ProviderDeps['sessionContextService'],
 ) {
   return createCustomProviderModelProvider(
     {
@@ -34,6 +35,7 @@ function buildProvider(
     {
       defaultModel: 'provider-model',
       loggingService,
+      sessionContextService,
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         const headers: Record<string, string> = {};
         const rawHeaders = init?.headers as any;
@@ -576,20 +578,29 @@ test('opencode session ID is stable across requests within a session', async (t)
 
 test('opencode session header prefers fallback session ID over traffic context session ID', async (t) => {
   const captured: CapturedRequest[] = [];
-  const provider = buildProvider(captured, successResponse, 'openai-compatible', 'https://opencode.ai/v1', {
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-    debug: () => {},
-    security: () => {},
-    setCorrelationId: () => {},
-    getCorrelationId: () => undefined,
-    clearCorrelationId: () => {},
-    getTrafficContext: () => ({
-      sessionId: 'conversation-session-123',
-      sessionStartedAt: '2026-05-25T12:00:00.000Z',
-    }),
-  });
+  const provider = buildProvider(
+    captured,
+    successResponse,
+    'openai-compatible',
+    'https://opencode.ai/v1',
+    {
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+      security: () => {},
+      setCorrelationId: () => {},
+      getCorrelationId: () => undefined,
+      clearCorrelationId: () => {},
+    },
+    {
+      getContext: () => ({
+        sessionId: 'conversation-session-123',
+        sessionStartedAt: '2026-05-25T12:00:00.000Z',
+      }),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    },
+  );
   const model = await provider.getModel('provider-model');
 
   await runUnderTrace(() =>
@@ -844,7 +855,10 @@ test('lazy opencode provider reuses the same model provider instance across getM
       debug: () => {},
       error: () => {},
       getCorrelationId: () => undefined,
-      getTrafficContext: () => null,
+    } as any,
+    sessionContextService: {
+      getContext: () => null,
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
     } as any,
   };
 

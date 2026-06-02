@@ -107,13 +107,16 @@ test('createCustomProviderModelProvider Google type gets logging fetch wrapper',
     },
     error: () => {},
     getCorrelationId: () => 'test-correlation-id',
-    getTrafficContext: () => ({
+  };
+  const dummySessionContextService = {
+    getContext: () => ({
       traceId: 'test-trace-id',
       sessionId: 'test-session-id',
-      sessionStartedAt: 12345,
+      sessionStartedAt: '12345',
       firstUserMessagePreview: 'hello',
       mode: 'standard',
     }),
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
   };
 
   const provider = createCustomProviderModelProvider(
@@ -124,6 +127,7 @@ test('createCustomProviderModelProvider Google type gets logging fetch wrapper',
     {
       defaultModel: 'gemini-test',
       loggingService: dummyLoggingService as any,
+      sessionContextService: dummySessionContextService as any,
       fetch: (async (_input: RequestInfo | URL, _init?: RequestInit) => {
         return new Response(
           JSON.stringify({

@@ -2,7 +2,7 @@ import { Agent, run, tool as createTool, type Tool, RunState } from '@openai/age
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
+import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import { ExecutionContext } from '../execution-context.js';
 import { getProvider } from '../../providers/index.js';
 import { SubagentSession } from './subagent-session.js';
@@ -330,6 +330,7 @@ function buildSubagentRetryTask(
 export class SubagentManager {
   #logger: ILoggingService;
   #settings: ISettingsService;
+  #sessionContextService: ISessionContextService;
   #executionContext?: ExecutionContext;
   #onEvent?: (event: ConversationEvent) => void;
   #mentorSession: SubagentSession;
@@ -339,11 +340,13 @@ export class SubagentManager {
     logger: ILoggingService;
     settings: ISettingsService;
     executionContext?: ExecutionContext;
+    sessionContextService: ISessionContextService;
     onEvent?: (event: ConversationEvent) => void;
     agentClient?: Pick<OpenAIAgentClient, 'chat'>;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
+    this.#sessionContextService = deps.sessionContextService;
     this.#executionContext = deps.executionContext;
     this.#onEvent = deps.onEvent;
     this.#agentClient = deps.agentClient;
@@ -449,7 +452,13 @@ export class SubagentManager {
 
     const mentorRunner = this.#mentorSession.ensureRunner(mentorProvider, (providerId) => {
       const providerDef = getProvider(providerId);
-      return providerDef?.createRunner?.({ settingsService: this.#settings, loggingService: this.#logger }) ?? null;
+      return (
+        providerDef?.createRunner?.({
+          settingsService: this.#settings,
+          loggingService: this.#logger,
+          sessionContextService: this.#sessionContextService,
+        }) ?? null
+      );
     });
 
     const mentorAgent = this.#mentorSession.ensureAgent(() => {
@@ -534,7 +543,11 @@ export class SubagentManager {
     const providerDef = getProvider(providerId);
     const runner =
       providerId !== 'openai'
-        ? providerDef?.createRunner?.({ settingsService: this.#settings, loggingService: this.#logger }) ?? null
+        ? providerDef?.createRunner?.({
+            settingsService: this.#settings,
+            loggingService: this.#logger,
+            sessionContextService: this.#sessionContextService,
+          }) ?? null
         : null;
 
     const modelSettings: any = {};
@@ -905,6 +918,7 @@ export class SubagentManager {
         settingsService: this.#settings,
         agentClient: this.#agentClient,
         logger: this.#logger,
+        sessionContextService: this.#sessionContextService,
       });
 
       return advisories.get('__subagent_worker_shell__')?.approved === true;

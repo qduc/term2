@@ -4,6 +4,11 @@ import { LoggingService } from './logging-service.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
+const createSessionContextService = () => ({
+  runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  getContext: () => null,
+});
+
 test('ConversationSession extracts reasoning_content from stream', async (t) => {
   const mockAgentClient: any = {
     startStream: async () => ({
@@ -50,7 +55,7 @@ test('ConversationSession extracts reasoning_content from stream', async (t) => 
 
   const session = new ConversationSession('test-session', {
     agentClient: mockAgentClient,
-    deps: { logger },
+    deps: { logger, sessionContextService: createSessionContextService() as any },
   } as any);
 
   const events: any[] = [];

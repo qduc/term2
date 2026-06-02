@@ -110,12 +110,9 @@ test('opencode type derived from providerType alone', async (t) => {
 
 test('session ID uses fallbackSessionIdOverride when provided', async (t) => {
   const captured: CapturedRequest[] = [];
-  const middleware = createAnthropicMiddleware(
-    'opencode',
-    'https://opencode.ai/v1',
-    undefined,
-    'ses_123456789012abcABC0abcABC0ab',
-  );
+  const middleware = createAnthropicMiddleware('opencode', 'https://opencode.ai/v1', {
+    fallbackSessionIdOverride: 'ses_123456789012abcABC0abcABC0ab',
+  });
   const composed = composeFetch(makeCapturingFetch(captured), [middleware]);
 
   await composed('https://opencode.ai/v1/messages', {

@@ -12,6 +12,8 @@ import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { injectHeaders, installationVersion } from './fetch/logging-middleware.js';
+import type { ISessionContextService } from '../services/service-interfaces.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import envPaths from 'env-paths';
@@ -419,6 +421,7 @@ class FallbackCodexProvider implements ModelProvider {
     private readonly openAIClient: OpenAI,
     private readonly tokenManager: CodexTokenManager,
     private readonly loggingService: any,
+    private readonly sessionContextService?: ISessionContextService,
   ) {}
 
   async getModel(modelName?: string): Promise<Model> {
@@ -451,6 +454,7 @@ class FallbackCodexProvider implements ModelProvider {
       },
       this.loggingService,
       'codex',
+      this.sessionContextService,
     );
 
     this.models.set(resolvedModel, fallbackModel);
@@ -512,11 +516,9 @@ const codexSanitizeRequestMiddleware: FetchMiddleware = (ctx, next) => {
   return next(ctx);
 };
 
-function codexHeadersMiddleware(loggingService: {
-  getTrafficContext?: () => { sessionId?: string } | null;
-}): FetchMiddleware {
+function codexHeadersMiddleware(sessionContextService?: ISessionContextService): FetchMiddleware {
   return (ctx, next) => {
-    const trafficContext = loggingService.getTrafficContext?.() ?? null;
+    const trafficContext = sessionContextService?.getContext() ?? null;
     const sessionId = trafficContext?.sessionId;
     const userAgent = `term2/${installationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`;
 
@@ -537,7 +539,7 @@ function codexHeadersMiddleware(loggingService: {
 registerProvider({
   id: 'codex',
   label: 'Codex',
-  createRunner: ({ settingsService, loggingService }) => {
+  createRunner: ({ settingsService, loggingService, sessionContextService }) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-5.3-codex';
     const tokenManager = new CodexTokenManager();
 
@@ -547,17 +549,20 @@ registerProvider({
       fetch: createProviderFetch({
         providerId: 'codex',
         defaultModel,
-        deps: { loggingService },
+        deps: {
+          loggingService,
+          sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
+        },
         middlewares: [
           codexAuthMiddleware(tokenManager, loggingService),
           codexSanitizeRequestMiddleware,
-          codexHeadersMiddleware(loggingService),
+          codexHeadersMiddleware(sessionContextService),
         ],
       }) as any,
     });
 
     return new Runner({
-      modelProvider: new FallbackCodexProvider(openAIClient, tokenManager, loggingService),
+      modelProvider: new FallbackCodexProvider(openAIClient, tokenManager, loggingService, sessionContextService),
     });
   },
   fetchModels: fetchCodexModels,

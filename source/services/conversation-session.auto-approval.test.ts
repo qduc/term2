@@ -16,6 +16,11 @@ const createMockLogger = () => ({
   clearCorrelationId: () => {},
 });
 
+const createSessionContextService = () => ({
+  runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  getContext: () => null,
+});
+
 class MockStream {
   public readonly events: unknown[];
   public completed: Promise<unknown>;
@@ -170,6 +175,7 @@ const createSessionHarness = ({
         'agent.autoApproveProvider': 'test-auto-provider',
         ...settingsOverrides,
       }),
+      sessionContextService: createSessionContextService() as any,
     },
   });
 

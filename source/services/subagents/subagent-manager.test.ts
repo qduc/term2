@@ -2,10 +2,24 @@ import test from 'ava';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ModelBehaviorError } from '@openai/agents';
-import { SubagentManager } from './subagent-manager.js';
+import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { registerProvider } from '../../providers/registry.js';
 import { ExecutionContext } from '../execution-context.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
+
+const createSessionContextService = () => ({
+  runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  getContext: () => null,
+});
+
+const SubagentManager = class extends RealSubagentManager {
+  constructor(deps: any) {
+    super({
+      ...deps,
+      sessionContextService: deps.sessionContextService ?? (createSessionContextService() as any),
+    });
+  }
+};
 
 // ========== Mock Utilities ==========
 
@@ -105,7 +119,11 @@ test.serial('run() returns failed result for unknown role', async (t) => {
     'agent.model': 'mock-model',
     'agent.provider': 'mock-mentor-manager',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   const result = await manager.run({ role: 'nonexistent-role-xyz', task: 'do something' });
 
@@ -123,7 +141,11 @@ test.serial('run() with mentor role uses mentorModel setting', async (t) => {
     'agent.mentorModel': 'mentor-model',
     'agent.mentorProvider': 'mock-mentor-manager',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   const result = await manager.run({ role: 'mentor', task: 'advise me' });
 
@@ -139,7 +161,11 @@ test.serial('run() with mentor role fails when mentorModel is not set', async (t
     'agent.model': 'main-model',
     'agent.provider': 'mock-mentor-manager',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   const result = await manager.run({ role: 'mentor', task: 'advise me' });
 
@@ -154,7 +180,11 @@ test.serial('run() mentor maintains conversation history across calls', async (t
     'agent.mentorModel': 'mentor-model',
     'agent.mentorProvider': 'mock-mentor-manager',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   await manager.run({ role: 'mentor', task: 'first question' });
   await manager.run({ role: 'mentor', task: 'second question' });
@@ -172,7 +202,11 @@ test.serial('resetMentorSession() clears conversation history', async (t) => {
     'agent.mentorModel': 'mentor-model',
     'agent.mentorProvider': 'mock-mentor-manager',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   await manager.run({ role: 'mentor', task: 'first question' });
   t.true(mentorManagerRunnerCalls[0].input.length >= 1);
@@ -191,7 +225,11 @@ test.serial('run() with explorer role returns SubagentResult', async (t) => {
     'agent.model': 'mock-model',
     'agent.provider': 'mock-explorer-provider',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   const result = await manager.run({ role: 'explorer', task: 'find all TypeScript files' });
 
@@ -207,7 +245,11 @@ test.serial('run() passes parent abort signal into the delegated provider run', 
     'agent.model': 'mock-model',
     'agent.provider': 'mock-explorer-provider',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
   const abortController = new AbortController();
 
   await manager.run({
@@ -242,7 +284,11 @@ test.serial('run() cancels a delegated provider run when the parent signal abort
     'agent.model': 'mock-model',
     'agent.provider': 'mock-aborted-subagent-provider',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
   const abortController = new AbortController();
   const resultPromise = manager.run({
     role: 'explorer',
@@ -262,7 +308,11 @@ test.serial('run() with explorer role uses read-only tools only', async (t) => {
     'agent.model': 'mock-model',
     'agent.provider': 'mock-explorer-provider',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   await manager.run({ role: 'explorer', task: 'find files' });
 
@@ -324,7 +374,11 @@ test.serial('run() with researcher role includes web tools', async (t) => {
     'agent.model': 'mock-model',
     'agent.provider': 'mock-researcher-provider',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   await manager.run({ role: 'researcher', task: 'look up the latest TypeScript release' });
 
@@ -379,7 +433,11 @@ test.serial('run() with worker role includes write and shell tools for non-gpt m
     'agent.model': 'mock-model',
     'agent.provider': 'mock-worker-provider',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   await manager.run({ role: 'worker', task: 'update the README.md file' });
 
@@ -403,7 +461,11 @@ test.serial('run() with worker role includes write and shell tools for gpt model
     'agent.model': 'gpt-5',
     'agent.provider': 'mock-worker-provider',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   await manager.run({ role: 'worker', task: 'update the README.md file' });
 
@@ -872,6 +934,7 @@ test.serial('run() emits started, tool_started and completed events', async (t) 
   const manager = new SubagentManager({
     logger: createMockLogger(),
     settings,
+    sessionContextService: createSessionContextService() as any,
     onEvent: (event) => events.push(event),
   });
 
@@ -900,6 +963,7 @@ test.serial('run() emits a completed event even when the role is unknown', async
   const manager = new SubagentManager({
     logger: createMockLogger(),
     settings,
+    sessionContextService: createSessionContextService() as any,
     onEvent: (event) => events.push(event),
   });
 
@@ -921,7 +985,11 @@ test.serial('mentor base instructions come from the mentor role markdown', async
     'agent.mentorProvider': 'mock-mentor-manager',
     'app.mentorMode': false,
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   await manager.run({ role: 'mentor', task: 'advise me' });
 
@@ -972,7 +1040,11 @@ test.serial('finalText is the assistant message after the last tool item', async
     'agent.model': 'mock-model',
     'agent.provider': 'mock-post-tool-provider',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
 
   const result = await manager.run({ role: 'explorer', task: 'where is it' });
 
@@ -1017,6 +1089,7 @@ test.serial('worker shell tool executes safe command without triggering approval
       'agent.model': 'mock-model',
       'agent.provider': 'mock-worker-shell-safe-provider',
     }),
+    sessionContextService: createSessionContextService() as any,
     executionContext: {
       getCwd: () => tmpDir,
       isRemote: () => false,
@@ -1066,6 +1139,7 @@ test.serial('worker shell tool blocks dangerous/destructive commands and returns
       'agent.model': 'mock-model',
       'agent.provider': 'mock-worker-shell-dangerous-provider',
     }),
+    sessionContextService: createSessionContextService() as any,
     executionContext: {
       getCwd: () => tmpDir,
       isRemote: () => false,
@@ -1117,6 +1191,7 @@ test.serial('worker shell tool allows YELLOW command when auto-approval evaluato
       'agent.autoApproveModel': 'mock-auto-approve-model',
       'agent.autoApproveProvider': 'mock-worker-shell-yellow-approved-provider',
     }),
+    sessionContextService: createSessionContextService() as any,
     agentClient: {
       chat: async (message: string) => {
         chatCalls++;
@@ -1174,6 +1249,7 @@ test.serial('worker shell tool blocks YELLOW command when auto-approval evaluato
       'agent.autoApproveModel': 'mock-auto-approve-model',
       'agent.autoApproveProvider': 'mock-worker-shell-yellow-rejected-provider',
     }),
+    sessionContextService: createSessionContextService() as any,
     agentClient: {
       chat: async () => {
         chatCalls++;
@@ -1218,7 +1294,11 @@ test.serial('run() extracts usage from error.state.usage when subagent run fails
     'agent.model': 'mock-model',
     'agent.provider': 'mock-failed-usage-provider',
   });
-  const manager = new SubagentManager({ logger: createMockLogger(), settings });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
   const result = await manager.run({
     role: 'explorer',
     task: 'find files',
@@ -1274,6 +1354,7 @@ test.serial(
         'agent.provider': 'mock-retry-recoverable-provider',
         'agent.retryAttempts': 2,
       }),
+      sessionContextService: createSessionContextService() as any,
       onEvent: (event) => events.push(event),
     });
 
@@ -1317,6 +1398,7 @@ test.serial('run() exhausts retries on repeated recoverable model errors and ret
       'agent.provider': 'mock-retry-exhaust-provider',
       'agent.retryAttempts': 2,
     }),
+    sessionContextService: createSessionContextService() as any,
     onEvent: (event) => events.push(event),
   });
 
@@ -1355,6 +1437,7 @@ test.serial('run() does not retry on non-recoverable ModelBehaviorError', async 
       'agent.provider': 'mock-no-retry-non-recoverable-provider',
       'agent.retryAttempts': 2,
     }),
+    sessionContextService: createSessionContextService() as any,
     onEvent: (event) => events.push(event),
   });
 
@@ -1390,6 +1473,7 @@ test.serial('run() aborted subagent returns cancelled status without model-error
       'agent.provider': 'mock-abort-no-retry-provider',
       'agent.retryAttempts': 2,
     }),
+    sessionContextService: createSessionContextService() as any,
     onEvent: (event) => events.push(event),
   });
 
@@ -1440,6 +1524,7 @@ test.serial('run() retries on transient upstream error via executeWithRetry', as
       'agent.provider': 'mock-transient-retry-provider',
       'agent.retryAttempts': 2,
     }),
+    sessionContextService: createSessionContextService() as any,
   });
 
   const result = await manager.run({ role: 'explorer', task: 'find all files' });
@@ -1482,6 +1567,7 @@ test.serial('run() does not retry worker after a mutating write tool was invoked
       'agent.provider': 'mock-write-then-crash-provider',
       'agent.retryAttempts': 2,
     }),
+    sessionContextService: createSessionContextService() as any,
     executionContext: {
       getCwd: () => tmpDir,
       isRemote: () => false,
@@ -1529,6 +1615,7 @@ test.serial('run() retries read-only subagent (explorer) even after read tools w
       'agent.provider': 'mock-explorer-read-then-crash-provider',
       'agent.retryAttempts': 2,
     }),
+    sessionContextService: createSessionContextService() as any,
   });
 
   const result = await manager.run({ role: 'explorer', task: 'search for something' });
@@ -1564,6 +1651,7 @@ test.serial('corrective retry task for hallucination names the specific bad tool
       'agent.provider': 'mock-corrective-hallucination-provider',
       'agent.retryAttempts': 2,
     }),
+    sessionContextService: createSessionContextService() as any,
   });
 
   await manager.run({ role: 'explorer', task: 'do something' });
@@ -1601,6 +1689,7 @@ test.serial('corrective retry task for behavior error instructs model to produce
       'agent.provider': 'mock-corrective-behavior-provider',
       'agent.retryAttempts': 2,
     }),
+    sessionContextService: createSessionContextService() as any,
   });
 
   await manager.run({ role: 'explorer', task: 'do something' });
@@ -1661,6 +1750,7 @@ test.serial('subagent run injects warning into tool output when turns left <= 5'
       'agent.model': 'mock-model',
       'agent.provider': 'mock-subagent-maxturns-provider',
     }),
+    sessionContextService: createSessionContextService() as any,
   });
 
   await manager.run({ role: 'explorer', task: 'mock task' });

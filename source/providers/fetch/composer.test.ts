@@ -2,6 +2,7 @@ import test from 'ava';
 import { composeFetch, FetchMiddleware } from './compose.js';
 import { createLoggingMiddleware, CreateLoggingMiddlewareOptions } from './logging-middleware.js';
 import { createProviderFetch } from './composer.js';
+import type { ISessionContextService } from '../../services/service-interfaces.js';
 
 // ---------------------------------------------------------------------------
 // composeFetch tests
@@ -103,13 +104,14 @@ function makeLoggingService(
     debug: () => {},
     error: () => {},
     getCorrelationId: () => 'trace-test',
-    getTrafficContext: () => ({
-      sessionId: 'session-123',
-      sessionStartedAt: '2026-05-22T09:14:31.125Z',
-      firstUserMessagePreview: 'hi',
-      mode: 'standard',
-    }),
     ...overrides,
+  };
+}
+
+function makeSessionContextService(context: ReturnType<ISessionContextService['getContext']>): ISessionContextService {
+  return {
+    runWithContext: (_context: any, fn: () => any) => fn(),
+    getContext: () => context,
   };
 }
 
@@ -126,6 +128,12 @@ test('createLoggingMiddleware logs request started and response received', async
       error: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
+    }),
+    sessionContextService: makeSessionContextService({
+      sessionId: 'session-123',
+      sessionStartedAt: '2026-05-22T09:14:31.125Z',
+      firstUserMessagePreview: 'hi',
+      mode: 'standard',
     }),
   });
 
@@ -200,6 +208,12 @@ test('createLoggingMiddleware logs response failed on error', async (t) => {
         logs.push({ message, meta });
       },
     }),
+    sessionContextService: makeSessionContextService({
+      sessionId: 'session-123',
+      sessionStartedAt: '2026-05-22T09:14:31.125Z',
+      firstUserMessagePreview: 'hi',
+      mode: 'standard',
+    }),
   });
 
   const baseFetch: typeof fetch = async () => {
@@ -250,16 +264,16 @@ test('createLoggingMiddleware uses evaluator event prefix when traffic context h
     provider: 'openrouter',
     model: 'test-model',
     loggingService: makeLoggingService({
-      getTrafficContext: () => ({
-        sessionId: 'session-eval',
-        sessionStartedAt: '2026-05-22T09:14:31.125Z',
-        firstUserMessagePreview: 'hi',
-        mode: 'standard',
-        evaluator: true,
-      }),
       debug: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
+    }),
+    sessionContextService: makeSessionContextService({
+      sessionId: 'session-eval',
+      sessionStartedAt: '2026-05-22T09:14:31.125Z',
+      firstUserMessagePreview: 'hi',
+      mode: 'standard',
+      evaluator: true,
     }),
   });
 
@@ -286,6 +300,12 @@ test('createLoggingMiddleware uses request model from body over default model', 
       debug: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
+    }),
+    sessionContextService: makeSessionContextService({
+      sessionId: 'session-123',
+      sessionStartedAt: '2026-05-22T09:14:31.125Z',
+      firstUserMessagePreview: 'hi',
+      mode: 'standard',
     }),
   });
 
@@ -331,6 +351,12 @@ test('createProviderFetch injects the logging middleware last', async (t) => {
           logs.push({ message, meta });
         },
       }),
+      sessionContextService: makeSessionContextService({
+        sessionId: 'session-123',
+        sessionStartedAt: '2026-05-22T09:14:31.125Z',
+        firstUserMessagePreview: 'hi',
+        mode: 'standard',
+      }),
     },
     middlewares: [customMiddleware],
     fetchImpl: async () =>
@@ -375,6 +401,7 @@ test('createProviderFetch with dynamic header injection middleware', async (t) =
     defaultModel: 'gpt-4',
     deps: {
       loggingService: makeLoggingService(),
+      sessionContextService: makeSessionContextService(null),
     },
     middlewares: [headerInjector],
     fetchImpl: async (_input, init) => {
@@ -424,6 +451,7 @@ test('createProviderFetch fetchImpl parameter works', async (t) => {
     defaultModel: 'gpt-4',
     deps: {
       loggingService: makeLoggingService(),
+      sessionContextService: makeSessionContextService(null),
     },
     fetchImpl: mockFetch,
   });
@@ -444,13 +472,12 @@ test('createProviderFetch exposes logging middleware types correctly', async (t)
     debug: () => {},
     error: () => {},
     getCorrelationId: () => 'trace',
-    getTrafficContext: () => null,
   };
 
   const composed = createProviderFetch({
     providerId: 'test',
     defaultModel: 'test-model',
-    deps: { loggingService },
+    deps: { loggingService, sessionContextService: makeSessionContextService(null) },
     fetchImpl: async () => new Response('ok', { status: 200 }),
   });
 
@@ -458,7 +485,7 @@ test('createProviderFetch exposes logging middleware types correctly', async (t)
   t.is(res.status, 200);
 });
 
-test('createProviderFetch handles missing getTrafficContext gracefully', async (t) => {
+test('createProviderFetch handles null session context gracefully', async (t) => {
   const composed = createProviderFetch({
     providerId: 'test',
     defaultModel: 'test-model',
@@ -467,9 +494,8 @@ test('createProviderFetch handles missing getTrafficContext gracefully', async (
         debug: () => {},
         error: () => {},
         getCorrelationId: () => undefined,
-        getTrafficContext: (() =>
-          undefined) as unknown as CreateLoggingMiddlewareOptions['loggingService']['getTrafficContext'],
       },
+      sessionContextService: makeSessionContextService(null),
     },
     fetchImpl: async () =>
       new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
@@ -500,6 +526,12 @@ test('createLoggingMiddleware handles error in fire-and-forget logging gracefull
       error: (message: string, meta?: any) => {
         logs.push({ message, meta });
       },
+    }),
+    sessionContextService: makeSessionContextService({
+      sessionId: 'session-123',
+      sessionStartedAt: '2026-05-22T09:14:31.125Z',
+      firstUserMessagePreview: 'hi',
+      mode: 'standard',
     }),
   });
 

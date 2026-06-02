@@ -10,7 +10,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     id: providerId,
     label,
     isRuntimeDefined: true,
-    createRunner: ({ settingsService, loggingService }) => {
+    createRunner: ({ settingsService, loggingService, sessionContextService }) => {
       let cachedProvider: { getModel: (modelName?: string) => any } | null = null;
 
       return new Runner({
@@ -36,6 +36,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
               cachedProvider = createCustomProviderModelProvider(resolvedConfig, {
                 defaultModel: settingsService.get('agent.model') || '',
                 loggingService,
+                sessionContextService,
               });
             }
             return cachedProvider.getModel(modelName);

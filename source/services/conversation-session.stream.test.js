@@ -13,6 +13,11 @@ const mockLogger = {
   clearCorrelationId: () => {},
 };
 
+const sessionContextService = {
+  runWithContext: (_context, fn) => fn(),
+  getContext: () => null,
+};
+
 class MockStream {
   constructor(events) {
     this.events = events;
@@ -50,7 +55,7 @@ test('run() streams ConversationEvents (text_delta → final) in order', async (
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -94,7 +99,7 @@ test('run() warns when completed stream history already contains duplicated tool
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger },
+    deps: { logger, sessionContextService },
   });
 
   for await (const _ev of session.run('hi')) {
@@ -137,7 +142,7 @@ test('run() falls back to standard service tier after flex timeout', async (t) =
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -196,7 +201,7 @@ test('run() retries streamed recoverable errors without committing failed stream
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -241,7 +246,7 @@ test('run() retries streamed transient websocket close 1006 by replaying the tur
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -312,7 +317,7 @@ test('run() retries non-chaining streamed transient errors from completed tool c
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -397,7 +402,7 @@ test('run() exports completed tool pairs from a stream that later fails', async 
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   await t.throwsAsync(async () => {
@@ -473,7 +478,7 @@ test('run() emits tool_recovery before error when a streamed turn fails after to
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -504,7 +509,7 @@ test('run() emits tool_recovery before error when a streamed turn fails after to
 test('importState() reconciles completed ledger pairs into canonical history', (t) => {
   const session = new ConversationSession('s1', {
     agentClient: {},
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   session.importState({
@@ -566,7 +571,7 @@ test('run() allows a follow-up after a long non-chaining run expands full histor
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   session.importState({
@@ -618,7 +623,7 @@ test('sendMessage() allows a follow-up after a long non-chaining run expands ful
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   session.importState({
@@ -670,7 +675,7 @@ test('continue() streams events after approval decision', async (t) => {
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const first = [];
@@ -740,7 +745,7 @@ test('continue() retries on transient error during stream iteration', async (t) 
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   // Trigger approval_required
@@ -786,7 +791,7 @@ test('sendMessage() preserves callId on approval_required terminal result', asyn
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const result = await session.sendMessage('run command');
@@ -833,7 +838,7 @@ test('handleApprovalDecision() preserves callId on subsequent approval_required 
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const first = await session.sendMessage('run command');
@@ -862,7 +867,7 @@ test('run() sends text for OpenAI provider (server-side state)', async (t) => {
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -901,7 +906,7 @@ test('run() sends full history for non-OpenAI providers (client-side state)', as
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -954,7 +959,7 @@ test('run() sends full history for openai-compatible providers', async (t) => {
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   // First message
@@ -1015,7 +1020,7 @@ test('run() sends full history for Codex provider and omits previousResponseId',
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   for await (const _ of session.run('First message')) {
@@ -1049,7 +1054,7 @@ test('sendMessage() returns usage from final event', async (t) => {
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const result = await session.sendMessage('Hello');
@@ -1094,7 +1099,7 @@ test('handleApprovalDecision() returns usage from final event', async (t) => {
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const approvalResult = await session.sendMessage('run command');
@@ -1132,7 +1137,7 @@ test('sendMessage() logs usage handoff at DEBUG level', async (t) => {
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger },
+    deps: { logger, sessionContextService },
   });
 
   await session.sendMessage('Hello');
@@ -1164,7 +1169,7 @@ test('logs diagnostics when usage is missing in stream completion', async (t) =>
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger },
+    deps: { logger, sessionContextService },
   });
 
   await session.sendMessage('Hello');
@@ -1188,7 +1193,7 @@ test('sendMessage() extracts usage from stream.rawResponses when completed is vo
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const result = await session.sendMessage('Hello');
@@ -1230,7 +1235,7 @@ test('sendMessage() preserves cache usage from streaming events when final usage
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const result = await session.sendMessage('Hello');
@@ -1270,7 +1275,7 @@ test('run() emits usage_update when usage is nested in event.data (raw_model_str
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -1317,7 +1322,7 @@ test('run() emits usage_update when raw model stream usage is nested in event.da
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -1355,7 +1360,7 @@ test('run() emits usage_update when usage is at top level of event', async (t) =
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -1389,7 +1394,7 @@ test('undoLastUserTurn() returns { text, imageCount: 0 } after a completed run',
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   for await (const _ of session.run('hello')) {
@@ -1409,7 +1414,7 @@ test('undoLastUserTurn() returns null when no genuine user turn exists', async (
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const result = session.undoLastUserTurn();
@@ -1478,7 +1483,7 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   // (a) Run msg1 to completion — store now has msg1 + Reply1.
@@ -1530,7 +1535,7 @@ test('run() throws AbortError when the stream is cancelled/aborted', async (t) =
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   await t.throwsAsync(
@@ -1615,7 +1620,7 @@ test('run() sends full history after undo on a chaining provider (Responses API)
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   // Turn 1: chaining provider sends just the text string
@@ -1658,7 +1663,7 @@ test('run() with image attachment does not throw when supportsChaining is true',
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const turn = {
@@ -1708,7 +1713,7 @@ test('previewLargeUncachedInput() does not mutate history', (t) => {
   };
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger, settingsService },
+    deps: { logger: mockLogger, settingsService, sessionContextService },
   });
 
   const before = session.exportState();
@@ -1737,7 +1742,7 @@ test('previewLargeUncachedInput() estimates from outgoing input instead of accep
   };
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger, settingsService },
+    deps: { logger: mockLogger, settingsService, sessionContextService },
   });
 
   const large = 'x'.repeat(64_000 * 4);
@@ -1775,7 +1780,7 @@ test('sendMessage() records successful large guard state after provider request 
   };
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger, settingsService },
+    deps: { logger: mockLogger, settingsService, sessionContextService },
   });
 
   const large = 'x'.repeat(64_000 * 4);
@@ -1797,7 +1802,7 @@ test('run() yields an error event carrying droppedUserMessage when startStream f
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -1833,7 +1838,7 @@ test('run() omits droppedUserMessage when no user turn was added (skipUserMessag
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const emitted = [];
@@ -1865,7 +1870,7 @@ test('run() emits user_message_consumed_for_abort when an aborted approval is be
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   session.approvalState.setPending({
@@ -1921,7 +1926,7 @@ test('switchProvider() clears provider continuity but preserves transcript histo
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   for await (const _ of session.run('First message')) {
@@ -2039,7 +2044,7 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
 
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   // Run turn 1 to completion — tool ledger now has the tool call entry.

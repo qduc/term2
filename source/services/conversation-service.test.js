@@ -18,6 +18,11 @@ const mockLogger = {
   clearCorrelationId: () => {},
 };
 
+const sessionContextService = {
+  runWithContext: (_context, fn) => fn(),
+  getContext: () => null,
+};
+
 class MockStream {
   constructor(events) {
     this.events = events;
@@ -62,7 +67,7 @@ test('emits live text chunks for response.output_text.delta events', async (t) =
   const chunks = [];
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.sendMessage('hi', {
     onTextChunk(full, chunk) {
@@ -93,7 +98,7 @@ test('emits ConversationEvents (text_delta → final) in order', async (t) => {
   const emitted = [];
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.sendMessage('hi', {
     onEvent(event) {
@@ -129,7 +134,7 @@ test('emits approval_required ConversationEvent for interruptions', async (t) =>
   const emitted = [];
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.sendMessage('run command', {
     onEvent(event) {
@@ -166,7 +171,7 @@ test('compacts whitespace-heavy JSON arguments for approvals', async (t) => {
   const emitted = [];
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.sendMessage('run tool', {
     onEvent(event) {
@@ -225,7 +230,7 @@ test('emits events when resolving aborted approval on next message', async (t) =
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const approvalEvents = [];
@@ -328,7 +333,7 @@ test('reject with reason and abort+new input yield the same history', async (t) 
 
     const service = new ConversationService({
       agentClient: mockClient,
-      deps: { logger: mockLogger },
+      deps: { logger: mockLogger, sessionContextService },
     });
 
     const approvalResult = await service.sendMessage('run command');
@@ -371,7 +376,7 @@ test('passes previous response ids into subsequent runs', async (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   await service.sendMessage('first');
   const secondResult = await service.sendMessage('second');
@@ -420,7 +425,7 @@ test('emits approval interruptions and resumes after approval', async (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const approvalResult = await service.sendMessage('run command');
   t.is(approvalResult.type, 'approval_required');
@@ -462,7 +467,7 @@ test('dedupes command messages emitted live from run events', async (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.sendMessage('run shell', {
     onCommandMessage(message) {
@@ -524,7 +529,7 @@ test('attaches cached shell args when output uses call_id', async (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.sendMessage('run shell', {
     onCommandMessage(message) {
@@ -586,7 +591,7 @@ test('preserves approval rejection command messages', async (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.sendMessage('run shell', {
     onCommandMessage(message) {
@@ -673,7 +678,7 @@ test('dedupes commands from initial stream when continuation history contains th
   const emittedCommands = [];
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   // Send initial message - should emit 'ls' and return approval_required
@@ -716,7 +721,7 @@ test('resetWithNewId() clears conversation state', async (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   await service.sendMessage('first');
 
@@ -731,7 +736,7 @@ test('resetWithNewId() updates sessionId', (t) => {
   const service = new ConversationService({
     agentClient: {},
     sessionId: 'old-id',
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   t.is(service.sessionId, 'old-id');
 
@@ -752,7 +757,7 @@ test('resetWithNewId() clears provider conversations when supported', async (t) 
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   await service.sendMessage('first message');
 
@@ -771,7 +776,7 @@ test('setModel() delegates to agent client', (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   service.setModel('gpt-4');
 
@@ -788,7 +793,7 @@ test('setTemperature() delegates to agent client when supported', (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   service.setTemperature(0.7);
 
@@ -816,7 +821,7 @@ test('abort() delegates to agent client and clears pending approval', async (t) 
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   // Trigger a pending approval
   await service.sendMessage('run command');
@@ -851,7 +856,7 @@ test('abort() preserves the aborted tool turn in exported state and snapshot', a
         return initialStream;
       },
     },
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const first = await service.sendMessage('run command');
@@ -907,7 +912,7 @@ test('switchProvider() after abort reuses the preserved tool turn in the next fu
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   const first = await service.sendMessage('run command');
@@ -973,7 +978,7 @@ test('handleApprovalDecision() rejects interruption when answer is n', async (t)
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   await service.sendMessage('run command');
 
@@ -991,7 +996,7 @@ test('handleApprovalDecision() rejects interruption when answer is n', async (t)
 test('handleApprovalDecision() returns null when no pending approval', async (t) => {
   const service = new ConversationService({
     agentClient: {},
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.handleApprovalDecision('y');
   t.is(result, null);
@@ -1033,7 +1038,7 @@ test('emits live reasoning chunks', async (t) => {
   const chunks = [];
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.sendMessage('hi', {
     onReasoningChunk(full, chunk) {
@@ -1075,7 +1080,7 @@ test('retries on tool hallucination error (ModelBehaviorError)', async (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.sendMessage('explain this file');
 
@@ -1099,7 +1104,7 @@ test('stops retrying after max hallucination retries', async (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   try {
@@ -1128,7 +1133,7 @@ test('does not retry on non-hallucination ModelBehaviorError', async (t) => {
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   try {
@@ -1168,7 +1173,7 @@ test('failed user turn is dropped from history after non-retryable provider erro
 
   const service = new ConversationService({
     agentClient: mockClient,
-    deps: { logger: mockLogger },
+    deps: { logger: mockLogger, sessionContextService },
   });
 
   await t.throwsAsync(() => service.sendMessage('first failed message'), {

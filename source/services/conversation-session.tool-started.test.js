@@ -26,6 +26,11 @@ const createMockLogger = () => {
   };
 };
 
+const sessionContextService = {
+  runWithContext: (_context, fn) => fn(),
+  getContext: () => null,
+};
+
 class MockStream {
   constructor(events) {
     this.events = events;
@@ -69,7 +74,7 @@ test('run() emits tool_started with parsed arguments when function_call argument
   const { logger } = createMockLogger();
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger },
+    deps: { logger, sessionContextService },
   });
 
   const emitted = [];
@@ -117,7 +122,7 @@ test('run() emits one diagnostic packet when tool arguments contain malformed JS
   const { logger, events } = createMockLogger();
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger },
+    deps: { logger, sessionContextService },
   });
 
   for await (const _ev of session.run('hi')) {
@@ -181,7 +186,7 @@ test('approval continuation does not persist duplicate tool_started when SDK rep
   const { logger } = createMockLogger();
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger },
+    deps: { logger, sessionContextService },
   });
   const persisted = [];
   session.setLogSink((event) => persisted.push(event));
@@ -230,7 +235,7 @@ test('run() emits one tool_started for duplicate function_call events with the s
   const { logger } = createMockLogger();
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
-    deps: { logger },
+    deps: { logger, sessionContextService },
   });
 
   const emitted = [];

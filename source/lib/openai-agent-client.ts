@@ -13,7 +13,7 @@ import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
 import { getAgentDefinition } from '../agent.js';
 import { normalizeToolInput, wrapToolInvoke } from './tool-invoke.js';
-import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { createEditorImpl } from './editor-impl.js';
 import { trimToolOutput } from '../utils/trim-tool-output.js';
@@ -101,6 +101,7 @@ export class OpenAIAgentClient {
   #toolInterceptors: ((name: string, params: any, toolCallId?: string) => Promise<string | null>)[] = [];
   #logger: ILoggingService;
   #settings: ISettingsService;
+  #sessionContextService: ISessionContextService;
   #executionContext?: ExecutionContext;
   #editor: ReturnType<typeof createEditorImpl>;
   #subagentManager: SubagentManager;
@@ -141,15 +142,18 @@ export class OpenAIAgentClient {
       logger: ILoggingService;
       settings: ISettingsService;
       executionContext?: ExecutionContext;
+      sessionContextService: ISessionContextService;
     };
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
+    this.#sessionContextService = deps.sessionContextService;
     this.#executionContext = deps.executionContext;
     this.#subagentManager = new SubagentManager({
       logger: deps.logger,
       settings: deps.settings,
       executionContext: deps.executionContext,
+      sessionContextService: this.#sessionContextService,
       onEvent: (event) => this.#subagentEventSink?.(event),
       agentClient: { chat: (message, options) => this.chat(message, options) },
     });
@@ -321,6 +325,7 @@ export class OpenAIAgentClient {
     return providerDef.createRunner({
       settingsService: this.#settings,
       loggingService: this.#logger,
+      sessionContextService: this.#sessionContextService,
     });
   }
 

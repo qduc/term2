@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
 import { describeError } from '../utils/error-helpers.js';
 import { summarizeReceivedTraffic } from '../services/provider-traffic.js';
+import type { ISessionContextService } from '../services/service-interfaces.js';
 
 export interface FallbackState {
   isDowngraded: boolean;
@@ -111,6 +112,7 @@ export class FallbackResponsesModel implements Model {
     private readonly onDowngrade?: (error: unknown) => void,
     private readonly loggingService?: any,
     private readonly providerId?: string,
+    private readonly sessionContextService?: ISessionContextService,
   ) {}
 
   async getResponse(request: ModelRequest): Promise<ModelResponse> {
@@ -120,7 +122,7 @@ export class FallbackResponsesModel implements Model {
 
     const requestId = randomUUID();
     const model = request.modelSettings?.providerData?.model || (this.wsModel as any)._model || 'unknown';
-    const trafficContext = this.loggingService?.getTrafficContext?.() ?? null;
+    const trafficContext = this.sessionContextService?.getContext() ?? null;
     const baseMeta = {
       requestId,
       traceId: trafficContext?.traceId ?? this.loggingService?.getCorrelationId?.(),
@@ -239,7 +241,7 @@ export class FallbackResponsesModel implements Model {
 
     const requestId = randomUUID();
     const model = request.modelSettings?.providerData?.model || (this.wsModel as any)._model || 'unknown';
-    const trafficContext = this.loggingService?.getTrafficContext?.() ?? null;
+    const trafficContext = this.sessionContextService?.getContext() ?? null;
     const baseMeta = {
       requestId,
       traceId: trafficContext?.traceId ?? this.loggingService?.getCorrelationId?.(),

@@ -6,6 +6,7 @@ export type CreateProviderFetchOptions = {
   defaultModel: string;
   deps: {
     loggingService: CreateLoggingMiddlewareOptions['loggingService'];
+    sessionContextService: CreateLoggingMiddlewareOptions['sessionContextService'];
   };
   middlewares?: FetchMiddleware[];
   fetchImpl?: typeof fetch;
@@ -26,6 +27,7 @@ export function createProviderFetch({
       provider: providerId,
       model: defaultModel,
       loggingService: deps.loggingService,
+      sessionContextService: deps.sessionContextService,
     }),
   ]);
 }

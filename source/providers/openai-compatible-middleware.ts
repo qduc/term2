@@ -1,4 +1,4 @@
-import type { ILoggingService } from '../services/service-interfaces.js';
+import type { ISessionContextService } from '../services/service-interfaces.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { mergeAssistantMessages } from './ai-sdk-message-normalizer.js';
 import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
@@ -78,13 +78,12 @@ export function sanitizeResponsesApiBody(body: any): any {
 export function createOpenAICompatibleMiddleware(
   providerType: string,
   baseUrl?: string,
-  loggingService?: ILoggingService,
-  fallbackSessionIdOverride?: string,
+  options?: {
+    sessionContextService?: ISessionContextService;
+    fallbackSessionIdOverride?: string;
+  },
 ): FetchMiddleware {
-  const injectSession = createOpencodeSessionInjector(
-    { type: providerType, baseUrl },
-    { loggingService, fallbackSessionIdOverride },
-  );
+  const injectSession = createOpencodeSessionInjector({ type: providerType, baseUrl }, options);
 
   return async (ctx, next) => {
     if (typeof ctx.init?.body === 'string') {

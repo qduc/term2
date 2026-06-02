@@ -10,6 +10,7 @@ import { getInkRenderOptions } from './utils/ink-render-options.js';
 import { OpenAIAgentClient } from './lib/openai-agent-client.js';
 import { ConversationService } from './services/conversation-service.js';
 import { SettingsService, buildEnvOverrides } from './services/settings-service.js';
+import { SessionContextService } from './services/session-context-service.js';
 import { getAllProviders, getProviderIds } from './providers/index.js';
 import { LoggingService } from './services/logging-service.js';
 import { HistoryService } from './services/history-service.js';
@@ -369,6 +370,7 @@ if (validatedReasoningEffort) {
 const logger = new LoggingService({
   disableLogging: false,
 });
+const sessionContextService = new SessionContextService();
 
 // Build settings with CLI overrides applied first so we can read persisted
 // exclusive modes before deciding the implicit lite default.
@@ -529,6 +531,7 @@ const agentClient = new OpenAIAgentClient({
     logger: logger,
     settings: settings,
     executionContext: executionContext,
+    sessionContextService,
   },
 });
 
@@ -542,6 +545,7 @@ if (hasPositionalPrompt) {
     agentClient,
     logger,
     settingsService: settings,
+    sessionContextService,
   });
   process.exit(exitCode);
 }
@@ -596,6 +600,7 @@ const conversationService = new ConversationService({
   deps: {
     logger: logger,
     settingsService: settings,
+    sessionContextService,
   },
 });
 

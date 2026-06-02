@@ -1,7 +1,8 @@
 import { Runner } from '@openai/agents';
 import { OpenAIProvider } from '@openai/agents-openai';
 import OpenAI from 'openai';
-import type { ISettingsService, ILoggingService } from '../services/service-interfaces.js';
+import type { ISettingsService, ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
 import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
@@ -44,6 +45,7 @@ export type CustomProviderRuntimeDeps = {
   defaultModel: string;
   fetch?: typeof fetch;
   loggingService?: ILoggingService;
+  sessionContextService?: ISessionContextService;
 };
 
 function findConfigFromSettings(settingsService: ISettingsService, providerId: string): CustomProviderConfig | null {
@@ -71,6 +73,7 @@ function buildProviderFetch(
   deps: CustomProviderRuntimeDeps,
   middlewares: FetchMiddleware[],
 ): typeof fetch {
+  const sessionContextService = deps.sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE;
   return createProviderFetch({
     providerId: config.name,
     defaultModel: deps.defaultModel,
@@ -79,8 +82,8 @@ function buildProviderFetch(
         debug: () => {},
         error: () => {},
         getCorrelationId: () => undefined,
-        getTrafficContext: () => null,
       },
+      sessionContextService,
     },
     middlewares,
     fetchImpl: deps.fetch,
@@ -110,12 +113,10 @@ export class OpencodeAnthropicFormatProvider implements ModelProvider {
         baseURL: runtimeConfig.baseUrl ? normalizeBaseUrl(runtimeConfig.baseUrl) : undefined,
         apiKey: runtimeConfig.apiKey,
         fetch: buildProviderFetch(this.config, this.deps, [
-          createAnthropicMiddleware(
-            this.config.type || 'opencode',
-            runtimeConfig.baseUrl,
-            this.deps.loggingService,
-            this.fallbackSessionId,
-          ),
+          createAnthropicMiddleware(this.config.type || 'opencode', runtimeConfig.baseUrl, {
+            sessionContextService: this.deps.sessionContextService,
+            fallbackSessionIdOverride: this.fallbackSessionId,
+          }),
         ]),
         name: this.config.name,
         headers: {
@@ -134,12 +135,10 @@ export class OpencodeAnthropicFormatProvider implements ModelProvider {
       baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
       apiKey: runtimeConfig.apiKey || 'no-key',
       fetch: buildProviderFetch(this.config, this.deps, [
-        createOpenAICompatibleMiddleware(
-          this.config.type || 'opencode',
-          runtimeConfig.baseUrl,
-          this.deps.loggingService,
-          this.fallbackSessionId,
-        ),
+        createOpenAICompatibleMiddleware(this.config.type || 'opencode', runtimeConfig.baseUrl, {
+          sessionContextService: this.deps.sessionContextService,
+          fallbackSessionIdOverride: this.fallbackSessionId,
+        }),
       ]) as any,
     });
     applyClientResponseNormalization(openAIClient, this.deps.loggingService);
@@ -197,7 +196,9 @@ export function createCustomProviderModelProvider(
         resolveConfig: () => ({
           ...resolveConfig(),
           fetch: buildProviderFetch(config, deps, [
-            createAnthropicMiddleware(config.type || 'anthropic', config.baseUrl, deps.loggingService),
+            createAnthropicMiddleware(config.type || 'anthropic', config.baseUrl, {
+              sessionContextService: deps.sessionContextService,
+            }),
           ]),
           headers: {
             'anthropic-version': '2023-06-01',
@@ -226,7 +227,9 @@ export function createCustomProviderModelProvider(
         baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
         apiKey: runtimeConfig.apiKey || 'no-key',
         fetch: buildProviderFetch(config, deps, [
-          createOpenAICompatibleMiddleware(providerType, runtimeConfig.baseUrl, deps.loggingService),
+          createOpenAICompatibleMiddleware(providerType, runtimeConfig.baseUrl, {
+            sessionContextService: deps.sessionContextService,
+          }),
         ]) as any,
       });
       applyClientResponseNormalization(openAIClient, deps.loggingService);
@@ -246,7 +249,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     id: providerId,
     label,
     isRuntimeDefined: true,
-    createRunner: ({ settingsService, loggingService }) => {
+    createRunner: ({ settingsService, loggingService, sessionContextService }) => {
       // baseUrl/apiKey can change only with restart, but we re-resolve from
       // settings at runner creation time to respect precedence.
       return new Runner({
@@ -263,6 +266,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
           return createCustomProviderModelProvider(resolved, {
             defaultModel: settingsService.get('agent.model') || '',
             loggingService,
+            sessionContextService,
           });
         })(),
       });

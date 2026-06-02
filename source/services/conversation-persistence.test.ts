@@ -9,6 +9,11 @@ import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
 import { ConversationSession } from './conversation-session.js';
 import { createMockSettingsService } from './settings-service.mock.js';
 
+const createSessionContextService = () => ({
+  runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  getContext: () => null,
+});
+
 let testDir = '';
 
 function cleanupAll() {
@@ -786,6 +791,7 @@ test.serial('session logging writes compact v3 assistant_turn state without cumu
         'agent.model': 'gpt-5',
         'agent.provider': 'openai',
       }),
+      sessionContextService: createSessionContextService() as any,
     },
     sessionStartedAt: '2026-05-26T00:00:00.000Z',
   });
@@ -899,6 +905,7 @@ test.serial('session logging persists displayUsage separately from cumulative as
         'agent.model': 'gpt-5',
         'agent.provider': 'openai',
       }),
+      sessionContextService: createSessionContextService() as any,
     },
     sessionStartedAt: '2026-05-26T00:00:00.000Z',
   });
@@ -1031,6 +1038,7 @@ test.serial(
           'agent.model': 'gpt-5',
           'agent.provider': 'openai',
         }),
+        sessionContextService: createSessionContextService() as any,
       },
       sessionStartedAt: '2026-05-26T00:00:00.000Z',
     });

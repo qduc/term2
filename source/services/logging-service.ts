@@ -1,7 +1,6 @@
 import * as winston from 'winston';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { AsyncLocalStorage } from 'node:async_hooks';
 import envPaths from 'env-paths';
 import DailyRotateFile from 'winston-daily-rotate-file';
 import {
@@ -14,7 +13,7 @@ import {
   type LogCategory,
 } from './logging-contract.js';
 import { truncateLogText, sanitizeLogMetadata } from '../utils/log-truncation.js';
-import { ProviderTrafficArtifactStore, type SessionTrafficContext } from './provider-traffic.js';
+import { ProviderTrafficArtifactStore } from './provider-traffic.js';
 
 const LOG_LEVELS = {
   error: 0,
@@ -54,7 +53,6 @@ interface LoggingServiceConfig {
  * - Optional console output for development
  */
 export class LoggingService {
-  static readonly #trafficContextStorage = new AsyncLocalStorage<SessionTrafficContext>();
   private logger: winston.Logger;
   private correlationId: string | undefined;
   private debugLogging: boolean;
@@ -260,14 +258,6 @@ export class LoggingService {
    */
   getCorrelationId(): string | undefined {
     return this.correlationId;
-  }
-
-  runWithTrafficContext<T>(context: SessionTrafficContext, fn: () => T): T {
-    return LoggingService.#trafficContextStorage.run(context, fn);
-  }
-
-  getTrafficContext(): SessionTrafficContext | null {
-    return LoggingService.#trafficContextStorage.getStore() ?? null;
   }
 
   /**

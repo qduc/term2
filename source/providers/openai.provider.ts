@@ -7,6 +7,7 @@ import { createProviderFetch } from './fetch/composer.js';
 import { FallbackResponsesModel } from './fallback-responses-model.js';
 import { TimedResponsesWSModel } from './timed-responses-ws-model.js';
 import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
 
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
@@ -46,7 +47,11 @@ class FallbackOpenAIProvider implements ModelProvider {
   private readonly fallbackState = { isDowngraded: false };
   private readonly models = new Map<string, FallbackResponsesModel>();
 
-  constructor(private readonly openAIClient: OpenAI, private readonly loggingService: any) {}
+  constructor(
+    private readonly openAIClient: OpenAI,
+    private readonly loggingService: any,
+    private readonly sessionContextService?: any,
+  ) {}
 
   getModel(modelName?: string): Model {
     const model = modelName || 'gpt-4o';
@@ -74,6 +79,7 @@ class FallbackOpenAIProvider implements ModelProvider {
       },
       this.loggingService,
       'openai',
+      this.sessionContextService,
     );
 
     this.models.set(model, fallbackModel);
@@ -92,7 +98,7 @@ class FallbackOpenAIProvider implements ModelProvider {
 registerProvider({
   id: 'openai',
   label: 'OpenAI',
-  createRunner: ({ settingsService, loggingService }) => {
+  createRunner: ({ settingsService, loggingService, sessionContextService }) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
     const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
     const openAIClient = new OpenAI({
@@ -100,12 +106,12 @@ registerProvider({
       fetch: createProviderFetch({
         providerId: 'openai',
         defaultModel,
-        deps: { loggingService },
+        deps: { loggingService, sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE },
       }) as any,
     });
 
     return new Runner({
-      modelProvider: new FallbackOpenAIProvider(openAIClient, loggingService),
+      modelProvider: new FallbackOpenAIProvider(openAIClient, loggingService, sessionContextService),
     });
   },
   fetchModels: fetchOpenAIModels,

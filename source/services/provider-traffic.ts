@@ -4,14 +4,7 @@ import path from 'node:path';
 export const TRAFFIC_TEXT_LIMIT = 100;
 const PREVIEW_LIMIT = 160;
 
-export type SessionTrafficContext = {
-  sessionId: string;
-  sessionStartedAt: string;
-  firstUserMessagePreview?: string;
-  mode?: string;
-  traceId?: string;
-  evaluator?: boolean;
-};
+export type { SessionTrafficContext } from './service-interfaces.js';
 
 export type SentTrafficRecord = {
   requestId: string;

@@ -1,3 +1,12 @@
+export type SessionTrafficContext = {
+  sessionId: string;
+  sessionStartedAt: string;
+  firstUserMessagePreview?: string;
+  mode?: string;
+  traceId?: string;
+  evaluator?: boolean;
+};
+
 export interface ILoggingService {
   info(message: string, meta?: any): void;
   warn(message: string, meta?: any): void;
@@ -7,25 +16,11 @@ export interface ILoggingService {
   setCorrelationId(id: string | undefined): void;
   getCorrelationId(): string | undefined;
   clearCorrelationId(): void;
-  runWithTrafficContext?<T>(
-    context: {
-      sessionId: string;
-      sessionStartedAt: string;
-      firstUserMessagePreview?: string;
-      mode?: string;
-      traceId?: string;
-      evaluator?: boolean;
-    },
-    fn: () => T,
-  ): T;
-  getTrafficContext?(): {
-    sessionId: string;
-    sessionStartedAt: string;
-    firstUserMessagePreview?: string;
-    mode?: string;
-    traceId?: string;
-    evaluator?: boolean;
-  } | null;
+}
+
+export interface ISessionContextService {
+  runWithContext<T>(context: SessionTrafficContext, fn: () => T): T;
+  getContext(): SessionTrafficContext | null;
 }
 
 export interface ISettingsService {

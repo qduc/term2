@@ -1,6 +1,11 @@
 import test from 'ava';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
 
+const createSessionContextService = () => ({
+  runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  getContext: () => null,
+});
+
 const createMockLogger = () => ({
   info: () => {},
   warn: () => {},
@@ -40,6 +45,7 @@ test('returns empty advisories and skips chat when auto-approval mode is off', a
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   t.is(advisories.size, 0);
@@ -62,6 +68,7 @@ test('evaluates RED commands via chat but keeps system rejection advisory', asyn
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   const redAdvisory = advisories.get('call-red');
@@ -89,6 +96,7 @@ test('evaluates non-RED commands via chat and parses valid JSON results', async 
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   t.deepEqual(advisories.get('call-safe'), {
@@ -123,6 +131,7 @@ test('uses structured chatJson when structured support is unknown', async (t) =>
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   t.deepEqual(advisories.get('call-safe'), {
@@ -155,6 +164,7 @@ test.serial('caches structured support after a successful structured request', a
         },
       } as any,
       logger: createMockLogger() as any,
+      sessionContextService: createSessionContextService() as any,
     });
 
     t.is(advisories.get(id)?.approved, true);
@@ -185,6 +195,7 @@ test.serial('falls back to chat and caches unsupported after structured output u
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   const second = await evaluateShellAutoApprovalAdvisories({
@@ -204,6 +215,7 @@ test.serial('falls back to chat and caches unsupported after structured output u
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   t.is(first.get('call-1')?.approved, true);
@@ -230,6 +242,7 @@ test.serial('does not cache unsupported for malformed structured output', async 
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   const second = await evaluateShellAutoApprovalAdvisories({
@@ -246,6 +259,7 @@ test.serial('does not cache unsupported for malformed structured output', async 
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   t.is(first.get('call-1')?.approved, false);
@@ -274,6 +288,7 @@ test('retries once when structured output is missing approved', async (t) => {
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   t.is(advisories.get('call-safe')?.approved, true);
@@ -295,6 +310,7 @@ test('denies all non-RED commands when original plus repair are invalid', async 
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   for (const id of ['call-safe-1', 'call-safe-2']) {
@@ -322,6 +338,7 @@ test('instructions distinguish auto-approval from user-requested destructive int
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   t.is(chatCalls.length, 1);
@@ -366,6 +383,7 @@ test('prompt contains only user and assistant text from bounded history context'
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   t.is(chatCalls.length, 1);
@@ -392,6 +410,7 @@ test('falls back to deny advisory for all commands when chat response shape is m
       chat: async () => JSON.stringify({ results: [{ reasoning: 'Looks safe', approved: true }, {}] }),
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   for (const id of ['call-safe-1', 'call-safe-2']) {
@@ -418,6 +437,7 @@ test('keeps RED commands system-rejected even if the LLM approves them', async (
       },
     } as any,
     logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
   });
 
   const redAdvisory = advisories.get('call-red');
@@ -446,6 +466,7 @@ test('rethrows upstream errors when throwOnError is enabled', async (t) => {
         },
       } as any,
       logger: createMockLogger() as any,
+      sessionContextService: createSessionContextService() as any,
       throwOnError: true,
     }),
   );

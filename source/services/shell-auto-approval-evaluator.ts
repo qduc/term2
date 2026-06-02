@@ -2,7 +2,7 @@ import type { AgentInputItem, JsonSchemaDefinition } from '@openai/agents';
 import type { LLMAdvisory } from '../contracts/conversation.js';
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import { classifyCommandDetailed, SafetyStatus } from '../utils/command-safety/index.js';
-import type { ILoggingService, ISettingsService } from './service-interfaces.js';
+import type { ILoggingService, ISettingsService, ISessionContextService } from './service-interfaces.js';
 import {
   SHELL_AUTO_APPROVAL_INSTRUCTIONS,
   SHELL_AUTO_APPROVAL_PROMPT_VERSION,
@@ -283,6 +283,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   settingsService,
   agentClient,
   logger,
+  sessionContextService,
   throwOnError = false,
 }: {
   commands: ShellAutoApprovalCommand[];
@@ -290,6 +291,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   settingsService?: ISettingsService;
   agentClient: Pick<OpenAIAgentClient, 'chat'> & Partial<Pick<OpenAIAgentClient, 'chatJson'>>;
   logger: ILoggingService;
+  sessionContextService: ISessionContextService;
   throwOnError?: boolean;
 }): Promise<Map<string, ShellAutoApprovalAdvisory>> {
   const out = new Map<string, ShellAutoApprovalAdvisory>();
@@ -322,7 +324,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   const prompt = buildPrompt(toEvaluateByLLM, history);
 
   try {
-    const currentContext = logger.getTrafficContext?.() ?? null;
+    const currentContext = sessionContextService.getContext();
     const evaluatorContext = currentContext ? { ...currentContext, evaluator: true as const } : null;
 
     const runPromptChat = (message: string) =>
@@ -347,7 +349,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     };
 
     const runWithContext = async <T>(fn: () => Promise<T>): Promise<T> =>
-      evaluatorContext ? await logger.runWithTrafficContext!(evaluatorContext, fn) : await fn();
+      evaluatorContext ? await sessionContextService.runWithContext(evaluatorContext, fn) : await fn();
 
     const tryPromptMode = async (): Promise<Map<string, ShellAutoApprovalAdvisory>> => {
       let responseText = await runWithContext(() => runPromptChat(prompt));

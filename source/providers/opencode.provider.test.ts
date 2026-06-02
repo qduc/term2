@@ -3,6 +3,11 @@ import { isOpencodeProvider } from './opencode.provider.js';
 import { createOpencodeSessionInjector, generateOpencodeSessionId } from './opencode-session.js';
 import { selectOpencodeModelTransport, shouldApplyOpencodeAnthropicPromptCaching } from './opencode-routing.js';
 
+const makeSessionContextService = (sessionId?: string) => ({
+  runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  getContext: () => (sessionId ? { sessionId, sessionStartedAt: '2026-01-01T00:00:00.000Z' } : null),
+});
+
 // ---------------------------------------------------------------------------
 // createOpencodeSessionInjector
 // ---------------------------------------------------------------------------
@@ -85,17 +90,10 @@ test('createOpencodeSessionInjector uses fallbackSessionIdOverride when provided
 });
 
 test('createOpencodeSessionInjector generated fallback takes precedence over traffic context session ID', (t) => {
-  const loggingService = {
-    debug: () => {},
-    error: () => {},
-    getCorrelationId: () => undefined,
-    getTrafficContext: () => ({
-      sessionId: 'conversation-session-abc',
-      sessionStartedAt: '2026-01-01T00:00:00.000Z',
-    }),
-  };
-
-  const injector = createOpencodeSessionInjector({ type: 'opencode' }, { loggingService: loggingService as any })!;
+  const injector = createOpencodeSessionInjector(
+    { type: 'opencode' },
+    { sessionContextService: makeSessionContextService('conversation-session-abc') },
+  )!;
 
   const result = injector({});
   const h = result!.headers as Record<string, string>;
@@ -106,21 +104,39 @@ test('createOpencodeSessionInjector generated fallback takes precedence over tra
   t.regex(h[sessionKey], /^ses_/);
 });
 
-test('createOpencodeSessionInjector fallbackSessionIdOverride takes precedence over traffic context', (t) => {
-  const loggingService = {
-    debug: () => {},
-    error: () => {},
-    getCorrelationId: () => undefined,
-    getTrafficContext: () => ({
-      sessionId: 'conversation-session-abc',
+test('createOpencodeSessionInjector generated ID is stable for same traffic context sessionId', (t) => {
+  let trafficSessionId = 'stable-session-id';
+  const sessionContextService = {
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    getContext: () => ({
+      sessionId: trafficSessionId,
       sessionStartedAt: '2026-01-01T00:00:00.000Z',
     }),
   };
 
+  const injector1 = createOpencodeSessionInjector({ type: 'opencode' }, { sessionContextService })!;
+  const injector2 = createOpencodeSessionInjector({ type: 'opencode' }, { sessionContextService })!;
+
+  const h1 = injector1({})!.headers as Record<string, string>;
+  const h2 = injector2({})!.headers as Record<string, string>;
+
+  const key1 = Object.keys(h1).find((k) => k.toLowerCase() === 'x-opencode-session')!;
+  const key2 = Object.keys(h2).find((k) => k.toLowerCase() === 'x-opencode-session')!;
+
+  t.is(h1[key1], h2[key2], 'Session IDs generated for the same traffic context sessionId should be equal');
+
+  // Change trafficSessionId
+  trafficSessionId = 'different-session-id';
+  const h3 = injector1({})!.headers as Record<string, string>;
+  const key3 = Object.keys(h3).find((k) => k.toLowerCase() === 'x-opencode-session')!;
+  t.not(h1[key1], h3[key3], 'Session IDs for different traffic context sessionIds should be different');
+});
+
+test('createOpencodeSessionInjector fallbackSessionIdOverride takes precedence over traffic context', (t) => {
   const injector = createOpencodeSessionInjector(
     { type: 'opencode' },
     {
-      loggingService: loggingService as any,
+      sessionContextService: makeSessionContextService('conversation-session-abc'),
       fallbackSessionIdOverride: 'ses_overridden1234567890123456',
     },
   )!;
@@ -157,6 +173,24 @@ test('generateOpencodeSessionId produces a 30-char session ID', (t) => {
 test('generateOpencodeSessionId produces unique values', (t) => {
   const ids = new Set(Array.from({ length: 100 }, () => generateOpencodeSessionId()));
   t.is(ids.size, 100);
+});
+
+test('generateOpencodeSessionId is deterministic for same effectiveSessionId', (t) => {
+  const id1 = generateOpencodeSessionId('session-123');
+  const id2 = generateOpencodeSessionId('session-123');
+  t.is(id1, id2);
+});
+
+test('generateOpencodeSessionId is different for different effectiveSessionIds', (t) => {
+  const id1 = generateOpencodeSessionId('session-123');
+  const id2 = generateOpencodeSessionId('session-456');
+  t.not(id1, id2);
+});
+
+test('generateOpencodeSessionId matches length and character pools for deterministic generation', (t) => {
+  const id = generateOpencodeSessionId('some-test-session-id-with-long-length-and-special-chars-!@#');
+  t.regex(id, /^ses_[0-9a-f]{12}[0-9a-zA-Z]{14}$/);
+  t.is(id.length, 30);
 });
 
 // ---------------------------------------------------------------------------

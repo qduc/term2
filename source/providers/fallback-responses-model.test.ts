@@ -256,7 +256,6 @@ test('FallbackResponsesModel logs unary WS request start, success, and failure e
 
   const logs: any[] = [];
   const mockLogging = {
-    getTrafficContext: () => ({ sessionId: 'sess-123', sessionStartedAt: '2026-05-24T12:00:00Z' }),
     getCorrelationId: () => 'corr-123',
     debug: (msg: string, meta: any) => {
       logs.push({ level: 'debug', msg, meta });
@@ -265,8 +264,20 @@ test('FallbackResponsesModel logs unary WS request start, success, and failure e
       logs.push({ level: 'error', msg, meta });
     },
   };
+  const mockSessionContext = {
+    getContext: () => ({ sessionId: 'sess-123', sessionStartedAt: '2026-05-24T12:00:00Z' }),
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  };
 
-  const model = new FallbackResponsesModel(wsModel, httpModel, state, undefined, mockLogging, 'openai');
+  const model = new FallbackResponsesModel(
+    wsModel,
+    httpModel,
+    state,
+    undefined,
+    mockLogging,
+    'openai',
+    mockSessionContext,
+  );
 
   const request: ModelRequest = {
     input: 'Hello',
@@ -383,14 +394,25 @@ test('FallbackResponsesModel logs streaming WS request start and response comple
 
   const logs: any[] = [];
   const mockLogging = {
-    getTrafficContext: () => ({ sessionId: 'sess-123', sessionStartedAt: '2026-05-24T12:00:00Z' }),
     getCorrelationId: () => 'corr-123',
     debug: (msg: string, meta: any) => {
       logs.push({ level: 'debug', msg, meta });
     },
   };
+  const mockSessionContext = {
+    getContext: () => ({ sessionId: 'sess-123', sessionStartedAt: '2026-05-24T12:00:00Z' }),
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  };
 
-  const model = new FallbackResponsesModel(wsModel, httpModel, state, undefined, mockLogging, 'openai');
+  const model = new FallbackResponsesModel(
+    wsModel,
+    httpModel,
+    state,
+    undefined,
+    mockLogging,
+    'openai',
+    mockSessionContext,
+  );
 
   const request: ModelRequest = {
     input: 'Hello',

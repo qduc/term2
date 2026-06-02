@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import type { ILoggingService } from '../../services/service-interfaces.js';
+import type { ILoggingService, ISessionContextService } from '../../services/service-interfaces.js';
 import { summarizeReceivedTraffic } from '../../services/provider-traffic.js';
 import { describeError } from '../../utils/error-helpers.js';
 import type { FetchMiddleware } from './compose.js';
@@ -24,7 +24,8 @@ try {
 export type CreateLoggingMiddlewareOptions = {
   provider: string;
   model: string;
-  loggingService: Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId' | 'getTrafficContext'>;
+  loggingService: Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId'>;
+  sessionContextService: ISessionContextService;
 };
 
 const toRecord = (value: unknown): Record<string, unknown> | null => {
@@ -152,14 +153,14 @@ export function injectHeaders(initHeaders: HeadersInit | undefined, newHeaders: 
 }
 
 export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions): FetchMiddleware {
-  const { provider, model, loggingService } = options;
+  const { provider, model, loggingService, sessionContextService } = options;
 
   return async (ctx, next) => {
     const requestBody = await readRequestBody(ctx.url, ctx.init);
     const parsedRequest = requestBody ? parseJsonObject(requestBody) : null;
     const requestModel = typeof parsedRequest?.model === 'string' ? parsedRequest.model : model;
     const requestId = randomUUID();
-    const trafficContext = loggingService.getTrafficContext?.() ?? null;
+    const trafficContext = sessionContextService.getContext() ?? null;
     const baseMeta = {
       requestId,
       traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),

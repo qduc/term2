@@ -3,6 +3,11 @@ import { OpenAIAgentClient } from './openai-agent-client.js';
 import { registerProvider } from '../providers/registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 
+const createSessionContextService = () => ({
+  runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  getContext: () => null,
+});
+
 // ========== Mock Utilities ==========
 
 function createMockLogger(): ILoggingService {
@@ -251,7 +256,7 @@ test.beforeEach(() => {
 test.serial('setModel updates the internal model', async (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   // Set a new model
@@ -271,7 +276,7 @@ test.serial('setModel updates the internal model', async (t) => {
 test.serial('getProvider returns current provider', (t) => {
   const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   t.is(client.getProvider(), 'mock-provider-public-methods');
@@ -280,7 +285,7 @@ test.serial('getProvider returns current provider', (t) => {
 test.serial('setProvider updates provider and persists to settings', (t) => {
   const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   client.setProvider('openai');
@@ -291,7 +296,7 @@ test.serial('setProvider updates provider and persists to settings', (t) => {
 test.serial('setProvider does not initialize provider credentials eagerly', async (t) => {
   const settings = createMockSettings({ 'agent.provider': 'mock-provider-public-methods' });
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   client.setProvider('mock-missing-creds');
@@ -308,7 +313,7 @@ test.serial('startStream only passes previousResponseId when provider supports c
     'agent.provider': 'mock-chaining-false',
   });
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   await client.startStream('Hello', { previousResponseId: 'prev-1' });
@@ -326,7 +331,7 @@ test.serial('codex startStream puts prompt_cache_key on agent modelSettings, not
     'agent.provider': 'codex',
   });
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   await client.startStream('Hello', { sessionId: 'session-123' });
@@ -360,7 +365,7 @@ test.serial('abort logs with active trace id before clearing correlation', async
     'agent.provider': 'mock-chaining-false',
   });
   const client = new OpenAIAgentClient({
-    deps: { logger, settings },
+    deps: { logger, settings, sessionContextService: createSessionContextService() as any },
   });
 
   await client.startStream('Hello');
@@ -381,7 +386,7 @@ test.serial('abort logs with active trace id before clearing correlation', async
 test.serial('addToolInterceptor returns removal function', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   const remove = client.addToolInterceptor(async () => {
@@ -397,7 +402,7 @@ test.serial('addToolInterceptor returns removal function', (t) => {
 test.serial('addToolInterceptor can be removed', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   const remove = client.addToolInterceptor(async () => {
@@ -417,7 +422,7 @@ test.serial('addToolInterceptor can be removed', (t) => {
 test.serial('abort does not throw when called without active operation', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   // Should not throw
@@ -427,7 +432,7 @@ test.serial('abort does not throw when called without active operation', (t) => 
 test.serial('abort can be called multiple times', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   t.notThrows(() => {
@@ -442,7 +447,7 @@ test.serial('abort can be called multiple times', (t) => {
 test.serial('clearConversations does not throw', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   t.notThrows(() => client.clearConversations());
@@ -451,7 +456,7 @@ test.serial('clearConversations does not throw', (t) => {
 test.serial('clearConversations can be called multiple times', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   t.notThrows(() => {
@@ -465,7 +470,7 @@ test.serial('clearConversations can be called multiple times', (t) => {
 test.serial('setReasoningEffort accepts valid effort levels', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   t.notThrows(() => client.setReasoningEffort('high'));
@@ -480,7 +485,7 @@ test.serial('setReasoningEffort accepts valid effort levels', (t) => {
 test.serial('setTemperature accepts numeric values', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   t.notThrows(() => client.setTemperature(0.5));
@@ -494,7 +499,7 @@ test.serial('setTemperature accepts numeric values', (t) => {
 test.serial('setRetryCallback accepts callback function', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   t.notThrows(() => client.setRetryCallback(() => {}));
@@ -509,7 +514,7 @@ test.serial('setModel resets mentor conversation chain used by ask_mentor', asyn
     'app.liteMode': false,
   });
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   await client.chat('prime tools');
@@ -545,7 +550,7 @@ test.serial('ask_mentor resets conversation chain when mentor provider changes',
     'app.liteMode': false,
   });
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   await client.chat('prime tools');
@@ -602,7 +607,7 @@ test.serial('setSubagentEventSink defers cleanup to null when subagents are acti
     'app.liteMode': false,
   });
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   await client.chat('prime tools');
@@ -670,7 +675,7 @@ test.serial('codex resolves default_reasoning_level if agent.reasoningEffort is 
   );
 
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   await client.startStream('Hello');
@@ -714,7 +719,7 @@ test.serial('codex chat resolves default_reasoning_level if agent.reasoningEffor
   );
 
   const client = new OpenAIAgentClient({
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   await client.chat('Hello', { provider: 'codex', model: 'gpt-5.3-codex', reasoningEffort: 'default' });
@@ -776,7 +781,7 @@ test.serial('main agent client injects warning into tool output when turns left 
 
   const client = new OpenAIAgentClient({
     maxTurns: 100,
-    deps: { logger: createMockLogger(), settings },
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
   // Trigger startStream to initiate the provider run with correct context

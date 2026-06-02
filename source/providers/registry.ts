@@ -1,9 +1,11 @@
 import type { Runner } from '@openai/agents';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import type { ISessionContextService } from '../services/service-interfaces.js';
 
 export interface ProviderDeps {
   settingsService: ISettingsService;
   loggingService: ILoggingService;
+  sessionContextService?: ISessionContextService;
 }
 
 export type ProviderFetch = (url: string, options?: any) => Promise<any>;

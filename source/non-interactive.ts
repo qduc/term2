@@ -1,6 +1,7 @@
 import type { OpenAIAgentClient } from './lib/openai-agent-client.js';
-import type { ILoggingService, ISettingsService } from './services/service-interfaces.js';
+import type { ILoggingService, ISettingsService, ISessionContextService } from './services/service-interfaces.js';
 import { ConversationSession } from './services/conversation-session.js';
+import { SessionContextService } from './services/session-context-service.js';
 import type { ConversationEvent } from './services/conversation-events.js';
 import { randomUUID } from 'node:crypto';
 import { classifyCommandDetailed } from './utils/command-safety/index.js';
@@ -15,6 +16,7 @@ export interface NonInteractiveConfig {
   settingsService?: ISettingsService;
   agentClient?: OpenAIAgentClient;
   logger?: ILoggingService;
+  sessionContextService?: ISessionContextService;
 }
 
 export const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
@@ -65,6 +67,7 @@ const formatEventForStderr = (event: ConversationEvent): string | null => {
 export async function runWithSession(session: ConversationSessionLike, config: NonInteractiveConfig): Promise<number> {
   const stdout = config.stdout ?? process.stdout;
   const stderr = config.stderr ?? process.stderr;
+  const sessionContextService = config.sessionContextService ?? new SessionContextService();
 
   const onEvent = (event: ConversationEvent) => {
     if (event.type === 'text_delta') {
@@ -129,6 +132,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
                       error: () => {},
                       security: () => {},
                     } as any),
+                  sessionContextService,
                 });
                 const advisory = advisories.get(approval.callId || '__single__');
                 if (advisory?.approved) {
@@ -191,10 +195,15 @@ export async function runNonInteractive(
     settingsService: ISettingsService;
   },
 ): Promise<number> {
+  const sessionContextService = config.sessionContextService ?? new SessionContextService();
   const session = new ConversationSession(createNonInteractiveSessionId(), {
     agentClient: config.agentClient,
-    deps: { logger: config.logger, settingsService: config.settingsService },
+    deps: {
+      logger: config.logger,
+      settingsService: config.settingsService,
+      sessionContextService,
+    },
   });
 
-  return runWithSession(session, config);
+  return runWithSession(session, { ...config, sessionContextService });
 }

@@ -11,13 +11,13 @@ import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
 async function fetchOpenAIModels(
-  _deps: ProviderDeps,
+  deps: ProviderDeps,
   fetchImpl: ProviderFetch = fetch as any,
 ): Promise<Array<{ id: string; name?: string }>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = deps.settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`;
   }
@@ -94,8 +94,9 @@ registerProvider({
   label: 'OpenAI',
   createRunner: ({ settingsService, loggingService }) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
+    const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
     const openAIClient = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: apiKey || 'placeholder',
       fetch: createProviderFetch({
         providerId: 'openai',
         defaultModel,

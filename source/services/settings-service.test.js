@@ -995,7 +995,6 @@ test('isSensitive() identifies sensitive settings', async (t) => {
   });
 
   // Sensitive settings
-  t.true(service.isSensitive('agent.openrouter.apiKey'));
   t.true(service.isSensitive('agent.openrouter.baseUrl'));
   t.true(service.isSensitive('agent.openrouter.referrer'));
   t.true(service.isSensitive('agent.openrouter.title'));
@@ -1006,6 +1005,8 @@ test('isSensitive() identifies sensitive settings', async (t) => {
   t.false(service.isSensitive('agent.openrouter.model'));
   t.false(service.isSensitive('shell.timeout'));
   t.false(service.isSensitive('logging.logLevel'));
+  t.false(service.isSensitive('agent.openrouter.apiKey'));
+  t.false(service.isSensitive('agent.openai.apiKey'));
 });
 
 test('set() throws for sensitive settings', async (t) => {
@@ -1017,7 +1018,7 @@ test('set() throws for sensitive settings', async (t) => {
 
   const error = t.throws(
     () => {
-      service.set('agent.openrouter.apiKey', 'sk-secret-key');
+      service.set('agent.openrouter.baseUrl', 'https://internal.api.com');
     },
     { instanceOf: Error },
   );
@@ -1033,7 +1034,7 @@ test('reset() throws for sensitive settings', async (t) => {
 
   const error = t.throws(
     () => {
-      service.reset('agent.openrouter.apiKey');
+      service.reset('agent.openrouter.baseUrl');
     },
     { instanceOf: Error },
   );
@@ -1074,7 +1075,6 @@ test.serial('sensitive settings are never saved to config file', async (t) => {
     const config = JSON.parse(content);
 
     // Verify sensitive values are NOT in the file
-    t.falsy(config.agent?.openrouter?.apiKey, 'apiKey should not be saved');
     t.falsy(config.agent?.openrouter?.baseUrl, 'baseUrl should not be saved');
     t.falsy(config.agent?.openrouter?.referrer, 'referrer should not be saved');
     t.falsy(config.agent?.openrouter?.title, 'title should not be saved');
@@ -1082,6 +1082,7 @@ test.serial('sensitive settings are never saved to config file', async (t) => {
 
     // Verify non-sensitive openrouter values ARE saved
     t.is(config.agent?.openrouter?.model, 'gpt-4', 'model should be saved');
+    t.is(config.agent?.openrouter?.apiKey, 'sk-secret-key', 'apiKey should be saved');
   });
 });
 
@@ -1115,9 +1116,9 @@ test.serial('sensitive settings loaded from env are accessible at runtime', asyn
     const content = fs.readFileSync(configFile, 'utf-8');
     const config = JSON.parse(content);
 
-    t.falsy(config.agent?.openrouter?.apiKey);
     t.falsy(config.agent?.openrouter?.baseUrl);
     t.falsy(config.app?.shellPath);
+    t.is(config.agent?.openrouter?.apiKey, 'sk-secret-key');
   });
 });
 

@@ -135,7 +135,6 @@ export function stripSensitiveSettings(settings: SettingsData): Partial<Settings
 
   // Remove sensitive openrouter fields (keep non-secret config)
   if (cleaned.agent?.openrouter) {
-    delete cleaned.agent.openrouter.apiKey;
     delete cleaned.agent.openrouter.baseUrl;
     delete cleaned.agent.openrouter.referrer;
     delete cleaned.agent.openrouter.title;

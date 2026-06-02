@@ -130,44 +130,105 @@ test.serial('useProviderSelection - selecting a custom provider opens edit_field
   });
 });
 
-test.serial('useProviderSelection - selecting a built-in provider is a no-op', async (t) => {
-  const settingsService = createMockSettingsService([], 'openai');
-  let hook: ReturnType<typeof useProviderSelection> | undefined;
-  let renderer: any;
+test.serial(
+  'useProviderSelection - selecting a built-in provider (except Codex) enters editing flow; Codex is a no-op',
+  async (t) => {
+    const settingsService = createMockSettingsService([], 'openai');
+    let hook: ReturnType<typeof useProviderSelection> | undefined;
+    let renderer: any;
 
-  await act(async () => {
-    renderer = render(
-      React.createElement(
-        InputProvider as any,
-        {},
-        React.createElement(TestComponent, {
-          settingsService,
-          onHookResult: (h) => {
-            hook = h;
-          },
-        }),
-      ),
-    );
-  });
+    await act(async () => {
+      renderer = render(
+        React.createElement(
+          InputProvider as any,
+          {},
+          React.createElement(TestComponent, {
+            settingsService,
+            onHookResult: (h) => {
+              hook = h;
+            },
+          }),
+        ),
+      );
+    });
 
-  await act(async () => {
-    hook!.open();
-  });
-  await flush();
+    await act(async () => {
+      hook!.open();
+    });
+    await flush();
 
-  // Move to the openai built-in (index 0 in default list).
-  await act(async () => {
-    hook!.selectItem();
-  });
-  await flush();
+    // Find Codex in the list of items
+    const codexIdx = hook!.items.findIndex((item) => item.id === 'codex');
+    t.true(codexIdx !== -1);
 
-  t.is(hook!.phase, 'list');
-  t.is(hook!.selectedIndex, 0);
+    // Navigate to Codex and select it
+    await act(async () => {
+      for (let i = 0; i < codexIdx; i++) {
+        hook!.moveDown();
+      }
+    });
+    await flush();
 
-  await act(async () => {
-    renderer.unmount();
-  });
-});
+    await act(async () => {
+      hook!.selectItem();
+    });
+    await flush();
+
+    // Codex is a no-op
+    t.is(hook!.phase, 'list');
+
+    // Navigate to OpenAI (first item, idx 0) and select it
+    await act(async () => {
+      // Navigate back to top
+      for (let i = 0; i < codexIdx; i++) {
+        hook!.moveUp();
+      }
+    });
+    await flush();
+
+    await act(async () => {
+      hook!.selectItem();
+    });
+    await flush();
+
+    // OpenAI opens edit_fields
+    t.is(hook!.phase, 'edit_fields');
+    t.is(hook!.selectedIndex, 2); // API Key is selected
+    t.is(hook!.draft?.name, 'OpenAI');
+
+    // Verify we can edit API Key and save it
+    await act(async () => {
+      hook!.selectItem(); // select API Key at index 2
+    });
+    await flush();
+    t.is(hook!.phase, 'wizard_key');
+
+    await act(async () => {
+      hook!.handleTextInputSubmit('sk-mock-openai-key');
+    });
+    await flush();
+    t.is(hook!.phase, 'edit_fields');
+    t.is(hook!.selectedIndex, 2); // Selected row is API Key row
+
+    await act(async () => {
+      hook!.moveDown(); // Move to "Save Changes" at index 3
+    });
+    await flush();
+    t.is(hook!.selectedIndex, 3);
+
+    await act(async () => {
+      hook!.selectItem(); // Save Changes
+    });
+    await flush();
+
+    t.is(hook!.phase, 'list');
+    t.is(settingsService.get('agent.openai.apiKey'), 'sk-mock-openai-key');
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  },
+);
 
 test.serial('useProviderSelection - requestDelete on a custom provider opens confirm_delete', async (t) => {
   const customProviders = [{ name: 'custom-ollama', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' }];

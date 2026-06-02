@@ -43,7 +43,10 @@ export function buildEnvOverrides(): Partial<SettingsData> {
     webSearch.provider = env.WEB_SEARCH_PROVIDER;
   }
 
-  const agent: any = { openrouter };
+  const openai: any = {};
+  if (env.OPENAI_API_KEY) openai.apiKey = env.OPENAI_API_KEY;
+
+  const agent: any = { openrouter, openai };
 
   return {
     agent,

@@ -11,7 +11,7 @@ import {
   stripSensitiveSettings,
 } from './settings-persistence.js';
 
-test('stripSensitiveSettings: removes shellPath and openrouter secrets', (t) => {
+test('stripSensitiveSettings: removes shellPath and openrouter secrets, preserving apiKey', (t) => {
   const settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   settings.app.shellPath = '/bin/zsh';
   settings.agent.openrouter = {
@@ -23,7 +23,7 @@ test('stripSensitiveSettings: removes shellPath and openrouter secrets', (t) => 
 
   const cleaned = stripSensitiveSettings(settings);
   t.is((cleaned as any).app?.shellPath, undefined);
-  t.is((cleaned as any).agent?.openrouter, undefined);
+  t.deepEqual((cleaned as any).agent?.openrouter, { apiKey: 'secret' });
 });
 
 test('hasMissingKeys: true when defaults introduce new key', (t) => {

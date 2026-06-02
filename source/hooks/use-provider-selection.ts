@@ -218,8 +218,12 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         return items.length + 1; // plus "Add Custom Provider"
       case 'wizard_type':
         return PROVIDER_TYPES.length;
-      case 'edit_fields':
-        return 6; // Name, Type, Base URL, API Key, Save, Cancel
+      case 'edit_fields': {
+        if (!draft) return 0;
+        const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
+        const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+        return isEditingBuiltIn ? 5 : 6;
+      }
       case 'confirm_delete':
         return 2; // Yes, No
       default:
@@ -242,8 +246,23 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         ];
       case 'wizard_type':
         return PROVIDER_TYPES.map((type) => ({ kind: 'type' as const, label: type }));
-      case 'edit_fields':
+      case 'edit_fields': {
         if (!draft) return [];
+        const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
+        const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+        if (isEditingBuiltIn) {
+          return [
+            { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'} (Built-in)` },
+            { kind: 'field' as const, label: `Type: ${draft.type || '<empty>'} (Built-in)` },
+            {
+              kind: 'field' as const,
+              label: 'API Key',
+              detail: draft.apiKey ? '********' : '<empty>',
+            },
+            { kind: 'action' as const, label: 'Save Changes' },
+            { kind: 'action' as const, label: 'Cancel' },
+          ];
+        }
         return [
           { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'}` },
           { kind: 'field' as const, label: `Type: ${draft.type || '<empty>'}` },
@@ -260,6 +279,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           { kind: 'action' as const, label: 'Save Changes' },
           { kind: 'action' as const, label: 'Cancel' },
         ];
+      }
       case 'confirm_delete':
         return [
           { kind: 'action' as const, label: 'Yes, delete this provider', tone: 'destructive' as const },
@@ -311,8 +331,18 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setEditingOriginalName(found ? found.name : null);
           setPhase('edit_fields');
           setSelectedIndex(0);
+        } else if (provider.id !== 'codex') {
+          // Allow editing apiKey for built-in providers (except Codex)
+          const storedKey = settingsService.get<string>(`agent.${provider.id}.apiKey`) || '';
+          setDraft({
+            name: provider.label,
+            type: provider.id as any,
+            apiKey: storedKey,
+          });
+          setEditingOriginalName(provider.id);
+          setPhase('edit_fields');
+          setSelectedIndex(2);
         }
-        // Built-in providers: no-op (activation lives in the model menu).
       }
     } else if (phase === 'wizard_type') {
       const selectedType = PROVIDER_TYPES[index]!;
@@ -331,31 +361,51 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       }
     } else if (phase === 'edit_fields') {
       if (!draft) return;
-      if (index === 0) {
-        // Edit Name
-        setEditingField('name');
-        setPhase('wizard_name');
-      } else if (index === 1) {
-        // Edit Type
-        setEditingField('type');
-        setPhase('wizard_type');
-        setSelectedIndex(PROVIDER_TYPES.indexOf(draft.type));
-      } else if (index === 2) {
-        // Edit Base URL
-        setEditingField('baseUrl');
-        setPhase('wizard_url');
-      } else if (index === 3) {
-        // Edit API Key
-        setEditingField('apiKey');
-        setPhase('wizard_key');
-      } else if (index === 4) {
-        // Save Changes
-        saveDraft();
+      const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
+      const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+
+      if (isEditingBuiltIn) {
+        if (index === 2) {
+          // Edit API Key
+          setEditingField('apiKey');
+          setPhase('wizard_key');
+        } else if (index === 3) {
+          // Save Changes
+          saveDraft();
+        } else if (index === 4) {
+          // Cancel
+          setPhase('list');
+          setSelectedIndex(0);
+          setDraft(null);
+          setEditingOriginalName(null);
+        }
       } else {
-        // Cancel
-        setPhase('list');
-        setSelectedIndex(0);
-        setDraft(null);
+        if (index === 0) {
+          // Edit Name
+          setEditingField('name');
+          setPhase('wizard_name');
+        } else if (index === 1) {
+          // Edit Type
+          setEditingField('type');
+          setPhase('wizard_type');
+          setSelectedIndex(PROVIDER_TYPES.indexOf(draft.type));
+        } else if (index === 2) {
+          // Edit Base URL
+          setEditingField('baseUrl');
+          setPhase('wizard_url');
+        } else if (index === 3) {
+          // Edit API Key
+          setEditingField('apiKey');
+          setPhase('wizard_key');
+        } else if (index === 4) {
+          // Save Changes
+          saveDraft();
+        } else {
+          // Cancel
+          setPhase('list');
+          setSelectedIndex(0);
+          setDraft(null);
+        }
       }
     } else if (phase === 'confirm_delete') {
       if (index === 0) {
@@ -419,7 +469,9 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     } else if (phase === 'wizard_key') {
       if (editingField) {
         setPhase('edit_fields');
-        setSelectedIndex(3);
+        const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
+        const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+        setSelectedIndex(isEditingBuiltIn ? 2 : 3);
         setEditingField(null);
       } else {
         setPhase('wizard_url');
@@ -508,14 +560,16 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         if (draft) {
           const updatedDraft = { ...draft, apiKey: val || undefined };
           setDraft(updatedDraft);
+          const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
+          const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
           if (editingField) {
             setPhase('edit_fields');
-            setSelectedIndex(3);
+            setSelectedIndex(isEditingBuiltIn ? 2 : 3);
             setEditingField(null);
           } else {
             // Wizard complete, go to fields overview before saving
             setPhase('edit_fields');
-            setSelectedIndex(4); // focus Save changes button
+            setSelectedIndex(isEditingBuiltIn ? 3 : 4); // focus Save changes button
           }
         }
         return true;
@@ -529,6 +583,23 @@ export const useProviderSelection = (settingsService: SettingsService) => {
   const saveDraft = () => {
     if (!draft) return;
     setErrorMessage(null);
+
+    const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
+    const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+
+    if (isEditingBuiltIn && editingOriginalName) {
+      try {
+        settingsService.setPersistent(`agent.${editingOriginalName}.apiKey`, draft.apiKey || undefined);
+        loadProviders();
+        setPhase('list');
+        setSelectedIndex(0);
+        setDraft(null);
+        setEditingOriginalName(null);
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Failed to save provider API key.');
+      }
+      return;
+    }
 
     // Final checks
     if (!draft.name.trim()) {

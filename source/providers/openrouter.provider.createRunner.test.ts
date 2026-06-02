@@ -3,6 +3,12 @@ import { getProvider } from './index.js';
 import type { ProviderDeps } from './registry.js';
 
 test('openrouter createRunner does not crash in ESM when api key is missing', (t) => {
+  const originalKey = process.env.OPENROUTER_API_KEY;
+  delete process.env.OPENROUTER_API_KEY;
+  t.teardown(() => {
+    process.env.OPENROUTER_API_KEY = originalKey;
+  });
+
   const provider = getProvider('openrouter');
   t.truthy(provider, 'openrouter provider should be registered');
   t.is(typeof provider?.createRunner, 'function');

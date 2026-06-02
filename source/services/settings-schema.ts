@@ -29,6 +29,11 @@ export const AgentSettingsSchema = z.object({
       title: z.string().optional(),
     })
     .optional(),
+  openai: z
+    .object({
+      apiKey: z.string().optional(),
+    })
+    .optional(),
   mentorModel: z.string().optional().describe('Model to use as a mentor'),
   mentorProvider: z
     .string()
@@ -239,7 +244,6 @@ export const CustomProviderSchema = z
 export function getSensitiveSettingKeys(): Set<string> {
   return new Set<string>([
     'app.shellPath',
-    'agent.openrouter.apiKey',
     'agent.openrouter.baseUrl',
     'agent.openrouter.referrer',
     'agent.openrouter.title',
@@ -296,6 +300,7 @@ export interface SettingsWithSources {
     maxParallelToolCalls: SettingWithSource<number>;
     provider: SettingWithSource<string>;
     openrouter: SettingWithSource<any>;
+    openai: SettingWithSource<any>;
     mentorModel: SettingWithSource<string | undefined>;
     mentorProvider: SettingWithSource<string | undefined>;
     mentorReasoningEffort: SettingWithSource<string>;
@@ -378,7 +383,8 @@ export const SETTING_KEYS = {
   AGENT_MAX_TURNS: 'agent.maxTurns',
   AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
   AGENT_MAX_PARALLEL_TOOL_CALLS: 'agent.maxParallelToolCalls',
-  AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey', // Sensitive - env only
+  AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
+  AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
   AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer', // Sensitive - env only
   AGENT_OPENROUTER_TITLE: 'agent.openrouter.title', // Sensitive - env only
@@ -435,6 +441,8 @@ export const SETTING_KEYS = {
 
 // Define which settings are modifiable at runtime
 export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
+  SETTING_KEYS.AGENT_OPENROUTER_API_KEY,
+  SETTING_KEYS.AGENT_OPENAI_API_KEY,
   SETTING_KEYS.AGENT_MODEL,
   SETTING_KEYS.AGENT_REASONING_EFFORT,
   SETTING_KEYS.AGENT_TEMPERATURE,
@@ -525,6 +533,9 @@ export const DEFAULT_SETTINGS: SettingsData = {
       // defaults empty; can be provided via env or config
       // defaults empty; can be provided via env or config
     } as any,
+    openai: {
+      // defaults empty; can be provided via env or config
+    } as any,
     mentorModel: undefined,
     mentorProvider: undefined,
     mentorReasoningEffort: 'default',
@@ -598,6 +609,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
  */
 export const SENSITIVE_SETTINGS = {
   AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
+  AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl',
   AGENT_OPENROUTER_REFERRER: 'agent.openrouter.referrer',
   AGENT_OPENROUTER_TITLE: 'agent.openrouter.title',

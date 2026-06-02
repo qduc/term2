@@ -537,6 +537,10 @@ const InputBox: FC<Props> = ({
     }
     if (key.backspace) {
       if (currentMode === 'undo_selection') return;
+      if (currentMode === 'provider_selection') {
+        currentHandlers[currentMode].onDelete?.();
+        return;
+      }
       if (currentCursor <= 0) return;
       const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
       const nextCursor = currentCursor - 1;

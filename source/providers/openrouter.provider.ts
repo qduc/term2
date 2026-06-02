@@ -47,7 +47,7 @@ async function fetchOpenRouterModels(
   const { settingsService } = deps;
 
   const baseUrl = settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1';
-  const apiKey = settingsService.get('agent.openrouter.apiKey');
+  const apiKey = settingsService.get('agent.openrouter.apiKey') || process.env.OPENROUTER_API_KEY;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -81,7 +81,7 @@ registerProvider({
   id: 'openrouter',
   label: 'OpenRouter',
   createRunner: ({ settingsService, loggingService }) => {
-    const apiKey = settingsService.get('agent.openrouter.apiKey');
+    const apiKey = settingsService.get('agent.openrouter.apiKey') || process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return null;
     }

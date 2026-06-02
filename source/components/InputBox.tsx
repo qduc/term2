@@ -643,10 +643,15 @@ const InputBox: FC<Props> = ({
         {...toPopupProps({ slash, path, settings, settingsValue, models, undo, providers })}
         settingsService={settingsService}
       />
-      <Box>
-        {activePromptLabel ? (
+
+      {activePromptLabel && (
+        <Box>
           <Text color="#22d3ee">{activePromptLabel}</Text>
-        ) : waitingForRejectionReason ? (
+        </Box>
+      )}
+
+      <Box>
+        {!activePromptLabel && waitingForRejectionReason ? (
           <Text color="yellow">Why? </Text>
         ) : isShellMode ? (
           <Text color="green">$ </Text>

@@ -108,8 +108,15 @@ test.serial('useProviderSelection - selecting a custom provider opens edit_field
 
   // Test selecting custom-ollama
   await act(async () => {
-    const idx = hook!.items.findIndex((item) => item.id === 'custom-ollama');
-    for (let i = 0; i < idx; i++) {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'provider' && item.id === 'custom-ollama');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
       hook!.moveDown();
     }
   });
@@ -157,30 +164,30 @@ test.serial(
     });
     await flush();
 
-    // Find Codex in the list of items
-    const codexIdx = hook!.items.findIndex((item) => item.id === 'codex');
+    // Verify Codex is skipped by keyboard navigation
+    const active = hook!.getActiveItems();
+    const codexIdx = active.findIndex((item) => item.kind === 'provider' && item.id === 'codex');
     t.true(codexIdx !== -1);
 
-    // Navigate to Codex and select it
+    // Let's verify that navigating moveDown starting from index 0 skips codexIdx
+    t.is(hook!.selectedIndex, 0); // Start at OpenAI
+
+    // Move down a fixed number of times. We should never land on codexIdx!
+    const visitedIndices = new Set<number>();
     await act(async () => {
-      for (let i = 0; i < codexIdx; i++) {
+      for (let i = 0; i < active.length; i++) {
+        visitedIndices.add(hook!.selectedIndex);
         hook!.moveDown();
       }
     });
     await flush();
 
-    await act(async () => {
-      hook!.selectItem();
-    });
-    await flush();
-
-    // Codex is a no-op
-    t.is(hook!.phase, 'list');
+    t.false(visitedIndices.has(codexIdx), 'Keyboard navigation should skip Codex');
 
     // Navigate to OpenAI (first item, idx 0) and select it
     await act(async () => {
-      // Navigate back to top
-      for (let i = 0; i < codexIdx; i++) {
+      for (let i = 0; i < active.length; i++) {
+        if (hook!.selectedIndex === 0) break;
         hook!.moveUp();
       }
     });
@@ -258,8 +265,15 @@ test.serial('useProviderSelection - requestDelete on a custom provider opens con
 
   // Navigate to custom-ollama
   await act(async () => {
-    const idx = hook!.items.findIndex((item) => item.id === 'custom-ollama');
-    for (let i = 0; i < idx; i++) {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'provider' && item.id === 'custom-ollama');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
       hook!.moveDown();
     }
   });
@@ -284,8 +298,15 @@ test.serial('useProviderSelection - requestDelete on a custom provider opens con
 
   // Now request delete again, this time confirm "Yes".
   await act(async () => {
-    const idx = hook!.items.findIndex((item) => item.id === 'custom-ollama');
-    for (let i = 0; i < idx; i++) {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'provider' && item.id === 'custom-ollama');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
       hook!.moveDown();
     }
   });
@@ -380,8 +401,15 @@ test.serial('useProviderSelection - add provider wizard flow and validation', as
 
   // Select "Add Custom Provider" which is at the end of the list
   await act(async () => {
-    const addIndex = hook!.items.length;
-    for (let i = 0; i < addIndex; i++) {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'add-provider');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
       hook!.moveDown();
     }
   });
@@ -513,8 +541,15 @@ test.serial('useProviderSelection - goBack returns wizard fields to the correct 
   await flush();
 
   await act(async () => {
-    const idx = hook!.items.findIndex((item) => item.id === 'existing-provider');
-    for (let i = 0; i < idx; i++) {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'provider' && item.id === 'existing-provider');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
       hook!.moveDown();
     }
   });
@@ -576,8 +611,15 @@ test.serial('useProviderSelection - saveDraft rejects duplicate names discovered
   await flush();
 
   await act(async () => {
-    const addIndex = hook!.items.length;
-    for (let i = 0; i < addIndex; i++) {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'add-provider');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
       hook!.moveDown();
     }
   });
@@ -663,8 +705,15 @@ test.serial('useProviderSelection - unchanged provider names are allowed when ed
   await flush();
 
   await act(async () => {
-    const idx = hook!.items.findIndex((item) => item.id === 'existing-provider');
-    for (let i = 0; i < idx; i++) {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'provider' && item.id === 'existing-provider');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
       hook!.moveDown();
     }
   });
@@ -752,7 +801,7 @@ test.serial('useProviderSelection - scrollOffset updates when navigating and res
   t.is(hook!.phase, 'list');
   t.is(hook!.scrollOffset, 0);
 
-  // Move down 10 times to reach index 10 (which is the 11th item)
+  // Move down 10 times to reach index 11 (the 11th active item)
   await act(async () => {
     for (let i = 0; i < 10; i++) {
       hook!.moveDown();
@@ -760,17 +809,17 @@ test.serial('useProviderSelection - scrollOffset updates when navigating and res
   });
   await flush();
 
-  t.is(hook!.selectedIndex, 10);
-  t.is(hook!.scrollOffset, 1, 'scrollOffset should scroll to 1 when reaching index 10');
+  t.is(hook!.selectedIndex, 11);
+  t.is(hook!.scrollOffset, 2, 'scrollOffset should scroll to 2 when reaching index 11');
 
-  // Move down 1 more time to index 11 (the 12th item)
+  // Move down 1 more time to index 12 (the 12th active item)
   await act(async () => {
     hook!.moveDown();
   });
   await flush();
 
-  t.is(hook!.selectedIndex, 11);
-  t.is(hook!.scrollOffset, 2, 'scrollOffset should scroll to 2 when reaching index 11');
+  t.is(hook!.selectedIndex, 12);
+  t.is(hook!.scrollOffset, 3, 'scrollOffset should scroll to 3 when reaching index 12');
 
   // Move up to index 0 (scrollOffset should sync back)
   await act(async () => {
@@ -786,8 +835,15 @@ test.serial('useProviderSelection - scrollOffset updates when navigating and res
   // Transition to wizard_name phase to verify scrollOffset resets
   // Let's select "Add Custom Provider" which is at the end of the list
   await act(async () => {
-    const addIndex = hook!.items.length;
-    for (let i = 0; i < addIndex; i++) {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'add-provider');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
       hook!.moveDown();
     }
   });

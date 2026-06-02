@@ -153,7 +153,8 @@ const ProviderSelectionMenu: FC<Props> = ({
         scrollOffset={scrollOffset}
         borderColor={getBorderColor()}
         footer={getFooter()}
-        renderItem={(item, index, isSelected) => {
+        isInactive={(item) => item.kind === 'provider' && item.id === 'codex'}
+        renderItem={(item, index, isSelected, isInactive) => {
           let label = item.label;
           let prefix = '  ';
           let color = isSelected ? 'green' : 'white';
@@ -166,9 +167,9 @@ const ProviderSelectionMenu: FC<Props> = ({
             } else {
               // Built-in (non-active): greyed out, not actionable on Enter.
               // Custom providers remain bright so they look interactive.
-              const isBuiltIn = !item.isCustom;
-              prefix = isBuiltIn ? '— ' : '  ';
-              color = isBuiltIn ? 'gray' : isSelected ? 'green' : 'white';
+              // Note: openai and openrouter remain active/bright because we can change their api key.
+              prefix = isInactive ? '— ' : '  ';
+              color = isInactive ? 'gray' : isSelected ? 'green' : 'white';
             }
           } else if (item.kind === 'add-provider') {
             prefix = '+ ';

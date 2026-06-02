@@ -1,18 +1,56 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { clampIndex } from './use-settings-completion.js';
 
-export function useSelection<T>(items: T[]) {
+export function useSelection<T>(items: T[], options?: { isInactive?: (item: T) => boolean }) {
   const [, forceUpdate] = useReducer((n: number) => n + 1, 0);
   const selectedIndexRef = useRef(0);
 
-  // Clamp selected index when items shrink
+  const isInactive = useCallback(
+    (item: T): boolean => {
+      if (!item) return false;
+      if (options?.isInactive) {
+        return options.isInactive(item);
+      }
+      return !!(item as any).inactive;
+    },
+    [options?.isInactive],
+  );
+
+  // Clamp selected index and ensure it's not on an inactive item
   useEffect(() => {
-    const clamped = clampIndex(selectedIndexRef.current, items.length);
-    if (clamped !== selectedIndexRef.current) {
-      selectedIndexRef.current = clamped;
+    if (items.length === 0) {
+      if (selectedIndexRef.current !== 0) {
+        selectedIndexRef.current = 0;
+        forceUpdate();
+      }
+      return;
+    }
+    let target = clampIndex(selectedIndexRef.current, items.length);
+    if (isInactive(items[target])) {
+      // Find nearest active item, scanning forward first, then backward
+      let found = false;
+      for (let i = target; i < items.length; i++) {
+        if (!isInactive(items[i])) {
+          target = i;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        for (let i = target - 1; i >= 0; i--) {
+          if (!isInactive(items[i])) {
+            target = i;
+            found = true;
+            break;
+          }
+        }
+      }
+    }
+    if (target !== selectedIndexRef.current) {
+      selectedIndexRef.current = target;
       forceUpdate();
     }
-  }, [items.length]);
+  }, [items, isInactive]);
 
   const setSelectedIndex = useCallback((index: number) => {
     selectedIndexRef.current = index;
@@ -21,36 +59,89 @@ export function useSelection<T>(items: T[]) {
 
   const moveUp = useCallback(() => {
     if (items.length === 0) return;
-    selectedIndexRef.current = selectedIndexRef.current > 0 ? selectedIndexRef.current - 1 : items.length - 1;
-    forceUpdate();
-  }, [items.length]);
+    const start = selectedIndexRef.current;
+    let next = start;
+    do {
+      next = next > 0 ? next - 1 : items.length - 1;
+      if (!isInactive(items[next])) {
+        selectedIndexRef.current = next;
+        forceUpdate();
+        return;
+      }
+    } while (next !== start);
+  }, [items, isInactive]);
 
   const moveDown = useCallback(() => {
     if (items.length === 0) return;
-    selectedIndexRef.current = selectedIndexRef.current < items.length - 1 ? selectedIndexRef.current + 1 : 0;
-    forceUpdate();
-  }, [items.length]);
+    const start = selectedIndexRef.current;
+    let next = start;
+    do {
+      next = next < items.length - 1 ? next + 1 : 0;
+      if (!isInactive(items[next])) {
+        selectedIndexRef.current = next;
+        forceUpdate();
+        return;
+      }
+    } while (next !== start);
+  }, [items, isInactive]);
 
   const moveHome = useCallback(() => {
-    selectedIndexRef.current = 0;
-    forceUpdate();
-  }, []);
+    if (items.length === 0) return;
+    for (let i = 0; i < items.length; i++) {
+      if (!isInactive(items[i])) {
+        selectedIndexRef.current = i;
+        forceUpdate();
+        return;
+      }
+    }
+  }, [items, isInactive]);
 
   const moveEnd = useCallback(() => {
-    selectedIndexRef.current = Math.max(0, items.length - 1);
-    forceUpdate();
-  }, [items.length]);
+    if (items.length === 0) return;
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (!isInactive(items[i])) {
+        selectedIndexRef.current = i;
+        forceUpdate();
+        return;
+      }
+    }
+  }, [items, isInactive]);
 
   const pageUp = useCallback(() => {
-    selectedIndexRef.current = Math.max(0, selectedIndexRef.current - 10);
-    forceUpdate();
-  }, []);
+    if (items.length === 0) return;
+    let current = selectedIndexRef.current;
+    let count = 0;
+    let lastActive = current;
+    while (current > 0 && count < 10) {
+      current--;
+      if (!isInactive(items[current])) {
+        count++;
+        lastActive = current;
+      }
+    }
+    if (lastActive !== selectedIndexRef.current) {
+      selectedIndexRef.current = lastActive;
+      forceUpdate();
+    }
+  }, [items, isInactive]);
 
   const pageDown = useCallback(() => {
     if (items.length === 0) return;
-    selectedIndexRef.current = Math.min(items.length - 1, selectedIndexRef.current + 10);
-    forceUpdate();
-  }, [items.length]);
+    let current = selectedIndexRef.current;
+    let count = 0;
+    let lastActive = current;
+    while (current < items.length - 1 && count < 10) {
+      current++;
+      if (!isInactive(items[current])) {
+        count++;
+        lastActive = current;
+      }
+    }
+    if (lastActive !== selectedIndexRef.current) {
+      selectedIndexRef.current = lastActive;
+      forceUpdate();
+    }
+  }, [items, isInactive]);
 
   const getSelectedItem = useCallback((): T | undefined => {
     if (items.length === 0) return undefined;

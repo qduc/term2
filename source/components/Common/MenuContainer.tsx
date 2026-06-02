@@ -20,7 +20,8 @@ type Props<T> = {
   footer?: ReactNode;
   footerOutsideBorder?: boolean; // whether footer is inside the bordered box or outside it
 
-  renderItem: (item: T, index: number, isSelected: boolean) => ReactNode;
+  isInactive?: (item: T) => boolean;
+  renderItem: (item: T, index: number, isSelected: boolean, isInactive: boolean) => ReactNode;
 };
 
 export function MenuContainer<T>({
@@ -35,6 +36,7 @@ export function MenuContainer<T>({
   fallbackText,
   footer,
   footerOutsideBorder = false,
+  isInactive,
   renderItem,
 }: Props<T>) {
   if (loading) {
@@ -71,7 +73,22 @@ export function MenuContainer<T>({
       {visibleItems.map((item, visibleIndex) => {
         const actualIndex = scrollOffset + visibleIndex;
         const isSelected = actualIndex === selectedIndex;
-        return renderItem(item, actualIndex, isSelected);
+        const isItemInactive = isInactive?.(item) || (item as any)?.inactive === true;
+        const element = renderItem(item, actualIndex, isSelected, isItemInactive);
+        if (isItemInactive) {
+          if (React.isValidElement(element) && element.type === Text) {
+            return React.cloneElement(element as React.ReactElement<any>, { color: 'gray' });
+          }
+          if (typeof element === 'string' || typeof element === 'number') {
+            return (
+              <Box key={actualIndex}>
+                <Text color="gray">{element}</Text>
+              </Box>
+            );
+          }
+          return element;
+        }
+        return element;
       })}
       {hasScrollDown && <Text color="#64748b">↓ {items.length - scrollOffset - maxHeight} more</Text>}
       {!footerOutsideBorder && footer && (

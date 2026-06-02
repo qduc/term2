@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings-service.js';
 import { getAllProviders, upsertProvider, unregisterProvider } from '../providers/index.js';
 import { createOpenAICompatibleProviderDefinition } from '../providers/openai-compatible-lazy.js';
+import { useSelection } from './use-selection.js';
 
 export type ProviderSelectionPhase =
   | 'list'
@@ -106,12 +107,83 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
   const [phase, setPhase] = useState<ProviderSelectionPhase>('list');
   const [items, setItems] = useState<ProviderSelectionItem[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [draft, setDraft] = useState<CustomProviderDraft | null>(null);
   const [editingOriginalName, setEditingOriginalName] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<'name' | 'type' | 'baseUrl' | 'apiKey' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scrollOffset, setScrollOffset] = useState(0);
+
+  const activeItems = useMemo((): ProviderSelectionMenuItem[] => {
+    switch (phase) {
+      case 'list':
+        return [
+          ...items.map((i) => ({
+            kind: 'provider' as const,
+            id: i.id,
+            label: i.label,
+            isActive: i.isActive,
+            isCustom: i.isCustom,
+          })),
+          { kind: 'add-provider' as const, label: 'Add Custom Provider' },
+        ];
+      case 'wizard_type':
+        return PROVIDER_TYPES.map((type) => ({ kind: 'type' as const, label: type }));
+      case 'edit_fields': {
+        if (!draft) return [];
+        const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
+        const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+        if (isEditingBuiltIn) {
+          return [
+            { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'} (Built-in)` },
+            { kind: 'field' as const, label: `Type: ${draft.type || '<empty>'} (Built-in)` },
+            {
+              kind: 'field' as const,
+              label: 'API Key',
+              detail: draft.apiKey ? '********' : '<empty>',
+            },
+            { kind: 'action' as const, label: 'Save Changes' },
+            { kind: 'action' as const, label: 'Cancel' },
+          ];
+        }
+        return [
+          { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'}` },
+          { kind: 'field' as const, label: `Type: ${draft.type || '<empty>'}` },
+          {
+            kind: 'field' as const,
+            label: 'Base URL',
+            detail: draft.baseUrl || '<empty>',
+          },
+          {
+            kind: 'field' as const,
+            label: 'API Key',
+            detail: draft.apiKey ? '********' : '<empty>',
+          },
+          { kind: 'action' as const, label: 'Save Changes' },
+          { kind: 'action' as const, label: 'Cancel' },
+        ];
+      }
+      case 'confirm_delete':
+        return [
+          { kind: 'action' as const, label: 'Yes, delete this provider', tone: 'destructive' as const },
+          { kind: 'action' as const, label: 'No, keep it' },
+        ];
+      default:
+        return [];
+    }
+  }, [phase, items, draft, editingOriginalName]);
+
+  const checkIsInactive = useCallback((item: ProviderSelectionMenuItem) => {
+    return item.kind === 'provider' && item.id === 'codex';
+  }, []);
+
+  const {
+    selectedIndex,
+    setSelectedIndex,
+    moveUp: selectionMoveUp,
+    moveDown: selectionMoveDown,
+  } = useSelection(activeItems, {
+    isInactive: checkIsInactive,
+  });
 
   // Reset scrollOffset when phase changes
   useEffect(() => {
@@ -197,97 +269,15 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
   // Key navigation handlers
   const moveUp = useCallback(() => {
-    setSelectedIndex((prev) => {
-      const count = getListCount();
-      if (count === 0) return 0;
-      return (prev - 1 + count) % count;
-    });
-  }, [phase, items, draft]);
+    selectionMoveUp();
+  }, [selectionMoveUp]);
 
   const moveDown = useCallback(() => {
-    setSelectedIndex((prev) => {
-      const count = getListCount();
-      if (count === 0) return 0;
-      return (prev + 1) % count;
-    });
-  }, [phase, items, draft]);
+    selectionMoveDown();
+  }, [selectionMoveDown]);
 
   const getListCount = (): number => {
-    switch (phase) {
-      case 'list':
-        return items.length + 1; // plus "Add Custom Provider"
-      case 'wizard_type':
-        return PROVIDER_TYPES.length;
-      case 'edit_fields': {
-        if (!draft) return 0;
-        const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
-        const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
-        return isEditingBuiltIn ? 5 : 6;
-      }
-      case 'confirm_delete':
-        return 2; // Yes, No
-      default:
-        return 0;
-    }
-  };
-
-  const getActiveItems = (): ProviderSelectionMenuItem[] => {
-    switch (phase) {
-      case 'list':
-        return [
-          ...items.map((i) => ({
-            kind: 'provider' as const,
-            id: i.id,
-            label: i.label,
-            isActive: i.isActive,
-            isCustom: i.isCustom,
-          })),
-          { kind: 'add-provider' as const, label: 'Add Custom Provider' },
-        ];
-      case 'wizard_type':
-        return PROVIDER_TYPES.map((type) => ({ kind: 'type' as const, label: type }));
-      case 'edit_fields': {
-        if (!draft) return [];
-        const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
-        const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
-        if (isEditingBuiltIn) {
-          return [
-            { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'} (Built-in)` },
-            { kind: 'field' as const, label: `Type: ${draft.type || '<empty>'} (Built-in)` },
-            {
-              kind: 'field' as const,
-              label: 'API Key',
-              detail: draft.apiKey ? '********' : '<empty>',
-            },
-            { kind: 'action' as const, label: 'Save Changes' },
-            { kind: 'action' as const, label: 'Cancel' },
-          ];
-        }
-        return [
-          { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'}` },
-          { kind: 'field' as const, label: `Type: ${draft.type || '<empty>'}` },
-          {
-            kind: 'field' as const,
-            label: 'Base URL',
-            detail: draft.baseUrl || '<empty>',
-          },
-          {
-            kind: 'field' as const,
-            label: 'API Key',
-            detail: draft.apiKey ? '********' : '<empty>',
-          },
-          { kind: 'action' as const, label: 'Save Changes' },
-          { kind: 'action' as const, label: 'Cancel' },
-        ];
-      }
-      case 'confirm_delete':
-        return [
-          { kind: 'action' as const, label: 'Yes, delete this provider', tone: 'destructive' as const },
-          { kind: 'action' as const, label: 'No, keep it' },
-        ];
-      default:
-        return [];
-    }
+    return activeItems.length;
   };
 
   const selectItem = useCallback(() => {
@@ -684,6 +674,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     setPhase('confirm_delete');
     setSelectedIndex(DELETE_CONFIRM_DEFAULT_INDEX); // default to 'No' for safety
   }, [phase, selectedIndex, items]);
+
+  const getActiveItems = useCallback(() => activeItems, [activeItems]);
 
   const selectedProviderName = editingOriginalName ?? undefined;
 

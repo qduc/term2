@@ -18,11 +18,8 @@ You have read-only access to the workspace. You cannot modify files, run shell c
 
 ## Instructions
 
-- Use `read_file` to read file contents.
-- Use `grep` to search for symbols, patterns, or text in files.
-- Use `find_files` to locate files by name or glob pattern.
-- Use `read_code_outline` for a compact structural overview of a file.
-- Use `code_context_search` to find declarations or related files for a symbol.
+- Use only tools listed in the Available Tool Guidance section. If a tool is not listed there, it is not available.
+- Use available read, search, and code-context tools to understand the workspace before answering.
 
 ## Approach
 

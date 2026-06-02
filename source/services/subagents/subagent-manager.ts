@@ -39,7 +39,29 @@ import { classifyCommand, SafetyStatus } from '../../utils/command-safety/index.
 import { evaluateShellAutoApprovalAdvisories } from '../shell-auto-approval-evaluator.js';
 import type { OpenAIAgentClient } from '../../lib/openai-agent-client.js';
 
-const PROMPTS_DIR = path.join(import.meta.dirname, '../../prompts/subagents');
+const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
+const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
+
+// Reads a prompt markdown file. The build does not copy `.md` files into
+// `dist`, so when running compiled code we fall back to the original
+// `source/prompts` tree (this also lets tests run against source directly).
+function resolvePrompt(promptPath: string): string {
+  try {
+    return fs.readFileSync(promptPath, 'utf-8').trim();
+  } catch (e: any) {
+    const relativePromptPath = path.relative(BASE_PROMPT_PATH, promptPath);
+    const sourcePromptPath = path.join(
+      import.meta.dirname,
+      '../../../source/prompts',
+      relativePromptPath.startsWith('..') ? path.basename(promptPath) : relativePromptPath,
+    );
+    if (sourcePromptPath !== promptPath && fs.existsSync(sourcePromptPath)) {
+      return fs.readFileSync(sourcePromptPath, 'utf-8').trim();
+    }
+    throw new Error(`Failed to read prompt file at ${promptPath}: ${e.message}`);
+  }
+}
+
 const MUTATING_TOOL_NAMES = new Set(['apply_patch', 'search_replace', 'create_file', 'shell']);
 const ROLE_MAX_TURNS_DEFAULT = 20;
 
@@ -83,11 +105,13 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, any>; 
 function loadRoleDefinition(role: SubagentRole, settings: ISettingsService): SubagentDefinition {
   const filePath = path.join(PROMPTS_DIR, `${role}.md`);
 
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Unknown subagent role: "${role}". No definition found at ${filePath}`);
+  let content: string;
+  try {
+    content = resolvePrompt(filePath);
+  } catch (error: any) {
+    throw new Error(`Unknown subagent role: "${role}". No definition found at ${filePath}. Error: ${error.message}`);
   }
 
-  const content = fs.readFileSync(filePath, 'utf-8');
   const { frontmatter, body } = parseFrontmatter(content);
 
   const subagentPrefix =
@@ -121,6 +145,71 @@ function loadRoleDefinition(role: SubagentRole, settings: ISettingsService): Sub
     reasoningEffort: resolve(frontmatter.reasoningEffort, `${subagentPrefix}ReasoningEffort`, undefined, 'default'),
     description: frontmatter.description ?? '',
   };
+}
+
+function selectSubagentBasePromptFile(model: string): string {
+  const normalizedModel = model.toLowerCase();
+  if (normalizedModel.includes('gpt-5') && normalizedModel.includes('codex')) {
+    return 'base-codex.md';
+  }
+  if (normalizedModel.includes('sonnet') || normalizedModel.includes('haiku')) {
+    return 'base-anthropic.md';
+  }
+  if (normalizedModel.includes('gpt-5')) {
+    return 'base-gpt-5-modern.md';
+  }
+  return 'base-simple.md';
+}
+
+function resolveSubagentSearchViaShell(settings: ISettingsService, model: string, canRunShell: boolean): boolean {
+  const searchViaShellSetting = settings.get<'auto' | 'on' | 'off'>('app.searchViaShell') ?? 'auto';
+  if (searchViaShellSetting === 'on') return canRunShell;
+  if (searchViaShellSetting === 'off') return false;
+  return shouldPreferPatchEditingModel(model) && canRunShell;
+}
+
+function buildAvailableToolGuidance(toolDefinitions: ToolDefinition[], searchViaShell: boolean): string {
+  const toolNames = toolDefinitions.map((tool) => tool.name);
+  const hasTool = (name: string) => toolNames.includes(name);
+  const lines = [
+    '## Available Tool Guidance',
+    '',
+    `Registered tools: ${toolNames.length > 0 ? toolNames.map((name) => `\`${name}\``).join(', ') : 'none'}.`,
+    '',
+    'Use only these tools. If a tool mentioned elsewhere is not listed here, it is not available.',
+  ];
+
+  if (searchViaShell && hasTool('shell')) {
+    lines.push('For workspace search, use `shell` with commands like `rg` for text search and `fd` for file search.');
+  } else if (hasTool('grep') || hasTool('find_files')) {
+    const searchTools = ['grep', 'find_files'].filter(hasTool).map((name) => `\`${name}\``);
+    lines.push(`For workspace search, use the dedicated search tools: ${searchTools.join(', ')}.`);
+  } else {
+    lines.push('No dedicated workspace search tool is available. Use `read_file` and provided context where possible.');
+  }
+
+  if (hasTool('read_code_outline') || hasTool('code_context_search')) {
+    const codeContextTools = ['read_code_outline', 'code_context_search'].filter(hasTool).map((name) => `\`${name}\``);
+    lines.push(`For code structure and symbol context, use: ${codeContextTools.join(', ')}.`);
+  } else {
+    lines.push('Code-context tools are not available in this run.');
+  }
+
+  if (hasTool('read_file')) {
+    lines.push('Use `read_file` for exact file contents before drawing conclusions or editing.');
+  }
+  if (hasTool('shell')) {
+    lines.push('Use `shell` only for commands that are safe, bounded, and relevant to the assigned task.');
+  }
+  if (hasTool('apply_patch') || hasTool('search_replace') || hasTool('create_file')) {
+    const writeTools = ['apply_patch', 'search_replace', 'create_file'].filter(hasTool).map((name) => `\`${name}\``);
+    lines.push(`For edits, use the registered write tools: ${writeTools.join(', ')}.`);
+  }
+  if (hasTool('web_search') || hasTool('web_fetch')) {
+    lines.push('Use web tools only when current external information or documentation is needed.');
+  }
+
+  return lines.join('\n');
 }
 
 function buildAgentTools(
@@ -519,7 +608,8 @@ export class SubagentManager {
     const toolCounts = new Map<string, number>();
     const filesChanged: string[] = [];
 
-    const toolDefinitions = this.#buildToolDefinitions(definition, filesChanged, request.task);
+    const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.model, definition.canRunShell);
+    const toolDefinitions = this.#buildToolDefinitions(definition, filesChanged, request.task, searchViaShell);
 
     const providerId = definition.provider;
     let mutatingToolAttempted = false;
@@ -559,7 +649,17 @@ export class SubagentManager {
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     const agentsInstructions = this.#executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
 
-    const fullInstructions = [definition.instructions, `Environment: ${envInfo}${agentsInstructions}`]
+    const modelPrompt = resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model)));
+    const worktreeHygiene = resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md'));
+    const toolGuidance = buildAvailableToolGuidance(toolDefinitions, searchViaShell);
+
+    const fullInstructions = [
+      modelPrompt,
+      worktreeHygiene,
+      definition.instructions,
+      toolGuidance,
+      `Environment: ${envInfo}${agentsInstructions}`,
+    ]
       .filter(Boolean)
       .join('\n\n');
 
@@ -665,7 +765,12 @@ export class SubagentManager {
     }
   }
 
-  #buildToolDefinitions(definition: SubagentDefinition, filesChanged: string[], taskContext: string): ToolDefinition[] {
+  #buildToolDefinitions(
+    definition: SubagentDefinition,
+    filesChanged: string[],
+    taskContext: string,
+    searchViaShell: boolean,
+  ): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     const isRemote = this.#executionContext?.isRemote() ?? false;
@@ -673,9 +778,14 @@ export class SubagentManager {
     if (definition.canRead) {
       tools.push(
         createReadFileToolDefinition({ executionContext: this.#executionContext, allowOutsideWorkspace: false }),
-        createGrepToolDefinition({ executionContext: this.#executionContext }),
-        createFindFilesToolDefinition({ executionContext: this.#executionContext }),
       );
+
+      if (!searchViaShell) {
+        tools.push(
+          createGrepToolDefinition({ executionContext: this.#executionContext }),
+          createFindFilesToolDefinition({ executionContext: this.#executionContext }),
+        );
+      }
 
       if (!isRemote) {
         tools.push(

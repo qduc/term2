@@ -18,11 +18,11 @@ You have read and write access to the workspace (within the assigned write bound
 
 ## Instructions
 
-- Use `read_file`, `grep`, `find_files`, `read_code_outline`, and `code_context_search` to understand the code before editing.
-- Use `apply_patch`, `search_replace`, or `create_file` to make the requested changes.
+- Use only tools listed in the Available Tool Guidance section. If a tool is not listed there, it is not available.
+- Use available read, search, and code-context tools to understand the code before editing.
+- Use available write tools to make the requested changes.
 - Read relevant files before editing them.
 - Keep edits limited to the assigned scope. Do not broaden the task.
-- Do not revert or overwrite changes that appear to have been made by another agent or external process.
 
 ## Write Policy
 

@@ -1759,3 +1759,369 @@ test.serial('subagent run injects warning into tool output when turns left <= 5'
   t.true(executeOutput!.includes('approaching the maximum turn limit'), 'should contain max turns warning');
   t.true(executeOutput!.includes('4 turns left'), 'should indicate correct number of turns left');
 });
+
+test.serial('execution subagents select subagent-safe model-family prompts and append role instructions', async (t) => {
+  let constructedAgentExplorer: any = null;
+  let constructedAgentWorker: any = null;
+  let constructedAgentResearcher: any = null;
+
+  registerProvider({
+    id: 'mock-prompt-test-provider-gpt-5-codex',
+    label: 'Mock Prompt Test Provider GPT-5 Codex',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          constructedAgentExplorer = agent;
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'gpt-5-codex' }],
+  });
+
+  registerProvider({
+    id: 'mock-prompt-test-provider-claude-3-sonnet',
+    label: 'Mock Prompt Test Provider Claude 3 Sonnet',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          constructedAgentWorker = agent;
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'claude-3-sonnet' }],
+  });
+
+  registerProvider({
+    id: 'mock-prompt-test-provider-gpt-5-modern',
+    label: 'Mock Prompt Test Provider GPT-5 Modern',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          constructedAgentResearcher = agent;
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'gpt-5' }],
+  });
+
+  // 1. Run explorer subagent with gpt-5-codex
+  const managerExplorer = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-5-codex',
+      'agent.provider': 'mock-prompt-test-provider-gpt-5-codex',
+    }),
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  await managerExplorer.run({ role: 'explorer', task: 'explorer task' });
+
+  t.truthy(constructedAgentExplorer);
+  t.true(constructedAgentExplorer.instructions.includes('nested Codex-family subagent'));
+  t.true(constructedAgentExplorer.instructions.includes('You are an explorer subagent.'));
+  t.true(constructedAgentExplorer.instructions.includes('## Worktree Hygiene'));
+  t.true(constructedAgentExplorer.instructions.includes('## Available Tool Guidance'));
+
+  const codexIdx = constructedAgentExplorer.instructions.indexOf('nested Codex-family subagent');
+  const explorerIdx = constructedAgentExplorer.instructions.indexOf('You are an explorer subagent');
+  t.true(codexIdx < explorerIdx, 'Model prompt must come before role prompt');
+
+  // 2. Run worker subagent with claude-3-sonnet
+  const managerWorker = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'claude-3-sonnet',
+      'agent.provider': 'mock-prompt-test-provider-claude-3-sonnet',
+    }),
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  await managerWorker.run({ role: 'worker', task: 'worker task' });
+
+  t.truthy(constructedAgentWorker);
+  t.true(constructedAgentWorker.instructions.includes('nested Anthropic-family subagent'));
+  t.true(constructedAgentWorker.instructions.includes('You are a worker subagent.'));
+
+  const sonnetIdx = constructedAgentWorker.instructions.indexOf('nested Anthropic-family subagent');
+  const workerIdx = constructedAgentWorker.instructions.indexOf('You are a worker subagent');
+  t.true(sonnetIdx < workerIdx, 'Model prompt must come before role prompt');
+
+  const managerResearcher = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-5',
+      'agent.provider': 'mock-prompt-test-provider-gpt-5-modern',
+    }),
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  await managerResearcher.run({ role: 'researcher', task: 'research task' });
+
+  t.truthy(constructedAgentResearcher);
+  t.true(constructedAgentResearcher.instructions.includes('nested GPT-5-family subagent'));
+  t.true(constructedAgentResearcher.instructions.includes('You are a researcher subagent.'));
+});
+
+test.serial('execution subagent prompts exclude top-level-only prompt content', async (t) => {
+  let constructedAgent: any = null;
+
+  registerProvider({
+    id: 'mock-top-level-exclusion-provider',
+    label: 'Mock Top Level Exclusion Provider',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          constructedAgent = agent;
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'gpt-5-codex' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-5-codex',
+      'agent.provider': 'mock-top-level-exclusion-provider',
+    }),
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  await manager.run({ role: 'worker', task: 'worker task' });
+
+  t.truthy(constructedAgent);
+  t.false(constructedAgent.instructions.includes('commentary channel'));
+  t.false(constructedAgent.instructions.includes('final channel'));
+  t.false(constructedAgent.instructions.includes('Intermediary updates'));
+  t.false(constructedAgent.instructions.includes('Plan Mode Workflow'));
+  t.false(constructedAgent.instructions.includes('You are Codex, a coding agent based on GPT-5.'));
+});
+
+test.serial('mentor subagent is NOT affected by prompt profiles', async (t) => {
+  let mentorAgent: any = null;
+
+  registerProvider({
+    id: 'mock-prompt-test-provider-mentor',
+    label: 'Mock Prompt Test Provider Mentor',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          mentorAgent = agent;
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'gpt-5-codex' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'main-model',
+      'agent.provider': 'mock-prompt-test-provider-mentor',
+      'agent.mentorModel': 'gpt-5-codex',
+      'agent.mentorProvider': 'mock-prompt-test-provider-mentor',
+      'app.mentorMode': false,
+    }),
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  await manager.run({ role: 'mentor', task: 'advise me' });
+
+  t.truthy(mentorAgent);
+  t.false(mentorAgent.instructions.includes('You are Codex, a coding agent based on GPT-5.'));
+  t.false(mentorAgent.instructions.includes('nested Codex-family subagent'));
+  t.false(mentorAgent.instructions.includes('## Available Tool Guidance'));
+  t.false(mentorAgent.instructions.includes('## Worktree Hygiene'));
+  t.true(mentorAgent.instructions.includes('You are a helpful mentor assistant.'));
+});
+
+test.serial('subagent tool definitions conditional registration for search tools', async (t) => {
+  let workerAgentShellTrue: any = null;
+  let workerAgentShellFalse: any = null;
+
+  registerProvider({
+    id: 'mock-tool-test-provider-shell-true',
+    label: 'Mock Tool Test Provider Shell True',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          workerAgentShellTrue = agent;
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'gpt-5' }],
+  });
+
+  registerProvider({
+    id: 'mock-tool-test-provider-shell-false',
+    label: 'Mock Tool Test Provider Shell False',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          workerAgentShellFalse = agent;
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'gpt-4o' }],
+  });
+
+  // 1. Model: gpt-5 (searchViaShell is true by default), canRunShell: true (from worker.md)
+  // Explorer/worker tools should NOT contain dedicated search tools: grep and find_files.
+  const managerShellTrue = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-5',
+      'agent.provider': 'mock-tool-test-provider-shell-true',
+      'app.searchViaShell': 'auto',
+    }),
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  await managerShellTrue.run({ role: 'worker', task: 'some task' });
+
+  t.truthy(workerAgentShellTrue);
+  const toolNamesShellTrue: string[] = workerAgentShellTrue.tools.map((tool: any) => tool.name);
+  t.false(
+    toolNamesShellTrue.includes('grep'),
+    'grep tool should be omitted when searchViaShell is active and canRunShell is true',
+  );
+  t.false(
+    toolNamesShellTrue.includes('find_files'),
+    'find_files tool should be omitted when searchViaShell is active and canRunShell is true',
+  );
+  t.true(toolNamesShellTrue.includes('shell'), 'shell tool must be registered');
+  t.true(workerAgentShellTrue.instructions.includes('Registered tools:'));
+  t.true(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`'));
+  t.true(workerAgentShellTrue.instructions.includes('`fd` for file search'));
+  t.false(workerAgentShellTrue.instructions.includes('Use `grep` to search'));
+  t.false(workerAgentShellTrue.instructions.includes('Use `find_files` to locate'));
+  t.false(workerAgentShellTrue.instructions.includes('For workspace search, use the dedicated search tools'));
+
+  // 2. Model: gpt-4o (searchViaShell is false by default), canRunShell: true
+  // Tools should include dedicated grep and find_files.
+  const managerShellFalse = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-4o',
+      'agent.provider': 'mock-tool-test-provider-shell-false',
+      'app.searchViaShell': 'auto',
+    }),
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  await managerShellFalse.run({ role: 'worker', task: 'some task' });
+
+  t.truthy(workerAgentShellFalse);
+  const toolNamesShellFalse: string[] = workerAgentShellFalse.tools.map((tool: any) => tool.name);
+  t.true(toolNamesShellFalse.includes('grep'), 'grep tool should be registered when searchViaShell is inactive');
+  t.true(
+    toolNamesShellFalse.includes('find_files'),
+    'find_files tool should be registered when searchViaShell is inactive',
+  );
+  t.true(toolNamesShellFalse.includes('shell'), 'shell tool must be registered');
+  t.true(workerAgentShellFalse.instructions.includes('For workspace search, use the dedicated search tools'));
+  t.true(workerAgentShellFalse.instructions.includes('`grep`'));
+  t.true(workerAgentShellFalse.instructions.includes('`find_files`'));
+  t.false(workerAgentShellFalse.instructions.includes('use `shell` with commands like `rg`'));
+});
+
+test.serial('explorer and researcher use dedicated search tools when shell is unavailable', async (t) => {
+  let explorerAgent: any = null;
+  let researcherAgent: any = null;
+
+  registerProvider({
+    id: 'mock-tool-test-provider-explorer-no-shell',
+    label: 'Mock Tool Test Provider Explorer No Shell',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          explorerAgent = agent;
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'gpt-5' }],
+  });
+
+  registerProvider({
+    id: 'mock-tool-test-provider-researcher-no-shell',
+    label: 'Mock Tool Test Provider Researcher No Shell',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          researcherAgent = agent;
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'gpt-5' }],
+  });
+
+  await new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-5',
+      'agent.provider': 'mock-tool-test-provider-explorer-no-shell',
+      'app.searchViaShell': 'auto',
+    }),
+    sessionContextService: createSessionContextService() as any,
+  }).run({ role: 'explorer', task: 'find files' });
+
+  await new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-5',
+      'agent.provider': 'mock-tool-test-provider-researcher-no-shell',
+      'app.searchViaShell': 'auto',
+    }),
+    sessionContextService: createSessionContextService() as any,
+  }).run({ role: 'researcher', task: 'research files' });
+
+  for (const agent of [explorerAgent, researcherAgent]) {
+    t.truthy(agent);
+    const toolNames: string[] = agent.tools.map((tool: any) => tool.name);
+    t.true(toolNames.includes('grep'));
+    t.true(toolNames.includes('find_files'));
+    t.false(toolNames.includes('shell'));
+    t.true(agent.instructions.includes('For workspace search, use the dedicated search tools'));
+    t.false(agent.instructions.includes('use `shell` with commands like `rg`'));
+  }
+});
+
+test.serial('remote execution disables code-context tools and guidance', async (t) => {
+  let remoteAgent: any = null;
+
+  registerProvider({
+    id: 'mock-tool-test-provider-remote',
+    label: 'Mock Tool Test Provider Remote',
+    createRunner: () =>
+      ({
+        run: async (agent: any) => {
+          remoteAgent = agent;
+          return { status: 'completed', finalOutput: 'done', history: [], messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'gpt-4o' }],
+  });
+
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-4o',
+      'agent.provider': 'mock-tool-test-provider-remote',
+    }),
+    executionContext: {
+      getCwd: () => '/tmp/remote-workspace',
+      isRemote: () => true,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  await manager.run({ role: 'explorer', task: 'inspect remote files' });
+
+  t.truthy(remoteAgent);
+  const toolNames: string[] = remoteAgent.tools.map((tool: any) => tool.name);
+  t.false(toolNames.includes('read_code_outline'));
+  t.false(toolNames.includes('code_context_search'));
+  t.true(remoteAgent.instructions.includes('Code-context tools are not available in this run.'));
+  t.false(remoteAgent.instructions.includes('For code structure and symbol context, use:'));
+});

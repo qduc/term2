@@ -20,7 +20,8 @@ You have access to web search and web fetch tools, and read-only access to the w
 
 - Use `web_search` to find relevant external documentation, articles, or information.
 - Use `web_fetch` to retrieve the content of specific URLs.
-- Use `read_file`, `grep`, `find_files`, `read_code_outline`, and `code_context_search` to read workspace files when relevant.
+- Use only tools listed in the Available Tool Guidance section. If a tool is not listed there, it is not available.
+- Use available read, search, and code-context tools to inspect workspace files when relevant.
 
 ## Approach
 

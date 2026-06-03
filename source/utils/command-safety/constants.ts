@@ -4,6 +4,7 @@
 export const ALLOWED_COMMANDS = new Set([
   // navigation / listing
   'pwd',
+  'cd',
   'ls',
   'find',
 
@@ -23,6 +24,13 @@ export const ALLOWED_COMMANDS = new Set([
   'wc',
   'stat',
   'file',
+  'du',
+  'df',
+
+  // path utilities (string-only, no file mutation)
+  'basename',
+  'dirname',
+  'realpath',
 
   // text inspection / transformation to stdout
   'sort',
@@ -31,6 +39,22 @@ export const ALLOWED_COMMANDS = new Set([
   'tr',
   'strings',
   'echo',
+  'printf',
+  'seq',
+  'comm',
+  'column',
+  'diff',
+
+  // binary / hex inspection (read-only dumps)
+  'xxd',
+  'od',
+  'hexdump',
+
+  // shell no-ops / lookups (output-only, do not mutate state)
+  'true',
+  'false',
+  'which',
+  'type',
 
   // structured data inspection
   'jq',

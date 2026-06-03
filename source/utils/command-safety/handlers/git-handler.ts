@@ -1,6 +1,19 @@
 import { SafetyStatus, SAFE_GIT_COMMANDS, DANGEROUS_GIT_COMMANDS } from '../constants.js';
 import type { CommandHandler, CommandHandlerHelpers, CommandHandlerResult } from './types.js';
 
+// Git global options that consume the following argument as their value
+// (e.g. `git -C <path> status`, `git -c <name>=<value> log`). Without skipping
+// their value, that value is mistaken for the subcommand and flagged YELLOW.
+const VALUE_TAKING_GIT_GLOBALS = new Set([
+  '-C',
+  '-c',
+  '--git-dir',
+  '--work-tree',
+  '--namespace',
+  '--exec-path',
+  '--super-prefix',
+]);
+
 /**
  * Handler for git command safety analysis
  */
@@ -10,12 +23,26 @@ export const gitHandler: CommandHandler = {
     const reasons: string[] = [];
     let status: SafetyStatus = SafetyStatus.GREEN;
 
-    // Extract the git subcommand (first non-flag argument)
+    // Extract the git subcommand (first non-flag argument), skipping global
+    // options and any values they consume.
     let gitSubcommand: string | undefined;
     if (node.suffix) {
+      let skipNext = false;
       for (const arg of node.suffix) {
         const argText = extractWordText(arg);
-        if (argText && !argText.startsWith('-')) {
+        if (skipNext) {
+          // This arg is the value of a preceding global option.
+          skipNext = false;
+          continue;
+        }
+        if (argText && argText.startsWith('-')) {
+          // Long options with an inline value (`--git-dir=...`) are self-contained.
+          if (VALUE_TAKING_GIT_GLOBALS.has(argText)) {
+            skipNext = true;
+          }
+          continue;
+        }
+        if (argText) {
           gitSubcommand = argText;
           break;
         }

@@ -131,6 +131,13 @@ export function analyzePathRisk(inputPath: string | undefined, loggingService?: 
     return SafetyStatus.GREEN;
   }
 
+  // GREEN: the current directory itself ("." / "./"). Without this, the later
+  // "hidden file" check fires because path.basename('.') === '.' (starts with a dot),
+  // wrongly flagging read-only commands like `rg "x" .` or `grep -r "x" .` as YELLOW.
+  if (candidate === '.' || candidate === './') {
+    return SafetyStatus.GREEN;
+  }
+
   const cwd = process.cwd();
 
   // Pre-calculate project membership for absolute paths

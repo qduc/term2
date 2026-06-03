@@ -95,7 +95,16 @@ function withAnthropicPromptCaching<T extends AiSdkAnthropicModelLike>(
 ): T {
   return wrapLanguageModel({
     model: model as any,
-    middleware: createAnthropicPromptCachingMiddleware(shouldApplyPromptCaching),
+    middleware: [
+      {
+        specificationVersion: 'v3',
+        transformParams: async ({ params }) => ({
+          ...params,
+          maxOutputTokens: 128000,
+        }),
+      },
+      createAnthropicPromptCachingMiddleware(shouldApplyPromptCaching),
+    ],
   }) as unknown as T;
 }
 

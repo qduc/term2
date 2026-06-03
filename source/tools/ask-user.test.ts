@@ -1,5 +1,11 @@
 import test from 'ava';
 import { createAskUserToolDefinition, formatAskUserCommandMessage } from './ask-user.js';
+import {
+  ASK_USER_CUSTOM_ANSWER_LABEL,
+  ASK_USER_DECLINE_LABEL,
+  ASK_USER_NO_ANSWER_RESULT,
+  ASK_USER_NO_RESPONSE_DISPLAY,
+} from './ask-user-constants.js';
 
 const fn = (impl?: (...args: any[]) => any) => {
   const mock = (impl ? (...args: any[]) => impl(...args) : () => undefined) as any;
@@ -35,6 +41,10 @@ test('createAskUserToolDefinition schema validates question and options', (t) =>
     }).success,
   );
   t.false(tool.parameters.safeParse({ question: '' }).success);
+  t.false(tool.parameters.safeParse({ question: '   ' }).success);
+  t.false(tool.parameters.safeParse({ question: 'Pick one', options: ['   '] }).success);
+  t.false(tool.parameters.safeParse({ question: 'Pick one', options: [ASK_USER_CUSTOM_ANSWER_LABEL] }).success);
+  t.false(tool.parameters.safeParse({ question: 'Pick one', options: [ASK_USER_DECLINE_LABEL] }).success);
   t.false(
     tool.parameters.safeParse({
       question: 'Pick one',
@@ -64,7 +74,7 @@ test('createAskUserToolDefinition returns fallback text when no answer is provid
   });
 
   t.is(mockGetAskUserAnswer.calls[0][0], 'call-2');
-  t.is(result, 'User did not provide an answer.');
+  t.is(result, ASK_USER_NO_ANSWER_RESULT);
 });
 
 test('createAskUserToolDefinition returns fallback text when no answer is provided even with options', async (t) => {
@@ -75,7 +85,7 @@ test('createAskUserToolDefinition returns fallback text when no answer is provid
     toolCall: { callId: 'call-3' },
   });
 
-  t.is(result, 'User did not provide an answer.');
+  t.is(result, ASK_USER_NO_ANSWER_RESULT);
 });
 
 test('formatAskUserCommandMessage renders the question and output', (t) => {
@@ -122,4 +132,33 @@ test('formatAskUserCommandMessage handles fallback arguments', (t) => {
     question: 'Pick a safe default',
     options: ['Use safe default', 'Ask later'],
   });
+});
+
+test('formatAskUserCommandMessage treats missing output as unsuccessful', (t) => {
+  const item = {
+    rawItem: {
+      callId: 'call-3',
+      arguments: JSON.stringify({ question: 'Which config should I use?' }),
+    },
+  };
+
+  const messages = formatAskUserCommandMessage(item, 0, new Map());
+
+  t.is(messages[0].output, ASK_USER_NO_RESPONSE_DISPLAY);
+  t.false(messages[0].success);
+});
+
+test('formatAskUserCommandMessage falls back for malformed arguments', (t) => {
+  const item = {
+    rawItem: {
+      callId: 'call-4',
+      arguments: JSON.stringify({ question: '   ' }),
+      output: 'Use default',
+    },
+  };
+
+  const messages = formatAskUserCommandMessage(item, 0, new Map());
+
+  t.is(messages[0].command, 'ask_user: Unknown question');
+  t.true(messages[0].success);
 });

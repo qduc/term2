@@ -3,6 +3,11 @@ import { Box, Text, useInput } from 'ink';
 import type { ApprovalDescriptor } from '../contracts/conversation.js';
 import { generateDiff } from '../utils/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_ASK_USER, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
+import {
+  ASK_USER_CUSTOM_ANSWER_LABEL,
+  ASK_USER_DECLINE_LABEL,
+  ASK_USER_DECLINE_RESULT,
+} from '../tools/ask-user-constants.js';
 import DiffView from './DiffView.js';
 
 type Props = {
@@ -168,7 +173,8 @@ const ApprovalPrompt: FC<Props> = ({ approval, onApprove, onReject, onTypeAnswer
 
   const askUserOptions = askUserArgs?.options ?? [];
   const askUserMenuItems = React.useMemo(
-    () => (isAskUser ? [...askUserOptions, 'Type custom answer...', 'Decline to answer'] : ['Approve', 'Reject']),
+    () =>
+      isAskUser ? [...askUserOptions, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL] : ['Approve', 'Reject'],
     [askUserOptions, isAskUser],
   );
 
@@ -189,10 +195,10 @@ const ApprovalPrompt: FC<Props> = ({ approval, onApprove, onReject, onTypeAnswer
       if (isAskUser) {
         const selected = askUserMenuItems[selectedIndex];
 
-        if (selected === 'Type custom answer...') {
+        if (selected === ASK_USER_CUSTOM_ANSWER_LABEL) {
           onTypeAnswer?.();
-        } else if (selected === 'Decline to answer') {
-          onApprove('User decline to answer');
+        } else if (selected === ASK_USER_DECLINE_LABEL) {
+          onApprove(ASK_USER_DECLINE_RESULT);
         } else {
           onApprove(selected);
         }
@@ -283,9 +289,9 @@ const ApprovalPrompt: FC<Props> = ({ approval, onApprove, onReject, onTypeAnswer
           {askUserMenuItems.map((item, idx) => {
             const isRecommended = idx === 0 && askUserOptions.length > 0;
             const label =
-              item === 'Type custom answer...'
+              item === ASK_USER_CUSTOM_ANSWER_LABEL
                 ? item
-                : item === 'Decline to answer'
+                : item === ASK_USER_DECLINE_LABEL
                 ? item
                 : isRecommended
                 ? `${item} (recommended)`
@@ -293,9 +299,9 @@ const ApprovalPrompt: FC<Props> = ({ approval, onApprove, onReject, onTypeAnswer
 
             const color =
               selectedIndex === idx
-                ? item === 'Decline to answer'
+                ? item === ASK_USER_DECLINE_LABEL
                   ? 'red'
-                  : item === 'Type custom answer...'
+                  : item === ASK_USER_CUSTOM_ANSWER_LABEL
                   ? 'cyan'
                   : 'green'
                 : isRecommended

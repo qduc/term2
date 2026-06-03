@@ -2,11 +2,24 @@ import { z } from 'zod';
 import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import { getCallIdFromItem, getOutputText, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
 import { TOOL_NAME_ASK_USER } from './tool-names.js';
+import {
+  ASK_USER_NO_ANSWER_RESULT,
+  ASK_USER_NO_RESPONSE_DISPLAY,
+  ASK_USER_RESERVED_OPTION_LABELS,
+} from './ask-user-constants.js';
+
+const reservedOptionLabels = new Set<string>(ASK_USER_RESERVED_OPTION_LABELS);
+
+const askUserTextSchema = z.string().trim().min(1);
+
+const askUserOptionSchema = askUserTextSchema.refine((value) => !reservedOptionLabels.has(value), {
+  message: 'Option label is reserved by the ask_user UI.',
+});
 
 const askUserSchema = z.object({
-  question: z.string().min(1).describe('The clarifying question to ask the user.'),
+  question: askUserTextSchema.describe('The clarifying question to ask the user.'),
   options: z
-    .array(z.string().min(1))
+    .array(askUserOptionSchema)
     .max(8)
     .optional()
     .describe(
@@ -31,7 +44,7 @@ export const createAskUserToolDefinition = (
     const callId = (details as any)?.toolCall?.callId;
     const answer = getAskUserAnswer(callId);
     if (answer === undefined) {
-      return 'User did not provide an answer.';
+      return ASK_USER_NO_ANSWER_RESULT;
     }
     return answer;
   },
@@ -43,11 +56,13 @@ export const formatAskUserCommandMessage: FormatCommandMessage = (item, index, t
   const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
   const args = normalizeToolArguments(normalizedArgs) ?? normalizeToolArguments(fallbackArgs) ?? {};
+  const parsedArgs = askUserSchema.safeParse(args);
 
-  const question = (args as any)?.question ?? 'Unknown question';
+  const question = parsedArgs.success ? parsedArgs.data.question : 'Unknown question';
   const command = `ask_user: ${question}`;
-  const output = getOutputText(item) || 'No response from user';
-  const success = !output.startsWith('User did not provide an answer.');
+  const rawOutput = getOutputText(item);
+  const output = rawOutput || ASK_USER_NO_RESPONSE_DISPLAY;
+  const success = Boolean(rawOutput) && rawOutput !== ASK_USER_NO_ANSWER_RESULT;
 
   return [
     createBaseMessage(item, index, 0, false, {

@@ -3,6 +3,11 @@ import React from 'react';
 import { render } from 'ink-testing-library';
 import ApprovalPrompt from './ApprovalPrompt.js';
 import type { ApprovalDescriptor } from '../contracts/conversation.js';
+import {
+  ASK_USER_CUSTOM_ANSWER_LABEL,
+  ASK_USER_DECLINE_LABEL,
+  ASK_USER_DECLINE_RESULT,
+} from '../tools/ask-user-constants.js';
 
 const flushReactUpdates = async (iterations = 1) => {
   for (let i = 0; i < iterations; i++) {
@@ -34,8 +39,8 @@ test('ApprovalPrompt renders ask_user question and options', (t) => {
   t.true(output.includes('Which option should I use?'));
   t.true(output.includes('Use the safe default'));
   t.true(output.includes('Use the faster option'));
-  t.true(output.includes('Type custom answer...'));
-  t.true(output.includes('Decline to answer'));
+  t.true(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL));
+  t.true(output.includes(ASK_USER_DECLINE_LABEL));
   t.false(output.includes('Allow this action?'));
   t.false(output.includes('Approve'));
   unmount();
@@ -47,7 +52,7 @@ test('ApprovalPrompt ask_user navigation wraps around menu items', async (t) => 
   );
 
   await writeInput(stdin, '\u001B[A');
-  t.true((lastFrame() ?? '').includes('❯ Decline to answer'));
+  t.true((lastFrame() ?? '').includes(`❯ ${ASK_USER_DECLINE_LABEL}`));
 
   await writeInput(stdin, '\u001B[B');
   t.true((lastFrame() ?? '').includes('❯ Use the safe default (recommended)'));
@@ -88,7 +93,7 @@ test('ApprovalPrompt ask_user Enter on Decline to answer calls the decline appro
   await writeInput(stdin, '\u001B[A');
   await writeInput(stdin, '\r');
 
-  t.is(approved, 'User decline to answer');
+  t.is(approved, ASK_USER_DECLINE_RESULT);
   unmount();
 });
 
@@ -158,7 +163,7 @@ test('ApprovalPrompt ask_user still shows custom answer and decline options with
 
   const output = lastFrame() ?? '';
   t.true(output.includes('Please answer this question'));
-  t.true(output.includes('Type custom answer...'));
-  t.true(output.includes('Decline to answer'));
+  t.true(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL));
+  t.true(output.includes(ASK_USER_DECLINE_LABEL));
   unmount();
 });

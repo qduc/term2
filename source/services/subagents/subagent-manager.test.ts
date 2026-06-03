@@ -47,6 +47,10 @@ function createMockSettings(values: Record<string, any> = {}): ISettingsService 
   };
 }
 
+function getAgentTool(agent: any, name: string): any {
+  return agent.tools.find((tool: any) => tool.name === name);
+}
+
 // ========== Provider Mocks ==========
 
 let mentorManagerRunnerCalls: any[] = [];
@@ -303,6 +307,91 @@ test.serial('run() cancels a delegated provider run when the parent signal abort
   t.true(result.error?.includes('aborted') ?? false);
 });
 
+test.serial('explorer shell tool executes GREEN commands and blocks YELLOW and RED commands', async (t) => {
+  const settings = createMockSettings({
+    'agent.model': 'mock-model',
+    'agent.provider': 'mock-explorer-provider',
+  });
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  await manager.run({ role: 'explorer', task: 'inspect the workspace' });
+
+  t.is(explorerRunnerCalls.length, 1);
+  const agent = explorerRunnerCalls[0].agent;
+  const shell = getAgentTool(agent, 'shell');
+  t.truthy(shell);
+  t.is(await shell.needsApproval({}, { command: 'pwd' }), false);
+
+  const invokeShell = async (command: string) => shell.invoke({}, JSON.stringify({ command }), {});
+  const blockedPrefix = 'Error: command blocked - explorer can only run read-only (GREEN) shell commands. Command: ';
+
+  for (const command of ['pwd', 'ls', 'cat package.json', 'git status', 'git log --oneline']) {
+    const output = await invokeShell(command);
+    t.true(output.includes('exit 0'), `expected GREEN command to execute: ${command}`);
+    t.false(output.startsWith(blockedPrefix), `expected GREEN command to not be blocked: ${command}`);
+  }
+
+  for (const command of ['touch blocked.txt', 'npm test', 'unknown_tool_name', 'cat ../outside.txt']) {
+    const output = await invokeShell(command);
+    t.true(output.startsWith(blockedPrefix), `expected YELLOW command to be blocked: ${command}`);
+    t.true(output.includes(command), `blocked output should mention the command: ${command}`);
+  }
+
+  for (const command of ['rm -rf x', 'sudo ls']) {
+    const output = await invokeShell(command);
+    t.true(output.startsWith(blockedPrefix), `expected RED command to be blocked: ${command}`);
+    t.true(output.includes(command), `blocked output should mention the command: ${command}`);
+  }
+});
+
+test.serial(
+  'explorer shell tool blocks write-like shell commands without creating files in a temp workspace',
+  async (t) => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-explorer-shell-block-'));
+    t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+    fs.writeFileSync(path.join(tmpDir, 'source.txt'), 'source content');
+
+    const settings = createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-explorer-provider',
+    });
+    const manager = new SubagentManager({
+      logger: createMockLogger(),
+      settings,
+      sessionContextService: createSessionContextService() as any,
+      executionContext: {
+        getCwd: () => tmpDir,
+        isRemote: () => false,
+        getSSHService: () => undefined,
+      } as unknown as ExecutionContext,
+    });
+
+    await manager.run({ role: 'explorer', task: 'inspect a temp workspace' });
+
+    const agent = explorerRunnerCalls[explorerRunnerCalls.length - 1].agent;
+    const shell = getAgentTool(agent, 'shell');
+    t.truthy(shell);
+
+    const blockedPrefix = 'Error: command blocked - explorer can only run read-only (GREEN) shell commands. Command: ';
+    const cases = [
+      { command: 'touch blocked-touch.txt', path: 'blocked-touch.txt' },
+      { command: 'echo marker > blocked-redirect.txt', path: 'blocked-redirect.txt' },
+      { command: 'cat source.txt > blocked-copy.txt', path: 'blocked-copy.txt' },
+      { command: 'printf marker | tee blocked-tee.txt', path: 'blocked-tee.txt' },
+    ];
+
+    for (const { command, path: relativePath } of cases) {
+      const output = await shell.invoke({}, JSON.stringify({ command }), {});
+      t.true(output.startsWith(blockedPrefix), `expected command to be blocked: ${command}`);
+      t.false(fs.existsSync(path.join(tmpDir, relativePath)), `expected no file to be created: ${relativePath}`);
+    }
+  },
+);
+
 test.serial('run() with explorer role uses read-only tools only', async (t) => {
   const settings = createMockSettings({
     'agent.model': 'mock-model',
@@ -333,7 +422,7 @@ test.serial('run() with explorer role uses read-only tools only', async (t) => {
   // Explorer should NOT have web tools by default
   t.false(toolNames.includes('web_search'));
   t.false(toolNames.includes('web_fetch'));
-  t.false(toolNames.includes('shell'));
+  t.true(toolNames.includes('shell'));
 });
 
 // ========== Researcher role ==========
@@ -2023,15 +2112,38 @@ test.serial('subagent tool definitions conditional registration for search tools
   t.true(workerAgentShellFalse.instructions.includes('`grep`'));
   t.true(workerAgentShellFalse.instructions.includes('`find_files`'));
   t.false(workerAgentShellFalse.instructions.includes('use `shell` with commands like `rg`'));
+
+  // 3. Model: gpt-5 with searchViaShell explicitly disabled still keeps dedicated search tools.
+  const managerShellOff = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'gpt-5',
+      'agent.provider': 'mock-tool-test-provider-shell-true',
+      'app.searchViaShell': 'off',
+    }),
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  await managerShellOff.run({ role: 'worker', task: 'some task' });
+
+  const toolNamesShellOff: string[] = workerAgentShellTrue.tools.map((tool: any) => tool.name);
+  t.true(toolNamesShellOff.includes('grep'), 'grep tool should remain registered when searchViaShell is off');
+  t.true(
+    toolNamesShellOff.includes('find_files'),
+    'find_files tool should remain registered when searchViaShell is off',
+  );
+  t.true(toolNamesShellOff.includes('shell'), 'shell tool must still be registered');
+  t.true(workerAgentShellTrue.instructions.includes('For workspace search, use the dedicated search tools'));
+  t.false(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`'));
 });
 
-test.serial('explorer and researcher use dedicated search tools when shell is unavailable', async (t) => {
+test.serial('explorer uses shell search when available and researcher keeps dedicated search tools', async (t) => {
   let explorerAgent: any = null;
   let researcherAgent: any = null;
 
   registerProvider({
-    id: 'mock-tool-test-provider-explorer-no-shell',
-    label: 'Mock Tool Test Provider Explorer No Shell',
+    id: 'mock-tool-test-provider-explorer-shell',
+    label: 'Mock Tool Test Provider Explorer Shell',
     createRunner: () =>
       ({
         run: async (agent: any) => {
@@ -2043,8 +2155,8 @@ test.serial('explorer and researcher use dedicated search tools when shell is un
   });
 
   registerProvider({
-    id: 'mock-tool-test-provider-researcher-no-shell',
-    label: 'Mock Tool Test Provider Researcher No Shell',
+    id: 'mock-tool-test-provider-researcher-dedicated',
+    label: 'Mock Tool Test Provider Researcher Dedicated',
     createRunner: () =>
       ({
         run: async (agent: any) => {
@@ -2059,7 +2171,7 @@ test.serial('explorer and researcher use dedicated search tools when shell is un
     logger: createMockLogger(),
     settings: createMockSettings({
       'agent.model': 'gpt-5',
-      'agent.provider': 'mock-tool-test-provider-explorer-no-shell',
+      'agent.provider': 'mock-tool-test-provider-explorer-shell',
       'app.searchViaShell': 'auto',
     }),
     sessionContextService: createSessionContextService() as any,
@@ -2069,21 +2181,27 @@ test.serial('explorer and researcher use dedicated search tools when shell is un
     logger: createMockLogger(),
     settings: createMockSettings({
       'agent.model': 'gpt-5',
-      'agent.provider': 'mock-tool-test-provider-researcher-no-shell',
+      'agent.provider': 'mock-tool-test-provider-researcher-dedicated',
       'app.searchViaShell': 'auto',
     }),
     sessionContextService: createSessionContextService() as any,
   }).run({ role: 'researcher', task: 'research files' });
 
-  for (const agent of [explorerAgent, researcherAgent]) {
-    t.truthy(agent);
-    const toolNames: string[] = agent.tools.map((tool: any) => tool.name);
-    t.true(toolNames.includes('grep'));
-    t.true(toolNames.includes('find_files'));
-    t.false(toolNames.includes('shell'));
-    t.true(agent.instructions.includes('For workspace search, use the dedicated search tools'));
-    t.false(agent.instructions.includes('use `shell` with commands like `rg`'));
-  }
+  t.truthy(explorerAgent);
+  let toolNames: string[] = explorerAgent.tools.map((tool: any) => tool.name);
+  t.true(toolNames.includes('shell'));
+  t.false(toolNames.includes('grep'));
+  t.false(toolNames.includes('find_files'));
+  t.true(explorerAgent.instructions.includes('For workspace search, use `shell` with commands like `rg`'));
+  t.false(explorerAgent.instructions.includes('For workspace search, use the dedicated search tools'));
+
+  t.truthy(researcherAgent);
+  toolNames = researcherAgent.tools.map((tool: any) => tool.name);
+  t.false(toolNames.includes('shell'));
+  t.true(toolNames.includes('grep'));
+  t.true(toolNames.includes('find_files'));
+  t.true(researcherAgent.instructions.includes('For workspace search, use the dedicated search tools'));
+  t.false(researcherAgent.instructions.includes('use `shell` with commands like `rg`'));
 });
 
 test.serial('remote execution disables code-context tools and guidance', async (t) => {

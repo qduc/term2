@@ -803,18 +803,17 @@ export class SubagentManager {
     }
 
     if (definition.canRunShell) {
-      tools.push(
-        this.#wrapShellTool(
-          createShellToolDefinition({
-            settingsService: this.#settings,
-            loggingService: this.#logger,
-            executionContext: this.#executionContext,
-          }),
-          cwd,
-          filesChanged,
-          taskContext,
-        ),
-      );
+      const shellDef = createShellToolDefinition({
+        settingsService: this.#settings,
+        loggingService: this.#logger,
+        executionContext: this.#executionContext,
+      });
+
+      if (definition.canWrite) {
+        tools.push(this.#wrapShellTool(shellDef, cwd, filesChanged, taskContext));
+      } else {
+        tools.push(this.#wrapReadOnlyShellTool(shellDef));
+      }
     }
 
     if (definition.canWrite) {
@@ -1009,6 +1008,34 @@ export class SubagentManager {
           } finally {
             releaseWorkerLocks();
           }
+        }
+
+        return originalExecute(params, context, details);
+      },
+    };
+  }
+
+  #wrapReadOnlyShellTool(definition: ToolDefinition): ToolDefinition {
+    const originalExecute = definition.execute.bind(definition);
+    const cwd = this.#executionContext?.getCwd() ?? process.cwd();
+
+    return {
+      ...definition,
+      needsApproval: () => false,
+      execute: async (params: any, context?: unknown, details?: unknown) => {
+        const command: string = typeof params?.command === 'string' ? params.command : '';
+        if (!command) {
+          return originalExecute(params, context, details);
+        }
+
+        const status = classifyCommand(command, this.#logger);
+        if (status !== SafetyStatus.GREEN) {
+          return `Error: command blocked - explorer can only run read-only (GREEN) shell commands. Command: ${command}`;
+        }
+
+        const writeTargets = this.#extractPathsFromCommand(command, cwd);
+        if (writeTargets.length > 0) {
+          return `Error: command blocked - explorer can only run read-only (GREEN) shell commands. Command: ${command}`;
         }
 
         return originalExecute(params, context, details);

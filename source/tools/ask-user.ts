@@ -36,7 +36,6 @@ export const createAskUserToolDefinition = (
   description:
     'Ask the user a clarifying question when a missing user decision blocks correct progress or when proceeding would require guessing a materially important requirement. ' +
     'Provide concise options when possible; the first option must be the recommended/default choice. ' +
-    'Do not add "Decline to answer" to the options array; the UI provides it automatically. ' +
     'If the user declines to answer, proceed using the safest reasonable default and state the assumption in your final response.',
   parameters: askUserSchema,
   needsApproval: () => true,

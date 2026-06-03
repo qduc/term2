@@ -1403,15 +1403,25 @@ export class ConversationSession {
       onReasoningChunk,
       onCommandMessage,
       onEvent,
+      approvalAnswer,
     }: {
       onTextChunk?: (fullText: string, chunk: string) => void;
       onReasoningChunk?: (fullText: string, chunk: string) => void;
       onCommandMessage?: (message: CommandMessage) => void;
       onEvent?: (event: ConversationEvent) => void;
+      approvalAnswer?: string;
     } = {},
   ): Promise<ConversationResult | null> {
     if (!this.approvalFlow.getPending()) {
       return null;
+    }
+
+    if (answer === 'y' && approvalAnswer) {
+      const pending = this.approvalFlow.getPending();
+      const callId = pending ? getCallIdFromObject(pending.interruption) : undefined;
+      if (callId) {
+        this.agentClient.setAskUserAnswer(callId, approvalAnswer);
+      }
     }
 
     this.#log({

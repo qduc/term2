@@ -135,10 +135,14 @@ const createSessionHarness = ({
   chatImpl?: (prompt: string, options: Record<string, unknown>) => Promise<string> | string;
 }) => {
   const chatCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+  const askUserAnswerCalls: Array<{ callId: string; answer: string }> = [];
   let startIndex = 0;
   let continuationIndex = 0;
 
   const agentClient = {
+    setAskUserAnswer(callId: string, answer: string) {
+      askUserAnswerCalls.push({ callId, answer });
+    },
     async startStream() {
       const stream = startStreams[startIndex++];
       if (!stream) {
@@ -179,7 +183,7 @@ const createSessionHarness = ({
     },
   });
 
-  return { session, chatCalls };
+  return { session, chatCalls, askUserAnswerCalls };
 };
 
 const malformedResponseMacro: Macro<
@@ -357,6 +361,25 @@ test('batch evaluation calls the LLM once and reuses cached advisories across se
   const finalResult = await session.handleApprovalDecision('y');
   t.is(getResponseResult(t, finalResult).finalText, 'All commands handled.');
   t.is(chatCalls.length, 1);
+});
+
+test('handleApprovalDecision forwards approval answers to the ask_user bridge', async (t) => {
+  const initialStream = createInterruptedStream([
+    createShellInterruption({ callId: 'call-ask-user', command: 'echo awaiting approval' }),
+  ]);
+  const finalStream = createFinalStream('Approved command completed.');
+
+  const { session, askUserAnswerCalls } = createSessionHarness({
+    startStreams: [initialStream],
+    continuationStreams: [finalStream],
+  });
+
+  const firstResult = await session.sendMessage('please continue');
+  getApprovalResult(t, firstResult);
+
+  const finalResult = await session.handleApprovalDecision('y', undefined, { approvalAnswer: 'Use option B' });
+  t.is(getResponseResult(t, finalResult).finalText, 'Approved command completed.');
+  t.deepEqual(askUserAnswerCalls, [{ callId: 'call-ask-user', answer: 'Use option B' }]);
 });
 
 test('mixed RED and non-RED batch evaluates both while RED remains system rejected', async (t) => {

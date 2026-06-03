@@ -2,11 +2,14 @@ import React, { FC } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { ApprovalDescriptor } from '../contracts/conversation.js';
 import { generateDiff } from '../utils/diff.js';
-import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_ASK_USER, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
 import DiffView from './DiffView.js';
 
 type Props = {
   approval: ApprovalDescriptor;
+  onApprove: (answer?: string) => void;
+  onReject: () => void;
+  onTypeAnswer?: () => void;
 };
 
 type ApplyPatchArgs = {
@@ -142,32 +145,72 @@ const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']>
   );
 };
 
-const ApprovalPrompt: FC<Props & { onApprove: () => void; onReject: () => void }> = ({
-  approval,
-  onApprove,
-  onReject,
-}) => {
-  const [selectedIndex, setSelectedIndex] = React.useState(0); // 0 = Approve, 1 = Reject
+type AskUserArgs = {
+  question?: string;
+  options?: string[];
+};
+
+const ApprovalPrompt: FC<Props> = ({ approval, onApprove, onReject, onTypeAnswer }) => {
+  const [selectedIndex, setSelectedIndex] = React.useState(0);
+
+  const isAskUser = approval.toolName === TOOL_NAME_ASK_USER;
+  const askUserArgs = React.useMemo<AskUserArgs | null>(() => {
+    if (!isAskUser) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(approval.argumentsText) as AskUserArgs;
+    } catch {
+      return null;
+    }
+  }, [approval.argumentsText, isAskUser]);
+
+  const askUserOptions = askUserArgs?.options ?? [];
+  const askUserMenuItems = React.useMemo(
+    () => (isAskUser ? [...askUserOptions, 'Type custom answer...', 'Decline to answer'] : ['Approve', 'Reject']),
+    [askUserOptions, isAskUser],
+  );
+
+  React.useEffect(() => {
+    setSelectedIndex(0);
+  }, [approval.argumentsText, approval.toolName]);
 
   useInput((input, key) => {
-    if (key.upArrow || key.downArrow) {
-      setSelectedIndex((prev) => (prev === 0 ? 1 : 0));
+    if (key.upArrow) {
+      setSelectedIndex((prev) => (prev === 0 ? askUserMenuItems.length - 1 : prev - 1));
+    }
+
+    if (key.downArrow) {
+      setSelectedIndex((prev) => (prev === askUserMenuItems.length - 1 ? 0 : prev + 1));
     }
 
     if (key.return) {
-      if (selectedIndex === 0) {
+      if (isAskUser) {
+        const selected = askUserMenuItems[selectedIndex];
+
+        if (selected === 'Type custom answer...') {
+          onTypeAnswer?.();
+        } else if (selected === 'Decline to answer') {
+          onApprove('User decline to answer');
+        } else {
+          onApprove(selected);
+        }
+      } else if (selectedIndex === 0) {
         onApprove();
       } else {
         onReject();
       }
     }
 
-    if (input === 'y') {
-      onApprove();
-    }
+    if (!isAskUser) {
+      if (input === 'y') {
+        onApprove();
+      }
 
-    if (input === 'n') {
-      onReject();
+      if (input === 'n') {
+        onReject();
+      }
     }
   });
 
@@ -227,6 +270,48 @@ const ApprovalPrompt: FC<Props & { onApprove: () => void; onReject: () => void }
     } catch {
       // Fall back to styled raw text if parsing fails
     }
+  } else if (isAskUser) {
+    const questionText = askUserArgs?.question?.trim() ? askUserArgs.question : approval.argumentsText;
+    content = (
+      <Box flexDirection="column">
+        <Box borderStyle="round" borderColor="yellow" paddingX={1} paddingY={0}>
+          <Text color="yellow" bold>
+            {questionText}
+          </Text>
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          {askUserMenuItems.map((item, idx) => {
+            const isRecommended = idx === 0 && askUserOptions.length > 0;
+            const label =
+              item === 'Type custom answer...'
+                ? item
+                : item === 'Decline to answer'
+                ? item
+                : isRecommended
+                ? `${item} (recommended)`
+                : item;
+
+            const color =
+              selectedIndex === idx
+                ? item === 'Decline to answer'
+                  ? 'red'
+                  : item === 'Type custom answer...'
+                  ? 'cyan'
+                  : 'green'
+                : isRecommended
+                ? 'yellow'
+                : undefined;
+
+            return (
+              <Text key={item} color={color}>
+                {selectedIndex === idx ? '❯ ' : '  '}
+                {label}
+              </Text>
+            );
+          })}
+        </Box>
+      </Box>
+    );
   }
 
   return (
@@ -236,13 +321,15 @@ const ApprovalPrompt: FC<Props & { onApprove: () => void; onReject: () => void }
       </Text>
       {content}
       {approval.llmAdvisory && <LLMAdvisory advisory={approval.llmAdvisory} />}
-      <Box flexDirection="column" marginTop={1}>
-        <Text>Allow this action?</Text>
-        <Box flexDirection="column" marginLeft={1}>
-          <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Approve</Text>
-          <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Reject</Text>
+      {!isAskUser && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text>Allow this action?</Text>
+          <Box flexDirection="column" marginLeft={1}>
+            <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Approve</Text>
+            <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Reject</Text>
+          </Box>
         </Box>
-      </Box>
+      )}
     </Box>
   );
 };

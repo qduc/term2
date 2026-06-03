@@ -138,6 +138,7 @@ export const useConversation = ({
   );
   const [waitingForApproval, setWaitingForApproval] = useState<boolean>(false);
   const [waitingForRejectionReason, setWaitingForRejectionReason] = useState<boolean>(false);
+  const [waitingForAskUserAnswer, setWaitingForAskUserAnswer] = useState<boolean>(false);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(() => getInitialLastUsage(initialMessages));
@@ -210,6 +211,7 @@ export const useConversation = ({
         });
         // Set waiting state AFTER adding approval message to ensure proper render order
         setWaitingForApproval(true);
+        setWaitingForAskUserAnswer(false);
         notifier?.approvalNeeded();
         return;
       }
@@ -404,7 +406,7 @@ export const useConversation = ({
   );
 
   const handleApprovalDecision = useCallback(
-    async (answer: string, rejectionReason?: string) => {
+    async (answer: string, rejectionReason?: string, approvalAnswer?: string) => {
       if (!waitingForApproval || !pendingApproval) {
         return;
       }
@@ -421,6 +423,7 @@ export const useConversation = ({
 
       setPendingApproval(null);
       setWaitingForApproval(false);
+      setWaitingForAskUserAnswer(false);
 
       // Handle "n" answer for max turns - return to input
       if (isMaxTurnsPrompt && answer === 'n') {
@@ -478,6 +481,7 @@ export const useConversation = ({
           };
           appendMessages([botErrorMessage]);
           setWaitingForApproval(false);
+          setWaitingForAskUserAnswer(false);
           setPendingApproval(null);
         } finally {
           // flushLog();
@@ -507,6 +511,7 @@ export const useConversation = ({
       try {
         const result = await conversationService.handleApprovalDecision(answer, rejectionReason, {
           onEvent: createOnEventWithSubagentTracking(applyConversationEvent),
+          approvalAnswer,
         });
         applyConversationEvent({ type: 'final', finalText: '' } as any);
         applyServiceResult(result, streamingState.textWasFlushed, streamingState.latestUsage);
@@ -533,6 +538,7 @@ export const useConversation = ({
         appendMessages([botErrorMessage]);
         // Reset approval state on error to allow user to continue
         setWaitingForApproval(false);
+        setWaitingForAskUserAnswer(false);
         setPendingApproval(null);
       } finally {
         loggingService.debug('handleApprovalDecision finally block - resetting state');
@@ -556,6 +562,10 @@ export const useConversation = ({
     ],
   );
 
+  const onTypeAnswer = useCallback(() => {
+    setWaitingForAskUserAnswer(true);
+  }, []);
+
   const clearConversation = useCallback(async () => {
     if (onClear) {
       await onClear();
@@ -565,6 +575,7 @@ export const useConversation = ({
     setMessages([]);
     setWaitingForApproval(false);
     setWaitingForRejectionReason(false);
+    setWaitingForAskUserAnswer(false);
     setPendingApproval(null);
     approvedContextRef.current = null;
     setIsProcessing(false);
@@ -578,6 +589,7 @@ export const useConversation = ({
     conversationService.abort();
     setWaitingForApproval(false);
     setWaitingForRejectionReason(false);
+    setWaitingForAskUserAnswer(false);
     setPendingApproval(null);
     approvedContextRef.current = null;
     setIsProcessing(false);
@@ -604,6 +616,7 @@ export const useConversation = ({
     setMessages((prev) => prev.slice(0, lastUserIndex));
     setWaitingForApproval(false);
     setWaitingForRejectionReason(false);
+    setWaitingForAskUserAnswer(false);
     setPendingApproval(null);
     approvedContextRef.current = null;
     setIsProcessing(false);
@@ -646,6 +659,7 @@ export const useConversation = ({
       setMessages((prev) => prev.slice(0, uiIndex));
       setWaitingForApproval(false);
       setWaitingForRejectionReason(false);
+      setWaitingForAskUserAnswer(false);
       setPendingApproval(null);
       approvedContextRef.current = null;
       setIsProcessing(false);
@@ -726,10 +740,13 @@ export const useConversation = ({
     pendingApproval,
     waitingForApproval,
     waitingForRejectionReason,
+    waitingForAskUserAnswer,
     setWaitingForRejectionReason,
+    setWaitingForAskUserAnswer,
     isProcessing,
     sendUserMessage,
     handleApprovalDecision,
+    onTypeAnswer,
     clearConversation,
     stopProcessing,
     undoLastUserMessage,

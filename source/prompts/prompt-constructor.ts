@@ -71,6 +71,8 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     inlineSections.push(getReasoningEfficiencyAddendum());
   }
 
+  inlineSections.push(getAskUserAddendum());
+
   return {
     basePromptFile: profile.basePromptFile,
     fragmentFiles,
@@ -88,4 +90,14 @@ function getDedicatedSearchToolsSection({ liteMode }: { liteMode: boolean }): st
   return liteMode
     ? '### Search Tools\n\n- `find_files`: locate files by name or glob.\n- `grep`: search file contents.'
     : '### Search Tools\n\n- Prefer `find_files` for locating files by name or glob.\n- Prefer `grep` for searching code content or symbols.';
+}
+
+function getAskUserAddendum(): string {
+  return `### ask_user Tool Guidance
+
+- Use \`ask_user\` only when a missing user decision blocks correct progress or when proceeding would require guessing a materially important requirement.
+- Prefer continuing with stated assumptions for low-risk ambiguity; do not ask needless questions.
+- Provide concise options when possible; the first option must be the recommended/default choice.
+- Do not add "Decline to answer" to the tool \`options\` array; the UI provides it automatically.
+- If the tool result is \`User decline to answer\`, proceed using the safest reasonable default and state the assumption in your final response.`;
 }

@@ -21,6 +21,7 @@ export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
   waitingForApproval: boolean;
   waitingForRejectionReason: boolean;
+  waitingForAskUserAnswer?: boolean;
   isProcessing: boolean;
   isShellMode?: boolean;
   lastUsage?: NormalizedUsage | null;
@@ -30,8 +31,9 @@ export type BottomAreaProps = {
   settingsService: SettingsService;
   loggingService: LoggingService;
   historyService: HistoryService;
-  onApprove: () => void;
+  onApprove: (answer?: string) => void;
   onReject: () => void;
+  onTypeAnswer?: () => void;
   sshInfo?: SSHInfo;
   undoMenuRef?: React.MutableRefObject<{ open: (items: UndoItem[]) => void } | null>;
   onUndoSelect?: (item: UndoItem) => void;
@@ -54,6 +56,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   pendingApproval,
   waitingForApproval,
   waitingForRejectionReason,
+  waitingForAskUserAnswer = false,
   isProcessing,
   isShellMode = false,
   onSubmit,
@@ -63,6 +66,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   historyService,
   onApprove,
   onReject,
+  onTypeAnswer,
   sshInfo,
   lastUsage,
   lastCodexRateLimit,
@@ -105,11 +109,12 @@ const BottomArea: FC<BottomAreaProps> = ({
     waitingForApproval &&
     !isProcessing &&
     !waitingForRejectionReason &&
-    pendingApproval;
+    pendingApproval &&
+    !waitingForAskUserAnswer;
   const showInput =
     !showHandoffConfirm &&
     !showLargeUncachedPrompt &&
-    ((!isProcessing && !waitingForApproval) || waitingForRejectionReason);
+    ((!isProcessing && !waitingForApproval) || waitingForRejectionReason || waitingForAskUserAnswer);
 
   return (
     <Box flexDirection="column" width="100%">
@@ -127,7 +132,12 @@ const BottomArea: FC<BottomAreaProps> = ({
             onDecline={onLargeUncachedDecline || (() => {})}
           />
         ) : showApprovalPrompt ? (
-          <ApprovalPrompt approval={pendingApproval} onApprove={onApprove} onReject={onReject} />
+          <ApprovalPrompt
+            approval={pendingApproval}
+            onApprove={onApprove}
+            onReject={onReject}
+            onTypeAnswer={onTypeAnswer}
+          />
         ) : isProcessing ? (
           <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
         ) : showInput ? (
@@ -146,11 +156,13 @@ const BottomArea: FC<BottomAreaProps> = ({
             onSystemMessage={onSystemMessage}
             onSlashTabComplete={onSlashTabComplete}
             promptLabel={
-              handoffState?.stage === 'entering_message'
+              waitingForAskUserAnswer
+                ? 'Answer: '
+                : handoffState?.stage === 'entering_message'
                 ? 'Handoff message (enter to use default message): '
                 : undefined
             }
-            allowEmptySubmit={handoffState?.stage === 'entering_message'}
+            allowEmptySubmit={handoffState?.stage === 'entering_message' || waitingForAskUserAnswer}
           />
         ) : null}
       </Box>

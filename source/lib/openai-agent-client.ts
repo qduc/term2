@@ -108,6 +108,7 @@ export class OpenAIAgentClient {
   #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
   #activeSubagentsCount = 0;
   #pendingClearSink = false;
+  #askUserAnswers = new Map<string, string>();
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -259,6 +260,17 @@ export class OpenAIAgentClient {
 
   getProvider(): string {
     return this.#provider;
+  }
+
+  setAskUserAnswer(callId: string, answer: string): void {
+    this.#askUserAnswers.set(callId, answer);
+  }
+
+  getAskUserAnswer(callId?: string): string | undefined {
+    if (!callId) return undefined;
+    const answer = this.#askUserAnswers.get(callId);
+    this.#askUserAnswers.delete(callId);
+    return answer;
   }
 
   addToolInterceptor(
@@ -917,6 +929,7 @@ export class OpenAIAgentClient {
         executionContext: this.#executionContext,
         askMentor: this.#createMentor,
         runSubagent: this.#runSubagent,
+        getAskUserAnswer: (callId?: string) => this.getAskUserAnswer(callId),
       },
       resolvedModel,
     );

@@ -32,6 +32,50 @@ test('getAgentDefinition includes grep and find_files when searchViaShell is fal
   t.true(toolNames.includes('code_context_search'));
 });
 
+test('getAgentDefinition includes ask_user in standard mode when getAskUserAnswer is provided', (t) => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+    getAskUserAnswer: () => 'test answer',
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  t.true(toolNames.includes('ask_user'));
+});
+
+test('getAgentDefinition includes ask_user in lite mode when getAskUserAnswer is provided', (t) => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o', 'app.liteMode': true }),
+    loggingService: mockLogger,
+    getAskUserAnswer: () => 'test answer',
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  t.true(toolNames.includes('ask_user'));
+});
+
+test('getAgentDefinition includes ask_user in orchestrator mode when getAskUserAnswer is provided', (t) => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o', 'app.orchestratorMode': true }),
+    loggingService: mockLogger,
+    runSubagent: async () => 'test',
+    getAskUserAnswer: () => 'test answer',
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  t.true(toolNames.includes('ask_user'));
+});
+
+test('getAgentDefinition omits ask_user when getAskUserAnswer is absent', (t) => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  t.false(toolNames.includes('ask_user'));
+});
+
 test('getAgentDefinition injects delegation guidance in orchestrator mode when runSubagent is provided', (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',

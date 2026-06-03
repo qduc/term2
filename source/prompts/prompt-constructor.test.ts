@@ -12,6 +12,22 @@ test('buildPromptSpec preserves mode precedence for base prompts', (t) => {
   t.is(buildPromptSpec({ model: 'gpt-4o', liteMode: false }).basePromptFile, 'simple.md');
 });
 
+test('buildPromptSpec includes ask_user guidance in all modes', (t) => {
+  const standard = buildPromptSpec({ model: 'gpt-4o', liteMode: false });
+  t.true(standard.inlineSections.some((s) => s.includes('ask_user')));
+
+  const lite = buildPromptSpec({ model: 'gpt-4o', liteMode: true });
+  t.true(lite.inlineSections.some((s) => s.includes('ask_user')));
+
+  const orchestrator = buildPromptSpec({
+    model: 'gpt-4o',
+    liteMode: false,
+    orchestratorMode: true,
+    runSubagentEnabled: true,
+  });
+  t.true(orchestrator.inlineSections.some((s) => s.includes('ask_user')));
+});
+
 // test('buildPromptSpec adds GPT version fragments without changing the base GPT prompt fallback', (t) => {
 //   const gpt55 = buildPromptSpec({ model: 'gpt-5.5-2026-04-23', liteMode: false });
 //   t.is(gpt55.basePromptFile, 'gpt-5-modern.md');

@@ -505,6 +505,56 @@ test.serial('setRetryCallback accepts callback function', (t) => {
   t.notThrows(() => client.setRetryCallback(() => {}));
 });
 
+test.serial('setAskUserAnswer stores and consumes answers by call id', (t) => {
+  const settings = createMockSettings();
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  client.setAskUserAnswer('call-1', 'Use the existing config');
+
+  t.is(client.getAskUserAnswer('call-1'), 'Use the existing config');
+  t.is(client.getAskUserAnswer('call-1'), undefined);
+});
+
+test.serial('getAskUserAnswer returns undefined for unknown call ids', (t) => {
+  const settings = createMockSettings();
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  t.is(client.getAskUserAnswer('missing-call'), undefined);
+  t.is(client.getAskUserAnswer(), undefined);
+});
+
+test.serial('ask_user tool executes using the stored approval answer', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-main-mentor-refresh',
+    'agent.model': 'mock-model',
+    'app.liteMode': false,
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  await client.chat('prime tools');
+
+  const askUserTool = capturedMainAgentForMentorTest?.tools?.find((tool: any) => tool?.name === 'ask_user');
+  t.truthy(askUserTool);
+  t.is(typeof askUserTool?.invoke, 'function');
+
+  client.setAskUserAnswer('call-bridge', 'Use the safe option');
+
+  const result = await askUserTool.invoke(
+    {},
+    JSON.stringify({ question: 'Which option should I use?', options: ['Use the safe option', 'Ask later'] }),
+    { toolCall: { callId: 'call-bridge' } },
+  );
+
+  t.is(result, 'Use the safe option');
+  t.is(client.getAskUserAnswer('call-bridge'), undefined);
+});
+
 test.serial('setModel resets mentor conversation chain used by ask_mentor', async (t) => {
   const settings = createMockSettings({
     'agent.provider': 'mock-main-mentor-refresh',

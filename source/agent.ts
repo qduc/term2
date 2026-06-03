@@ -5,12 +5,14 @@ import { createSearchReplaceToolDefinition } from './tools/search-replace.js';
 import { createApplyPatchToolDefinition } from './tools/apply-patch.js';
 import { createShellToolDefinition } from './tools/shell.js';
 import { createAskMentorToolDefinition } from './tools/ask-mentor.js';
+import { createAskUserToolDefinition } from './tools/ask-user.js';
 import { createRunSubagentToolDefinition } from './tools/run-subagent.js';
 import { createWebSearchToolDefinition } from './tools/web-search.js';
 import { createWebFetchToolDefinition } from './tools/web-fetch.js';
 import { createCreateFileToolDefinition } from './tools/create-file.js';
 import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './tools/code-context.js';
 import { registerToolFormatters } from './tools/command-message-formatters.js';
+import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
 import type { ToolDefinition } from './tools/types.js';
 import os from 'os';
 import fs from 'fs';
@@ -270,10 +272,11 @@ export const getAgentDefinition = (
     executionContext?: ExecutionContext;
     askMentor?: (question: string) => Promise<string>;
     runSubagent?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
+    getAskUserAnswer?: (callId?: string) => string | undefined;
   },
   model?: string,
 ): AgentDefinition => {
-  const { settingsService, loggingService, executionContext, askMentor, runSubagent } = deps;
+  const { settingsService, loggingService, executionContext, askMentor, runSubagent, getAskUserAnswer } = deps;
   const defaultModel = settingsService.get<string>('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
 
@@ -333,6 +336,13 @@ export const getAgentDefinition = (
       createReadFileToolDefinition({ executionContext, allowOutsideWorkspace: true, orchestratorMode: true }),
       createGrepToolDefinition({ executionContext, orchestratorMode: true }),
     ];
+    if (getAskUserAnswer) {
+      const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
+      if (askUserTool.name !== TOOL_NAME_ASK_USER) {
+        throw new Error(`Unexpected ask_user tool name: ${askUserTool.name}`);
+      }
+      tools.push(askUserTool);
+    }
     registerToolFormatters(tools);
 
     return {
@@ -354,6 +364,14 @@ export const getAgentDefinition = (
       loggingService,
     }),
   ];
+
+  if (getAskUserAnswer) {
+    const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
+    if (askUserTool.name !== TOOL_NAME_ASK_USER) {
+      throw new Error(`Unexpected ask_user tool name: ${askUserTool.name}`);
+    }
+    tools.push(askUserTool);
+  }
 
   if (codeContextEnabled) {
     tools.push(

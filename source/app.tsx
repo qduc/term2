@@ -238,9 +238,12 @@ const App: FC<AppProps> = ({
     waitingForApproval,
     waitingForRejectionReason,
     setWaitingForRejectionReason,
+    waitingForAskUserAnswer,
+    setWaitingForAskUserAnswer,
     isProcessing,
     sendUserMessage,
     handleApprovalDecision,
+    onTypeAnswer,
     clearConversation,
     stopProcessing,
     undoLastUserMessage,
@@ -451,6 +454,12 @@ const App: FC<AppProps> = ({
 
   // Handle Esc to stop processing or cancel rejection reason or handoff
   useInput((_input: string, key) => {
+    if (key.escape && waitingForAskUserAnswer) {
+      setWaitingForAskUserAnswer(false);
+      setInput('');
+      return;
+    }
+
     if (key.escape && waitingForRejectionReason) {
       // Cancel rejection reason input and return to approval prompt
       setWaitingForRejectionReason(false);
@@ -471,9 +480,12 @@ const App: FC<AppProps> = ({
     }
   });
 
-  const handleApprove = useCallback(async () => {
-    await handleApprovalDecision('y');
-  }, [handleApprovalDecision]);
+  const handleApprove = useCallback(
+    async (answer?: string) => {
+      await handleApprovalDecision('y', undefined, answer);
+    },
+    [handleApprovalDecision],
+  );
 
   const handleReject = useCallback(() => {
     setWaitingForRejectionReason(true);
@@ -499,6 +511,12 @@ const App: FC<AppProps> = ({
   const handleSubmit = async (turn: UserTurn): Promise<void> => {
     const value = turn.text;
     const hasImages = Boolean(turn.images?.length);
+    if (waitingForAskUserAnswer) {
+      setWaitingForAskUserAnswer(false);
+      setInput('');
+      await handleApprovalDecision('y', undefined, value);
+      return;
+    }
     if (!hasUserTurnContent(turn) && handoffState?.stage !== 'entering_message') return;
 
     // If waiting for rejection reason, handle it
@@ -642,6 +660,7 @@ const App: FC<AppProps> = ({
             pendingApproval={pendingApproval}
             waitingForApproval={waitingForApproval}
             waitingForRejectionReason={waitingForRejectionReason}
+            waitingForAskUserAnswer={waitingForAskUserAnswer}
             isProcessing={isProcessing}
             isShellMode={isShellMode}
             lastUsage={lastUsage}
@@ -652,6 +671,7 @@ const App: FC<AppProps> = ({
             historyService={historyService}
             onApprove={handleApprove}
             onReject={handleReject}
+            onTypeAnswer={onTypeAnswer}
             sshInfo={sshInfo}
             lastCodexRateLimit={lastCodexRateLimit}
             undoMenuRef={undoMenuRef}

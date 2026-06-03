@@ -298,6 +298,35 @@ export const normalizeToolInput = (input: unknown, schema?: z.ZodTypeAny): strin
   return jsonStr;
 };
 
+/**
+ * Detects the SDK's schema-validation error (thrown by `tool()` when the
+ * incoming arguments fail to parse) across SDK versions / bundlers that may
+ * rename the class.
+ */
+export const isInvalidToolInputError = (error: any): boolean => {
+  if (!error) return false;
+  const name = error.name || error.constructor?.name;
+  return name === 'InvalidToolInputError' || name === 'AI_InvalidToolInputError';
+};
+
+/**
+ * Custom `errorFunction` for SDK `tool()` definitions.
+ *
+ * The SDK's default error handler swallows *every* thrown error into a result
+ * string, which forces brittle string-scanning to tell schema-validation
+ * failures apart from a tool that merely prints those words. Instead, we let
+ * schema-validation errors propagate so `wrapToolInvoke` can attach precise Zod
+ * diagnostics, while keeping all other runtime errors as non-fatal strings
+ * (mirroring the SDK's default behavior) so the runner stays stable.
+ */
+export const toolErrorFunction = (_context: unknown, error: unknown): string => {
+  if (isInvalidToolInputError(error)) {
+    throw error;
+  }
+  const details = error instanceof Error ? error.toString() : String(error);
+  return `An error occurred while running the tool. Please try again. Error: ${details}`;
+};
+
 export const wrapToolInvoke = <T extends Tool>(tool: T, originalSchema?: z.ZodTypeAny): T => {
   // Only FunctionTool has an invoke method
   if (tool.type !== 'function') {
@@ -309,20 +338,6 @@ export const wrapToolInvoke = <T extends Tool>(tool: T, originalSchema?: z.ZodTy
   functionTool.invoke = async (context: any, input: unknown, details: any) => {
     const targetSchema = originalSchema || functionTool.parameters;
     const normalizedInput = normalizeToolInput(input, targetSchema as any);
-
-    const isInvalidToolInputError = (error: any) => {
-      if (!error) return false;
-      const name = error.name || error.constructor?.name;
-      return name === 'InvalidToolInputError' || name === 'AI_InvalidToolInputError';
-    };
-
-    const isValidationErrorString = (str: string) => {
-      return (
-        str.includes('InvalidToolInputError') ||
-        str.includes('AI_InvalidToolInputError') ||
-        str.includes('Invalid JSON input for tool')
-      );
-    };
 
     const runDiagnostics = (toolName: string, schema: z.ZodTypeAny, rawInput: any): string => {
       let parsedInput: any;
@@ -362,15 +377,12 @@ export const wrapToolInvoke = <T extends Tool>(tool: T, originalSchema?: z.ZodTy
     };
 
     try {
-      const result = await originalInvoke(context, normalizedInput, details);
-      if (typeof result === 'string' && isValidationErrorString(result)) {
-        return runDiagnostics(functionTool.name, targetSchema as any, normalizedInput);
-      }
-      return result;
+      return await originalInvoke(context, normalizedInput, details);
     } catch (error: any) {
       if (isInvalidToolInputError(error)) {
-        const diagnosticsMsg = runDiagnostics(functionTool.name, targetSchema as any, normalizedInput);
-        throw new Error(diagnosticsMsg);
+        // Surface schema diagnostics as a non-fatal tool result so the model
+        // can self-correct within the same turn, rather than aborting the run.
+        return runDiagnostics(functionTool.name, targetSchema as any, normalizedInput);
       }
       throw error;
     }

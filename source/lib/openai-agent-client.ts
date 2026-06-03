@@ -12,7 +12,7 @@ import { getProvider } from '../providers/index.js';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
 import { getAgentDefinition } from '../agent.js';
-import { normalizeToolInput, wrapToolInvoke } from './tool-invoke.js';
+import { normalizeToolInput, toolErrorFunction, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { createEditorImpl } from './editor-impl.js';
@@ -1030,6 +1030,9 @@ export class OpenAIAgentClient {
             name: definition.name,
             description: definition.description,
             parameters: useStrictToolSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
+            // Let schema-validation errors propagate to wrapToolInvoke for Zod
+            // diagnostics; keep other runtime errors as non-fatal strings.
+            errorFunction: toolErrorFunction,
             needsApproval: wrapNeedsApproval(definition, {
               checkInterceptors: (params) => this.#checkToolInterceptors(definition.name, params),
             }),

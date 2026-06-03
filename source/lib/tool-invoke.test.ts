@@ -1,7 +1,7 @@
 import test from 'ava';
 import { tool as createTool, RunContext } from '@openai/agents';
 import { z } from 'zod';
-import { repairJson, normalizeToolInput, wrapToolInvoke } from './tool-invoke.js';
+import { repairJson, normalizeToolInput, toolErrorFunction, wrapToolInvoke } from './tool-invoke.js';
 
 // ---------------------------------------------------------------------------
 // repairJson – pass-through for valid / empty input
@@ -259,7 +259,10 @@ test('normalizeToolInput with schema coerces boolean string inputs', (t) => {
   });
 });
 
-test('wrapToolInvoke intercepts InvalidToolInputError exception and formats diagnostics', async (t) => {
+// Integration: real createTool + errorFunction + wrapToolInvoke path. When the
+// SDK fails schema validation, the diagnostics are surfaced as a NON-FATAL
+// result string (not thrown) so the model can self-correct within the turn.
+test('wrapToolInvoke surfaces schema diagnostics as a non-fatal result for invalid input', async (t) => {
   const parametersSchema = z.object({
     pattern: z.string(),
     no_ignore: z.boolean().optional(),
@@ -268,47 +271,47 @@ test('wrapToolInvoke intercepts InvalidToolInputError exception and formats diag
     name: 'grep',
     description: 'grep tool',
     parameters: parametersSchema,
+    errorFunction: toolErrorFunction,
     execute: async () => 'ok',
   });
 
-  rawTool.invoke = async (_context, _input, _details) => {
-    const err = new Error('Invalid JSON input for tool');
-    err.name = 'InvalidToolInputError';
-    throw err;
-  };
-
   const wrappedTool = wrapToolInvoke(rawTool, parametersSchema);
-  const err = await t.throwsAsync(() =>
-    wrappedTool.invoke({} as RunContext, '{"pattern": "test", "no_ignore": "not-a-bool"}'),
-  );
-  t.is(
-    err?.message,
-    'Tool input did not match schema for grep: no_ignore must be boolean, got string "not-a-bool". Retry with valid JSON arguments.',
-  );
-});
-test('wrapToolInvoke intercepts InvalidToolInputError result string and formats diagnostics', async (t) => {
-  const parametersSchema = z.object({
-    pattern: z.string(),
-    no_ignore: z.boolean().optional(),
-  });
-  const rawTool = createTool({
-    name: 'grep',
-    description: 'grep tool',
-    parameters: parametersSchema,
-    execute: async () => 'ok',
-  });
-
-  rawTool.invoke = async (_context, _input, _details) => {
-    return 'An error occurred while running the tool. Please try again. Error: InvalidToolInputError: Invalid JSON input for tool';
-  };
-
-  const wrappedTool = wrapToolInvoke(rawTool, parametersSchema);
-
   const result = await wrappedTool.invoke({} as RunContext, '{"pattern": "test", "no_ignore": "not-a-bool"}');
+
   t.is(
     result,
     'Tool input did not match schema for grep: no_ignore must be boolean, got string "not-a-bool". Retry with valid JSON arguments.',
   );
+});
+
+// Regression: tool output that merely *mentions* the validation error must be
+// returned verbatim and must NOT be re-interpreted as a validation failure.
+test('wrapToolInvoke returns tool output verbatim even when it mentions InvalidToolInputError', async (t) => {
+  const parametersSchema = z.object({ path: z.string() });
+  const toolOutput = 'File contents: throw new InvalidToolInputError("Invalid JSON input for tool")';
+  const rawTool = createTool({
+    name: 'read_file',
+    description: 'read file tool',
+    parameters: parametersSchema,
+    errorFunction: toolErrorFunction,
+    execute: async () => toolOutput,
+  });
+
+  const wrappedTool = wrapToolInvoke(rawTool, parametersSchema);
+  const result = await wrappedTool.invoke({} as RunContext, '{"path": "notes.md"}');
+
+  t.is(result, toolOutput);
+});
+
+test('toolErrorFunction rethrows schema-validation errors for diagnostics handling', (t) => {
+  const err = new Error('Invalid JSON input for tool');
+  err.name = 'InvalidToolInputError';
+  t.throws(() => toolErrorFunction({} as RunContext, err), { is: err });
+});
+
+test('toolErrorFunction returns a non-fatal message for other runtime errors', (t) => {
+  const result = toolErrorFunction({} as RunContext, new Error('disk on fire'));
+  t.is(result, 'An error occurred while running the tool. Please try again. Error: Error: disk on fire');
 });
 
 test('normalizeToolInput with schema coerces stringified array and object inputs', (t) => {

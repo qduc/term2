@@ -12,7 +12,8 @@ export type ProviderSelectionPhase =
   | 'wizard_type'
   | 'wizard_url'
   | 'wizard_key'
-  | 'confirm_delete';
+  | 'confirm_delete'
+  | 'confirm_discard';
 
 export interface CustomProviderDraft {
   name: string;
@@ -29,6 +30,8 @@ const PROVIDER_TYPES: CustomProviderDraft['type'][] = [
   'google',
   'opencode',
 ];
+
+const PROVIDER_NAME_REGEX = /^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/;
 
 interface ProviderSelectionItem {
   id: string;
@@ -58,6 +61,7 @@ export type ProviderSelectionMenuItem =
       kind: 'field';
       label: string;
       detail?: string;
+      fieldKey?: 'name' | 'type' | 'baseUrl' | 'apiKey';
     }
   | {
       kind: 'type';
@@ -111,6 +115,9 @@ export const useProviderSelection = (settingsService: SettingsService) => {
   const [editingOriginalName, setEditingOriginalName] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<'name' | 'type' | 'baseUrl' | 'apiKey' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [discardFromPhase, setDiscardFromPhase] = useState<ProviderSelectionPhase | null>(null);
+  const [draftModified, setDraftModified] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
 
   const activeItems = useMemo((): ProviderSelectionMenuItem[] => {
@@ -134,34 +141,42 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
         if (isEditingBuiltIn) {
           return [
-            { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'} (Built-in)` },
-            { kind: 'field' as const, label: `Type: ${draft.type || '<empty>'} (Built-in)` },
+            { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'} (Built-in)`, fieldKey: 'name' },
+            { kind: 'field' as const, label: `Type: ${draft.type || '<empty>'} (Built-in)`, fieldKey: 'type' },
             {
               kind: 'field' as const,
               label: 'API Key',
               detail: draft.apiKey ? '********' : '<empty>',
+              fieldKey: 'apiKey',
             },
             { kind: 'action' as const, label: 'Save Changes' },
             { kind: 'action' as const, label: 'Cancel' },
           ];
         }
         return [
-          { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'}` },
-          { kind: 'field' as const, label: `Type: ${draft.type || '<empty>'}` },
+          { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'}`, fieldKey: 'name' },
+          { kind: 'field' as const, label: `Type: ${draft.type || '<empty>'}`, fieldKey: 'type' },
           {
             kind: 'field' as const,
             label: 'Base URL',
             detail: draft.baseUrl || '<empty>',
+            fieldKey: 'baseUrl',
           },
           {
             kind: 'field' as const,
             label: 'API Key',
             detail: draft.apiKey ? '********' : '<empty>',
+            fieldKey: 'apiKey',
           },
           { kind: 'action' as const, label: 'Save Changes' },
           { kind: 'action' as const, label: 'Cancel' },
         ];
       }
+      case 'confirm_discard':
+        return [
+          { kind: 'action' as const, label: 'Yes, discard changes', tone: 'destructive' as const },
+          { kind: 'action' as const, label: 'No, keep editing' },
+        ];
       case 'confirm_delete':
         return [
           { kind: 'action' as const, label: 'Yes, delete this provider', tone: 'destructive' as const },
@@ -254,6 +269,9 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       setEditingOriginalName(null);
       setEditingField(null);
       setErrorMessage(null);
+      setFieldErrors({});
+      setDiscardFromPhase(null);
+      setDraftModified(false);
     }
   }, [isOpen, loadProviders]);
 
@@ -288,6 +306,9 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     if (phase === 'list') {
       if (index === items.length) {
         // "Add Custom Provider" selected
+        setFieldErrors({});
+        setDiscardFromPhase(null);
+        setDraftModified(false);
         setDraft({
           name: '',
           type: 'openai-compatible',
@@ -300,6 +321,9 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         // Provider selected
         const provider = items[index]!;
         if (provider.isCustom) {
+          setFieldErrors({});
+          setDiscardFromPhase(null);
+          setDraftModified(false);
           // Edit custom provider directly
           const list = settingsService.get<any[]>('providers') || [];
           const found = list.find((p: any) => p && p.name === provider.id);
@@ -319,10 +343,14 @@ export const useProviderSelection = (settingsService: SettingsService) => {
             });
           }
           setEditingOriginalName(found ? found.name : null);
+          setFieldErrors({});
           setPhase('edit_fields');
           setSelectedIndex(0);
         } else if (provider.id !== 'codex') {
           // Allow editing apiKey for built-in providers (except Codex)
+          setFieldErrors({});
+          setDiscardFromPhase(null);
+          setDraftModified(false);
           const storedKey = settingsService.get<string>(`agent.${provider.id}.apiKey`) || '';
           setDraft({
             name: provider.label,
@@ -338,8 +366,11 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       const selectedType = PROVIDER_TYPES[index]!;
       if (draft) {
         setDraft({ ...draft, type: selectedType });
+        setDraftModified(true);
         if (editingField) {
           // We were editing from edit_fields
+          setFieldErrors({});
+          setDraftModified(false);
           setPhase('edit_fields');
           setSelectedIndex(1); // select the Type row
           setEditingField(null);
@@ -358,6 +389,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         if (index === 2) {
           // Edit API Key
           setEditingField('apiKey');
+          setDraftModified(false);
           setPhase('wizard_key');
         } else if (index === 3) {
           // Save Changes
@@ -368,24 +400,29 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setSelectedIndex(0);
           setDraft(null);
           setEditingOriginalName(null);
+          setFieldErrors({});
         }
       } else {
         if (index === 0) {
           // Edit Name
           setEditingField('name');
+          setDraftModified(false);
           setPhase('wizard_name');
         } else if (index === 1) {
           // Edit Type
           setEditingField('type');
+          setDraftModified(false);
           setPhase('wizard_type');
           setSelectedIndex(PROVIDER_TYPES.indexOf(draft.type));
         } else if (index === 2) {
           // Edit Base URL
           setEditingField('baseUrl');
+          setDraftModified(false);
           setPhase('wizard_url');
         } else if (index === 3) {
           // Edit API Key
           setEditingField('apiKey');
+          setDraftModified(false);
           setPhase('wizard_key');
         } else if (index === 4) {
           // Save Changes
@@ -395,7 +432,61 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setPhase('list');
           setSelectedIndex(0);
           setDraft(null);
+          setFieldErrors({});
         }
+      }
+    } else if (phase === 'confirm_discard') {
+      if (!discardFromPhase) return;
+      if (index === 0) {
+        setDraftModified(false);
+        const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
+        const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+
+        if (discardFromPhase === 'wizard_name') {
+          if (editingField !== null) {
+            setPhase('edit_fields');
+            setSelectedIndex(0);
+            setEditingField(null);
+          } else {
+            setPhase('list');
+            setSelectedIndex(0);
+            setDraft(null);
+            setEditingOriginalName(null);
+          }
+        } else if (discardFromPhase === 'wizard_type') {
+          if (editingField !== null) {
+            setPhase('edit_fields');
+            setSelectedIndex(1);
+            setEditingField(null);
+          } else {
+            setPhase('wizard_name');
+            setSelectedIndex(0);
+          }
+        } else if (discardFromPhase === 'wizard_url') {
+          if (editingField !== null) {
+            setPhase('edit_fields');
+            setSelectedIndex(2);
+            setEditingField(null);
+          } else {
+            setPhase('wizard_type');
+            setSelectedIndex(0);
+          }
+        } else if (discardFromPhase === 'wizard_key') {
+          if (editingField !== null) {
+            setPhase('edit_fields');
+            setSelectedIndex(isEditingBuiltIn ? 2 : 3);
+            setEditingField(null);
+          } else {
+            setPhase('wizard_url');
+            setSelectedIndex(0);
+          }
+        }
+        setDiscardFromPhase(null);
+        setFieldErrors({});
+      } else {
+        setPhase(discardFromPhase);
+        setSelectedIndex(0);
+        setDiscardFromPhase(null);
       }
     } else if (phase === 'confirm_delete') {
       if (index === 0) {
@@ -423,12 +514,29 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         setEditingOriginalName(null);
       }
     }
-  }, [phase, selectedIndex, items, editingOriginalName, draft, editingField, settingsService, loadProviders]);
+  }, [
+    phase,
+    selectedIndex,
+    items,
+    editingOriginalName,
+    draft,
+    editingField,
+    discardFromPhase,
+    settingsService,
+    loadProviders,
+  ]);
 
   const goBack = useCallback(() => {
     setErrorMessage(null);
     if (phase === 'list') {
       close();
+    } else if (
+      (phase === 'wizard_name' || phase === 'wizard_type' || phase === 'wizard_url' || phase === 'wizard_key') &&
+      draftModified
+    ) {
+      setDiscardFromPhase(phase);
+      setPhase('confirm_discard');
+      setSelectedIndex(DELETE_CONFIRM_DEFAULT_INDEX);
     } else if (phase === 'wizard_name') {
       if (editingField) {
         setPhase('edit_fields');
@@ -468,6 +576,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         setSelectedIndex(0);
       }
     } else if (phase === 'edit_fields') {
+      setFieldErrors({});
       setPhase('list');
       setSelectedIndex(0);
       setDraft(null);
@@ -476,8 +585,14 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       setPhase('list');
       setSelectedIndex(0);
       setEditingOriginalName(null);
+    } else if (phase === 'confirm_discard') {
+      if (discardFromPhase) {
+        setPhase(discardFromPhase);
+        setSelectedIndex(0);
+      }
+      setDiscardFromPhase(null);
     }
-  }, [phase, editingField, close]);
+  }, [phase, editingField, close, draftModified, discardFromPhase, draft]);
 
   // Handler for text input submissions from app.tsx wizard manager
   const handleTextInputSubmit = useCallback(
@@ -488,6 +603,12 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       if (phase === 'wizard_name') {
         if (!val) {
           setErrorMessage('Name cannot be empty.');
+          return false;
+        }
+        if (!PROVIDER_NAME_REGEX.test(val)) {
+          setErrorMessage(
+            'Name must start with a letter or number and contain only letters, numbers, hyphens, underscores, and dots.',
+          );
           return false;
         }
         // Check for name conflict
@@ -501,7 +622,10 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         if (draft) {
           const updatedDraft = { ...draft, name: val };
           setDraft(updatedDraft);
+          setDraftModified(true);
           if (editingField) {
+            setFieldErrors({});
+            setDraftModified(false);
             setPhase('edit_fields');
             setSelectedIndex(0);
             setEditingField(null);
@@ -534,7 +658,10 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         if (draft) {
           const updatedDraft = { ...draft, baseUrl: val || undefined };
           setDraft(updatedDraft);
+          setDraftModified(true);
           if (editingField) {
+            setFieldErrors({});
+            setDraftModified(false);
             setPhase('edit_fields');
             setSelectedIndex(2);
             setEditingField(null);
@@ -550,9 +677,12 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         if (draft) {
           const updatedDraft = { ...draft, apiKey: val || undefined };
           setDraft(updatedDraft);
+          setDraftModified(true);
           const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
           const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
           if (editingField) {
+            setFieldErrors({});
+            setDraftModified(false);
             setPhase('edit_fields');
             setSelectedIndex(isEditingBuiltIn ? 2 : 3);
             setEditingField(null);
@@ -560,6 +690,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
             // Wizard complete, go to fields overview before saving
             setPhase('edit_fields');
             setSelectedIndex(isEditingBuiltIn ? 3 : 4); // focus Save changes button
+            setFieldErrors({});
+            setDraftModified(false);
           }
         }
         return true;
@@ -573,6 +705,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
   const saveDraft = () => {
     if (!draft) return;
     setErrorMessage(null);
+    setFieldErrors({});
 
     const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
     const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
@@ -585,6 +718,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         setSelectedIndex(0);
         setDraft(null);
         setEditingOriginalName(null);
+        setFieldErrors({});
       } catch (err: any) {
         setErrorMessage(err.message || 'Failed to save provider API key.');
       }
@@ -593,25 +727,27 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
     // Final checks
     if (!draft.name.trim()) {
-      setPhase('wizard_name');
-      setErrorMessage('Name cannot be empty.');
+      setFieldErrors({ name: 'Name cannot be empty.' });
+      return;
+    }
+
+    if (!PROVIDER_NAME_REGEX.test(draft.name.trim())) {
+      setFieldErrors({
+        name: 'Name must start with a letter or number and contain only letters, numbers, hyphens, underscores, and dots.',
+      });
       return;
     }
 
     const originalName = editingOriginalName;
     if (hasProviderNameConflict(settingsService, draft.name, originalName ?? undefined)) {
-      setPhase('edit_fields');
-      setSelectedIndex(0);
-      setErrorMessage(`Provider with name '${draft.name}' already exists.`);
+      setFieldErrors({ name: `Provider with name '${draft.name}' already exists.` });
       return;
     }
 
     const type = draft.type;
     const baseUrlRequired = type === 'openai' || type === 'openai-compatible' || type === 'llama.cpp';
     if (baseUrlRequired && !draft.baseUrl) {
-      setPhase('edit_fields');
-      setSelectedIndex(2);
-      setErrorMessage(`Base URL is required for provider type '${type}'.`);
+      setFieldErrors({ baseUrl: `Base URL is required for provider type '${type}'.` });
       return;
     }
 
@@ -659,6 +795,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       setSelectedIndex(0);
       setDraft(null);
       setEditingOriginalName(null);
+      setFieldErrors({});
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to save provider.');
     }
@@ -687,6 +824,9 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     scrollOffset,
     draft,
     errorMessage,
+    fieldErrors,
+    draftModified,
+    discardFromPhase,
     selectedProviderName,
     open,
     close,

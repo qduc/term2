@@ -13,6 +13,7 @@ type Props = {
   scrollOffset?: number;
   activeItems: ProviderSelectionMenuItem[];
   errorMessage: string | null;
+  fieldErrors?: Record<string, string>;
   selectedProviderName?: string;
   draft: CustomProviderDraft | null;
 };
@@ -23,6 +24,7 @@ const ProviderSelectionMenu: FC<Props> = ({
   scrollOffset,
   activeItems,
   errorMessage,
+  fieldErrors,
   selectedProviderName,
   draft,
 }) => {
@@ -36,6 +38,8 @@ const ProviderSelectionMenu: FC<Props> = ({
         return 'Review & Save Provider';
       case 'confirm_delete':
         return `Delete Provider: ${selectedProviderName}`;
+      case 'confirm_discard':
+        return 'Discard Changes?';
       case 'wizard_name':
         return 'Step 1: Provider Name';
       case 'wizard_url':
@@ -52,6 +56,7 @@ const ProviderSelectionMenu: FC<Props> = ({
       case 'list':
         return 'Enter → Edit custom provider · Del → Delete custom provider · Esc → Close Menu · ↑↓ → Navigate';
       case 'confirm_delete':
+      case 'confirm_discard':
       case 'wizard_type':
         return 'Enter → Select · Esc → Go Back · ↑↓ → Navigate';
       case 'edit_fields':
@@ -67,7 +72,7 @@ const ProviderSelectionMenu: FC<Props> = ({
 
   const getBorderColor = () => {
     if (errorMessage) return 'red';
-    if (phase === 'confirm_delete') return 'red';
+    if (phase === 'confirm_delete' || phase === 'confirm_discard') return 'red';
     return 'cyan';
   };
 
@@ -128,6 +133,23 @@ const ProviderSelectionMenu: FC<Props> = ({
     return renderTextWizardPrompt();
   }
 
+  const labelColumnWidth = (() => {
+    let maxLen = 0;
+    for (const it of activeItems) {
+      let p = '  ';
+      let l = it.label;
+      if (it.kind === 'add-provider') {
+        p = '+ ';
+      } else if (it.kind === 'action') {
+        p = it.tone === 'destructive' ? '× ' : '  ';
+      } else if (it.kind === 'field' && it.detail) {
+        l = `${it.label}: ${it.detail}`;
+      }
+      maxLen = Math.max(maxLen, p.length + l.length);
+    }
+    return maxLen + 2;
+  })();
+
   return (
     <Box flexDirection="column">
       <Box marginBottom={0}>
@@ -142,7 +164,14 @@ const ProviderSelectionMenu: FC<Props> = ({
           </Text>
         </Box>
       )}
-      {errorMessage && (
+      {phase === 'confirm_discard' && (
+        <Box marginTop={1} marginBottom={0}>
+          <Text color="yellow" bold>
+            ⚠ You have unsaved changes. Discard them?
+          </Text>
+        </Box>
+      )}
+      {errorMessage && phase !== 'edit_fields' && (
         <Box marginTop={1} marginBottom={0}>
           <Text color="red">⚠ {errorMessage}</Text>
         </Box>
@@ -157,20 +186,16 @@ const ProviderSelectionMenu: FC<Props> = ({
         renderItem={(item, index, isSelected, isInactive) => {
           let label = item.label;
           let prefix = '  ';
+          let suffix = '';
           let color = isSelected ? 'green' : 'white';
           let bold = isSelected;
 
           if (item.kind === 'provider') {
-            if (item.isActive) {
-              prefix = '● ';
-              color = isSelected ? 'green' : 'cyan';
-            } else {
-              // Built-in (non-active): greyed out, not actionable on Enter.
-              // Custom providers remain bright so they look interactive.
-              // Note: openai and openrouter remain active/bright because we can change their api key.
-              prefix = isInactive ? '— ' : '  ';
-              color = isInactive ? 'gray' : isSelected ? 'green' : 'white';
-            }
+            // Built-in (non-active): greyed out, not actionable on Enter.
+            // Custom providers remain bright so they look interactive.
+            // Note: openai and openrouter remain active/bright because we can change their api key.
+            color = isInactive ? 'gray' : isSelected ? 'green' : 'white';
+            suffix = item.label === 'Codex' ? 'Run `npx @openai/codex login` to login to Codex' : '';
           } else if (item.kind === 'add-provider') {
             prefix = '+ ';
             color = isSelected ? 'green' : 'yellow';
@@ -190,13 +215,39 @@ const ProviderSelectionMenu: FC<Props> = ({
             color = isSelected ? 'red' : 'red';
           }
 
+          if (phase === 'edit_fields' && item.kind === 'field') {
+            const error = item.fieldKey ? fieldErrors?.[item.fieldKey] : undefined;
+            return (
+              <Box key={`${index}-${item.kind}-${item.label}`} flexDirection="column">
+                <Box flexDirection="row">
+                  <Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '▶ ' : '  '}</Text>
+                  <Box width={labelColumnWidth} flexDirection="row" flexShrink={0}>
+                    <Text color={color} bold={bold}>
+                      {prefix}
+                      {label}
+                    </Text>
+                  </Box>
+                  {suffix ? <Text color="gray">{suffix}</Text> : null}
+                </Box>
+                {error ? (
+                  <Box marginLeft={4}>
+                    <Text color="red">⚠ {error}</Text>
+                  </Box>
+                ) : null}
+              </Box>
+            );
+          }
+
           return (
             <Box key={`${index}-${item.kind}-${item.label}`} flexDirection="row">
               <Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '▶ ' : '  '}</Text>
-              <Text color={color} bold={bold}>
-                {prefix}
-                {label}
-              </Text>
+              <Box width={labelColumnWidth} flexDirection="row" flexShrink={0}>
+                <Text color={color} bold={bold}>
+                  {prefix}
+                  {label}
+                </Text>
+              </Box>
+              {suffix ? <Text color="gray">{suffix}</Text> : null}
             </Box>
           );
         }}

@@ -431,6 +431,17 @@ test.serial('useProviderSelection - add provider wizard flow and validation', as
   t.false(success);
   t.is(hook!.errorMessage, 'Name cannot be empty.');
 
+  // Submit invalid name format (fails)
+  await act(async () => {
+    success = hook!.handleTextInputSubmit('my provider');
+  });
+  await flush();
+  t.false(success);
+  t.is(
+    hook!.errorMessage,
+    'Name must start with a letter or number and contain only letters, numbers, hyphens, underscores, and dots.',
+  );
+
   // Submit duplicate/built-in name (fails)
   await act(async () => {
     success = hook!.handleTextInputSubmit('openai');
@@ -571,6 +582,7 @@ test.serial('useProviderSelection - goBack returns wizard fields to the correct 
   await flush();
 
   t.is(hook!.phase, 'wizard_name');
+  t.is(hook!.selectedIndex, 0);
 
   await act(async () => {
     hook!.goBack();
@@ -579,6 +591,160 @@ test.serial('useProviderSelection - goBack returns wizard fields to the correct 
 
   t.is(hook!.phase, 'edit_fields');
   t.is(hook!.selectedIndex, 0);
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+test.serial('useProviderSelection - confirm discard appears when backing out of a modified wizard', async (t) => {
+  const settingsService = createMockSettingsService([], 'openai');
+  let hook: ReturnType<typeof useProviderSelection> | undefined;
+  let renderer: any;
+
+  await act(async () => {
+    renderer = render(
+      React.createElement(
+        InputProvider as any,
+        {},
+        React.createElement(TestComponent, {
+          settingsService,
+          onHookResult: (h) => {
+            hook = h;
+          },
+        }),
+      ),
+    );
+  });
+
+  await act(async () => {
+    hook!.open();
+  });
+  await flush();
+
+  await act(async () => {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'add-provider');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
+      hook!.moveDown();
+    }
+  });
+  await flush();
+
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'wizard_name');
+
+  await act(async () => {
+    hook!.handleTextInputSubmit('test-provider');
+  });
+  await flush();
+
+  t.is(hook!.phase, 'wizard_type');
+
+  await act(async () => {
+    hook!.goBack();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'confirm_discard');
+  t.is(hook!.selectedIndex, 1);
+
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'wizard_type');
+  t.is(hook!.selectedIndex, 0);
+
+  await act(async () => {
+    hook!.goBack();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'confirm_discard');
+
+  await act(async () => {
+    hook!.moveUp();
+  });
+  await flush();
+
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'wizard_name');
+  t.truthy(hook!.draft);
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+test.serial('useProviderSelection - back out of an unmodified wizard returns directly to the list', async (t) => {
+  const settingsService = createMockSettingsService([], 'openai');
+  let hook: ReturnType<typeof useProviderSelection> | undefined;
+  let renderer: any;
+
+  await act(async () => {
+    renderer = render(
+      React.createElement(
+        InputProvider as any,
+        {},
+        React.createElement(TestComponent, {
+          settingsService,
+          onHookResult: (h) => {
+            hook = h;
+          },
+        }),
+      ),
+    );
+  });
+
+  await act(async () => {
+    hook!.open();
+  });
+  await flush();
+
+  await act(async () => {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'add-provider');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
+      hook!.moveDown();
+    }
+  });
+  await flush();
+
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'wizard_name');
+
+  await act(async () => {
+    hook!.goBack();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'list');
 
   await act(async () => {
     renderer.unmount();
@@ -668,7 +834,8 @@ test.serial('useProviderSelection - saveDraft rejects duplicate names discovered
   await flush();
 
   t.is(hook!.phase, 'edit_fields');
-  t.is(hook!.errorMessage, "Provider with name 'late-conflict-provider' already exists.");
+  t.deepEqual(hook!.fieldErrors, { name: "Provider with name 'late-conflict-provider' already exists." });
+  t.is(hook!.errorMessage, null);
   t.is(settingsService.get('providers').length, 1);
 
   await act(async () => {

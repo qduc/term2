@@ -13,6 +13,7 @@ test('ProviderSelectionMenu shows the type step numbering consistently', (t) => 
         { kind: 'type', label: 'openai' },
       ],
       errorMessage: null,
+      fieldErrors: {},
       selectedProviderName: undefined,
       draft: { name: 'local', type: 'openai-compatible' },
     }),
@@ -33,6 +34,7 @@ test('ProviderSelectionMenu renders structured provider items without built-in/c
         { kind: 'add-provider', label: 'Add Custom Provider' },
       ],
       errorMessage: null,
+      fieldErrors: {},
       selectedProviderName: undefined,
       draft: null,
     }),
@@ -55,6 +57,7 @@ test('ProviderSelectionMenu highlights destructive delete confirmation text', (t
         { kind: 'action', label: 'No, keep it' },
       ],
       errorMessage: null,
+      fieldErrors: {},
       selectedProviderName: 'custom-ollama',
       draft: null,
     }),
@@ -63,4 +66,51 @@ test('ProviderSelectionMenu highlights destructive delete confirmation text', (t
   const frame = lastFrame()!;
   t.true(frame.includes('× Yes, delete this provider'));
   t.true(frame.includes('No, keep it'));
+});
+
+test('ProviderSelectionMenu renders inline field errors in edit_fields', (t) => {
+  const { lastFrame } = render(
+    React.createElement(ProviderSelectionMenu, {
+      phase: 'edit_fields',
+      selectedIndex: 0,
+      activeItems: [
+        { kind: 'field', label: 'Name: bad name', fieldKey: 'name' },
+        { kind: 'field', label: 'Base URL', detail: 'http://localhost:11434/v1', fieldKey: 'baseUrl' },
+        { kind: 'action', label: 'Save Changes' },
+      ],
+      errorMessage: null,
+      fieldErrors: {
+        name: 'Name must start with a letter or number and contain only letters, numbers, hyphens, underscores, and dots.',
+        baseUrl: "Base URL is required for provider type 'openai-compatible'.",
+      },
+      selectedProviderName: undefined,
+      draft: { name: 'bad name', type: 'openai-compatible', baseUrl: 'http://localhost:11434/v1' },
+    }),
+  );
+
+  const frame = lastFrame()!;
+  t.true(frame.includes('⚠ Name must start with a letter or number'));
+  t.true(frame.includes("⚠ Base URL is required for provider type 'openai-compatible'."));
+});
+
+test('ProviderSelectionMenu renders the confirm discard warning', (t) => {
+  const { lastFrame } = render(
+    React.createElement(ProviderSelectionMenu, {
+      phase: 'confirm_discard',
+      selectedIndex: 1,
+      activeItems: [
+        { kind: 'action', label: 'Yes, discard changes', tone: 'destructive' },
+        { kind: 'action', label: 'No, keep editing' },
+      ],
+      errorMessage: null,
+      fieldErrors: {},
+      selectedProviderName: undefined,
+      draft: { name: 'test-provider', type: 'openai-compatible' },
+    }),
+  );
+
+  const frame = lastFrame()!;
+  t.true(frame.includes('Discard Changes?'));
+  t.true(frame.includes('⚠ You have unsaved changes. Discard them?'));
+  t.true(frame.includes('No, keep editing'));
 });

@@ -77,6 +77,7 @@ interface PopupManagerProps {
     scrollOffset?: number;
     activeItems: ProviderSelectionMenuItem[];
     errorMessage: string | null;
+    fieldErrors?: Record<string, string>;
     selectedProviderName?: string;
     draft: import('../../hooks/use-provider-selection.js').CustomProviderDraft | null;
   };
@@ -158,6 +159,7 @@ export const PopupManager: FC<PopupManagerProps> = ({
           scrollOffset={providers.scrollOffset}
           activeItems={providers.activeItems}
           errorMessage={providers.errorMessage}
+          fieldErrors={providers.fieldErrors}
           selectedProviderName={providers.selectedProviderName}
           draft={providers.draft}
         />

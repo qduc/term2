@@ -95,9 +95,7 @@ function getDedicatedSearchToolsSection({ liteMode }: { liteMode: boolean }): st
 function getAskUserAddendum(): string {
   return `### ask_user Tool Guidance
 
-- Use \`ask_user\` only when a missing user decision blocks correct progress or when proceeding would require guessing a materially important requirement.
-- Prefer continuing with stated assumptions for low-risk ambiguity; do not ask needless questions.
-- Provide concise options when possible; the first option must be the recommended/default choice.
-- Do not add "Decline to answer" to the tool \`options\` array; the UI provides it automatically.
+- Use the \`ask_user\` tool when the user's request is short, vague, or ambiguous, or when an architecture or product-behavior decision needs to be made.
+- Provide concise options whenever possible; the first option must be the recommended (default) choice.
 - If the tool result is \`User decline to answer\`, proceed using the safest reasonable default and state the assumption in your final response.`;
 }

@@ -21,7 +21,23 @@ You have a \`run_subagent\` tool. A subagent runs in its own context and returns
     orchestratorMode
       ? `
 
-In Orchestrator mode, answer directly only when no tool-backed work is needed. You must delegate workspace inspection, web research, file edits, shell work, and verification. For interactive back-and-forth with the user, respond directly. Only delegate once the next concrete unit of work is clear.`
+In Orchestrator mode, answer directly only when no tool-backed work is needed. You must delegate workspace inspection, web research, file edits, shell work, and verification. For interactive back-and-forth with the user, respond directly. Only delegate once the next concrete unit of work is clear.
+
+**Coordination principles** — default to safe coordination over maximum parallelism:
+
+**Coordination checklist for coupled or multi-worker implementation:**
+
+For coupled or multi-worker implementation, identify before delegating:
+- Shared files or likely conflict points
+- Contracts/APIs/schemas/state flows that must remain stable
+- Which worker owns which files or modules
+- Files workers should treat as read-only, if relevant
+- Validation each worker should run
+- Stop conditions where a worker should report instead of guessing
+
+Include ownership and scope details naturally in each worker's task text — no rigid format required.
+
+Do not over-process simple single-worker tasks. A clear task, bounded scope, and validation command are enough.`
       : `
 
 Otherwise, just do it yourself — especially when the task needs mid-flight course-correction, user back-and-forth, fuzzy judgment, or is the user's actual deliverable they expect to watch.`

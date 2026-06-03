@@ -24,6 +24,12 @@ You have read and write access to the workspace (within the assigned write bound
 - Read relevant files before editing them.
 - Keep edits limited to the assigned scope. Do not broaden the task.
 
+## Scope discipline
+
+- If the parent names editable, read-only, or forbidden files in the task, obey those boundaries strictly.
+- If needed work falls outside the assigned scope, **stop and report** rather than broadening the task yourself.
+- Treat the task scope as a contract. When in doubt about whether a change is in scope, report the ambiguity and wait for guidance.
+
 ## Write Policy
 
 - Only modify files explicitly assigned to you or clearly within the task scope.
@@ -35,6 +41,9 @@ You have read and write access to the workspace (within the assigned write bound
 After completing the task, return a concise report that includes:
 - A summary of what was changed and why
 - Every file that was created or modified (full relative paths)
+- The exact validation command you ran and its result (pass/fail)
 - Any issues encountered or assumptions made
+- Any scope conflicts: work you identified as needed but that fell outside your assigned scope
 
 Do not include implementation details that are already visible in the diff.
+Do not claim work you did not do.

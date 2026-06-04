@@ -35,6 +35,7 @@ import {
 } from './tool-execution-ledger.js';
 import type { AssistantTurnState, LogEvent, StateSnapshot } from './conversation-log-events.js';
 import { describeError } from '../utils/error-helpers.js';
+import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import type { PersistedAssistantTurn, PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 
 export type { CommandMessage };
@@ -119,6 +120,18 @@ export class ConversationSession {
   private toolLedger = new ToolExecutionLedger();
   private generation = 0;
   #inputSurgeKind: string = 'delta';
+  #chainingBroken = false;
+
+  #breakChaining(): void {
+    this.#chainingBroken = true;
+    this.previousResponseId = null;
+    this.logger.warn('WS-to-HTTP downgrade detected: chaining disabled, switching to full-history mode', {
+      eventType: 'conversation.chaining_broken',
+      category: 'provider',
+      phase: 'post_stream',
+      sessionId: this.id,
+    });
+  }
   private currentPersistedTurnItems: PersistedAssistantTurnItem[] = [];
   private currentReasoningBuffer = '';
   private currentAssistantTextBuffer = '';
@@ -165,6 +178,13 @@ export class ConversationSession {
       logger: this.logger,
       sessionId: this.id,
     });
+
+    // When the WS transport degrades to HTTP for a provider that requires
+    // WS for conversation chaining, sever the chain and switch to full-history
+    // mode for the rest of the session.
+    if (typeof this.agentClient.onDowngrade === 'function') {
+      this.agentClient.onDowngrade(() => this.#breakChaining());
+    }
   }
 
   #getTrafficMode(): string {
@@ -227,7 +247,8 @@ export class ConversationSession {
     const history = this.#getCanonicalHistory();
     const effectiveTurn = includeTurn ? this.#turnWithModeNotice(turn, this.pendingModeNotice) : turn;
     const outgoingHistory = includeTurn ? [...history, this.#makeUserInputItem(effectiveTurn)] : history;
-    const useChaining = supportsChaining && (!!this.previousResponseId || outgoingHistory.length <= 1);
+    const useChaining =
+      supportsChaining && !this.#chainingBroken && (!!this.previousResponseId || outgoingHistory.length <= 1);
     const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
     const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;
 
@@ -856,9 +877,10 @@ export class ConversationSession {
       // resync (fresh start with just the current message). After undo the chain
       // is severed (previousResponseId = null) while prior turns remain in the
       // local store, so we fall back to full-history mode to re-establish context.
-      const { streamInput, inputSurgeKind } = this.#buildOutgoingInput(turn, {
+      const { streamInput, inputSurgeKind: initialInputSurgeKind } = this.#buildOutgoingInput(turn, {
         includeTurn: false,
       });
+      let inputSurgeKind = initialInputSurgeKind;
       this.#inputSurgeKind = inputSurgeKind;
       const surgeDecision = this.inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind });
       if (surgeDecision.action === 'block') {
@@ -892,10 +914,39 @@ export class ConversationSession {
         this.pendingModeNotice = null;
       }
 
-      stream = (await this.agentClient.startStream(streamInput, {
-        previousResponseId: inputSurgeKind === 'delta' ? this.previousResponseId : null,
-        sessionId: this.id,
-      })) as AgentStream;
+      try {
+        stream = (await this.agentClient.startStream(streamInput, {
+          previousResponseId: inputSurgeKind === 'delta' ? this.previousResponseId : null,
+          sessionId: this.id,
+        })) as AgentStream;
+      } catch (chainingError) {
+        // When WS degrades to HTTP mid-request and the provider requires WS for
+        // chaining (e.g. Codex), the model layer throws ChainingTransportDowngradeError.
+        // Break chaining and retry with full history.
+        if (chainingError instanceof ChainingTransportDowngradeError) {
+          this.#breakChaining();
+
+          this.logger.warn('ChainingTransportDowngradeError caught, retrying with full history', {
+            eventType: 'retry.chaining_downgrade',
+            category: 'retry',
+            phase: 'retry',
+            retryType: 'chaining_downgrade',
+            sessionId: this.id,
+            traceId: this.logger.getCorrelationId(),
+            errorMessage: chainingError instanceof Error ? chainingError.message : String(chainingError),
+          });
+
+          const fullHistoryRetry = this.#buildOutgoingInput(turn, { includeTurn: false });
+          inputSurgeKind = fullHistoryRetry.inputSurgeKind;
+          this.#inputSurgeKind = inputSurgeKind;
+          stream = (await this.agentClient.startStream(fullHistoryRetry.streamInput, {
+            previousResponseId: null,
+            sessionId: this.id,
+          })) as AgentStream;
+        } else {
+          throw chainingError;
+        }
+      }
 
       const acc = createStreamAccumulator();
       for await (const event of processStreamEvents(

@@ -1,6 +1,7 @@
 import { ModelBehaviorError } from '@openai/agents';
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
 import { OpenRouterError, OpenAICompatibleError } from '../providers/common/provider-errors.js';
+import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 
 export const MAX_HALLUCINATION_RETRIES = 2;
 export const MAX_SUBAGENT_MODEL_RETRIES = 1;
@@ -33,6 +34,10 @@ export const isTransientRetryableError = (error: unknown): boolean => {
     if (lower === 'terminated' || lower.startsWith('terminated:')) {
       return true;
     }
+  }
+
+  if (error instanceof ChainingTransportDowngradeError) {
+    return true;
   }
 
   if (error && typeof error === 'object') {

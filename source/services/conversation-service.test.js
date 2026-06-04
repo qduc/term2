@@ -223,7 +223,11 @@ test('emits events when resolving aborted approval on next message', async (t) =
     },
     async continueRunStream(state, options) {
       t.is(state, initialStream.state);
-      t.deepEqual(options, { previousResponseId: 'resp_test', sessionId: 'default' });
+      t.deepEqual(options, {
+        previousResponseId: 'resp_test',
+        sessionId: 'default',
+        toolResultCallIds: ['call-abort'],
+      });
       return continuationStream;
     },
   };
@@ -418,7 +422,11 @@ test('emits approval interruptions and resumes after approval', async (t) => {
     },
     async continueRunStream(state, options) {
       t.is(state, initialStream.state);
-      t.deepEqual(options, { previousResponseId: 'resp_test', sessionId: 'default' });
+      t.deepEqual(options, {
+        previousResponseId: 'resp_test',
+        sessionId: 'default',
+        toolResultCallIds: [],
+      });
       return continuationStream;
     },
   };
@@ -965,7 +973,11 @@ test('handleApprovalDecision() rejects interruption when answer is n', async (t)
       return initialStream;
     },
     async continueRunStream(state, options) {
-      t.deepEqual(options, { previousResponseId: 'resp_test', sessionId: 'default' });
+      t.deepEqual(options, {
+        previousResponseId: 'resp_test',
+        sessionId: 'default',
+        toolResultCallIds: [],
+      });
       return continuationStream;
     },
     addToolInterceptor(fn) {

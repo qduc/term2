@@ -7,6 +7,21 @@ import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 
 export interface FallbackState {
   isDowngraded: boolean;
+  /** Called the first time the WS transport degrades to HTTP. */
+  onDowngrade?: () => void;
+}
+
+/**
+ * Thrown when a provider that requires WS for conversation chaining
+ * (e.g. Codex) falls back to HTTP mid-request, because the HTTP
+ * endpoint cannot reconstruct server-managed history. The session
+ * layer should catch this and retry with full conversation history.
+ */
+export class ChainingTransportDowngradeError extends Error {
+  override readonly name = 'ChainingTransportDowngradeError' as const;
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+  }
 }
 
 export function isNetworkProtocolError(err: any): boolean {
@@ -215,6 +230,14 @@ export class FallbackResponsesModel implements Model {
   }
 
   #prepareCodexServerHistoryRequest(request: ModelRequest): ModelRequest {
+    // When downgraded to HTTP, server-managed history is not supported.
+    // Strip previousResponseId and return the input as-is so the caller
+    // (which may have already delta-filtered) gets the raw request through.
+    if (this.state.isDowngraded) {
+      const { previousResponseId: _prid, ...rest } = request as any;
+      return rest as ModelRequest;
+    }
+
     const explicitPreviousResponseId =
       typeof request.previousResponseId === 'string' && request.previousResponseId.length > 0
         ? request.previousResponseId
@@ -306,6 +329,19 @@ export class FallbackResponsesModel implements Model {
     const key = this.#getCodexServerHistoryKey();
     if (key) {
       this.codexPreviousResponseIds.set(key, responseId);
+    }
+  }
+
+  /** Flip downgrade state, clear stale WS response IDs, and notify listeners. */
+  #notifyDowngrade(error: unknown): void {
+    this.state.isDowngraded = true;
+    // WS-established response IDs are meaningless to the HTTP endpoint.
+    this.codexPreviousResponseIds.clear();
+    if (this.onDowngrade) {
+      this.onDowngrade(error);
+    }
+    if (this.state.onDowngrade) {
+      this.state.onDowngrade();
     }
   }
 
@@ -512,9 +548,14 @@ export class FallbackResponsesModel implements Model {
             });
           }
 
-          this.state.isDowngraded = true;
-          if (this.onDowngrade) {
-            this.onDowngrade(error);
+          this.#notifyDowngrade(error);
+          // For Codex, the HTTP endpoint does not support conversation chaining.
+          // If we have a chained request, throw so the session can retry with
+          // full history.
+          if (this.providerId === 'codex' && effectiveRequest.previousResponseId) {
+            throw new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP', {
+              cause: error,
+            });
           }
           const response = await this.httpModel.getResponse(effectiveRequest);
           this.#rememberCodexResponseId(getResponseIdFromResponse(response));
@@ -669,12 +710,18 @@ export class FallbackResponsesModel implements Model {
           // network errors still flip the downgrade flag.
           const isTransientMidStreamStall = started && isIdleTimeoutError(error);
           if (!isTransientMidStreamStall) {
-            this.state.isDowngraded = true;
-            if (this.onDowngrade) {
-              this.onDowngrade(error);
-            }
+            this.#notifyDowngrade(error);
           }
           if (!started) {
+            // For Codex, the HTTP endpoint does not support conversation chaining
+            // (previous_response_id / server-managed history). If we have a chained
+            // request, a silent HTTP fallback would send a contextless delta. Instead,
+            // throw so the session layer can retry with full history.
+            if (this.providerId === 'codex' && effectiveRequest.previousResponseId) {
+              throw new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP', {
+                cause: error,
+              });
+            }
             // Seamless fallback: no events yielded yet
             for await (const event of this.httpModel.getStreamedResponse(effectiveRequest)) {
               this.#rememberCodexResponseId(getResponseIdFromStreamEvent(event));

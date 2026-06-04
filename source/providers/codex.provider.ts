@@ -2,7 +2,7 @@ import { Runner } from '@openai/agents';
 import { getDefaultModel, ModelProvider, Model } from '@openai/agents-core';
 import OpenAI from 'openai';
 import { CodexResponsesModel, CodexResponsesWSModel } from './codex-responses-model.js';
-import { FallbackResponsesModel } from './fallback-responses-model.js';
+import { FallbackResponsesModel, type FallbackState } from './fallback-responses-model.js';
 import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -414,7 +414,7 @@ async function fetchCodexModels(
 }
 
 class FallbackCodexProvider implements ModelProvider {
-  private readonly fallbackState = { isDowngraded: false };
+  readonly fallbackState: FallbackState = { isDowngraded: false };
   private readonly models = new Map<string, FallbackResponsesModel>();
 
   constructor(

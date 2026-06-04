@@ -1,6 +1,10 @@
 import test from 'ava';
 import { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
-import { FallbackResponsesModel, isNetworkProtocolError } from './fallback-responses-model.js';
+import {
+  FallbackResponsesModel,
+  isNetworkProtocolError,
+  ChainingTransportDowngradeError,
+} from './fallback-responses-model.js';
 
 function makeMockModel(
   options: {
@@ -960,4 +964,172 @@ test('FallbackResponsesModel.getStreamedResponse still flips downgrade on pre-st
   t.is(httpCalled, 1);
   t.true(state.isDowngraded, 'no events yielded → idle timeout still indicates a broken WS path');
   t.deepEqual(events, [{ type: 'response_started' }]);
+});
+
+test('Codex getResponse throws ChainingTransportDowngradeError when WS fails on a chained request', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+
+  const wsError = new Error('Responses websocket connection closed before opening.');
+
+  const wsModel = makeMockModel({
+    getResponse: async () => {
+      wsCalled++;
+      throw wsError;
+    },
+  });
+
+  const httpModel = makeMockModel({
+    getResponse: async () => {
+      httpCalled++;
+      return { usage: {} as any, output: [] };
+    },
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state, undefined, undefined, 'codex');
+
+  const chainedRequest: ModelRequest = {
+    previousResponseId: 'resp_abc',
+    input: 'Hello',
+    modelSettings: { providerData: { model: 'gpt-5.5-codex' } },
+    tools: [],
+    handoffs: [],
+    tracing: false,
+    outputType: {} as any,
+  };
+
+  const error = await t.throwsAsync(() => model.getResponse(chainedRequest));
+  t.true(error instanceof ChainingTransportDowngradeError);
+  t.is(error.message, 'Codex WS connection failed; cannot chain via HTTP');
+  t.is((error as any).cause, wsError);
+  t.is(wsCalled, 1);
+  t.is(httpCalled, 0, 'HTTP model should not be called when chaining breaks');
+  t.true(state.isDowngraded);
+});
+
+test('Codex getStreamedResponse throws ChainingTransportDowngradeError when WS fails on a chained request before any events', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+
+  const wsError = new Error('Responses websocket connection closed before opening.');
+
+  const wsModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      wsCalled++;
+      throw wsError;
+    } as any,
+  });
+
+  const httpModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      httpCalled++;
+    } as any,
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state, undefined, undefined, 'codex');
+
+  const chainedRequest: ModelRequest = {
+    previousResponseId: 'resp_stream_abc',
+    input: 'Hello',
+    modelSettings: { providerData: { model: 'gpt-5.5-codex' } },
+    tools: [],
+    handoffs: [],
+    tracing: false,
+    outputType: {} as any,
+  };
+
+  const events: any[] = [];
+  const error = await t.throwsAsync(async () => {
+    for await (const event of model.getStreamedResponse(chainedRequest)) {
+      events.push(event);
+    }
+  });
+
+  t.true(error instanceof ChainingTransportDowngradeError);
+  t.is(error.message, 'Codex WS connection failed; cannot chain via HTTP');
+  t.is((error as any).cause, wsError);
+  t.is(wsCalled, 1);
+  t.is(httpCalled, 0, 'HTTP stream should not be called when chaining breaks');
+  t.true(state.isDowngraded);
+  t.deepEqual(events, []);
+});
+
+test('Codex getStreamedResponse still falls back to HTTP when WS fails on a non-chained request', async (t) => {
+  let wsCalled = 0;
+  let httpCalled = 0;
+
+  const wsError = new Error('Responses websocket connection closed before opening.');
+
+  const wsModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      wsCalled++;
+      throw wsError;
+    } as any,
+  });
+
+  const httpModel = makeMockModel({
+    getStreamedResponse: async function* () {
+      httpCalled++;
+      yield { type: 'response_started' } as any;
+    } as any,
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state, undefined, undefined, 'codex');
+
+  // No previousResponseId = not a chained request
+  const nonChainedRequest: ModelRequest = {
+    input: 'Hello',
+    modelSettings: { providerData: { model: 'gpt-5.5-codex' } },
+    tools: [],
+    handoffs: [],
+    tracing: false,
+    outputType: {} as any,
+  };
+
+  const events: any[] = [];
+  for await (const event of model.getStreamedResponse(nonChainedRequest)) {
+    events.push(event);
+  }
+
+  t.is(wsCalled, 1);
+  t.is(httpCalled, 1, 'HTTP fallback should still happen for non-chained request');
+  t.true(state.isDowngraded);
+  t.deepEqual(events, [{ type: 'response_started' }]);
+});
+
+test('FallbackResponsesModel fires state.onDowngrade callback when downgrading', async (t) => {
+  let stateDowngradeFired = false;
+  let constructorDowngradeFired = false;
+
+  const wsError = new Error('Responses websocket connection closed before opening.');
+
+  const wsModel = makeMockModel({
+    getResponse: async () => {
+      throw wsError;
+    },
+  });
+
+  const httpModel = makeMockModel({
+    getResponse: async () => ({ usage: {} as any, output: [] }),
+  });
+
+  const state: { isDowngraded: boolean; onDowngrade?: () => void } = {
+    isDowngraded: false,
+    onDowngrade: () => {
+      stateDowngradeFired = true;
+    },
+  };
+
+  const model = new FallbackResponsesModel(wsModel, httpModel, state, () => {
+    constructorDowngradeFired = true;
+  });
+
+  await model.getResponse({} as any);
+
+  t.true(state.isDowngraded);
+  t.true(stateDowngradeFired, 'state.onDowngrade should have been called');
+  t.true(constructorDowngradeFired, 'constructor onDowngrade should have been called');
 });

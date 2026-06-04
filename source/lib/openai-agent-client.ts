@@ -9,6 +9,8 @@ import {
   type JsonSchemaDefinition,
 } from '@openai/agents';
 import { getProvider } from '../providers/index.js';
+import { type FallbackState } from '../providers/fallback-responses-model.js';
+import type { ModelProvider } from '@openai/agents-core/model';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
 import { getAgentDefinition } from '../agent.js';
@@ -203,6 +205,14 @@ export function wrapNeedsApproval(
 }
 
 /**
+ * Narrowed provider interface so we can access {@link FallbackState}
+ * without casting through `any`.
+ */
+interface ModelProviderWithFallback extends ModelProvider {
+  fallbackState?: FallbackState;
+}
+
+/**
  * Minimal adapter that isolates usage of @openai/agents.
  * Swap this module to change the underlying agent provider without touching the UI.
  */
@@ -233,6 +243,45 @@ export class OpenAIAgentClient {
   #pendingClearSink = false;
   #askUserAnswers = new Map<string, string>();
   #lastChainedDeltaInputItems: number | null = null;
+
+  #onDowngradeCallback?: () => void;
+
+  /**
+   * Registers a callback that will be triggered when the provider transport downgrades to HTTP.
+   * If the current runner is already downgraded, the callback is invoked immediately.
+   */
+  onDowngrade(callback: () => void): void {
+    this.#onDowngradeCallback = callback;
+    if (this.#runner) {
+      this.#applyDowngradeCallbackToRunner(this.#runner);
+    }
+  }
+
+  #applyDowngradeCallbackToRunner(runner: Runner | null): void {
+    if (!runner) return;
+    const provider = runner.config?.modelProvider as ModelProviderWithFallback;
+    const fallbackState = provider?.fallbackState;
+    if (fallbackState) {
+      if (fallbackState.isDowngraded) {
+        this.#onDowngradeCallback?.();
+      } else {
+        fallbackState.onDowngrade = () => {
+          this.#onDowngradeCallback?.();
+        };
+      }
+    }
+  }
+
+  /**
+   * Returns the FallbackState from the current provider's model, if available.
+   * This allows the session to react when the WS transport degrades to HTTP.
+   */
+  getFallbackState(): FallbackState | null {
+    const runner = this.#runner;
+    if (!runner) return null;
+    const provider = runner.config?.modelProvider as ModelProviderWithFallback;
+    return provider?.fallbackState ?? null;
+  }
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -469,7 +518,9 @@ export class OpenAIAgentClient {
 
   #getOrCreateRunner(providerId: string): Runner | null {
     if (providerId !== this.#provider) {
-      return this.#createRunner(providerId);
+      const runner = this.#createRunner(providerId);
+      this.#applyDowngradeCallbackToRunner(runner);
+      return runner;
     }
 
     if (this.#runner) {
@@ -477,6 +528,7 @@ export class OpenAIAgentClient {
     }
 
     this.#runner = this.#createRunner(providerId);
+    this.#applyDowngradeCallbackToRunner(this.#runner);
     return this.#runner;
   }
 
@@ -632,14 +684,20 @@ export class OpenAIAgentClient {
           if (args.context) {
             args.context.turnCount = (args.context.turnCount ?? 0) + 1;
           }
-          return supportsConversationChaining && previousResponseId
+          // When WS has degraded to HTTP, server-managed chaining is unavailable;
+          // return unfiltered input so the full history reaches the model.
+          const currentFallback = this.getFallbackState();
+          const chainingActive = supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded;
+          return chainingActive
             ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
             : args.modelData;
         },
       };
       const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
-      if (supportsConversationChaining && previousResponseId) {
+      // Only set previousResponseId when chaining is still active (not degraded).
+      const currentFallback = this.getFallbackState();
+      if (supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded) {
         options.previousResponseId = previousResponseId;
       }
 
@@ -696,14 +754,17 @@ export class OpenAIAgentClient {
         if (args.context) {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
         }
-        return supportsConversationChaining && previousResponseId
+        const currentFallback = this.getFallbackState();
+        const chainingActive = supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded;
+        return chainingActive
           ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
           : args.modelData;
       },
     };
     const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
-    if (supportsConversationChaining && previousResponseId) {
+    const currentFallback = this.getFallbackState();
+    if (supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded) {
       options.previousResponseId = previousResponseId;
     }
 
@@ -745,14 +806,17 @@ export class OpenAIAgentClient {
         if (args.context) {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
         }
-        return supportsConversationChaining && previousResponseId
+        const currentFallback = this.getFallbackState();
+        const chainingActive = supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded;
+        return chainingActive
           ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
           : args.modelData;
       },
     };
     const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
-    if (supportsConversationChaining && previousResponseId) {
+    const currentFallback = this.getFallbackState();
+    if (supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded) {
       options.previousResponseId = previousResponseId;
     }
 

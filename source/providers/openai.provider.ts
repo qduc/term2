@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
-import { FallbackResponsesModel } from './fallback-responses-model.js';
+import { FallbackResponsesModel, type FallbackState } from './fallback-responses-model.js';
 import { TimedResponsesWSModel } from './timed-responses-ws-model.js';
 import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
@@ -76,7 +76,7 @@ async function fetchOpenAIModels(
 }
 
 class FallbackOpenAIProvider implements ModelProvider {
-  private readonly fallbackState = { isDowngraded: false };
+  readonly fallbackState: FallbackState = { isDowngraded: false };
   private readonly models = new Map<string, FallbackResponsesModel>();
 
   constructor(

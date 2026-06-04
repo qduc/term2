@@ -93,6 +93,31 @@ test('sanitizeSentTrafficBody truncates system message with content array', (t) 
   t.is(messages[1].content, 'hi');
 });
 
+test('sanitizeSentTrafficBody truncates anthropic message api system prompt (string or content array)', (t) => {
+  const longText = 'a'.repeat(1200);
+  const bodyWithStringSystem = {
+    system: longText,
+    messages: [{ role: 'user', content: 'hi' }],
+  };
+
+  const sanitizedString = sanitizeSentTrafficBody(bodyWithStringSystem);
+  t.true(typeof sanitizedString.system === 'string');
+  t.true((sanitizedString.system as string).includes(expectedTruncation(longText.length)));
+  t.is((sanitizedString.system as string).length < longText.length, true);
+
+  const bodyWithArraySystem = {
+    system: [{ type: 'text', text: longText, cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: 'hi' }],
+  };
+
+  const sanitizedArray = sanitizeSentTrafficBody(bodyWithArraySystem);
+  const systemContent = sanitizedArray.system as Array<Record<string, unknown>>;
+  t.is(systemContent[0].type, 'text');
+  t.true(String(systemContent[0].text).startsWith('a'.repeat(TRAFFIC_TEXT_LIMIT)));
+  t.true(String(systemContent[0].text).includes(expectedTruncation(longText.length)));
+  t.deepEqual(systemContent[0].cache_control, { type: 'ephemeral' });
+});
+
 test('sanitizeSentTrafficBody removes encrypted reasoning payload data from messages', (t) => {
   const body = {
     messages: [

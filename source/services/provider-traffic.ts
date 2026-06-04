@@ -77,9 +77,24 @@ const normalizePreview = (text: string | undefined): string => {
   return normalized.slice(0, PREVIEW_LIMIT);
 };
 
+const sanitizeContentArray = (content: unknown[]): unknown[] =>
+  content.map((item) => {
+    const record = asRecord(item);
+    if (!record) return item;
+    if (record.type === 'text' && typeof record.text === 'string') {
+      return { ...record, text: truncateTrafficText(record.text) };
+    }
+    return item;
+  });
+
 const sanitizeInstructionLikeValue = (value: unknown): unknown => {
-  if (typeof value !== 'string') return value;
-  return truncateTrafficText(value);
+  if (typeof value === 'string') {
+    return truncateTrafficText(value);
+  }
+  if (Array.isArray(value)) {
+    return sanitizeContentArray(value);
+  }
+  return value;
 };
 
 const sanitizeToolDefinitions = (tools: unknown): unknown => {
@@ -94,16 +109,6 @@ const sanitizeToolDefinitions = (tools: unknown): unknown => {
     return 'unknown-tool';
   });
 };
-
-const sanitizeContentArray = (content: unknown[]): unknown[] =>
-  content.map((item) => {
-    const record = asRecord(item);
-    if (!record) return item;
-    if (record.type === 'text' && typeof record.text === 'string') {
-      return { ...record, text: truncateTrafficText(record.text) };
-    }
-    return item;
-  });
 
 const sanitizeReasoningDetails = (reasoningDetails: unknown): unknown => {
   if (!Array.isArray(reasoningDetails)) return reasoningDetails;
@@ -136,6 +141,10 @@ export const sanitizeSentTrafficBody = (body: Record<string, unknown>): Record<s
 
   if (Object.prototype.hasOwnProperty.call(sanitized, 'instructions')) {
     sanitized.instructions = sanitizeInstructionLikeValue(sanitized.instructions);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(sanitized, 'system')) {
+    sanitized.system = sanitizeInstructionLikeValue(sanitized.system);
   }
 
   if (Array.isArray(sanitized.messages)) {

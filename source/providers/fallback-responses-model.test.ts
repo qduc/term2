@@ -2,14 +2,22 @@ import test from 'ava';
 import { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
 import { FallbackResponsesModel, isNetworkProtocolError } from './fallback-responses-model.js';
 
-function makeMockModel(options: {
-  getResponse?: (request: ModelRequest) => Promise<ModelResponse>;
-  getStreamedResponse?: (request: ModelRequest) => AsyncIterable<StreamEvent>;
-}): Model {
-  return {
+function makeMockModel(
+  options: {
+    getResponse?: (request: ModelRequest) => Promise<ModelResponse>;
+    getStreamedResponse?: (request: ModelRequest) => AsyncIterable<StreamEvent>;
+  },
+  className = 'MockModel',
+): Model {
+  const model = {
     getResponse: options.getResponse || (async () => ({} as any)),
     getStreamedResponse: options.getStreamedResponse || (async function* () {} as any),
   };
+  Object.defineProperty(model, 'constructor', {
+    value: { name: className },
+    configurable: true,
+  });
+  return model as Model;
 }
 
 test('isNetworkProtocolError correctly flags network protocol errors', (t) => {
@@ -241,15 +249,18 @@ test('FallbackResponsesModel.getStreamedResponse propagates error and does not f
 });
 
 test('FallbackResponsesModel logs unary WS request start, success, and failure events', async (t) => {
-  const wsModel = makeMockModel({
-    getResponse: async () => {
-      return {
-        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } as any,
-        output: [{ type: 'message', content: [{ type: 'output_text', text: 'Hello back' }] }] as any,
-        providerData: { id: 'resp_ws_123' },
-      };
+  const wsModel = makeMockModel(
+    {
+      getResponse: async () => {
+        return {
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } as any,
+          output: [{ type: 'message', content: [{ type: 'output_text', text: 'Hello back' }] }] as any,
+          providerData: { id: 'resp_ws_123' },
+        };
+      },
     },
-  });
+    'TimedResponsesWSModel',
+  );
   (wsModel as any)._buildResponsesCreateRequest = (_request: any, _stream: boolean) => {
     return {
       requestData: { messages: [] },
@@ -303,6 +314,8 @@ test('FallbackResponsesModel logs unary WS request start, success, and failure e
   t.is(logs[0].meta.eventType, 'provider.request.started');
   t.is(logs[0].meta.provider, 'openai');
   t.is(logs[0].meta.model, 'gpt-4o');
+  t.is(logs[0].meta.modelClass, 'TimedResponsesWSModel');
+  t.is(logs[0].meta.modelWrapperClass, 'FallbackResponsesModel');
   t.deepEqual(logs[0].meta.headers, {
     authorization: '[REDACTED]',
     'x-opencode-session': 'session-ws-abc',
@@ -370,36 +383,39 @@ test('FallbackResponsesModel falls back to HTTP when WebSocket times out', async
 });
 
 test('FallbackResponsesModel logs streaming WS request start and response completion events', async (t) => {
-  const wsModel = makeMockModel({
-    getStreamedResponse: async function* () {
-      yield {
-        type: 'model',
-        event: {
-          type: 'response.output_text.delta',
-          delta: 'Hello',
-        },
-      } as any;
-      yield {
-        type: 'model',
-        event: {
-          type: 'response.completed',
-          response: {
-            id: 'resp_ws_stream_123',
-            output: [
-              {
-                type: 'message',
-                id: 'msg_1',
-                role: 'assistant',
-                status: 'completed',
-                content: [{ type: 'output_text', text: 'Hello' }],
-              },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+  const wsModel = makeMockModel(
+    {
+      getStreamedResponse: async function* () {
+        yield {
+          type: 'model',
+          event: {
+            type: 'response.output_text.delta',
+            delta: 'Hello',
           },
-        },
-      } as any;
-    } as any,
-  });
+        } as any;
+        yield {
+          type: 'model',
+          event: {
+            type: 'response.completed',
+            response: {
+              id: 'resp_ws_stream_123',
+              output: [
+                {
+                  type: 'message',
+                  id: 'msg_1',
+                  role: 'assistant',
+                  status: 'completed',
+                  content: [{ type: 'output_text', text: 'Hello' }],
+                },
+              ],
+              usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+            },
+          },
+        } as any;
+      } as any,
+    },
+    'TimedResponsesWSModel',
+  );
 
   const httpModel = makeMockModel({});
   const state = { isDowngraded: false };
@@ -441,6 +457,8 @@ test('FallbackResponsesModel logs streaming WS request start and response comple
 
   t.is(logs.length, 2);
   t.is(logs[0].meta.eventType, 'provider.request.started');
+  t.is(logs[0].meta.modelClass, 'TimedResponsesWSModel');
+  t.is(logs[0].meta.modelWrapperClass, 'FallbackResponsesModel');
   t.is(logs[1].meta.eventType, 'provider.response.received');
   t.is(logs[1].meta.text, 'Hello'); // parsed delta content
   t.is(logs[1].meta.payload.transport, 'sse'); // parsed as text/event-stream sse

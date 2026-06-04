@@ -124,6 +124,7 @@ export class FallbackResponsesModel implements Model {
     const requestId = randomUUID();
     const model = request.modelSettings?.providerData?.model || (this.wsModel as any)._model || 'unknown';
     const trafficContext = this.sessionContextService?.getContext() ?? null;
+    const modelClass = (this.wsModel as any)?.constructor?.name || 'UnknownModel';
     const baseMeta = {
       requestId,
       traceId: trafficContext?.traceId ?? this.loggingService?.getCorrelationId?.(),
@@ -133,6 +134,8 @@ export class FallbackResponsesModel implements Model {
       mode: trafficContext?.mode,
       provider: this.providerId || 'unknown',
       model,
+      modelClass,
+      modelWrapperClass: this.constructor.name,
     };
 
     const isEvaluator = trafficContext?.evaluator === true;
@@ -248,6 +251,7 @@ export class FallbackResponsesModel implements Model {
     const requestId = randomUUID();
     const model = request.modelSettings?.providerData?.model || (this.wsModel as any)._model || 'unknown';
     const trafficContext = this.sessionContextService?.getContext() ?? null;
+    const modelClass = (this.wsModel as any)?.constructor?.name || 'UnknownModel';
     const baseMeta = {
       requestId,
       traceId: trafficContext?.traceId ?? this.loggingService?.getCorrelationId?.(),
@@ -257,6 +261,8 @@ export class FallbackResponsesModel implements Model {
       mode: trafficContext?.mode,
       provider: this.providerId || 'unknown',
       model,
+      modelClass,
+      modelWrapperClass: this.constructor.name,
     };
 
     const isEvaluator = trafficContext?.evaluator === true;

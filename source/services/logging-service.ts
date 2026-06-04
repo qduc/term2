@@ -401,6 +401,9 @@ export class LoggingService {
         : new Date().toISOString();
     const provider = typeof runtimeRecord.provider === 'string' ? runtimeRecord.provider : 'unknown';
     const model = typeof runtimeRecord.model === 'string' ? runtimeRecord.model : 'unknown';
+    const modelClass = typeof runtimeRecord.modelClass === 'string' ? runtimeRecord.modelClass : undefined;
+    const modelWrapperClass =
+      typeof runtimeRecord.modelWrapperClass === 'string' ? runtimeRecord.modelWrapperClass : undefined;
     const mode = typeof runtimeRecord.mode === 'string' ? runtimeRecord.mode : 'unknown';
     const firstUserMessagePreview =
       typeof runtimeRecord.firstUserMessagePreview === 'string' ? runtimeRecord.firstUserMessagePreview : undefined;
@@ -415,6 +418,8 @@ export class LoggingService {
             timestamp,
             provider,
             model,
+            ...(modelClass ? { modelClass } : {}),
+            ...(modelWrapperClass ? { modelWrapperClass } : {}),
             sessionId,
             sessionStartedAt,
             mode,
@@ -437,6 +442,8 @@ export class LoggingService {
           timestamp,
           provider,
           model,
+          ...(modelClass ? { modelClass } : {}),
+          ...(modelWrapperClass ? { modelWrapperClass } : {}),
           sessionId,
           sessionStartedAt,
           mode,
@@ -452,6 +459,8 @@ export class LoggingService {
           timestamp,
           provider,
           model,
+          ...(modelClass ? { modelClass } : {}),
+          ...(modelWrapperClass ? { modelWrapperClass } : {}),
           sessionId,
           sessionStartedAt,
           mode,

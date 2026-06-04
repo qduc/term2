@@ -11,6 +11,8 @@ export type SentTrafficRecord = {
   timestamp: string;
   provider: string;
   model: string;
+  modelClass?: string;
+  modelWrapperClass?: string;
   sessionId: string;
   sessionStartedAt: string;
   mode?: string;
@@ -562,6 +564,8 @@ type RequestStartInput = {
   timestamp: string;
   provider: string;
   model: string;
+  modelClass?: string;
+  modelWrapperClass?: string;
   sessionId: string;
   sessionStartedAt: string;
   mode?: string;
@@ -576,6 +580,8 @@ type RequestCompleteInput = {
   timestamp: string;
   provider: string;
   model: string;
+  modelClass?: string;
+  modelWrapperClass?: string;
   sessionId: string;
   sessionStartedAt: string;
   mode?: string;
@@ -602,6 +608,8 @@ export class ProviderTrafficArtifactStore {
       timestamp: input.timestamp,
       provider: input.provider,
       model: input.model,
+      ...(input.modelClass ? { modelClass: input.modelClass } : {}),
+      ...(input.modelWrapperClass ? { modelWrapperClass: input.modelWrapperClass } : {}),
       sessionId: input.sessionId,
       mode: input.mode ?? 'unknown',
       ...(input.headers ? { headers: input.headers } : {}),
@@ -633,6 +641,8 @@ export class ProviderTrafficArtifactStore {
       timestamp: input.timestamp,
       provider: input.provider,
       model: input.model,
+      ...(input.modelClass ? { modelClass: input.modelClass } : {}),
+      ...(input.modelWrapperClass ? { modelWrapperClass: input.modelWrapperClass } : {}),
       sessionId: input.sessionId,
       mode: input.mode ?? 'unknown',
       ...(input.receivedSummary ? { summary: input.receivedSummary } : {}),

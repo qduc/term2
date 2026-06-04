@@ -401,6 +401,8 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
     timestamp: '2026-05-22T09:14:35.044Z',
     provider: 'openrouter',
     model: 'qwen/qwen3',
+    modelClass: 'TimedOpenAIResponsesWSModel',
+    modelWrapperClass: 'FallbackResponsesModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',
@@ -422,6 +424,8 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
   const firstRecord = readRequestFile(requestFile)[0];
   t.is(firstRecord?.direction, 'sent');
   t.deepEqual(firstRecord?.headers, { host: 'api.openrouter.ai', authorization: '[REDACTED]' });
+  t.is(firstRecord?.modelClass, 'TimedOpenAIResponsesWSModel');
+  t.is(firstRecord?.modelWrapperClass, 'FallbackResponsesModel');
 
   const indexPath = path.join(dayDir, 'index.jsonl');
   const indexEntries = fs
@@ -453,6 +457,8 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     timestamp: '2026-05-22T09:14:35.044Z',
     provider: 'openai',
     model: 'gpt-5',
+    modelClass: 'TimedResponsesWSModel',
+    modelWrapperClass: 'FallbackResponsesModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',
@@ -464,6 +470,8 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     timestamp: '2026-05-22T09:14:36.000Z',
     provider: 'openai',
     model: 'gpt-5',
+    modelClass: 'TimedResponsesWSModel',
+    modelWrapperClass: 'FallbackResponsesModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',
@@ -474,6 +482,8 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     timestamp: '2026-05-22T10:00:00.000Z',
     provider: 'openrouter',
     model: 'deepseek/chat',
+    modelClass: 'TimedOpenAIResponsesWSModel',
+    modelWrapperClass: 'FallbackResponsesModel',
     sessionId: 'session-999',
     sessionStartedAt: '2026-05-22T10:00:00.000Z',
     mode: 'mentor',
@@ -485,6 +495,8 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     timestamp: '2026-05-22T10:00:01.000Z',
     provider: 'openrouter',
     model: 'deepseek/chat',
+    modelClass: 'TimedOpenAIResponsesWSModel',
+    modelWrapperClass: 'FallbackResponsesModel',
     sessionId: 'session-999',
     sessionStartedAt: '2026-05-22T10:00:00.000Z',
     mode: 'mentor',
@@ -495,6 +507,8 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     timestamp: '2026-05-23T00:00:01.000Z',
     provider: 'openai',
     model: 'gpt-5',
+    modelClass: 'TimedResponsesWSModel',
+    modelWrapperClass: 'FallbackResponsesModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-23T00:00:00.000Z',
     mode: 'standard',
@@ -507,9 +521,15 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
   t.is(requestRecords.length, 2);
   t.is(requestRecords[1]?.direction, 'received');
   t.is((requestRecords[1]?.summary as any)?.outputText, 'done');
+  t.is(requestRecords[0]?.modelClass, 'TimedResponsesWSModel');
+  t.is(requestRecords[0]?.modelWrapperClass, 'FallbackResponsesModel');
+  t.is(requestRecords[1]?.modelClass, 'TimedResponsesWSModel');
+  t.is(requestRecords[1]?.modelWrapperClass, 'FallbackResponsesModel');
 
   const failureFile = path.join(rootDir, '2026-05-22', '10-00-00_sessi', '10-00-00.000Z_req-2.jsonl');
   t.is((readRequestFile(failureFile)[1]?.error as any)?.message, 'fetch failed');
+  t.is(readRequestFile(failureFile)[0]?.modelClass, 'TimedOpenAIResponsesWSModel');
+  t.is(readRequestFile(failureFile)[1]?.modelClass, 'TimedOpenAIResponsesWSModel');
 
   const indexEntries = fs
     .readFileSync(path.join(rootDir, '2026-05-22', 'index.jsonl'), 'utf8')
@@ -535,6 +555,8 @@ test('ProviderTrafficArtifactStore places evaluator requests under evaluator sub
     timestamp: '2026-05-22T09:14:35.044Z',
     provider: 'openai',
     model: 'gpt-4o-mini',
+    modelClass: 'CodexResponsesWSModel',
+    modelWrapperClass: 'FallbackResponsesModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',
@@ -546,6 +568,8 @@ test('ProviderTrafficArtifactStore places evaluator requests under evaluator sub
     timestamp: '2026-05-22T09:14:36.000Z',
     provider: 'openai',
     model: 'gpt-4o-mini',
+    modelClass: 'CodexResponsesWSModel',
+    modelWrapperClass: 'FallbackResponsesModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',
@@ -565,6 +589,8 @@ test('ProviderTrafficArtifactStore places evaluator requests under evaluator sub
   t.is(records.length, 2);
   t.is(records[0]?.direction, 'sent');
   t.is(records[1]?.direction, 'received');
+  t.is(records[0]?.modelClass, 'CodexResponsesWSModel');
+  t.is(records[1]?.modelClass, 'CodexResponsesWSModel');
 });
 
 test('recordRequestComplete removes completed request path from map so a second completion without a fresh start gets a new path', (t) => {

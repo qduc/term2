@@ -1644,6 +1644,85 @@ test('run() sends full history after undo on a chaining provider (Responses API)
   t.falsy(thirdCall.opts.previousResponseId, 'No previousResponseId after undo');
 });
 
+test('run() resyncs full history after resume before returning to chaining provider', async (t) => {
+  const firstResumedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Resynced reply' }]);
+  firstResumedStream.finalOutput = 'Resynced reply';
+  firstResumedStream.lastResponseId = 'resp-resynced';
+  firstResumedStream.history = [
+    { role: 'user', type: 'message', content: 'Earlier message' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Earlier reply' }],
+    },
+    { role: 'user', type: 'message', content: 'Resume follow-up' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Resynced reply' }],
+    },
+  ];
+
+  const chainedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Chained reply' }]);
+  chainedStream.finalOutput = 'Chained reply';
+  chainedStream.lastResponseId = 'resp-chained';
+  chainedStream.output = [
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Chained reply' }],
+    },
+  ];
+
+  const calls = [];
+  const streams = [firstResumedStream, chainedStream];
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream(input, opts) {
+      calls.push({ input, opts });
+      return streams.shift();
+    },
+  };
+
+  const session = new ConversationSession('resumed-session', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  session.importState({
+    history: [
+      { role: 'user', type: 'message', content: 'Earlier message' },
+      {
+        role: 'assistant',
+        type: 'message',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'Earlier reply' }],
+      },
+    ],
+    previousResponseId: 'expired-response-id',
+    toolLedger: [],
+    updatedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+  });
+
+  for await (const _ of session.run('Resume follow-up')) {
+  }
+  t.true(Array.isArray(calls[0].input), 'First resumed turn must resend full history');
+  t.falsy(calls[0].opts.previousResponseId, 'First resumed turn must not use persisted previousResponseId');
+  t.deepEqual(
+    calls[0].input.map((item) => item.content),
+    ['Earlier message', [{ type: 'output_text', text: 'Earlier reply' }], 'Resume follow-up'],
+  );
+
+  for await (const _ of session.run('Second follow-up')) {
+  }
+  t.is(calls[1].input, 'Second follow-up', 'Second resumed turn should return to delta chaining');
+  t.is(calls[1].opts.previousResponseId, 'resp-resynced');
+});
+
 test('run() with image attachment does not throw when supportsChaining is true', async (t) => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply' }]);
   stream.finalOutput = 'Reply';

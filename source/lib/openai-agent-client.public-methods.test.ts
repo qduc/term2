@@ -534,6 +534,76 @@ test.serial('continueRun filters replayed history to delta input when chaining f
   t.is(filtered.instructions, 'system');
 });
 
+test.serial('continueRunStream keeps only expected approved tool outputs when chaining', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-true',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  await client.continueRunStream(
+    { _context: { context: { turnCount: 0 } } },
+    { previousResponseId: 'resp-prev', toolResultCallIds: ['call-current'] },
+  );
+
+  const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
+    context: { turnCount: 0 },
+    modelData: {
+      input: [
+        { type: 'function_call_output', callId: 'call-old-1', output: 'old one' },
+        { type: 'function_call_output', call_id: 'call-old-2', output: 'old two' },
+        { type: 'function_call_output', callId: 'call-current', output: 'current' },
+      ],
+      instructions: 'system',
+    },
+  });
+
+  t.deepEqual(filtered.input, [{ type: 'function_call_output', callId: 'call-current', output: 'current' }]);
+});
+
+test.serial('continueRunStream warns when chained delta input item count spikes', async (t) => {
+  const warnings: any[] = [];
+  const logger = {
+    ...createMockLogger(),
+    warn: (message: string, meta: any) => warnings.push({ message, meta }),
+  };
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-true',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger, settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  await client.continueRunStream({ _context: { context: { turnCount: 0 } } }, { previousResponseId: 'resp-prev' });
+  const filter = chainingRunnerCalls[0].options.callModelInputFilter;
+  filter({
+    context: { turnCount: 0 },
+    modelData: {
+      input: [
+        { type: 'function_call_output', callId: 'call-1', output: 'one' },
+        { type: 'function_call_output', callId: 'call-2', output: 'two' },
+        { type: 'function_call_output', callId: 'call-3', output: 'three' },
+      ],
+    },
+  });
+  filter({
+    context: { turnCount: 1 },
+    modelData: {
+      input: Array.from({ length: 23 }, (_, index) => ({
+        type: 'function_call_output',
+        callId: `call-${index}`,
+        output: `output-${index}`,
+      })),
+    },
+  });
+
+  const warning = warnings.find((entry) => entry.meta?.eventType === 'provider.chained_delta_input_spike');
+  t.truthy(warning);
+  t.is(warning.meta.previousInputItems, 3);
+  t.is(warning.meta.inputItems, 23);
+});
+
 test.serial('continueRunStream filters and keeps user message even with custom type', async (t) => {
   const settings = createMockSettings({
     'agent.provider': 'mock-chaining-true',

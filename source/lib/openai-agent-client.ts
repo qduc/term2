@@ -55,6 +55,27 @@ const isToolResultItem = (item: unknown): boolean => {
   return typeof record?.type === 'string' && TOOL_RESULT_ITEM_TYPES.has(record.type);
 };
 
+const getToolResultCallId = (item: unknown): string | null => {
+  const record = asRecord(item);
+  if (!record || !isToolResultItem(record)) {
+    return null;
+  }
+
+  const raw = asRecord(record.rawItem) ?? record;
+  const callId = raw.callId ?? raw.call_id ?? raw.tool_call_id;
+  return typeof callId === 'string' && callId ? callId : null;
+};
+
+type ChainedModelInputFilterOptions = {
+  toolResultCallIds?: readonly string[];
+};
+
+type ChainedRunOptions = {
+  previousResponseId?: string | null;
+  sessionId?: string;
+  toolResultCallIds?: readonly string[];
+};
+
 /**
  * Finds the starting index of the delta input when conversation chaining is active.
  *
@@ -85,10 +106,25 @@ const findChainedDeltaStart = (input: unknown[]): number => {
   return 0;
 };
 
-const filterChainedModelInput = (modelData: any): any => {
+const filterChainedModelInput = (modelData: any, options: ChainedModelInputFilterOptions = {}): any => {
   const input = modelData?.input;
   if (!Array.isArray(input) || input.length <= 1) {
     return modelData;
+  }
+
+  const expectedToolResultCallIds = new Set(options.toolResultCallIds?.filter(Boolean) ?? []);
+  if (expectedToolResultCallIds.size > 0) {
+    const expectedToolResults = input.filter((item) => {
+      const callId = getToolResultCallId(item);
+      return callId !== null && expectedToolResultCallIds.has(callId);
+    });
+
+    if (expectedToolResults.length > 0) {
+      return {
+        ...modelData,
+        input: expectedToolResults,
+      };
+    }
   }
 
   const deltaStart = findChainedDeltaStart(input);
@@ -196,6 +232,7 @@ export class OpenAIAgentClient {
   #activeSubagentsCount = 0;
   #pendingClearSink = false;
   #askUserAnswers = new Map<string, string>();
+  #lastChainedDeltaInputItems: number | null = null;
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -500,13 +537,40 @@ export class OpenAIAgentClient {
     }
 
     this.#refreshAgent();
+    this.#lastChainedDeltaInputItems = null;
 
     this.#logger.debug('Conversation and agent refreshed');
   }
 
+  #filterAndGuardChainedModelInput(modelData: any, options: ChainedModelInputFilterOptions = {}): any {
+    const filtered = filterChainedModelInput(modelData, options);
+    const input = filtered?.input;
+    if (!Array.isArray(input)) {
+      return filtered;
+    }
+
+    const previousInputItems = this.#lastChainedDeltaInputItems;
+    const inputItems = input.length;
+    if (previousInputItems !== null && inputItems - previousInputItems >= 10 && inputItems >= previousInputItems * 3) {
+      this.#logger.warn('Chained delta input item count spiked', {
+        eventType: 'provider.chained_delta_input_spike',
+        category: 'provider',
+        phase: 'request_start',
+        traceId: this.#logger.getCorrelationId(),
+        provider: this.#provider,
+        model: this.#model,
+        previousInputItems,
+        inputItems,
+      });
+    }
+
+    this.#lastChainedDeltaInputItems = inputItems;
+    return filtered;
+  }
+
   async startStream(
     userInput: string | AgentInputItem | AgentInputItem[],
-    { previousResponseId, sessionId }: { previousResponseId?: string | null; sessionId?: string } = {},
+    { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
   ): Promise<any> {
     // Abort any previous operation
     this.abort();
@@ -569,7 +633,7 @@ export class OpenAIAgentClient {
             args.context.turnCount = (args.context.turnCount ?? 0) + 1;
           }
           return supportsConversationChaining && previousResponseId
-            ? filterChainedModelInput(args.modelData)
+            ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
             : args.modelData;
         },
       };
@@ -601,7 +665,7 @@ export class OpenAIAgentClient {
 
   async continueRun(
     state: any,
-    { previousResponseId, sessionId }: { previousResponseId?: string | null; sessionId?: string } = {},
+    { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
   ): Promise<any> {
     this.abort();
     this.#currentAbortController = new AbortController();
@@ -633,7 +697,7 @@ export class OpenAIAgentClient {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
         }
         return supportsConversationChaining && previousResponseId
-          ? filterChainedModelInput(args.modelData)
+          ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
           : args.modelData;
       },
     };
@@ -648,7 +712,7 @@ export class OpenAIAgentClient {
 
   async continueRunStream(
     state: any,
-    { previousResponseId, sessionId }: { previousResponseId?: string | null; sessionId?: string } = {},
+    { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
   ): Promise<any> {
     this.abort();
     this.#currentAbortController = new AbortController();
@@ -682,7 +746,7 @@ export class OpenAIAgentClient {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
         }
         return supportsConversationChaining && previousResponseId
-          ? filterChainedModelInput(args.modelData)
+          ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
           : args.modelData;
       },
     };

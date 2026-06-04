@@ -641,7 +641,10 @@ export class ConversationSession {
     for (const item of reconciled.history as import('@openai/agents').AgentInputItem[]) {
       this.conversationStore.addImportedItem(item);
     }
-    this.previousResponseId = state.previousResponseId;
+    // Provider-side response chains can expire while the local transcript remains valid.
+    // Force the first resumed turn to resync from full history; successful completion
+    // will populate a fresh previousResponseId for subsequent chained turns.
+    this.previousResponseId = null;
     this.emittedToolStartedCallIds.clear();
     this.inputSurgeGuard.reset();
     this.shellAutoApproval.clearCache();
@@ -753,6 +756,9 @@ export class ConversationSession {
           const continuedStream = (await this.agentClient.continueRunStream(abortedContext.state, {
             previousResponseId: this.previousResponseId,
             sessionId: this.id,
+            toolResultCallIds: [getCallIdFromObject(abortedContext.interruption)].filter(
+              (callId): callId is string => typeof callId === 'string' && callId.length > 0,
+            ),
           })) as AgentStream;
 
           const acc = createStreamAccumulator();
@@ -1180,10 +1186,13 @@ export class ConversationSession {
     }
 
     const {
-      pendingApprovalContext: { state, toolCallArgumentsById, emittedCommandIds: previouslyEmittedIds },
+      pendingApprovalContext: { state, interruption, toolCallArgumentsById, emittedCommandIds: previouslyEmittedIds },
       toolStartedEvent,
       removeInterceptor,
     } = plan;
+    const approvedToolResultCallIds = [getCallIdFromObject(interruption)].filter(
+      (callId): callId is string => typeof callId === 'string' && callId.length > 0,
+    );
 
     if (toolStartedEvent) {
       const filtered = this.#dedupeToolStarted(toolStartedEvent);
@@ -1205,6 +1214,7 @@ export class ConversationSession {
           const stream = (await this.agentClient.continueRunStream(state, {
             previousResponseId: this.previousResponseId,
             sessionId: this.id,
+            toolResultCallIds: approvedToolResultCallIds,
           })) as AgentStream;
 
           const acc = createStreamAccumulator();

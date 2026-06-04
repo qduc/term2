@@ -1965,6 +1965,49 @@ test('switchProvider() clears provider continuity but preserves transcript histo
   );
 });
 
+test('setModel() clears provider continuity and forces full-history replay on the next turn', async (t) => {
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
+  firstStream.finalOutput = 'First reply';
+  firstStream.lastResponseId = 'resp-model-1';
+
+  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Second reply' }]);
+  secondStream.finalOutput = 'Second reply';
+  secondStream.lastResponseId = 'resp-model-2';
+
+  const calls = [];
+  const models = [];
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    setModel(model) {
+      models.push(model);
+    },
+    clearConversations() {},
+    async startStream(input, opts) {
+      calls.push({ input, opts });
+      return calls.length === 1 ? firstStream : secondStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  for await (const _ of session.run('First message')) {
+  }
+
+  session.setModel('gpt-next');
+
+  for await (const _ of session.run('Second message')) {
+  }
+
+  t.deepEqual(models, ['gpt-next']);
+  t.true(Array.isArray(calls[1].input), 'model change should force a full-history replay');
+  t.falsy(calls[1].opts.previousResponseId, 'model change must discard previousResponseId');
+});
+
 test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injected on retry', async (t) => {
   // Turn 1: run with a tool call so the tool ledger records an entry.
   const toolCallId = 'call_abc123';
@@ -2070,4 +2113,147 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
   t.true(Array.isArray(retryInput), 'retry should send full history');
   const callIds = retryInput.filter((item) => item.callId || item.call_id).map((item) => item.callId || item.call_id);
   t.false(callIds.includes(toolCallId), 'retried history must NOT contain old tool call IDs');
+});
+
+test('undoLastUserTurn() preserves earlier tool ledger entries that still belong to retained turns', async (t) => {
+  const firstToolCallId = 'call_first';
+  const secondToolCallId = 'call_second';
+
+  const stream1 = new MockStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId: firstToolCallId,
+          name: 'shell',
+          arguments: '{"command":"echo first"}',
+        },
+      },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call_output',
+          callId: firstToolCallId,
+          output: 'first',
+        },
+      },
+    },
+    { type: 'response.output_text.delta', delta: 'First done' },
+  ]);
+  stream1.finalOutput = 'First done';
+  stream1.lastResponseId = 'resp-first';
+  stream1.output = [
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'First done' }],
+    },
+  ];
+
+  const stream2 = new MockStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId: secondToolCallId,
+          name: 'shell',
+          arguments: '{"command":"echo second"}',
+        },
+      },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call_output',
+          callId: secondToolCallId,
+          output: 'second',
+        },
+      },
+    },
+    { type: 'response.output_text.delta', delta: 'Second done' },
+  ]);
+  stream2.finalOutput = 'Second done';
+  stream2.lastResponseId = 'resp-second';
+  stream2.output = [
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Second done' }],
+    },
+  ];
+
+  let retryInput;
+  const retryStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Retry done' }]);
+  retryStream.finalOutput = 'Retry done';
+  retryStream.lastResponseId = 'resp-retry';
+  retryStream.history = [
+    { role: 'user', type: 'message', content: 'first tool turn' },
+    { type: 'function_call', callId: firstToolCallId, name: 'shell', arguments: '{"command":"echo first"}' },
+    { type: 'function_call_output', callId: firstToolCallId, output: 'first' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'First done' }],
+    },
+    { role: 'user', type: 'message', content: 'retry second turn' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Retry done' }],
+    },
+  ];
+
+  let callCount = 0;
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    clearConversations() {},
+    async startStream(input) {
+      callCount++;
+      if (callCount === 1) return stream1;
+      if (callCount === 2) return stream2;
+      retryInput = input;
+      return retryStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  for await (const _ of session.run('first tool turn')) {
+  }
+
+  for await (const _ of session.run('second tool turn')) {
+  }
+
+  session.undoLastUserTurn();
+
+  const stateAfterUndo = session.exportState();
+  t.deepEqual(
+    stateAfterUndo.toolLedger.map((entry) => entry.callId),
+    [firstToolCallId],
+    'undo should retain tool ledger entries for still-retained earlier turns',
+  );
+
+  for await (const _ of session.run('retry second turn')) {
+  }
+
+  t.true(Array.isArray(retryInput), 'retry should send full history');
+  const retryCallIds = retryInput
+    .filter((item) => item.callId || item.call_id)
+    .map((item) => item.callId || item.call_id);
+  t.true(retryCallIds.includes(firstToolCallId), 'retry should keep earlier retained tool call IDs');
+  t.false(retryCallIds.includes(secondToolCallId), 'retry must drop tool call IDs from the undone turn');
 });

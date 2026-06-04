@@ -610,6 +610,10 @@ export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
         text: INTERRUPTED_SYSTEM_MESSAGE,
       });
     }
+
+    // A reconstructed interrupted turn exists only in local history, so any
+    // provider-bound chain must be severed before the next resumed request.
+    state.previousResponseId = null;
   }
 
   // Defensive idempotent final repair pass

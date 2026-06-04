@@ -186,6 +186,25 @@ test('replayEvents: trailing user_message inserts interrupted system message', (
   const restored = replayEvents(envelopes);
   t.true(restored.messages.some((m) => m.sender === 'system' && String(m.text).includes('interrupted')));
   t.true(restored.replayWarnings.length > 0);
+  t.is(restored.previousResponseId, null);
+});
+
+test('replayEvents: interrupted turn nulls previousResponseId even when a prior turn completed', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z', provider: 'openai' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'first' } }),
+    env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'done' }] },
+      state: { previousResponseId: 'resp-1', provider: 'openai' },
+    }),
+    env({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'second' } }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  t.true(restored.replayWarnings.some((warning) => warning.includes('interrupted')));
+  t.is(restored.previousResponseId, null);
 });
 
 test('replayEvents: tool_started followed by tool_result clears in-flight (no warning)', (t) => {

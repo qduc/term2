@@ -272,39 +272,58 @@ export class ConversationSession {
     return gen === this.generation;
   }
 
-  reset(): void {
+  #resetProviderContinuity({ clearConversations = true }: { clearConversations?: boolean } = {}): void {
     this.generation++;
     this.previousResponseId = null;
-    this.conversationStore.clear();
     this.approvalState.clearPending();
     this.approvalState.consumeAborted();
     this.toolCallArgumentsById.clear();
     this.emittedToolStartedCallIds.clear();
-    this.toolLedger = new ToolExecutionLedger();
     this.shellAutoApproval.clearCache();
     this.inputSurgeGuard.reset();
+    this.#resetPersistedTurnState();
+
+    if (clearConversations) {
+      const clearConversationsFn = getMethod<[], void>(this.agentClient, 'clearConversations');
+      clearConversationsFn?.call(this.agentClient);
+    }
+  }
+
+  #pruneToolLedgerToCurrentHistory(): void {
+    const userTurnCount = this.conversationStore.listUserTurns().length;
+    const historyCallIds = new Set(
+      this.conversationStore
+        .getHistory()
+        .map((item) => callIdOf(item))
+        .filter(Boolean),
+    );
+    const filteredEntries = this.toolLedger.export().filter((entry) => {
+      const match = /^turn-(\d+)$/.exec(entry.turnId);
+      if (match) {
+        return Number.parseInt(match[1], 10) <= userTurnCount;
+      }
+
+      return historyCallIds.has(entry.callId);
+    });
+
+    this.toolLedger.import(filteredEntries);
+  }
+
+  reset(): void {
+    this.#resetProviderContinuity();
+    this.conversationStore.clear();
+    this.toolLedger = new ToolExecutionLedger();
     this.largeUncachedInputGuard.reset();
     this.#inputSurgeKind = 'delta';
-    this.#resetPersistedTurnState();
-    const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
-    clearConversations?.call(this.agentClient);
   }
 
   undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null {
     const removed = this.conversationStore.removeLastUserTurn();
     if (removed === null) return null;
-    this.generation++;
-    this.previousResponseId = null;
-    this.approvalState.clearPending();
-    this.approvalState.consumeAborted();
-    this.toolCallArgumentsById.clear();
-    this.emittedToolStartedCallIds.clear();
-    this.toolLedger = new ToolExecutionLedger();
-    this.shellAutoApproval.clearCache();
-    this.inputSurgeGuard.reset();
+    this.#pruneToolLedgerToCurrentHistory();
+    this.#resetProviderContinuity();
     this.largeUncachedInputGuard.markUndoOrRewind();
     this.#inputSurgeKind = 'delta';
-    this.#resetPersistedTurnState();
     this.#log({ type: 'undo', removedUserTurns: 1, snapshot: this.getCurrentSnapshot() });
     return removed;
   }
@@ -316,47 +335,33 @@ export class ConversationSession {
   undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null {
     const removed = this.conversationStore.removeNLastUserTurns(n);
     if (removed === null) return null;
-    this.generation++;
-    this.previousResponseId = null;
-    this.approvalState.clearPending();
-    this.approvalState.consumeAborted();
-    this.toolCallArgumentsById.clear();
-    this.emittedToolStartedCallIds.clear();
-    this.toolLedger = new ToolExecutionLedger();
-    this.shellAutoApproval.clearCache();
-    this.inputSurgeGuard.reset();
+    this.#pruneToolLedgerToCurrentHistory();
+    this.#resetProviderContinuity();
     this.largeUncachedInputGuard.markUndoOrRewind();
     this.#inputSurgeKind = 'delta';
-    this.#resetPersistedTurnState();
     this.#log({ type: 'undo', removedUserTurns: n, snapshot: this.getCurrentSnapshot() });
     return removed;
   }
 
   setModel(model: string): void {
+    this.#resetProviderContinuity();
     this.agentClient.setModel(model);
   }
 
   setReasoningEffort(effort: ReasoningEffortSetting): void {
+    this.#resetProviderContinuity();
     const setReasoningEffort = getMethod<[ReasoningEffortSetting], void>(this.agentClient, 'setReasoningEffort');
     setReasoningEffort?.call(this.agentClient, effort);
   }
 
   setTemperature(temperature?: number): void {
+    this.#resetProviderContinuity();
     const setTemperature = getMethod<[number | undefined], void>(this.agentClient, 'setTemperature');
     setTemperature?.call(this.agentClient, temperature);
   }
 
   setProvider(provider: string): void {
-    this.generation++;
-    this.previousResponseId = null;
-    this.approvalState.clearPending();
-    this.approvalState.consumeAborted();
-    this.toolCallArgumentsById.clear();
-    this.emittedToolStartedCallIds.clear();
-    this.shellAutoApproval.clearCache();
-    this.inputSurgeGuard.reset();
-    const clearConversations = getMethod<[], void>(this.agentClient, 'clearConversations');
-    clearConversations?.call(this.agentClient);
+    this.#resetProviderContinuity();
     const setProvider = getMethod<[string], void>(this.agentClient, 'setProvider');
     setProvider?.call(this.agentClient, provider);
   }
@@ -639,6 +644,11 @@ export class ConversationSession {
     this.previousResponseId = state.previousResponseId;
     this.emittedToolStartedCallIds.clear();
     this.inputSurgeGuard.reset();
+    this.shellAutoApproval.clearCache();
+    this.approvalState.clearPending();
+    this.approvalState.consumeAborted();
+    this.toolCallArgumentsById.clear();
+    this.#resetPersistedTurnState();
     this.largeUncachedInputGuard.markResumedSession({
       updatedAtMs: state.updatedAt ? Date.parse(state.updatedAt) : null,
     });

@@ -6,12 +6,14 @@ function makeMockModel(
   options: {
     getResponse?: (request: ModelRequest) => Promise<ModelResponse>;
     getStreamedResponse?: (request: ModelRequest) => AsyncIterable<StreamEvent>;
+    getRetryAdvice?: (args: any) => any;
   },
   className = 'MockModel',
 ): Model {
   const model = {
     getResponse: options.getResponse || (async () => ({} as any)),
     getStreamedResponse: options.getStreamedResponse || (async function* () {} as any),
+    ...(options.getRetryAdvice ? { getRetryAdvice: options.getRetryAdvice } : {}),
   };
   Object.defineProperty(model, 'constructor', {
     value: { name: className },
@@ -92,6 +94,188 @@ test('FallbackResponsesModel.getResponse uses WS model by default and falls back
   t.is(wsCalled, 1); // still 1
   t.is(httpCalled, 2);
   t.is(result2, expectedResponse);
+});
+
+test('FallbackResponsesModel injects Codex previous response id and trims replayed tool-continuation input', async (t) => {
+  const seenRequests: ModelRequest[] = [];
+  const toolOutput = {
+    type: 'function_call_output',
+    call_id: 'call-read',
+    output: 'done',
+  };
+
+  const wsModel = makeMockModel({
+    getStreamedResponse: async function* (request: ModelRequest) {
+      seenRequests.push(request);
+      yield {
+        type: 'response_done',
+        response: {
+          id: seenRequests.length === 1 ? 'resp-1' : 'resp-2',
+          output: [],
+          usage: {},
+        },
+      } as any;
+    },
+  });
+
+  const model = new FallbackResponsesModel(
+    wsModel,
+    makeMockModel({}),
+    { isDowngraded: false },
+    undefined,
+    undefined,
+    'codex',
+    {
+      getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    },
+  );
+
+  for await (const _event of model.getStreamedResponse({
+    input: [{ role: 'user', type: 'message', content: 'inspect' }],
+    modelSettings: {},
+  } as any)) {
+  }
+
+  t.is(seenRequests.length, 2);
+  t.is(seenRequests[0].modelSettings.providerData?.generate, false);
+  t.deepEqual(seenRequests[0].input, []);
+  t.is(seenRequests[1].previousResponseId, 'resp-1');
+  t.deepEqual(seenRequests[1].input, [{ role: 'user', type: 'message', content: 'inspect' }]);
+
+  for await (const _event of model.getStreamedResponse({
+    input: [
+      { role: 'user', type: 'message', content: 'inspect' },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+      { type: 'function_call', call_id: 'call-read', name: 'read_file', arguments: '{}' },
+      toolOutput,
+    ],
+    modelSettings: {},
+  } as any)) {
+  }
+
+  t.is(seenRequests.length, 3);
+  t.is(seenRequests[2].previousResponseId, 'resp-2');
+  t.deepEqual(seenRequests[2].input, [toolOutput]);
+
+  const latestUser = { role: 'user', type: 'message', content: 'summarize' };
+  for await (const _event of model.getStreamedResponse({
+    previousResponseId: 'resp-explicit',
+    input: [
+      { role: 'user', type: 'message', content: 'inspect' },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Done.' }] },
+      latestUser,
+    ],
+    modelSettings: {},
+  } as any)) {
+  }
+
+  t.is(seenRequests.length, 4);
+  t.is(seenRequests[3].previousResponseId, 'resp-explicit');
+  t.deepEqual(seenRequests[3].input, [latestUser]);
+});
+
+test('FallbackResponsesModel retries safe Codex warm-up failures before chaining the delta request', async (t) => {
+  const seenRequests: ModelRequest[] = [];
+  const safeWarmupError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
+    code: 'connection_closed_before_opening',
+  });
+
+  const wsModel = makeMockModel({
+    getResponse: async (request: ModelRequest) => {
+      seenRequests.push(request);
+      if (seenRequests.length === 1) {
+        throw safeWarmupError;
+      }
+      return {
+        responseId: seenRequests.length === 2 ? 'resp-warmup' : 'resp-main',
+        output: [],
+        usage: {} as any,
+      };
+    },
+    getRetryAdvice: ({ error }: any) =>
+      error === safeWarmupError ? { suggested: true, replaySafety: 'safe' } : { suggested: false },
+  });
+
+  const model = new FallbackResponsesModel(
+    wsModel,
+    makeMockModel({}),
+    { isDowngraded: false },
+    undefined,
+    undefined,
+    'codex',
+    {
+      getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    },
+  );
+
+  const latestUser = { role: 'user', type: 'message', content: 'next' };
+  await model.getResponse({
+    input: [
+      { role: 'user', type: 'message', content: 'first' },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
+      latestUser,
+    ],
+    modelSettings: {},
+  } as any);
+
+  t.is(seenRequests.length, 3);
+  t.is(seenRequests[0].modelSettings.providerData?.generate, false);
+  t.is(seenRequests[1].modelSettings.providerData?.generate, false);
+  t.deepEqual(seenRequests[0].input, seenRequests[1].input);
+  t.is(seenRequests[2].previousResponseId, 'resp-warmup');
+  t.deepEqual(seenRequests[2].input, [latestUser]);
+});
+
+test('FallbackResponsesModel falls back to full history without previous response id when safe Codex warm-up retries are exhausted', async (t) => {
+  const seenRequests: ModelRequest[] = [];
+  const safeWarmupError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
+    code: 'connection_closed_before_opening',
+  });
+
+  const wsModel = makeMockModel({
+    getStreamedResponse: async function* (request: ModelRequest) {
+      seenRequests.push(request);
+      if (seenRequests.length <= 3) {
+        throw safeWarmupError;
+      }
+      yield {
+        type: 'response_done',
+        response: {
+          id: 'resp-main',
+          output: [],
+          usage: {},
+        },
+      } as any;
+    },
+    getRetryAdvice: ({ error }: any) =>
+      error === safeWarmupError ? { suggested: true, replaySafety: 'safe' } : { suggested: false },
+  });
+
+  const state = { isDowngraded: false };
+  const model = new FallbackResponsesModel(wsModel, makeMockModel({}), state, undefined, undefined, 'codex', {
+    getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  });
+
+  const fullInput = [
+    { role: 'user', type: 'message', content: 'first' },
+    { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
+    { role: 'user', type: 'message', content: 'next' },
+  ];
+  for await (const _event of model.getStreamedResponse({
+    input: fullInput,
+    modelSettings: {},
+  } as any)) {
+  }
+
+  t.is(seenRequests.length, 4);
+  t.true(seenRequests.slice(0, 3).every((request) => request.modelSettings.providerData?.generate === false));
+  t.deepEqual(seenRequests[3].input, fullInput);
+  t.is(seenRequests[3].previousResponseId, undefined);
+  t.is(seenRequests[3].modelSettings.providerData?.generate, undefined);
+  t.false(state.isDowngraded);
 });
 
 test('FallbackResponsesModel.getResponse immediately throws non-network errors without falling back', async (t) => {

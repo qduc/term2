@@ -1,3 +1,52 @@
+## [0.7.3] - 2026-06-04
+
+### Features
+- Add delta-input filtering for conversation chaining to prevent duplicate inputs
+- Add `getMaxOutputTokens` utility with dynamic token limits integrated into Anthropic provider
+- Support conversation history chaining for Codex over WebSocket
+- Add `prompt_cache_key` forwarding to OpenAI WebSocket requests
+- Add `modelClass` and `modelWrapperClass` metadata to logging and provider traffic records
+- Add headers to traffic log entries
+- Add hardened `ask_user` tool with improved clarity and usage consistency
+- Add field-level validation errors and discard confirmation flow for provider settings
+- Add providers management menu for configuring multiple API providers
+- Enable explorer subagent to run safe read-only shell commands
+- Refine orchestrator mode prompt for better task delegation
+- Support free-form string settings with runtime modification
+- Add inactive state support to menu items and improve navigation handling
+- Add safeguards and user confirmation prompt when starting non-lite mode from home or root directory
+- Improve settings handling with schema-based validation, persistence, and numeric suggestions
+- Add notification mechanism for main agent and subagents approaching maximum turn limits
+- Improve inline completion cancellation and dismissal tracking
+- Limit number of path completion entries to avoid performance issues
+- Deliver plan mode toggle as a prefixed user-turn notice
+- Sanitize `system` field in sent traffic data with truncation support
+
+### Bug Fixes
+- Fix chaining continuity issues and improve undo tool ledger logic
+- Fix maxOutputTokens fallback to 4096 for non-Claude models
+- Fix false positive from wrapToolInvoke scanning result strings for error types
+- Fix corrupt tool display for resumed conversations
+- Fix active prompt label wrapping for long input content
+- Fix prompt token estimates
+- Fix cannot leave empty handoff message (fallback to default now works)
+- Fix completed commands stuck in dynamic render queue
+- Fix already billable token usage handling in accumulators
+- Update token prop in LargeUncachedConfirmationPrompt for consistency
+
+### Improvements
+- Refactor ask_user tool guidance for clarity and improved usage consistency
+- Remove redundant "Decline to answer" instruction from ask_user tool description
+- Extract provider middleware and session handling into dedicated modules
+- Decouple session context management from LoggingService
+- Extract warning injection logic from trim-tool-output.ts
+- Streamline notification send method
+- Improve command-safety classifications
+
+### Internal/Chores
+- Cleanup various code smells
+- Improve sidebar in log viewer to work with complex multi-file nested structures
+
 ## [0.7.2] - 2026-05-31
 
 ### Features

@@ -91,10 +91,11 @@ test('provider_selection submit uses text submit for wizard phases', async (t) =
   const handleTextInputSubmitCalls: string[] = [];
   const selectItemCalls: number[] = [];
 
+  let renderer: any;
   let hook: ReturnType<typeof useModeHandlers> | undefined;
 
   await act(async () => {
-    render(
+    renderer = render(
       React.createElement(TestComponent, {
         providers: {
           phase: 'wizard_name' as ProviderSelectionPhase,
@@ -123,9 +124,16 @@ test('provider_selection submit uses text submit for wizard phases', async (t) =
     throw new Error('Expected provider_selection onSubmit handler');
   }
 
-  const result = onSubmit('my-custom-provider');
+  let result: ReturnType<typeof onSubmit> = undefined as unknown as ReturnType<typeof onSubmit>;
+  await act(async () => {
+    result = onSubmit('my-custom-provider');
+  });
 
   t.is(result, 'handled');
   t.deepEqual(handleTextInputSubmitCalls, ['my-custom-provider']);
   t.deepEqual(selectItemCalls, []);
+
+  await act(async () => {
+    renderer.unmount();
+  });
 });

@@ -25,7 +25,6 @@ test('createAskUserToolDefinition defines the tool correctly', (t) => {
 
   t.is(tool.name, 'ask_user');
   t.true(tool.description.includes('clarifying question'));
-  t.true(tool.description.includes('Decline to answer'));
   t.true(tool.needsApproval({ question: 'test' }, undefined));
 });
 

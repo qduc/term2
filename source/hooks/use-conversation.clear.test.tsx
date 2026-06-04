@@ -63,6 +63,45 @@ test.serial('useConversation triggers onClear and resets messages/sessionId', as
   t.is(lastFrame!(), 'new-session-id|0');
 });
 
+test.serial('useConversation fallback clear resets with a fresh session id', async (t) => {
+  const mockConversationService = {
+    sessionId: 'old-session-id',
+    resetWithNewId(newId: string) {
+      this.sessionId = newId;
+    },
+  } as any;
+
+  let clearFn: () => Promise<void> = () => Promise.resolve();
+
+  const Harness = () => {
+    const { messages, clearConversation } = useConversation({
+      conversationService: mockConversationService,
+      loggingService,
+      initialMessages: [{ id: '1', sender: 'user', text: 'hello' }],
+    });
+
+    clearFn = clearConversation;
+
+    return <Text>{messages.length}</Text>;
+  };
+
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<Harness />));
+  });
+  t.truthy(lastFrame);
+  t.is(lastFrame!(), '1');
+
+  await act(async () => {
+    await clearFn();
+  });
+
+  t.not(mockConversationService.sessionId, 'old-session-id');
+  t.truthy(mockConversationService.sessionId);
+  t.truthy(lastFrame);
+  t.is(lastFrame!(), '0');
+});
+
 test.serial('useConversation filters duplicate stack trace from rawEvent when logging error', async (t) => {
   const loggedErrors: any[] = [];
   const loggingServiceMock = {

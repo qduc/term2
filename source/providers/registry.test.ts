@@ -81,6 +81,7 @@ test('openai provider exposes capabilities without requiring credentials', (t) =
     supportsConversationChaining: true,
     supportsTracingControl: true,
     usesStrictToolSchema: true,
+    supportsPromptCacheKey: true,
     nativePatchModelPrefixes: ['gpt-5.1'],
   });
 });

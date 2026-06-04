@@ -570,7 +570,7 @@ export const useConversation = ({
     if (onClear) {
       await onClear();
     } else {
-      conversationService.resetWithNewId(conversationService.sessionId);
+      conversationService.resetWithNewId(crypto.randomUUID());
     }
     setMessages([]);
     setWaitingForApproval(false);

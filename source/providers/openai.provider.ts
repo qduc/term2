@@ -26,7 +26,7 @@ export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel
     const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
     return {
       ...built,
-      requestData: forwardPromptCacheKey(request, { ...built.requestData }),
+      requestData: forwardPromptCacheKey(request, built.requestData),
     };
   }
 }
@@ -36,7 +36,7 @@ export class TimedOpenAIResponsesWSModel extends TimedResponsesWSModel {
     const built = super._buildResponsesCreateRequest(request, stream);
     return {
       ...built,
-      requestData: forwardPromptCacheKey(request, { ...built.requestData }),
+      requestData: forwardPromptCacheKey(request, built.requestData),
     };
   }
 }
@@ -152,6 +152,7 @@ registerProvider({
   capabilities: {
     supportsConversationChaining: true,
     supportsTracingControl: true,
+    supportsPromptCacheKey: true,
     usesStrictToolSchema: true,
     nativePatchModelPrefixes: ['gpt-5.1'],
   },

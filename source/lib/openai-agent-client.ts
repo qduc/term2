@@ -329,6 +329,7 @@ export class OpenAIAgentClient {
   #getProviderCapabilities(providerId: string): {
     supportsConversationChaining: boolean;
     supportsTracingControl: boolean;
+    supportsPromptCacheKey?: boolean;
     usesStrictToolSchema?: boolean;
     nativePatchModelPrefixes?: string[];
   } {
@@ -336,6 +337,7 @@ export class OpenAIAgentClient {
     return {
       supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
       supportsTracingControl: providerDef?.capabilities?.supportsTracingControl ?? false,
+      supportsPromptCacheKey: providerDef?.capabilities?.supportsPromptCacheKey,
       usesStrictToolSchema: providerDef?.capabilities?.usesStrictToolSchema,
       nativePatchModelPrefixes: providerDef?.capabilities?.nativePatchModelPrefixes,
     };
@@ -848,7 +850,8 @@ export class OpenAIAgentClient {
   }
 
   #getAgentForRun(agent: Agent, { sessionId }: { sessionId?: string } = {}): Agent {
-    if ((this.#provider !== 'codex' && this.#provider !== 'openai') || !sessionId) {
+    const { supportsPromptCacheKey } = this.#getProviderCapabilities(this.#provider);
+    if (!supportsPromptCacheKey || !sessionId) {
       return agent;
     }
 

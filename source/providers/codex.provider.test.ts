@@ -243,6 +243,7 @@ test('Codex provider is registered in the registry', (t) => {
     supportsConversationChaining: false,
     supportsTracingControl: false,
     usesStrictToolSchema: true,
+    supportsPromptCacheKey: true,
   });
 });
 

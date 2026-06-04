@@ -571,6 +571,7 @@ registerProvider({
   capabilities: {
     supportsConversationChaining: false,
     supportsTracingControl: false,
+    supportsPromptCacheKey: true,
     usesStrictToolSchema: true,
   },
 });

@@ -210,6 +210,7 @@ function ensureCodexProviderRegistered() {
         capabilities: {
           supportsConversationChaining: true,
           supportsTracingControl: true,
+          supportsPromptCacheKey: true,
         },
       },
       { allowOverride: true },
@@ -240,6 +241,7 @@ function ensureOpenAIProviderRegistered() {
         capabilities: {
           supportsConversationChaining: true,
           supportsTracingControl: true,
+          supportsPromptCacheKey: true,
         },
       },
       { allowOverride: true },
@@ -388,6 +390,20 @@ test.serial('openai startStream puts prompt_cache_key on agent modelSettings, no
   t.is(openaiRunnerCalls.length, 1);
   t.is(openaiRunnerCalls[0].agent.modelSettings.prompt_cache_key, 'session-456');
   t.false('modelSettings' in openaiRunnerCalls[0].options);
+});
+
+test.serial('startStream omits prompt_cache_key when provider does not support it', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-provider-public-methods',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  await client.startStream('Hello', { sessionId: 'session-789' });
+
+  t.is(runnerCalls.length, 1);
+  t.falsy(runnerCalls[0].agent.modelSettings?.prompt_cache_key);
 });
 
 test.serial('abort logs with active trace id before clearing correlation', async (t) => {

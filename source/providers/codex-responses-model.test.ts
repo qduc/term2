@@ -398,6 +398,39 @@ test.serial('CodexResponsesModel._buildResponsesCreateRequest forwards prompt_ca
   }
 });
 
+test.serial('CodexResponsesModel._buildResponsesCreateRequest strips replay item ids from input', (t) => {
+  const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;
+  (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = function () {
+    return {
+      requestData: {
+        input: [
+          { id: 'msg_1', type: 'message', role: 'assistant', content: [] },
+          { id: 'rs_1', type: 'reasoning', summary: [], encrypted_content: 'enc' },
+          { id: 'fc_1', type: 'function_call', call_id: 'call_1', name: 'shell', arguments: '{}' },
+          { type: 'function_call_output', call_id: 'call_1', output: 'ok' },
+          { id: 'ig_1', type: 'image_generation_call', status: 'completed', result: 'image' },
+        ],
+      },
+      sdkRequestHeaders: {},
+      signal: undefined,
+    };
+  };
+
+  try {
+    const model = new CodexResponsesModel({} as any, 'gpt-5-codex');
+    const built = (model as any)._buildResponsesCreateRequest({ modelSettings: {} }, true);
+
+    t.false('id' in built.requestData.input[0]);
+    t.false('id' in built.requestData.input[1]);
+    t.false('id' in built.requestData.input[2]);
+    t.is(built.requestData.input[2].call_id, 'call_1');
+    t.false('id' in built.requestData.input[3]);
+    t.is(built.requestData.input[4].id, 'ig_1');
+  } finally {
+    (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest = original;
+  }
+});
+
 test('CodexResponsesWSModel extends TimedResponsesWSModel and configures timeouts', (t) => {
   const mockClient = {
     baseURL: 'https://api.openai.com',

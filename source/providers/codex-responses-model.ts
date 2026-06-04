@@ -20,6 +20,63 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 
 const stringValue = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
 
+const CODEX_REPLAY_ITEM_TYPES_WITHOUT_IDS = new Set([
+  'message',
+  'reasoning',
+  'local_shell_call',
+  'function_call',
+  'tool_search_call',
+  'custom_tool_call',
+  'web_search_call',
+]);
+
+function stripCodexReplayIds(input: unknown): unknown {
+  if (!Array.isArray(input)) {
+    return input;
+  }
+
+  let changed = false;
+  const normalized = input.map((item) => {
+    const record = asRecord(item);
+    const type = stringValue(record?.type);
+    if (!record || !type || !CODEX_REPLAY_ITEM_TYPES_WITHOUT_IDS.has(type) || !('id' in record)) {
+      return item;
+    }
+
+    const { id: _id, ...rest } = record;
+    changed = true;
+    return rest;
+  });
+
+  return changed ? normalized : input;
+}
+
+function normalizeCodexRequestData(requestData: any, request: any): any {
+  const normalizedRequestData = { ...requestData };
+
+  // Codex responses endpoint rejects temperature; always omit it.
+  if ('temperature' in normalizedRequestData) {
+    delete normalizedRequestData.temperature;
+  }
+
+  normalizedRequestData.input = stripCodexReplayIds(normalizedRequestData.input);
+
+  const modelInclude = request?.modelSettings?.include;
+  if (Array.isArray(modelInclude) && modelInclude.length > 0) {
+    const existingInclude = Array.isArray(normalizedRequestData.include) ? normalizedRequestData.include : [];
+    normalizedRequestData.include = Array.from(
+      new Set([...existingInclude, ...modelInclude].filter((entry) => typeof entry === 'string' && entry.length > 0)),
+    );
+  }
+
+  const promptCacheKey = request?.modelSettings?.prompt_cache_key;
+  if (typeof promptCacheKey === 'string' && promptCacheKey.length > 0) {
+    normalizedRequestData.prompt_cache_key = promptCacheKey;
+  }
+
+  return normalizedRequestData;
+}
+
 const summarizeReconstructedItems = (items: unknown[]): Record<string, unknown> => {
   const typeCounts: Record<string, number> = {};
   let functionCallCount = 0;
@@ -75,29 +132,10 @@ export class CodexResponsesWSModel extends TimedResponsesWSModel {
 
   override _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const built = super._buildResponsesCreateRequest(request, stream);
-    const requestData = { ...built.requestData };
-
-    // Codex responses endpoint rejects temperature; always omit it.
-    if ('temperature' in requestData) {
-      delete requestData.temperature;
-    }
-
-    const modelInclude = request?.modelSettings?.include;
-    if (Array.isArray(modelInclude) && modelInclude.length > 0) {
-      const existingInclude = Array.isArray(requestData.include) ? requestData.include : [];
-      requestData.include = Array.from(
-        new Set([...existingInclude, ...modelInclude].filter((entry) => typeof entry === 'string' && entry.length > 0)),
-      );
-    }
-
-    const promptCacheKey = request?.modelSettings?.prompt_cache_key;
-    if (typeof promptCacheKey === 'string' && promptCacheKey.length > 0) {
-      requestData.prompt_cache_key = promptCacheKey;
-    }
 
     return {
       ...built,
-      requestData,
+      requestData: normalizeCodexRequestData(built.requestData, request),
     };
   }
 
@@ -107,6 +145,7 @@ export class CodexResponsesWSModel extends TimedResponsesWSModel {
 
     const extraHeaders: Record<string, string> = {
       authorization: `Bearer ${accessToken}`,
+      'OpenAI-Beta': 'responses_websockets=2026-02-06',
     };
     if (accountId) {
       extraHeaders['chatgpt-account-id'] = accountId;
@@ -142,29 +181,10 @@ export class CodexResponsesModel extends OpenAIResponsesModel {
 
   _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
-    const requestData = { ...built.requestData };
-
-    // Codex responses endpoint rejects temperature; always omit it.
-    if ('temperature' in requestData) {
-      delete requestData.temperature;
-    }
-
-    const modelInclude = request?.modelSettings?.include;
-    if (Array.isArray(modelInclude) && modelInclude.length > 0) {
-      const existingInclude = Array.isArray(requestData.include) ? requestData.include : [];
-      requestData.include = Array.from(
-        new Set([...existingInclude, ...modelInclude].filter((entry) => typeof entry === 'string' && entry.length > 0)),
-      );
-    }
-
-    const promptCacheKey = request?.modelSettings?.prompt_cache_key;
-    if (typeof promptCacheKey === 'string' && promptCacheKey.length > 0) {
-      requestData.prompt_cache_key = promptCacheKey;
-    }
 
     return {
       ...built,
-      requestData,
+      requestData: normalizeCodexRequestData(built.requestData, request),
     };
   }
 

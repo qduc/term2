@@ -981,7 +981,7 @@ test('run() sends full history for openai-compatible providers', async (t) => {
   t.true(secondInput.length >= 2, 'Second call should include conversation history');
 });
 
-test('run() sends full history for Codex provider and omits previousResponseId', async (t) => {
+test('run() chains follow-up turns for Codex provider over websocket', async (t) => {
   const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First response' }]);
   firstStream.finalOutput = 'First response';
   firstStream.lastResponseId = 'resp-codex-1';
@@ -1030,13 +1030,11 @@ test('run() sends full history for Codex provider and omits previousResponseId',
     // consume events
   }
 
-  t.true(Array.isArray(calls[0].input), 'Codex should use full-history input from the first turn');
-  t.falsy(calls[0].opts.previousResponseId, 'Codex should not receive a usable previousResponseId on turn 1');
-  t.true(Array.isArray(calls[1].input), 'Codex should use full-history input on follow-up turns');
-  t.true(calls[1].input.some((item) => item.role === 'user' && item.content === 'First message'));
-  t.true(calls[1].input.some((item) => item.role === 'assistant'));
-  t.true(calls[1].input.some((item) => item.role === 'user' && item.content === 'Second message'));
-  t.falsy(calls[1].opts.previousResponseId, 'Codex should not receive a usable previousResponseId on turn 2');
+  t.is(typeof calls[0].input, 'string', 'Codex should send only the first user message on turn 1');
+  t.falsy(calls[0].opts.previousResponseId, 'Codex should not receive a previousResponseId on turn 1');
+  t.is(typeof calls[1].input, 'string', 'Codex should send only the next user message on turn 2');
+  t.is(calls[1].input, 'Second message');
+  t.is(calls[1].opts.previousResponseId, 'resp-codex-1', 'Codex should chain follow-up turns from turn 1');
 });
 
 test('sendMessage() returns usage from final event', async (t) => {

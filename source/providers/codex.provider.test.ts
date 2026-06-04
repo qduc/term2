@@ -240,7 +240,7 @@ test('Codex provider is registered in the registry', (t) => {
   t.is(typeof provider?.fetchModels, 'function');
   t.is(typeof provider?.createRunner, 'function');
   t.deepEqual(provider?.capabilities, {
-    supportsConversationChaining: false,
+    supportsConversationChaining: true,
     supportsTracingControl: false,
     usesStrictToolSchema: true,
     supportsPromptCacheKey: true,

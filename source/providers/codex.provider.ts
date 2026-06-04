@@ -569,7 +569,7 @@ registerProvider({
   clearConversations: undefined,
   sensitiveSettingKeys: [],
   capabilities: {
-    supportsConversationChaining: false,
+    supportsConversationChaining: true,
     supportsTracingControl: false,
     supportsPromptCacheKey: true,
     usesStrictToolSchema: true,

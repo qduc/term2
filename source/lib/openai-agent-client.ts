@@ -28,6 +28,80 @@ import type { ConversationEvent } from '../services/conversation-events.js';
 import { fetchModels, getModelDefaultReasoningLevel } from '../services/model-service.js';
 import { ToolExecutionLimiter } from './tool-execution-limiter.js';
 
+const TOOL_RESULT_ITEM_TYPES = new Set([
+  'function_call_output',
+  'function_call_result',
+  'function_call_output_result',
+  'tool_call_output',
+  'tool_call_result',
+  'tool_call_output_item',
+  'local_shell_call_output',
+  'shell_call_output',
+  'computer_call_output',
+  'computer_call_result',
+  'apply_patch_call_output',
+]);
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const isUserInputMessage = (item: unknown): boolean => {
+  const record = asRecord(item);
+  return record?.role === 'user';
+};
+
+const isToolResultItem = (item: unknown): boolean => {
+  const record = asRecord(item);
+  return typeof record?.type === 'string' && TOOL_RESULT_ITEM_TYPES.has(record.type);
+};
+
+/**
+ * Finds the starting index of the delta input when conversation chaining is active.
+ *
+ * Assumption: Deltas are expected to be either:
+ *  (a) trailing tool results (when the model has just called tools and is continuing), or
+ *  (b) a new user message plus everything after it (when starting a new turn).
+ *
+ * If the input ends with a replayed assistant message that follows a tool output,
+ * this function falls back to searching for the last user message, which may over-retain.
+ * In practice, this is rare because model invocations are typically triggered by new user
+ * inputs or new tool results.
+ */
+const findChainedDeltaStart = (input: unknown[]): number => {
+  let trailingToolResultStart = input.length;
+  while (trailingToolResultStart > 0 && isToolResultItem(input[trailingToolResultStart - 1])) {
+    trailingToolResultStart--;
+  }
+  if (trailingToolResultStart < input.length) {
+    return trailingToolResultStart;
+  }
+
+  for (let index = input.length - 1; index >= 0; index--) {
+    if (isUserInputMessage(input[index])) {
+      return index;
+    }
+  }
+
+  return 0;
+};
+
+const filterChainedModelInput = (modelData: any): any => {
+  const input = modelData?.input;
+  if (!Array.isArray(input) || input.length <= 1) {
+    return modelData;
+  }
+
+  const deltaStart = findChainedDeltaStart(input);
+  if (deltaStart <= 0) {
+    return modelData;
+  }
+
+  return {
+    ...modelData,
+    input: input.slice(deltaStart),
+  };
+};
+
 /**
  * Wraps a tool definition's needsApproval so that structurally invalid params
  * (those that fail Zod schema validation) never trigger an approval prompt.
@@ -484,6 +558,7 @@ export class OpenAIAgentClient {
         turnCount: 0,
         maxTurns: this.#maxTurns,
       };
+      const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
       const options: any = {
         stream: true,
         maxTurns: this.#maxTurns,
@@ -493,12 +568,13 @@ export class OpenAIAgentClient {
           if (args.context) {
             args.context.turnCount = (args.context.turnCount ?? 0) + 1;
           }
-          return args.modelData;
+          return supportsConversationChaining && previousResponseId
+            ? filterChainedModelInput(args.modelData)
+            : args.modelData;
         },
       };
       const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
-      const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
       if (supportsConversationChaining && previousResponseId) {
         options.previousResponseId = previousResponseId;
       }
@@ -548,6 +624,7 @@ export class OpenAIAgentClient {
       userContext.turnCount = 0;
     }
 
+    const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
     const options: any = {
       signal,
       context: userContext,
@@ -555,12 +632,13 @@ export class OpenAIAgentClient {
         if (args.context) {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
         }
-        return args.modelData;
+        return supportsConversationChaining && previousResponseId
+          ? filterChainedModelInput(args.modelData)
+          : args.modelData;
       },
     };
     const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
-    const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
     if (supportsConversationChaining && previousResponseId) {
       options.previousResponseId = previousResponseId;
     }
@@ -593,6 +671,7 @@ export class OpenAIAgentClient {
       userContext.turnCount = 0;
     }
 
+    const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
     const options: any = {
       stream: true,
       maxTurns: this.#maxTurns,
@@ -602,12 +681,13 @@ export class OpenAIAgentClient {
         if (args.context) {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
         }
-        return args.modelData;
+        return supportsConversationChaining && previousResponseId
+          ? filterChainedModelInput(args.modelData)
+          : args.modelData;
       },
     };
     const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
-    const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
     if (supportsConversationChaining && previousResponseId) {
       options.previousResponseId = previousResponseId;
     }

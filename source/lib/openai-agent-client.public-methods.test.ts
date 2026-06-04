@@ -149,7 +149,7 @@ function ensureChainingProvidersRegistered() {
       createRunner: () =>
         ({
           run: async (_agent: any, _input: any, options: any) => {
-            chainingRunnerCalls.push({ options, providerId: 'mock-chaining-false' });
+            chainingRunnerCalls.push({ input: _input, options, providerId: 'mock-chaining-false' });
             return {
               status: 'completed',
               finalOutput: 'ok',
@@ -170,7 +170,7 @@ function ensureChainingProvidersRegistered() {
       createRunner: () =>
         ({
           run: async (_agent: any, _input: any, options: any) => {
-            chainingRunnerCalls.push({ options, providerId: 'mock-chaining-true' });
+            chainingRunnerCalls.push({ input: _input, options, providerId: 'mock-chaining-true' });
             return {
               status: 'completed',
               finalOutput: 'ok',
@@ -360,6 +360,203 @@ test.serial('startStream only passes previousResponseId when provider supports c
   await client.startStream('Hello', { previousResponseId: 'prev-2' });
   t.is(chainingRunnerCalls.length, 2);
   t.is(chainingRunnerCalls[1].options.previousResponseId, 'prev-2');
+});
+
+test.serial(
+  'continueRunStream filters replayed history to delta input when chaining from previousResponseId',
+  async (t) => {
+    const settings = createMockSettings({
+      'agent.provider': 'mock-chaining-true',
+    });
+    const client = new OpenAIAgentClient({
+      deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+    });
+
+    const state = {
+      _context: { context: { turnCount: 0 } },
+      _generatedItems: [
+        { rawItem: { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' } },
+        { rawItem: { type: 'function_call_output', callId: 'call-read', output: 'done' } },
+      ],
+    };
+
+    await client.continueRunStream(state, { previousResponseId: 'resp-prev' });
+
+    t.is(chainingRunnerCalls.length, 1);
+    const call = chainingRunnerCalls[0];
+    t.is(call.input, state);
+    t.is(call.options.previousResponseId, 'resp-prev');
+
+    const filtered = call.options.callModelInputFilter({
+      context: { turnCount: 0 },
+      modelData: {
+        input: [
+          { role: 'user', type: 'message', content: 'inspect file' },
+          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+          { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
+          { type: 'function_call_output', callId: 'call-read', output: 'done' },
+        ],
+        instructions: 'system',
+      },
+    });
+
+    t.deepEqual(filtered.input, [{ type: 'function_call_output', callId: 'call-read', output: 'done' }]);
+    t.is(filtered.instructions, 'system');
+  },
+);
+
+test.serial(
+  'continueRunStream filters replayed history to delta input with function_call_output_result and tool_call_output_item',
+  async (t) => {
+    const settings = createMockSettings({
+      'agent.provider': 'mock-chaining-true',
+    });
+    const client = new OpenAIAgentClient({
+      deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+    });
+
+    await client.continueRunStream({ _context: { context: { turnCount: 0 } } }, { previousResponseId: 'resp-prev' });
+
+    const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
+      context: { turnCount: 0 },
+      modelData: {
+        input: [
+          { role: 'user', type: 'message', content: 'inspect file' },
+          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+          { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
+          { type: 'function_call_output_result', callId: 'call-read', output: 'done' },
+          { type: 'tool_call_output_item', callId: 'call-read', output: 'done' },
+        ],
+        instructions: 'system',
+      },
+    });
+
+    t.deepEqual(filtered.input, [
+      { type: 'function_call_output_result', callId: 'call-read', output: 'done' },
+      { type: 'tool_call_output_item', callId: 'call-read', output: 'done' },
+    ]);
+  },
+);
+
+test.serial('continueRunStream keeps the latest user item when chained model input replays full history', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-true',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  await client.continueRunStream({ _context: { context: { turnCount: 0 } } }, { previousResponseId: 'resp-prev' });
+
+  const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
+    context: { turnCount: 0 },
+    modelData: {
+      input: [
+        { role: 'user', type: 'message', content: 'first' },
+        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
+        { role: 'user', type: 'message', content: 'second' },
+      ],
+      instructions: 'system',
+    },
+  });
+
+  t.deepEqual(filtered.input, [{ role: 'user', type: 'message', content: 'second' }]);
+});
+
+test.serial('startStream filters replayed history to delta input when chaining from previousResponseId', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-true',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  await client.startStream('inspect file', { previousResponseId: 'resp-prev' });
+
+  t.is(chainingRunnerCalls.length, 1);
+  const call = chainingRunnerCalls[0];
+  t.is(call.options.previousResponseId, 'resp-prev');
+
+  const filtered = call.options.callModelInputFilter({
+    context: { turnCount: 0 },
+    modelData: {
+      input: [
+        { role: 'user', type: 'message', content: 'inspect file' },
+        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+        { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
+        { type: 'function_call_output', callId: 'call-read', output: 'done' },
+      ],
+      instructions: 'system',
+    },
+  });
+
+  t.deepEqual(filtered.input, [{ type: 'function_call_output', callId: 'call-read', output: 'done' }]);
+  t.is(filtered.instructions, 'system');
+});
+
+test.serial('continueRun filters replayed history to delta input when chaining from previousResponseId', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-true',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  const state = {
+    _context: { context: { turnCount: 0 } },
+    _generatedItems: [
+      { rawItem: { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' } },
+      { rawItem: { type: 'function_call_output', callId: 'call-read', output: 'done' } },
+    ],
+  };
+
+  await client.continueRun(state, { previousResponseId: 'resp-prev' });
+
+  t.is(chainingRunnerCalls.length, 1);
+  const call = chainingRunnerCalls[0];
+  t.is(call.input, state);
+  t.is(call.options.previousResponseId, 'resp-prev');
+
+  const filtered = call.options.callModelInputFilter({
+    context: { turnCount: 0 },
+    modelData: {
+      input: [
+        { role: 'user', type: 'message', content: 'inspect file' },
+        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+        { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
+        { type: 'function_call_output', callId: 'call-read', output: 'done' },
+      ],
+      instructions: 'system',
+    },
+  });
+
+  t.deepEqual(filtered.input, [{ type: 'function_call_output', callId: 'call-read', output: 'done' }]);
+  t.is(filtered.instructions, 'system');
+});
+
+test.serial('continueRunStream filters and keeps user message even with custom type', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-true',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  await client.continueRunStream({ _context: { context: { turnCount: 0 } } }, { previousResponseId: 'resp-prev' });
+
+  const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
+    context: { turnCount: 0 },
+    modelData: {
+      input: [
+        { role: 'user', type: 'message', content: 'first' },
+        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
+        { role: 'user', type: 'custom_input_type', content: 'second' },
+      ],
+      instructions: 'system',
+    },
+  });
+
+  t.deepEqual(filtered.input, [{ role: 'user', type: 'custom_input_type', content: 'second' }]);
 });
 
 test.serial('codex startStream puts prompt_cache_key on agent modelSettings, not run options', async (t) => {

@@ -75,6 +75,8 @@ let chainingProviderRegistered = false;
 let chainingRunnerCalls: any[] = [];
 let codexProviderRegistered = false;
 let codexRunnerCalls: any[] = [];
+let openaiProviderRegistered = false;
+let openaiRunnerCalls: any[] = [];
 let failingProviderRegistered = false;
 function ensureMentorProvidersRegistered() {
   if (!mentorProviderRegistered) {
@@ -217,6 +219,36 @@ function ensureCodexProviderRegistered() {
   }
 }
 
+function ensureOpenAIProviderRegistered() {
+  if (!openaiProviderRegistered) {
+    registerProvider(
+      {
+        id: 'openai',
+        label: 'Mock OpenAI',
+        createRunner: () =>
+          ({
+            run: async (agent: any, _input: any, options: any) => {
+              openaiRunnerCalls.push({ agent, options });
+              return {
+                status: 'completed',
+                finalOutput: 'ok',
+                messages: [],
+              };
+            },
+          } as any),
+        fetchModels: async () => [{ id: 'mock-model' }],
+        capabilities: {
+          supportsConversationChaining: true,
+          supportsTracingControl: true,
+        },
+      },
+      { allowOverride: true },
+    );
+
+    openaiProviderRegistered = true;
+  }
+}
+
 function ensureFailingProviderRegistered() {
   if (!failingProviderRegistered) {
     registerProvider({
@@ -242,6 +274,7 @@ test.beforeEach(() => {
   ensureMentorProvidersRegistered();
   ensureChainingProvidersRegistered();
   ensureCodexProviderRegistered();
+  ensureOpenAIProviderRegistered();
   ensureFailingProviderRegistered();
   capturedMainAgentForMentorTest = null;
   mentorInputs = [];
@@ -249,6 +282,7 @@ test.beforeEach(() => {
   mentorResponseCounter = 0;
   chainingRunnerCalls = [];
   codexRunnerCalls = [];
+  openaiRunnerCalls = [];
 });
 
 // ========== setModel tests ==========
@@ -339,6 +373,21 @@ test.serial('codex startStream puts prompt_cache_key on agent modelSettings, not
   t.is(codexRunnerCalls.length, 1);
   t.is(codexRunnerCalls[0].agent.modelSettings.prompt_cache_key, 'session-123');
   t.false('modelSettings' in codexRunnerCalls[0].options);
+});
+
+test.serial('openai startStream puts prompt_cache_key on agent modelSettings, not run options', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'openai',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  await client.startStream('Hello', { sessionId: 'session-456' });
+
+  t.is(openaiRunnerCalls.length, 1);
+  t.is(openaiRunnerCalls[0].agent.modelSettings.prompt_cache_key, 'session-456');
+  t.false('modelSettings' in openaiRunnerCalls[0].options);
 });
 
 test.serial('abort logs with active trace id before clearing correlation', async (t) => {

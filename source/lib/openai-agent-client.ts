@@ -848,7 +848,7 @@ export class OpenAIAgentClient {
   }
 
   #getAgentForRun(agent: Agent, { sessionId }: { sessionId?: string } = {}): Agent {
-    if (this.#provider !== 'codex' || !sessionId) {
+    if ((this.#provider !== 'codex' && this.#provider !== 'openai') || !sessionId) {
       return agent;
     }
 

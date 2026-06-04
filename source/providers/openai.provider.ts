@@ -9,6 +9,38 @@ import { TimedResponsesWSModel } from './timed-responses-ws-model.js';
 import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
 
+function forwardPromptCacheKey(request: any, requestData: Record<string, unknown>): Record<string, unknown> {
+  const promptCacheKey = request?.modelSettings?.prompt_cache_key;
+  if (typeof promptCacheKey === 'string' && promptCacheKey.length > 0) {
+    return {
+      ...requestData,
+      prompt_cache_key: promptCacheKey,
+    };
+  }
+
+  return requestData;
+}
+
+export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel {
+  _buildResponsesCreateRequest(request: any, stream: boolean): any {
+    const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
+    return {
+      ...built,
+      requestData: forwardPromptCacheKey(request, { ...built.requestData }),
+    };
+  }
+}
+
+export class TimedOpenAIResponsesWSModel extends TimedResponsesWSModel {
+  _buildResponsesCreateRequest(request: any, stream: boolean): any {
+    const built = super._buildResponsesCreateRequest(request, stream);
+    return {
+      ...built,
+      requestData: forwardPromptCacheKey(request, { ...built.requestData }),
+    };
+  }
+}
+
 const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 
 async function fetchOpenAIModels(
@@ -60,10 +92,10 @@ class FallbackOpenAIProvider implements ModelProvider {
       return cached;
     }
 
-    const wsModel = new TimedResponsesWSModel(this.openAIClient as any, model, {
+    const wsModel = new TimedOpenAIResponsesWSModel(this.openAIClient as any, model, {
       ...DEFAULT_TIMED_WS_TIMEOUTS,
     });
-    const httpModel = new OpenAIResponsesModel(this.openAIClient as any, model);
+    const httpModel = new OpenAIResponsesModelWithPromptCacheKey(this.openAIClient as any, model);
 
     const fallbackModel = new FallbackResponsesModel(
       wsModel,

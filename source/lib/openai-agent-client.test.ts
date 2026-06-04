@@ -344,6 +344,80 @@ test('wrapNeedsApproval delegates to the tool when no interceptor rejects', asyn
   t.true(await wrapped(null, { command: 'ls' }));
 });
 
+test('wrapNeedsApproval normalizes stringified array before validation', async (t) => {
+  const definition = {
+    parameters: z.object({ tags: z.array(z.string()) }),
+    needsApproval: async () => true,
+  };
+  const wrapped = wrapNeedsApproval(definition);
+
+  // Models sometimes stringify array parameters; normalisation must parse
+  // them so the value passes schema validation and reaches needsApproval.
+  t.true(await wrapped(null, { tags: '["a", "b"]' }));
+});
+
+test('wrapNeedsApproval normalizes stringified object before validation', async (t) => {
+  const definition = {
+    parameters: z.object({ config: z.object({ key: z.string() }) }),
+    needsApproval: async () => true,
+  };
+  const wrapped = wrapNeedsApproval(definition);
+
+  t.true(await wrapped(null, { config: '{"key": "val"}' }));
+});
+
+test('wrapNeedsApproval normalizes boolean strings before validation', async (t) => {
+  const definition = {
+    parameters: z.object({ verbose: z.boolean() }),
+    needsApproval: async () => true,
+  };
+  const wrapped = wrapNeedsApproval(definition);
+
+  t.true(await wrapped(null, { verbose: 'true' }));
+});
+
+test('wrapNeedsApproval normalizes null sentinels on optional fields before validation', async (t) => {
+  let received: unknown;
+  const definition = {
+    parameters: z.object({ command: z.string(), timeout_ms: z.number().optional() }),
+    needsApproval: async (params: unknown, _ctx?: unknown): Promise<boolean> => {
+      received = params;
+      return true;
+    },
+  };
+  const wrapped = wrapNeedsApproval(definition);
+
+  t.true(await wrapped(null, { command: 'ls', timeout_ms: null }));
+  // null sentinel is removed, so timeout_ms should be absent
+  t.false('timeout_ms' in (received as any));
+});
+
+test('wrapNeedsApproval still bypasses approval for params that remain invalid after normalisation', async (t) => {
+  const definition = {
+    parameters: z.object({ count: z.number() }),
+    needsApproval: async () => true,
+  };
+  const wrapped = wrapNeedsApproval(definition);
+
+  // A string that isn't a valid number stays invalid → bypass approval
+  t.false(await wrapped(null, { count: 'not a number' }));
+});
+
+test('wrapNeedsApproval passes through already-valid params unchanged', async (t) => {
+  let received: unknown;
+  const definition = {
+    parameters: z.object({ name: z.string(), items: z.array(z.string()) }),
+    needsApproval: async (params: unknown, _ctx?: unknown): Promise<boolean> => {
+      received = params;
+      return true;
+    },
+  };
+  const wrapped = wrapNeedsApproval(definition);
+
+  t.true(await wrapped(null, { name: 'test', items: ['a', 'b'] }));
+  t.deepEqual((received as any).items, ['a', 'b']);
+});
+
 // ========== combineAbortSignals Tests ==========
 
 test('combineAbortSignals returns undefined if neither signal is provided', (t) => {

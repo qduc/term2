@@ -193,6 +193,97 @@ function unwrapSchema(schema: any): any {
   return current;
 }
 
+/**
+ * Normalize a plain-object params bag in-place according to the Zod schema.
+ *
+ * Applies the same coercions as {@link normalizeToolInput} but operates directly
+ * on a JS object, avoiding a JSON round-trip. Returns the same reference when
+ * no modifications are needed, or a shallow clone with the normalised values.
+ *
+ * Skips non-object / null inputs and returns them unchanged.
+ */
+export const normalizeObjectParams = (params: unknown, schema?: z.ZodTypeAny): unknown => {
+  if (params === null || params === undefined) return params;
+  if (typeof params !== 'object' || Array.isArray(params)) return params;
+  if (!schema) return params;
+
+  const shape = getObjectShape(schema);
+  if (!shape) return params;
+
+  let modified = false;
+  const result = { ...(params as Record<string, unknown>) };
+
+  for (const key of Object.keys(shape)) {
+    const fieldSchema = shape[key];
+    if (!fieldSchema || typeof fieldSchema.safeParse !== 'function') continue;
+
+    const value = result[key];
+    if (value === undefined) continue;
+
+    // 1. Optional field sentinels: "null", "None", "" or null -> undefined (omit)
+    if (fieldSchema.safeParse(undefined).success) {
+      if (value === 'null' || value === 'None' || value === '' || value === null) {
+        delete result[key];
+        modified = true;
+        continue;
+      }
+    }
+
+    // 2. Boolean coercion: "true"/"false" -> boolean
+    const isBool =
+      fieldSchema.safeParse(true).success &&
+      fieldSchema.safeParse(false).success &&
+      !fieldSchema.safeParse('not a boolean').success;
+    if (isBool && typeof value === 'string') {
+      const lower = value.toLowerCase();
+      if (lower === 'true') {
+        result[key] = true;
+        modified = true;
+      } else if (lower === 'false') {
+        result[key] = false;
+        modified = true;
+      }
+    }
+
+    // 3. Array or Object coercion from stringified representation
+    const unwrapped = unwrapSchema(fieldSchema);
+    if (typeof value === 'string' && unwrapped) {
+      const def = unwrapped.def || unwrapped._def;
+      if (def) {
+        const typeName = def.type || def.typeName;
+        const trimmed = value.trim();
+        if ((typeName === 'array' || typeName === 'ZodArray') && trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          try {
+            const parsedArray = JSON.parse(trimmed);
+            if (Array.isArray(parsedArray)) {
+              result[key] = parsedArray;
+              modified = true;
+            }
+          } catch {
+            // Ignore parsing error
+          }
+        } else if (
+          (typeName === 'object' || typeName === 'ZodObject') &&
+          trimmed.startsWith('{') &&
+          trimmed.endsWith('}')
+        ) {
+          try {
+            const parsedObj = JSON.parse(trimmed);
+            if (parsedObj && typeof parsedObj === 'object' && !Array.isArray(parsedObj)) {
+              result[key] = parsedObj;
+              modified = true;
+            }
+          } catch {
+            // Ignore parsing error
+          }
+        }
+      }
+    }
+  }
+
+  return modified ? result : params;
+};
+
 export const normalizeToolInput = (input: unknown, schema?: z.ZodTypeAny): string => {
   let jsonStr = '';
   if (typeof input === 'string') {
@@ -211,84 +302,9 @@ export const normalizeToolInput = (input: unknown, schema?: z.ZodTypeAny): strin
   if (schema) {
     try {
       const parsed = JSON.parse(jsonStr);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        const shape = getObjectShape(schema);
-        if (shape) {
-          let modified = false;
-          for (const key of Object.keys(shape)) {
-            const fieldSchema = shape[key];
-            if (!fieldSchema || typeof fieldSchema.safeParse !== 'function') {
-              continue;
-            }
-            const value = parsed[key];
-            if (value !== undefined) {
-              // 1. Optional field sentinels: "null", "None", "" or null -> undefined (omit)
-              if (fieldSchema.safeParse(undefined).success) {
-                if (value === 'null' || value === 'None' || value === '' || value === null) {
-                  delete parsed[key];
-                  modified = true;
-                  continue;
-                }
-              }
-              // 2. Boolean coercion: "true"/"false" -> boolean
-              const isBool =
-                fieldSchema.safeParse(true).success &&
-                fieldSchema.safeParse(false).success &&
-                !fieldSchema.safeParse('not a boolean').success;
-              if (isBool && typeof value === 'string') {
-                const lower = value.toLowerCase();
-                if (lower === 'true') {
-                  parsed[key] = true;
-                  modified = true;
-                } else if (lower === 'false') {
-                  parsed[key] = false;
-                  modified = true;
-                }
-              }
-              // 3. Array or Object coercion from stringified representation
-              const unwrapped = unwrapSchema(fieldSchema);
-              if (typeof value === 'string' && unwrapped) {
-                const def = unwrapped.def || unwrapped._def;
-                if (def) {
-                  const typeName = def.type || def.typeName;
-                  const trimmed = value.trim();
-                  if (
-                    (typeName === 'array' || typeName === 'ZodArray') &&
-                    trimmed.startsWith('[') &&
-                    trimmed.endsWith(']')
-                  ) {
-                    try {
-                      const parsedArray = JSON.parse(trimmed);
-                      if (Array.isArray(parsedArray)) {
-                        parsed[key] = parsedArray;
-                        modified = true;
-                      }
-                    } catch {
-                      // Ignore parsing error
-                    }
-                  } else if (
-                    (typeName === 'object' || typeName === 'ZodObject') &&
-                    trimmed.startsWith('{') &&
-                    trimmed.endsWith('}')
-                  ) {
-                    try {
-                      const parsedObj = JSON.parse(trimmed);
-                      if (parsedObj && typeof parsedObj === 'object' && !Array.isArray(parsedObj)) {
-                        parsed[key] = parsedObj;
-                        modified = true;
-                      }
-                    } catch {
-                      // Ignore parsing error
-                    }
-                  }
-                }
-              }
-            }
-          }
-          if (modified) {
-            jsonStr = JSON.stringify(parsed);
-          }
-        }
+      const normalized = normalizeObjectParams(parsed, schema);
+      if (normalized !== parsed) {
+        jsonStr = JSON.stringify(normalized);
       }
     } catch {
       // Ignore parsing errors and return jsonStr as-is

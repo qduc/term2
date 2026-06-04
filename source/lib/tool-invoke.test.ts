@@ -1,7 +1,13 @@
 import test from 'ava';
 import { tool as createTool, RunContext } from '@openai/agents';
 import { z } from 'zod';
-import { repairJson, normalizeToolInput, toolErrorFunction, wrapToolInvoke } from './tool-invoke.js';
+import {
+  repairJson,
+  normalizeObjectParams,
+  normalizeToolInput,
+  toolErrorFunction,
+  wrapToolInvoke,
+} from './tool-invoke.js';
 
 // ---------------------------------------------------------------------------
 // repairJson – pass-through for valid / empty input
@@ -349,4 +355,74 @@ test('normalizeToolInput with schema coerces empty stringified array', (t) => {
   t.deepEqual(JSON.parse(result), {
     tags: [],
   });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeObjectParams
+// ---------------------------------------------------------------------------
+
+test('normalizeObjectParams returns null/undefined/non-object unchanged', (t) => {
+  t.is(normalizeObjectParams(null), null);
+  t.is(normalizeObjectParams(undefined), undefined);
+  t.is(normalizeObjectParams('hello'), 'hello');
+  t.deepEqual(normalizeObjectParams([1, 2]), [1, 2]);
+});
+
+test('normalizeObjectParams returns object unchanged when no schema provided', (t) => {
+  const obj = { a: 1 };
+  t.is(normalizeObjectParams(obj), obj); // same reference
+});
+
+test('normalizeObjectParams filters null sentinels on optional fields', (t) => {
+  const schema = z.object({
+    name: z.string(),
+    count: z.number().optional(),
+  });
+
+  const result = normalizeObjectParams({ name: 'test', count: null }, schema) as Record<string, unknown>;
+  t.deepEqual(result, { name: 'test' });
+  t.false('count' in (result as object));
+});
+
+test('normalizeObjectParams coerces boolean strings', (t) => {
+  const schema = z.object({
+    flag: z.boolean(),
+  });
+
+  const result = normalizeObjectParams({ flag: 'true' }, schema) as Record<string, unknown>;
+  t.is(result.flag, true);
+});
+
+test('normalizeObjectParams coerces stringified arrays', (t) => {
+  const schema = z.object({
+    tags: z.array(z.string()),
+  });
+
+  const result = normalizeObjectParams({ tags: '["a","b"]' }, schema) as Record<string, unknown>;
+  t.deepEqual(result.tags, ['a', 'b']);
+});
+
+test('normalizeObjectParams coerces stringified objects', (t) => {
+  const schema = z.object({
+    config: z.object({ key: z.string() }),
+  });
+
+  const result = normalizeObjectParams({ config: '{"key":"val"}' }, schema) as Record<string, unknown>;
+  t.deepEqual(result.config, { key: 'val' });
+});
+
+test('normalizeObjectParams returns same reference when no modifications needed', (t) => {
+  const schema = z.object({ name: z.string() });
+  const obj = { name: 'test' };
+  t.is(normalizeObjectParams(obj, schema), obj);
+});
+
+test('normalizeObjectParams filters string sentinels on optional fields', (t) => {
+  const schema = z.object({
+    path: z.string(),
+    start: z.number().optional(),
+  });
+
+  const result = normalizeObjectParams({ path: '/a', start: 'None' }, schema) as Record<string, unknown>;
+  t.false('start' in (result as object));
 });

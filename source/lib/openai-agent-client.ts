@@ -12,7 +12,8 @@ import { getProvider } from '../providers/index.js';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
 import { getAgentDefinition } from '../agent.js';
-import { normalizeToolInput, toolErrorFunction, wrapToolInvoke } from './tool-invoke.js';
+import { z } from 'zod';
+import { normalizeObjectParams, normalizeToolInput, toolErrorFunction, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { createEditorImpl } from './editor-impl.js';
@@ -32,11 +33,13 @@ import { ToolExecutionLimiter } from './tool-execution-limiter.js';
  * (those that fail Zod schema validation) never trigger an approval prompt.
  * The tool's execute will receive those params and return a structured error.
  *
- * Top-level null values are normalized to undefined before validation. When using
- * OpenAI strict tool schemas, toOpenAIStrictToolSchema converts optional fields to
- * nullable-with-null-default, so the API sends null for omitted optional fields.
- * The original Zod schema uses .optional() which rejects null, so without this
- * normalization valid strict-schema calls would incorrectly bypass approval.
+ * Params are normalised using schema-aware coercion before validation:
+ *  1. Null sentinels (null, "null", "None", "") on optional fields → omitted
+ *  2. Boolean strings ("true"/"false") on boolean fields → true/false
+ *  3. Stringified JSON arrays/objects on typed fields → parsed values
+ *
+ * This handles the OpenAI strict-schema convention where omitted optional fields
+ * arrive as null, as well as models that stringify structured parameters.
  */
 export function wrapNeedsApproval(
   definition: {
@@ -61,12 +64,22 @@ export function wrapNeedsApproval(
         // logic rather than silently skipping the prompt.
       }
     }
-    const normalized =
-      params !== null && typeof params === 'object' && !Array.isArray(params)
-        ? Object.fromEntries(
-            Object.entries(params as Record<string, unknown>).map(([k, v]) => [k, v === null ? undefined : v]),
-          )
-        : params;
+
+    // Apply schema-aware normalisation directly on the object (no JSON round-trip).
+    // Falls back to a minimal null→undefined pass if the schema is unavailable
+    // or normalisation itself throws.
+    let normalized: unknown;
+    try {
+      normalized = normalizeObjectParams(params, definition.parameters as z.ZodTypeAny);
+    } catch {
+      normalized =
+        params !== null && typeof params === 'object' && !Array.isArray(params)
+          ? Object.fromEntries(
+              Object.entries(params as Record<string, unknown>).map(([k, v]) => [k, v === null ? undefined : v]),
+            )
+          : params;
+    }
+
     if (!definition.parameters.safeParse(normalized).success) {
       return false;
     }

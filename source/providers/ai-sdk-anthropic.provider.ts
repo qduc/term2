@@ -89,10 +89,39 @@ function createAnthropicPromptCachingMiddleware(
   };
 }
 
+const MAX_OUTPUT_TOKENS_MAP: Record<string, number> = {
+  'minimax-m3': 131072,
+  'qwen3.5-plus': 65536,
+  'mimo-v2-omni': 128000,
+  'kimi-k2.6': 65536,
+  'qwen3.7-max': 65536,
+  'qwen3.6-plus': 65536,
+  'minimax-m2.7': 131072,
+  'deepseek-v4-flash': 384000,
+  'glm-5': 32768,
+  'minimax-m2.5': 65536,
+  'mimo-v2-pro': 128000,
+  'qwen3.7-plus': 65536,
+  'mimo-v2.5': 128000,
+  'deepseek-v4-pro': 384000,
+  'kimi-k2.5': 65536,
+  'glm-5.1': 32768,
+  'mimo-v2.5-pro': 128000,
+};
+
+export function getMaxOutputTokens(modelId: string): number {
+  const defaultLimit = 65536;
+  if (!modelId) return defaultLimit;
+  const key = modelId.split('/').pop()?.toLowerCase() ?? '';
+  return MAX_OUTPUT_TOKENS_MAP[key] ?? defaultLimit;
+}
+
 function withAnthropicPromptCaching<T extends AiSdkAnthropicModelLike>(
   model: T,
   shouldApplyPromptCaching: AnthropicPromptCachingPredicate,
+  modelId: string,
 ): T {
+  const maxOutputTokens = getMaxOutputTokens(modelId);
   return wrapLanguageModel({
     model: model as any,
     middleware: [
@@ -100,7 +129,7 @@ function withAnthropicPromptCaching<T extends AiSdkAnthropicModelLike>(
         specificationVersion: 'v3',
         transformParams: async ({ params }) => ({
           ...params,
-          maxOutputTokens: 128000,
+          maxOutputTokens,
         }),
       },
       createAnthropicPromptCachingMiddleware(shouldApplyPromptCaching),
@@ -136,7 +165,12 @@ export class AiSdkAnthropicProvider implements ModelProvider {
   getModel(modelName?: string): Promise<Model> | Model {
     const config = this.#resolveConfig();
     const provider = this.#createProvider(config);
-    const model = withAnthropicPromptCaching(provider(modelName || this.#defaultModel), this.#shouldApplyPromptCaching);
+    const resolvedModelName = modelName || this.#defaultModel;
+    const model = withAnthropicPromptCaching(
+      provider(resolvedModelName),
+      this.#shouldApplyPromptCaching,
+      resolvedModelName,
+    );
 
     return adaptAiSdkModelForAgents(model, undefined, 'anthropic');
   }

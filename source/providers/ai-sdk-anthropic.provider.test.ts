@@ -1,5 +1,9 @@
 import test from 'ava';
-import { addAnthropicPromptCachingToMessages, AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
+import {
+  addAnthropicPromptCachingToMessages,
+  AiSdkAnthropicProvider,
+  getMaxOutputTokens,
+} from './ai-sdk-anthropic.provider.js';
 
 test('addAnthropicPromptCachingToMessages adds cacheControl to the last Anthropic message only', (t) => {
   const messages = [
@@ -117,4 +121,14 @@ test('AiSdkAnthropicProvider can be instantiated for Anthropic models', (t) => {
   });
 
   t.truthy(provider);
+});
+
+test('getMaxOutputTokens maps models correctly and defaults to 128000', (t) => {
+  t.is(getMaxOutputTokens('minimax-m3'), 131072);
+  t.is(getMaxOutputTokens('qwen3.5-plus'), 65536);
+  t.is(getMaxOutputTokens('deepseek-v4-flash'), 384000);
+  t.is(getMaxOutputTokens('glm-5.1'), 32768);
+  t.is(getMaxOutputTokens('anthropic/mimo-v2-omni'), 128000);
+  t.is(getMaxOutputTokens('unknown-model'), 128000);
+  t.is(getMaxOutputTokens(''), 128000);
 });

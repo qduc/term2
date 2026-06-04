@@ -405,6 +405,7 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',
     firstUserMessagePreview: 'hello there',
+    headers: { host: 'api.openrouter.ai', authorization: '[REDACTED]' },
     sentBody: { messages: [{ role: 'user', content: 'hello there' }] },
   });
 
@@ -418,7 +419,9 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
   t.is(path.basename(requestFile), '09-14-35.044Z_req-1.jsonl');
   t.false(path.basename(requestFile).includes('session-123'));
 
-  t.is(readRequestFile(requestFile)[0]?.direction, 'sent');
+  const firstRecord = readRequestFile(requestFile)[0];
+  t.is(firstRecord?.direction, 'sent');
+  t.deepEqual(firstRecord?.headers, { host: 'api.openrouter.ai', authorization: '[REDACTED]' });
 
   const indexPath = path.join(dayDir, 'index.jsonl');
   const indexEntries = fs

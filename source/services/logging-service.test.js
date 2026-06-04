@@ -176,6 +176,7 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
     mode: 'standard',
     provider: 'openrouter',
     model: 'moonshotai/kimi-k2.5',
+    headers: { host: 'api.openrouter.ai', authorization: '[REDACTED]' },
     payload: {
       messages: [{ role: 'system' }, { role: 'user', content: 'hello' }],
       tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object' } } }],
@@ -234,6 +235,7 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
   }
 
   t.is(sent.direction, 'sent');
+  t.deepEqual(sent.headers, { host: 'api.openrouter.ai', authorization: '[REDACTED]' });
   t.deepEqual(sent.body.messages, [{ role: 'system' }, { role: 'user', content: 'hello' }]);
   t.deepEqual(sent.body.tools, ['read_file']);
   t.is(received.direction, 'received');

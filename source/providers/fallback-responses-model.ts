@@ -3,6 +3,7 @@ import { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-
 import { describeError } from '../utils/error-helpers.js';
 import { summarizeReceivedTraffic } from '../services/provider-traffic.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
+import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 
 export interface FallbackState {
   isDowngraded: boolean;
@@ -140,10 +141,14 @@ export class FallbackResponsesModel implements Model {
     // Log request start
     if (this.loggingService && this.providerId) {
       let sentBody: any = request;
+      let sanitizedHeaders: Record<string, string> | undefined;
       try {
         if (typeof (this.wsModel as any)._buildResponsesCreateRequest === 'function') {
           const built = (this.wsModel as any)._buildResponsesCreateRequest(request, false);
           sentBody = built.requestData;
+          if (built.sdkRequestHeaders) {
+            sanitizedHeaders = sanitizeHeaders(built.sdkRequestHeaders);
+          }
         }
       } catch {
         // fallback
@@ -159,6 +164,7 @@ export class FallbackResponsesModel implements Model {
         messages: sentBody?.messages,
         toolsCount: Array.isArray(sentBody?.tools) ? sentBody.tools.length : undefined,
         payload: sentBody,
+        headers: sanitizedHeaders,
       });
     }
 
@@ -259,10 +265,14 @@ export class FallbackResponsesModel implements Model {
     // Log request start
     if (this.loggingService && this.providerId) {
       let sentBody: any = request;
+      let sanitizedHeaders: Record<string, string> | undefined;
       try {
         if (typeof (this.wsModel as any)._buildResponsesCreateRequest === 'function') {
           const built = (this.wsModel as any)._buildResponsesCreateRequest(request, true);
           sentBody = built.requestData;
+          if (built.sdkRequestHeaders) {
+            sanitizedHeaders = sanitizeHeaders(built.sdkRequestHeaders);
+          }
         }
       } catch {
         // fallback
@@ -278,6 +288,7 @@ export class FallbackResponsesModel implements Model {
         messages: sentBody?.messages,
         toolsCount: Array.isArray(sentBody?.tools) ? sentBody.tools.length : undefined,
         payload: sentBody,
+        headers: sanitizedHeaders,
       });
     }
 

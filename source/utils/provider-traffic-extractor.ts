@@ -11,6 +11,7 @@ export interface ProviderTrafficRecord {
   model: string;
   payload: Record<string, unknown>;
   isEvaluator?: boolean;
+  headers?: Record<string, string>;
 }
 
 const toNonEmptyString = (value: unknown, fallback: string): string => {
@@ -157,6 +158,7 @@ export function extractProviderTrafficRecordFromRuntimeLog(
     model: toNonEmptyString(parsed.model, 'unknown'),
     payload,
     isEvaluator,
+    ...(parsed.headers ? { headers: parsed.headers as Record<string, string> } : {}),
   };
 
   if (lineNumber !== undefined) {

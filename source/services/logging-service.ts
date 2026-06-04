@@ -408,6 +408,7 @@ export class LoggingService {
     try {
       if (eventType === 'provider.request.started' || eventType === 'evaluator.request.started') {
         const payload = runtimeRecord.payload;
+        const headers = runtimeRecord.headers;
         if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
           this.providerTrafficStore.recordRequestStart({
             requestId,
@@ -419,6 +420,10 @@ export class LoggingService {
             mode,
             firstUserMessagePreview,
             sentBody: payload as Record<string, unknown>,
+            headers:
+              headers && typeof headers === 'object' && !Array.isArray(headers)
+                ? (headers as Record<string, string>)
+                : undefined,
             evaluator: eventType === 'evaluator.request.started',
           });
         }

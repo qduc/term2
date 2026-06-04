@@ -14,6 +14,7 @@ test('extractProviderTrafficFromLogContent extracts sent and received provider p
       model: 'moonshotai/kimi-k2.5',
       messageCount: 2,
       messages: [{ role: 'system' }, { role: 'user' }],
+      headers: { 'x-opencode-session': 'session-xyz', authorization: '[REDACTED]' },
     }),
     JSON.stringify({
       timestamp: '2026-02-09 11:42:37',
@@ -36,6 +37,7 @@ test('extractProviderTrafficFromLogContent extracts sent and received provider p
   t.is(records[0].direction, 'sent');
   t.is(records[0].traceId, 'trace-a');
   t.deepEqual(records[0].payload.messages, [{ role: 'system' }, { role: 'user' }]);
+  t.deepEqual(records[0].headers, { 'x-opencode-session': 'session-xyz', authorization: '[REDACTED]' });
 
   t.is(records[1].direction, 'received');
   t.is(records[1].sourceMessage, 'OpenRouter stream done');

@@ -567,6 +567,7 @@ type RequestStartInput = {
   mode?: string;
   firstUserMessagePreview?: string;
   sentBody: Record<string, unknown>;
+  headers?: Record<string, string>;
   evaluator?: boolean;
 };
 
@@ -603,6 +604,7 @@ export class ProviderTrafficArtifactStore {
       model: input.model,
       sessionId: input.sessionId,
       mode: input.mode ?? 'unknown',
+      ...(input.headers ? { headers: input.headers } : {}),
       body: sanitizeSentTrafficBody(input.sentBody),
     };
     fs.writeFileSync(requestPath, `${JSON.stringify(sentRecord, null, 2)}\n`, 'utf8');

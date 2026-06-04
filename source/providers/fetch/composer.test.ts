@@ -148,6 +148,11 @@ test('createLoggingMiddleware logs request started and response received', async
 
   const response = await composed('https://example.test/chat/completions', {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer 12345',
+      'x-custom-test': 'ok',
+    },
     body: JSON.stringify({
       model: 'test-model',
       messages: [{ role: 'user', content: 'hi' }],
@@ -176,6 +181,11 @@ test('createLoggingMiddleware logs request started and response received', async
     },
   });
   t.deepEqual(logs[0].meta.messages, [{ role: 'user', content: 'hi' }]);
+  t.deepEqual(logs[0].meta.headers, {
+    'content-type': 'application/json',
+    authorization: '[REDACTED]',
+    'x-custom-test': 'ok',
+  });
 
   // Check response log
   t.like(logs[1], {

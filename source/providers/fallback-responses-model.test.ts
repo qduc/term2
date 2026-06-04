@@ -250,7 +250,15 @@ test('FallbackResponsesModel logs unary WS request start, success, and failure e
       };
     },
   });
-
+  (wsModel as any)._buildResponsesCreateRequest = (_request: any, _stream: boolean) => {
+    return {
+      requestData: { messages: [] },
+      sdkRequestHeaders: {
+        Authorization: 'Bearer ws-token-123',
+        'x-opencode-session': 'session-ws-abc',
+      },
+    };
+  };
   const httpModel = makeMockModel({});
   const state = { isDowngraded: false };
 
@@ -295,6 +303,10 @@ test('FallbackResponsesModel logs unary WS request start, success, and failure e
   t.is(logs[0].meta.eventType, 'provider.request.started');
   t.is(logs[0].meta.provider, 'openai');
   t.is(logs[0].meta.model, 'gpt-4o');
+  t.deepEqual(logs[0].meta.headers, {
+    authorization: '[REDACTED]',
+    'x-opencode-session': 'session-ws-abc',
+  });
 
   t.is(logs[1].level, 'debug');
   t.is(logs[1].meta.eventType, 'provider.response.received');

@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import type { ILoggingService, ISessionContextService } from '../../services/service-interfaces.js';
 import { summarizeReceivedTraffic } from '../../services/provider-traffic.js';
 import { describeError } from '../../utils/error-helpers.js';
+import { sanitizeHeaders } from '../../utils/header-sanitizer.js';
 import type { FetchMiddleware } from './compose.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -174,6 +175,7 @@ export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions)
 
     const isEvaluator = trafficContext?.evaluator === true;
     const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+    const sanitizedHeaders = ctx.init?.headers ? sanitizeHeaders(ctx.init.headers) : undefined;
 
     loggingService.debug(`${provider} ai sdk request`, {
       eventType: `${eventPrefix}.request.started`,
@@ -185,6 +187,7 @@ export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions)
       messages: parsedRequest?.messages,
       toolsCount: Array.isArray(parsedRequest?.tools) ? parsedRequest.tools.length : undefined,
       payload: parsedRequest ?? undefined,
+      headers: sanitizedHeaders,
     });
 
     let response: Response;

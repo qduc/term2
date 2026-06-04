@@ -297,11 +297,26 @@ test('run() retries non-chaining streamed transient errors from completed tool c
 
   const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
   successStream.finalOutput = 'Recovered';
+  successStream.lastResponseId = 'resp-recovered';
   successStream.history = [
     { role: 'user', type: 'message', content: 'inspect' },
     { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
     { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', name: 'read_file', output: 'contents' },
     { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Recovered' }] },
+  ];
+
+  const followUpStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Follow up' }]);
+  followUpStream.finalOutput = 'Follow up';
+  followUpStream.lastResponseId = 'resp-follow-up';
+  followUpStream.history = [
+    ...successStream.history,
+    { role: 'user', type: 'message', content: 'follow up' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Follow up' }],
+    },
   ];
 
   const calls = [];
@@ -731,15 +746,27 @@ test('continue() retries on transient error during stream iteration', async (t) 
 
   const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
   successStream.finalOutput = 'Recovered';
+  successStream.lastResponseId = 'resp-recovered';
+
+  const followUpStream = new MockStream([{ type: 'response.output_text.delta', delta: 'After continue' }]);
+  followUpStream.finalOutput = 'After continue';
+  followUpStream.lastResponseId = 'resp-after-continue';
 
   let continueCalls = 0;
+  let startCalls = 0;
+  const calls = [];
   const mockClient = {
-    async startStream() {
-      return initialStream;
+    getProvider() {
+      return 'openai';
+    },
+    async startStream(input, opts) {
+      startCalls++;
+      calls.push({ input, opts });
+      return startCalls === 1 ? initialStream : startCalls === 2 ? successStream : followUpStream;
     },
     async continueRunStream() {
       continueCalls++;
-      return continueCalls === 1 ? failingStream : successStream;
+      return failingStream;
     },
   };
 
@@ -755,17 +782,27 @@ test('continue() retries on transient error during stream iteration', async (t) 
   }
   t.is(first[0].type, 'approval_required');
 
-  // Continue — first attempt fails, second succeeds
+  // Continue — first attempt fails, second succeeds via startStream retry
   const cont = [];
   for await (const ev of session.continue({ answer: 'y' })) {
     cont.push(ev);
   }
 
-  t.is(continueCalls, 2);
+  t.is(continueCalls, 1);
+  t.is(startCalls, 2);
+  t.is(calls[1].opts.previousResponseId, null, 'retry should replay full history without chaining');
   const types = cont.map((e) => e.type);
   t.true(types.includes('retry'), 'should emit a retry event');
   t.true(types.includes('final'), 'should emit a final event after retry');
   t.is(cont[cont.length - 1].finalText, 'Recovered');
+
+  for await (const _ of session.run('after continue')) {
+  }
+
+  t.is(startCalls, 3);
+  t.is(typeof calls[2].input, 'string', 'successful retry should allow later turns to chain again');
+  t.is(calls[2].input, 'after continue');
+  t.is(calls[2].opts.previousResponseId, 'resp-recovered');
 });
 
 test('sendMessage() preserves callId on approval_required terminal result', async (t) => {
@@ -2335,4 +2372,104 @@ test('undoLastUserTurn() preserves earlier tool ledger entries that still belong
     .map((item) => item.callId || item.call_id);
   t.true(retryCallIds.includes(firstToolCallId), 'retry should keep earlier retained tool call IDs');
   t.false(retryCallIds.includes(secondToolCallId), 'retry must drop tool call IDs from the undone turn');
+});
+
+test('run() retries chaining streamed transient errors by breaking chaining and replaying full history', async (t) => {
+  class FailingStream extends MockStream {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call',
+            id: 'fc_1',
+            callId: 'call-read',
+            name: 'read_file',
+            arguments: '{}',
+          },
+        },
+      };
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call_result',
+            id: 'fcr_1',
+            callId: 'call-read',
+            name: 'read_file',
+            output: 'contents',
+          },
+        },
+      };
+      throw new Error('WebSocket connection closed before response completed (code=1006)');
+    }
+  }
+
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  successStream.finalOutput = 'Recovered';
+  successStream.lastResponseId = 'resp-recovered';
+  successStream.history = [
+    { role: 'user', type: 'message', content: 'inspect' },
+    { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
+    { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', name: 'read_file', output: 'contents' },
+    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Recovered' }] },
+  ];
+
+  const followUpStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Follow up' }]);
+  followUpStream.finalOutput = 'Follow up';
+  followUpStream.lastResponseId = 'resp-follow-up';
+  followUpStream.history = [
+    ...successStream.history,
+    { role: 'user', type: 'message', content: 'follow up' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Follow up' }],
+    },
+  ];
+
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream(input, opts) {
+      calls.push({ input, opts });
+      return calls.length === 1 ? new FailingStream() : calls.length === 2 ? successStream : followUpStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('inspect')) {
+    emitted.push(ev);
+  }
+
+  t.deepEqual(
+    emitted.map((event) => event.type),
+    ['tool_started', 'command_message', 'retry', 'text_delta', 'final'],
+  );
+  t.is(calls.length, 2);
+
+  t.is(typeof calls[0].input, 'string');
+  t.is(calls[0].input, 'inspect');
+  t.falsy(calls[0].opts.previousResponseId);
+
+  t.true(Array.isArray(calls[1].input));
+  t.deepEqual(
+    calls[1].input.map((item) => item.type),
+    ['message', 'function_call', 'function_call_result'],
+  );
+
+  for await (const _ of session.run('follow up')) {
+  }
+
+  t.is(typeof calls[2].input, 'string', 'successful retry should allow later turns to chain again');
+  t.is(calls[2].input, 'follow up');
+  t.is(calls[2].opts.previousResponseId, 'resp-recovered');
 });

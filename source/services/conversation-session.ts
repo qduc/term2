@@ -132,6 +132,37 @@ export class ConversationSession {
       sessionId: this.id,
     });
   }
+
+  #clearPreviousResponseId(): void {
+    this.previousResponseId = null;
+  }
+
+  #restoreCompletedToolLedgerEntries(snapshot: SavedToolExecution[]): void {
+    const merged = [...snapshot];
+    const indexByCallId = new Map<string, number>();
+
+    merged.forEach((entry, index) => {
+      indexByCallId.set(entry.callId, index);
+    });
+
+    for (const entry of this.toolLedger.export()) {
+      if (entry.status !== 'completed') {
+        continue;
+      }
+
+      const existingIndex = indexByCallId.get(entry.callId);
+      if (existingIndex !== undefined) {
+        merged[existingIndex] = entry;
+        continue;
+      }
+
+      indexByCallId.set(entry.callId, merged.length);
+      merged.push(entry);
+    }
+
+    this.toolLedger.import(merged);
+  }
+
   private currentPersistedTurnItems: PersistedAssistantTurnItem[] = [];
   private currentReasoningBuffer = '';
   private currentAssistantTextBuffer = '';
@@ -1100,19 +1131,17 @@ export class ConversationSession {
         if (!this.#isCurrentGeneration(gen)) return;
 
         if (stream) {
-          const provider = this.#getProviderForGuard() ?? 'openai';
-          const supportsChaining = supportsConversationChaining(provider);
-          if (supportsChaining) {
-            this.toolLedger.import(ledgerSnapshot);
-          } else {
-            this.toolLedger.markOpenCallsAborted(error instanceof Error ? error.message : String(error));
-            const reconciled = reconcileHistoryWithToolLedger(
-              this.conversationStore.getHistory(),
-              this.toolLedger.export(),
-            );
-            if (reconciled.addedCompletedPairs > 0) {
-              this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
-            }
+          // Clear response continuity for the retry and keep any completed tool
+          // results so the replayed history stays atomic.
+          this.#clearPreviousResponseId();
+          this.#restoreCompletedToolLedgerEntries(ledgerSnapshot);
+
+          const reconciled = reconcileHistoryWithToolLedger(
+            this.conversationStore.getHistory(),
+            this.toolLedger.export(),
+          );
+          if (reconciled.addedCompletedPairs > 0) {
+            this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
           }
         } else {
           this.conversationStore.removeLastUserMessage();
@@ -1241,6 +1270,7 @@ export class ConversationSession {
       toolStartedEvent,
       removeInterceptor,
     } = plan;
+    const ledgerSnapshot = this.toolLedger.export();
     const approvedToolResultCallIds = [getCallIdFromObject(interruption)].filter(
       (callId): callId is string => typeof callId === 'string' && callId.length > 0,
     );
@@ -1378,7 +1408,30 @@ export class ConversationSession {
               retryType: 'upstream',
             };
             await new Promise((resolve) => setTimeout(resolve, delay));
-            continue;
+
+            if (!this.#isCurrentGeneration(gen)) return;
+
+            // Clear response continuity for the retry and keep any completed tool
+            // results so the replayed history stays atomic.
+            this.#clearPreviousResponseId();
+            this.#restoreCompletedToolLedgerEntries(ledgerSnapshot);
+
+            const reconciled = reconcileHistoryWithToolLedger(
+              this.conversationStore.getHistory(),
+              this.toolLedger.export(),
+            );
+            if (reconciled.addedCompletedPairs > 0) {
+              this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+            }
+
+            const lastUserText = this.conversationStore.getLastUserMessage();
+            const dummyTurn: UserTurn = { text: lastUserText };
+
+            yield* this.run(dummyTurn, {
+              skipUserMessage: true,
+              transientRetryCount,
+            });
+            return;
           }
           throw error;
         }

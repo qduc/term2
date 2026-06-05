@@ -154,6 +154,9 @@ export function createSettingsCommand({
         if (applyRuntimeSetting && settingsService.isRuntimeModifiable(keyToReset)) {
           applyRuntimeSetting(keyToReset, resetValue);
         }
+        if (keyToReset === SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS) {
+          addSystemMessage('agent.maxParallelToolCalls takes effect on the next request.');
+        }
         return true;
       }
 
@@ -223,6 +226,9 @@ export function createSettingsCommand({
         applyRuntimeSetting(key, parsedValue);
       }
       addSystemMessage(`Set ${key} to ${parsedValue}`);
+      if (key === SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS) {
+        addSystemMessage('agent.maxParallelToolCalls takes effect on the next request.');
+      }
       return true;
     },
   };

@@ -1,7 +1,7 @@
 import test from 'ava';
 import { z } from 'zod';
 import { OpenRouterError } from '../providers/common/provider-errors.js';
-import { wrapNeedsApproval, combineAbortSignals } from './openai-agent-client.js';
+import { wrapNeedsApproval } from './openai-agent-client.js';
 
 test('OpenRouterError includes status and headers', (t) => {
   const error = new OpenRouterError('Test error', 429, { 'retry-after': '5', 'x-custom': 'value' }, 'response body');
@@ -416,88 +416,4 @@ test('wrapNeedsApproval passes through already-valid params unchanged', async (t
 
   t.true(await wrapped(null, { name: 'test', items: ['a', 'b'] }));
   t.deepEqual((received as any).items, ['a', 'b']);
-});
-
-// ========== combineAbortSignals Tests ==========
-
-test('combineAbortSignals returns undefined if neither signal is provided', (t) => {
-  t.is(combineAbortSignals(undefined, undefined), undefined);
-});
-
-test('combineAbortSignals returns signal1 if only signal1 is provided', (t) => {
-  const controller = new AbortController();
-  const res = combineAbortSignals(controller.signal, undefined);
-  t.truthy(res);
-  t.is(res?.signal, controller.signal);
-});
-
-test('combineAbortSignals returns signal2 if only signal2 is provided', (t) => {
-  const controller = new AbortController();
-  const res = combineAbortSignals(undefined, controller.signal);
-  t.truthy(res);
-  t.is(res?.signal, controller.signal);
-});
-
-test('combineAbortSignals combines signals and aborts when signal1 aborts', (t) => {
-  const c1 = new AbortController();
-  const c2 = new AbortController();
-  const res = combineAbortSignals(c1.signal, c2.signal);
-  t.truthy(res);
-  t.false(res!.signal.aborted);
-
-  c1.abort();
-  t.true(res!.signal.aborted);
-  res!.cleanup();
-});
-
-test('combineAbortSignals combines signals and aborts when signal2 aborts', (t) => {
-  const c1 = new AbortController();
-  const c2 = new AbortController();
-  const res = combineAbortSignals(c1.signal, c2.signal);
-  t.truthy(res);
-  t.false(res!.signal.aborted);
-
-  c2.abort();
-  t.true(res!.signal.aborted);
-  res!.cleanup();
-});
-
-test('combineAbortSignals combined signal aborts immediately if signal1 is already aborted', (t) => {
-  const c1 = new AbortController();
-  const c2 = new AbortController();
-  c1.abort();
-
-  const res = combineAbortSignals(c1.signal, c2.signal);
-  t.truthy(res);
-  t.true(res!.signal.aborted);
-});
-
-test('combineAbortSignals combined signal aborts immediately if signal2 is already aborted', (t) => {
-  const c1 = new AbortController();
-  const c2 = new AbortController();
-  c2.abort();
-
-  const res = combineAbortSignals(c1.signal, c2.signal);
-  t.truthy(res);
-  t.true(res!.signal.aborted);
-});
-
-test('combineAbortSignals cleanup removes listeners for fallback implementation', (t) => {
-  const originalAny = AbortSignal.any;
-  // @ts-ignore
-  delete AbortSignal.any;
-  try {
-    const c1 = new AbortController();
-    const c2 = new AbortController();
-    const res = combineAbortSignals(c1.signal, c2.signal);
-    t.truthy(res);
-
-    res!.cleanup();
-
-    // Aborting after cleanup should not abort the combined controller (signal)
-    c1.abort();
-    t.false(res!.signal.aborted);
-  } finally {
-    AbortSignal.any = originalAny;
-  }
 });

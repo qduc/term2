@@ -28,7 +28,6 @@ import { isFlexServiceTierTimeout } from '../utils/flex-service-tier.js';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
 import type { ConversationEvent } from '../services/conversation-events.js';
 import { fetchModels, getModelDefaultReasoningLevel } from '../services/model-service.js';
-import { ToolExecutionLimiter } from './tool-execution-limiter.js';
 
 const TOOL_RESULT_ITEM_TYPES = new Set([
   'function_call_output',
@@ -229,7 +228,7 @@ export class OpenAIAgentClient {
   #currentCorrelationId: string | null = null;
   #retryCallback: (() => void) | null = null;
   #runner: Runner | null = null;
-  #toolExecutionLimiter: ToolExecutionLimiter;
+
   #serviceTierOverrideForNextRequest: 'standard' | null = null;
   #toolInterceptors: ((name: string, params: any, toolCallId?: string) => Promise<string | null>)[] = [];
   #logger: ILoggingService;
@@ -336,7 +335,6 @@ export class OpenAIAgentClient {
       settingsService: this.#settings,
       executionContext: this.#executionContext,
     });
-    this.#toolExecutionLimiter = new ToolExecutionLimiter(() => this.#getMaxParallelToolCalls());
     this.#reasoningEffort = reasoningEffort;
     this.#temperature = this.#settings.get<number | undefined>('agent.temperature');
     this.#provider = this.#settings.get<string>('agent.provider') || 'openai';
@@ -379,10 +377,6 @@ export class OpenAIAgentClient {
       ];
       if (rebuildKeys.includes(changedKey)) {
         this.#refreshAgent();
-      }
-
-      if (changedKey === 'agent.maxParallelToolCalls') {
-        this.#toolExecutionLimiter.notifyLimitChanged();
       }
     });
 
@@ -680,6 +674,7 @@ export class OpenAIAgentClient {
         maxTurns: this.#maxTurns,
         signal,
         context: userContext,
+        toolExecution: { maxFunctionToolConcurrency: this.#getMaxParallelToolCalls() },
         callModelInputFilter: (args: any) => {
           if (args.context) {
             args.context.turnCount = (args.context.turnCount ?? 0) + 1;
@@ -750,6 +745,7 @@ export class OpenAIAgentClient {
     const options: any = {
       signal,
       context: userContext,
+      toolExecution: { maxFunctionToolConcurrency: this.#getMaxParallelToolCalls() },
       callModelInputFilter: (args: any) => {
         if (args.context) {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
@@ -802,6 +798,7 @@ export class OpenAIAgentClient {
       maxTurns: this.#maxTurns,
       signal,
       context: userContext,
+      toolExecution: { maxFunctionToolConcurrency: this.#getMaxParallelToolCalls() },
       callModelInputFilter: (args: any) => {
         if (args.context) {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
@@ -1225,34 +1222,6 @@ export class OpenAIAgentClient {
       providerId: this.#provider,
       capabilities: providerCapabilities,
     });
-    const executeWithToolConcurrency = async <T>(
-      details: any,
-      runTask: (wrappedDetails: any) => Promise<T>,
-    ): Promise<T> => {
-      const parentSignal = this.#currentAbortController?.signal;
-      const toolSignal = details?.signal;
-      const combined = combineAbortSignals(parentSignal, toolSignal);
-      const combinedSignal = combined?.signal;
-      const cleanupSignal = combined?.cleanup;
-
-      const wrappedDetails = details
-        ? Object.create(Object.getPrototypeOf(details), {
-            ...Object.getOwnPropertyDescriptors(details),
-            ...(combinedSignal
-              ? { signal: { value: combinedSignal, writable: true, enumerable: true, configurable: true } }
-              : {}),
-          })
-        : combinedSignal
-        ? { signal: combinedSignal }
-        : undefined;
-
-      try {
-        return await this.#toolExecutionLimiter.run(() => runTask(wrappedDetails), combinedSignal);
-      } finally {
-        cleanupSignal?.();
-      }
-    };
-
     const tools: Tool[] = toolDefinitions
       .filter((definition) => {
         // Exclude custom apply_patch if we're using native one
@@ -1296,27 +1265,24 @@ export class OpenAIAgentClient {
                 return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
               }
 
-              return executeWithToolConcurrency(details, async (wrappedDetails) => {
-                // Normal execution with combined abort signal
-                const result = await definition.execute(params, _context, wrappedDetails);
-                let trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+              const result = await definition.execute(params, _context, details);
+              let trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
 
-                // Inject warning when turns are approaching maxTurns
-                const userContext: any = _context?.context;
-                if (
-                  userContext &&
-                  typeof userContext.turnCount === 'number' &&
-                  typeof userContext.maxTurns === 'number'
-                ) {
-                  const turnsLeft = userContext.maxTurns - userContext.turnCount;
-                  if (turnsLeft >= 0 && turnsLeft <= 5) {
-                    const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
-                    trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
-                  }
+              // Inject warning when turns are approaching maxTurns
+              const userContext: any = _context?.context;
+              if (
+                userContext &&
+                typeof userContext.turnCount === 'number' &&
+                typeof userContext.maxTurns === 'number'
+              ) {
+                const turnsLeft = userContext.maxTurns - userContext.turnCount;
+                if (turnsLeft >= 0 && turnsLeft <= 5) {
+                  const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
+                  trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
                 }
+              }
 
-                return trimmedResult;
-              });
+              return trimmedResult;
             },
           }),
           definition.parameters,
@@ -1363,22 +1329,20 @@ export class OpenAIAgentClient {
             return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
           }
           const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');
-          return executeWithToolConcurrency(details, async (wrappedDetails) => {
-            const result = await originalInvoke.call(nativePatchTool, runContext, normalizedInput, wrappedDetails);
-            let trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+          const result = await originalInvoke.call(nativePatchTool, runContext, normalizedInput, details);
+          let trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
 
-            // Inject warning when turns are approaching maxTurns
-            const userContext: any = runContext?.context;
-            if (userContext && typeof userContext.turnCount === 'number' && typeof userContext.maxTurns === 'number') {
-              const turnsLeft = userContext.maxTurns - userContext.turnCount;
-              if (turnsLeft >= 0 && turnsLeft <= 5) {
-                const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
-                trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
-              }
+          // Inject warning when turns are approaching maxTurns
+          const userContext: any = runContext?.context;
+          if (userContext && typeof userContext.turnCount === 'number' && typeof userContext.maxTurns === 'number') {
+            const turnsLeft = userContext.maxTurns - userContext.turnCount;
+            if (turnsLeft >= 0 && turnsLeft <= 5) {
+              const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
+              trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
             }
+          }
 
-            return trimmedResult;
-          });
+          return trimmedResult;
         };
       }
 
@@ -1447,37 +1411,4 @@ export class OpenAIAgentClient {
   getSettings(): ISettingsService {
     return this.#settings;
   }
-}
-
-export function combineAbortSignals(
-  signal1?: AbortSignal,
-  signal2?: AbortSignal,
-): { signal: AbortSignal; cleanup: () => void } | undefined {
-  if (!signal1 && !signal2) return undefined;
-  if (!signal1) return { signal: signal2!, cleanup: () => {} };
-  if (!signal2) return { signal: signal1!, cleanup: () => {} };
-
-  if (typeof AbortSignal.any === 'function') {
-    return { signal: AbortSignal.any([signal1, signal2]), cleanup: () => {} };
-  }
-
-  const controller = new AbortController();
-  const onAbort = () => {
-    controller.abort();
-    cleanup();
-  };
-
-  const cleanup = () => {
-    signal1.removeEventListener('abort', onAbort);
-    signal2.removeEventListener('abort', onAbort);
-  };
-
-  if (signal1.aborted || signal2.aborted) {
-    controller.abort();
-  } else {
-    signal1.addEventListener('abort', onAbort);
-    signal2.addEventListener('abort', onAbort);
-  }
-
-  return { signal: controller.signal, cleanup };
 }

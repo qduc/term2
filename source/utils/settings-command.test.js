@@ -117,6 +117,26 @@ test('setting agent.maxParallelToolCalls validates positive integers', (t) => {
   t.true(deps.messages[0].includes('greater than or equal to 1'));
 });
 
+test('setting agent.maxParallelToolCalls reports that the new limit applies on the next request', (t) => {
+  const deps = createDeps();
+  const command = createSettingsCommand(deps);
+  command.action('agent.maxParallelToolCalls 5');
+
+  t.deepEqual(deps.setCalls, [{ key: 'agent.maxParallelToolCalls', value: 5 }]);
+  t.deepEqual(deps.applied, [{ key: 'agent.maxParallelToolCalls', value: 5 }]);
+  t.true(deps.messages.some((msg) => msg.includes('takes effect on the next request')));
+});
+
+test('resetting agent.maxParallelToolCalls reports that the default applies on the next request', (t) => {
+  const deps = createDeps();
+  const command = createSettingsCommand(deps);
+  command.action('reset agent.maxParallelToolCalls');
+
+  t.deepEqual(deps.resetCalls, ['agent.maxParallelToolCalls']);
+  t.deepEqual(deps.applied, [{ key: 'agent.maxParallelToolCalls', value: 'value-for-agent.maxParallelToolCalls' }]);
+  t.true(deps.messages.some((msg) => msg.includes('takes effect on the next request')));
+});
+
 test('refuses to set startup-only values at runtime', (t) => {
   const deps = createDeps({
     isRuntimeModifiable: (key) => key !== 'agent.maxTurns',

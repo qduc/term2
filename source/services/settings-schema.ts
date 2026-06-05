@@ -119,6 +119,10 @@ export const UISettingsSchema = z.object({
     .positive()
     .default(3000)
     .describe('Max paste length before text is replaced by a placeholder'),
+  displayMode: z
+    .enum(['standard', 'concise'])
+    .default('standard')
+    .describe('Display mode for rendering conversation output'),
 });
 
 export const LoggingSettingsSchema = z.object({
@@ -325,6 +329,7 @@ export interface SettingsWithSources {
   ui: {
     historySize: SettingWithSource<number>;
     pasteThreshold: SettingWithSource<number | undefined>;
+    displayMode: SettingWithSource<'standard' | 'concise'>;
   };
   logging: {
     logLevel: SettingWithSource<string>;
@@ -408,6 +413,7 @@ export const SETTING_KEYS = {
   AGENT_SUBAGENT_RESEARCHER_REASONING_EFFORT: 'agent.subagentResearcherReasoningEffort',
   UI_HISTORY_SIZE: 'ui.historySize',
   UI_PASTE_THRESHOLD: 'ui.pasteThreshold',
+  UI_DISPLAY_MODE: 'ui.displayMode',
   LOGGING_LOG_LEVEL: 'logging.logLevel',
   LOGGING_DISABLE: 'logging.disableLogging',
   LOGGING_DEBUG: 'logging.debugLogging',
@@ -467,6 +473,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
   SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,
   SETTING_KEYS.UI_PASTE_THRESHOLD,
+  SETTING_KEYS.UI_DISPLAY_MODE,
   SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
   SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER,
   SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
@@ -562,6 +569,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   ui: {
     historySize: 1000,
     pasteThreshold: 3000,
+    displayMode: 'standard',
   },
   logging: {
     logLevel: 'info',

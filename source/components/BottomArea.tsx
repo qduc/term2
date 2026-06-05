@@ -23,6 +23,7 @@ export type BottomAreaProps = {
   waitingForRejectionReason: boolean;
   waitingForAskUserAnswer?: boolean;
   isProcessing: boolean;
+  thinkingStartedAt?: number | null;
   isShellMode?: boolean;
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
@@ -58,6 +59,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   waitingForRejectionReason,
   waitingForAskUserAnswer = false,
   isProcessing,
+  thinkingStartedAt = null,
   isShellMode = false,
   onSubmit,
   slashCommands,
@@ -87,6 +89,9 @@ const BottomArea: FC<BottomAreaProps> = ({
   onSlashTabComplete,
 }) => {
   const [dotCount, setDotCount] = useState(1);
+  const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(() =>
+    thinkingStartedAt == null ? 0 : Math.max(0, Math.floor((Date.now() - thinkingStartedAt) / 1000)),
+  );
 
   useEffect(() => {
     if (!isProcessing) {
@@ -100,6 +105,21 @@ const BottomArea: FC<BottomAreaProps> = ({
 
     return () => clearInterval(interval);
   }, [isProcessing]);
+
+  useEffect(() => {
+    if (thinkingStartedAt == null) {
+      setThinkingElapsedSeconds(0);
+      return;
+    }
+
+    const updateElapsed = () => {
+      setThinkingElapsedSeconds(Math.max(0, Math.floor((Date.now() - thinkingStartedAt) / 1000)));
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [thinkingStartedAt]);
 
   const showHandoffConfirm = handoffState?.stage === 'confirm_model';
   const showLargeUncachedPrompt = Boolean(pendingLargeUncachedTurn);
@@ -138,6 +158,8 @@ const BottomArea: FC<BottomAreaProps> = ({
             onReject={onReject}
             onTypeAnswer={onTypeAnswer}
           />
+        ) : isProcessing && thinkingStartedAt != null ? (
+          <Text color="#64748b">Thinking... {thinkingElapsedSeconds}s</Text>
         ) : isProcessing ? (
           <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
         ) : showInput ? (

@@ -82,6 +82,24 @@ test('BottomArea shows processing indicator when busy', (t) => {
   unmount();
 });
 
+test('BottomArea shows thinking timer when reasoning is active', (t) => {
+  const originalNow = Date.now;
+  Date.now = () => 12_000;
+
+  const { lastFrame, unmount } = renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+    thinkingStartedAt: 0,
+  });
+
+  const output = lastFrame() ?? '';
+  t.true(output.includes('Thinking... 12s'));
+  t.false(output.includes('processing'));
+
+  unmount();
+  Date.now = originalNow;
+});
+
 test('BottomArea shows handoff confirmation prompt when handoffState is confirm_model', (t) => {
   const { lastFrame, unmount } = renderBottomArea({
     ...baseProps,

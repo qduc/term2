@@ -134,17 +134,24 @@ const MessageList: FC<Props> = ({
   restoredStaticMessageIds = EMPTY_RESTORED_STATIC_MESSAGE_IDS,
 }) => {
   const { stdout } = useStdout();
-
   const terminalColumns = stdout.columns || 80;
   const contentWidth = Math.max(1, terminalColumns - MESSAGE_HORIZONTAL_PADDING * 2);
+  const displayMode = settingsService?.get('ui.displayMode') ?? 'standard';
   const restoredStaticMessageIdSet = useMemo(() => new Set(restoredStaticMessageIds), [restoredStaticMessageIds]);
+
+  const filteredMessages = useMemo(() => {
+    if (displayMode === 'concise') {
+      return messages.filter((message) => message.sender !== 'reasoning');
+    }
+    return messages;
+  }, [messages, displayMode]);
 
   // Use useMemo to prevent array recreation on every render.
   // This stabilizes the references passed to Static and the active Box,
   // preventing unnecessary re-renders and fixing flickering in long sessions.
   const { history, active } = useMemo(() => {
-    return splitStaticHistory(messages);
-  }, [messages]);
+    return splitStaticHistory(filteredMessages);
+  }, [filteredMessages]);
 
   const staticItemsRef = useRef<StaticItem[]>(createStaticItems(bannerItems, []));
   const seenBannerIdsRef = useRef<Set<string>>(new Set(bannerItems));
@@ -280,6 +287,7 @@ const MessageList: FC<Props> = ({
             toolArgs={msg.toolArgs}
             isApprovalRejection={msg.isApprovalRejection}
             hadApproval={msg.hadApproval}
+            displayMode={displayMode}
           />
         ) : msg.sender === 'subagent' ? (
           <SubagentActivityMessage msg={msg} />

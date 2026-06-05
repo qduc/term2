@@ -5,6 +5,11 @@ import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE 
 import { COLOR_TOOL_OUTPUT } from './theme.js';
 import DiffView from './DiffView.js';
 
+type DiffStats = {
+  added: number;
+  removed: number;
+};
+
 type Props = {
   command: string;
   output?: string;
@@ -15,6 +20,28 @@ type Props = {
   toolArgs?: any;
   isApprovalRejection?: boolean;
   hadApproval?: boolean;
+  displayMode?: 'standard' | 'concise';
+};
+
+const SEARCH_TOOL_NAMES = new Set(['grep', 'find_files']);
+
+const SEARCH_COMMANDS = ['grep', 'rg', 'find', 'fd', 'ag', 'ack', 'git grep'];
+
+const isSearchLikeTool = (toolName: string | undefined, command: string): boolean => {
+  if (toolName && SEARCH_TOOL_NAMES.has(toolName)) return true;
+  if (toolName === 'shell' || !toolName) {
+    const cmd = command.trim().split(/\s+/)[0] ?? '';
+    if (cmd && SEARCH_COMMANDS.some((sc) => cmd === sc || cmd.endsWith(`/${sc}`))) return true;
+  }
+  return false;
+};
+
+const countOutputLines = (output: string | undefined): number => {
+  if (!output) return 0;
+  return output
+    .trim()
+    .split('\n')
+    .filter((line) => line.trim().length > 0).length;
 };
 
 const formatToolArgs = (toolName: string | undefined, args: any): string => {
@@ -62,7 +89,9 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
         const path = normalizedArgs.path || '.';
         const parts = [`"${pattern}"`, `"${path}"`];
 
+        if (normalizedArgs.mode === 'literal') parts.push('--literal');
         if (normalizedArgs.case_sensitive) parts.push('--case-sensitive');
+        else if (normalizedArgs.case_sensitive === false) parts.push('--ignore-case');
         if (normalizedArgs.file_pattern) parts.push(`--include "${normalizedArgs.file_pattern}"`);
         if (normalizedArgs.exclude_pattern) parts.push(`--exclude "${normalizedArgs.exclude_pattern}"`);
 
@@ -127,6 +156,25 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
   }
 };
 
+const countDiffStats = (diff: string): DiffStats => {
+  let added = 0;
+  let removed = 0;
+
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')) {
+      continue;
+    }
+
+    if (line.startsWith('+')) {
+      added += 1;
+    } else if (line.startsWith('-')) {
+      removed += 1;
+    }
+  }
+
+  return { added, removed };
+};
+
 const CommandMessage: FC<Props> = ({
   command,
   output,
@@ -137,6 +185,7 @@ const CommandMessage: FC<Props> = ({
   toolArgs,
   isApprovalRejection,
   hadApproval,
+  displayMode = 'standard',
 }) => {
   const isRunning = status === 'pending' || status === 'running';
   const [isVisible, setIsVisible] = useState(!isRunning);
@@ -176,6 +225,52 @@ const CommandMessage: FC<Props> = ({
     return output;
   }, [output]);
 
+  const formattedArgs = useMemo(() => {
+    return toolArgs ? formatToolArgs(toolName, toolArgs) : '';
+  }, [toolName, toolArgs]);
+
+  const changeStats = useMemo<DiffStats | null>(() => {
+    const diffText =
+      toolName === TOOL_NAME_APPLY_PATCH
+        ? toolArgs?.diff
+        : toolName === TOOL_NAME_SEARCH_REPLACE
+        ? diff
+        : toolName === TOOL_NAME_CREATE_FILE
+        ? createFileDiffLines
+        : '';
+
+    if (!diffText) {
+      return null;
+    }
+
+    const stats = countDiffStats(diffText);
+    return stats.added === 0 && stats.removed === 0 ? null : stats;
+  }, [createFileDiffLines, diff, toolArgs?.diff, toolName]);
+
+  const changeStatsElement = changeStats ? (
+    <>
+      {' '}
+      (<Text color="green">+{changeStats.added}</Text>, <Text color="red">-{changeStats.removed}</Text>)
+    </>
+  ) : null;
+
+  const matchCount = useMemo(() => {
+    if (displayMode !== 'concise') return 0;
+    if (!isSearchLikeTool(toolName, command)) return 0;
+    if (isRunning || isApprovalRejection) return 0;
+    return countOutputLines(output);
+  }, [displayMode, toolName, command, isRunning, isApprovalRejection, output]);
+
+  const matchCountElement =
+    matchCount > 0 ? (
+      <>
+        {' '}
+        <Text dimColor>
+          ({matchCount} match{matchCount !== 1 ? 'es' : ''})
+        </Text>
+      </>
+    ) : null;
+
   useEffect(() => {
     if (!isRunning) {
       setIsVisible(true);
@@ -191,6 +286,62 @@ const CommandMessage: FC<Props> = ({
 
   if (!isVisible) {
     return null;
+  }
+
+  if (displayMode === 'concise') {
+    const isShell = !toolName || toolName === 'shell';
+    const displayCommand = isShell ? `$ ${command}` : `[${toolName}] ${formattedArgs}`.trim();
+
+    if (isApprovalRejection) {
+      return (
+        <Box flexDirection="column">
+          <Text color="red">
+            <Text bold>✖</Text> <Text dimColor>{displayCommand}</Text>
+            {changeStatsElement}
+          </Text>
+          <Text color="red" dimColor>
+            {' '}
+            → DENIED: {denialReason}
+          </Text>
+        </Box>
+      );
+    }
+
+    if (isRunning) {
+      return (
+        <Box>
+          <Text color="yellow">
+            <Text bold>▶</Text> <Text dimColor>{displayCommand}</Text>
+            {changeStatsElement}
+          </Text>
+        </Box>
+      );
+    }
+
+    if (success === false || failureReason) {
+      const errorMsg = failureReason || denialReason || 'failed';
+      return (
+        <Box flexDirection="column">
+          <Text color="red">
+            <Text bold>✖</Text> <Text>{displayCommand}</Text>
+            {changeStatsElement}
+            {matchCountElement}
+          </Text>
+          <Text color="red"> Error: {errorMsg}</Text>
+        </Box>
+      );
+    }
+
+    // Success (one line)
+    return (
+      <Box>
+        <Text color="green">
+          <Text bold>✔</Text> <Text dimColor>{displayCommand}</Text>
+          {changeStatsElement}
+          {matchCountElement}
+        </Text>
+      </Box>
+    );
   }
   const outputText = output?.trim() ? output : isRunning ? '(running...)' : '(no output)';
   const displayed =
@@ -277,8 +428,6 @@ const CommandMessage: FC<Props> = ({
       </Box>
     );
   }
-
-  const formattedArgs = toolArgs ? formatToolArgs(toolName, toolArgs) : '';
 
   // Special handling for approval-rejected shell commands: show the denial message
   // with a clear [DENIED] label so the user knows what was attempted and why.

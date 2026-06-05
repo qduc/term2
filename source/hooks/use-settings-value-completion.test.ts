@@ -164,3 +164,9 @@ test('buildSettingValueSuggestions returns no predefined values for free-form AP
   t.deepEqual(buildSettingValueSuggestions('webSearch.exa.apiKey'), []);
   t.deepEqual(buildSettingValueSuggestions('webSearch.tavily.apiKey'), []);
 });
+
+test('buildSettingValueSuggestions returns enum suggestions for ui.displayMode', (t) => {
+  const result = buildSettingValueSuggestions('ui.displayMode');
+  const values = result.map((r) => r.value);
+  t.deepEqual(values, ['standard', 'concise']);
+});

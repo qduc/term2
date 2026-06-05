@@ -77,6 +77,9 @@ export type Message =
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 const MAX_MESSAGE_COUNT = 300;
 
+const clearsThinkingIndicator = (eventType: string): boolean =>
+  eventType === 'text_delta' || eventType === 'tool_started' || eventType === 'final';
+
 const getInitialLastUsage = (messages: Message[]): NormalizedUsage | null => {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
@@ -141,6 +144,7 @@ export const useConversation = ({
   const [waitingForAskUserAnswer, setWaitingForAskUserAnswer] = useState<boolean>(false);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
   const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(() => getInitialLastUsage(initialMessages));
   const [lastCodexRateLimit, setLastCodexRateLimit] = useState<CodexRateLimitInfo | null>(null);
   const setCodexRateLimit = setLastCodexRateLimit;
@@ -179,6 +183,13 @@ export const useConversation = ({
   const createOnEventWithSubagentTracking = useCallback(
     (baseOnEvent: (event: any) => void) => {
       return (event: any) => {
+        const eventType = typeof event?.type === 'string' ? event.type : undefined;
+        if (eventType === 'reasoning_delta') {
+          setThinkingStartedAt((prev) => prev ?? Date.now());
+        } else if (eventType && clearsThinkingIndicator(eventType)) {
+          setThinkingStartedAt(null);
+        }
+
         baseOnEvent(event);
         if (subagentUsageAccumulator && event?.type === 'subagent_completed' && event?.result?.usage) {
           subagentUsageAccumulator.add(event.result.usage);
@@ -276,6 +287,7 @@ export const useConversation = ({
       appendMessages([userMessage]);
       logWriter?.append({ type: 'user_message', message: userMessage });
       setIsProcessing(true);
+      setThinkingStartedAt(null);
 
       const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
         createStreamingSession<Message>(
@@ -389,6 +401,7 @@ export const useConversation = ({
         // flushLog();
         reasoningUpdater.flush();
         botResponseUpdater.cancel();
+        setThinkingStartedAt(null);
         setIsProcessing(false);
         // Don't reset waitingForApproval here - it's set by applyServiceResult
         // and should only be cleared by handleApprovalDecision or stopProcessing
@@ -427,6 +440,7 @@ export const useConversation = ({
 
       // Handle "n" answer for max turns - return to input
       if (isMaxTurnsPrompt && answer === 'n') {
+        setThinkingStartedAt(null);
         setIsProcessing(false);
         return;
       }
@@ -434,6 +448,7 @@ export const useConversation = ({
       // Handle "y" answer for max turns - continue execution automatically
       if (isMaxTurnsPrompt && answer === 'y') {
         setIsProcessing(true);
+        setThinkingStartedAt(null);
 
         const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
           createStreamingSession<Message>(
@@ -487,12 +502,14 @@ export const useConversation = ({
           // flushLog();
           reasoningUpdater.flush();
           botResponseUpdater.cancel();
+          setThinkingStartedAt(null);
           setIsProcessing(false);
         }
         return;
       }
 
       setIsProcessing(true);
+      setThinkingStartedAt(null);
       const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
         createStreamingSession<Message>(
           {
@@ -544,6 +561,7 @@ export const useConversation = ({
         loggingService.debug('handleApprovalDecision finally block - resetting state');
         reasoningUpdater.flush();
         botResponseUpdater.cancel();
+        setThinkingStartedAt(null);
         setIsProcessing(false);
         // Don't reset approval state here - if the result is another approval_required,
         // applyServiceResult will set waitingForApproval=true, but this finally block
@@ -578,6 +596,7 @@ export const useConversation = ({
     setWaitingForAskUserAnswer(false);
     setPendingApproval(null);
     approvedContextRef.current = null;
+    setThinkingStartedAt(null);
     setIsProcessing(false);
     setLastUsage(null);
     setLastCodexRateLimit(null);
@@ -592,6 +611,7 @@ export const useConversation = ({
     setWaitingForAskUserAnswer(false);
     setPendingApproval(null);
     approvedContextRef.current = null;
+    setThinkingStartedAt(null);
     setIsProcessing(false);
   }, [conversationService]);
 
@@ -619,6 +639,7 @@ export const useConversation = ({
     setWaitingForAskUserAnswer(false);
     setPendingApproval(null);
     approvedContextRef.current = null;
+    setThinkingStartedAt(null);
     setIsProcessing(false);
 
     return restored;
@@ -662,6 +683,7 @@ export const useConversation = ({
       setWaitingForAskUserAnswer(false);
       setPendingApproval(null);
       approvedContextRef.current = null;
+      setThinkingStartedAt(null);
       setIsProcessing(false);
 
       return restored;
@@ -744,6 +766,7 @@ export const useConversation = ({
     setWaitingForRejectionReason,
     setWaitingForAskUserAnswer,
     isProcessing,
+    thinkingStartedAt,
     sendUserMessage,
     handleApprovalDecision,
     onTypeAnswer,

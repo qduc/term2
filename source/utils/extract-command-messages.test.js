@@ -185,7 +185,7 @@ test('extracts grep output from plain text tool result', (t) => {
       callId: 'call-grep-1',
       sender: 'command',
       status: 'completed',
-      command: 'grep "hello" "source"',
+      command: 'grep "hello" "source" --ignore-case',
       output: 'source/app.tsx:1:hello',
       success: true,
       isApprovalRejection: false,

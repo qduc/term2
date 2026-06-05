@@ -5,7 +5,7 @@ import test from 'ava';
 import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import CommandMessage from './CommandMessage.js';
-import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE } from '../tools/tool-names.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
 
 type FakeTimer = {
   advanceBy: (ms: number) => void;
@@ -66,6 +66,8 @@ const createFakeTimerClock = (): FakeTimer => {
     },
   };
 };
+
+const stripAnsi = (text: string) => text.replaceAll(/\u001B\[[0-9;]*m/g, '');
 
 test('CommandMessage does not duplicate parameters when they are already in command string', async (t) => {
   const clock = createFakeTimerClock();
@@ -184,6 +186,44 @@ test('CommandMessage renders apply_patch update_file with [PATCH] header and dif
   t.true(output.includes('src/file.ts'), `Expected file path in output: ${output}`);
   t.true(output.includes('-old line'), `Expected removed line in output: ${output}`);
   t.true(output.includes('+new line'), `Expected added line in output: ${output}`);
+});
+
+test('CommandMessage renders apply_patch line counts in concise mode', async (t) => {
+  const props = {
+    command: 'apply_patch update_file src/file.ts',
+    toolName: TOOL_NAME_APPLY_PATCH,
+    toolArgs: { path: 'src/file.ts', diff: ' context\n-old line\n+new line\n', type: 'update_file' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('[apply_patch] update_file src/file.ts'), `Expected concise command: ${output}`);
+  t.true(output.includes('(+1, -1)'), `Expected change counts in concise output: ${output}`);
+});
+
+test('CommandMessage renders search_replace line counts in concise mode', async (t) => {
+  const props = {
+    command: 'search_replace',
+    toolName: TOOL_NAME_SEARCH_REPLACE,
+    toolArgs: {
+      path: 'src/file.ts',
+      search_content: 'hello',
+      replace_content: 'world',
+    },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('[search_replace]'), `Expected concise tool name: ${output}`);
+  t.true(output.includes('(+1, -1)'), `Expected change counts in concise output: ${output}`);
 });
 
 test('CommandMessage renders apply_patch create_file with [CREATE FILE] header and diff', async (t) => {
@@ -371,4 +411,278 @@ test('CommandMessage renders shell approval rejection without command in output 
 
   t.true(output.includes('DENIED'), `Expected [DENIED] marker in output: ${output}`);
   t.true(output.includes('not safe'), `Expected denial reason in output: ${output}`);
+});
+
+test('CommandMessage renders successfully completed shell command on a single line in concise mode', async (t) => {
+  const props = {
+    command: 'npm test',
+    toolName: 'shell',
+    toolArgs: { command: 'npm test' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'All tests passed\nOK',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('✔'), `Expected success icon in output: ${output}`);
+  t.true(output.includes('$ npm test'), `Expected command in output: ${output}`);
+  t.false(output.includes('All tests passed'), `Expected stdout to be hidden in output: ${output}`);
+});
+
+test('CommandMessage renders running shell command on a single line in concise mode', async (t) => {
+  const clock = createFakeTimerClock();
+  const props = {
+    command: 'npm run dev',
+    toolName: 'shell',
+    toolArgs: { command: 'npm run dev' },
+    status: 'running' as const,
+    displayMode: 'concise' as const,
+  };
+
+  let lastFrame: (() => string | undefined) | undefined;
+  try {
+    await act(async () => {
+      ({ lastFrame } = render(<CommandMessage {...props} />));
+      clock.advanceBy(1100);
+    });
+
+    const output = lastFrame?.() ?? '';
+
+    t.true(output.includes('▶'), `Expected running icon in output: ${output}`);
+    t.true(output.includes('$ npm run dev'), `Expected command in output: ${output}`);
+  } finally {
+    clock.restore();
+  }
+});
+
+test('CommandMessage renders failed command on two lines in concise mode', async (t) => {
+  const props = {
+    command: 'npm test',
+    toolName: 'shell',
+    toolArgs: { command: 'npm test' },
+    status: 'completed' as const,
+    success: false,
+    displayMode: 'concise' as const,
+    failureReason: 'Test suite failed',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  // Expect two lines
+  const lines = output.trim().split('\n');
+  t.true(lines.length >= 2, `Expected at least 2 lines of output, got: ${output}`);
+  t.true(lines[0]!.includes('✖'), `Expected fail icon on line 1: ${lines[0]}`);
+  t.true(lines[0]!.includes('$ npm test'), `Expected command on line 1: ${lines[0]}`);
+  t.true(output.includes('Error: Test suite failed'), `Expected error message: ${output}`);
+});
+
+test('CommandMessage renders non-shell tool concisely on a single line', async (t) => {
+  const props = {
+    command: 'create_file',
+    toolName: 'create_file',
+    toolArgs: { path: 'src/new-file.ts', content: 'console.log("hello");' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('✔'), `Expected success icon in output: ${output}`);
+  t.true(output.includes('[create_file]'), `Expected tool name: ${output}`);
+  t.true(output.includes('src/new-file.ts'), `Expected file path: ${output}`);
+  t.false(output.includes('console.log'), `Expected content diff to be hidden: ${output}`);
+});
+
+test('CommandMessage renders grep case-insensitive flag in concise mode', async (t) => {
+  const props = {
+    command: 'grep',
+    toolName: 'grep',
+    toolArgs: { pattern: 'hello', path: 'source', case_sensitive: false },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('[grep]'), `Expected tool name: ${output}`);
+  t.true(output.includes('--ignore-case'), `Expected case-insensitive flag in output: ${output}`);
+});
+
+test('CommandMessage shows match count for grep tool in concise mode', async (t) => {
+  const props = {
+    command: 'grep',
+    toolName: 'grep',
+    toolArgs: { pattern: 'hello', path: 'source' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'file1.ts:1:hello\nfile2.ts:3:hello world\nfile3.ts:7:hello',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('(3 matches)'), `Expected match count in output: ${output}`);
+});
+
+test('CommandMessage shows singular match count for grep with 1 result', async (t) => {
+  const props = {
+    command: 'grep',
+    toolName: 'grep',
+    toolArgs: { pattern: 'hello', path: 'source' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'file1.ts:1:hello',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('(1 match)'), `Expected singular match count in output: ${output}`);
+  t.false(output.includes('matches'), `Expected no plural 'matches' in output: ${output}`);
+});
+
+test('CommandMessage shows match count for find_files tool in concise mode', async (t) => {
+  const props = {
+    command: 'find_files',
+    toolName: 'find_files',
+    toolArgs: { pattern: '*.ts', path: 'source' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'source/a.ts\nsource/b.ts\nsource/c.ts\nsource/d.ts\nsource/e.ts',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('(5 matches)'), `Expected match count in output: ${output}`);
+});
+
+test('CommandMessage shows match count for shell grep command in concise mode', async (t) => {
+  const props = {
+    command: 'grep -rn hello source/',
+    toolName: 'shell',
+    toolArgs: { command: 'grep -rn hello source/' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'source/a.ts:1:hello\nsource/b.ts:3:hello',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('(2 matches)'), `Expected match count in output: ${output}`);
+});
+
+test('CommandMessage shows match count for shell rg command in concise mode', async (t) => {
+  const props = {
+    command: 'rg hello source/',
+    toolName: 'shell',
+    toolArgs: { command: 'rg hello source/' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'source/a.ts\n1:hello\n\nsource/b.ts\n3:hello world',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('(4 matches)'), `Expected match count in output: ${output}`);
+});
+
+test('CommandMessage shows match count for shell find command in concise mode', async (t) => {
+  const props = {
+    command: 'find . -name *.ts',
+    toolName: 'shell',
+    toolArgs: { command: 'find . -name *.ts' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: './a.ts\n./b.ts\n./c.ts',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('(3 matches)'), `Expected match count in output: ${output}`);
+});
+
+test('CommandMessage shows match count for shell fd command in concise mode', async (t) => {
+  const props = {
+    command: 'fd test.ts',
+    toolName: 'shell',
+    toolArgs: { command: 'fd test.ts' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'source/test.ts\nsource/components/test.ts',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('(2 matches)'), `Expected match count in output: ${output}`);
+});
+
+test('CommandMessage does not show match count for non-search shell command in concise mode', async (t) => {
+  const props = {
+    command: 'npm test',
+    toolName: 'shell',
+    toolArgs: { command: 'npm test' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'All tests passed\nOK',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.false(output.includes('match'), `Expected no match count in output: ${output}`);
+});
+
+test('CommandMessage does not show match count for grep in standard mode', async (t) => {
+  const props = {
+    command: 'grep',
+    toolName: 'grep',
+    toolArgs: { pattern: 'hello', path: 'source' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'standard' as const,
+    output: 'file1.ts:1:hello\nfile2.ts:3:hello',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.false(output.includes('match'), `Expected no match count in standard mode: ${output}`);
+});
+
+test('CommandMessage does not show match count when output is empty', async (t) => {
+  const props = {
+    command: 'grep',
+    toolName: 'grep',
+    toolArgs: { pattern: 'nonexistent', path: 'source' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: '',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.false(output.includes('match'), `Expected no match count for empty output: ${output}`);
 });

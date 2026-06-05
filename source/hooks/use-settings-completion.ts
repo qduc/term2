@@ -42,6 +42,7 @@ const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Maximum lines of shell output to capture',
   [SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS]: 'Maximum characters of shell output to capture',
   [SETTING_KEYS.UI_HISTORY_SIZE]: 'Number of history items to keep',
+  [SETTING_KEYS.UI_DISPLAY_MODE]: 'Display mode for rendering output (standard|concise)',
   [SETTING_KEYS.LOGGING_LOG_LEVEL]: 'Logging level (debug, info, warn, error)',
   [SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE]: 'Suppress console output (true|false) to avoid interfering with Ink UI',
   [SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING]: 'Use AI to automatically correct failed search_replace operations',
@@ -148,6 +149,7 @@ export function getSettingCategory(key: string): SettingsCategory {
   if (
     key === SETTING_KEYS.UI_HISTORY_SIZE ||
     key === SETTING_KEYS.UI_PASTE_THRESHOLD ||
+    key === SETTING_KEYS.UI_DISPLAY_MODE ||
     key === SETTING_KEYS.LOGGING_LOG_LEVEL ||
     key === SETTING_KEYS.LOGGING_DISABLE ||
     key === SETTING_KEYS.APP_NOTIFICATIONS ||

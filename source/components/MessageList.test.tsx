@@ -598,3 +598,26 @@ test('MessageList outputs a blank line after the final message in Static', (t) =
   t.true(lines.length > 0);
   t.is(lines[lines.length - 1].trim(), '');
 });
+
+test('MessageList hides reasoning messages when displayMode is concise', (t) => {
+  const mockSettingsService = {
+    get: (key: string) => {
+      if (key === 'ui.displayMode') return 'concise';
+      return undefined;
+    },
+    onChange: () => () => {},
+  } as any;
+
+  const messages = [
+    { id: '1', sender: 'user', text: 'Hello' },
+    { id: '2', sender: 'reasoning', text: 'I am thinking about hello' },
+    { id: '3', sender: 'bot', text: 'Hello back!' },
+  ];
+
+  const { lastFrame } = render(<MessageList messages={messages} settingsService={mockSettingsService} />);
+  const output = lastFrame() ?? '';
+
+  t.true(output.includes('Hello'), `Expected user message: ${output}`);
+  t.true(output.includes('Hello back!'), `Expected bot message: ${output}`);
+  t.false(output.includes('thinking'), `Expected reasoning message to be hidden: ${output}`);
+});

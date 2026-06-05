@@ -160,6 +160,10 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   'shell.maxOutputLines': [{ value: '200' }, { value: '500' }, { value: '1000' }],
   'shell.maxOutputChars': [{ value: '20000' }, { value: '50000' }, { value: '100000' }],
   'ui.historySize': [{ value: '50' }, { value: '100' }, { value: '200' }],
+  'ui.displayMode': [
+    { value: 'standard', description: 'Standard output (full details)' },
+    { value: 'concise', description: 'Concise output (no reasoning, one-line tool calls)' },
+  ],
   'agent.maxTurns': [{ value: '10' }, { value: '20' }, { value: '50' }],
   'agent.retryAttempts': [{ value: '1' }, { value: '2' }, { value: '3' }],
   'ssh.port': [{ value: '22', description: 'Default SSH port' }],

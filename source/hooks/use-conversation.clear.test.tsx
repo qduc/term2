@@ -156,3 +156,58 @@ test.serial('useConversation filters duplicate stack trace from rawEvent when lo
   t.is(meta.rawEvent.stack, undefined);
   t.is(meta.rawEvent.message, 'Test error');
 });
+
+test.serial('useConversation exposes transient thinking state only while hidden reasoning is active', async (t) => {
+  let emitTextDelta: (() => void) | undefined;
+  let resolveSend: (() => void) | undefined;
+  const mockConversationService = {
+    sessionId: 'session-id',
+    sendMessage: async (_input: string, options?: { onEvent?: (event: any) => void }) => {
+      options?.onEvent?.({ type: 'reasoning_delta', delta: 'Thinking', fullText: 'Thinking' });
+      emitTextDelta = () => {
+        options?.onEvent?.({ type: 'text_delta', delta: 'Visible', fullText: 'Visible' });
+      };
+      await new Promise<void>((resolve) => {
+        resolveSend = resolve;
+      });
+      return { type: 'response', response: 'Visible' } as any;
+    },
+  } as any;
+
+  let sendMsg: ((input: string) => Promise<void>) | undefined;
+
+  const Harness = () => {
+    const { sendUserMessage, thinkingStartedAt } = useConversation({
+      conversationService: mockConversationService,
+      loggingService,
+    });
+    sendMsg = sendUserMessage;
+    return <Text>{thinkingStartedAt === null ? 'idle' : 'thinking'}</Text>;
+  };
+
+  let lastFrame: (() => string | undefined) | undefined;
+  await act(async () => {
+    ({ lastFrame } = render(<Harness />));
+  });
+
+  t.is(lastFrame!(), 'idle');
+
+  let pendingSend: Promise<void> | undefined;
+  await act(async () => {
+    pendingSend = sendMsg!('hello');
+    await Promise.resolve();
+  });
+
+  t.is(lastFrame!(), 'thinking');
+
+  await act(async () => {
+    emitTextDelta?.();
+  });
+
+  t.is(lastFrame!(), 'idle');
+
+  await act(async () => {
+    resolveSend?.();
+    await pendingSend;
+  });
+});

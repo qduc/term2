@@ -87,7 +87,7 @@ test('FallbackResponsesModel.getResponse uses WS model by default and falls back
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, 1);
+  t.is(wsCalled, 6, 'should attempt WS 6 times (initial + 5 retries) before HTTP fallback');
   t.is(httpCalled, 1);
   t.true(state.isDowngraded);
   t.true(downgradeLogged);
@@ -95,7 +95,7 @@ test('FallbackResponsesModel.getResponse uses WS model by default and falls back
 
   // Subsequent call should skip WS model and go directly to HTTP model
   const result2 = await model.getResponse({} as any);
-  t.is(wsCalled, 1); // still 1
+  t.is(wsCalled, 6); // still 6
   t.is(httpCalled, 2);
   t.is(result2, expectedResponse);
 });
@@ -241,7 +241,7 @@ test('FallbackResponsesModel falls back to full history without previous respons
   const wsModel = makeMockModel({
     getStreamedResponse: async function* (request: ModelRequest) {
       seenRequests.push(request);
-      if (seenRequests.length <= 3) {
+      if (seenRequests.length <= 6) {
         throw safeWarmupError;
       }
       yield {
@@ -274,11 +274,11 @@ test('FallbackResponsesModel falls back to full history without previous respons
   } as any)) {
   }
 
-  t.is(seenRequests.length, 4);
-  t.true(seenRequests.slice(0, 3).every((request) => request.modelSettings.providerData?.generate === false));
-  t.deepEqual(seenRequests[3].input, fullInput);
-  t.is(seenRequests[3].previousResponseId, undefined);
-  t.is(seenRequests[3].modelSettings.providerData?.generate, undefined);
+  t.is(seenRequests.length, 7);
+  t.true(seenRequests.slice(0, 6).every((request) => request.modelSettings.providerData?.generate === false));
+  t.deepEqual(seenRequests[6].input, fullInput);
+  t.is(seenRequests[6].previousResponseId, undefined);
+  t.is(seenRequests[6].modelSettings.providerData?.generate, undefined);
   t.false(state.isDowngraded);
 });
 
@@ -385,7 +385,7 @@ test('FallbackResponsesModel.getStreamedResponse falls back seamlessly if error 
     events.push(event);
   }
 
-  t.is(wsCalled, 1);
+  t.is(wsCalled, 6, 'should attempt WS 6 times (initial + 5 retries) before HTTP fallback');
   t.is(httpCalled, 1);
   t.true(state.isDowngraded);
   t.true(downgradeLogged);
@@ -431,8 +431,8 @@ test('FallbackResponsesModel.getStreamedResponse propagates error and does not f
 
   t.is(wsCalled, 1);
   t.is(httpCalled, 0); // No HTTP fallback!
-  t.true(state.isDowngraded); // Still downgrades for future requests!
-  t.true(downgradeLogged);
+  t.false(state.isDowngraded, 'mid-stream failures should be retried by the session before downgrading');
+  t.false(downgradeLogged);
   t.deepEqual(events, [{ type: 'output_text_delta', delta: 'Partial' }]);
 });
 
@@ -558,14 +558,14 @@ test('FallbackResponsesModel falls back to HTTP when WebSocket times out', async
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, 1);
+  t.is(wsCalled, 6, 'should attempt WS 6 times (initial + 5 retries) before HTTP fallback');
   t.is(httpCalled, 1);
   t.true(state.isDowngraded);
   t.is(result, expectedResponse);
 
   // Subsequent calls should skip WS and use HTTP directly
   const result2 = await model.getResponse({} as any);
-  t.is(wsCalled, 1);
+  t.is(wsCalled, 6);
   t.is(httpCalled, 2);
   t.is(result2, expectedResponse);
 });
@@ -653,7 +653,7 @@ test('FallbackResponsesModel logs streaming WS request start and response comple
   t.is(logs[1].meta.payload.payload.id, 'resp_ws_stream_123');
 });
 
-test('FallbackResponsesModel.getResponse retries WS up to 2 times on first-frame timeout then downgrades', async (t) => {
+test('FallbackResponsesModel.getResponse retries WS up to 5 times before downgrading', async (t) => {
   let wsCalled = 0;
   let httpCalled = 0;
   let downgradeLogged = false;
@@ -681,7 +681,7 @@ test('FallbackResponsesModel.getResponse retries WS up to 2 times on first-frame
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, 3, 'should attempt WS 3 times (initial + 2 retries)');
+  t.is(wsCalled, 6, 'should attempt WS 6 times (initial + 5 retries)');
   t.is(httpCalled, 1);
   t.true(state.isDowngraded);
   t.true(downgradeLogged);
@@ -722,7 +722,7 @@ test('FallbackResponsesModel.getResponse succeeds on retry after first-frame tim
   t.is(result, expectedResponse);
 });
 
-test('FallbackResponsesModel.getResponse downgrades immediately on non-first-frame network errors', async (t) => {
+test('FallbackResponsesModel.getResponse retries pre-response network errors before downgrading', async (t) => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -747,7 +747,7 @@ test('FallbackResponsesModel.getResponse downgrades immediately on non-first-fra
 
   const result = await model.getResponse({} as any);
 
-  t.is(wsCalled, 1, 'idle timeout should not trigger first-frame retry path');
+  t.is(wsCalled, 6, 'should attempt WS 6 times (initial + 5 retries)');
   t.is(httpCalled, 1);
   t.true(state.isDowngraded);
   t.is(result, expectedResponse);
@@ -788,7 +788,7 @@ test('FallbackResponsesModel.getResponse retries abnormal websocket close 1006 b
   t.is(result, expectedResponse);
 });
 
-test('FallbackResponsesModel.getStreamedResponse retries WS up to 2 times on first-frame timeout then downgrades', async (t) => {
+test('FallbackResponsesModel.getStreamedResponse retries WS up to 5 times before downgrading', async (t) => {
   let wsCalled = 0;
   let httpCalled = 0;
   let downgradeLogged = false;
@@ -817,7 +817,7 @@ test('FallbackResponsesModel.getStreamedResponse retries WS up to 2 times on fir
     events.push(event);
   }
 
-  t.is(wsCalled, 3, 'should attempt WS 3 times (initial + 2 retries)');
+  t.is(wsCalled, 6, 'should attempt WS 6 times (initial + 5 retries)');
   t.is(httpCalled, 1);
   t.true(state.isDowngraded);
   t.true(downgradeLogged);
@@ -891,7 +891,7 @@ test('FallbackResponsesModel.getStreamedResponse does not retry once events have
   );
 
   t.is(wsCalled, 1, 'should not retry once a frame has been yielded');
-  t.true(state.isDowngraded, 'still flips downgrade flag for future requests');
+  t.false(state.isDowngraded, 'session-level retry should get a chance to reconnect WS before downgrade');
   t.deepEqual(events, [{ type: 'output_text_delta', delta: 'partial' }]);
 });
 
@@ -934,7 +934,7 @@ test('FallbackResponsesModel.getStreamedResponse does not flip downgrade flag on
   t.deepEqual(events, [{ type: 'output_text_delta', delta: 'partial' }]);
 });
 
-test('FallbackResponsesModel.getStreamedResponse still flips downgrade on pre-stream idle timeout', async (t) => {
+test('FallbackResponsesModel.getStreamedResponse retries pre-stream idle timeout before downgrading', async (t) => {
   let wsCalled = 0;
   let httpCalled = 0;
 
@@ -960,9 +960,9 @@ test('FallbackResponsesModel.getStreamedResponse still flips downgrade on pre-st
     events.push(event);
   }
 
-  t.is(wsCalled, 1);
+  t.is(wsCalled, 6, 'should attempt WS 6 times (initial + 5 retries)');
   t.is(httpCalled, 1);
-  t.true(state.isDowngraded, 'no events yielded → idle timeout still indicates a broken WS path');
+  t.true(state.isDowngraded, 'exhausted pre-stream idle timeouts still indicate a broken WS path');
   t.deepEqual(events, [{ type: 'response_started' }]);
 });
 
@@ -1003,7 +1003,7 @@ test('Codex getResponse throws ChainingTransportDowngradeError when WS fails on 
   t.true(error instanceof ChainingTransportDowngradeError);
   t.is(error.message, 'Codex WS connection failed; cannot chain via HTTP');
   t.is((error as any).cause, wsError);
-  t.is(wsCalled, 1);
+  t.is(wsCalled, 6, 'should attempt WS 6 times (initial + 5 retries) before chaining breaks');
   t.is(httpCalled, 0, 'HTTP model should not be called when chaining breaks');
   t.true(state.isDowngraded);
 });
@@ -1050,7 +1050,7 @@ test('Codex getStreamedResponse throws ChainingTransportDowngradeError when WS f
   t.true(error instanceof ChainingTransportDowngradeError);
   t.is(error.message, 'Codex WS connection failed; cannot chain via HTTP');
   t.is((error as any).cause, wsError);
-  t.is(wsCalled, 1);
+  t.is(wsCalled, 6, 'should attempt WS 6 times (initial + 5 retries) before chaining breaks');
   t.is(httpCalled, 0, 'HTTP stream should not be called when chaining breaks');
   t.true(state.isDowngraded);
   t.deepEqual(events, []);
@@ -1094,7 +1094,7 @@ test('Codex getStreamedResponse still falls back to HTTP when WS fails on a non-
     events.push(event);
   }
 
-  t.is(wsCalled, 1);
+  t.is(wsCalled, 6, 'should attempt WS 6 times (initial + 5 retries) before HTTP fallback');
   t.is(httpCalled, 1, 'HTTP fallback should still happen for non-chained request');
   t.true(state.isDowngraded);
   t.deepEqual(events, [{ type: 'response_started' }]);

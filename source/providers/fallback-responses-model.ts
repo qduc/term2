@@ -9,6 +9,8 @@ export interface FallbackState {
   isDowngraded: boolean;
   /** Called the first time the WS transport degrades to HTTP. */
   onDowngrade?: () => void;
+  /** Forces the transport into downgraded HTTP mode after session-level retry exhaustion. */
+  forceDowngrade?: (error: unknown) => void;
 }
 
 /**
@@ -91,7 +93,7 @@ export function isNetworkProtocolError(err: any): boolean {
   return false;
 }
 
-const MAX_WS_FIRST_FRAME_RETRIES = 2;
+const DEFAULT_STREAM_MAX_RETRIES = 5;
 
 const CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES = new Set([
   'function_call_output',
@@ -191,9 +193,8 @@ function isRetryableAbnormalCloseError(err: unknown): boolean {
   return message.includes('websocket connection closed before response completed') && message.includes('code=1006');
 }
 
-function isIdleTimeoutError(err: unknown): boolean {
-  if (!err || typeof (err as any).message !== 'string') return false;
-  return (err as any).message.toLowerCase().includes('websocket idle timeout');
+function shouldRetryBeforeResponseStart(err: unknown): boolean {
+  return isFirstFrameTimeoutError(err) || isRetryableAbnormalCloseError(err) || isNetworkProtocolError(err);
 }
 
 // The SDK's convertToOutputItem crashes with TypeError when the WS model returns
@@ -218,7 +219,9 @@ export class FallbackResponsesModel implements Model {
     private readonly loggingService?: any,
     private readonly providerId?: string,
     private readonly sessionContextService?: ISessionContextService,
-  ) {}
+  ) {
+    this.state.forceDowngrade = (error: unknown) => this.#notifyDowngrade(error);
+  }
 
   #getCodexServerHistoryKey(): string | null {
     if (this.providerId !== 'codex') {
@@ -334,6 +337,9 @@ export class FallbackResponsesModel implements Model {
 
   /** Flip downgrade state, clear stale WS response IDs, and notify listeners. */
   #notifyDowngrade(error: unknown): void {
+    if (this.state.isDowngraded) {
+      return;
+    }
     this.state.isDowngraded = true;
     // WS-established response IDs are meaningless to the HTTP endpoint.
     this.codexPreviousResponseIds.clear();
@@ -376,7 +382,7 @@ export class FallbackResponsesModel implements Model {
         if (!canSafelyRetry) {
           throw error;
         }
-        if (attempt > MAX_WS_FIRST_FRAME_RETRIES) {
+        if (attempt > DEFAULT_STREAM_MAX_RETRIES) {
           return undefined;
         }
         attempt++;
@@ -403,7 +409,7 @@ export class FallbackResponsesModel implements Model {
         if (!canSafelyRetry) {
           throw error;
         }
-        if (attempt > MAX_WS_FIRST_FRAME_RETRIES) {
+        if (attempt > DEFAULT_STREAM_MAX_RETRIES) {
           return undefined;
         }
         attempt++;
@@ -518,10 +524,7 @@ export class FallbackResponsesModel implements Model {
 
         return response;
       } catch (error) {
-        if (
-          (isFirstFrameTimeoutError(error) || isRetryableAbnormalCloseError(error)) &&
-          firstFrameRetries < MAX_WS_FIRST_FRAME_RETRIES
-        ) {
+        if (shouldRetryBeforeResponseStart(error) && firstFrameRetries < DEFAULT_STREAM_MAX_RETRIES) {
           firstFrameRetries++;
           if (this.loggingService && this.providerId) {
             this.loggingService.warn?.(`${this.providerId} ws request failed before response start, retrying`, {
@@ -530,7 +533,7 @@ export class FallbackResponsesModel implements Model {
               phase: 'provider_response',
               ...baseMeta,
               attempt: firstFrameRetries,
-              maxRetries: MAX_WS_FIRST_FRAME_RETRIES,
+              maxRetries: DEFAULT_STREAM_MAX_RETRIES,
               error: describeError(error),
             });
           }
@@ -673,11 +676,7 @@ export class FallbackResponsesModel implements Model {
         }
         return;
       } catch (error) {
-        if (
-          !started &&
-          (isFirstFrameTimeoutError(error) || isRetryableAbnormalCloseError(error)) &&
-          firstFrameRetries < MAX_WS_FIRST_FRAME_RETRIES
-        ) {
+        if (!started && shouldRetryBeforeResponseStart(error) && firstFrameRetries < DEFAULT_STREAM_MAX_RETRIES) {
           firstFrameRetries++;
           if (this.loggingService && this.providerId) {
             this.loggingService.warn?.(`${this.providerId} ws stream failed before response start, retrying`, {
@@ -686,7 +685,7 @@ export class FallbackResponsesModel implements Model {
               phase: 'provider_response',
               ...baseMeta,
               attempt: firstFrameRetries,
-              maxRetries: MAX_WS_FIRST_FRAME_RETRIES,
+              maxRetries: DEFAULT_STREAM_MAX_RETRIES,
               error: describeError(error),
             });
           }
@@ -704,12 +703,11 @@ export class FallbackResponsesModel implements Model {
             });
           }
 
-          // A single mid-stream idle timeout is likely a transient stall, not proof
-          // that the WS path is permanently broken — don't sentence the rest of the
-          // session to HTTP based on it. Pre-stream idle timeouts and all other
-          // network errors still flip the downgrade flag.
-          const isTransientMidStreamStall = started && isIdleTimeoutError(error);
-          if (!isTransientMidStreamStall) {
+          // Mid-stream failures are retried by the session layer from repaired
+          // history. Do not sentence the rest of the session to HTTP before that
+          // retry budget is exhausted.
+          const isMidStreamFailure = started;
+          if (!isMidStreamFailure) {
             this.#notifyDowngrade(error);
           }
           if (!started) {

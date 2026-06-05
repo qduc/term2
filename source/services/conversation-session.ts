@@ -743,18 +743,21 @@ export class ConversationSession {
       flexServiceTierFallbackCount = 0,
       hallucinationRetryCount = 0,
       transientRetryCount = 0,
+      transportFallbackRetryCount = 0,
     }: {
       skipUserMessage?: boolean;
       flexServiceTierFallbackCount?: number;
       hallucinationRetryCount?: number;
       transientRetryCount?: number;
+      transportFallbackRetryCount?: number;
     } = {},
   ): AsyncIterable<ConversationEvent> {
     if (
       !skipUserMessage ||
       hallucinationRetryCount > 0 ||
       flexServiceTierFallbackCount > 0 ||
-      transientRetryCount > 0
+      transientRetryCount > 0 ||
+      transportFallbackRetryCount > 0
     ) {
       this.#resetPersistedTurnState();
     }
@@ -1151,8 +1154,60 @@ export class ConversationSession {
         yield* this.run(turn, {
           skipUserMessage: Boolean(stream),
           transientRetryCount: attempt,
+          transportFallbackRetryCount,
         });
         return;
+      }
+
+      if (isTransientRetryableError(error) && stream && transportFallbackRetryCount < 1) {
+        const forceTransportDowngrade = getMethod<[unknown], boolean>(this.agentClient, 'forceTransportDowngrade');
+        const didDowngrade = forceTransportDowngrade?.call(this.agentClient, error) ?? false;
+
+        if (didDowngrade) {
+          const attempt = transportFallbackRetryCount + 1;
+
+          this.logger.warn('Transient upstream error exhausted WS retries, forcing HTTP fallback', {
+            eventType: 'retry.transport_fallback',
+            category: 'retry',
+            phase: 'retry',
+            retryType: 'upstream',
+            retryAttempt: attempt,
+            attempt,
+            maxRetries: 1,
+            sessionId: this.id,
+            traceId: this.logger.getCorrelationId(),
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
+
+          yield {
+            type: 'retry',
+            toolName: 'transport',
+            attempt,
+            maxRetries: 1,
+            errorMessage: 'WebSocket retries exhausted. Falling back to HTTP transport and retrying.',
+            retryType: 'upstream',
+          };
+
+          if (!this.#isCurrentGeneration(gen)) return;
+
+          this.#clearPreviousResponseId();
+          this.#restoreCompletedToolLedgerEntries(ledgerSnapshot);
+
+          const reconciled = reconcileHistoryWithToolLedger(
+            this.conversationStore.getHistory(),
+            this.toolLedger.export(),
+          );
+          if (reconciled.addedCompletedPairs > 0) {
+            this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+          }
+
+          yield* this.run(turn, {
+            skipUserMessage: true,
+            transientRetryCount: 0,
+            transportFallbackRetryCount: attempt,
+          });
+          return;
+        }
       }
 
       const decision = decideRetry(error, hallucinationRetryCount, Boolean(stream), streamHistoryLength);

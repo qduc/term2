@@ -283,6 +283,19 @@ export class OpenAIAgentClient {
   }
 
   /**
+   * Force the current fallback-capable provider onto HTTP transport.
+   * Returns false when the active provider has no fallback transport or is already downgraded.
+   */
+  forceTransportDowngrade(error: unknown): boolean {
+    const fallbackState = this.getFallbackState();
+    if (!fallbackState || fallbackState.isDowngraded || typeof fallbackState.forceDowngrade !== 'function') {
+      return false;
+    }
+    fallbackState.forceDowngrade(error);
+    return fallbackState.isDowngraded;
+  }
+
+  /**
    * Forward real-time subagent activity events to the active conversation
    * turn. The session sets this for the duration of a send and clears it
    * afterwards so events reach the UI's onEvent callback.

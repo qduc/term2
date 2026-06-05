@@ -5,7 +5,7 @@ import { ChainingTransportDowngradeError } from '../providers/fallback-responses
 
 export const MAX_HALLUCINATION_RETRIES = 2;
 export const MAX_SUBAGENT_MODEL_RETRIES = 1;
-export const MAX_TRANSIENT_RETRIES = 3;
+export const MAX_TRANSIENT_RETRIES = 5;
 
 /**
  * Returns true when the error is a transient upstream failure (429 / 5xx /
@@ -48,7 +48,8 @@ export const isTransientRetryableError = (error: unknown): boolean => {
     }
     const message = String((error as any).message || '').toLowerCase();
     if (message.includes('websocket connection closed before response completed')) {
-      return message.includes('code=1006');
+      const closeCode = message.match(/code=(\d+)/)?.[1];
+      return closeCode ? closeCode === '1006' : true;
     }
     if (
       message.includes('rate limit') ||

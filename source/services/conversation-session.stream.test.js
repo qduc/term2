@@ -2473,3 +2473,123 @@ test('run() retries chaining streamed transient errors by breaking chaining and 
   t.is(calls[2].input, 'follow up');
   t.is(calls[2].opts.previousResponseId, 'resp-recovered');
 });
+
+test.serial('run() forces HTTP fallback after streamed WS retries are exhausted', async (t) => {
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (callback, _delay, ...args) => originalSetTimeout(callback, 0, ...args);
+  t.teardown(() => {
+    globalThis.setTimeout = originalSetTimeout;
+  });
+
+  class FailingStream extends MockStream {
+    async *[Symbol.asyncIterator]() {
+      yield { type: 'response.output_text.delta', delta: 'partial' };
+      throw new Error('WebSocket connection closed before response completed');
+    }
+  }
+
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First response' }]);
+  firstStream.finalOutput = 'First response';
+  firstStream.lastResponseId = 'resp-first';
+  firstStream.history = [
+    { role: 'user', type: 'message', content: 'first' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'First response' }],
+    },
+  ];
+
+  const fallbackStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered over HTTP' }]);
+  fallbackStream.finalOutput = 'Recovered over HTTP';
+  fallbackStream.lastResponseId = 'resp-http';
+  fallbackStream.history = [
+    ...firstStream.history,
+    { role: 'user', type: 'message', content: 'second' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Recovered over HTTP' }],
+    },
+  ];
+
+  let downgraded = false;
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'codex';
+    },
+    forceTransportDowngrade() {
+      downgraded = true;
+      return true;
+    },
+    async startStream(input, opts) {
+      calls.push({ input, opts, transport: downgraded ? 'http' : 'ws' });
+      if (calls.length === 1) {
+        return firstStream;
+      }
+      return downgraded ? fallbackStream : new FailingStream();
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  for await (const _ of session.run('first')) {
+    // establish a chained Codex response id
+  }
+
+  const emitted = [];
+  for await (const event of session.run('second')) {
+    emitted.push(event);
+  }
+
+  const secondTurnCalls = calls.slice(1);
+  t.is(secondTurnCalls.filter((call) => call.transport === 'ws').length, 6);
+  t.is(secondTurnCalls.filter((call) => call.transport === 'http').length, 1);
+
+  t.is(typeof secondTurnCalls[0].input, 'string');
+  t.is(secondTurnCalls[0].input, 'second');
+  t.is(secondTurnCalls[0].opts.previousResponseId, 'resp-first');
+
+  const httpCall = secondTurnCalls[secondTurnCalls.length - 1];
+  t.true(Array.isArray(httpCall.input), 'HTTP fallback must replay full history');
+  t.falsy(httpCall.opts.previousResponseId, 'HTTP fallback must not use Responses chaining');
+  t.deepEqual(
+    httpCall.input.filter((item) => item.role === 'user').map((item) => item.content),
+    ['first', 'second'],
+  );
+
+  t.deepEqual(
+    emitted.map((event) => event.type),
+    [
+      'text_delta',
+      'retry',
+      'text_delta',
+      'retry',
+      'text_delta',
+      'retry',
+      'text_delta',
+      'retry',
+      'text_delta',
+      'retry',
+      'text_delta',
+      'retry',
+      'text_delta',
+      'final',
+    ],
+  );
+  t.is(emitted.filter((event) => event.type === 'retry' && event.toolName === 'turn').length, 5);
+  t.is(emitted.filter((event) => event.type === 'retry' && event.toolName === 'transport').length, 1);
+
+  const state = session.exportState();
+  const assistantTexts = state.history
+    .filter((item) => item.role === 'assistant')
+    .flatMap((item) => item.content || [])
+    .map((part) => part.text);
+  t.deepEqual(assistantTexts, ['First response', 'Recovered over HTTP']);
+});

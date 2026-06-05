@@ -7,6 +7,7 @@ import { createInvalidToolCallDiagnostic } from './logging-contract.js';
 import { asRecord, getString } from './interruption-info.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
 import type { AgentStream } from './agent-stream.js';
+import type { ToolCallStreamingDeltaEvent } from './conversation-events.js';
 
 function normalizeCodexRateLimitWindow(obj: unknown): CodexRateLimitWindow | undefined {
   if (!obj || typeof obj !== 'object') {
@@ -85,6 +86,11 @@ export async function* processStreamEvents(
 
   acc.textDeltaCount = 0;
   acc.reasoningDeltaCount = 0;
+
+  /** Tracks tool names from response.output_item.added events (Responses API). */
+  const streamingToolNamesByIndex = new Map<number, string>();
+  /** Accumulated argument character count for current streaming tool calls. */
+  let streamingToolArgCharCount = 0;
 
   const emitText = (delta: string) => {
     if (!delta) return null;
@@ -171,6 +177,79 @@ export async function* processStreamEvents(
     if (reasoningDelta) {
       const e = emitReasoning(reasoningDelta);
       if (e) yield e;
+    }
+
+    // --- Detect tool call argument streaming (before tool_started fires) ---
+    //
+    // Responses API: response.output_item.added fires when the model starts a
+    // function_call; response.output_item.delta carries argument fragments.
+    // Chat Completions API: choices[].delta.tool_calls carries fragments.
+    {
+      const meType = getString(modelEvent, 'type');
+      const edType = getString(eventData, 'type');
+
+      // Capture tool name from the initial item-added event (Responses API).
+      if (meType === 'response.output_item.added' || edType === 'response.output_item.added') {
+        const addedSrc = meType === 'response.output_item.added' ? modelEvent : eventData;
+        const addedItem = asRecord(addedSrc?.output_item) ?? asRecord(addedSrc?.item);
+        if (getString(addedItem, 'type') === 'function_call') {
+          const idx =
+            typeof (addedSrc as Record<string, unknown>)?.output_index === 'number'
+              ? ((addedSrc as Record<string, unknown>).output_index as number)
+              : -1;
+          const name = getString(addedItem, 'name');
+          if (idx >= 0 && name) streamingToolNamesByIndex.set(idx, name);
+        }
+      }
+
+      // Detect argument delta from Responses API.
+      if (meType === 'response.output_item.delta' || edType === 'response.output_item.delta') {
+        const deltaSrc = meType === 'response.output_item.delta' ? modelEvent : eventData;
+        const delta = asRecord(deltaSrc?.delta);
+        if (delta && typeof delta.arguments === 'string' && delta.arguments) {
+          streamingToolArgCharCount += (delta.arguments as string).length;
+          const idx =
+            typeof (deltaSrc as Record<string, unknown>)?.output_index === 'number'
+              ? ((deltaSrc as Record<string, unknown>).output_index as number)
+              : -1;
+          const toolName = idx >= 0 ? streamingToolNamesByIndex.get(idx) : undefined;
+          yield {
+            type: 'tool_call_streaming_delta',
+            toolName,
+            argumentCharCount: streamingToolArgCharCount,
+          } satisfies ToolCallStreamingDeltaEvent;
+        }
+      }
+
+      // Detect argument delta from Chat Completions API.
+      // modelEvent is the ChatCompletionChunk; tool_calls live under choices[].delta.tool_calls.
+      {
+        const choices = modelEvent?.choices ?? eventData?.choices;
+        if (Array.isArray(choices)) {
+          for (const choice of choices) {
+            const delta = asRecord(choice?.delta);
+            const toolCalls = delta?.tool_calls;
+            if (Array.isArray(toolCalls)) {
+              for (const tc of toolCalls) {
+                const fn = asRecord(tc?.function);
+                if (fn) {
+                  // Track tool name from any chunk (first chunk has it).
+                  const name = getString(fn, 'name');
+                  if (name) streamingToolNamesByIndex.set(tc?.index ?? 0, name);
+                  if (typeof fn.arguments === 'string' && fn.arguments) {
+                    streamingToolArgCharCount += (fn.arguments as string).length;
+                    yield {
+                      type: 'tool_call_streaming_delta',
+                      toolName: streamingToolNamesByIndex.get(tc?.index ?? 0),
+                      argumentCharCount: streamingToolArgCharCount,
+                    } satisfies ToolCallStreamingDeltaEvent;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
 
     const maybeEmitCommandMessagesFromItems = (items: unknown[]) =>

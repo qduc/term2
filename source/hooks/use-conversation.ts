@@ -145,6 +145,10 @@ export const useConversation = ({
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
+  const [toolCallStreamingInfo, setToolCallStreamingInfo] = useState<{
+    toolName?: string;
+    argumentCharCount: number;
+  } | null>(null);
   const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(() => getInitialLastUsage(initialMessages));
   const [lastCodexRateLimit, setLastCodexRateLimit] = useState<CodexRateLimitInfo | null>(null);
   const setCodexRateLimit = setLastCodexRateLimit;
@@ -188,6 +192,15 @@ export const useConversation = ({
           setThinkingStartedAt((prev) => prev ?? Date.now());
         } else if (eventType && clearsThinkingIndicator(eventType)) {
           setThinkingStartedAt(null);
+        }
+
+        if (eventType === 'tool_call_streaming_delta') {
+          setToolCallStreamingInfo({
+            toolName: event.toolName,
+            argumentCharCount: event.argumentCharCount,
+          });
+        } else if (eventType === 'tool_started' || eventType === 'text_delta' || eventType === 'final') {
+          setToolCallStreamingInfo(null);
         }
 
         baseOnEvent(event);
@@ -288,6 +301,7 @@ export const useConversation = ({
       logWriter?.append({ type: 'user_message', message: userMessage });
       setIsProcessing(true);
       setThinkingStartedAt(null);
+      setToolCallStreamingInfo(null);
 
       const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
         createStreamingSession<Message>(
@@ -449,6 +463,7 @@ export const useConversation = ({
       if (isMaxTurnsPrompt && answer === 'y') {
         setIsProcessing(true);
         setThinkingStartedAt(null);
+        setToolCallStreamingInfo(null);
 
         const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
           createStreamingSession<Message>(
@@ -510,6 +525,7 @@ export const useConversation = ({
 
       setIsProcessing(true);
       setThinkingStartedAt(null);
+      setToolCallStreamingInfo(null);
       const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
         createStreamingSession<Message>(
           {
@@ -767,6 +783,7 @@ export const useConversation = ({
     setWaitingForAskUserAnswer,
     isProcessing,
     thinkingStartedAt,
+    toolCallStreamingInfo,
     sendUserMessage,
     handleApprovalDecision,
     onTypeAnswer,

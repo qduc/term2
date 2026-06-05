@@ -147,3 +147,63 @@ test('BottomArea shows input with handoff message prompt when handoffState is en
   t.false(output.includes('processing'));
   unmount();
 });
+
+test('BottomArea shows tool call streaming indicator when toolCallStreamingInfo is set', (t) => {
+  const { lastFrame, unmount } = renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+    toolCallStreamingInfo: { toolName: 'shell', argumentCharCount: 150 },
+  });
+  const output = lastFrame() ?? '';
+  t.true(output.includes('Calling'));
+  t.true(output.includes('shell'));
+  t.true(output.includes('150 chars'));
+  t.false(output.includes('processing'));
+  t.false(output.includes('Thinking'));
+  unmount();
+});
+
+test('BottomArea shows tool call streaming indicator without tool name', (t) => {
+  const { lastFrame, unmount } = renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+    toolCallStreamingInfo: { argumentCharCount: 42 },
+  });
+  const output = lastFrame() ?? '';
+  t.true(output.includes('Calling'));
+  t.true(output.includes('tool'));
+  t.true(output.includes('42 chars'));
+  t.false(output.includes('processing'));
+  unmount();
+});
+
+test('BottomArea falls back to processing when toolCallStreamingInfo is null', (t) => {
+  const { lastFrame, unmount } = renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+    toolCallStreamingInfo: null,
+  });
+  const output = lastFrame() ?? '';
+  t.true(output.includes('processing'));
+  t.false(output.includes('Calling'));
+  unmount();
+});
+
+test('BottomArea shows thinking over tool call streaming when both are active', (t) => {
+  const originalNow = Date.now;
+  Date.now = () => 5000;
+
+  const { lastFrame, unmount } = renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+    thinkingStartedAt: 0,
+    toolCallStreamingInfo: { toolName: 'shell', argumentCharCount: 100 },
+  });
+  const output = lastFrame() ?? '';
+  // Thinking takes priority over tool call streaming
+  t.true(output.includes('Thinking'));
+  t.false(output.includes('Calling'));
+
+  unmount();
+  Date.now = originalNow;
+});

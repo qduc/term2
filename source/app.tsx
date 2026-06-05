@@ -242,6 +242,7 @@ const App: FC<AppProps> = ({
     setWaitingForAskUserAnswer,
     isProcessing,
     thinkingStartedAt,
+    toolCallStreamingInfo,
     sendUserMessage,
     handleApprovalDecision,
     onTypeAnswer,
@@ -664,6 +665,7 @@ const App: FC<AppProps> = ({
             waitingForAskUserAnswer={waitingForAskUserAnswer}
             isProcessing={isProcessing}
             thinkingStartedAt={thinkingStartedAt}
+            toolCallStreamingInfo={toolCallStreamingInfo}
             isShellMode={isShellMode}
             lastUsage={lastUsage}
             onSubmit={handleSubmit}

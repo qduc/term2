@@ -24,6 +24,7 @@ export type BottomAreaProps = {
   waitingForAskUserAnswer?: boolean;
   isProcessing: boolean;
   thinkingStartedAt?: number | null;
+  toolCallStreamingInfo?: { toolName?: string; argumentCharCount: number } | null;
   isShellMode?: boolean;
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
@@ -60,6 +61,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   waitingForAskUserAnswer = false,
   isProcessing,
   thinkingStartedAt = null,
+  toolCallStreamingInfo = null,
   isShellMode = false,
   onSubmit,
   slashCommands,
@@ -160,6 +162,11 @@ const BottomArea: FC<BottomAreaProps> = ({
           />
         ) : isProcessing && thinkingStartedAt != null ? (
           <Text color="#64748b">Thinking... {thinkingElapsedSeconds}s</Text>
+        ) : isProcessing && toolCallStreamingInfo ? (
+          <Text color="#64748b">
+            Calling {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : 'tool'} (
+            {toolCallStreamingInfo.argumentCharCount} chars){'.'.repeat(dotCount)}
+          </Text>
         ) : isProcessing ? (
           <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
         ) : showInput ? (

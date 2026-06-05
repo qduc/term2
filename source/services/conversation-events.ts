@@ -8,6 +8,7 @@ export type ConversationEvent =
   | TextDeltaEvent
   | ReasoningDeltaEvent
   | ToolStartedEvent
+  | ToolCallStreamingDeltaEvent
   | CommandMessageEvent
   | ApprovalRequiredEvent
   | UsageUpdateEvent
@@ -68,6 +69,18 @@ export interface ToolStartedEvent {
   toolCallId: string;
   toolName: string;
   arguments: unknown;
+}
+
+/**
+ * Emitted while the model is streaming tool call arguments.
+ * Allows the UI to show progress before the full tool call arrives.
+ */
+export interface ToolCallStreamingDeltaEvent {
+  type: 'tool_call_streaming_delta';
+  /** Tool name, if known (available earlier on Responses API). */
+  toolName?: string;
+  /** Cumulative character count of streamed arguments so far. */
+  argumentCharCount: number;
 }
 
 export interface ApprovalRequiredEvent {

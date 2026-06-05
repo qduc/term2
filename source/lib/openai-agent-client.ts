@@ -22,7 +22,6 @@ import { createEditorImpl } from './editor-impl.js';
 import { trimToolOutput } from '../utils/trim-tool-output.js';
 import { injectWarningIntoToolOutput } from '../utils/inject-warning-into-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
-import { executeWithRetry } from './retry-executor.js';
 import { shouldUseNativePatchTool, shouldUseStrictToolSchema } from './tool-selection-policy.js';
 import { isFlexServiceTierTimeout } from '../utils/flex-service-tier.js';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
@@ -226,7 +225,6 @@ export class OpenAIAgentClient {
   #retryAttempts: number;
   #currentAbortController: AbortController | null = null;
   #currentCorrelationId: string | null = null;
-  #retryCallback: (() => void) | null = null;
   #runner: Runner | null = null;
 
   #serviceTierOverrideForNextRequest: 'standard' | null = null;
@@ -442,6 +440,10 @@ export class OpenAIAgentClient {
     return this.#provider;
   }
 
+  getStreamMaxRetries(): number | undefined {
+    return this.#settings.get<number | undefined>('agent.streamMaxRetries' as any);
+  }
+
   setAskUserAnswer(callId: string, answer: string): void {
     this.#askUserAnswers.set(callId, answer);
   }
@@ -540,7 +542,7 @@ export class OpenAIAgentClient {
   }
 
   setRetryCallback(callback: () => void): void {
-    this.#retryCallback = callback;
+    void callback;
   }
 
   shouldRetryWithoutFlexServiceTier(error: unknown): boolean {
@@ -709,7 +711,7 @@ export class OpenAIAgentClient {
         options.previousResponseId = previousResponseId;
       }
 
-      const result = await this.#executeWithRetry(() => this.#runAgent(agentForRun, userInput, options));
+      const result = await this.#runAgent(agentForRun, userInput, options);
       return result;
     } catch (error: any) {
       this.#logger.error('Agent stream failed', {
@@ -777,7 +779,7 @@ export class OpenAIAgentClient {
       options.previousResponseId = previousResponseId;
     }
 
-    return this.#executeWithRetry(() => this.#runAgent(agentForRun, state, options));
+    return this.#runAgent(agentForRun, state, options);
   }
 
   async continueRunStream(
@@ -830,7 +832,7 @@ export class OpenAIAgentClient {
       options.previousResponseId = previousResponseId;
     }
 
-    return this.#executeWithRetry(() => this.#runAgent(agentForRun, state, options));
+    return this.#runAgent(agentForRun, state, options);
   }
 
   #runAgentWithProvider(
@@ -882,18 +884,6 @@ export class OpenAIAgentClient {
         this.#refreshAgent();
       }
     }
-  }
-
-  async #executeWithRetry<T>(operation: () => Promise<T>, retries = this.#retryAttempts): Promise<T> {
-    return executeWithRetry({
-      operation,
-      retryAttempts: retries,
-      provider: this.#provider,
-      model: this.#model,
-      traceId: this.#currentCorrelationId,
-      logger: this.#logger,
-      onRetry: this.#retryCallback ?? undefined,
-    });
   }
 
   async chat(

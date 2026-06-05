@@ -1,69 +1,12 @@
 import { ModelBehaviorError } from '@openai/agents';
-import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
-import { OpenRouterError, OpenAICompatibleError } from '../providers/common/provider-errors.js';
-import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
+export { isTransientRetryableError } from './retry-error-classification.js';
 
 export const MAX_HALLUCINATION_RETRIES = 2;
 export const MAX_SUBAGENT_MODEL_RETRIES = 1;
-export const MAX_TRANSIENT_RETRIES = 5;
-
-/**
- * Returns true when the error is a transient upstream failure (429 / 5xx /
- * connection timeout) that is worth retrying automatically.
- */
-export const isTransientRetryableError = (error: unknown): boolean => {
-  if (
-    error instanceof APIConnectionError ||
-    error instanceof APIConnectionTimeoutError ||
-    error instanceof InternalServerError ||
-    error instanceof RateLimitError
-  ) {
-    return true;
-  }
-
-  if (error instanceof OpenRouterError && (error.status === 429 || error.status >= 500)) {
-    return true;
-  }
-
-  if (error instanceof OpenAICompatibleError && (error.status === 429 || error.status >= 500)) {
-    return true;
-  }
-
-  if (typeof error === 'string') {
-    const lower = error.toLowerCase();
-    if (lower === 'terminated' || lower.startsWith('terminated:')) {
-      return true;
-    }
-  }
-
-  if (error instanceof ChainingTransportDowngradeError) {
-    return true;
-  }
-
-  if (error && typeof error === 'object') {
-    const statusRaw = (error as any).status ?? (error as any).statusCode;
-    const status = typeof statusRaw === 'number' ? statusRaw : parseInt(statusRaw, 10);
-    if (Number.isInteger(status) && (status === 429 || status >= 500)) {
-      return true;
-    }
-    const message = String((error as any).message || '').toLowerCase();
-    if (message.includes('websocket connection closed before response completed')) {
-      const closeCode = message.match(/code=(\d+)/)?.[1];
-      return closeCode ? closeCode === '1006' : true;
-    }
-    if (
-      message.includes('rate limit') ||
-      message.includes('too many requests') ||
-      message.includes('rate_limit') ||
-      message === 'terminated' ||
-      message.startsWith('terminated:')
-    ) {
-      return true;
-    }
-  }
-
-  return false;
-};
+export const DEFAULT_TRANSIENT_RETRIES = 5;
+export const getMaxTransientRetries = (providerConfig?: { streamMaxRetries?: number }): number =>
+  providerConfig?.streamMaxRetries ?? DEFAULT_TRANSIENT_RETRIES;
+export const MAX_TRANSIENT_RETRIES = DEFAULT_TRANSIENT_RETRIES;
 
 export const isRecoverableModelError = (error: unknown): boolean => {
   if (!(error instanceof ModelBehaviorError)) {

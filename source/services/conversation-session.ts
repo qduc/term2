@@ -4,9 +4,9 @@ import { ConversationStore } from './conversation-store.js';
 import type { AgentInputItem } from '@openai/agents';
 import {
   decideRetry,
+  getMaxTransientRetries,
   isTransientRetryableError,
   MAX_HALLUCINATION_RETRIES,
-  MAX_TRANSIENT_RETRIES,
 } from './conversation-retry-policy.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../tools/types.js';
@@ -44,6 +44,12 @@ export type ConversationResult = ConversationTerminal;
 const supportsConversationChaining = (providerId: string): boolean => {
   const providerDef = getProvider(providerId);
   return providerDef?.capabilities?.supportsConversationChaining ?? false;
+};
+
+const getTransientRetryDelay = (attempt: number): number => {
+  const base = Math.min(500 * Math.pow(2, attempt - 1), 30000);
+  const jitter = 0.9 + Math.random() * 0.2;
+  return Math.round(base * jitter);
 };
 
 const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
@@ -767,6 +773,11 @@ export class ConversationSession {
     const text = turn.text;
     let addedUserMessage = false;
     const ledgerSnapshot = this.toolLedger.export();
+    const maxTransientRetries = getMaxTransientRetries({
+      streamMaxRetries: getMethod<[], number | undefined>(this.agentClient, 'getStreamMaxRetries')?.call(
+        this.agentClient,
+      ),
+    });
     this.toolLedger.beginTurn();
     try {
       this.logger.debug('Conversation stream start', {
@@ -1104,9 +1115,9 @@ export class ConversationSession {
         return;
       }
 
-      if (isTransientRetryableError(error) && transientRetryCount < MAX_TRANSIENT_RETRIES) {
+      if (isTransientRetryableError(error) && transientRetryCount < maxTransientRetries) {
         const attempt = transientRetryCount + 1;
-        const delay = Math.min(500 * Math.pow(2, attempt - 1), 30000);
+        const delay = getTransientRetryDelay(attempt);
 
         this.logger.warn('Transient upstream error detected, retrying turn', {
           eventType: 'retry.transient',
@@ -1115,7 +1126,7 @@ export class ConversationSession {
           retryType: 'upstream',
           retryAttempt: attempt,
           attempt,
-          maxRetries: MAX_TRANSIENT_RETRIES,
+          maxRetries: maxTransientRetries,
           sessionId: this.id,
           traceId: this.logger.getCorrelationId(),
           errorMessage: error instanceof Error ? error.message : String(error),
@@ -1126,7 +1137,7 @@ export class ConversationSession {
           type: 'retry',
           toolName: 'turn',
           attempt,
-          maxRetries: MAX_TRANSIENT_RETRIES,
+          maxRetries: maxTransientRetries,
           errorMessage: error instanceof Error ? error.message : String(error),
           retryType: 'upstream',
         };
@@ -1159,7 +1170,7 @@ export class ConversationSession {
         return;
       }
 
-      if (isTransientRetryableError(error) && stream && transportFallbackRetryCount < 1) {
+      if (isTransientRetryableError(error) && transportFallbackRetryCount < 1) {
         const forceTransportDowngrade = getMethod<[unknown], boolean>(this.agentClient, 'forceTransportDowngrade');
         const didDowngrade = forceTransportDowngrade?.call(this.agentClient, error) ?? false;
 
@@ -1190,19 +1201,23 @@ export class ConversationSession {
 
           if (!this.#isCurrentGeneration(gen)) return;
 
-          this.#clearPreviousResponseId();
-          this.#restoreCompletedToolLedgerEntries(ledgerSnapshot);
+          if (stream) {
+            this.#clearPreviousResponseId();
+            this.#restoreCompletedToolLedgerEntries(ledgerSnapshot);
 
-          const reconciled = reconcileHistoryWithToolLedger(
-            this.conversationStore.getHistory(),
-            this.toolLedger.export(),
-          );
-          if (reconciled.addedCompletedPairs > 0) {
-            this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+            const reconciled = reconcileHistoryWithToolLedger(
+              this.conversationStore.getHistory(),
+              this.toolLedger.export(),
+            );
+            if (reconciled.addedCompletedPairs > 0) {
+              this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+            }
+          } else {
+            this.conversationStore.removeLastUserMessage();
           }
 
           yield* this.run(turn, {
-            skipUserMessage: true,
+            skipUserMessage: Boolean(stream),
             transientRetryCount: 0,
             transportFallbackRetryCount: attempt,
           });
@@ -1439,16 +1454,21 @@ export class ConversationSession {
           yield toTerminalEvent(resolvedResult);
           return;
         } catch (error) {
-          if (isTransientRetryableError(error) && transientRetryCount < MAX_TRANSIENT_RETRIES) {
+          const maxTransientRetries = getMaxTransientRetries({
+            streamMaxRetries: getMethod<[], number | undefined>(this.agentClient, 'getStreamMaxRetries')?.call(
+              this.agentClient,
+            ),
+          });
+          if (isTransientRetryableError(error) && transientRetryCount < maxTransientRetries) {
             transientRetryCount++;
-            const delay = Math.min(500 * Math.pow(2, transientRetryCount - 1), 30000);
+            const delay = getTransientRetryDelay(transientRetryCount);
             this.logger.warn('Transient error in continuation, retrying', {
               eventType: 'retry.transient',
               category: 'retry',
               phase: 'retry',
               retryType: 'upstream',
               retryAttempt: transientRetryCount,
-              maxRetries: MAX_TRANSIENT_RETRIES,
+              maxRetries: maxTransientRetries,
               sessionId: this.id,
               traceId: this.logger.getCorrelationId(),
               errorMessage: error instanceof Error ? error.message : String(error),
@@ -1458,7 +1478,7 @@ export class ConversationSession {
               type: 'retry',
               toolName: 'continuation',
               attempt: transientRetryCount,
-              maxRetries: MAX_TRANSIENT_RETRIES,
+              maxRetries: maxTransientRetries,
               errorMessage: error instanceof Error ? error.message : String(error),
               retryType: 'upstream',
             };

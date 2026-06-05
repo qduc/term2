@@ -4,6 +4,9 @@ import { describeError } from '../utils/error-helpers.js';
 import { summarizeReceivedTraffic } from '../services/provider-traffic.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
+import { isRetryableTransportError } from '../services/retry-error-classification.js';
+
+export { isNetworkProtocolError } from '../services/retry-error-classification.js';
 
 export interface FallbackState {
   isDowngraded: boolean;
@@ -26,74 +29,7 @@ export class ChainingTransportDowngradeError extends Error {
   }
 }
 
-export function isNetworkProtocolError(err: any): boolean {
-  if (!err) return false;
-
-  // Check standard Node.js system error codes
-  if (typeof err.code === 'string') {
-    const code = err.code.toUpperCase();
-    if (
-      code === 'ENOTFOUND' ||
-      code === 'ECONNREFUSED' ||
-      code === 'ETIMEDOUT' ||
-      code === 'EPIPE' ||
-      code === 'ECONNRESET' ||
-      code === 'EHOSTUNREACH' ||
-      code === 'ENETUNREACH'
-    ) {
-      return true;
-    }
-  }
-
-  const message = (err.message || '').toLowerCase();
-
-  // Exclude auth errors and rate limits (401, 403, 429) explicitly
-  if (
-    message.includes('unexpected server response: 401') ||
-    message.includes('unexpected server response: 403') ||
-    message.includes('unexpected server response: 429')
-  ) {
-    return false;
-  }
-
-  const unexpectedServerResponseMatch = message.match(/unexpected server response:\s*(\d{3})/);
-  if (unexpectedServerResponseMatch) {
-    const status = Number(unexpectedServerResponseMatch[1]);
-    return status === 502 || status === 503 || status === 504;
-  }
-
-  // WebSocket transport specific and generic connection error signatures
-  if (
-    message.includes('websocket connection closed') ||
-    message.includes('websocket is not open') ||
-    message.includes('websocket open timed out') ||
-    message.includes('websocket idle timeout') ||
-    message.includes('websocket first frame timeout') ||
-    message.includes('timed out before opening') ||
-    message.includes('connection timed out') ||
-    message.includes('socket hang up') ||
-    message.includes('pong timeout') ||
-    message.includes('unexpected server response:') || // e.g. unexpected server response: 502/503
-    message.includes('failed to open') ||
-    message.includes('connection error') ||
-    message.includes('connection failed')
-  ) {
-    return true;
-  }
-
-  if (err.name === 'InvalidStateError') {
-    return true;
-  }
-
-  // Inspect the cause recursively if available
-  if (err.cause && isNetworkProtocolError(err.cause)) {
-    return true;
-  }
-
-  return false;
-}
-
-const DEFAULT_STREAM_MAX_RETRIES = 5;
+export const DEFAULT_STREAM_MAX_RETRIES = 5;
 
 const CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES = new Set([
   'function_call_output',
@@ -181,21 +117,6 @@ type PreparedCodexRequest = {
 };
 
 type WarmupKind = 'unary' | 'stream';
-
-function isFirstFrameTimeoutError(err: unknown): boolean {
-  if (!err || typeof (err as any).message !== 'string') return false;
-  return (err as any).message.toLowerCase().includes('websocket first frame timeout');
-}
-
-function isRetryableAbnormalCloseError(err: unknown): boolean {
-  if (!err || typeof (err as any).message !== 'string') return false;
-  const message = (err as any).message.toLowerCase();
-  return message.includes('websocket connection closed before response completed') && message.includes('code=1006');
-}
-
-function shouldRetryBeforeResponseStart(err: unknown): boolean {
-  return isFirstFrameTimeoutError(err) || isRetryableAbnormalCloseError(err) || isNetworkProtocolError(err);
-}
 
 // The SDK's convertToOutputItem crashes with TypeError when the WS model returns
 // a failed API response that has no `output` field. Treat it as a WS-path failure
@@ -493,79 +414,60 @@ export class FallbackResponsesModel implements Model {
       });
     }
 
-    let firstFrameRetries = 0;
-    while (true) {
-      try {
-        const response = await this.wsModel.getResponse(effectiveRequest);
-        this.#rememberCodexResponseId(getResponseIdFromResponse(response));
+    try {
+      const response = await this.wsModel.getResponse(effectiveRequest);
+      this.#rememberCodexResponseId(getResponseIdFromResponse(response));
 
-        // Log response complete
+      // Log response complete
+      if (this.loggingService && this.providerId) {
+        const summary = {
+          transport: 'json' as const,
+          status: 200,
+          errorFrames: [],
+          malformedFrames: [],
+          unknownFrames: [],
+          payload: response.providerData || response,
+        };
+
+        this.loggingService.debug(`${this.providerId} ws response received`, {
+          eventType: `${eventPrefix}.response.received`,
+          category: 'provider',
+          phase: 'provider_response',
+          direction: 'received',
+          ...baseMeta,
+          status: 200,
+          text: response.output?.[0]?.type === 'message' ? (response.output[0] as any).content?.[0]?.text : undefined,
+          payload: summary,
+        });
+      }
+
+      return response;
+    } catch (error) {
+      if (isRetryableTransportError(error).transportFallback || isWsResponseOutputMissing(error)) {
         if (this.loggingService && this.providerId) {
-          const summary = {
-            transport: 'json' as const,
-            status: 200,
-            errorFrames: [],
-            malformedFrames: [],
-            unknownFrames: [],
-            payload: response.providerData || response,
-          };
-
-          this.loggingService.debug(`${this.providerId} ws response received`, {
-            eventType: `${eventPrefix}.response.received`,
+          this.loggingService.error(`${this.providerId} ws request failed`, {
+            eventType: 'provider.response.failed',
             category: 'provider',
             phase: 'provider_response',
-            direction: 'received',
             ...baseMeta,
-            status: 200,
-            text: response.output?.[0]?.type === 'message' ? (response.output[0] as any).content?.[0]?.text : undefined,
-            payload: summary,
+            error: describeError(error),
           });
         }
 
+        this.#notifyDowngrade(error);
+        // For Codex, the HTTP endpoint does not support conversation chaining.
+        // If we have a chained request, throw so the session can retry with
+        // full history.
+        if (this.providerId === 'codex' && effectiveRequest.previousResponseId) {
+          throw new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP', {
+            cause: error,
+          });
+        }
+        const response = await this.httpModel.getResponse(effectiveRequest);
+        this.#rememberCodexResponseId(getResponseIdFromResponse(response));
         return response;
-      } catch (error) {
-        if (shouldRetryBeforeResponseStart(error) && firstFrameRetries < DEFAULT_STREAM_MAX_RETRIES) {
-          firstFrameRetries++;
-          if (this.loggingService && this.providerId) {
-            this.loggingService.warn?.(`${this.providerId} ws request failed before response start, retrying`, {
-              eventType: 'provider.response.retry',
-              category: 'provider',
-              phase: 'provider_response',
-              ...baseMeta,
-              attempt: firstFrameRetries,
-              maxRetries: DEFAULT_STREAM_MAX_RETRIES,
-              error: describeError(error),
-            });
-          }
-          continue;
-        }
-
-        if (isNetworkProtocolError(error) || isWsResponseOutputMissing(error)) {
-          if (this.loggingService && this.providerId) {
-            this.loggingService.error(`${this.providerId} ws request failed`, {
-              eventType: 'provider.response.failed',
-              category: 'provider',
-              phase: 'provider_response',
-              ...baseMeta,
-              error: describeError(error),
-            });
-          }
-
-          this.#notifyDowngrade(error);
-          // For Codex, the HTTP endpoint does not support conversation chaining.
-          // If we have a chained request, throw so the session can retry with
-          // full history.
-          if (this.providerId === 'codex' && effectiveRequest.previousResponseId) {
-            throw new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP', {
-              cause: error,
-            });
-          }
-          const response = await this.httpModel.getResponse(effectiveRequest);
-          this.#rememberCodexResponseId(getResponseIdFromResponse(response));
-          return response;
-        }
-        throw error;
       }
+      throw error;
     }
   }
 
@@ -633,103 +535,84 @@ export class FallbackResponsesModel implements Model {
       });
     }
 
-    let firstFrameRetries = 0;
-    while (true) {
-      let started = false;
-      const sseEvents: any[] = [];
-      try {
-        const stream = this.wsModel.getStreamedResponse(effectiveRequest);
-        for await (const event of stream) {
-          if (event.type === 'model' && event.event) {
-            sseEvents.push(event.event);
-          }
-          this.#rememberCodexResponseId(getResponseIdFromStreamEvent(event));
-          started = true;
-          yield event;
+    let started = false;
+    const sseEvents: any[] = [];
+    try {
+      const stream = this.wsModel.getStreamedResponse(effectiveRequest);
+      for await (const event of stream) {
+        if (event.type === 'model' && event.event) {
+          sseEvents.push(event.event);
         }
+        this.#rememberCodexResponseId(getResponseIdFromStreamEvent(event));
+        started = true;
+        yield event;
+      }
 
-        // Log response complete
-        if (this.loggingService && this.providerId && sseEvents.length > 0) {
-          const sseText = sseEvents.map((ev) => `data: ${JSON.stringify(ev)}`).join('\n\n');
+      // Log response complete
+      if (this.loggingService && this.providerId && sseEvents.length > 0) {
+        const sseText = sseEvents.map((ev) => `data: ${JSON.stringify(ev)}`).join('\n\n');
 
-          const fakeResponse = new Response(sseText, {
-            status: 200,
-            headers: { 'Content-Type': 'text/event-stream' },
-          });
+        const fakeResponse = new Response(sseText, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        });
 
-          const summary = await summarizeReceivedTraffic(fakeResponse);
-          const summaryPayload = summary.payload as any;
-          const responseText = summaryPayload?.choices?.[0]?.delta?.content;
-          const toolCalls = summaryPayload?.choices?.[0]?.delta?.tool_calls;
+        const summary = await summarizeReceivedTraffic(fakeResponse);
+        const summaryPayload = summary.payload as any;
+        const responseText = summaryPayload?.choices?.[0]?.delta?.content;
+        const toolCalls = summaryPayload?.choices?.[0]?.delta?.tool_calls;
 
-          this.loggingService.debug(`${this.providerId} ws stream response received`, {
-            eventType: `${eventPrefix}.response.received`,
+        this.loggingService.debug(`${this.providerId} ws stream response received`, {
+          eventType: `${eventPrefix}.response.received`,
+          category: 'provider',
+          phase: 'provider_response',
+          direction: 'received',
+          ...baseMeta,
+          status: 200,
+          text: responseText,
+          toolCalls,
+          payload: summary,
+        });
+      }
+      return;
+    } catch (error) {
+      if (isRetryableTransportError(error).transportFallback) {
+        if (this.loggingService && this.providerId) {
+          this.loggingService.error(`${this.providerId} ws stream request failed`, {
+            eventType: 'provider.response.failed',
             category: 'provider',
             phase: 'provider_response',
-            direction: 'received',
             ...baseMeta,
-            status: 200,
-            text: responseText,
-            toolCalls,
-            payload: summary,
+            error: describeError(error),
           });
         }
-        return;
-      } catch (error) {
-        if (!started && shouldRetryBeforeResponseStart(error) && firstFrameRetries < DEFAULT_STREAM_MAX_RETRIES) {
-          firstFrameRetries++;
-          if (this.loggingService && this.providerId) {
-            this.loggingService.warn?.(`${this.providerId} ws stream failed before response start, retrying`, {
-              eventType: 'provider.response.retry',
-              category: 'provider',
-              phase: 'provider_response',
-              ...baseMeta,
-              attempt: firstFrameRetries,
-              maxRetries: DEFAULT_STREAM_MAX_RETRIES,
-              error: describeError(error),
+
+        // Mid-stream failures are retried by the session layer from repaired
+        // history. Do not sentence the rest of the session to HTTP before that
+        // retry budget is exhausted.
+        const isMidStreamFailure = started;
+        if (!isMidStreamFailure) {
+          this.#notifyDowngrade(error);
+        }
+        if (!started) {
+          // For Codex, the HTTP endpoint does not support conversation chaining
+          // (previous_response_id / server-managed history). If we have a chained
+          // request, a silent HTTP fallback would send a contextless delta. Instead,
+          // throw so the session layer can retry with full history.
+          if (this.providerId === 'codex' && effectiveRequest.previousResponseId) {
+            throw new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP', {
+              cause: error,
             });
           }
-          continue;
+          // Seamless fallback: no events yielded yet
+          for await (const event of this.httpModel.getStreamedResponse(effectiveRequest)) {
+            this.#rememberCodexResponseId(getResponseIdFromStreamEvent(event));
+            yield event;
+          }
+          return;
         }
-
-        if (isNetworkProtocolError(error)) {
-          if (this.loggingService && this.providerId) {
-            this.loggingService.error(`${this.providerId} ws stream request failed`, {
-              eventType: 'provider.response.failed',
-              category: 'provider',
-              phase: 'provider_response',
-              ...baseMeta,
-              error: describeError(error),
-            });
-          }
-
-          // Mid-stream failures are retried by the session layer from repaired
-          // history. Do not sentence the rest of the session to HTTP before that
-          // retry budget is exhausted.
-          const isMidStreamFailure = started;
-          if (!isMidStreamFailure) {
-            this.#notifyDowngrade(error);
-          }
-          if (!started) {
-            // For Codex, the HTTP endpoint does not support conversation chaining
-            // (previous_response_id / server-managed history). If we have a chained
-            // request, a silent HTTP fallback would send a contextless delta. Instead,
-            // throw so the session layer can retry with full history.
-            if (this.providerId === 'codex' && effectiveRequest.previousResponseId) {
-              throw new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP', {
-                cause: error,
-              });
-            }
-            // Seamless fallback: no events yielded yet
-            for await (const event of this.httpModel.getStreamedResponse(effectiveRequest)) {
-              this.#rememberCodexResponseId(getResponseIdFromStreamEvent(event));
-              yield event;
-            }
-            return;
-          }
-        }
-        throw error;
       }
+      throw error;
     }
   }
 

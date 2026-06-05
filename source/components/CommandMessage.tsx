@@ -265,7 +265,7 @@ const CommandMessage: FC<Props> = ({
     matchCount > 0 ? (
       <>
         {' '}
-        <Text dimColor>
+        <Text>
           ({matchCount} match{matchCount !== 1 ? 'es' : ''})
         </Text>
       </>
@@ -296,13 +296,10 @@ const CommandMessage: FC<Props> = ({
       return (
         <Box flexDirection="column">
           <Text color="red">
-            <Text bold>✖</Text> <Text dimColor>{displayCommand}</Text>
+            <Text bold>✖</Text> <Text>{displayCommand}</Text>
             {changeStatsElement}
           </Text>
-          <Text color="red" dimColor>
-            {' '}
-            → DENIED: {denialReason}
-          </Text>
+          <Text color="red"> → DENIED: {denialReason}</Text>
         </Box>
       );
     }
@@ -311,7 +308,7 @@ const CommandMessage: FC<Props> = ({
       return (
         <Box>
           <Text color="yellow">
-            <Text bold>▶</Text> <Text dimColor>{displayCommand}</Text>
+            <Text bold>▶</Text> <Text>{displayCommand}</Text>
             {changeStatsElement}
           </Text>
         </Box>
@@ -336,7 +333,7 @@ const CommandMessage: FC<Props> = ({
     return (
       <Box>
         <Text color="green">
-          <Text bold>✔</Text> <Text dimColor>{displayCommand}</Text>
+          <Text bold>✔</Text> <Text>{displayCommand}</Text>
           {changeStatsElement}
           {matchCountElement}
         </Text>

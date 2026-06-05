@@ -160,13 +160,13 @@ const BottomArea: FC<BottomAreaProps> = ({
             onReject={onReject}
             onTypeAnswer={onTypeAnswer}
           />
-        ) : isProcessing && thinkingStartedAt != null ? (
-          <Text color="#64748b">Thinking... {thinkingElapsedSeconds}s</Text>
         ) : isProcessing && toolCallStreamingInfo ? (
           <Text color="#64748b">
             Calling {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : 'tool'} (
             {toolCallStreamingInfo.argumentCharCount} chars){'.'.repeat(dotCount)}
           </Text>
+        ) : isProcessing && thinkingStartedAt != null ? (
+          <Text color="#64748b">Thinking... {thinkingElapsedSeconds}s</Text>
         ) : isProcessing ? (
           <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
         ) : showInput ? (

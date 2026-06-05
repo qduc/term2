@@ -534,3 +534,62 @@ test('tool_call_streaming_delta omits tool name when no output_item.added was se
   t.is(deltas[0].toolName, undefined);
   t.is(deltas[0].argumentCharCount, 7);
 });
+
+test('tool_call_streaming_delta tracks argument char count independently per tool call index', async (t) => {
+  const stream = makeStream([
+    // Tool call 0 starts
+    {
+      data: {
+        type: 'response.output_item.added',
+        output_index: 0,
+        output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
+      },
+    },
+    // Tool call 1 starts
+    {
+      data: {
+        type: 'response.output_item.added',
+        output_index: 1,
+        output_item: { type: 'function_call', name: 'find_files', id: 'call-2' },
+      },
+    },
+    // Arguments for tool call 0
+    {
+      data: {
+        type: 'response.output_item.delta',
+        output_index: 0,
+        delta: { arguments: '{"cmd":"ls"}' },
+      },
+    },
+    // Arguments for tool call 1
+    {
+      data: {
+        type: 'response.output_item.delta',
+        output_index: 1,
+        delta: { arguments: '{"pattern":"*.ts"}' },
+      },
+    },
+    // More arguments for tool call 0
+    {
+      data: {
+        type: 'response.output_item.delta',
+        output_index: 0,
+        delta: { arguments: ',"detailed":true' },
+      },
+    },
+  ]);
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+
+  const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
+  t.is(deltas.length, 3);
+  t.is(deltas[0].toolName, 'shell');
+  t.is(deltas[0].argumentCharCount, 12); // '{"cmd":"ls"}'.length
+  t.is(deltas[1].toolName, 'find_files');
+  t.is(deltas[1].argumentCharCount, 18); // '{"pattern":"*.ts"}'.length
+  t.is(deltas[2].toolName, 'shell');
+  t.is(deltas[2].argumentCharCount, 28); // 12 + ',"detailed":true'.length
+});

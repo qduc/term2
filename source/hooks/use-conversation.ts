@@ -78,7 +78,10 @@ const REASONING_RESPONSE_THROTTLE_MS = 200;
 const MAX_MESSAGE_COUNT = 300;
 
 const clearsThinkingIndicator = (eventType: string): boolean =>
-  eventType === 'text_delta' || eventType === 'tool_started' || eventType === 'final';
+  eventType === 'text_delta' ||
+  eventType === 'tool_started' ||
+  eventType === 'tool_call_streaming_delta' ||
+  eventType === 'final';
 
 const getInitialLastUsage = (messages: Message[]): NormalizedUsage | null => {
   for (let i = messages.length - 1; i >= 0; i--) {

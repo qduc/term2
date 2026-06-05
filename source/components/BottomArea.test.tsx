@@ -189,7 +189,7 @@ test('BottomArea falls back to processing when toolCallStreamingInfo is null', (
   unmount();
 });
 
-test('BottomArea shows thinking over tool call streaming when both are active', (t) => {
+test('BottomArea shows tool call streaming over thinking when both are active', (t) => {
   const originalNow = Date.now;
   Date.now = () => 5000;
 
@@ -200,9 +200,10 @@ test('BottomArea shows thinking over tool call streaming when both are active', 
     toolCallStreamingInfo: { toolName: 'shell', argumentCharCount: 100 },
   });
   const output = lastFrame() ?? '';
-  // Thinking takes priority over tool call streaming
-  t.true(output.includes('Thinking'));
-  t.false(output.includes('Calling'));
+  // Tool call streaming takes priority over thinking
+  t.true(output.includes('Calling'));
+  t.true(output.includes('shell'));
+  t.false(output.includes('Thinking'));
 
   unmount();
   Date.now = originalNow;

@@ -89,8 +89,8 @@ export async function* processStreamEvents(
 
   /** Tracks tool names from response.output_item.added events (Responses API). */
   const streamingToolNamesByIndex = new Map<number, string>();
-  /** Accumulated argument character count for current streaming tool calls. */
-  let streamingToolArgCharCount = 0;
+  /** Accumulated argument character count for each streaming tool call by index. */
+  const streamingToolArgCharCounts = new Map<number, number>();
 
   const emitText = (delta: string) => {
     if (!delta) return null;
@@ -207,17 +207,21 @@ export async function* processStreamEvents(
         const deltaSrc = meType === 'response.output_item.delta' ? modelEvent : eventData;
         const delta = asRecord(deltaSrc?.delta);
         if (delta && typeof delta.arguments === 'string' && delta.arguments) {
-          streamingToolArgCharCount += (delta.arguments as string).length;
           const idx =
             typeof (deltaSrc as Record<string, unknown>)?.output_index === 'number'
               ? ((deltaSrc as Record<string, unknown>).output_index as number)
               : -1;
-          const toolName = idx >= 0 ? streamingToolNamesByIndex.get(idx) : undefined;
-          yield {
-            type: 'tool_call_streaming_delta',
-            toolName,
-            argumentCharCount: streamingToolArgCharCount,
-          } satisfies ToolCallStreamingDeltaEvent;
+          if (idx >= 0) {
+            const prev = streamingToolArgCharCounts.get(idx) ?? 0;
+            const next = prev + (delta.arguments as string).length;
+            streamingToolArgCharCounts.set(idx, next);
+            const toolName = streamingToolNamesByIndex.get(idx);
+            yield {
+              type: 'tool_call_streaming_delta',
+              toolName,
+              argumentCharCount: next,
+            } satisfies ToolCallStreamingDeltaEvent;
+          }
         }
       }
 
@@ -237,11 +241,14 @@ export async function* processStreamEvents(
                   const name = getString(fn, 'name');
                   if (name) streamingToolNamesByIndex.set(tc?.index ?? 0, name);
                   if (typeof fn.arguments === 'string' && fn.arguments) {
-                    streamingToolArgCharCount += (fn.arguments as string).length;
+                    const tcIndex = tc?.index ?? 0;
+                    const prev = streamingToolArgCharCounts.get(tcIndex) ?? 0;
+                    const next = prev + (fn.arguments as string).length;
+                    streamingToolArgCharCounts.set(tcIndex, next);
                     yield {
                       type: 'tool_call_streaming_delta',
-                      toolName: streamingToolNamesByIndex.get(tc?.index ?? 0),
-                      argumentCharCount: streamingToolArgCharCount,
+                      toolName: streamingToolNamesByIndex.get(tcIndex),
+                      argumentCharCount: next,
                     } satisfies ToolCallStreamingDeltaEvent;
                   }
                 }

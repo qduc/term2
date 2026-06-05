@@ -201,7 +201,7 @@ test('CommandMessage renders apply_patch line counts in concise mode', async (t)
   const { lastFrame } = render(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  t.true(output.includes('[apply_patch] update_file src/file.ts'), `Expected concise command: ${output}`);
+  t.true(output.includes('Patched update_file src/file.ts'), `Expected concise command: ${output}`);
   t.true(output.includes('(+1, -1)'), `Expected change counts in concise output: ${output}`);
 });
 
@@ -222,7 +222,7 @@ test('CommandMessage renders search_replace line counts in concise mode', async 
   const { lastFrame } = render(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  t.true(output.includes('[search_replace]'), `Expected concise tool name: ${output}`);
+  t.true(output.includes('Edited'), `Expected concise tool name: ${output}`);
   t.true(output.includes('(+1, -1)'), `Expected change counts in concise output: ${output}`);
 });
 
@@ -494,7 +494,7 @@ test('CommandMessage renders non-shell tool concisely on a single line', async (
   const output = lastFrame() ?? '';
 
   t.true(output.includes('✔'), `Expected success icon in output: ${output}`);
-  t.true(output.includes('[create_file]'), `Expected tool name: ${output}`);
+  t.true(output.includes('Created'), `Expected tool name: ${output}`);
   t.true(output.includes('src/new-file.ts'), `Expected file path: ${output}`);
   t.false(output.includes('console.log'), `Expected content diff to be hidden: ${output}`);
 });
@@ -512,7 +512,7 @@ test('CommandMessage renders grep case-insensitive flag in concise mode', async 
   const { lastFrame } = render(<CommandMessage {...props} />);
   const output = lastFrame() ?? '';
 
-  t.true(output.includes('[grep]'), `Expected tool name: ${output}`);
+  t.true(output.includes('Searched'), `Expected tool name: ${output}`);
   t.true(output.includes('--ignore-case'), `Expected case-insensitive flag in output: ${output}`);
 });
 
@@ -653,7 +653,7 @@ test('CommandMessage does not show match count for non-search shell command in c
   t.false(output.includes('match'), `Expected no match count in output: ${output}`);
 });
 
-test('CommandMessage does not show match count for grep in standard mode', async (t) => {
+test('CommandMessage renders grep results grouped by file in standard mode', async (t) => {
   const props = {
     command: 'grep',
     toolName: 'grep',
@@ -667,7 +667,9 @@ test('CommandMessage does not show match count for grep in standard mode', async
   const { lastFrame } = render(<CommandMessage {...props} />);
   const output = lastFrame() ?? '';
 
-  t.false(output.includes('match'), `Expected no match count in standard mode: ${output}`);
+  t.true(output.includes('file1.ts'), `Expected file1.ts in output: ${output}`);
+  t.true(output.includes('file2.ts'), `Expected file2.ts in output: ${output}`);
+  t.true(output.includes('GREP RESULTS'), `Expected GREP RESULTS header in output: ${output}`);
 });
 
 test('CommandMessage does not show match count when output is empty', async (t) => {
@@ -685,4 +687,138 @@ test('CommandMessage does not show match count when output is empty', async (t) 
   const output = lastFrame() ?? '';
 
   t.false(output.includes('match'), `Expected no match count for empty output: ${output}`);
+});
+
+test('CommandMessage truncates error message in concise mode when error is longer than 4 lines', async (t) => {
+  const longError = 'Error line 1\nError line 2\nError line 3\nError line 4\nError line 5\nError line 6';
+  const props = {
+    command: 'npm test',
+    toolName: 'shell',
+    toolArgs: { command: 'npm test' },
+    status: 'failed' as const,
+    success: false,
+    displayMode: 'concise' as const,
+    failureReason: longError,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  // Should show first 3 lines
+  t.true(output.includes('Error line 1'), `Expected first line in output: ${output}`);
+  t.true(output.includes('Error line 2'), `Expected second line in output: ${output}`);
+  t.true(output.includes('Error line 3'), `Expected third line in output: ${output}`);
+  // Should NOT show middle lines
+  t.false(output.includes('Error line 4'), `Expected line 4 to be truncated: ${output}`);
+  t.false(output.includes('Error line 5'), `Expected line 5 to be truncated: ${output}`);
+  // Should show last line
+  t.true(output.includes('Error line 6'), `Expected last line in output: ${output}`);
+  // Should show truncation indicator
+  t.true(output.includes('more lines'), `Expected 'more lines' indicator in output: ${output}`);
+});
+
+test('CommandMessage renders read_file with line numbers in standard mode', async (t) => {
+  const props = {
+    command: 'read_file',
+    toolName: 'read_file',
+    toolArgs: { path: 'src/main.ts', start_line: 1, end_line: 2 },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'standard' as const,
+    output: 'File: src/main.ts (2 lines) [lines 1-2]\n===\nimport { foo } from "bar";\nfoo();',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('[READ FILE]'), `Expected header: ${output}`);
+  t.true(output.includes('src/main.ts'), `Expected file path: ${output}`);
+  t.true(output.includes('1 │ import { foo } from "bar";'), `Expected first line with number: ${output}`);
+  t.true(output.includes('2 │ foo();'), `Expected second line with number: ${output}`);
+});
+
+test('CommandMessage renders find_files lists in standard mode', async (t) => {
+  const props = {
+    command: 'find_files',
+    toolName: 'find_files',
+    toolArgs: { pattern: '*.ts' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'standard' as const,
+    output: 'src/a.ts\nsrc/b.ts',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('[FILE SEARCH]'), `Expected header: ${output}`);
+  t.true(output.includes('📄 src/a.ts'), `Expected file 1: ${output}`);
+  t.true(output.includes('📄 src/b.ts'), `Expected file 2: ${output}`);
+});
+
+test('CommandMessage renders subagent card in standard mode', async (t) => {
+  const props = {
+    command: 'run_subagent',
+    toolName: 'run_subagent',
+    toolArgs: { role: 'worker', task: 'some task' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'standard' as const,
+    output: 'Status: completed\nTools used: shell(3)\nFiles changed: src/a.ts\n\nSubagent finished successfully!',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('[SUBAGENT]'), `Expected header: ${output}`);
+  t.true(output.includes('worker'), `Expected subagent role: ${output}`);
+  t.true(output.includes('COMPLETED'), `Expected status: ${output}`);
+  t.true(output.includes('Tools: shell(3)'), `Expected tools summary: ${output}`);
+  t.true(output.includes('Changed: src/a.ts'), `Expected files summary: ${output}`);
+  t.true(output.includes('Subagent finished successfully!'), `Expected main text: ${output}`);
+});
+
+test('CommandMessage renders web_search dashboard in standard mode', async (t) => {
+  const props = {
+    command: 'web_search',
+    toolName: 'web_search',
+    toolArgs: { query: 'latest Ink' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'standard' as const,
+    output:
+      '## Answer\n\nInk is a React renderer.\n\n## Search Results\n\n### 1. Ink GitHub\n**URL:** https://github.com/vadimdemedes/ink\n\nReact for CLI.',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('[WEB SEARCH]'), `Expected header: ${output}`);
+  t.true(output.includes('Answer Summary'), `Expected answer card header: ${output}`);
+  t.true(output.includes('Ink is a React renderer.'), `Expected answer: ${output}`);
+  t.true(output.includes('1. Ink GitHub'), `Expected result title: ${output}`);
+  t.true(output.includes('https://github.com/vadimdemedes/ink'), `Expected result URL: ${output}`);
+  t.true(output.includes('React for CLI.'), `Expected result snippet: ${output}`);
+});
+
+test('CommandMessage renders web_fetch result in standard mode', async (t) => {
+  const props = {
+    command: 'web_fetch',
+    toolName: 'web_fetch',
+    toolArgs: { url: 'https://example.com' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'standard' as const,
+    output:
+      'Title: Example Domain\nURL: https://example.com\n\n## Table of Contents\n\n* [Header](#header)\n\n---\n\nMarkdown content here',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('[WEB FETCH]'), `Expected header: ${output}`);
+  t.true(output.includes('Example Domain'), `Expected title: ${output}`);
+  t.true(output.includes('https://example.com'), `Expected URL: ${output}`);
+  t.true(output.includes('Table of Contents'), `Expected TOC header: ${output}`);
+  t.true(output.includes('Markdown content here'), `Expected content: ${output}`);
 });

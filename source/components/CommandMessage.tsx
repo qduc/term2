@@ -44,6 +44,350 @@ const countOutputLines = (output: string | undefined): number => {
     .filter((line) => line.trim().length > 0).length;
 };
 
+const parseReadFileOutput = (output: string | undefined) => {
+  if (!output) return null;
+  const lines = output.split('\n');
+  if (lines.length >= 3 && lines[0]?.startsWith('File: ') && lines[1] === '===') {
+    const header = lines[0] ?? '';
+    const match = header.match(/File:\s*(.*?)\s*\((\d+)\s*lines\)\s*\[lines\s*(\d+)-(\d+)\]/);
+    const contentLines = lines.slice(2);
+    if (match) {
+      return {
+        filePath: match[1],
+        totalLines: parseInt(match[2] ?? '0', 10),
+        startLine: parseInt(match[3] ?? '1', 10),
+        endLine: parseInt(match[4] ?? '1', 10),
+        contentLines,
+      };
+    }
+  }
+  return null;
+};
+
+const parseGrepOutput = (output: string | undefined) => {
+  if (!output) return null;
+  const lines = output.split('\n');
+  const matchesByFile: Record<string, { lineNum: number; content: string }[]> = {};
+  let note: string | null = null;
+  let isAllMatches = true;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    if (line.startsWith('Note:')) {
+      note = line;
+      continue;
+    }
+    const match = line.match(/^(.*?):(\d+):(.*)$/);
+    if (match) {
+      const filePath = match[1] ?? '';
+      const lineNum = parseInt(match[2] ?? '0', 10);
+      const content = match[3] ?? '';
+      if (!matchesByFile[filePath]) {
+        matchesByFile[filePath] = [];
+      }
+      matchesByFile[filePath].push({ lineNum, content });
+    } else {
+      isAllMatches = false;
+      break;
+    }
+  }
+
+  if (isAllMatches && Object.keys(matchesByFile).length > 0) {
+    return { matchesByFile, note };
+  }
+  return null;
+};
+
+const parseFindFilesOutput = (output: string | undefined) => {
+  if (!output) return null;
+  const lines = output.split('\n');
+  const files: string[] = [];
+  let note: string | null = null;
+  let isAllFiles = true;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    if (line.startsWith('Note:')) {
+      note = line;
+      continue;
+    }
+    if (line.startsWith('Error:') || line.startsWith('No files found')) {
+      isAllFiles = false;
+      break;
+    }
+    files.push(line);
+  }
+
+  if (isAllFiles && files.length > 0) {
+    return { files, note };
+  }
+  return null;
+};
+
+const parseSubagentOutput = (output: string | undefined, toolArgs: any) => {
+  if (!output) return null;
+
+  let status = 'completed';
+  let toolsUsed = '';
+  let filesChanged = '';
+  let mainText = output;
+
+  const lines = output.split('\n');
+  const remainingLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('Status: ')) {
+      status = line.replace('Status: ', '').trim();
+    } else if (line.startsWith('Tools: ') || line.startsWith('Tools used: ')) {
+      toolsUsed = line.replace(/Tools( used)?: /, '').trim();
+    } else if (line.startsWith('Files changed: ')) {
+      filesChanged = line.replace('Files changed: ', '').trim();
+    } else if (line.startsWith('Error: ')) {
+      status = 'failed';
+      remainingLines.push(line);
+    } else {
+      remainingLines.push(line);
+    }
+  }
+
+  mainText = remainingLines.join('\n').trim();
+
+  return {
+    role: toolArgs?.role ?? 'subagent',
+    status,
+    toolsUsed,
+    filesChanged,
+    mainText,
+  };
+};
+
+const parseWebSearchOutput = (output: string | undefined) => {
+  if (!output) return null;
+
+  const normalized = output.replace(/^##\s+/gm, '## ').trim();
+  if (!normalized.includes('## Answer') && !normalized.includes('## Search Results')) {
+    return null;
+  }
+
+  let answer: string | null = null;
+  const results: { title: string; url: string; published?: string; content: string }[] = [];
+
+  const sections = normalized.split(/(?:^|\n)##\s+/);
+  for (const section of sections) {
+    const trimmed = section.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.startsWith('Answer')) {
+      answer = trimmed.replace(/^Answer\r?\n/, '').trim();
+    } else if (trimmed.startsWith('Search Results')) {
+      const resultItems = trimmed.split(/(?:^|\n)###\s+/);
+      for (const item of resultItems) {
+        const itemTrimmed = item.trim();
+        if (!itemTrimmed || itemTrimmed.startsWith('Search Results')) continue;
+
+        const lines = itemTrimmed.split('\n');
+        const titleLine = lines[0] ?? '';
+        const title = titleLine.replace(/^\d+\.\s*/, '').trim();
+
+        let url = '';
+        let published = '';
+        const contentLines: string[] = [];
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i]?.trim();
+          if (!line) continue;
+          if (line.startsWith('**URL:**')) {
+            url = line.replace('**URL:**', '').trim();
+          } else if (line.startsWith('**Published:**')) {
+            published = line.replace('**Published:**', '').trim();
+          } else if (line === '---') {
+            // End of item
+          } else {
+            contentLines.push(lines[i] ?? '');
+          }
+        }
+
+        if (title && url) {
+          results.push({
+            title,
+            url,
+            published: published || undefined,
+            content: contentLines.join('\n').trim(),
+          });
+        }
+      }
+    }
+  }
+
+  return { answer, results };
+};
+
+const parseWebFetchOutput = (output: string | undefined) => {
+  if (!output) return null;
+  const lines = output.split('\n');
+  if (lines.length >= 2 && lines[0]?.startsWith('Title: ') && lines[1]?.startsWith('URL: ')) {
+    const title = lines[0].replace('Title: ', '').trim();
+    const url = lines[1].replace('URL: ', '').trim();
+
+    let toc: string | null = null;
+    let tempFile: string | null = null;
+    let notes: string | null = null;
+    const contentLines: string[] = [];
+
+    let inToc = false;
+
+    for (let i = 2; i < lines.length; i++) {
+      const line = lines[i] ?? '';
+      const trimmedLine = line.trim();
+
+      if (trimmedLine === '## Table of Contents') {
+        inToc = true;
+        toc = '';
+        continue;
+      }
+
+      if (inToc && trimmedLine === '---') {
+        inToc = false;
+        continue;
+      }
+
+      if (inToc) {
+        toc += line + '\n';
+        continue;
+      }
+
+      if (trimmedLine.startsWith('**Note: Content still truncated.')) {
+        notes = (notes ? notes + '\n' : '') + trimmedLine;
+        continue;
+      }
+
+      if (trimmedLine.startsWith('**Full content saved to temp file:')) {
+        const match = trimmedLine.match(/temp file:\s*`(.*?)`/);
+        if (match) {
+          tempFile = match[1] ?? '';
+        }
+        continue;
+      }
+
+      if (trimmedLine.startsWith('The full content has been saved for reference.')) {
+        continue;
+      }
+
+      contentLines.push(line);
+    }
+
+    return {
+      title,
+      url,
+      toc: toc?.trim() || null,
+      tempFile,
+      notes,
+      content: contentLines.join('\n').trim(),
+    };
+  }
+  return null;
+};
+
+const parseCodeOutlineOutput = (output: string | undefined) => {
+  if (!output) return null;
+  const lines = output.split('\n');
+  if (lines.length >= 2 && lines[0]?.startsWith('FILE ') && lines[1]?.startsWith('LANG ')) {
+    const filePath = lines[0].replace('FILE ', '').trim();
+    const lang = lines[1].replace('LANG ', '').trim();
+
+    const imports: string[] = [];
+    const exports: string[] = [];
+    const decls: string[] = [];
+
+    let section: 'imports' | 'exports' | 'decls' | null = null;
+
+    for (let i = 2; i < lines.length; i++) {
+      const line = lines[i]?.trim();
+      if (!line) continue;
+      if (line === 'IMPORTS') {
+        section = 'imports';
+        continue;
+      }
+      if (line === 'EXPORTS') {
+        section = 'exports';
+        continue;
+      }
+      if (line === 'DECLARATIONS') {
+        section = 'decls';
+        continue;
+      }
+      if (line === 'EMPTY') {
+        continue;
+      }
+
+      if (section === 'imports') {
+        imports.push(line);
+      } else if (section === 'exports') {
+        exports.push(line);
+      } else if (section === 'decls') {
+        decls.push(line);
+      }
+    }
+
+    return { filePath, lang, imports, exports, decls };
+  }
+  return null;
+};
+
+const parseCodeContextSearchOutput = (output: string | undefined) => {
+  if (!output) return null;
+  const lines = output.split('\n');
+  if (lines.length >= 2 && lines[0]?.startsWith('QUERY ')) {
+    const queryType = lines[0].replace('QUERY ', '').trim();
+
+    if (queryType === 'related') {
+      const target = lines[1]?.startsWith('TARGET ') ? lines[1].replace('TARGET ', '').trim() : '';
+      const relatedFiles: { filePath: string; relations: string }[] = [];
+
+      let currentFile = '';
+      for (let i = 2; i < lines.length; i++) {
+        const line = lines[i]?.trim();
+        if (!line || line === 'NO_RESULTS') continue;
+        if (line.startsWith('REL ')) {
+          if (currentFile) {
+            relatedFiles.push({
+              filePath: currentFile,
+              relations: line.replace('REL ', '').trim(),
+            });
+            currentFile = '';
+          }
+        } else if (!line.startsWith('WARNING ')) {
+          currentFile = line;
+        }
+      }
+
+      return { queryType, target, relatedFiles };
+    } else if (queryType === 'symbol') {
+      const symbol = lines[1]?.startsWith('SYMBOL ') ? lines[1].replace('SYMBOL ', '').trim() : '';
+      const results: { filePath: string; lineNum: number; kind: string; name: string; exported: boolean }[] = [];
+
+      for (let i = 2; i < lines.length; i++) {
+        const line = lines[i]?.trim();
+        if (!line || line === 'NO_RESULTS' || line.startsWith('WARNING ')) continue;
+
+        const match = line.match(/^(.*?):(\d+)\s+(\w+)\s+(\S+)(?:\s+(exported))?$/);
+        if (match) {
+          results.push({
+            filePath: match[1] ?? '',
+            lineNum: parseInt(match[2] ?? '0', 10),
+            kind: match[3] ?? '',
+            name: match[4] ?? '',
+            exported: !!match[5],
+          });
+        }
+      }
+
+      return { queryType, symbol, results };
+    }
+  }
+  return null;
+};
+
 const formatToolArgs = (toolName: string | undefined, args: any): string => {
   if (!args || !toolName) {
     return '';
@@ -87,15 +431,75 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
       case 'grep': {
         const pattern = normalizedArgs.pattern || '';
         const path = normalizedArgs.path || '.';
-        const parts = [`"${pattern}"`, `"${path}"`];
-
+        const parts = [`for "${pattern}" in "${path}"`];
         if (normalizedArgs.mode === 'literal') parts.push('--literal');
         if (normalizedArgs.case_sensitive) parts.push('--case-sensitive');
         else if (normalizedArgs.case_sensitive === false) parts.push('--ignore-case');
         if (normalizedArgs.file_pattern) parts.push(`--include "${normalizedArgs.file_pattern}"`);
         if (normalizedArgs.exclude_pattern) parts.push(`--exclude "${normalizedArgs.exclude_pattern}"`);
-
         return parts.join(' ');
+      }
+
+      case 'read_file':
+      case 'view_file': {
+        const path = normalizedArgs.path || 'unknown';
+        const start = normalizedArgs.start_line;
+        const end = normalizedArgs.end_line;
+        if (start !== undefined || end !== undefined) {
+          return `"${path}" (lines ${start ?? 1}-${end ?? 'end'})`;
+        }
+        return `"${path}"`;
+      }
+
+      case 'find_files': {
+        const pattern = normalizedArgs.pattern || '';
+        const path = normalizedArgs.path || '.';
+        if (path !== '.' && path) {
+          return `matching "${pattern}" in "${path}"`;
+        }
+        return `matching "${pattern}"`;
+      }
+
+      case 'run_subagent': {
+        const role = normalizedArgs.role || 'subagent';
+        const task = normalizedArgs.task || '';
+        const taskPreview = task.length > 40 ? `${task.slice(0, 40)}...` : task;
+        return `[${role}] "${taskPreview.replace(/\r?\n/g, ' ')}"`;
+      }
+
+      case 'web_search': {
+        const query = normalizedArgs.query || '';
+        return `for "${query}"`;
+      }
+
+      case 'web_fetch': {
+        const url = normalizedArgs.url || '';
+        return `"${url}"`;
+      }
+
+      case 'ask_mentor': {
+        const question = normalizedArgs.question || 'Unknown question';
+        const qPreview = question.length > 40 ? `${question.slice(0, 40)}...` : question;
+        return `"${qPreview.replace(/\r?\n/g, ' ')}"`;
+      }
+
+      case 'ask_user': {
+        const question = normalizedArgs.question || 'Unknown question';
+        const qPreview = question.length > 40 ? `${question.slice(0, 40)}...` : question;
+        return `"${qPreview.replace(/\r?\n/g, ' ')}"`;
+      }
+
+      case 'read_code_outline': {
+        const path = normalizedArgs.path || 'unknown';
+        return `of "${path}"`;
+      }
+
+      case 'code_context_search': {
+        const queryType = normalizedArgs.query_type;
+        if (queryType === 'symbol') {
+          return `for symbol "${normalizedArgs.symbol || ''}"`;
+        }
+        return `for files related to "${normalizedArgs.path || ''}"`;
       }
 
       case TOOL_NAME_APPLY_PATCH: {
@@ -127,11 +531,6 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
       case TOOL_NAME_CREATE_FILE: {
         const filePath = normalizedArgs.path || 'unknown';
         return `"${filePath}"`;
-      }
-
-      case 'ask_mentor': {
-        const question = normalizedArgs.question || 'Unknown question';
-        return question.length > 80 ? `${question.slice(0, 80)}...` : question;
       }
 
       default:
@@ -289,14 +688,67 @@ const CommandMessage: FC<Props> = ({
   }
 
   if (displayMode === 'concise') {
-    const isShell = !toolName || toolName === 'shell';
-    const displayCommand = isShell ? `$ ${command}` : `[${toolName}] ${formattedArgs}`.trim();
+    const displayAction = (() => {
+      const isShell = !toolName || toolName === 'shell';
+      if (isShell) {
+        return (
+          <>
+            <Text color="gray">$</Text> <Text>{command}</Text>
+          </>
+        );
+      }
+
+      const argsText = formattedArgs ? ` ${formattedArgs}` : '';
+      const renderAction = (verb: string) => (
+        <>
+          <Text dimColor>{verb}</Text>
+          <Text>{argsText}</Text>
+        </>
+      );
+
+      switch (toolName) {
+        case 'grep':
+          return renderAction('Searched');
+        case 'find_files':
+          return renderAction('Searched files');
+        case 'read_file':
+        case 'view_file':
+          return renderAction('Read');
+        case TOOL_NAME_APPLY_PATCH:
+          return renderAction('Patched');
+        case TOOL_NAME_SEARCH_REPLACE:
+          return renderAction('Edited');
+        case TOOL_NAME_CREATE_FILE:
+          return renderAction('Created');
+        case 'ask_mentor':
+          return renderAction('Asked mentor');
+        case 'ask_user':
+          return renderAction('Asked user');
+        case 'web_search':
+          return renderAction('Web searched');
+        case 'web_fetch':
+          return renderAction('Web fetched');
+        case 'read_code_outline':
+          return renderAction('Read outline');
+        case 'code_context_search':
+          return renderAction('Searched context');
+        case 'run_subagent':
+          return renderAction('Delegated');
+        default:
+          return (
+            <>
+              <Text dimColor>[{toolName}]</Text>
+              <Text>{argsText}</Text>
+            </>
+          );
+      }
+    })();
 
     if (isApprovalRejection) {
       return (
         <Box flexDirection="column">
           <Text color="red">
-            <Text bold>✖</Text> <Text>{displayCommand}</Text>
+            <Text bold>✖</Text> {displayAction}
             {changeStatsElement}
           </Text>
           <Text color="red"> → DENIED: {denialReason}</Text>
@@ -308,7 +760,7 @@ const CommandMessage: FC<Props> = ({
       return (
         <Box>
           <Text color="yellow">
-            <Text bold>▶</Text> <Text>{displayCommand}</Text>
+            <Text bold>▶</Text> {displayAction}
             {changeStatsElement}
           </Text>
         </Box>
@@ -317,14 +769,25 @@ const CommandMessage: FC<Props> = ({
 
     if (success === false || failureReason) {
       const errorMsg = failureReason || denialReason || 'failed';
+      // Truncate error message like standard mode truncates output
+      const truncatedError = (() => {
+        const lines = errorMsg.trimEnd().split('\n');
+        const maxLines = 3;
+        if (lines.length > maxLines + 1) {
+          const firstPart = lines.slice(0, maxLines).join('\n');
+          const lastLine = lines[lines.length - 1];
+          return `${firstPart}\n... (${lines.length - maxLines - 1} more lines)\n${lastLine}`;
+        }
+        return errorMsg;
+      })();
       return (
         <Box flexDirection="column">
           <Text color="red">
-            <Text bold>✖</Text> <Text>{displayCommand}</Text>
+            <Text bold>✖</Text> {displayAction}
             {changeStatsElement}
             {matchCountElement}
           </Text>
-          <Text color="red"> Error: {errorMsg}</Text>
+          <Text color="red"> Error: {truncatedError}</Text>
         </Box>
       );
     }
@@ -333,7 +796,7 @@ const CommandMessage: FC<Props> = ({
     return (
       <Box>
         <Text color="green">
-          <Text bold>✔</Text> <Text>{displayCommand}</Text>
+          <Text bold>✔</Text> {displayAction}
           {changeStatsElement}
           {matchCountElement}
         </Text>
@@ -424,6 +887,492 @@ const CommandMessage: FC<Props> = ({
         <Text color={success === false ? 'red' : COLOR_TOOL_OUTPUT}>{displayed}</Text>
       </Box>
     );
+  }
+
+  // Standard mode custom tool renderers
+  if (displayMode === 'standard' && success !== false && !failureReason && !isRunning) {
+    if (toolName === 'read_file' || toolName === 'view_file') {
+      const parsed = parseReadFileOutput(output) as any;
+      if (parsed) {
+        const { filePath, totalLines, startLine, endLine, contentLines } = parsed;
+        const maxContentLines = 10;
+        const displayLines: { lineNum: number; content: string }[] = [];
+        let truncatedCount = 0;
+
+        if (contentLines.length > maxContentLines + 1) {
+          const topCount = maxContentLines - 1;
+          for (let i = 0; i < topCount; i++) {
+            displayLines.push({ lineNum: startLine + i, content: contentLines[i] ?? '' });
+          }
+          truncatedCount = contentLines.length - topCount - 1;
+          displayLines.push({ lineNum: -1, content: `... (${truncatedCount} lines truncated) ...` });
+          displayLines.push({
+            lineNum: startLine + contentLines.length - 1,
+            content: contentLines[contentLines.length - 1] ?? '',
+          });
+        } else {
+          contentLines.forEach((content: string, i: number) => {
+            displayLines.push({ lineNum: startLine + i, content });
+          });
+        }
+
+        return (
+          <Box flexDirection="column" marginY={1}>
+            <Box>
+              <Text color="cyan" bold>
+                📖 [READ FILE]
+              </Text>
+              <Text>
+                {' '}
+                {filePath} (Lines {startLine}-{endLine} of {totalLines})
+              </Text>
+            </Box>
+            <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginTop={1}>
+              {displayLines.map((line, idx) => {
+                if (line.lineNum === -1) {
+                  return (
+                    <Text key={idx} color="gray" dimColor>
+                      {line.content}
+                    </Text>
+                  );
+                }
+                const lineNumStr = String(line.lineNum).padStart(5, ' ');
+                return (
+                  <Text key={idx}>
+                    <Text color="gray" dimColor>
+                      {lineNumStr} │{' '}
+                    </Text>
+                    <Text color={COLOR_TOOL_OUTPUT}>{line.content}</Text>
+                  </Text>
+                );
+              })}
+            </Box>
+          </Box>
+        );
+      }
+    }
+
+    if (toolName === 'grep') {
+      const parsed = parseGrepOutput(output) as any;
+      if (parsed) {
+        const { matchesByFile, note } = parsed;
+        const filePaths = Object.keys(matchesByFile);
+        return (
+          <Box flexDirection="column" marginY={1}>
+            <Box marginBottom={1}>
+              <Text color="cyan" bold>
+                🔍 [GREP RESULTS]
+              </Text>
+              <Text> for {toolArgs?.pattern || ''}</Text>
+            </Box>
+            {filePaths.map((filePath, fileIdx) => {
+              const matches = matchesByFile[filePath] ?? [];
+              return (
+                <Box key={fileIdx} flexDirection="column" marginBottom={1}>
+                  <Box>
+                    <Text color="cyan" bold>
+                      📄 {filePath}
+                    </Text>
+                    <Text color="gray">
+                      {' '}
+                      ({matches.length} match{matches.length !== 1 ? 'es' : ''})
+                    </Text>
+                  </Box>
+                  <Box flexDirection="column" paddingLeft={2}>
+                    {matches.map((match: any, matchIdx: number) => {
+                      const lineNumStr = String(match.lineNum).padStart(4, ' ');
+                      return (
+                        <Text key={matchIdx}>
+                          <Text color="gray" dimColor>
+                            {lineNumStr}:{' '}
+                          </Text>
+                          <Text color={COLOR_TOOL_OUTPUT}>{match.content}</Text>
+                        </Text>
+                      );
+                    })}
+                  </Box>
+                </Box>
+              );
+            })}
+            {note && (
+              <Box marginTop={1}>
+                <Text color="yellow">{note}</Text>
+              </Box>
+            )}
+          </Box>
+        );
+      }
+    }
+
+    if (toolName === 'find_files') {
+      const parsed = parseFindFilesOutput(output) as any;
+      if (parsed) {
+        const { files, note } = parsed;
+        return (
+          <Box flexDirection="column" marginY={1}>
+            <Box marginBottom={1}>
+              <Text color="cyan" bold>
+                📂 [FILE SEARCH]
+              </Text>
+              <Text>
+                {' '}
+                found {files.length} file{files.length !== 1 ? 's' : ''}
+              </Text>
+            </Box>
+            <Box flexDirection="column" paddingLeft={2}>
+              {files.map((file: string, idx: number) => (
+                <Text key={idx} color={COLOR_TOOL_OUTPUT}>
+                  📄 {file}
+                </Text>
+              ))}
+            </Box>
+            {note && (
+              <Box marginTop={1}>
+                <Text color="yellow">{note}</Text>
+              </Box>
+            )}
+          </Box>
+        );
+      }
+    }
+
+    if (toolName === 'run_subagent') {
+      const parsed = parseSubagentOutput(output, toolArgs) as any;
+      if (parsed) {
+        const { role, status, toolsUsed, filesChanged, mainText } = parsed;
+        const statusColor = status === 'completed' ? 'green' : status === 'failed' ? 'red' : 'yellow';
+        return (
+          <Box flexDirection="column" marginY={1}>
+            <Box>
+              <Text color="cyan" bold>
+                🤖 [SUBAGENT]
+              </Text>
+              <Text> {role} </Text>
+              <Text color={statusColor} bold>
+                ({status.toUpperCase()})
+              </Text>
+            </Box>
+            {(toolsUsed || filesChanged) && (
+              <Box flexDirection="column" paddingLeft={2} marginY={0.5}>
+                {toolsUsed && (
+                  <Text color="gray">
+                    🛠️ Tools: <Text color="white">{toolsUsed}</Text>
+                  </Text>
+                )}
+                {filesChanged && (
+                  <Text color="gray">
+                    📝 Changed: <Text color="white">{filesChanged}</Text>
+                  </Text>
+                )}
+              </Box>
+            )}
+            {mainText && (
+              <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1} marginTop={1}>
+                <Text color={COLOR_TOOL_OUTPUT}>{mainText}</Text>
+              </Box>
+            )}
+          </Box>
+        );
+      }
+    }
+
+    if (toolName === 'web_search') {
+      const parsed = parseWebSearchOutput(output) as any;
+      if (parsed) {
+        const { answer, results } = parsed;
+        return (
+          <Box flexDirection="column" marginY={1}>
+            <Box marginBottom={1}>
+              <Text color="cyan" bold>
+                🌐 [WEB SEARCH]
+              </Text>
+              <Text> "{toolArgs?.query || ''}"</Text>
+            </Box>
+            {answer && (
+              <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginBottom={1}>
+                <Text color="yellow" bold>
+                  💡 Answer Summary
+                </Text>
+                <Text color={COLOR_TOOL_OUTPUT}>{answer}</Text>
+              </Box>
+            )}
+            {results && results.length > 0 && (
+              <Box flexDirection="column">
+                <Text color="cyan" bold>
+                  📋 Search Results:
+                </Text>
+                {results.map((res: any, idx: number) => (
+                  <Box key={idx} flexDirection="column" marginTop={1} paddingLeft={2}>
+                    <Text bold color="white">
+                      {idx + 1}. {res.title}
+                    </Text>
+                    <Text color="blue" underline>
+                      🔗 {res.url}
+                    </Text>
+                    {res.published && (
+                      <Text color="gray" dimColor>
+                        📅 Published: {res.published}
+                      </Text>
+                    )}
+                    <Box marginTop={1}>
+                      <Text color={COLOR_TOOL_OUTPUT}>{res.content}</Text>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+        );
+      }
+    }
+
+    if (toolName === 'web_fetch') {
+      const parsed = parseWebFetchOutput(output) as any;
+      if (parsed) {
+        const { title, url, toc, tempFile, notes, content } = parsed;
+        const maxLines = 15;
+        const contentLines = content.split('\n');
+        let displayContent = content;
+        let truncatedCount = 0;
+        if (contentLines.length > maxLines + 1) {
+          const firstPart = contentLines.slice(0, maxLines).join('\n');
+          const lastLine = contentLines[contentLines.length - 1];
+          truncatedCount = contentLines.length - maxLines - 1;
+          displayContent = `${firstPart}\n\n... (${truncatedCount} lines of content truncated for preview) ...\n\n${lastLine}`;
+        }
+        return (
+          <Box flexDirection="column" marginY={1}>
+            <Box>
+              <Text color="cyan" bold>
+                📥 [WEB FETCH]
+              </Text>
+              <Text> {title}</Text>
+            </Box>
+            <Box paddingLeft={2}>
+              <Text color="blue" underline>
+                🔗 {url}
+              </Text>
+            </Box>
+            {toc && (
+              <Box flexDirection="column" borderStyle="classic" borderColor="gray" paddingX={1} marginY={1} width={50}>
+                <Text color="yellow" bold>
+                  📋 Table of Contents
+                </Text>
+                <Text color="gray">{toc}</Text>
+              </Box>
+            )}
+            {content && (
+              <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginTop={1}>
+                <Text color={COLOR_TOOL_OUTPUT}>{displayContent}</Text>
+              </Box>
+            )}
+            {tempFile && (
+              <Box marginTop={1}>
+                <Text color="yellow">
+                  💾 Full content saved to:{' '}
+                  <Text bold color="white">
+                    {tempFile}
+                  </Text>
+                </Text>
+              </Box>
+            )}
+            {notes && (
+              <Box marginTop={0.5}>
+                <Text color="yellow">⚠️ {notes}</Text>
+              </Box>
+            )}
+          </Box>
+        );
+      }
+    }
+
+    if (toolName === 'ask_mentor') {
+      return (
+        <Box flexDirection="column" marginY={1}>
+          <Box>
+            <Text color="cyan" bold>
+              🧠 [MENTOR QUESTION]
+            </Text>
+            <Text color="white" italic>
+              {' '}
+              "{toolArgs?.question || ''}"
+            </Text>
+          </Box>
+          <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={1} marginTop={1}>
+            <Text color="magenta" bold>
+              💬 Mentor Response
+            </Text>
+            <Text color={COLOR_TOOL_OUTPUT}>{output}</Text>
+          </Box>
+        </Box>
+      );
+    }
+
+    if (toolName === 'ask_user') {
+      const options = toolArgs?.options;
+      return (
+        <Box flexDirection="column" marginY={1}>
+          <Box>
+            <Text color="cyan" bold>
+              ❓ [ASK USER]
+            </Text>
+            <Text color="white"> {toolArgs?.question || 'Unknown question'}</Text>
+          </Box>
+          {options && Array.isArray(options) && options.length > 0 && (
+            <Box paddingLeft={2} marginY={0.5}>
+              <Text color="gray">Options: </Text>
+              {options.map((opt: string, idx: number) => (
+                <Text key={idx} color={idx === 0 ? 'green' : 'white'}>
+                  {idx > 0 ? ', ' : ''}[{opt}]{idx === 0 ? ' (Recommended)' : ''}
+                </Text>
+              ))}
+            </Box>
+          )}
+          <Box paddingLeft={2} marginTop={0.5}>
+            <Text color="gray">🗣️ Response: </Text>
+            <Text color="green" bold>
+              {output || 'No response yet'}
+            </Text>
+          </Box>
+        </Box>
+      );
+    }
+
+    if (toolName === 'read_code_outline') {
+      const parsed = parseCodeOutlineOutput(output) as any;
+      if (parsed) {
+        const { filePath, lang, imports, exports, decls } = parsed;
+        return (
+          <Box flexDirection="column" marginY={1}>
+            <Box marginBottom={1}>
+              <Text color="cyan" bold>
+                📑 [CODE OUTLINE]
+              </Text>
+              <Text>
+                {' '}
+                {filePath} ({lang})
+              </Text>
+            </Box>
+            {imports && imports.length > 0 && (
+              <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
+                <Text color="yellow" bold>
+                  📦 Imports:
+                </Text>
+                {imports.map((imp: string, idx: number) => (
+                  <Text key={idx} color={COLOR_TOOL_OUTPUT}>
+                    {' '}
+                    • {imp}
+                  </Text>
+                ))}
+              </Box>
+            )}
+            {exports && exports.length > 0 && (
+              <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
+                <Text color="green" bold>
+                  📤 Exports:
+                </Text>
+                {exports.map((exp: string, idx: number) => (
+                  <Text key={idx} color={COLOR_TOOL_OUTPUT}>
+                    {' '}
+                    • {exp}
+                  </Text>
+                ))}
+              </Box>
+            )}
+            {decls && decls.length > 0 && (
+              <Box flexDirection="column" paddingLeft={2}>
+                <Text color="blue" bold>
+                  🛠️ Declarations:
+                </Text>
+                {decls.map((decl: string, idx: number) => (
+                  <Text key={idx} color={COLOR_TOOL_OUTPUT}>
+                    {' '}
+                    • {decl}
+                  </Text>
+                ))}
+              </Box>
+            )}
+          </Box>
+        );
+      }
+    }
+
+    if (toolName === 'code_context_search') {
+      const parsed = parseCodeContextSearchOutput(output) as any;
+      if (parsed) {
+        const { queryType } = parsed;
+        if (queryType === 'related') {
+          const { target, relatedFiles } = parsed;
+          return (
+            <Box flexDirection="column" marginY={1}>
+              <Box marginBottom={1}>
+                <Text color="cyan" bold>
+                  🔗 [RELATED FILES]
+                </Text>
+                <Text> for {target}</Text>
+              </Box>
+              {!relatedFiles || relatedFiles.length === 0 ? (
+                <Box paddingLeft={2}>
+                  <Text color="gray">No related files found.</Text>
+                </Box>
+              ) : (
+                <Box flexDirection="column" paddingLeft={2}>
+                  {relatedFiles.map((f: any, idx: number) => (
+                    <Box key={idx} flexDirection="column" marginBottom={0.5}>
+                      <Text color="white">📄 {f.filePath}</Text>
+                      <Text color="gray" dimColor>
+                        {' '}
+                        Relations: {f.relations}
+                      </Text>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          );
+        } else {
+          const { symbol, results } = parsed;
+          return (
+            <Box flexDirection="column" marginY={1}>
+              <Box marginBottom={1}>
+                <Text color="cyan" bold>
+                  🔍 [SYMBOL SEARCH]
+                </Text>
+                <Text> "{symbol}"</Text>
+              </Box>
+              {!results || results.length === 0 ? (
+                <Box paddingLeft={2}>
+                  <Text color="gray">No symbol declarations found.</Text>
+                </Box>
+              ) : (
+                <Box flexDirection="column" paddingLeft={2}>
+                  {results.map((res: any, idx: number) => (
+                    <Text key={idx}>
+                      <Text color="white">
+                        📄 {res.filePath}:{res.lineNum}
+                      </Text>
+                      <Text color="gray" dimColor>
+                        {' '}
+                        │{' '}
+                      </Text>
+                      <Text color="yellow">
+                        {res.kind} {res.name}
+                      </Text>
+                      {res.exported && (
+                        <Text color="green" dimColor>
+                          {' '}
+                          (exported)
+                        </Text>
+                      )}
+                    </Text>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          );
+        }
+      }
+    }
   }
 
   // Special handling for approval-rejected shell commands: show the denial message

@@ -4,9 +4,27 @@ import * as path from 'path';
 import * as os from 'os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { tool as createTool, RunContext } from '@openai/agents';
 import { createGrepToolDefinition } from './grep.js';
+import { toolErrorFunction, wrapToolInvoke } from '../lib/tool-invoke.js';
 
 const execFileAsync = promisify(execFile);
+
+function createWrappedGrepTool() {
+  const definition = createGrepToolDefinition();
+  return wrapToolInvoke(
+    createTool({
+      name: definition.name,
+      description: definition.description,
+      parameters: definition.parameters,
+      strict: true,
+      errorFunction: toolErrorFunction,
+      execute: async (params, context, details) => definition.execute(params as any, context, details),
+    }),
+    definition.parameters,
+    { argumentParsing: definition.argumentParsing },
+  );
+}
 
 async function withTempDir(run: (dir: string) => Promise<void>) {
   const originalCwd = process.cwd;
@@ -40,5 +58,107 @@ test.serial('execute: file_pattern does not include gitignored files', async (t)
 
     t.true(result.includes('source/app.ts'));
     t.false(result.includes('tsconfig.tsbuildinfo'));
+  });
+});
+
+test.serial('execute: regex mode is the default', async (t) => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, 'notes.txt'), 'hello.world\nhello-world\n');
+
+    const result = await createGrepToolDefinition().execute({
+      pattern: 'hello.world',
+      path: '.',
+    });
+
+    t.true(result.includes('hello.world'));
+    t.true(result.includes('hello-world'));
+  });
+});
+
+test.serial('execute: searches are case-sensitive by default', async (t) => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, 'notes.txt'), 'axc\naXc\n');
+
+    const result = await createGrepToolDefinition().execute({
+      pattern: 'aXc',
+      path: '.',
+    });
+
+    t.false(result.includes('axc'));
+    t.true(result.includes('aXc'));
+  });
+});
+
+test.serial('execute: case_sensitive false enables case-insensitive search', async (t) => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, 'notes.txt'), 'axc\naXc\n');
+
+    const result = await createGrepToolDefinition().execute({
+      pattern: 'aXc',
+      path: '.',
+      case_sensitive: false,
+    });
+
+    t.true(result.includes('axc'));
+    t.true(result.includes('aXc'));
+  });
+});
+
+test.serial('execute: regex mode supports parsed digit class patterns', async (t) => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
+
+    const result = await createGrepToolDefinition().execute({
+      pattern: 'test\\d+',
+      path: '.',
+    });
+
+    t.false(result.includes('testabc'));
+    t.true(result.includes('test123'));
+    t.true(result.includes('test456'));
+  });
+});
+
+test.serial('execute: regex mode supports parsed escaped dot patterns', async (t) => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, 'notes.txt'), 'hello.hello\nhelloXhello\n');
+
+    const result = await createGrepToolDefinition().execute({
+      pattern: 'hello\\.hello',
+      path: '.',
+    });
+
+    t.true(result.includes('hello.hello'));
+    t.false(result.includes('helloXhello'));
+  });
+});
+
+test.serial('invoke: grep uses strict JSON parsing before regex execution', async (t) => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
+    const grep = createWrappedGrepTool();
+
+    const validJsonResult = await grep.invoke({} as RunContext, String.raw`{"pattern":"test\\d+","path":"."}`, {});
+    const invalidJsonResult = await grep.invoke({} as RunContext, String.raw`{"pattern":"test\d+","path":"."}`, {});
+
+    t.true(String(validJsonResult).includes('test123'));
+    t.true(String(validJsonResult).includes('test456'));
+    t.false(String(validJsonResult).includes('testabc'));
+    t.regex(String(invalidJsonResult), /Retry with/);
+  });
+});
+
+test.serial('execute: literal mode uses fixed-string matching', async (t) => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, 'notes.txt'), 'hello.world\nhello-world\n');
+
+    const result = await createGrepToolDefinition().execute({
+      pattern: 'hello.world',
+      path: '.',
+      mode: 'literal',
+    });
+
+    t.true(result.includes('hello.world'));
+    t.false(result.includes('hello-world'));
   });
 });

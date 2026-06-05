@@ -1299,6 +1299,7 @@ export class OpenAIAgentClient {
             },
           }),
           definition.parameters,
+          { argumentParsing: definition.argumentParsing },
         ),
       );
 

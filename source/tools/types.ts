@@ -25,6 +25,7 @@ export interface ToolDefinition<Params = any> {
   name: string;
   description: string;
   parameters: ZodObject<any, any>;
+  argumentParsing?: 'repair' | 'strict';
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval: (params: Params, context?: unknown) => Promise<boolean> | boolean;
   execute: (params: Params, context?: unknown, details?: unknown) => Promise<any> | any;

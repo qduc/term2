@@ -260,6 +260,8 @@ function buildAgentTools(
           return trimmedResult;
         },
       }),
+      definition.parameters,
+      { argumentParsing: definition.argumentParsing },
     ),
   );
 }

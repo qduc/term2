@@ -284,10 +284,16 @@ export const normalizeObjectParams = (params: unknown, schema?: z.ZodTypeAny): u
   return modified ? result : params;
 };
 
-export const normalizeToolInput = (input: unknown, schema?: z.ZodTypeAny): string => {
+type ToolInputNormalizationMode = 'repair' | 'strict';
+
+export const normalizeToolInput = (
+  input: unknown,
+  schema?: z.ZodTypeAny,
+  mode: ToolInputNormalizationMode = 'repair',
+): string => {
   let jsonStr = '';
   if (typeof input === 'string') {
-    jsonStr = repairJson(input);
+    jsonStr = mode === 'strict' ? input : repairJson(input);
   } else {
     try {
       jsonStr = JSON.stringify(input);
@@ -343,7 +349,11 @@ export const toolErrorFunction = (_context: unknown, error: unknown): string => 
   return `An error occurred while running the tool. Please try again. Error: ${details}`;
 };
 
-export const wrapToolInvoke = <T extends Tool>(tool: T, originalSchema?: z.ZodTypeAny): T => {
+export const wrapToolInvoke = <T extends Tool>(
+  tool: T,
+  originalSchema?: z.ZodTypeAny,
+  options: { argumentParsing?: ToolInputNormalizationMode } = {},
+): T => {
   // Only FunctionTool has an invoke method
   if (tool.type !== 'function') {
     return tool;
@@ -353,7 +363,7 @@ export const wrapToolInvoke = <T extends Tool>(tool: T, originalSchema?: z.ZodTy
   const originalInvoke = functionTool.invoke.bind(functionTool);
   functionTool.invoke = async (context: any, input: unknown, details: any) => {
     const targetSchema = originalSchema || functionTool.parameters;
-    const normalizedInput = normalizeToolInput(input, targetSchema as any);
+    const normalizedInput = normalizeToolInput(input, targetSchema as any, options.argumentParsing ?? 'repair');
 
     const runDiagnostics = (toolName: string, schema: z.ZodTypeAny, rawInput: any): string => {
       let parsedInput: any;

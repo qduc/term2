@@ -225,6 +225,43 @@ test('wrapToolInvoke repairs multiline string arguments before SDK validation', 
   t.is(result, '+line 1\n+line 2\n');
 });
 
+test('wrapToolInvoke strict parsing does not repair invalid JSON escapes', async (t) => {
+  const parametersSchema = z.object({
+    pattern: z.string(),
+  });
+  const rawTool = createTool({
+    name: 'grep',
+    description: 'grep tool',
+    parameters: parametersSchema,
+    errorFunction: toolErrorFunction,
+    execute: async (params) => params.pattern,
+  });
+
+  const wrappedTool = wrapToolInvoke(rawTool, parametersSchema, { argumentParsing: 'strict' });
+  const result = await wrappedTool.invoke({} as RunContext, String.raw`{"pattern":"\w"}`);
+
+  t.regex(result, /Tool input did not match schema for grep|Tool input was invalid for this tool/);
+  t.regex(result, /Retry with/);
+});
+
+test('wrapToolInvoke strict parsing accepts standard JSON regex escaping', async (t) => {
+  const parametersSchema = z.object({
+    pattern: z.string(),
+  });
+  const rawTool = createTool({
+    name: 'grep',
+    description: 'grep tool',
+    parameters: parametersSchema,
+    errorFunction: toolErrorFunction,
+    execute: async (params) => params.pattern,
+  });
+
+  const wrappedTool = wrapToolInvoke(rawTool, parametersSchema, { argumentParsing: 'strict' });
+  const result = await wrappedTool.invoke({} as RunContext, String.raw`{"pattern":"\\w"}`);
+
+  t.is(result, String.raw`\w`);
+});
+
 test('normalizeToolInput with schema filters sentinel values for optional fields', (t) => {
   const schema = z.object({
     path: z.string(),

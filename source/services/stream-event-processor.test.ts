@@ -346,26 +346,35 @@ test('emits tool_call_streaming_delta for Responses API argument deltas', async 
     {
       type: 'raw_model_stream_event',
       data: {
-        type: 'response.output_item.added',
-        output_index: 0,
-        output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
+        type: 'model',
+        event: {
+          type: 'response.output_item.added',
+          output_index: 0,
+          output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
+        },
       },
     },
     // Arguments stream in chunks
     {
       type: 'raw_model_stream_event',
       data: {
-        type: 'response.output_item.delta',
-        output_index: 0,
-        delta: { arguments: '{"command' },
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: '{"command',
+        },
       },
     },
     {
       type: 'raw_model_stream_event',
       data: {
-        type: 'response.output_item.delta',
-        output_index: 0,
-        delta: { arguments: '":"ls"}' },
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: '":"ls"}',
+        },
       },
     },
   ]);
@@ -383,6 +392,123 @@ test('emits tool_call_streaming_delta for Responses API argument deltas', async 
   // Second delta: name still available, count accumulated
   t.is(deltas[1].toolName, 'shell');
   t.is(deltas[1].argumentCharCount, 16); // full args length
+});
+
+test('emits tool_call_streaming_delta for custom tool input deltas', async (t) => {
+  const stream = makeStream([
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'model',
+        event: {
+          type: 'response.output_item.added',
+          output_index: 0,
+          output_item: { type: 'function_call', name: 'custom_tool', id: 'call-1' },
+        },
+      },
+    },
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'model',
+        event: {
+          type: 'response.custom_tool_call_input.delta',
+          output_index: 0,
+          delta: '{"arg',
+        },
+      },
+    },
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'model',
+        event: {
+          type: 'response.custom_tool_call_input.delta',
+          output_index: 0,
+          delta: '":1}',
+        },
+      },
+    },
+  ]);
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+
+  const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
+  t.is(deltas.length, 2);
+  t.is(deltas[0].toolName, 'custom_tool');
+  t.is(deltas[0].argumentCharCount, 5); // '{"arg'.length
+  t.is(deltas[1].argumentCharCount, 9);
+});
+
+test('emits tool_call_streaming_delta for MCP tool call argument deltas', async (t) => {
+  const stream = makeStream([
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'model',
+        event: {
+          type: 'response.output_item.added',
+          output_index: 0,
+          output_item: { type: 'function_call', name: 'mcp_tool', id: 'call-1' },
+        },
+      },
+    },
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'model',
+        event: {
+          type: 'response.mcp_call_arguments.delta',
+          output_index: 0,
+          delta: '{"param',
+        },
+      },
+    },
+  ]);
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+
+  const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
+  t.is(deltas.length, 1);
+  t.is(deltas[0].toolName, 'mcp_tool');
+  t.is(deltas[0].argumentCharCount, 7);
+});
+
+test('emits tool_call_streaming_delta for legacy response.output_item.delta fallback', async (t) => {
+  const stream = makeStream([
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'response.output_item.added',
+        output_index: 0,
+        output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
+      },
+    },
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'response.output_item.delta',
+        output_index: 0,
+        delta: { arguments: '{"command' },
+      },
+    },
+  ]);
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+
+  const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
+  t.is(deltas.length, 1);
+  t.is(deltas[0].toolName, 'shell');
+  t.is(deltas[0].argumentCharCount, 9);
 });
 
 test('emits tool_call_streaming_delta for Chat Completions API tool_calls deltas', async (t) => {
@@ -451,23 +577,32 @@ test('tool_call_streaming_delta accumulates argument char count across deltas', 
   const stream = makeStream([
     {
       data: {
-        type: 'response.output_item.delta',
-        output_index: 0,
-        delta: { arguments: 'aaa' },
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: 'aaa',
+        },
       },
     },
     {
       data: {
-        type: 'response.output_item.delta',
-        output_index: 0,
-        delta: { arguments: 'bbb' },
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: 'bbb',
+        },
       },
     },
     {
       data: {
-        type: 'response.output_item.delta',
-        output_index: 0,
-        delta: { arguments: 'ccc' },
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: 'ccc',
+        },
       },
     },
   ]);
@@ -488,16 +623,22 @@ test('tool_call_streaming_delta includes tool name from output_item.added when a
   const stream = makeStream([
     {
       data: {
-        type: 'response.output_item.added',
-        output_index: 0,
-        output_item: { type: 'function_call', name: 'find_files', id: 'call-1' },
+        type: 'model',
+        event: {
+          type: 'response.output_item.added',
+          output_index: 0,
+          output_item: { type: 'function_call', name: 'find_files', id: 'call-1' },
+        },
       },
     },
     {
       data: {
-        type: 'response.output_item.delta',
-        output_index: 0,
-        delta: { arguments: '{"pattern' },
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: '{"pattern',
+        },
       },
     },
   ]);
@@ -517,9 +658,12 @@ test('tool_call_streaming_delta omits tool name when no output_item.added was se
   const stream = makeStream([
     {
       data: {
-        type: 'response.output_item.delta',
-        output_index: 0,
-        delta: { arguments: '{"x":1}' },
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: '{"x":1}',
+        },
       },
     },
   ]);
@@ -540,41 +684,56 @@ test('tool_call_streaming_delta tracks argument char count independently per too
     // Tool call 0 starts
     {
       data: {
-        type: 'response.output_item.added',
-        output_index: 0,
-        output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
+        type: 'model',
+        event: {
+          type: 'response.output_item.added',
+          output_index: 0,
+          output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
+        },
       },
     },
     // Tool call 1 starts
     {
       data: {
-        type: 'response.output_item.added',
-        output_index: 1,
-        output_item: { type: 'function_call', name: 'find_files', id: 'call-2' },
+        type: 'model',
+        event: {
+          type: 'response.output_item.added',
+          output_index: 1,
+          output_item: { type: 'function_call', name: 'find_files', id: 'call-2' },
+        },
       },
     },
     // Arguments for tool call 0
     {
       data: {
-        type: 'response.output_item.delta',
-        output_index: 0,
-        delta: { arguments: '{"cmd":"ls"}' },
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: '{"cmd":"ls"}',
+        },
       },
     },
     // Arguments for tool call 1
     {
       data: {
-        type: 'response.output_item.delta',
-        output_index: 1,
-        delta: { arguments: '{"pattern":"*.ts"}' },
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 1,
+          delta: '{"pattern":"*.ts"}',
+        },
       },
     },
     // More arguments for tool call 0
     {
       data: {
-        type: 'response.output_item.delta',
-        output_index: 0,
-        delta: { arguments: ',"detailed":true' },
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: ',"detailed":true',
+        },
       },
     },
   ]);

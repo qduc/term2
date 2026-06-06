@@ -203,6 +203,42 @@ export async function* processStreamEvents(
       }
 
       // Detect argument delta from Responses API.
+      const isResponsesApiDelta =
+        meType === 'response.function_call_arguments.delta' ||
+        edType === 'response.function_call_arguments.delta' ||
+        meType === 'response.custom_tool_call_input.delta' ||
+        edType === 'response.custom_tool_call_input.delta' ||
+        meType === 'response.mcp_call_arguments.delta' ||
+        edType === 'response.mcp_call_arguments.delta';
+
+      if (isResponsesApiDelta) {
+        const deltaSrc =
+          meType === 'response.function_call_arguments.delta' ||
+          meType === 'response.custom_tool_call_input.delta' ||
+          meType === 'response.mcp_call_arguments.delta'
+            ? modelEvent
+            : eventData;
+        const delta = deltaSrc?.delta;
+        if (typeof delta === 'string' && delta) {
+          const idx =
+            typeof (deltaSrc as Record<string, unknown>)?.output_index === 'number'
+              ? ((deltaSrc as Record<string, unknown>).output_index as number)
+              : -1;
+          if (idx >= 0) {
+            const prev = streamingToolArgCharCounts.get(idx) ?? 0;
+            const next = prev + delta.length;
+            streamingToolArgCharCounts.set(idx, next);
+            const toolName = streamingToolNamesByIndex.get(idx);
+            yield {
+              type: 'tool_call_streaming_delta',
+              toolName,
+              argumentCharCount: next,
+            } satisfies ToolCallStreamingDeltaEvent;
+          }
+        }
+      }
+
+      // Legacy fallback for response.output_item.delta where delta is an object with arguments.
       if (meType === 'response.output_item.delta' || edType === 'response.output_item.delta') {
         const deltaSrc = meType === 'response.output_item.delta' ? modelEvent : eventData;
         const delta = asRecord(deltaSrc?.delta);

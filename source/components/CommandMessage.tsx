@@ -388,7 +388,7 @@ const parseCodeContextSearchOutput = (output: string | undefined) => {
   return null;
 };
 
-const formatToolArgs = (toolName: string | undefined, args: any): string => {
+const formatToolArgs = (toolName: string | undefined, args: any, displayMode?: 'standard' | 'concise'): string => {
   if (!args || !toolName) {
     return '';
   }
@@ -510,6 +510,15 @@ const formatToolArgs = (toolName: string | undefined, args: any): string => {
 
       case TOOL_NAME_SEARCH_REPLACE: {
         const path = normalizedArgs.path || 'unknown';
+        if (displayMode === 'concise') {
+          if (normalizedArgs.replacements) {
+            const replacements = normalizedArgs.replacements || [];
+            const countText = replacements.length > 1 ? ` (+ ${replacements.length - 1} more)` : '';
+            return `"${path}"${countText}`;
+          } else {
+            return `"${path}"`;
+          }
+        }
         if (normalizedArgs.replacements) {
           const replacements = normalizedArgs.replacements || [];
           const firstRep = replacements[0] || {};
@@ -625,8 +634,8 @@ const CommandMessage: FC<Props> = ({
   }, [output]);
 
   const formattedArgs = useMemo(() => {
-    return toolArgs ? formatToolArgs(toolName, toolArgs) : '';
-  }, [toolName, toolArgs]);
+    return toolArgs ? formatToolArgs(toolName, toolArgs, displayMode) : '';
+  }, [toolName, toolArgs, displayMode]);
 
   const changeStats = useMemo<DiffStats | null>(() => {
     const diffText =

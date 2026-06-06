@@ -223,7 +223,36 @@ test('CommandMessage renders search_replace line counts in concise mode', async 
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('Edited'), `Expected concise tool name: ${output}`);
+  t.true(output.includes('"src/file.ts"'), `Expected path in concise output: ${output}`);
+  t.false(output.includes('hello'), `Expected search content to be hidden in concise output: ${output}`);
+  t.false(output.includes('world'), `Expected replace content to be hidden in concise output: ${output}`);
   t.true(output.includes('(+1, -1)'), `Expected change counts in concise output: ${output}`);
+});
+
+test('CommandMessage renders search_replace multiple replacements in concise mode', async (t) => {
+  const props = {
+    command: 'search_replace',
+    toolName: TOOL_NAME_SEARCH_REPLACE,
+    toolArgs: {
+      path: 'src/file.ts',
+      replacements: [
+        { search_content: 'hello', replace_content: 'world' },
+        { search_content: 'foo', replace_content: 'bar' },
+      ],
+    },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('Edited'), `Expected concise tool name: ${output}`);
+  t.true(output.includes('"src/file.ts" (+ 1 more)'), `Expected path and count in concise output: ${output}`);
+  t.false(output.includes('hello'), `Expected search content to be hidden in concise output: ${output}`);
+  t.false(output.includes('world'), `Expected replace content to be hidden in concise output: ${output}`);
+  t.true(output.includes('(+2, -2)'), `Expected change counts in concise output: ${output}`);
 });
 
 test('CommandMessage renders apply_patch create_file with [CREATE FILE] header and diff', async (t) => {

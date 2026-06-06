@@ -87,10 +87,10 @@ export async function* processStreamEvents(
   acc.textDeltaCount = 0;
   acc.reasoningDeltaCount = 0;
 
-  /** Tracks tool names from response.output_item.added events (Responses API). */
-  const streamingToolNamesByIndex = new Map<number, string>();
-  /** Accumulated argument character count for each streaming tool call by index. */
-  const streamingToolArgCharCounts = new Map<number, number>();
+  /** Tracks tool names from response.output_item.added events (Responses API) and AI SDK tool-input-start. */
+  const streamingToolNamesByIndex = new Map<number | string, string>();
+  /** Accumulated argument character count for each streaming tool call by index/id. */
+  const streamingToolArgCharCounts = new Map<number | string, number>();
 
   const emitText = (delta: string) => {
     if (!delta) return null;
@@ -199,6 +199,34 @@ export async function* processStreamEvents(
               : -1;
           const name = getString(addedItem, 'name');
           if (idx >= 0 && name) streamingToolNamesByIndex.set(idx, name);
+        }
+      }
+
+      // AI SDK Tool Input Start
+      if (meType === 'tool-input-start' || edType === 'tool-input-start') {
+        const startSrc = meType === 'tool-input-start' ? modelEvent : eventData;
+        const toolCallId = getString(startSrc, 'id');
+        const toolName = getString(startSrc, 'toolName');
+        if (toolCallId && toolName) {
+          streamingToolNamesByIndex.set(toolCallId, toolName);
+        }
+      }
+
+      // AI SDK Tool Input Delta
+      if (meType === 'tool-input-delta' || edType === 'tool-input-delta') {
+        const deltaSrc = meType === 'tool-input-delta' ? modelEvent : eventData;
+        const toolCallId = getString(deltaSrc, 'id');
+        const delta = getString(deltaSrc, 'delta');
+        if (toolCallId && delta) {
+          const prev = streamingToolArgCharCounts.get(toolCallId) ?? 0;
+          const next = prev + delta.length;
+          streamingToolArgCharCounts.set(toolCallId, next);
+          const toolName = streamingToolNamesByIndex.get(toolCallId);
+          yield {
+            type: 'tool_call_streaming_delta',
+            toolName,
+            argumentCharCount: next,
+          } satisfies ToolCallStreamingDeltaEvent;
         }
       }
 

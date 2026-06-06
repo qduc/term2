@@ -752,3 +752,53 @@ test('tool_call_streaming_delta tracks argument char count independently per too
   t.is(deltas[2].toolName, 'shell');
   t.is(deltas[2].argumentCharCount, 28); // 12 + ',"detailed":true'.length
 });
+
+test('emits tool_call_streaming_delta for AI SDK tool-input start and delta events', async (t) => {
+  const stream = makeStream([
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'model',
+        event: {
+          type: 'tool-input-start',
+          id: 'call-1',
+          toolName: 'shell',
+        },
+      },
+    },
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'model',
+        event: {
+          type: 'tool-input-delta',
+          id: 'call-1',
+          delta: '{"command',
+        },
+      },
+    },
+    {
+      type: 'raw_model_stream_event',
+      data: {
+        type: 'model',
+        event: {
+          type: 'tool-input-delta',
+          id: 'call-1',
+          delta: '":"ls"}',
+        },
+      },
+    },
+  ]);
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+
+  const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
+  t.is(deltas.length, 2);
+  t.is(deltas[0].toolName, 'shell');
+  t.is(deltas[0].argumentCharCount, 9); // '{"command'.length
+  t.is(deltas[1].toolName, 'shell');
+  t.is(deltas[1].argumentCharCount, 16); // full args length
+});

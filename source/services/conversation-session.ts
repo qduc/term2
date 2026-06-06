@@ -125,7 +125,7 @@ export class ConversationSession {
   private largeUncachedInputGuard = new LargeUncachedInputGuard();
   private toolLedger = new ToolExecutionLedger();
   private generation = 0;
-  #inputSurgeKind: string = 'delta';
+  #inputSurgeKind: 'delta' | 'full_history' = 'delta';
   #chainingBroken = false;
 
   #breakChaining(): void {
@@ -246,6 +246,22 @@ export class ConversationSession {
     return getProvider
       ? getProvider.call(this.agentClient)
       : this.settingsService?.get<string>('agent.provider') ?? null;
+  }
+
+  #recordInputSurgeSuccess(input: unknown, options: { kind: 'delta' | 'full_history'; previousInput?: unknown }): void {
+    this.inputSurgeGuard.recordSuccessfulInput(input, options);
+    this.largeUncachedInputGuard.recordSuccessfulInput({
+      input,
+      now: Date.now(),
+      provider: this.#getProviderForGuard(),
+      model: this.#getModelForGuard(),
+      reasoningEffort: this.#getReasoningEffortForGuard(),
+      mode: this.#getTrafficMode(),
+    });
+  }
+
+  #getPreviousInputForInputSurge(): AgentInputItem[] | undefined {
+    return this.#inputSurgeKind === 'full_history' ? this.conversationStore.getHistory() : undefined;
   }
 
   #makeUserInputItem(turn: UserTurn): AgentInputItem {
@@ -769,6 +785,8 @@ export class ConversationSession {
     }
     const gen = this.generation;
     let stream: AgentStream | null = null;
+    let streamInput: string | AgentInputItem | AgentInputItem[] = '';
+    let inputSurgeKind: 'delta' | 'full_history' = 'delta';
     const turn = this.#turnWithModeNotice(normalizeUserTurn(input), this.pendingModeNotice);
     const text = turn.text;
     let addedUserMessage = false;
@@ -819,6 +837,7 @@ export class ConversationSession {
         const { removeInterceptor } = this.approvalFlow.prepareAbortResolution(abortedContext, text);
 
         try {
+          const previousInputForSurge = this.#getPreviousInputForInputSurge();
           const continuedStream = (await this.agentClient.continueRunStream(abortedContext.state, {
             previousResponseId: this.previousResponseId,
             sessionId: this.id,
@@ -889,6 +908,10 @@ export class ConversationSession {
               acc.emittedCommandIds,
               acc.latestUsage,
             );
+            this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
+              kind: this.#inputSurgeKind,
+              previousInput: previousInputForSurge,
+            });
             yield toTerminalEvent(resolvedResult);
             return;
           }
@@ -903,6 +926,10 @@ export class ConversationSession {
             acc.emittedCommandIds,
             acc.latestUsage,
           );
+          this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
+            kind: this.#inputSurgeKind,
+            previousInput: previousInputForSurge,
+          });
           yield toTerminalEvent(resolvedResult);
           return;
         } catch (error) {
@@ -922,10 +949,9 @@ export class ConversationSession {
       // resync (fresh start with just the current message). After undo the chain
       // is severed (previousResponseId = null) while prior turns remain in the
       // local store, so we fall back to full-history mode to re-establish context.
-      const { streamInput, inputSurgeKind: initialInputSurgeKind } = this.#buildOutgoingInput(turn, {
+      ({ streamInput, inputSurgeKind } = this.#buildOutgoingInput(turn, {
         includeTurn: false,
-      });
-      let inputSurgeKind = initialInputSurgeKind;
+      }));
       this.#inputSurgeKind = inputSurgeKind;
       const surgeDecision = this.inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind });
       if (surgeDecision.action === 'block') {
@@ -1037,22 +1063,10 @@ export class ConversationSession {
         acc.latestUsage,
       );
 
-      if (inputSurgeKind === 'delta') {
-        this.inputSurgeGuard.recordSuccessfulInput(streamInput, { kind: inputSurgeKind });
-      } else {
-        this.inputSurgeGuard.recordSuccessfulInput(this.conversationStore.getHistory(), {
-          kind: inputSurgeKind,
-          previousInput: streamInput,
-        });
-      }
-      this.largeUncachedInputGuard.recordSuccessfulInput({
-        input: inputSurgeKind === 'delta' ? streamInput : this.conversationStore.getHistory(),
-        now: Date.now(),
-        provider: this.#getProviderForGuard(),
-        model: this.#getModelForGuard(),
-        reasoningEffort: this.#getReasoningEffortForGuard(),
-        mode: this.#getTrafficMode(),
-      });
+      this.#recordInputSurgeSuccess(
+        inputSurgeKind === 'delta' ? streamInput : this.conversationStore.getHistory(),
+        inputSurgeKind === 'delta' ? { kind: inputSurgeKind } : { kind: inputSurgeKind, previousInput: streamInput },
+      );
 
       if (resolvedResult.type === 'approval_required') {
         if (resolvedResult.approval.callId) {
@@ -1279,6 +1293,10 @@ export class ConversationSession {
         if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
           this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
         }
+        this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
+          kind: 'full_history',
+          previousInput: streamInput,
+        });
         const recoverySummary = this.toolLedger.getRecoverySummary();
         if (recoverySummary) {
           yield {
@@ -1362,6 +1380,7 @@ export class ConversationSession {
       let transientRetryCount = 0;
       while (true) {
         try {
+          const previousInputForSurge = this.#getPreviousInputForInputSurge();
           const stream = (await this.agentClient.continueRunStream(state, {
             previousResponseId: this.previousResponseId,
             sessionId: this.id,
@@ -1447,10 +1466,18 @@ export class ConversationSession {
               traceId: this.logger.getCorrelationId(),
               toolName: resolvedResult.approval.toolName,
             });
+            this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
+              kind: this.#inputSurgeKind,
+              previousInput: previousInputForSurge,
+            });
             yield toTerminalEvent(resolvedResult);
             return;
           }
 
+          this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
+            kind: this.#inputSurgeKind,
+            previousInput: previousInputForSurge,
+          });
           yield toTerminalEvent(resolvedResult);
           return;
         } catch (error) {

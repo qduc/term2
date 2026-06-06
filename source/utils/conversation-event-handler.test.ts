@@ -844,7 +844,7 @@ test('subagent events: maintains a live peek with the last three tools', (t) => 
   ]);
 });
 
-test('subagent_completed removes the live peek', (t) => {
+test('subagent_completed updates the status of the live peek', (t) => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -873,7 +873,78 @@ test('subagent_completed removes the live peek', (t) => {
     },
   ]);
 
-  t.deepEqual(result, []);
+  t.deepEqual(result, [
+    {
+      id: 'subagent-agent-1',
+      sender: 'subagent',
+      status: 'completed',
+      agentId: 'agent-1',
+      role: 'worker',
+      task: 'make the change',
+      tools: ['apply_patch'],
+    },
+  ]);
+});
+
+test('subagent_started links callId from tool_started and command_message replaces it', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  // 1. tool_started for run_subagent
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-sa-123',
+    toolName: 'run_subagent',
+    arguments: { role: 'worker', task: 'do task X' },
+  } as ConversationEvent);
+
+  // 2. subagent_started
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-sa-123',
+    role: 'worker',
+    task: 'do task X',
+  } as ConversationEvent);
+
+  t.is(deps.calls.appendedMessages.length, 1);
+  const subagentMsg = deps.calls.appendedMessages[0][0];
+  t.is(subagentMsg.sender, 'subagent');
+  t.is(subagentMsg.callId, 'call-sa-123');
+
+  // 3. subagent_completed updates status
+  handler({
+    type: 'subagent_completed',
+    result: {
+      agentId: 'agent-sa-123',
+      role: 'worker',
+      status: 'completed',
+      finalText: 'done',
+      filesChanged: [],
+      toolsUsed: [],
+    },
+  } as ConversationEvent);
+
+  // 4. command_message replaces the subagent message
+  handler({
+    type: 'command_message',
+    message: {
+      id: 'result-sa-123',
+      sender: 'command',
+      status: 'completed',
+      command: 'run_subagent [worker] do task X',
+      output: 'done',
+      callId: 'call-sa-123',
+      toolName: 'run_subagent',
+    },
+  } as ConversationEvent);
+
+  const updater = deps.calls.setMessagesCalls[1]!; // First was subagent_completed, second is command_message
+  const result = updater([subagentMsg]);
+  t.is(result.length, 1);
+  t.is(result[0].sender, 'command');
+  t.is(result[0].id, 'subagent-agent-sa-123'); // preserves the original subagent message id
+  t.is(result[0].status, 'completed');
 });
 
 // =============================================================================

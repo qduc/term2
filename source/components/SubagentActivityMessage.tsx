@@ -35,10 +35,22 @@ const buildTitle = (role: string | undefined, task: string | undefined): string 
 const SubagentActivityMessage: FC<Props> = ({ msg }) => {
   const tools = Array.isArray(msg.tools) ? msg.tools.slice(-3) : [];
   const title = buildTitle(msg.role, msg.task);
+  const statusSuffix = msg.status && msg.status !== 'running' ? ` — ${msg.status}` : '';
+  const color =
+    msg.status === 'completed'
+      ? 'green'
+      : msg.status === 'failed'
+      ? 'red'
+      : msg.status === 'cancelled'
+      ? 'gray'
+      : 'yellow';
 
   return (
     <Box flexDirection="column">
-      <Text color="yellow">$ {title}</Text>
+      <Text color={color}>
+        $ {title}
+        {statusSuffix}
+      </Text>
       {tools.map((tool, index) => (
         <Text key={`${tool}-${index}`} color="#64748b">
           {truncate(tool, MAX_TOOL_LENGTH)}

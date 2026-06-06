@@ -488,7 +488,15 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
     }
     case 'subagent_completed': {
       const agentId = event.result.agentId;
-      state.messages = state.messages.filter((msg) => !(msg.sender === 'subagent' && (msg as any).agentId === agentId));
+      state.messages = state.messages.map((msg) => {
+        if (msg.sender === 'subagent' && (msg as any).agentId === agentId) {
+          return {
+            ...msg,
+            status: event.result.status,
+          };
+        }
+        return msg;
+      });
       return;
     }
     case 'error': {

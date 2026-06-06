@@ -148,6 +148,7 @@ export function createConversationEventHandler<
   } = deps;
 
   const activeRunningToolCallIds = new Set<string>();
+  const pendingSubagentToolCalls = new Map<string, any>();
 
   const markCurrentReasoningFinalized = () => {
     if (!state.currentReasoningMessageId) {
@@ -352,6 +353,9 @@ export function createConversationEventHandler<
 
         // run_subagent shows its own title via SubagentActivityMessage
         if (toolName === 'run_subagent') {
+          if (toolCallId) {
+            pendingSubagentToolCalls.set(toolCallId, args);
+          }
           return;
         }
 
@@ -378,7 +382,9 @@ export function createConversationEventHandler<
         setMessages((prev) => {
           const pendingIndex = annotated.callId
             ? prev.findIndex(
-                (msg) => msg.sender === 'command' && msg.callId === annotated.callId && msg.status === 'running',
+                (msg) =>
+                  (msg.sender === 'command' && msg.callId === annotated.callId && msg.status === 'running') ||
+                  (msg.sender === 'subagent' && msg.callId === annotated.callId),
               )
             : prev.findIndex((msg) => msg.sender === 'command' && !msg.callId && msg.status === 'running');
 
@@ -400,17 +406,48 @@ export function createConversationEventHandler<
         if (event.parentTool === 'ask_mentor') {
           return;
         }
-        appendMessages([
-          {
-            id: `subagent-${event.agentId}`,
-            sender: 'subagent',
-            status: 'running',
-            agentId: event.agentId,
-            role: event.role,
-            task: event.task,
-            tools: [],
-          } as unknown as MessageT,
-        ]);
+
+        let matchingCallId: string | undefined;
+        for (const [callId, args] of pendingSubagentToolCalls.entries()) {
+          if (args && args.role === event.role && args.task === event.task) {
+            matchingCallId = callId;
+            pendingSubagentToolCalls.delete(callId);
+            break;
+          }
+        }
+
+        if (!matchingCallId) {
+          for (const [callId, args] of pendingSubagentToolCalls.entries()) {
+            if (args && args.role === event.role) {
+              matchingCallId = callId;
+              pendingSubagentToolCalls.delete(callId);
+              break;
+            }
+          }
+        }
+
+        if (!matchingCallId && pendingSubagentToolCalls.size > 0) {
+          const firstKey = pendingSubagentToolCalls.keys().next().value;
+          if (firstKey !== undefined) {
+            matchingCallId = firstKey;
+            pendingSubagentToolCalls.delete(firstKey);
+          }
+        }
+
+        const subagentMsg: any = {
+          id: `subagent-${event.agentId}`,
+          sender: 'subagent',
+          status: 'running',
+          agentId: event.agentId,
+          role: event.role,
+          task: event.task,
+          tools: [],
+        };
+        if (matchingCallId !== undefined) {
+          subagentMsg.callId = matchingCallId;
+        }
+
+        appendMessages([subagentMsg as unknown as MessageT]);
         return;
       }
 
@@ -553,7 +590,15 @@ export function createConversationEventHandler<
       case 'subagent_completed': {
         setMessages((prev) => {
           return trimMessages(
-            prev.filter((msg) => !(msg.sender === 'subagent' && (msg as any).agentId === event.result.agentId)),
+            prev.map((msg) => {
+              if (msg.sender === 'subagent' && (msg as any).agentId === event.result.agentId) {
+                return {
+                  ...msg,
+                  status: event.result.status,
+                };
+              }
+              return msg;
+            }),
           );
         });
         return;

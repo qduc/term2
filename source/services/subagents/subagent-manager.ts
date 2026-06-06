@@ -13,7 +13,7 @@ import { executeWithRetry } from '../../lib/retry-executor.js';
 import { decideRecoverableModelRetry, MAX_SUBAGENT_MODEL_RETRIES } from '../conversation-retry-policy.js';
 import type { RetryType } from '../conversation-retry-policy.js';
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
-import { wrapNeedsApproval } from '../../lib/openai-agent-client.js';
+import { wrapNeedsApproval } from '../../lib/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../lib/openai-strict-tool-schema.js';
 import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
 import { createReadFileToolDefinition } from '../../tools/read-file.js';

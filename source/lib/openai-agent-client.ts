@@ -1,206 +1,24 @@
-import {
-  Agent,
-  run,
-  tool as createTool,
-  applyPatchTool,
-  type Tool,
-  type AgentInputItem,
-  Runner,
-  type JsonSchemaDefinition,
-} from '@openai/agents';
+import { Agent, run, type AgentInputItem, Runner, type JsonSchemaDefinition } from '@openai/agents';
+import { buildAgent, type AgentFactoryDeps } from './agent-factory.js';
 import { getProvider } from '../providers/index.js';
 import { type FallbackState } from '../providers/fallback-responses-model.js';
 import type { ModelProvider } from '@openai/agents-core/model';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
-import { getAgentDefinition } from '../agent.js';
-import { z } from 'zod';
-import { normalizeObjectParams, normalizeToolInput, toolErrorFunction, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { createEditorImpl } from './editor-impl.js';
-import { trimToolOutput } from '../utils/trim-tool-output.js';
-import { injectWarningIntoToolOutput } from '../utils/inject-warning-into-tool-output.js';
-import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
-import { shouldUseNativePatchTool, shouldUseStrictToolSchema } from './tool-selection-policy.js';
 import { isFlexServiceTierTimeout } from '../utils/flex-service-tier.js';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
 import type { ConversationEvent } from '../services/conversation-events.js';
 import { fetchModels, getModelDefaultReasoningLevel } from '../services/model-service.js';
-
-const TOOL_RESULT_ITEM_TYPES = new Set([
-  'function_call_output',
-  'function_call_result',
-  'function_call_output_result',
-  'tool_call_output',
-  'tool_call_result',
-  'tool_call_output_item',
-  'local_shell_call_output',
-  'shell_call_output',
-  'computer_call_output',
-  'computer_call_result',
-  'apply_patch_call_output',
-]);
-
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-  value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-
-const isUserInputMessage = (item: unknown): boolean => {
-  const record = asRecord(item);
-  return record?.role === 'user';
-};
-
-const isToolResultItem = (item: unknown): boolean => {
-  const record = asRecord(item);
-  return typeof record?.type === 'string' && TOOL_RESULT_ITEM_TYPES.has(record.type);
-};
-
-const getToolResultCallId = (item: unknown): string | null => {
-  const record = asRecord(item);
-  if (!record || !isToolResultItem(record)) {
-    return null;
-  }
-
-  const raw = asRecord(record.rawItem) ?? record;
-  const callId = raw.callId ?? raw.call_id ?? raw.tool_call_id;
-  return typeof callId === 'string' && callId ? callId : null;
-};
-
-type ChainedModelInputFilterOptions = {
-  toolResultCallIds?: readonly string[];
-};
+import { filterChainedModelInput, type ChainedModelInputFilterOptions } from './chained-input-filter.js';
 
 type ChainedRunOptions = {
   previousResponseId?: string | null;
   sessionId?: string;
   toolResultCallIds?: readonly string[];
 };
-
-/**
- * Finds the starting index of the delta input when conversation chaining is active.
- *
- * Assumption: Deltas are expected to be either:
- *  (a) trailing tool results (when the model has just called tools and is continuing), or
- *  (b) a new user message plus everything after it (when starting a new turn).
- *
- * If the input ends with a replayed assistant message that follows a tool output,
- * this function falls back to searching for the last user message, which may over-retain.
- * In practice, this is rare because model invocations are typically triggered by new user
- * inputs or new tool results.
- */
-const findChainedDeltaStart = (input: unknown[]): number => {
-  let trailingToolResultStart = input.length;
-  while (trailingToolResultStart > 0 && isToolResultItem(input[trailingToolResultStart - 1])) {
-    trailingToolResultStart--;
-  }
-  if (trailingToolResultStart < input.length) {
-    return trailingToolResultStart;
-  }
-
-  for (let index = input.length - 1; index >= 0; index--) {
-    if (isUserInputMessage(input[index])) {
-      return index;
-    }
-  }
-
-  return 0;
-};
-
-const filterChainedModelInput = (modelData: any, options: ChainedModelInputFilterOptions = {}): any => {
-  const input = modelData?.input;
-  if (!Array.isArray(input) || input.length <= 1) {
-    return modelData;
-  }
-
-  const expectedToolResultCallIds = new Set(options.toolResultCallIds?.filter(Boolean) ?? []);
-  if (expectedToolResultCallIds.size > 0) {
-    const expectedToolResults = input.filter((item) => {
-      const callId = getToolResultCallId(item);
-      return callId !== null && expectedToolResultCallIds.has(callId);
-    });
-
-    if (expectedToolResults.length > 0) {
-      return {
-        ...modelData,
-        input: expectedToolResults,
-      };
-    }
-  }
-
-  const deltaStart = findChainedDeltaStart(input);
-  if (deltaStart <= 0) {
-    return modelData;
-  }
-
-  return {
-    ...modelData,
-    input: input.slice(deltaStart),
-  };
-};
-
-/**
- * Wraps a tool definition's needsApproval so that structurally invalid params
- * (those that fail Zod schema validation) never trigger an approval prompt.
- * The tool's execute will receive those params and return a structured error.
- *
- * Params are normalised using schema-aware coercion before validation:
- *  1. Null sentinels (null, "null", "None", "") on optional fields → omitted
- *  2. Boolean strings ("true"/"false") on boolean fields → true/false
- *  3. Stringified JSON arrays/objects on typed fields → parsed values
- *
- * This handles the OpenAI strict-schema convention where omitted optional fields
- * arrive as null, as well as models that stringify structured parameters.
- */
-export function wrapNeedsApproval(
-  definition: {
-    parameters: { safeParse: (v: unknown) => { success: boolean } };
-    needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean;
-  },
-  options?: {
-    // When an interceptor (e.g. plan mode) would reject this call, the approval
-    // prompt must be suppressed — execute() returns the rejection to the model.
-    checkInterceptors?: (params: unknown) => Promise<string | null>;
-  },
-): (context: unknown, params: unknown) => Promise<boolean> {
-  return async (context, params) => {
-    if (options?.checkInterceptors) {
-      try {
-        const rejectionMessage = await options.checkInterceptors(params);
-        if (rejectionMessage) {
-          return false;
-        }
-      } catch {
-        // If the interceptor check throws, fall through to normal approval
-        // logic rather than silently skipping the prompt.
-      }
-    }
-
-    // Apply schema-aware normalisation directly on the object (no JSON round-trip).
-    // Falls back to a minimal null→undefined pass if the schema is unavailable
-    // or normalisation itself throws.
-    let normalized: unknown;
-    try {
-      normalized = normalizeObjectParams(params, definition.parameters as z.ZodTypeAny);
-    } catch {
-      normalized =
-        params !== null && typeof params === 'object' && !Array.isArray(params)
-          ? Object.fromEntries(
-              Object.entries(params as Record<string, unknown>).map(([k, v]) => [k, v === null ? undefined : v]),
-            )
-          : params;
-    }
-
-    if (!definition.parameters.safeParse(normalized).success) {
-      return false;
-    }
-    try {
-      return await definition.needsApproval(normalized, context);
-    } catch (error) {
-      // If needsApproval throws, fail-safe to requiring approval
-      return true;
-    }
-  };
-}
 
 /**
  * Narrowed provider interface so we can access {@link FallbackState}
@@ -351,7 +169,9 @@ export class OpenAIAgentClient {
     this.#provider = this.#settings.get<string>('agent.provider') || 'openai';
     this.#maxTurns = maxTurns ?? 20;
     this.#retryAttempts = retryAttempts ?? 2;
-    this.#agent = this.#createAgent({ model, reasoningEffort });
+    const buildResult = buildAgent({ model, reasoningEffort }, this.#buildFactoryDeps());
+    this.#agent = buildResult.agent;
+    this.#model = buildResult.resolvedModel;
     this.#runner = null;
 
     // Subscribe to settings changes that affect agent definition (prompt,
@@ -401,37 +221,38 @@ export class OpenAIAgentClient {
   }
 
   setModel(model: string): void {
-    this.#agent = this.#createAgent({
-      model,
-      reasoningEffort: this.#reasoningEffort,
-    });
+    const buildResult = buildAgent({ model, reasoningEffort: this.#reasoningEffort }, this.#buildFactoryDeps());
+    this.#agent = buildResult.agent;
+    this.#model = buildResult.resolvedModel;
     this.#resetMentorState();
   }
 
   setReasoningEffort(effort?: ModelSettingsReasoningEffort | 'default'): void {
     this.#reasoningEffort = effort;
-    this.#agent = this.#createAgent({
-      model: this.#model,
-      reasoningEffort: effort,
-    });
+    const buildResult = buildAgent({ model: this.#model, reasoningEffort: effort }, this.#buildFactoryDeps());
+    this.#agent = buildResult.agent;
+    this.#model = buildResult.resolvedModel;
   }
 
   setTemperature(temperature?: number): void {
     this.#temperature = temperature;
-    this.#agent = this.#createAgent({
-      model: this.#model,
-      reasoningEffort: this.#reasoningEffort,
-      temperature,
-    });
+    const buildResult = buildAgent(
+      { model: this.#model, reasoningEffort: this.#reasoningEffort, temperature },
+      this.#buildFactoryDeps(),
+    );
+    this.#agent = buildResult.agent;
+    this.#model = buildResult.resolvedModel;
   }
 
   setProvider(provider: string): void {
     this.#provider = provider;
     this.#settings.set('agent.provider', provider);
-    this.#agent = this.#createAgent({
-      model: this.#model,
-      reasoningEffort: this.#reasoningEffort,
-    });
+    const buildResult = buildAgent(
+      { model: this.#model, reasoningEffort: this.#reasoningEffort },
+      this.#buildFactoryDeps(),
+    );
+    this.#agent = buildResult.agent;
+    this.#model = buildResult.resolvedModel;
     this.#runner = null;
     this.#resetMentorState();
   }
@@ -485,6 +306,21 @@ export class OpenAIAgentClient {
     return null;
   }
 
+  #buildFactoryDeps(): AgentFactoryDeps {
+    return {
+      settings: this.#settings,
+      logger: this.#logger,
+      executionContext: this.#executionContext,
+      editor: this.#editor,
+      providerId: this.#provider,
+      serviceTierOverrideForNextRequest: this.#serviceTierOverrideForNextRequest,
+      createMentor: this.#createMentor,
+      runSubagent: this.#runSubagent,
+      getAskUserAnswer: (callId?: string) => this.getAskUserAnswer(callId),
+      checkToolInterceptors: (name, params, toolCallId) => this.#checkToolInterceptors(name, params, toolCallId),
+    };
+  }
+
   #getMaxParallelToolCalls(): number {
     const rawValue = this.#settings.get<number | undefined>('agent.maxParallelToolCalls');
     const numericValue = Number(rawValue);
@@ -493,23 +329,6 @@ export class OpenAIAgentClient {
     }
 
     return Math.max(1, Math.floor(numericValue));
-  }
-
-  #getProviderCapabilities(providerId: string): {
-    supportsConversationChaining: boolean;
-    supportsTracingControl: boolean;
-    supportsPromptCacheKey?: boolean;
-    usesStrictToolSchema?: boolean;
-    nativePatchModelPrefixes?: string[];
-  } {
-    const providerDef = getProvider(providerId);
-    return {
-      supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
-      supportsTracingControl: providerDef?.capabilities?.supportsTracingControl ?? false,
-      supportsPromptCacheKey: providerDef?.capabilities?.supportsPromptCacheKey,
-      usesStrictToolSchema: providerDef?.capabilities?.usesStrictToolSchema,
-      nativePatchModelPrefixes: providerDef?.capabilities?.nativePatchModelPrefixes,
-    };
   }
 
   #createRunner(providerId: string): Runner | null {
@@ -561,11 +380,12 @@ export class OpenAIAgentClient {
   }
 
   #refreshAgent(): void {
-    this.#agent = this.#createAgent({
-      model: this.#model,
-      reasoningEffort: this.#reasoningEffort as any,
-      temperature: this.#temperature,
-    });
+    const buildResult = buildAgent(
+      { model: this.#model, reasoningEffort: this.#reasoningEffort as any, temperature: this.#temperature },
+      this.#buildFactoryDeps(),
+    );
+    this.#agent = buildResult.agent;
+    this.#model = buildResult.resolvedModel;
     // Refreshing core agent should not keep stale mentor state/instructions.
     this.#resetMentorState();
   }
@@ -683,7 +503,8 @@ export class OpenAIAgentClient {
         turnCount: 0,
         maxTurns: this.#maxTurns,
       };
-      const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
+      const supportsConversationChaining =
+        getProvider(this.#provider)?.capabilities?.supportsConversationChaining ?? false;
       const options: any = {
         stream: true,
         maxTurns: this.#maxTurns,
@@ -756,7 +577,8 @@ export class OpenAIAgentClient {
       userContext.turnCount = 0;
     }
 
-    const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
+    const supportsConversationChaining =
+      getProvider(this.#provider)?.capabilities?.supportsConversationChaining ?? false;
     const options: any = {
       signal,
       context: userContext,
@@ -807,7 +629,8 @@ export class OpenAIAgentClient {
       userContext.turnCount = 0;
     }
 
-    const { supportsConversationChaining } = this.#getProviderCapabilities(this.#provider);
+    const supportsConversationChaining =
+      getProvider(this.#provider)?.capabilities?.supportsConversationChaining ?? false;
     const options: any = {
       stream: true,
       maxTurns: this.#maxTurns,
@@ -846,7 +669,7 @@ export class OpenAIAgentClient {
     // When using non-OpenAI providers (e.g., OpenRouter), this export can fail noisily
     // (e.g., 503 errors). Disable tracing per-run for any non-OpenAI provider.
     const effectiveOptions: any = options ? { ...options } : {};
-    const { supportsTracingControl } = this.#getProviderCapabilities(providerId);
+    const supportsTracingControl = getProvider(providerId)?.capabilities?.supportsTracingControl ?? false;
     if (!supportsTracingControl) {
       effectiveOptions.tracingDisabled = true;
     }
@@ -1058,7 +881,7 @@ export class OpenAIAgentClient {
   }
 
   #getAgentForRun(agent: Agent, { sessionId }: { sessionId?: string } = {}): Agent {
-    const { supportsPromptCacheKey } = this.#getProviderCapabilities(this.#provider);
+    const supportsPromptCacheKey = getProvider(this.#provider)?.capabilities?.supportsPromptCacheKey;
     if (!supportsPromptCacheKey || !sessionId) {
       return agent;
     }
@@ -1129,288 +952,6 @@ export class OpenAIAgentClient {
       }
     }
   };
-
-  #createAgent({
-    model,
-    reasoningEffort,
-    temperature,
-  }: {
-    model?: string;
-    reasoningEffort?: ModelSettingsReasoningEffort | 'default';
-    temperature?: number;
-  } = {}): Agent {
-    const resolvedModel = model?.trim() || this.#settings.get<string>('agent.model');
-    this.#model = resolvedModel;
-    const resolvedTemperature = temperature ?? this.#settings.get<number | undefined>('agent.temperature');
-    const {
-      name,
-      instructions,
-      tools: toolDefinitions,
-    } = getAgentDefinition(
-      {
-        settingsService: this.#settings,
-        loggingService: this.#logger,
-        executionContext: this.#executionContext,
-        askMentor: this.#createMentor,
-        runSubagent: this.#runSubagent,
-        getAskUserAnswer: (callId?: string) => this.getAskUserAnswer(callId),
-      },
-      resolvedModel,
-    );
-
-    const providerCapabilities = this.#getProviderCapabilities(this.#provider);
-    const shouldUseNativePatchToolForModel = shouldUseNativePatchTool({
-      providerId: this.#provider,
-      model: resolvedModel,
-      capabilities: providerCapabilities,
-    });
-    const tools = this.#buildAgentTools({
-      toolDefinitions,
-      resolvedModel,
-      shouldUseNativePatchTool: shouldUseNativePatchToolForModel,
-    });
-
-    let effectiveReasoningEffort = reasoningEffort;
-    const isDefaultSetting = this.#settings.get<string>('agent.reasoningEffort') === 'default';
-    if (
-      this.#provider === 'codex' &&
-      isDefaultSetting &&
-      (!effectiveReasoningEffort || effectiveReasoningEffort === 'default')
-    ) {
-      const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', resolvedModel);
-      if (defaultReasoningLevel) {
-        effectiveReasoningEffort = defaultReasoningLevel as ModelSettingsReasoningEffort;
-      }
-    }
-
-    const modelSettings = this.#buildModelSettings({
-      reasoningEffort: effectiveReasoningEffort,
-      resolvedTemperature,
-    });
-
-    const agent = new Agent({
-      name,
-      model: resolvedModel,
-      ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
-      instructions,
-      tools,
-    });
-
-    // Only add defaultRunOptions if an explicit effort is set (not
-    // 'default'). This ensures the API receives the param only when
-    // intended.
-    if (effectiveReasoningEffort && effectiveReasoningEffort !== 'default') {
-      (agent as any).defaultRunOptions = {
-        ...((agent as any).defaultRunOptions || {}),
-        // Pass through to underlying client for models that support it
-        reasoning: { effort: effectiveReasoningEffort },
-      };
-    }
-
-    return agent;
-  }
-
-  #buildAgentTools({
-    toolDefinitions,
-    resolvedModel,
-    shouldUseNativePatchTool,
-  }: {
-    toolDefinitions: any[];
-    resolvedModel: string;
-    reasoningEffort?: ModelSettingsReasoningEffort | 'default';
-    shouldUseNativePatchTool: boolean;
-  }): Tool[] {
-    const providerCapabilities = this.#getProviderCapabilities(this.#provider);
-    const useStrictToolSchema = shouldUseStrictToolSchema({
-      providerId: this.#provider,
-      capabilities: providerCapabilities,
-    });
-    const tools: Tool[] = toolDefinitions
-      .filter((definition) => {
-        // Exclude custom apply_patch if we're using native one
-        if (shouldUseNativePatchTool && definition.name === 'apply_patch') {
-          return false;
-        }
-        return true;
-      })
-      .map((definition) =>
-        wrapToolInvoke(
-          createTool({
-            name: definition.name,
-            description: definition.description,
-            parameters: useStrictToolSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
-            // Let schema-validation errors propagate to wrapToolInvoke for Zod
-            // diagnostics; keep other runtime errors as non-fatal strings.
-            errorFunction: toolErrorFunction,
-            needsApproval: wrapNeedsApproval(definition, {
-              checkInterceptors: (params) => this.#checkToolInterceptors(definition.name, params),
-            }),
-            execute: async (params, _context, details) => {
-              const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');
-              // Extract tool call ID from details if available
-              const toolCallId = details?.toolCall?.callId;
-              // Check if this execution should be intercepted
-              const rejectionMessage = await this.#checkToolInterceptors(definition.name, params, toolCallId);
-              if (rejectionMessage) {
-                this.#logger.debug('Tool execution intercepted', {
-                  tool: definition.name,
-                  params: JSON.stringify(params).substring(0, 100),
-                });
-                // Return a failure response that all tools should understand
-                const rejected = JSON.stringify({
-                  output: [
-                    {
-                      success: false,
-                      error: rejectionMessage,
-                    },
-                  ],
-                });
-                return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
-              }
-
-              const result = await definition.execute(params, _context, details);
-              let trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
-
-              // Inject warning when turns are approaching maxTurns
-              const userContext: any = _context?.context;
-              if (
-                userContext &&
-                typeof userContext.turnCount === 'number' &&
-                typeof userContext.maxTurns === 'number'
-              ) {
-                const turnsLeft = userContext.maxTurns - userContext.turnCount;
-                if (turnsLeft >= 0 && turnsLeft <= 5) {
-                  const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
-                  trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
-                }
-              }
-
-              return trimmedResult;
-            },
-          }),
-          definition.parameters,
-          { argumentParsing: definition.argumentParsing },
-        ),
-      );
-
-    // Add native applyPatchTool for gpt-5.1 on OpenAI provider
-    if (shouldUseNativePatchTool) {
-      const nativePatchTool = applyPatchTool({
-        editor: this.#editor,
-        needsApproval: false, // Default to auto-approve for now
-      }) as any; // Type assertion needed as invoke is not in public API
-
-      // Wrap the native tool's invoke function to apply interceptor check
-      const originalInvoke = nativePatchTool.invoke;
-      if (originalInvoke) {
-        nativePatchTool.invoke = async (runContext: any, input: any, details: any) => {
-          // Extract tool call ID from details if available
-          const toolCallId = details?.toolCall?.callId;
-          // Parse input to get params for logging
-          const normalizedInput = normalizeToolInput(input);
-          let params: any;
-          try {
-            params = typeof input === 'string' ? JSON.parse(input) : input;
-          } catch {
-            params = input;
-          }
-          const rejectionMessage = await this.#checkToolInterceptors('apply_patch', params, toolCallId);
-          if (rejectionMessage) {
-            this.#logger.debug('Native tool execution intercepted', {
-              tool: 'apply_patch',
-              toolCallId,
-              params: JSON.stringify(params).substring(0, 100),
-            });
-            const rejected = JSON.stringify({
-              output: [
-                {
-                  success: false,
-                  error: rejectionMessage,
-                },
-              ],
-            });
-            const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');
-            return trimToolOutput(rejected, undefined, maxOutputLengthValue ?? undefined);
-          }
-          const maxOutputLengthValue = this.#settings.get<number | undefined>('shell.maxOutputChars');
-          const result = await originalInvoke.call(nativePatchTool, runContext, normalizedInput, details);
-          let trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
-
-          // Inject warning when turns are approaching maxTurns
-          const userContext: any = runContext?.context;
-          if (userContext && typeof userContext.turnCount === 'number' && typeof userContext.maxTurns === 'number') {
-            const turnsLeft = userContext.maxTurns - userContext.turnCount;
-            if (turnsLeft >= 0 && turnsLeft <= 5) {
-              const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
-              trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
-            }
-          }
-
-          return trimmedResult;
-        };
-      }
-
-      tools.push(nativePatchTool);
-      this.#logger.debug('Using native applyPatchTool from SDK', {
-        model: resolvedModel,
-        provider: this.#provider,
-      });
-    } else {
-      this.#logger.debug('Using custom apply_patch implementation', {
-        model: resolvedModel,
-        provider: this.#provider,
-      });
-    }
-
-    return tools;
-  }
-
-  #buildModelSettings({
-    reasoningEffort,
-    resolvedTemperature,
-  }: {
-    reasoningEffort?: ModelSettingsReasoningEffort | 'default';
-    resolvedTemperature?: number;
-  }): Record<string, any> {
-    // Build modelSettings only if an explicit effort value (other than
-    // 'default') was provided. 'default' means we should not pass the
-    // effort param and allow the underlying API to choose the default.
-    const modelSettings: Record<string, any> = {};
-    if (reasoningEffort && reasoningEffort !== 'default') {
-      modelSettings.reasoning = {
-        effort: reasoningEffort,
-        summary: 'auto',
-      };
-    }
-
-    // Temperature: only pass when explicitly set (number). Undefined means
-    // provider/model default.
-    if (typeof resolvedTemperature === 'number' && Number.isFinite(resolvedTemperature)) {
-      modelSettings.temperature = resolvedTemperature;
-    }
-
-    // OpenAI Flex Service Tier: only pass when enabled and using OpenAI provider
-    // This reduces costs by using the flex service tier for lower priority requests
-    // See: https://platform.openai.com/docs/guides/service-tier
-    const useFlexServiceTier = this.#settings.get<boolean>('agent.useFlexServiceTier');
-    if (
-      useFlexServiceTier &&
-      this.#serviceTierOverrideForNextRequest !== 'standard' &&
-      (this.#provider === 'openai' || this.#provider === 'openrouter')
-    ) {
-      modelSettings.providerData = {
-        ...(modelSettings.providerData || {}),
-        service_tier: 'flex',
-      };
-    }
-
-    if (this.#provider === 'codex') {
-      modelSettings.store = false;
-      modelSettings.include = ['reasoning.encrypted_content'];
-    }
-
-    return modelSettings;
-  }
 
   getSettings(): ISettingsService {
     return this.#settings;

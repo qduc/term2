@@ -416,3 +416,67 @@ export const wrapToolInvoke = <T extends Tool>(
 
   return tool;
 };
+
+/**
+ * Wraps a tool definition's needsApproval so that structurally invalid params
+ * (those that fail Zod schema validation) never trigger an approval prompt.
+ * The tool's execute will receive those params and return a structured error.
+ *
+ * Params are normalised using schema-aware coercion before validation:
+ *  1. Null sentinels (null, "null", "None", "") on optional fields → omitted
+ *  2. Boolean strings ("true"/"false") on boolean fields → true/false
+ *  3. Stringified JSON arrays/objects on typed fields → parsed values
+ *
+ * This handles the OpenAI strict-schema convention where omitted optional fields
+ * arrive as null, as well as models that stringify structured parameters.
+ */
+export function wrapNeedsApproval(
+  definition: {
+    parameters: { safeParse: (v: unknown) => { success: boolean } };
+    needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean;
+  },
+  options?: {
+    // When an interceptor (e.g. plan mode) would reject this call, the approval
+    // prompt must be suppressed — execute() returns the rejection to the model.
+    checkInterceptors?: (params: unknown) => Promise<string | null>;
+  },
+): (context: unknown, params: unknown) => Promise<boolean> {
+  return async (context, params) => {
+    if (options?.checkInterceptors) {
+      try {
+        const rejectionMessage = await options.checkInterceptors(params);
+        if (rejectionMessage) {
+          return false;
+        }
+      } catch {
+        // If the interceptor check throws, fall through to normal approval
+        // logic rather than silently skipping the prompt.
+      }
+    }
+
+    // Apply schema-aware normalisation directly on the object (no JSON round-trip).
+    // Falls back to a minimal null→undefined pass if the schema is unavailable
+    // or normalisation itself throws.
+    let normalized: unknown;
+    try {
+      normalized = normalizeObjectParams(params, definition.parameters as z.ZodTypeAny);
+    } catch {
+      normalized =
+        params !== null && typeof params === 'object' && !Array.isArray(params)
+          ? Object.fromEntries(
+              Object.entries(params as Record<string, unknown>).map(([k, v]) => [k, v === null ? undefined : v]),
+            )
+          : params;
+    }
+
+    if (!definition.parameters.safeParse(normalized).success) {
+      return false;
+    }
+    try {
+      return await definition.needsApproval(normalized, context);
+    } catch (error) {
+      // If needsApproval throws, fail-safe to requiring approval
+      return true;
+    }
+  };
+}

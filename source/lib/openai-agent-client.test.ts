@@ -1,7 +1,7 @@
 import test from 'ava';
 import { z } from 'zod';
 import { OpenRouterError } from '../providers/common/provider-errors.js';
-import { wrapNeedsApproval } from './openai-agent-client.js';
+import { wrapNeedsApproval } from './tool-invoke.js';
 
 test('OpenRouterError includes status and headers', (t) => {
   const error = new OpenRouterError('Test error', 429, { 'retry-after': '5', 'x-custom': 'value' }, 'response body');

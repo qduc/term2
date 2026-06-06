@@ -19,6 +19,15 @@ test('extractTextDelta: joins array output_text entries', (t) => {
   t.is(extractTextDelta(payload), 'Hello world');
 });
 
+test('extractTextDelta: ignores done events', (t) => {
+  const payload = {
+    type: 'response.output_text.done',
+    text: 'Hello world',
+  };
+
+  t.is(extractTextDelta(payload), null);
+});
+
 test('extractReasoningDelta: extracts OpenAI reasoning summary deltas', (t) => {
   const event = {
     data: {

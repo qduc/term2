@@ -48,7 +48,10 @@ export function extractTextDelta(payload: any): string | null {
   }
 
   const type = typeof (payload as any).type === 'string' ? payload.type : '';
-  const looksLikeOutput = typeof type === 'string' && type.includes('output_text');
+  if (type && !type.endsWith('_delta') && !type.endsWith('.delta')) {
+    return null;
+  }
+  const looksLikeOutput = typeof type === 'string' && (type.endsWith('_delta') || type.endsWith('.delta'));
   const hasOutputProperties = Boolean(
     (payload as any).delta ?? (payload as any).output_text ?? (payload as any).text ?? (payload as any).content,
   );

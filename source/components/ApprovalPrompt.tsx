@@ -15,6 +15,18 @@ type Props = {
   onApprove: (answer?: string) => void;
   onReject: () => void;
   onTypeAnswer?: () => void;
+  currentQuestionIndex?: number;
+  waitingForAskUserAnswer?: boolean;
+};
+
+type QuestionItem = {
+  question: string;
+  options?: string[];
+  is_multi_select?: boolean;
+};
+
+type AskUserArgs = {
+  questions: QuestionItem[];
 };
 
 type ApplyPatchArgs = {
@@ -150,13 +162,16 @@ const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']>
   );
 };
 
-type AskUserArgs = {
-  question?: string;
-  options?: string[];
-};
-
-const ApprovalPrompt: FC<Props> = ({ approval, onApprove, onReject, onTypeAnswer }) => {
+const ApprovalPrompt: FC<Props> = ({
+  approval,
+  onApprove,
+  onReject,
+  onTypeAnswer,
+  currentQuestionIndex = 0,
+  waitingForAskUserAnswer = false,
+}) => {
   const [selectedIndex, setSelectedIndex] = React.useState(0);
+  const [selectedIndices, setSelectedIndices] = React.useState<Set<number>>(new Set());
 
   const isAskUser = approval.toolName === TOOL_NAME_ASK_USER;
   const askUserArgs = React.useMemo<AskUserArgs | null>(() => {
@@ -171,18 +186,39 @@ const ApprovalPrompt: FC<Props> = ({ approval, onApprove, onReject, onTypeAnswer
     }
   }, [approval.argumentsText, isAskUser]);
 
-  const askUserOptions = askUserArgs?.options ?? [];
-  const askUserMenuItems = React.useMemo(
-    () =>
-      isAskUser ? [...askUserOptions, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL] : ['Approve', 'Reject'],
-    [askUserOptions, isAskUser],
-  );
+  const questionsList = React.useMemo<QuestionItem[]>(() => {
+    if (!askUserArgs || !Array.isArray(askUserArgs.questions) || askUserArgs.questions.length === 0) {
+      return [];
+    }
+    return askUserArgs.questions;
+  }, [askUserArgs]);
+
+  const currentQuestionItem = questionsList[currentQuestionIndex] || questionsList[0];
+  const isMultiSelect = !!currentQuestionItem?.is_multi_select;
+  const askUserOptions = currentQuestionItem?.options ?? [];
+
+  const CONFIRM_SELECTIONS_LABEL = '[Confirm selections]';
+
+  const askUserMenuItems = React.useMemo(() => {
+    if (!isAskUser) {
+      return ['Approve', 'Reject'];
+    }
+    if (isMultiSelect) {
+      return [...askUserOptions, CONFIRM_SELECTIONS_LABEL, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL];
+    }
+    return [...askUserOptions, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL];
+  }, [isAskUser, isMultiSelect, askUserOptions]);
 
   React.useEffect(() => {
     setSelectedIndex(0);
-  }, [approval.argumentsText, approval.toolName]);
+    setSelectedIndices(new Set());
+  }, [currentQuestionIndex, approval.argumentsText, approval.toolName]);
 
   useInput((input, key) => {
+    if (waitingForAskUserAnswer) {
+      return;
+    }
+
     if (key.upArrow) {
       setSelectedIndex((prev) => (prev === 0 ? askUserMenuItems.length - 1 : prev - 1));
     }
@@ -199,6 +235,22 @@ const ApprovalPrompt: FC<Props> = ({ approval, onApprove, onReject, onTypeAnswer
           onTypeAnswer?.();
         } else if (selected === ASK_USER_DECLINE_LABEL) {
           onApprove(ASK_USER_DECLINE_RESULT);
+        } else if (isMultiSelect) {
+          if (selected === CONFIRM_SELECTIONS_LABEL) {
+            const chosen = Array.from(selectedIndices).map((idx) => askUserOptions[idx]);
+            onApprove(JSON.stringify(chosen));
+          } else {
+            const idx = selectedIndex;
+            setSelectedIndices((prev) => {
+              const next = new Set(prev);
+              if (next.has(idx)) {
+                next.delete(idx);
+              } else {
+                next.add(idx);
+              }
+              return next;
+            });
+          }
         } else {
           onApprove(selected);
         }
@@ -277,45 +329,62 @@ const ApprovalPrompt: FC<Props> = ({ approval, onApprove, onReject, onTypeAnswer
       // Fall back to styled raw text if parsing fails
     }
   } else if (isAskUser) {
-    const questionText = askUserArgs?.question?.trim() ? askUserArgs.question : approval.argumentsText;
+    const questionText = currentQuestionItem?.question || 'Unknown question';
+    const totalQuestions = questionsList.length;
+
     content = (
       <Box flexDirection="column">
         <Box borderStyle="round" borderColor="yellow" paddingX={1} paddingY={0}>
           <Text color="yellow" bold>
+            {totalQuestions > 1 ? `[Question ${currentQuestionIndex + 1}/${totalQuestions}] ` : ''}
             {questionText}
           </Text>
         </Box>
-        <Box flexDirection="column" marginTop={1}>
-          {askUserMenuItems.map((item, idx) => {
-            const isRecommended = idx === 0 && askUserOptions.length > 0;
-            const label =
-              item === ASK_USER_CUSTOM_ANSWER_LABEL
-                ? item
-                : item === ASK_USER_DECLINE_LABEL
-                ? item
-                : isRecommended
-                ? `${item} (recommended)`
-                : item;
+        {waitingForAskUserAnswer ? (
+          <Box marginTop={1} marginLeft={1}>
+            <Text color="cyan">❯ Type your custom answer in the prompt below...</Text>
+          </Box>
+        ) : (
+          <Box flexDirection="column" marginTop={1}>
+            {askUserMenuItems.map((item, idx) => {
+              const isOption = idx < askUserOptions.length;
+              const isRecommended = idx === 0 && isOption;
+              const isConfirm = item === CONFIRM_SELECTIONS_LABEL;
 
-            const color =
-              selectedIndex === idx
-                ? item === ASK_USER_DECLINE_LABEL
-                  ? 'red'
-                  : item === ASK_USER_CUSTOM_ANSWER_LABEL
-                  ? 'cyan'
-                  : 'green'
-                : isRecommended
-                ? 'yellow'
-                : undefined;
+              let label = item;
+              if (item === ASK_USER_CUSTOM_ANSWER_LABEL || item === ASK_USER_DECLINE_LABEL) {
+                // leave as is
+              } else if (isConfirm) {
+                // leave as is
+              } else {
+                if (isMultiSelect) {
+                  const checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
+                  label = checkbox + item + (isRecommended ? ' (recommended)' : '');
+                } else {
+                  label = item + (isRecommended ? ' (recommended)' : '');
+                }
+              }
 
-            return (
-              <Text key={item} color={color}>
-                {selectedIndex === idx ? '❯ ' : '  '}
-                {label}
-              </Text>
-            );
-          })}
-        </Box>
+              const color =
+                selectedIndex === idx
+                  ? item === ASK_USER_DECLINE_LABEL
+                    ? 'red'
+                    : item === ASK_USER_CUSTOM_ANSWER_LABEL
+                    ? 'cyan'
+                    : 'green'
+                  : isRecommended
+                  ? 'yellow'
+                  : undefined;
+
+              return (
+                <Text key={item} color={color}>
+                  {selectedIndex === idx ? '❯ ' : '  '}
+                  {label}
+                </Text>
+              );
+            })}
+          </Box>
+        )}
       </Box>
     );
   }

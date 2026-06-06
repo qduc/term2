@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConversationService } from '../services/conversation-service.js';
 import { isAbortLikeError } from '../utils/error-helpers.js';
+import { ASK_USER_DECLINE_RESULT } from '../tools/ask-user-constants.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { appendMessagesCapped } from '../utils/message-buffer.js';
 import { createMessageId } from './message-id.js';
@@ -145,6 +146,8 @@ export const useConversation = ({
   const [waitingForApproval, setWaitingForApproval] = useState<boolean>(false);
   const [waitingForRejectionReason, setWaitingForRejectionReason] = useState<boolean>(false);
   const [waitingForAskUserAnswer, setWaitingForAskUserAnswer] = useState<boolean>(false);
+  const [askUserAnswers, setAskUserAnswers] = useState<(string | string[])[]>([]);
+  const [currentAskUserQuestionIndex, setCurrentAskUserQuestionIndex] = useState<number>(0);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
@@ -239,6 +242,10 @@ export const useConversation = ({
         // Set waiting state AFTER adding approval message to ensure proper render order
         setWaitingForApproval(true);
         setWaitingForAskUserAnswer(false);
+        if (result.approval.toolName === 'ask_user') {
+          setCurrentAskUserQuestionIndex(0);
+          setAskUserAnswers([]);
+        }
         notifier?.approvalNeeded();
         return;
       }
@@ -443,6 +450,43 @@ export const useConversation = ({
 
       // Check if this is a max turns exceeded prompt
       const isMaxTurnsPrompt = pendingApproval.isMaxTurnsPrompt;
+      const isAskUser = pendingApproval.toolName === 'ask_user';
+
+      if (isAskUser && answer === 'y' && approvalAnswer !== ASK_USER_DECLINE_RESULT) {
+        // Parse questions
+        let questions: any[] = [];
+        try {
+          const parsed = JSON.parse(pendingApproval.argumentsText);
+          questions = parsed.questions || [];
+        } catch {}
+
+        // Only JSON-parse multi-select arrays; single-select answers are plain strings
+        let parsedAns: any = approvalAnswer ?? '';
+        const currentQuestion = questions[askUserAnswers.length];
+        if (currentQuestion?.is_multi_select) {
+          try {
+            const maybeArray = JSON.parse(approvalAnswer ?? '');
+            if (Array.isArray(maybeArray)) {
+              parsedAns = maybeArray;
+            }
+          } catch {
+            // Not JSON — keep as plain string
+          }
+        }
+
+        const nextAnswers = [...askUserAnswers, parsedAns];
+
+        if (nextAnswers.length < questions.length) {
+          // More questions to answer!
+          setAskUserAnswers(nextAnswers);
+          setCurrentAskUserQuestionIndex(nextAnswers.length);
+          setWaitingForAskUserAnswer(false);
+          return;
+        }
+
+        // All questions answered, set approvalAnswer to the JSON string of all answers
+        approvalAnswer = JSON.stringify(nextAnswers);
+      }
 
       if (answer === 'y') {
         approvedContextRef.current = {
@@ -454,6 +498,8 @@ export const useConversation = ({
       setPendingApproval(null);
       setWaitingForApproval(false);
       setWaitingForAskUserAnswer(false);
+      setAskUserAnswers([]);
+      setCurrentAskUserQuestionIndex(0);
 
       // Handle "n" answer for max turns - return to input
       if (isMaxTurnsPrompt && answer === 'n') {
@@ -613,6 +659,8 @@ export const useConversation = ({
     setWaitingForApproval(false);
     setWaitingForRejectionReason(false);
     setWaitingForAskUserAnswer(false);
+    setAskUserAnswers([]);
+    setCurrentAskUserQuestionIndex(0);
     setPendingApproval(null);
     approvedContextRef.current = null;
     setThinkingStartedAt(null);
@@ -628,6 +676,8 @@ export const useConversation = ({
     setWaitingForApproval(false);
     setWaitingForRejectionReason(false);
     setWaitingForAskUserAnswer(false);
+    setAskUserAnswers([]);
+    setCurrentAskUserQuestionIndex(0);
     setPendingApproval(null);
     approvedContextRef.current = null;
     setThinkingStartedAt(null);
@@ -656,6 +706,8 @@ export const useConversation = ({
     setWaitingForApproval(false);
     setWaitingForRejectionReason(false);
     setWaitingForAskUserAnswer(false);
+    setAskUserAnswers([]);
+    setCurrentAskUserQuestionIndex(0);
     setPendingApproval(null);
     approvedContextRef.current = null;
     setThinkingStartedAt(null);
@@ -700,6 +752,8 @@ export const useConversation = ({
       setWaitingForApproval(false);
       setWaitingForRejectionReason(false);
       setWaitingForAskUserAnswer(false);
+      setAskUserAnswers([]);
+      setCurrentAskUserQuestionIndex(0);
       setPendingApproval(null);
       approvedContextRef.current = null;
       setThinkingStartedAt(null);
@@ -782,6 +836,7 @@ export const useConversation = ({
     waitingForApproval,
     waitingForRejectionReason,
     waitingForAskUserAnswer,
+    currentAskUserQuestionIndex,
     setWaitingForRejectionReason,
     setWaitingForAskUserAnswer,
     isProcessing,

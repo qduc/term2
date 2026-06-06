@@ -24,8 +24,12 @@ const baseApproval: ApprovalDescriptor = {
   agentName: 'Agent',
   toolName: 'ask_user',
   argumentsText: JSON.stringify({
-    question: 'Which option should I use?',
-    options: ['Use the safe default', 'Use the faster option'],
+    questions: [
+      {
+        question: 'Which option should I use?',
+        options: ['Use the safe default', 'Use the faster option'],
+      },
+    ],
   }),
   rawInterruption: { type: 'ask_user' },
 };
@@ -102,8 +106,12 @@ test('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAnswer', a
   const approval: ApprovalDescriptor = {
     ...baseApproval,
     argumentsText: JSON.stringify({
-      question: 'Which option should I use?',
-      options: ['Use the safe default'],
+      questions: [
+        {
+          question: 'Which option should I use?',
+          options: ['Use the safe default', 'Use the faster option'],
+        },
+      ],
     }),
   };
 
@@ -118,7 +126,9 @@ test('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAnswer', a
     />,
   );
 
-  await writeInput(stdin, '\u001B[B');
+  // Menu: Option 0, Option 1, Type custom answer...(index 2), Decline(index 3)
+  await writeInput(stdin, '\u001B[B'); // down to Option 1
+  await writeInput(stdin, '\u001B[B'); // down to Type custom answer...
   await writeInput(stdin, '\r');
 
   t.is(typedAnswer, 1);
@@ -153,7 +163,7 @@ test('ApprovalPrompt ask_user still shows custom answer and decline options with
   const approval: ApprovalDescriptor = {
     ...baseApproval,
     argumentsText: JSON.stringify({
-      question: 'Please answer this question',
+      questions: [{ question: 'Please answer this question' }],
     }),
   };
 
@@ -165,5 +175,129 @@ test('ApprovalPrompt ask_user still shows custom answer and decline options with
   t.true(output.includes('Please answer this question'));
   t.true(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL));
   t.true(output.includes(ASK_USER_DECLINE_LABEL));
+  unmount();
+});
+
+test('ApprovalPrompt renders multi-select options with checkboxes', (t) => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'ask_user',
+    argumentsText: JSON.stringify({
+      questions: [
+        {
+          question: 'Select tools to use',
+          options: ['git', 'npm', 'cargo'],
+          is_multi_select: true,
+        },
+      ],
+    }),
+    rawInterruption: { type: 'ask_user' },
+  };
+
+  const { lastFrame, unmount } = render(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
+  );
+
+  const output = lastFrame() ?? '';
+  t.true(output.includes('[ ] git'));
+  t.true(output.includes('[ ] npm'));
+  t.true(output.includes('[ ] cargo'));
+  t.true(output.includes('[Confirm selections]'));
+  unmount();
+});
+
+test('ApprovalPrompt toggles multi-select options and submits on Confirm', async (t) => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'ask_user',
+    argumentsText: JSON.stringify({
+      questions: [
+        {
+          question: 'Select tools to use',
+          options: ['git', 'npm', 'cargo'],
+          is_multi_select: true,
+        },
+      ],
+    }),
+    rawInterruption: { type: 'ask_user' },
+  };
+
+  let approved: string | undefined;
+  const { lastFrame, stdin, unmount } = render(
+    <ApprovalPrompt
+      approval={approval}
+      onApprove={(answer) => {
+        approved = answer;
+      }}
+      onReject={() => {}}
+      onTypeAnswer={() => {}}
+    />,
+  );
+
+  // Toggle first option (git)
+  await writeInput(stdin, '\r');
+  t.true((lastFrame() ?? '').includes('[x] git'));
+
+  // Move down to second option (npm) and toggle it
+  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\r');
+  t.true((lastFrame() ?? '').includes('[x] npm'));
+
+  // Move down to "[Confirm selections]" (which is at index 3: git at 0, npm at 1, cargo at 2, Confirm selections at 3)
+  // Currently we are at index 1 (npm). Move down twice to reach index 3.
+  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\r');
+
+  t.deepEqual(JSON.parse(approved || '[]'), ['git', 'npm']);
+  unmount();
+});
+
+test('ApprovalPrompt renders question index prefix for multiple questions', (t) => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'ask_user',
+    argumentsText: JSON.stringify({
+      questions: [{ question: 'First question' }, { question: 'Second question' }],
+    }),
+    rawInterruption: { type: 'ask_user' },
+  };
+
+  const { lastFrame, unmount } = render(
+    <ApprovalPrompt
+      approval={approval}
+      onApprove={() => {}}
+      onReject={() => {}}
+      onTypeAnswer={() => {}}
+      currentQuestionIndex={1}
+    />,
+  );
+
+  const output = lastFrame() ?? '';
+  t.true(output.includes('[Question 2/2] Second question'));
+  unmount();
+});
+
+test('ApprovalPrompt displays custom typing message and suppresses keys when waitingForAskUserAnswer is true', async (t) => {
+  let approved: string | undefined;
+  const { lastFrame, stdin, unmount } = render(
+    <ApprovalPrompt
+      approval={baseApproval}
+      onApprove={(answer) => {
+        approved = answer;
+      }}
+      onReject={() => {}}
+      onTypeAnswer={() => {}}
+      waitingForAskUserAnswer={true}
+    />,
+  );
+
+  const output = lastFrame() ?? '';
+  t.true(output.includes('Type your custom answer in the prompt below'));
+  t.false(output.includes('Use the safe default'));
+
+  // Pressing Enter should do nothing because key input is suppressed
+  await writeInput(stdin, '\r');
+  t.is(approved, undefined);
   unmount();
 });

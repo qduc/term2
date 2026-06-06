@@ -240,6 +240,7 @@ const App: FC<AppProps> = ({
     setWaitingForRejectionReason,
     waitingForAskUserAnswer,
     setWaitingForAskUserAnswer,
+    currentAskUserQuestionIndex,
     isProcessing,
     thinkingStartedAt,
     toolCallStreamingInfo,
@@ -663,6 +664,7 @@ const App: FC<AppProps> = ({
             waitingForApproval={waitingForApproval}
             waitingForRejectionReason={waitingForRejectionReason}
             waitingForAskUserAnswer={waitingForAskUserAnswer}
+            currentAskUserQuestionIndex={currentAskUserQuestionIndex}
             isProcessing={isProcessing}
             thinkingStartedAt={thinkingStartedAt}
             toolCallStreamingInfo={toolCallStreamingInfo}

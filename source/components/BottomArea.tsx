@@ -22,6 +22,7 @@ export type BottomAreaProps = {
   waitingForApproval: boolean;
   waitingForRejectionReason: boolean;
   waitingForAskUserAnswer?: boolean;
+  currentAskUserQuestionIndex?: number;
   isProcessing: boolean;
   thinkingStartedAt?: number | null;
   toolCallStreamingInfo?: { toolName?: string; argumentCharCount: number } | null;
@@ -59,6 +60,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   waitingForApproval,
   waitingForRejectionReason,
   waitingForAskUserAnswer = false,
+  currentAskUserQuestionIndex = 0,
   isProcessing,
   thinkingStartedAt = null,
   toolCallStreamingInfo = null,
@@ -131,8 +133,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     waitingForApproval &&
     !isProcessing &&
     !waitingForRejectionReason &&
-    pendingApproval &&
-    !waitingForAskUserAnswer;
+    pendingApproval;
   const showInput =
     !showHandoffConfirm &&
     !showLargeUncachedPrompt &&
@@ -153,47 +154,57 @@ const BottomArea: FC<BottomAreaProps> = ({
             onConfirm={onLargeUncachedApprove || (() => {})}
             onDecline={onLargeUncachedDecline || (() => {})}
           />
-        ) : showApprovalPrompt ? (
-          <ApprovalPrompt
-            approval={pendingApproval}
-            onApprove={onApprove}
-            onReject={onReject}
-            onTypeAnswer={onTypeAnswer}
-          />
-        ) : isProcessing && toolCallStreamingInfo ? (
-          <Text color="#64748b">
-            Calling {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : 'tool'} (
-            {toolCallStreamingInfo.argumentCharCount} chars){'.'.repeat(dotCount)}
-          </Text>
-        ) : isProcessing && thinkingStartedAt != null ? (
-          <Text color="#64748b">Thinking... {thinkingElapsedSeconds}s</Text>
-        ) : isProcessing ? (
-          <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
-        ) : showInput ? (
-          <InputBox
-            onSubmit={onSubmit}
-            slashCommands={slashCommands}
-            waitingForRejectionReason={waitingForRejectionReason}
-            isShellMode={isShellMode}
-            settingsService={settingsService}
-            loggingService={loggingService}
-            historyService={historyService}
-            undoMenuRef={undoMenuRef}
-            onUndoSelect={onUndoSelect}
-            providersMenuRef={providersMenuRef}
-            onSettingChange={onSettingChange}
-            onSystemMessage={onSystemMessage}
-            onSlashTabComplete={onSlashTabComplete}
-            promptLabel={
-              waitingForAskUserAnswer
-                ? 'Answer: '
-                : handoffState?.stage === 'entering_message'
-                ? 'Handoff message (enter to use default message): '
-                : undefined
-            }
-            allowEmptySubmit={handoffState?.stage === 'entering_message' || waitingForAskUserAnswer}
-          />
-        ) : null}
+        ) : (
+          <Box flexDirection="column">
+            {showApprovalPrompt && (
+              <ApprovalPrompt
+                approval={pendingApproval}
+                onApprove={onApprove}
+                onReject={onReject}
+                onTypeAnswer={onTypeAnswer}
+                currentQuestionIndex={currentAskUserQuestionIndex}
+                waitingForAskUserAnswer={waitingForAskUserAnswer}
+              />
+            )}
+            {isProcessing && toolCallStreamingInfo && (
+              <Text color="#64748b">
+                Calling {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : 'tool'} (
+                {toolCallStreamingInfo.argumentCharCount} chars){'.'.repeat(dotCount)}
+              </Text>
+            )}
+            {isProcessing && thinkingStartedAt != null && (
+              <Text color="#64748b">Thinking... {thinkingElapsedSeconds}s</Text>
+            )}
+            {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
+              <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
+            )}
+            {showInput && (
+              <InputBox
+                onSubmit={onSubmit}
+                slashCommands={slashCommands}
+                waitingForRejectionReason={waitingForRejectionReason}
+                isShellMode={isShellMode}
+                settingsService={settingsService}
+                loggingService={loggingService}
+                historyService={historyService}
+                undoMenuRef={undoMenuRef}
+                onUndoSelect={onUndoSelect}
+                providersMenuRef={providersMenuRef}
+                onSettingChange={onSettingChange}
+                onSystemMessage={onSystemMessage}
+                onSlashTabComplete={onSlashTabComplete}
+                promptLabel={
+                  waitingForAskUserAnswer
+                    ? 'Answer: '
+                    : handoffState?.stage === 'entering_message'
+                    ? 'Handoff message (enter to use default message): '
+                    : undefined
+                }
+                allowEmptySubmit={handoffState?.stage === 'entering_message' || waitingForAskUserAnswer}
+              />
+            )}
+          </Box>
+        )}
       </Box>
 
       <StatusBar

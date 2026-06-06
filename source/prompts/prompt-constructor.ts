@@ -4,6 +4,7 @@ import { getReasoningEfficiencyAddendum } from './reasoning-efficiency.js';
 import { getSearchViaShellAddendum } from './search-via-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 import { selectPromptProfile } from './prompt-profiles.js';
+import { ASK_USER_DECLINE_RESULT } from '../tools/ask-user-constants.js';
 
 export type PromptConstructorOptions = {
   model: string;
@@ -97,5 +98,5 @@ function getAskUserAddendum(): string {
 
 - Use the \`ask_user\` tool when the user's request is short, vague, or ambiguous, or when an architecture or product-behavior decision needs to be made.
 - Provide concise options whenever possible; the first option must be the recommended (default) choice.
-- If the tool result is \`User decline to answer\`, proceed using the safest reasonable default and state the assumption in your final response.`;
+- If the tool result is \`${ASK_USER_DECLINE_RESULT}\`, proceed using the safest reasonable default and state the assumption in your final response.`;
 }

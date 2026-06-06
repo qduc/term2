@@ -879,7 +879,9 @@ test.serial('ask_user tool executes using the stored approval answer', async (t)
 
   const result = await askUserTool.invoke(
     {},
-    JSON.stringify({ question: 'Which option should I use?', options: ['Use the safe option', 'Ask later'] }),
+    JSON.stringify({
+      questions: [{ question: 'Which option should I use?', options: ['Use the safe option', 'Ask later'] }],
+    }),
     { toolCall: { callId: 'call-bridge' } },
   );
 

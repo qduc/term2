@@ -52,7 +52,8 @@ export class OpenAIAgentClient {
   #sessionContextService: ISessionContextService;
   #executionContext?: ExecutionContext;
   #editor: ReturnType<typeof createEditorImpl>;
-  #subagentManager: SubagentManager;
+  #subagentManager: SubagentManager | null = null;
+  #isTransientClient = false;
   #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
   #activeSubagentsCount = 0;
   #pendingClearSink = false;
@@ -126,7 +127,9 @@ export class OpenAIAgentClient {
   }
 
   #resetMentorState(): void {
-    this.#subagentManager.resetMentorSession();
+    if (this.#subagentManager) {
+      this.#subagentManager.resetMentorSession();
+    }
   }
 
   constructor({
@@ -134,12 +137,16 @@ export class OpenAIAgentClient {
     reasoningEffort,
     maxTurns,
     retryAttempts,
+    agentOverride,
+    providerOverride,
     deps,
   }: {
     model?: string;
     reasoningEffort?: ModelSettingsReasoningEffort | 'default';
     maxTurns?: number;
     retryAttempts?: number;
+    agentOverride?: Agent;
+    providerOverride?: string;
     deps: {
       logger: ILoggingService;
       settings: ISettingsService;
@@ -151,14 +158,6 @@ export class OpenAIAgentClient {
     this.#settings = deps.settings;
     this.#sessionContextService = deps.sessionContextService;
     this.#executionContext = deps.executionContext;
-    this.#subagentManager = new SubagentManager({
-      logger: deps.logger,
-      settings: deps.settings,
-      executionContext: deps.executionContext,
-      sessionContextService: this.#sessionContextService,
-      onEvent: (event) => this.#subagentEventSink?.(event),
-      agentClient: { chat: (message, options) => this.chat(message, options) },
-    });
     this.#editor = createEditorImpl({
       loggingService: this.#logger,
       settingsService: this.#settings,
@@ -166,58 +165,106 @@ export class OpenAIAgentClient {
     });
     this.#reasoningEffort = reasoningEffort;
     this.#temperature = this.#settings.get<number | undefined>('agent.temperature');
-    this.#provider = this.#settings.get<string>('agent.provider') || 'openai';
-    this.#maxTurns = maxTurns ?? 20;
-    this.#retryAttempts = retryAttempts ?? 2;
-    const buildResult = buildAgent({ model, reasoningEffort }, this.#buildFactoryDeps());
-    this.#agent = buildResult.agent;
-    this.#model = buildResult.resolvedModel;
+    if (agentOverride) {
+      this.#isTransientClient = true;
+      this.#agent = agentOverride;
+      this.#model = model ?? (agentOverride as any).model ?? '';
+      this.#maxTurns = maxTurns ?? 1;
+      this.#retryAttempts = retryAttempts ?? 2;
+    } else {
+      const buildResult = buildAgent({ model, reasoningEffort }, this.#buildFactoryDeps());
+      this.#agent = buildResult.agent;
+      this.#model = buildResult.resolvedModel;
+      this.#maxTurns = maxTurns ?? 20;
+      this.#retryAttempts = retryAttempts ?? 2;
+    }
+    this.#provider = providerOverride ?? this.#settings.get<string>('agent.provider') ?? 'openai';
     this.#runner = null;
 
-    // Subscribe to settings changes that affect agent definition (prompt,
-    // tools, model, provider, modes) and rebuild the agent automatically.
-    this.#settings.onChange?.((changedKey) => {
-      if (!changedKey) return;
-      // Keys that require a full agent rebuild:
-      const rebuildKeys = [
-        'app.liteMode',
-        'app.orchestratorMode',
-        'app.planMode',
-        'app.mentorMode',
-        'app.searchViaShell',
-        'agent.model',
-        'agent.provider',
-        'agent.reasoningEffort',
-        'agent.temperature',
-        'agent.useFlexServiceTier',
-        'agent.mentorModel',
-        'agent.mentorProvider',
-        'agent.mentorReasoningEffort',
-        'agent.subagentExplorerModel',
-        'agent.subagentWorkerModel',
-        'agent.subagentResearcherModel',
-        'agent.subagentExplorerProvider',
-        'agent.subagentWorkerProvider',
-        'agent.subagentResearcherProvider',
-        'agent.subagentExplorerReasoningEffort',
-        'agent.subagentWorkerReasoningEffort',
-        'agent.subagentResearcherReasoningEffort',
-        'logging.logLevel',
-        'logging.suppressConsoleOutput',
-        'shell.useRtkCompression',
-      ];
-      if (rebuildKeys.includes(changedKey)) {
-        this.#refreshAgent();
-      }
-    });
+    if (!agentOverride) {
+      this.#subagentManager = new SubagentManager({
+        logger: deps.logger,
+        settings: deps.settings,
+        executionContext: deps.executionContext,
+        sessionContextService: this.#sessionContextService,
+        onEvent: (event) => this.#subagentEventSink?.(event),
+        agentClient: { chat: (message, options) => this.chat(message, options) },
+        // Factory lives here (not in SubagentManager) so each subagent gets a
+        // lightweight transient client that shares logger/settings/executionContext
+        // with the parent but skips agent-rebuild and SubagentManager initialisation.
+        createClient: ({
+          agent,
+          provider,
+          maxTurns,
+          retryAttempts,
+        }: {
+          agent: any;
+          provider: string;
+          maxTurns: number;
+          retryAttempts?: number;
+        }) =>
+          new OpenAIAgentClient({
+            model: agent.model,
+            maxTurns,
+            retryAttempts,
+            deps: {
+              logger: deps.logger,
+              settings: deps.settings,
+              executionContext: deps.executionContext,
+              sessionContextService: this.#sessionContextService,
+            },
+            agentOverride: agent,
+            providerOverride: provider,
+          }),
+      });
+    }
 
-    this.#logger.debug('OpenAI Agent Client initialized', {
-      model: model || this.#settings.get<string>('agent.model'),
-      reasoningEffort: reasoningEffort ?? 'default',
-      temperature: this.#temperature,
-      maxTurns: this.#maxTurns,
-      retryAttempts: this.#retryAttempts,
-    });
+    if (!agentOverride) {
+      // Subscribe to settings changes that affect agent definition (prompt,
+      // tools, model, provider, modes) and rebuild the agent automatically.
+      this.#settings.onChange?.((changedKey) => {
+        if (!changedKey) return;
+        // Keys that require a full agent rebuild:
+        const rebuildKeys = [
+          'app.liteMode',
+          'app.orchestratorMode',
+          'app.planMode',
+          'app.mentorMode',
+          'app.searchViaShell',
+          'agent.model',
+          'agent.provider',
+          'agent.reasoningEffort',
+          'agent.temperature',
+          'agent.useFlexServiceTier',
+          'agent.mentorModel',
+          'agent.mentorProvider',
+          'agent.mentorReasoningEffort',
+          'agent.subagentExplorerModel',
+          'agent.subagentWorkerModel',
+          'agent.subagentResearcherModel',
+          'agent.subagentExplorerProvider',
+          'agent.subagentWorkerProvider',
+          'agent.subagentResearcherProvider',
+          'agent.subagentExplorerReasoningEffort',
+          'agent.subagentWorkerReasoningEffort',
+          'agent.subagentResearcherReasoningEffort',
+          'logging.logLevel',
+          'logging.suppressConsoleOutput',
+          'shell.useRtkCompression',
+        ];
+        if (rebuildKeys.includes(changedKey)) {
+          this.#refreshAgent();
+        }
+      });
+
+      this.#logger.debug('OpenAI Agent Client initialized', {
+        model: model || this.#settings.get<string>('agent.model'),
+        reasoningEffort: reasoningEffort ?? 'default',
+        temperature: this.#temperature,
+        maxTurns: this.#maxTurns,
+        retryAttempts: this.#retryAttempts,
+      });
+    }
   }
 
   setModel(model: string): void {
@@ -380,6 +427,7 @@ export class OpenAIAgentClient {
   }
 
   #refreshAgent(): void {
+    if (this.#isTransientClient) return;
     const buildResult = buildAgent(
       { model: this.#model, reasoningEffort: this.#reasoningEffort as any, temperature: this.#temperature },
       this.#buildFactoryDeps(),
@@ -895,6 +943,9 @@ export class OpenAIAgentClient {
   }
 
   #createMentor = async (question: string): Promise<string> => {
+    if (!this.#subagentManager) {
+      throw new Error('Transient agent clients cannot spawn subagents.');
+    }
     this.#activeSubagentsCount++;
     try {
       const result = await this.#subagentManager.run({ role: 'mentor', task: question, parentTool: 'ask_mentor' });
@@ -922,6 +973,9 @@ export class OpenAIAgentClient {
     _context?: unknown,
     details?: unknown,
   ): Promise<any> => {
+    if (!this.#subagentManager) {
+      throw new Error('Transient agent clients cannot spawn subagents.');
+    }
     // Forward any resumeState from the SDK (populated in the Agent.asTool
     // path) to the subagent manager so it can restore the agent run state
     // for nested approval continuation.

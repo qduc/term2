@@ -1,17 +1,16 @@
-import { Agent, run, tool as createTool, type Tool, RunState } from '@openai/agents';
+import { Agent, run, tool as createTool, type Tool } from '@openai/agents';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import { ExecutionContext } from '../execution-context.js';
 import { getProvider } from '../../providers/index.js';
+import { ConversationSession } from '../conversation-session.js';
 import { SubagentSession } from './subagent-session.js';
 import type { SubagentRequest, SubagentResult, SubagentDefinition, SubagentRole } from './types.js';
 import type { ConversationEvent } from '../conversation-events.js';
 import type { CommandMessage, ToolDefinition } from '../../tools/types.js';
-import { executeWithRetry } from '../../lib/retry-executor.js';
-import { decideRecoverableModelRetry, MAX_SUBAGENT_MODEL_RETRIES } from '../conversation-retry-policy.js';
-import type { RetryType } from '../conversation-retry-policy.js';
+
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import { wrapNeedsApproval } from '../../lib/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../lib/openai-strict-tool-schema.js';
@@ -62,7 +61,6 @@ function resolvePrompt(promptPath: string): string {
   }
 }
 
-const MUTATING_TOOL_NAMES = new Set(['apply_patch', 'search_replace', 'create_file', 'shell']);
 const ROLE_MAX_TURNS_DEFAULT = 20;
 
 function parseFrontmatter(content: string): { frontmatter: Record<string, any>; body: string } {
@@ -395,27 +393,16 @@ function aggregateToolUsage(toolCounts: Map<string, number>): Array<{ toolName: 
   return Array.from(toolCounts.entries()).map(([toolName, count]) => ({ toolName, count }));
 }
 
-function buildSubagentRetryTask(
-  originalTask: string,
-  errorMessage: string,
-  toolNames: string[],
-  retryType: RetryType,
-  hallucinatedToolName?: string,
-): string {
-  const availableTools = toolNames.length > 0 ? toolNames.join(', ') : 'none';
-
-  let instruction: string;
-  if (retryType === 'hallucination' && hallucinatedToolName && hallucinatedToolName !== 'unknown') {
-    instruction =
-      `The tool "${hallucinatedToolName}" does not exist. Do not attempt to use it. ` +
-      `Available tools: ${availableTools}.`;
-  } else if (retryType === 'parsing_error') {
-    instruction = `Your previous tool call could not be parsed. Ensure all tool arguments are valid JSON and try again.`;
-  } else {
-    instruction = `Please produce a final textual answer now. Do not call any more tools; provide a direct response to the original task.`;
-  }
-
-  return `${originalTask}\n\n` + `[System: Previous attempt failed with error: ${errorMessage}. ${instruction}]`;
+/**
+ * Check whether an error message or error-like object indicates an abort/cancel.
+ * Centralises the detection logic that was previously duplicated between the
+ * event-loop `error` case and the outer `catch` block.
+ */
+function isAbortLike(message: string | undefined, obj?: unknown): boolean {
+  if (message?.includes('abort') || message?.includes('cancel')) return true;
+  const o = obj as Record<string, unknown> | undefined;
+  if (o && (o['name'] === 'AbortError' || o['code'] === 'ERR_ABORTED' || o['kind'] === 'aborted')) return true;
+  return false;
 }
 
 export class SubagentManager {
@@ -424,8 +411,14 @@ export class SubagentManager {
   #sessionContextService: ISessionContextService;
   #executionContext?: ExecutionContext;
   #onEvent?: (event: ConversationEvent) => void;
-  #mentorSession: SubagentSession;
   #agentClient?: Pick<OpenAIAgentClient, 'chat'>;
+  #createClient?: (opts: {
+    agent: any;
+    provider: string;
+    maxTurns: number;
+    retryAttempts?: number;
+  }) => OpenAIAgentClient;
+  #mentorSession: SubagentSession;
 
   constructor(deps: {
     logger: ILoggingService;
@@ -434,6 +427,12 @@ export class SubagentManager {
     sessionContextService: ISessionContextService;
     onEvent?: (event: ConversationEvent) => void;
     agentClient?: Pick<OpenAIAgentClient, 'chat'>;
+    createClient?: (args: {
+      agent: any;
+      provider: string;
+      maxTurns: number;
+      retryAttempts?: number;
+    }) => OpenAIAgentClient;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
@@ -441,6 +440,7 @@ export class SubagentManager {
     this.#executionContext = deps.executionContext;
     this.#onEvent = deps.onEvent;
     this.#agentClient = deps.agentClient;
+    this.#createClient = deps.createClient;
     this.#mentorSession = new SubagentSession(randomUUID(), 'mentor');
   }
 
@@ -614,33 +614,14 @@ export class SubagentManager {
     const toolDefinitions = this.#buildToolDefinitions(definition, filesChanged, request.task, searchViaShell);
 
     const providerId = definition.provider;
-    let mutatingToolAttempted = false;
     const tools = buildAgentTools(toolDefinitions, {
       providerId,
       logger: this.#logger,
       settings: this.#settings,
-      onToolStart: (name, _params, commandMessages) => {
+      onToolStart: (name, _params, _commandMessages) => {
         toolCounts.set(name, (toolCounts.get(name) ?? 0) + 1);
-        if (MUTATING_TOOL_NAMES.has(name)) mutatingToolAttempted = true;
-        this.#emit({
-          type: 'subagent_tool_started',
-          agentId,
-          role: request.role,
-          toolName: name,
-          commandMessages,
-        });
       },
     });
-
-    const providerDef = getProvider(providerId);
-    const runner =
-      providerId !== 'openai'
-        ? providerDef?.createRunner?.({
-            settingsService: this.#settings,
-            loggingService: this.#logger,
-            sessionContextService: this.#sessionContextService,
-          }) ?? null
-        : null;
 
     const modelSettings: any = {};
     if (definition.reasoningEffort && definition.reasoningEffort !== 'default') {
@@ -673,98 +654,118 @@ export class SubagentManager {
       tools,
     });
 
-    // When resuming from a nested agent-tool run (e.g. worker approvals),
-    // restore the SDK RunState from the serialized resumeState string.
-    // This is populated by the SDK in the Agent.asTool path. When
-    // run_subagent is registered as a plain function tool,
-    // details.resumeState is not populated by the SDK, so this branch is
-    // dead code until run_subagent switches to Agent.asTool registration.
-    const initialInput: string | RunState<any, any> = request.resumeState
-      ? await RunState.fromString(agent, request.resumeState)
-      : request.task;
-    let runInput: string | RunState<any, any> = initialInput;
-    let modelRetryCount = 0;
+    if (!this.#createClient) {
+      throw new Error('SubagentManager: createClient factory not provided');
+    }
 
-    while (true) {
-      try {
-        const subagentContext = {
-          turnCount: 0,
-          maxTurns: definition.maxTurns,
-        };
-        const result = await executeWithRetry({
-          operation: () =>
-            runWithProvider(providerId, runner, agent, runInput, {
-              stream: false,
-              maxTurns: definition.maxTurns,
-              context: subagentContext,
-              callModelInputFilter: (args: any) => {
-                if (args.context) {
-                  args.context.turnCount = (args.context.turnCount ?? 0) + 1;
-                }
-                return args.modelData;
-              },
-              ...(request.signal ? { signal: request.signal } : {}),
-            }),
-          retryAttempts: this.#settings.get<number>('agent.retryAttempts') ?? 2,
-          provider: providerId,
-          model: definition.model,
-          traceId: this.#logger.getCorrelationId?.() ?? undefined,
-          logger: this.#logger,
-        });
+    const subClient = this.#createClient({
+      agent,
+      provider: providerId,
+      maxTurns: definition.maxTurns,
+      retryAttempts: 2,
+    });
 
-        return {
-          agentId,
-          role: request.role,
-          status: 'completed',
-          finalText: extractFinalText(result),
-          filesChanged: [...new Set(filesChanged)],
-          toolsUsed: aggregateToolUsage(toolCounts),
-          usage: normalizeAgentRunUsage(result?.state?.usage) ?? extractUsage(result),
-          nestedRunResult: result,
-        };
-      } catch (error: any) {
-        const decision = decideRecoverableModelRetry(error, modelRetryCount, MAX_SUBAGENT_MODEL_RETRIES);
-        if (decision.kind === 'no_retry') throw error;
+    const session = new ConversationSession(`subagent-${agentId}`, {
+      agentClient: subClient,
+      deps: {
+        logger: this.#logger,
+        settingsService: this.#settings,
+        sessionContextService: this.#sessionContextService,
+      },
+    });
 
-        // Avoid unsafe retries after the subagent has already invoked any
-        // mutating tool (write or shell), regardless of whether the write
-        // succeeded. Even a failed write attempt may reflect a partial state
-        // change that makes a retry unsafe (e.g. duplicate edits).
-        if ((definition.canWrite || definition.canRunShell) && mutatingToolAttempted) throw error;
+    const userTurn = { text: request.task, images: [] as any[] };
+    let finalText = '';
+    let usage: ReturnType<typeof extractUsage> = undefined;
+    let error: Error | undefined;
+    let subagentStatus: SubagentResult['status'] = 'completed';
+    let loopProcessedError = false;
 
-        modelRetryCount = decision.attempt;
-
-        this.#logger.warn('Subagent model error retry', {
-          eventType: 'retry.subagent_model_error',
-          category: 'retry',
-          phase: 'retry',
-          agentId,
-          role: request.role,
-          retryType: decision.retryType,
-          retryAttempt: decision.attempt,
-          maxRetries: decision.maxRetries,
-          errorMessage: decision.message,
-        });
-
-        this.#emit({
-          type: 'retry',
-          toolName: decision.toolName,
-          attempt: decision.attempt,
-          maxRetries: decision.maxRetries,
-          errorMessage: decision.message,
-          retryType: decision.retryType,
-        });
-
-        const availableToolNames = toolDefinitions.map((d) => d.name);
-        runInput = buildSubagentRetryTask(
-          typeof initialInput === 'string' ? initialInput : request.task,
-          decision.message,
-          availableToolNames,
-          decision.retryType,
-          decision.toolName,
-        );
+    try {
+      for await (const event of session.run(userTurn, { signal: request.signal })) {
+        switch (event.type) {
+          case 'tool_started':
+            if (event.toolName) {
+              this.#emit({
+                type: 'subagent_tool_started',
+                agentId,
+                role: request.role,
+                toolName: event.toolName,
+              });
+            }
+            break;
+          case 'command_message':
+            this.#emit({
+              type: 'subagent_command_message',
+              agentId,
+              role: request.role,
+              message: event.message,
+            });
+            break;
+          case 'final':
+            finalText = event.finalText;
+            if (event.usage) usage = event.usage;
+            break;
+          case 'usage_update':
+            if (event.usage) usage = event.usage;
+            break;
+          case 'error':
+            error = new Error(event.message);
+            loopProcessedError = true;
+            subagentStatus = isAbortLike(event.message, event) ? 'cancelled' : 'failed';
+            break;
+          case 'retry':
+            this.#emit({
+              type: 'retry',
+              toolName: event.toolName,
+              attempt: event.attempt,
+              maxRetries: event.maxRetries,
+              errorMessage: event.errorMessage,
+              retryType: event.retryType,
+              agentId,
+              role: request.role,
+            } as any);
+            break;
+        }
+      }
+    } catch (err: any) {
+      if (!error) {
+        error = err instanceof Error ? err : new Error(String(err));
+      }
+      // Only reclassify if the error event handler didn't already set the status.
+      // The thrown error is the same object that triggered the 'error' event, so
+      // re-checking would be redundant and risks divergence if the two checks
+      // have different shapes.
+      if (!loopProcessedError) {
+        subagentStatus = isAbortLike(error.message, error) || isAbortLike(err?.message, err) ? 'cancelled' : 'failed';
+      }
+      if (!usage) {
+        usage = normalizeAgentRunUsage(err?.state?.usage) ?? extractUsage(err);
       }
     }
+
+    if (error) {
+      return {
+        agentId,
+        role: request.role,
+        status: subagentStatus,
+        finalText: '',
+        filesChanged: [...new Set(filesChanged)],
+        toolsUsed: aggregateToolUsage(toolCounts),
+        error: error.message,
+        ...(usage ? { usage } : {}),
+      };
+    }
+
+    return {
+      agentId,
+      role: request.role,
+      status: 'completed',
+      finalText,
+      filesChanged: [...new Set(filesChanged)],
+      toolsUsed: aggregateToolUsage(toolCounts),
+      ...(usage ? { usage } : {}),
+    };
   }
 
   #buildToolDefinitions(

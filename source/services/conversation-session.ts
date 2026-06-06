@@ -586,12 +586,14 @@ export class ConversationSession {
       hallucinationRetryCount = 0,
       transientRetryCount = 0,
       transportFallbackRetryCount = 0,
+      signal,
     }: {
       skipUserMessage?: boolean;
       flexServiceTierFallbackCount?: number;
       hallucinationRetryCount?: number;
       transientRetryCount?: number;
       transportFallbackRetryCount?: number;
+      signal?: AbortSignal;
     } = {},
   ): AsyncIterable<ConversationEvent> {
     if (
@@ -617,6 +619,17 @@ export class ConversationSession {
       ),
     });
     this.toolLedger.beginTurn();
+    let abortListener: (() => void) | undefined;
+    if (signal) {
+      if (signal.aborted) {
+        this.agentClient.abort();
+        throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+      }
+      abortListener = () => {
+        this.agentClient.abort();
+      };
+      signal.addEventListener('abort', abortListener);
+    }
     try {
       this.logger.debug('Conversation stream start', {
         eventType: 'stream.started',
@@ -1114,6 +1127,10 @@ export class ConversationSession {
         stack: error instanceof Error ? error.stack : undefined,
       });
       throw error;
+    } finally {
+      if (signal && abortListener) {
+        signal.removeEventListener('abort', abortListener);
+      }
     }
   }
 

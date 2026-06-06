@@ -442,6 +442,53 @@ export function createConversationEventHandler<
         return;
       }
 
+      case 'subagent_command_message': {
+        setMessages((prev) => {
+          const index = prev.findIndex((msg) => msg.sender === 'subagent' && (msg as any).agentId === event.agentId);
+          const command = event.message?.command;
+          if (!command) return prev;
+
+          const appendOrReplaceTool = (message: any) => {
+            const currentTools = Array.isArray(message.tools) ? [...message.tools] : [];
+            const toolName = event.message?.toolName;
+            const toolIndex = toolName ? currentTools.lastIndexOf(toolName) : -1;
+
+            if (toolIndex !== -1) {
+              currentTools[toolIndex] = command;
+            } else {
+              currentTools.push(command);
+            }
+
+            return {
+              ...message,
+              status: 'running',
+              role: message.role ?? event.role,
+              tools: currentTools.slice(-3),
+            };
+          };
+
+          if (index === -1) {
+            return trimMessages([
+              ...prev,
+              {
+                id: `subagent-${event.agentId}`,
+                sender: 'subagent',
+                status: 'running',
+                agentId: event.agentId,
+                role: event.role,
+                task: '',
+                tools: [command],
+              } as unknown as MessageT,
+            ]);
+          }
+
+          const next = [...prev];
+          next[index] = appendOrReplaceTool(next[index]) as unknown as MessageT;
+          return trimMessages(next);
+        });
+        return;
+      }
+
       case 'subagent_completed': {
         setMessages((prev) => {
           return trimMessages(

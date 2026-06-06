@@ -14,7 +14,7 @@ test('getSubagentDelegationAddendum includes orchestrator-specific text when orc
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
 
   t.true(result.includes('Orchestrator mode'));
-  t.true(result.includes('delegate workspace inspection'));
+  t.true(result.includes('Delegate workspace inspection'));
 });
 
 test('getSubagentDelegationAddendum includes self-service fallback when orchestratorMode is false', (t) => {
@@ -47,4 +47,12 @@ test('non-orchestrator mode does not include coordination checklist', (t) => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: false });
   t.false(result.includes('coupled or multi-worker'));
   t.false(result.includes('Coordination checklist'));
+});
+
+test('includes task framing guidance about autonomous workers', (t) => {
+  const result = getSubagentDelegationAddendum();
+  t.true(result.includes('Task framing'));
+  t.true(result.includes('autonomous agents'));
+  t.true(result.includes('goal, relevant context, and constraints'));
+  t.true(result.includes('not implementation steps'));
 });

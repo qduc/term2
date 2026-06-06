@@ -168,7 +168,7 @@ test('getAgentDefinition in orchestrator mode requires delegated tool work', (t)
   });
 
   t.true(definition.instructions.includes('Orchestrator mode'));
-  t.true(definition.instructions.includes('must delegate'));
+  t.true(definition.instructions.includes('Delegate workspace inspection'));
   t.false(definition.instructions.includes('Use `read_code_outline`'));
   // Verify non-orchestrator direct-tool guidance is absent from orchestrator instructions
   t.false(definition.instructions.includes('Prefer `read_file` for reading file contents.'));

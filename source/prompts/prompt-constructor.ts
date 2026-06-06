@@ -97,6 +97,6 @@ function getAskUserAddendum(): string {
   return `### ask_user Tool Guidance
 
 - Use the \`ask_user\` tool when the user's request is short, vague, or ambiguous, or when an architecture or product-behavior decision needs to be made.
-- Provide concise options whenever possible; the first option must be the recommended (default) choice.
+- Provide concise options whenever possible; the first option should be the recommended (default) choice.
 - If the tool result is \`${ASK_USER_DECLINE_RESULT}\`, proceed using the safest reasonable default and state the assumption in your final response.`;
 }

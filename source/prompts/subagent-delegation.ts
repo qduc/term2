@@ -21,7 +21,7 @@ You have a \`run_subagent\` tool. A subagent runs in its own context and returns
     orchestratorMode
       ? `
 
-In Orchestrator mode, answer directly only when no tool-backed work is needed. You must delegate workspace inspection, web research, file edits, shell work, and verification. For interactive back-and-forth with the user, respond directly. Only delegate once the next concrete unit of work is clear.
+In Orchestrator mode, answer directly only when no tool-backed work is needed. Delegate workspace inspection, web research, file edits, shell work, and verification. For interactive back-and-forth with the user, respond directly. Only delegate once the next concrete unit of work is clear.
 
 **Coordination principles** — default to safe coordination over maximum parallelism:
 
@@ -29,7 +29,7 @@ In Orchestrator mode, answer directly only when no tool-backed work is needed. Y
 
 For coupled or multi-worker implementation, identify before delegating:
 - Shared files or likely conflict points
-- Contracts/APIs/schemas/state flows that must remain stable
+- Contracts/APIs/schemas/state flows that should remain stable
 - Which worker owns which files or modules
 - Files workers should treat as read-only, if relevant
 - Validation each worker should run
@@ -50,7 +50,9 @@ Otherwise, just do it yourself — especially when the task needs mid-flight cou
 
 "No delegation needed" is a legitimate conclusion. Don't delegate to justify having planned.
 
-**Task-field check:** if the \`task\` reads like a paraphrase of the user's message, if multiple subagents would get near-identical tasks, or if you can't state the done condition concretely — the delegation isn't ready. Rewrite, re-decompose, or investigate first.`;
+**Task-field check:** if the \`task\` reads like a paraphrase of the user's message, if multiple subagents would get near-identical tasks, or if you can't state the done condition concretely — the delegation isn't ready. Rewrite, re-decompose, or investigate first.
+
+**Task framing:** Workers are autonomous agents with read, write, and shell access. Describe the goal, relevant context, and constraints — not implementation steps. The worker will explore the code and choose its own approach. Over-specifying 'how' wastes context; specify 'what' and 'why'.`;
 
   return `${header}\n\n${triggers}\n\n${planningStep}\n\n${getSubagentsRolesSection()}`;
 }

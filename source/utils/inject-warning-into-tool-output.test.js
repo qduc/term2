@@ -80,3 +80,35 @@ test('injectWarningIntoToolOutput preserves JSON object shape when no text field
   t.is(parsed.warning, warning.trim());
   t.is(parsed.success, true);
 });
+
+test('injectWarningIntoToolOutput appends warning as new item to JSON array when last item is not a string or object', (t) => {
+  const output = JSON.stringify([1, 2]);
+  const warning = ' [Warning]';
+  const result = injectWarningIntoToolOutput(output, warning);
+  const parsed = JSON.parse(result);
+  t.deepEqual(parsed, [1, 2, ' [Warning]']);
+});
+
+test('injectWarningIntoToolOutput appends warning as new item in envelope output array when last item is not a string or object', (t) => {
+  const output = JSON.stringify({
+    output: [
+      {
+        success: true,
+      },
+      true,
+    ],
+  });
+  const warning = ' [Warning]';
+  const result = injectWarningIntoToolOutput(output, warning);
+  const parsed = JSON.parse(result);
+  t.deepEqual(parsed.output, [
+    {
+      success: true,
+    },
+    true,
+    {
+      success: true,
+      stdout: ' [Warning]',
+    },
+  ]);
+});

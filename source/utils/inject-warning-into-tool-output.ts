@@ -40,7 +40,11 @@ export const injectWarningIntoToolOutput = (output: string, warning: string): st
         if (obj.output.length > 0) {
           const lastIdx = obj.output.length - 1;
           const lastItem = obj.output[lastIdx];
-          obj.output[lastIdx] = appendToValue(lastItem);
+          if (typeof lastItem === 'string' || (lastItem && typeof lastItem === 'object' && !Array.isArray(lastItem))) {
+            obj.output[lastIdx] = appendToValue(lastItem);
+          } else {
+            obj.output.push({ success: true, stdout: warning });
+          }
         } else {
           obj.output.push({ success: true, stdout: warning });
         }
@@ -51,7 +55,11 @@ export const injectWarningIntoToolOutput = (output: string, warning: string): st
         if (parsed.length > 0) {
           const lastIdx = parsed.length - 1;
           const lastItem = parsed[lastIdx];
-          parsed[lastIdx] = appendToValue(lastItem);
+          if (typeof lastItem === 'string' || (lastItem && typeof lastItem === 'object' && !Array.isArray(lastItem))) {
+            parsed[lastIdx] = appendToValue(lastItem);
+          } else {
+            parsed.push(warning);
+          }
         } else {
           parsed.push(warning);
         }

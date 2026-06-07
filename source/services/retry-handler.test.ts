@@ -1,12 +1,13 @@
 import test from 'ava';
 import { ModelBehaviorError } from '@openai/agents';
 import { APIConnectionTimeoutError } from 'openai';
+import { OpenAICompatibleError } from '../providers/common/provider-errors.js';
 import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import { ConversationStore } from './conversation-store.js';
 import { RetryHandler } from './retry-handler.js';
 import { ToolExecutionLedger } from './tool-execution-ledger.js';
 
-const makeHandler = (agentClient: Record<string, any> = {}) =>
+const makeHandler = (agentClient: Record<string, any> = {}, random: () => number = Math.random) =>
   new RetryHandler(
     {
       info: () => undefined,
@@ -20,6 +21,7 @@ const makeHandler = (agentClient: Record<string, any> = {}) =>
     },
     'session-1',
     agentClient as any,
+    random,
   );
 
 function asInstanceOf<T extends object>(prototype: object, props: Partial<T>): T {
@@ -44,7 +46,7 @@ test('classifyError returns flex fallback when available', (t) => {
 });
 
 test('classifyError returns transient retry for retryable upstream errors', (t) => {
-  const handler = makeHandler();
+  const handler = makeHandler({}, () => 0);
 
   const decision = handler.classifyError({
     error: asInstanceOf<APIConnectionTimeoutError>(APIConnectionTimeoutError.prototype, { message: 'timeout' }),
@@ -60,8 +62,27 @@ test('classifyError returns transient retry for retryable upstream errors', (t) 
   t.is(decision.kind, 'transient');
   if (decision.kind !== 'transient') return;
   t.is(decision.attempt, 2);
-  t.true(decision.delay >= 800);
-  t.true(decision.delay <= 1200);
+  t.is(decision.delay, 900);
+});
+
+test('classifyError respects Retry-After when the upstream error is retryable', (t) => {
+  const handler = makeHandler();
+
+  const decision = handler.classifyError({
+    error: new OpenAICompatibleError('rate limited', 429, { 'Retry-After': '7' }),
+    transientRetryCount: 0,
+    transportFallbackRetryCount: 0,
+    hallucinationRetryCount: 0,
+    flexServiceTierFallbackCount: 0,
+    maxTransientRetries: 5,
+    stream: null,
+    streamHistoryLength: 0,
+  });
+
+  t.is(decision.kind, 'transient');
+  if (decision.kind !== 'transient') return;
+  t.is(decision.attempt, 1);
+  t.is(decision.delay, 7000);
 });
 
 test('classifyError returns transport downgrade when forced', (t) => {
@@ -134,19 +155,30 @@ test('classifyError returns unrecoverable when retry limits are exhausted or err
     streamHistoryLength: 0,
   });
   t.deepEqual(generic, { kind: 'unrecoverable' });
+
+  const badRequest = genericHandler.classifyError({
+    error: new OpenAICompatibleError('bad request', 400, {}),
+    transientRetryCount: 0,
+    transportFallbackRetryCount: 0,
+    hallucinationRetryCount: 0,
+    flexServiceTierFallbackCount: 0,
+    maxTransientRetries: 5,
+    stream: null,
+    streamHistoryLength: 0,
+  });
+  t.deepEqual(badRequest, { kind: 'unrecoverable' });
 });
 
 test.serial('getTransientDelay uses exponential backoff with jitter', (t) => {
-  const handler = makeHandler();
-  const originalRandom = Math.random;
-  t.teardown(() => {
-    Math.random = originalRandom;
+  let randomIndex = 0;
+  const randomValues = [0, 1];
+  const handler = makeHandler({}, () => {
+    const value = randomValues[randomIndex];
+    randomIndex += 1;
+    return value;
   });
 
-  Math.random = () => 0;
   t.is(handler.getTransientDelay(1), 450);
-
-  Math.random = () => 1;
   t.is(handler.getTransientDelay(3), 2200);
 });
 

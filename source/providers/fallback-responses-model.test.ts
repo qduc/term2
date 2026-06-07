@@ -27,6 +27,16 @@ function makeMockModel(
   return model as Model;
 }
 
+function createSleepRecorder() {
+  const delays: number[] = [];
+  return {
+    delays,
+    sleep: async (delayMs: number) => {
+      delays.push(delayMs);
+    },
+  };
+}
+
 test('isNetworkProtocolError correctly flags network protocol errors', (t) => {
   // System network errors
   t.true(isNetworkProtocolError({ code: 'ENOTFOUND' }));
@@ -182,6 +192,7 @@ test('FallbackResponsesModel injects Codex previous response id and trims replay
 
 test('FallbackResponsesModel retries safe Codex warm-up failures before chaining the delta request', async (t) => {
   const seenRequests: ModelRequest[] = [];
+  const sleep = createSleepRecorder();
   const safeWarmupError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
     code: 'connection_closed_before_opening',
   });
@@ -213,6 +224,7 @@ test('FallbackResponsesModel retries safe Codex warm-up failures before chaining
       getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
       runWithContext: <T>(_context: any, fn: () => T) => fn(),
     },
+    { sleep: sleep.sleep },
   );
 
   const latestUser = { role: 'user', type: 'message', content: 'next' };
@@ -226,6 +238,8 @@ test('FallbackResponsesModel retries safe Codex warm-up failures before chaining
   } as any);
 
   t.is(seenRequests.length, 3);
+  t.is(sleep.delays.length, 1);
+  t.true(sleep.delays[0] > 0);
   t.is(seenRequests[0].modelSettings.providerData?.generate, false);
   t.is(seenRequests[1].modelSettings.providerData?.generate, false);
   t.deepEqual(seenRequests[0].input, seenRequests[1].input);
@@ -235,6 +249,7 @@ test('FallbackResponsesModel retries safe Codex warm-up failures before chaining
 
 test('FallbackResponsesModel falls back to full history without previous response id when safe Codex warm-up retries are exhausted', async (t) => {
   const seenRequests: ModelRequest[] = [];
+  const sleep = createSleepRecorder();
   const safeWarmupError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
     code: 'connection_closed_before_opening',
   });
@@ -259,10 +274,19 @@ test('FallbackResponsesModel falls back to full history without previous respons
   });
 
   const state = { isDowngraded: false };
-  const model = new FallbackResponsesModel(wsModel, makeMockModel({}), state, undefined, undefined, 'codex', {
-    getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
-    runWithContext: <T>(_context: any, fn: () => T) => fn(),
-  });
+  const model = new FallbackResponsesModel(
+    wsModel,
+    makeMockModel({}),
+    state,
+    undefined,
+    undefined,
+    'codex',
+    {
+      getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    },
+    { sleep: sleep.sleep },
+  );
 
   const fullInput = [
     { role: 'user', type: 'message', content: 'first' },
@@ -277,6 +301,8 @@ test('FallbackResponsesModel falls back to full history without previous respons
 
   const expectedTotalAttempts = DEFAULT_STREAM_MAX_RETRIES + 2;
   t.is(seenRequests.length, expectedTotalAttempts);
+  t.is(sleep.delays.length, DEFAULT_STREAM_MAX_RETRIES);
+  t.true(sleep.delays.every((delayMs) => delayMs > 0));
   t.true(
     seenRequests
       .slice(0, expectedTotalAttempts - 1)

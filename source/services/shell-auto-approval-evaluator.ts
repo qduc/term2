@@ -1,5 +1,6 @@
 import type { AgentInputItem, JsonSchemaDefinition } from '@openai/agents';
 import type { LLMAdvisory } from '../contracts/conversation.js';
+import { executeWithRetry } from '../lib/retry-executor.js';
 import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import { classifyCommandDetailed, SafetyStatus } from '../utils/command-safety/index.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './service-interfaces.js';
@@ -21,6 +22,7 @@ const MAX_HISTORY_ITEMS = 8;
 const MAX_CONTEXT_CHARS = 3_000;
 const MAX_MESSAGE_CHARS = 500;
 const STRUCTURED_SUPPORT_CACHE_TTL_MS = 60 * 60 * 1_000;
+const SHELL_AUTO_APPROVAL_UPSTREAM_RETRY_ATTEMPTS = 1;
 
 type StructuredSupport = 'supported' | 'unsupported';
 
@@ -285,6 +287,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   logger,
   sessionContextService,
   throwOnError = false,
+  retryOptions,
 }: {
   commands: ShellAutoApprovalCommand[];
   history: AgentInputItem[];
@@ -293,6 +296,10 @@ export async function evaluateShellAutoApprovalAdvisories({
   logger: ILoggingService;
   sessionContextService: ISessionContextService;
   throwOnError?: boolean;
+  retryOptions?: {
+    sleep?: (ms: number) => Promise<void>;
+    random?: () => number;
+  };
 }): Promise<Map<string, ShellAutoApprovalAdvisory>> {
   const out = new Map<string, ShellAutoApprovalAdvisory>();
   if (!settingsService) return out;
@@ -351,8 +358,20 @@ export async function evaluateShellAutoApprovalAdvisories({
     const runWithContext = async <T>(fn: () => Promise<T>): Promise<T> =>
       evaluatorContext ? await sessionContextService.runWithContext(evaluatorContext, fn) : await fn();
 
+    const runWithUpstreamRetry = async <T>(operation: () => Promise<T>): Promise<T> =>
+      executeWithRetry({
+        operation,
+        retryAttempts: SHELL_AUTO_APPROVAL_UPSTREAM_RETRY_ATTEMPTS,
+        provider: autoApproveProvider,
+        model: autoApproveModel,
+        traceId: logger.getCorrelationId?.(),
+        logger,
+        ...(retryOptions?.sleep ? { sleep: retryOptions.sleep } : {}),
+        ...(retryOptions?.random ? { random: retryOptions.random } : {}),
+      });
+
     const tryPromptMode = async (): Promise<Map<string, ShellAutoApprovalAdvisory>> => {
-      let responseText = await runWithContext(() => runPromptChat(prompt));
+      let responseText = await runWithContext(() => runWithUpstreamRetry(() => runPromptChat(prompt)));
       logger.debug('Shell auto-approval evaluation response', {
         eventType: 'evaluator.response.received',
         direction: 'received',
@@ -377,12 +396,14 @@ export async function evaluateShellAutoApprovalAdvisories({
           validationError instanceof Error ? validationError.message : String(validationError),
         );
         responseText = await runWithContext(() =>
-          agentClient.chat(repairPrompt, {
-            model: autoApproveModel,
-            provider: autoApproveProvider,
-            reasoningEffort: 'none',
-            instructions,
-          }),
+          runWithUpstreamRetry(() =>
+            agentClient.chat(repairPrompt, {
+              model: autoApproveModel,
+              provider: autoApproveProvider,
+              reasoningEffort: 'none',
+              instructions,
+            }),
+          ),
         );
         logger.debug('Shell auto-approval repair response', {
           eventType: 'evaluator.response.received',
@@ -413,7 +434,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     };
 
     const tryStructuredMode = async (): Promise<Map<string, ShellAutoApprovalAdvisory>> => {
-      let response: unknown = await runWithContext(() => runStructuredChat(prompt));
+      let response: unknown = await runWithContext(() => runWithUpstreamRetry(() => runStructuredChat(prompt)));
       setStructuredSupport(autoApproveProvider, autoApproveModel, 'supported');
       logger.debug('Shell auto-approval evaluation response', {
         eventType: 'evaluator.response.received',
@@ -438,7 +459,7 @@ export async function evaluateShellAutoApprovalAdvisories({
           response,
           validationError instanceof Error ? validationError.message : String(validationError),
         );
-        response = await runWithContext(() => runStructuredChat(repairPrompt));
+        response = await runWithContext(() => runWithUpstreamRetry(() => runStructuredChat(repairPrompt)));
         logger.debug('Shell auto-approval repair response', {
           eventType: 'evaluator.response.received',
           direction: 'received',

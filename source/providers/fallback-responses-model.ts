@@ -5,6 +5,7 @@ import { summarizeReceivedTraffic } from '../services/provider-traffic.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import { isRetryableTransportError } from '../services/retry-error-classification.js';
+import { computeUpstreamRetryDelayMs } from '../services/upstream-retry-policy.js';
 
 export { isNetworkProtocolError } from '../services/retry-error-classification.js';
 
@@ -118,6 +119,11 @@ type PreparedCodexRequest = {
 
 type WarmupKind = 'unary' | 'stream';
 
+type WarmupRetryDependencies = {
+  sleep?: (delayMs: number) => Promise<void>;
+  random?: () => number;
+};
+
 // The SDK's convertToOutputItem crashes with TypeError when the WS model returns
 // a failed API response that has no `output` field. Treat it as a WS-path failure
 // so we can fall back to the HTTP model.
@@ -131,6 +137,8 @@ function isWsResponseOutputMissing(err: unknown): boolean {
 
 export class FallbackResponsesModel implements Model {
   private readonly codexPreviousResponseIds = new Map<string, string>();
+  private readonly warmupSleep: (delayMs: number) => Promise<void>;
+  private readonly warmupRandom: () => number;
 
   constructor(
     private readonly wsModel: Model,
@@ -140,8 +148,16 @@ export class FallbackResponsesModel implements Model {
     private readonly loggingService?: any,
     private readonly providerId?: string,
     private readonly sessionContextService?: ISessionContextService,
+    warmupRetryDependencies?: WarmupRetryDependencies,
   ) {
     this.state.forceDowngrade = (error: unknown) => this.#notifyDowngrade(error);
+    this.warmupSleep =
+      warmupRetryDependencies?.sleep ??
+      ((delayMs: number) =>
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, delayMs);
+        }));
+    this.warmupRandom = warmupRetryDependencies?.random ?? Math.random;
   }
 
   #getCodexServerHistoryKey(): string | null {
@@ -286,13 +302,19 @@ export class FallbackResponsesModel implements Model {
     return retryAdvice?.suggested === true && retryAdvice?.replaySafety === 'safe';
   }
 
+  async #sleepBeforeCodexWarmupRetry(attempt: number): Promise<void> {
+    const delayMs = computeUpstreamRetryDelayMs({ attemptNumber: attempt, random: this.warmupRandom });
+    await this.warmupSleep(delayMs);
+  }
+
   async #warmupCodexUnary(request: ModelRequest | undefined): Promise<string | undefined> {
     if (!request) {
       return undefined;
     }
 
+    const maxAttempts = DEFAULT_STREAM_MAX_RETRIES + 1;
     let attempt = 1;
-    while (true) {
+    while (attempt <= maxAttempts) {
       try {
         const response = await this.wsModel.getResponse(request);
         const responseId = getResponseIdFromResponse(response);
@@ -303,12 +325,15 @@ export class FallbackResponsesModel implements Model {
         if (!canSafelyRetry) {
           throw error;
         }
-        if (attempt > DEFAULT_STREAM_MAX_RETRIES) {
+        if (attempt >= maxAttempts) {
           return undefined;
         }
+        await this.#sleepBeforeCodexWarmupRetry(attempt);
         attempt++;
       }
     }
+
+    return undefined;
   }
 
   async #warmupCodexStream(request: ModelRequest | undefined): Promise<string | undefined> {
@@ -316,8 +341,9 @@ export class FallbackResponsesModel implements Model {
       return undefined;
     }
 
+    const maxAttempts = DEFAULT_STREAM_MAX_RETRIES + 1;
     let attempt = 1;
-    while (true) {
+    while (attempt <= maxAttempts) {
       try {
         let responseId: string | undefined;
         for await (const event of this.wsModel.getStreamedResponse(request)) {
@@ -330,12 +356,15 @@ export class FallbackResponsesModel implements Model {
         if (!canSafelyRetry) {
           throw error;
         }
-        if (attempt > DEFAULT_STREAM_MAX_RETRIES) {
+        if (attempt >= maxAttempts) {
           return undefined;
         }
+        await this.#sleepBeforeCodexWarmupRetry(attempt);
         attempt++;
       }
     }
+
+    return undefined;
   }
 
   #getEffectiveCodexRequestAfterWarmup(

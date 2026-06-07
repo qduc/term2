@@ -4,6 +4,7 @@ import type { AgentStream } from './agent-stream.js';
 import { decideRetry, isTransientRetryableError } from './conversation-retry-policy.js';
 import { ConversationStore } from './conversation-store.js';
 import type { ILoggingService } from './service-interfaces.js';
+import { classifyUpstreamRetryableError, computeUpstreamRetryDelayMs } from './upstream-retry-policy.js';
 import {
   reconcileHistoryWithToolLedger,
   ToolExecutionLedger,
@@ -19,7 +20,12 @@ export type RetryDecision =
   | { kind: 'unrecoverable' };
 
 export class RetryHandler {
-  constructor(private logger: ILoggingService, private sessionId: string, private agentClient: OpenAIAgentClient) {}
+  constructor(
+    private logger: ILoggingService,
+    private sessionId: string,
+    private agentClient: OpenAIAgentClient,
+    private random: () => number = Math.random,
+  ) {}
 
   classifyError(opts: {
     error: unknown;
@@ -56,10 +62,15 @@ export class RetryHandler {
 
     if (isTransientRetryableError(error) && transientRetryCount < maxTransientRetries) {
       const attempt = transientRetryCount + 1;
+      const upstreamRetryClassification = classifyUpstreamRetryableError(error);
       return {
         kind: 'transient',
         attempt,
-        delay: this.getTransientDelay(attempt),
+        delay: computeUpstreamRetryDelayMs({
+          retryAfterMs: upstreamRetryClassification.retryAfterMs,
+          attemptNumber: attempt,
+          random: this.random,
+        }),
       };
     }
 
@@ -80,9 +91,7 @@ export class RetryHandler {
   }
 
   getTransientDelay(attempt: number): number {
-    const base = Math.min(500 * Math.pow(2, attempt - 1), 30000);
-    const jitter = 0.9 + Math.random() * 0.2;
-    return Math.round(base * jitter);
+    return computeUpstreamRetryDelayMs({ attemptNumber: attempt, random: this.random });
   }
 
   restoreForRetry(opts: {

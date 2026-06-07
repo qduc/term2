@@ -152,6 +152,7 @@ export interface SubagentToolStartedEvent {
   agentId: string;
   role: string;
   toolName: string;
+  arguments?: unknown;
   commandMessages?: CommandMessage[];
 }
 

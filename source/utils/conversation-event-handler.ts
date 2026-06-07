@@ -52,6 +52,15 @@ export function findLastSafeBoundary(fullText: string, searchStartIndex: number)
   return lastSafeIndex;
 }
 
+function countOutputLines(output: string | undefined): number {
+  if (!output) return 0;
+  const trimmed = output.trim();
+  if (trimmed === 'No matches found.' || trimmed.startsWith('No files found')) {
+    return 0;
+  }
+  return trimmed.split('\n').filter((line) => line.trim().length > 0).length;
+}
+
 /**
  * Message types used by the event handler.
  */
@@ -412,7 +421,20 @@ export function createConversationEventHandler<
             event.commandMessages
               ?.map((message) => message.command)
               .filter((command): command is string => Boolean(command)) ?? [];
-          const newTools = toolLabels.length > 0 ? toolLabels : [event.toolName];
+          const newTools = (() => {
+            if (toolLabels.length > 0) {
+              return toolLabels;
+            }
+            const args = parseToolArguments(event.arguments);
+            const formatted = formatToolCommand(event.toolName, args as Record<string, unknown>);
+            if (formatted === event.toolName) {
+              return [event.toolName];
+            }
+            if (event.toolName === 'shell') {
+              return [`shell ${formatted}`];
+            }
+            return [formatted];
+          })();
           const appendTool = (message: any) => ({
             ...message,
             status: 'running',
@@ -448,15 +470,54 @@ export function createConversationEventHandler<
           const command = event.message?.command;
           if (!command) return prev;
 
+          const toolName = event.message?.toolName;
+          const finishedCommand = (() => {
+            let displayCommand = command;
+
+            // Ensure 'shell' prefix is prepended for shell commands
+            if (toolName === 'shell' && !displayCommand.startsWith('shell ')) {
+              displayCommand = `shell ${displayCommand}`;
+            }
+
+            // Determine suffix based on success/output
+            let suffix = '';
+            if (toolName === 'shell') {
+              if (event.message?.success === true) {
+                suffix = ' (Success)';
+              } else if (event.message?.success === false) {
+                suffix = ' (Failed)';
+              }
+            } else if (toolName === 'grep' || toolName === 'find_files') {
+              const lines = countOutputLines(event.message?.output);
+              suffix = ` (${lines} match${lines !== 1 ? 'es' : ''})`;
+            } else {
+              if (event.message?.success === true) {
+                suffix = ' (Success)';
+              } else if (event.message?.success === false) {
+                suffix = ' (Failed)';
+              }
+            }
+
+            return `${displayCommand}${suffix}`;
+          })();
+
           const appendOrReplaceTool = (message: any) => {
             const currentTools = Array.isArray(message.tools) ? [...message.tools] : [];
-            const toolName = event.message?.toolName;
-            const toolIndex = toolName ? currentTools.lastIndexOf(toolName) : -1;
+            let toolIndex = -1;
+            if (toolName) {
+              for (let i = currentTools.length - 1; i >= 0; i--) {
+                const t = currentTools[i];
+                if (t === toolName || t.startsWith(`${toolName} `)) {
+                  toolIndex = i;
+                  break;
+                }
+              }
+            }
 
             if (toolIndex !== -1) {
-              currentTools[toolIndex] = command;
+              currentTools[toolIndex] = finishedCommand;
             } else {
-              currentTools.push(command);
+              currentTools.push(finishedCommand);
             }
 
             return {
@@ -477,7 +538,7 @@ export function createConversationEventHandler<
                 agentId: event.agentId,
                 role: event.role,
                 task: '',
-                tools: [command],
+                tools: [finishedCommand],
               } as unknown as MessageT,
             ]);
           }

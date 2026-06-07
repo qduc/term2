@@ -1320,6 +1320,7 @@ test('subagent_command_message: replaces generic toolName or appends command to 
       status: 'completed',
       command: 'read_file "source/app.tsx"',
       toolName: 'read_file',
+      success: true,
     },
   } as any);
 
@@ -1336,7 +1337,7 @@ test('subagent_command_message: replaces generic toolName or appends command to 
       agentId: 'agent-1',
       role: 'explorer',
       task: 'investigate',
-      tools: ['read_file "source/app.tsx"'],
+      tools: ['read_file "source/app.tsx" (Success)'],
     },
   ]);
 });
@@ -1356,6 +1357,7 @@ test('subagent_command_message: creates subagent message if not present', (t) =>
       status: 'completed',
       command: 'read_file "source/app.tsx"',
       toolName: 'read_file',
+      success: true,
     },
   } as any);
 
@@ -1364,5 +1366,159 @@ test('subagent_command_message: creates subagent message if not present', (t) =>
   t.is(result.length, 1);
   t.is(result[0].sender, 'subagent');
   t.is(result[0].agentId, 'agent-1');
-  t.deepEqual(result[0].tools, ['read_file "source/app.tsx"']);
+  t.deepEqual(result[0].tools, ['read_file "source/app.tsx" (Success)']);
+});
+
+test('subagent_tool_started: formats shell command with args', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'investigate',
+  } as ConversationEvent);
+
+  handler({
+    type: 'subagent_tool_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    toolName: 'shell',
+    arguments: { command: 'npm test' },
+  } as any);
+
+  let messages = deps.calls.appendedMessages[0];
+  for (const update of deps.calls.setMessagesCalls) {
+    messages = update(messages);
+  }
+
+  t.deepEqual(messages[0].tools, ['shell npm test']);
+});
+
+test('subagent_command_message: replaces formatted shell command and appends outcome', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'investigate',
+  } as ConversationEvent);
+
+  handler({
+    type: 'subagent_tool_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    toolName: 'shell',
+    arguments: { command: 'npm test' },
+  } as any);
+
+  handler({
+    type: 'subagent_command_message',
+    agentId: 'agent-1',
+    role: 'explorer',
+    message: {
+      id: 'cmd-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'npm test',
+      toolName: 'shell',
+      success: false,
+    },
+  } as any);
+
+  let messages = deps.calls.appendedMessages[0];
+  for (const update of deps.calls.setMessagesCalls) {
+    messages = update(messages);
+  }
+
+  t.deepEqual(messages[0].tools, ['shell npm test (Failed)']);
+});
+
+test('subagent_command_message: counts matches for grep tool and appends count', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'investigate',
+  } as ConversationEvent);
+
+  handler({
+    type: 'subagent_tool_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    toolName: 'grep',
+    arguments: { pattern: 'TODO', path: 'src/' },
+  } as any);
+
+  handler({
+    type: 'subagent_command_message',
+    agentId: 'agent-1',
+    role: 'explorer',
+    message: {
+      id: 'cmd-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'grep "TODO" "src/"',
+      toolName: 'grep',
+      output: 'src/main.ts:1:TODO: first\nsrc/main.ts:5:TODO: second',
+    },
+  } as any);
+
+  let messages = deps.calls.appendedMessages[0];
+  for (const update of deps.calls.setMessagesCalls) {
+    messages = update(messages);
+  }
+
+  t.deepEqual(messages[0].tools, ['grep "TODO" "src/" (2 matches)']);
+});
+
+test('subagent_command_message: appends 0 matches for empty grep output', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'investigate',
+  } as ConversationEvent);
+
+  handler({
+    type: 'subagent_tool_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    toolName: 'grep',
+    arguments: { pattern: 'TODO', path: 'src/' },
+  } as any);
+
+  handler({
+    type: 'subagent_command_message',
+    agentId: 'agent-1',
+    role: 'explorer',
+    message: {
+      id: 'cmd-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'grep "TODO" "src/"',
+      toolName: 'grep',
+      output: 'No matches found.',
+    },
+  } as any);
+
+  let messages = deps.calls.appendedMessages[0];
+  for (const update of deps.calls.setMessagesCalls) {
+    messages = update(messages);
+  }
+
+  t.deepEqual(messages[0].tools, ['grep "TODO" "src/" (0 matches)']);
 });

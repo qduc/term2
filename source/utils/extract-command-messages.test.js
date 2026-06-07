@@ -67,6 +67,7 @@ test('extracts failure reason from shell command outcome', (t) => {
       success: false,
       failureReason: 'timeout',
       isApprovalRejection: false,
+      toolName: 'shell',
     });
   } finally {
     restore();
@@ -107,6 +108,7 @@ test('extracts shell command from matching function_call item', (t) => {
       success: true,
       failureReason: undefined,
       isApprovalRejection: false,
+      toolName: 'shell',
     });
   } finally {
     restore();
@@ -148,6 +150,7 @@ test('extracts shell command from output items using call_id', (t) => {
       success: true,
       failureReason: undefined,
       isApprovalRejection: false,
+      toolName: 'shell',
     });
   } finally {
     restore();
@@ -189,6 +192,7 @@ test('extracts grep output from plain text tool result', (t) => {
       output: 'source/app.tsx:1:hello',
       success: true,
       isApprovalRejection: false,
+      toolName: 'grep',
     });
   } finally {
     restore();
@@ -235,6 +239,7 @@ test('extracts grep command from matching function_call item', (t) => {
       output: 'source/utils/output-trim.ts:12:export const DEFAULT_TRIM_CONFIG',
       success: true,
       isApprovalRejection: false,
+      toolName: 'grep',
     });
   } finally {
     restore();

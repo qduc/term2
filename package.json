@@ -102,6 +102,7 @@
     "*.{js,jsx,ts,tsx,md,json}": "prettier --write"
   },
   "ava": {
+    "concurrency": 4,
     "environmentVariables": {
       "NODE_NO_WARNINGS": "1",
       "DISABLE_LOGGING": "1"

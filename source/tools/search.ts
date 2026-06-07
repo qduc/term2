@@ -72,6 +72,7 @@ const formatSearchCommandMessage: FormatCommandMessage = (item, index, _toolCall
       command,
       output,
       success,
+      toolName: 'grep',
     }),
   ];
 };

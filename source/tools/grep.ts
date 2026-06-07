@@ -286,6 +286,7 @@ export const formatGrepCommandMessage: FormatCommandMessage = (item, index, tool
       command,
       output,
       success,
+      toolName: 'grep',
     }),
   ];
 };

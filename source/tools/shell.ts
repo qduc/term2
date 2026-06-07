@@ -188,6 +188,7 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
       output,
       success,
       failureReason,
+      toolName: 'shell',
     }),
   ];
 };

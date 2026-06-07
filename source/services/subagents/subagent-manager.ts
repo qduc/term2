@@ -691,6 +691,7 @@ export class SubagentManager {
                 agentId,
                 role: request.role,
                 toolName: event.toolName,
+                arguments: event.arguments,
               });
             }
             break;

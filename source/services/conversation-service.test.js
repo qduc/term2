@@ -494,6 +494,7 @@ test('dedupes command messages emitted live from run events', async (t) => {
       success: true,
       isApprovalRejection: false,
       failureReason: undefined,
+      toolName: 'shell',
     },
   ]);
   t.deepEqual(result.commandMessages, []);
@@ -556,6 +557,7 @@ test('attaches cached shell args when output uses call_id', async (t) => {
       success: true,
       isApprovalRejection: false,
       failureReason: undefined,
+      toolName: 'shell',
     },
   ]);
   t.deepEqual(result.commandMessages, []);

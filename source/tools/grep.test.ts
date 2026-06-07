@@ -5,7 +5,7 @@ import * as os from 'os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tool as createTool, RunContext } from '@openai/agents';
-import { createGrepToolDefinition } from './grep.js';
+import { createGrepToolDefinition, formatGrepCommandMessage } from './grep.js';
 import { toolErrorFunction, wrapToolInvoke } from '../lib/tool-invoke.js';
 
 const execFileAsync = promisify(execFile);
@@ -161,4 +161,20 @@ test.serial('execute: literal mode uses fixed-string matching', async (t) => {
     t.true(result.includes('hello.world'));
     t.false(result.includes('hello-world'));
   });
+});
+
+test('formatGrepCommandMessage sets toolName to "grep" so the match counter uses the structured parser', (t) => {
+  const item = {
+    rawItem: {
+      arguments: JSON.stringify({ pattern: 'hello', path: '.' }),
+    },
+    output: JSON.stringify({
+      output: 'file1.ts:1:hello\nfile2.ts:3:hello',
+    }),
+  };
+
+  const messages = formatGrepCommandMessage(item, 0, new Map());
+
+  t.is(messages.length, 1);
+  t.is(messages[0].toolName, 'grep');
 });

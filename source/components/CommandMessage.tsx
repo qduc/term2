@@ -2,6 +2,7 @@ import React, { FC, useState, useEffect, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { generateDiff } from '../utils/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
+import { getMatchCount, isSearchLikeTool, parseFindFilesOutput, parseGrepOutput } from './command-message-helpers.js';
 import { COLOR_TOOL_OUTPUT } from './theme.js';
 import DiffView from './DiffView.js';
 
@@ -23,27 +24,6 @@ type Props = {
   displayMode?: 'standard' | 'concise';
 };
 
-const SEARCH_TOOL_NAMES = new Set(['grep', 'find_files']);
-
-const SEARCH_COMMANDS = ['grep', 'rg', 'find', 'fd', 'ag', 'ack', 'git grep'];
-
-const isSearchLikeTool = (toolName: string | undefined, command: string): boolean => {
-  if (toolName && SEARCH_TOOL_NAMES.has(toolName)) return true;
-  if (toolName === 'shell' || !toolName) {
-    const cmd = command.trim().split(/\s+/)[0] ?? '';
-    if (cmd && SEARCH_COMMANDS.some((sc) => cmd === sc || cmd.endsWith(`/${sc}`))) return true;
-  }
-  return false;
-};
-
-const countOutputLines = (output: string | undefined): number => {
-  if (!output) return 0;
-  return output
-    .trim()
-    .split('\n')
-    .filter((line) => line.trim().length > 0).length;
-};
-
 const parseReadFileOutput = (output: string | undefined) => {
   if (!output) return null;
   const lines = output.split('\n');
@@ -60,66 +40,6 @@ const parseReadFileOutput = (output: string | undefined) => {
         contentLines,
       };
     }
-  }
-  return null;
-};
-
-const parseGrepOutput = (output: string | undefined) => {
-  if (!output) return null;
-  const lines = output.split('\n');
-  const matchesByFile: Record<string, { lineNum: number; content: string }[]> = {};
-  let note: string | null = null;
-  let isAllMatches = true;
-
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    if (line.startsWith('Note:')) {
-      note = line;
-      continue;
-    }
-    const match = line.match(/^(.*?):(\d+):(.*)$/);
-    if (match) {
-      const filePath = match[1] ?? '';
-      const lineNum = parseInt(match[2] ?? '0', 10);
-      const content = match[3] ?? '';
-      if (!matchesByFile[filePath]) {
-        matchesByFile[filePath] = [];
-      }
-      matchesByFile[filePath].push({ lineNum, content });
-    } else {
-      isAllMatches = false;
-      break;
-    }
-  }
-
-  if (isAllMatches && Object.keys(matchesByFile).length > 0) {
-    return { matchesByFile, note };
-  }
-  return null;
-};
-
-const parseFindFilesOutput = (output: string | undefined) => {
-  if (!output) return null;
-  const lines = output.split('\n');
-  const files: string[] = [];
-  let note: string | null = null;
-  let isAllFiles = true;
-
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    if (line.startsWith('Note:')) {
-      note = line;
-      continue;
-    }
-    if (line.startsWith('Error:') || line.startsWith('No files found')) {
-      isAllFiles = false;
-      break;
-    }
-    files.push(line);
-  }
-
-  if (isAllFiles && files.length > 0) {
-    return { files, note };
   }
   return null;
 };
@@ -666,7 +586,7 @@ const CommandMessage: FC<Props> = ({
     if (displayMode !== 'concise') return 0;
     if (!isSearchLikeTool(toolName, command)) return 0;
     if (isRunning || isApprovalRejection) return 0;
-    return countOutputLines(output);
+    return getMatchCount(toolName, command, output);
   }, [displayMode, toolName, command, isRunning, isApprovalRejection, output]);
 
   const matchCountElement =

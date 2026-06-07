@@ -202,6 +202,7 @@ test('run() retries streamed recoverable errors without committing failed stream
   const session = new ConversationSession('s1', {
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
+    retryOptions: { allowFreshStartRetries: false },
   });
 
   const emitted = [];
@@ -216,6 +217,36 @@ test('run() retries streamed recoverable errors without committing failed stream
   t.is(calls.length, 2);
   t.is(calls[0].length, 1);
   t.deepEqual(calls[1], [{ role: 'user', type: 'message', content: 'retry me' }]);
+});
+
+test('run() does not retry recoverable errors from a fresh start when disabled', async (t) => {
+  let calls = 0;
+  const mockClient = {
+    getProvider() {
+      return 'openrouter';
+    },
+    async startStream() {
+      calls++;
+      throw new ModelBehaviorError('Tool fake_tool not found in agent Terminal Assistant.');
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+    retryOptions: { allowFreshStartRetries: false },
+  });
+
+  const emitted = [];
+  await t.throwsAsync(async () => {
+    for await (const ev of session.run('retry me')) {
+      emitted.push(ev);
+    }
+  });
+
+  t.is(calls, 1);
+  t.false(emitted.some((event) => event.type === 'retry'));
+  t.truthy(emitted.find((event) => event.type === 'error'));
 });
 
 test('run() retries streamed transient websocket close 1006 by replaying the turn', async (t) => {

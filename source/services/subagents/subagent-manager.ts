@@ -672,6 +672,9 @@ export class SubagentManager {
         settingsService: this.#settings,
         sessionContextService: this.#sessionContextService,
       },
+      retryOptions: {
+        allowFreshStartRetries: false,
+      },
     });
 
     const userTurn = { text: request.task, images: [] as any[] };

@@ -52,6 +52,14 @@ type BuiltOutgoingInput = {
 
 type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
 
+type ConversationSessionRetryOptions = {
+  /**
+   * When false, retries are only allowed if an AgentStream exists so the turn
+   * can resume from captured history instead of replaying from the beginning.
+   */
+  allowFreshStartRetries?: boolean;
+};
+
 const warnIfStreamHistoryReplayedTools = ({
   logger,
   sessionId,
@@ -183,6 +191,7 @@ export class ConversationSession {
   private sessionContextService: ISessionContextService;
   private pendingModeNotice: string | null = null;
   private conversationLogger: ConversationLogger;
+  private allowFreshStartRetries: boolean;
 
   constructor(
     id: string,
@@ -190,6 +199,7 @@ export class ConversationSession {
       agentClient,
       deps,
       sessionStartedAt,
+      retryOptions,
     }: {
       agentClient: OpenAIAgentClient;
       deps: {
@@ -198,6 +208,7 @@ export class ConversationSession {
         sessionContextService: ISessionContextService;
       };
       sessionStartedAt?: string;
+      retryOptions?: ConversationSessionRetryOptions;
     },
   ) {
     this.id = id;
@@ -206,6 +217,7 @@ export class ConversationSession {
     this.logger = deps.logger;
     this.settingsService = deps.settingsService;
     this.sessionContextService = deps.sessionContextService;
+    this.allowFreshStartRetries = retryOptions?.allowFreshStartRetries ?? true;
     this.conversationStore = new ConversationStore();
     this.retryHandler = new RetryHandler(this.logger, this.id, this.agentClient);
     this.shellAutoApproval = new ShellAutoApprovalResolver({
@@ -811,7 +823,7 @@ export class ConversationSession {
         // When WS degrades to HTTP mid-request and the provider requires WS for
         // chaining (e.g. Codex), the model layer throws ChainingTransportDowngradeError.
         // Break chaining and retry with full history.
-        if (chainingError instanceof ChainingTransportDowngradeError) {
+        if (chainingError instanceof ChainingTransportDowngradeError && this.allowFreshStartRetries) {
           this.#breakChaining();
 
           this.logger.warn('ChainingTransportDowngradeError caught, retrying with full history', {
@@ -892,7 +904,7 @@ export class ConversationSession {
       yield toTerminalEvent(resolvedResult);
     } catch (error) {
       const streamHistoryLength = Array.isArray((stream as any)?.history) ? (stream as any).history.length : 0;
-      const decision: RetryDecision = this.retryHandler.classifyError({
+      let decision: RetryDecision = this.retryHandler.classifyError({
         error,
         transientRetryCount,
         transportFallbackRetryCount,
@@ -902,6 +914,19 @@ export class ConversationSession {
         stream,
         streamHistoryLength,
       });
+
+      if (!this.allowFreshStartRetries && !stream && decision.kind !== 'none' && decision.kind !== 'unrecoverable') {
+        this.logger.warn('Retry requires fresh start but fresh-start retries are disabled for this session', {
+          eventType: 'retry.fresh_start_blocked',
+          category: 'retry',
+          phase: 'retry',
+          sessionId: this.id,
+          traceId: this.logger.getCorrelationId(),
+          retryKind: decision.kind,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+        decision = { kind: 'unrecoverable' };
+      }
 
       switch (decision.kind) {
         case 'flex_fallback': {
@@ -1289,6 +1314,23 @@ export class ConversationSession {
             stream,
             streamHistoryLength: Array.isArray((stream as any)?.history) ? (stream as any).history.length : 0,
           });
+          if (
+            !this.allowFreshStartRetries &&
+            !stream &&
+            decision.kind !== 'none' &&
+            decision.kind !== 'unrecoverable'
+          ) {
+            this.logger.warn('Retry requires fresh start but fresh-start retries are disabled for this session', {
+              eventType: 'retry.fresh_start_blocked',
+              category: 'retry',
+              phase: 'retry',
+              sessionId: this.id,
+              traceId: this.logger.getCorrelationId(),
+              retryKind: decision.kind,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            });
+            throw error;
+          }
           if (decision.kind === 'transient') {
             transientRetryCount = decision.attempt;
             this.logger.warn('Transient error in continuation, retrying', {

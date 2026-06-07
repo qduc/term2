@@ -10,6 +10,7 @@ import { SubagentSession } from './subagent-session.js';
 import type { SubagentRequest, SubagentResult, SubagentDefinition, SubagentRole } from './types.js';
 import type { ConversationEvent } from '../conversation-events.js';
 import type { CommandMessage, ToolDefinition } from '../../tools/types.js';
+import { MAX_SUBAGENT_MODEL_RETRIES } from '../conversation-retry-policy.js';
 
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import { wrapNeedsApproval } from '../../lib/tool-invoke.js';
@@ -685,7 +686,10 @@ export class SubagentManager {
     let loopProcessedError = false;
 
     try {
-      for await (const event of session.run(userTurn, { signal: request.signal })) {
+      for await (const event of session.run(userTurn, {
+        signal: request.signal,
+        maxModelRetries: MAX_SUBAGENT_MODEL_RETRIES,
+      })) {
         switch (event.type) {
           case 'tool_started':
             if (event.toolName) {

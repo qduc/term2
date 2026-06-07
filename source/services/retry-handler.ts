@@ -36,6 +36,7 @@ export class RetryHandler {
     maxTransientRetries: number;
     stream: AgentStream | null;
     streamHistoryLength: number;
+    maxModelRetries?: number;
   }): RetryDecision {
     void this.logger;
     void this.sessionId;
@@ -49,6 +50,7 @@ export class RetryHandler {
       maxTransientRetries,
       stream,
       streamHistoryLength,
+      maxModelRetries,
     } = opts;
 
     const shouldRetryWithoutFlexServiceTier =
@@ -82,7 +84,13 @@ export class RetryHandler {
       return { kind: 'transport_downgrade' };
     }
 
-    const hallucinationDecision = decideRetry(error, hallucinationRetryCount, Boolean(stream), streamHistoryLength);
+    const hallucinationDecision = decideRetry(
+      error,
+      hallucinationRetryCount,
+      Boolean(stream),
+      streamHistoryLength,
+      maxModelRetries,
+    );
     if (hallucinationDecision.kind === 'retry') {
       return { kind: 'hallucination', decision: hallucinationDecision };
     }

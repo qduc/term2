@@ -104,8 +104,9 @@ export const decideRetry = (
   attemptCount: number,
   hadStream: boolean,
   streamHistoryLength: number,
+  maxRetries: number = MAX_HALLUCINATION_RETRIES,
 ): RetryDecision => {
-  const decision = decideRecoverableModelRetry(error, attemptCount);
+  const decision = decideRecoverableModelRetry(error, attemptCount, maxRetries);
   if (decision.kind === 'no_retry') {
     return { kind: 'no_retry' };
   }
@@ -119,7 +120,7 @@ export const decideRetry = (
       type: 'retry',
       toolName: retryType === 'hallucination' ? toolName : 'model',
       attempt,
-      maxRetries: MAX_HALLUCINATION_RETRIES,
+      maxRetries,
       errorMessage: message,
       retryType,
     },
@@ -127,7 +128,7 @@ export const decideRetry = (
       toolName,
       retryType,
       attempt,
-      maxRetries: MAX_HALLUCINATION_RETRIES,
+      maxRetries,
       errorMessage: message,
     },
     attempt,

@@ -279,41 +279,44 @@ test('abort-resolution preserves the next-turn pending block for a very large ap
   t.regex(followUpError.message, /New tool result added/);
 });
 
-test.skip('MaxTurnsExceededError catch updates the InputSurgeGuard baseline after tool-led history reconciliation', async (t) => {
-  // TODO: This path is covered by the production fix, but the synthetic stream
-  // harness here does not reliably reproduce the SDK's max-turn reconciliation
-  // behavior without additional integration scaffolding.
-  const recoveredToolHistory = [
-    { role: 'assistant', type: 'function_call', callId: 'call-reconcile', name: 'apply_patch', arguments: '{}' },
-    {
-      role: 'assistant',
-      type: 'function_call_result',
-      callId: 'call-reconcile',
-      output: 'ok',
-    },
-    ...makeHistoryItems(198, 'reconciled'),
-  ];
+test.serial(
+  'MaxTurnsExceededError catch updates the InputSurgeGuard baseline after tool-led history reconciliation',
+  async (t) => {
+    // TODO: This path is covered by the production fix, but the synthetic stream
+    // harness here does not reliably reproduce the SDK's max-turn reconciliation
+    // behavior without additional integration scaffolding.
+    const recoveredToolHistory = [
+      { role: 'assistant', type: 'function_call', callId: 'call-reconcile', name: 'apply_patch', arguments: '{}' },
+      {
+        role: 'assistant',
+        type: 'function_call_result',
+        callId: 'call-reconcile',
+        output: 'ok',
+      },
+      ...makeHistoryItems(198, 'reconciled'),
+    ];
 
-  const { session } = createSessionHarness({
-    startStreams: [createErrorStream(new Error('Max turns (100) exceeded')), createTerminalStream(5, 'recovered')],
-    continuationStreams: [],
-  });
+    const { session } = createSessionHarness({
+      startStreams: [createErrorStream(new Error('Max turns (100) exceeded')), createTerminalStream(5, 'recovered')],
+      continuationStreams: [],
+    });
 
-  seedInputSurgeBaseline(session);
-  (session as any).toolLedger.import([
-    {
-      turnId: 'turn-1',
-      callId: 'call-reconcile',
-      toolName: 'apply_patch',
-      status: 'completed',
-      startedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      historyItems: recoveredToolHistory,
-    },
-  ]);
+    seedInputSurgeBaseline(session, 201);
+    (session as any).toolLedger.import([
+      {
+        turnId: 'turn-1',
+        callId: 'call-reconcile',
+        toolName: 'apply_patch',
+        status: 'completed',
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        historyItems: recoveredToolHistory,
+      },
+    ]);
 
-  await t.throwsAsync(session.sendMessage('run until the SDK max-turns limit is reached'));
+    await t.throwsAsync(session.sendMessage('run until the SDK max-turns limit is reached'));
 
-  const followUpResult = expectResponse(await session.sendMessage('next turn after reconciliation'));
-  t.is(followUpResult.finalText, 'recovered-final');
-});
+    const followUpResult = expectResponse(await session.sendMessage('next turn after reconciliation'));
+    t.is(followUpResult.finalText, 'recovered-final');
+  },
+);

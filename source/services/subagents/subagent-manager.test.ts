@@ -118,6 +118,28 @@ function wrapResultAsAgentStream(result: any): any {
   };
 }
 
+function wrapErrorAsAgentStream(error: any): any {
+  const completed = Promise.reject(error);
+  completed.catch(() => {});
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          throw error;
+        },
+      };
+    },
+    completed,
+    rawResponses: [],
+    status: 'failed',
+    interruptions: [],
+    history: [],
+    messages: [],
+    responseId: null,
+    lastResponseId: null,
+  };
+}
+
 // ========== Provider Mocks ==========
 
 let mentorManagerRunnerCalls: any[] = [];
@@ -1483,66 +1505,69 @@ test.serial('run() extracts usage from error.state.usage when subagent run fails
 
 // ========== Model error retry ==========
 
-test.skip('run() retries on recoverable model error (hallucinated tool) and succeeds on second attempt', async (t) => {
-  // TODO: Subagent retry is now handled by ConversationSession/RetryHandler. Re-test at integration level.
-  let runCount = 0;
-  const events: any[] = [];
-  const logWarnCalls: any[] = [];
+test.serial(
+  'run() retries on recoverable model error (hallucinated tool) and succeeds on second attempt',
+  async (t) => {
+    // TODO: Subagent retry is now handled by ConversationSession/RetryHandler. Re-test at integration level.
+    let runCount = 0;
+    const events: any[] = [];
+    const logWarnCalls: any[] = [];
 
-  registerProvider({
-    id: 'mock-retry-recoverable-provider',
-    label: 'Mock Retry Recoverable Provider',
-    createRunner: () =>
-      ({
-        run: async () => {
-          runCount++;
-          if (runCount === 1) {
-            throw new ModelBehaviorError('Tool bash not found in agent Explorer.');
-          }
-          const result = {
-            status: 'completed',
-            finalOutput: 'Success on retry',
-            history: [],
-            messages: [],
-          };
-          return wrapResultAsAgentStream(result);
+    registerProvider({
+      id: 'mock-retry-recoverable-provider',
+      label: 'Mock Retry Recoverable Provider',
+      createRunner: () =>
+        ({
+          run: async () => {
+            runCount++;
+            if (runCount === 1) {
+              return wrapErrorAsAgentStream(new ModelBehaviorError('Tool bash not found in agent Explorer.'));
+            }
+            const result = {
+              status: 'completed',
+              finalOutput: 'Success on retry',
+              history: [],
+              messages: [],
+            };
+            return wrapResultAsAgentStream(result);
+          },
+        } as any),
+      fetchModels: async () => [{ id: 'mock-model' }],
+    });
+
+    const manager = new SubagentManager({
+      logger: {
+        ...createMockLogger(),
+        warn: (msg: string, meta?: Record<string, unknown>) => {
+          logWarnCalls.push({ msg, meta });
         },
-      } as any),
-    fetchModels: async () => [{ id: 'mock-model' }],
-  });
-
-  const manager = new SubagentManager({
-    logger: {
-      ...createMockLogger(),
-      warn: (msg: string, meta?: Record<string, unknown>) => {
-        logWarnCalls.push({ msg, meta });
       },
-    },
-    settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': 'mock-retry-recoverable-provider',
-      'agent.retryAttempts': 2,
-    }),
-    sessionContextService: createSessionContextService() as any,
-    onEvent: (event) => events.push(event),
-  });
+      settings: createMockSettings({
+        'agent.model': 'mock-model',
+        'agent.provider': 'mock-retry-recoverable-provider',
+        'agent.retryAttempts': 2,
+      }),
+      sessionContextService: createSessionContextService() as any,
+      onEvent: (event) => events.push(event),
+    });
 
-  const result = await manager.run({ role: 'explorer', task: 'find all files' });
+    const result = await manager.run({ role: 'explorer', task: 'find all files' });
 
-  t.is(result.status, 'completed');
-  t.is(runCount, 2);
-  const retryEvent = events.find((e) => e.type === 'retry');
-  t.truthy(retryEvent, 'should emit retry event');
-  t.is(retryEvent.toolName, 'bash');
-  t.is(retryEvent.retryType, 'hallucination');
-  t.is(retryEvent.attempt, 1);
-  t.is(retryEvent.maxRetries, 1);
+    t.is(result.status, 'completed');
+    t.is(runCount, 2);
+    const retryEvent = events.find((e) => e.type === 'retry');
+    t.truthy(retryEvent, 'should emit retry event');
+    t.is(retryEvent.toolName, 'bash');
+    t.is(retryEvent.retryType, 'hallucination');
+    t.is(retryEvent.attempt, 1);
+    t.is(retryEvent.maxRetries, 1);
 
-  const retryLog = logWarnCalls.find((c) => c.meta?.eventType === 'retry.subagent_model_error');
-  t.truthy(retryLog, 'should log subagent model error retry');
-});
+    const retryLog = logWarnCalls.find((c) => c.meta?.eventType === 'retry.model_error');
+    t.truthy(retryLog, 'should log subagent model error retry');
+  },
+);
 
-test.skip('run() exhausts retries on repeated recoverable model errors and returns failed result', async (t) => {
+test.serial('run() exhausts retries on repeated recoverable model errors and returns failed result', async (t) => {
   // TODO: Subagent retry is now handled by ConversationSession/RetryHandler. Re-test at integration level.
   let runCount = 0;
   const events: any[] = [];
@@ -1554,7 +1579,7 @@ test.skip('run() exhausts retries on repeated recoverable model errors and retur
       ({
         run: async () => {
           runCount++;
-          throw new ModelBehaviorError('Tool bash not found in agent Explorer.');
+          return wrapErrorAsAgentStream(new ModelBehaviorError('Tool bash not found in agent Explorer.'));
         },
       } as any),
     fetchModels: async () => [{ id: 'mock-model' }],
@@ -1653,7 +1678,7 @@ test.serial('run() aborted subagent returns cancelled status without model-error
   t.is(retryEvents.length, 0, 'abort errors should not trigger model-error retries');
 });
 
-test.skip('run() retries on transient upstream error via executeWithRetry', async (t) => {
+test.serial('run() retries on transient upstream error via executeWithRetry', async (t) => {
   // TODO: Transient retry is now handled by ConversationSession/RetryHandler.
   let runCount = 0;
   const logWarnCalls: any[] = [];
@@ -1669,7 +1694,7 @@ test.skip('run() retries on transient upstream error via executeWithRetry', asyn
             const err = new Error('rate limit') as any;
             err.status = 429;
             err.headers = { 'retry-after': '0' };
-            throw err;
+            return wrapErrorAsAgentStream(err);
           }
           const result = {
             status: 'completed',
@@ -1702,7 +1727,7 @@ test.skip('run() retries on transient upstream error via executeWithRetry', asyn
 
   t.is(result.status, 'completed');
   t.is(runCount, 2, 'should have retried once after transient error');
-  const upstreamRetry = logWarnCalls.find((c) => c.meta?.eventType === 'retry.upstream');
+  const upstreamRetry = logWarnCalls.find((c) => c.meta?.eventType === 'retry.transient');
   t.truthy(upstreamRetry, 'should log upstream retry');
 });
 

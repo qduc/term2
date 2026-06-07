@@ -598,6 +598,7 @@ export class ConversationSession {
       hallucinationRetryCount = 0,
       transientRetryCount = 0,
       transportFallbackRetryCount = 0,
+      maxModelRetries,
       signal,
     }: {
       skipUserMessage?: boolean;
@@ -605,6 +606,7 @@ export class ConversationSession {
       hallucinationRetryCount?: number;
       transientRetryCount?: number;
       transportFallbackRetryCount?: number;
+      maxModelRetries?: number;
       signal?: AbortSignal;
     } = {},
   ): AsyncIterable<ConversationEvent> {
@@ -913,6 +915,7 @@ export class ConversationSession {
         maxTransientRetries,
         stream,
         streamHistoryLength,
+        maxModelRetries,
       });
 
       if (!this.allowFreshStartRetries && !stream && decision.kind !== 'none' && decision.kind !== 'unrecoverable') {
@@ -966,6 +969,7 @@ export class ConversationSession {
           yield* this.run(turn, {
             skipUserMessage: true,
             flexServiceTierFallbackCount: flexServiceTierFallbackCount + 1,
+            maxModelRetries,
           });
           return;
         }
@@ -1012,6 +1016,7 @@ export class ConversationSession {
             skipUserMessage: Boolean(stream),
             transientRetryCount: decision.attempt,
             transportFallbackRetryCount,
+            maxModelRetries,
           });
           return;
         }
@@ -1058,6 +1063,7 @@ export class ConversationSession {
             skipUserMessage: Boolean(stream),
             transientRetryCount: 0,
             transportFallbackRetryCount: attempt,
+            maxModelRetries,
           });
           return;
         }
@@ -1075,7 +1081,7 @@ export class ConversationSession {
             retryType: decisionResult.logPayload.retryType,
             retryAttempt: decisionResult.attempt,
             attempt: decisionResult.attempt,
-            maxRetries: MAX_HALLUCINATION_RETRIES,
+            maxRetries: maxModelRetries ?? MAX_HALLUCINATION_RETRIES,
             sessionId: this.id,
             traceId: this.logger.getCorrelationId(),
             errorMessage: decisionResult.message,
@@ -1094,7 +1100,10 @@ export class ConversationSession {
             this.conversationStore.removeLastUserMessage();
           }
 
-          yield* this.run(turn, decisionResult.nextRunOptions);
+          yield* this.run(turn, {
+            ...decisionResult.nextRunOptions,
+            maxModelRetries,
+          });
           return;
         }
         case 'none':

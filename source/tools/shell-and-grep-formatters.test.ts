@@ -13,7 +13,7 @@ test('formatShellCommandMessage: sets toolName to "shell"', (t) => {
   t.is(messages[0].command, 'echo "hello"');
 });
 
-test('formatGrepCommandMessage: sets toolName to "grep"', (t) => {
+test('formatGrepCommandMessage: sets toolName to "grep" and populates toolArgs', (t) => {
   const item = {
     arguments: { pattern: 'TODO', path: 'src/' },
     output: 'src/main.ts:1:TODO: something',
@@ -22,4 +22,5 @@ test('formatGrepCommandMessage: sets toolName to "grep"', (t) => {
   t.is(messages.length, 1);
   t.is(messages[0].toolName, 'grep');
   t.is(messages[0].command, 'grep "TODO" "src/"');
+  t.deepEqual(messages[0].toolArgs, { pattern: 'TODO', path: 'src/' });
 });

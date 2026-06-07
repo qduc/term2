@@ -193,6 +193,14 @@ test('extracts grep output from plain text tool result', (t) => {
       success: true,
       isApprovalRejection: false,
       toolName: 'grep',
+      toolArgs: {
+        pattern: 'hello',
+        path: 'source',
+        case_sensitive: false,
+        file_pattern: null,
+        exclude_pattern: null,
+        max_results: 100,
+      },
     });
   } finally {
     restore();
@@ -240,6 +248,14 @@ test('extracts grep command from matching function_call item', (t) => {
       success: true,
       isApprovalRejection: false,
       toolName: 'grep',
+      toolArgs: {
+        pattern: 'DEFAULT_TRIM_CONFIG',
+        path: 'source',
+        case_sensitive: true,
+        file_pattern: '*.ts',
+        exclude_pattern: null,
+        max_results: 100,
+      },
     });
   } finally {
     restore();

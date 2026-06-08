@@ -1,6 +1,19 @@
 import test from 'ava';
 
-import { classifySearchKind, getMatchCount, parseGrepOutput } from './command-message-helpers.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../tools/tool-names.js';
+import {
+  classifySearchKind,
+  countDiffStats,
+  formatToolArgs,
+  getMatchCount,
+  parseCodeContextSearchOutput,
+  parseCodeOutlineOutput,
+  parseGrepOutput,
+  parseReadFileOutput,
+  parseSubagentOutput,
+  parseWebFetchOutput,
+  parseWebSearchOutput,
+} from './command-message-helpers.js';
 
 test('getMatchCount returns 0 when output is empty or undefined', (t) => {
   t.is(getMatchCount(undefined, 'grep -rn hello source/', ''), 0);
@@ -81,4 +94,159 @@ test("classifySearchKind returns 'shell' for shell-routed search", (t) => {
 
 test('parseGrepOutput returns null when the first non-empty line is not a Note or match', (t) => {
   t.is(parseGrepOutput('plain summary line\nfile1.ts:1:hello'), null);
+});
+
+test('parseReadFileOutput extracts metadata and content lines', (t) => {
+  t.deepEqual(parseReadFileOutput('File: source/a.ts (10 lines) [lines 2-4]\n===\nline 2\nline 3'), {
+    filePath: 'source/a.ts',
+    totalLines: 10,
+    startLine: 2,
+    endLine: 4,
+    contentLines: ['line 2', 'line 3'],
+  });
+});
+
+test('parseSubagentOutput extracts status metadata and remaining text', (t) => {
+  t.deepEqual(
+    parseSubagentOutput('Status: completed\nTools used: shell, read_file\nFiles changed: source/a.ts\nSummary', {
+      role: 'worker',
+    }),
+    {
+      role: 'worker',
+      status: 'completed',
+      toolsUsed: 'shell, read_file',
+      filesChanged: 'source/a.ts',
+      mainText: 'Summary',
+    },
+  );
+});
+
+test('parseSubagentOutput marks Error-prefixed output as failed', (t) => {
+  t.deepEqual(parseSubagentOutput('Error: failed\nDetails', { role: 'explorer' }), {
+    role: 'explorer',
+    status: 'failed',
+    toolsUsed: '',
+    filesChanged: '',
+    mainText: 'Error: failed\nDetails',
+  });
+});
+
+test('parseWebSearchOutput extracts answer and result entries', (t) => {
+  const output = [
+    '## Answer',
+    'Use focused tests.',
+    '## Search Results',
+    '### 1. Docs',
+    '**URL:** https://example.com/docs',
+    '**Published:** 2026-01-01',
+    'Relevant content.',
+  ].join('\n');
+
+  t.deepEqual(parseWebSearchOutput(output), {
+    answer: 'Use focused tests.',
+    results: [
+      {
+        title: 'Docs',
+        url: 'https://example.com/docs',
+        published: '2026-01-01',
+        content: 'Relevant content.',
+      },
+    ],
+  });
+});
+
+test('parseWebFetchOutput separates table of contents, notes, temp file, and content', (t) => {
+  const output = [
+    'Title: Example',
+    'URL: https://example.com',
+    '## Table of Contents',
+    '- Intro',
+    '---',
+    'Body text',
+    '**Note: Content still truncated.**',
+    '**Full content saved to temp file: `/tmp/fetch.md`**',
+    'The full content has been saved for reference.',
+  ].join('\n');
+
+  t.deepEqual(parseWebFetchOutput(output), {
+    title: 'Example',
+    url: 'https://example.com',
+    toc: '- Intro',
+    tempFile: '/tmp/fetch.md',
+    notes: '**Note: Content still truncated.**',
+    content: 'Body text',
+  });
+});
+
+test('parseCodeOutlineOutput groups imports exports and declarations', (t) => {
+  const output = [
+    'FILE source/a.ts',
+    'LANG ts',
+    'IMPORTS',
+    "import x from 'x';",
+    'EXPORTS',
+    'export { y };',
+    'DECLARATIONS',
+    'function y',
+  ].join('\n');
+
+  t.deepEqual(parseCodeOutlineOutput(output), {
+    filePath: 'source/a.ts',
+    lang: 'ts',
+    imports: ["import x from 'x';"],
+    exports: ['export { y };'],
+    decls: ['function y'],
+  });
+});
+
+test('parseCodeContextSearchOutput parses related file results', (t) => {
+  const output = ['QUERY related', 'TARGET source/a.ts', 'source/b.ts', 'REL imports', 'WARNING ignored'].join('\n');
+
+  t.deepEqual(parseCodeContextSearchOutput(output), {
+    queryType: 'related',
+    target: 'source/a.ts',
+    relatedFiles: [{ filePath: 'source/b.ts', relations: 'imports' }],
+  });
+});
+
+test('parseCodeContextSearchOutput parses symbol results', (t) => {
+  const output = ['QUERY symbol', 'SYMBOL run', 'source/a.ts:12 function run exported'].join('\n');
+
+  t.deepEqual(parseCodeContextSearchOutput(output), {
+    queryType: 'symbol',
+    symbol: 'run',
+    results: [{ filePath: 'source/a.ts', lineNum: 12, kind: 'function', name: 'run', exported: true }],
+  });
+});
+
+test('formatToolArgs parses stringified JSON args', (t) => {
+  t.is(formatToolArgs('read_file', '{"path":"source/a.ts","start_line":2,"end_line":4}'), '"source/a.ts" (lines 2-4)');
+});
+
+test('formatToolArgs summarizes search replacement batches in concise mode', (t) => {
+  t.is(
+    formatToolArgs(
+      TOOL_NAME_SEARCH_REPLACE,
+      {
+        path: 'source/a.ts',
+        replacements: [
+          { search_content: 'old1', replace_content: 'new1' },
+          { search_content: 'old2', replace_content: 'new2' },
+        ],
+      },
+      'concise',
+    ),
+    '"source/a.ts" (+ 1 more)',
+  );
+});
+
+test('formatToolArgs formats apply patch operation and path', (t) => {
+  t.is(formatToolArgs(TOOL_NAME_APPLY_PATCH, { type: 'update_file', path: 'source/a.ts' }), 'update_file source/a.ts');
+});
+
+test('countDiffStats ignores diff headers and hunk markers', (t) => {
+  t.deepEqual(countDiffStats('--- a/source/a.ts\n+++ b/source/a.ts\n@@ section\n-old\n+new\n context'), {
+    added: 1,
+    removed: 1,
+  });
 });

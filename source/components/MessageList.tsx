@@ -189,6 +189,7 @@ const MessageList: FC<Props> = ({
       }
     }
 
+    let hasDeferred = false;
     for (const message of history) {
       const signature = createMessageSignature(message);
       const committedSignature = committedMessageSignaturesRef.current.get(message.id);
@@ -202,20 +203,26 @@ const MessageList: FC<Props> = ({
       if (committedSignature !== undefined) {
         candidateMessageSignaturesRef.current.set(message.id, signature);
         deferred.push(message);
+        hasDeferred = true;
         continue;
       }
 
-      const shouldCommitImmediately = shouldCommitMessageToStatic({
-        hasActiveMessages,
-        hasExistingStaticHistory,
-        wasPreviouslyActive: previousActiveMessageIds.has(message.id),
-        hasPendingCandidateSignature: candidateMessageSignaturesRef.current.get(message.id) === signature,
-        isRestoredMessage: restoredStaticMessageIdSet.has(message.id),
-        isCompletedCommand,
-      });
-      if (!shouldCommitImmediately && candidateMessageSignaturesRef.current.get(message.id) !== signature) {
-        candidateMessageSignaturesRef.current.set(message.id, signature);
+      const shouldCommitImmediately =
+        !hasDeferred &&
+        shouldCommitMessageToStatic({
+          hasActiveMessages,
+          hasExistingStaticHistory,
+          wasPreviouslyActive: previousActiveMessageIds.has(message.id),
+          hasPendingCandidateSignature: candidateMessageSignaturesRef.current.get(message.id) === signature,
+          isRestoredMessage: restoredStaticMessageIdSet.has(message.id),
+          isCompletedCommand,
+        });
+      if (!shouldCommitImmediately) {
+        if (candidateMessageSignaturesRef.current.get(message.id) !== signature) {
+          candidateMessageSignaturesRef.current.set(message.id, signature);
+        }
         deferred.push(message);
+        hasDeferred = true;
         continue;
       }
 

@@ -621,3 +621,26 @@ test('MessageList hides reasoning messages when displayMode is concise', (t) => 
   t.true(output.includes('Hello back!'), `Expected bot message: ${output}`);
   t.false(output.includes('thinking'), `Expected reasoning message to be hidden: ${output}`);
 });
+
+test('MessageList retains chronological order when active message is finalized in the same tick as a new finalized message that was never active', (t) => {
+  const renderer = render(
+    <MessageList messages={[{ id: 'list-msg', sender: 'bot', status: 'streaming', text: '- list item' }]} />,
+  );
+
+  renderer.rerender(
+    <MessageList
+      messages={[
+        { id: 'heading-msg', sender: 'bot', status: 'finalized', text: '### Heading' },
+        { id: 'list-msg', sender: 'bot', status: 'finalized', text: '- list item' },
+      ]}
+    />,
+  );
+
+  const output = stripAnsi(renderer.lastFrame() ?? '');
+  const headingIndex = output.indexOf('### Heading');
+  const listIndex = output.indexOf('list item');
+
+  t.true(headingIndex !== -1, 'Heading should be present');
+  t.true(listIndex !== -1, 'List item should be present');
+  t.true(headingIndex < listIndex, `Heading should render before list item. Output was: \n${output}`);
+});

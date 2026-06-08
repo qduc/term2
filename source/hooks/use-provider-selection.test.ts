@@ -5,19 +5,26 @@ import test from 'ava';
 import React, { act, useEffect } from 'react';
 import { render } from 'ink-testing-library';
 import { useProviderSelection } from './use-provider-selection.js';
-import { InputProvider } from '../context/InputContext.js';
+import { InputProvider, useInputContext } from '../context/InputContext.js';
 
 const TestComponent = ({
   settingsService,
   onHookResult,
+  onInputValue,
 }: {
   settingsService: any;
   onHookResult: (hook: ReturnType<typeof useProviderSelection>) => void;
+  onInputValue?: (value: string) => void;
 }) => {
   const hook = useProviderSelection(settingsService);
+  const { input } = useInputContext();
 
   useEffect(() => {
     onHookResult(hook);
+  });
+
+  useEffect(() => {
+    onInputValue?.(input);
   });
 
   return null;
@@ -1026,6 +1033,119 @@ test.serial('useProviderSelection - scrollOffset updates when navigating and res
 
   t.is(hook!.phase, 'wizard_name');
   t.is(hook!.scrollOffset, 0, 'scrollOffset should reset to 0 when phase changes to wizard_name');
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+test.serial('useProviderSelection - editing a field from edit_fields populates input with current value', async (t) => {
+  const customProviders = [
+    { name: 'my-provider', type: 'openai-compatible', baseUrl: 'http://example.com/v1', apiKey: 'secret-key' },
+  ];
+  const settingsService = createMockSettingsService(customProviders, 'openai');
+  let hook: ReturnType<typeof useProviderSelection> | undefined;
+  let inputVal = '';
+  let renderer: any;
+
+  await act(async () => {
+    renderer = render(
+      React.createElement(
+        InputProvider as any,
+        {},
+        React.createElement(TestComponent, {
+          settingsService,
+          onHookResult: (h) => {
+            hook = h;
+          },
+          onInputValue: (v: string) => {
+            inputVal = v;
+          },
+        }),
+      ),
+    );
+  });
+
+  await act(async () => {
+    hook!.open();
+  });
+  await flush();
+
+  // Navigate to the custom provider and select it to enter edit_fields
+  await act(async () => {
+    const active = hook!.getActiveItems();
+    const targetIdx = active.findIndex((item) => item.kind === 'provider' && item.id === 'my-provider');
+    let moves = 0;
+    for (let i = 0; i < targetIdx; i++) {
+      if (!(active[i]!.kind === 'provider' && (active[i] as any).id === 'codex')) {
+        moves++;
+      }
+    }
+    for (let i = 0; i < moves; i++) {
+      hook!.moveDown();
+    }
+  });
+  await flush();
+
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+
+  t.is(hook!.phase, 'edit_fields');
+  t.is(hook!.draft?.name, 'my-provider');
+
+  // Test editing Name field (index 0)
+  await act(async () => {
+    hook!.selectItem(); // index 0 = Name
+  });
+  await flush();
+
+  t.is(hook!.phase, 'wizard_name');
+  t.is(inputVal, 'my-provider', 'input should be populated with current name');
+
+  // Go back
+  await act(async () => {
+    hook!.goBack();
+  });
+  await flush();
+  t.is(hook!.phase, 'edit_fields');
+
+  // Test editing Base URL field (index 2)
+  await act(async () => {
+    hook!.moveDown();
+    hook!.moveDown();
+  });
+  await flush();
+
+  await act(async () => {
+    hook!.selectItem(); // index 2 = Base URL
+  });
+  await flush();
+
+  t.is(hook!.phase, 'wizard_url');
+  t.is(inputVal, 'http://example.com/v1', 'input should be populated with current baseUrl');
+
+  // Go back
+  await act(async () => {
+    hook!.goBack();
+  });
+  await flush();
+  t.is(hook!.phase, 'edit_fields');
+
+  // Test editing API Key field (index 3)
+  await act(async () => {
+    hook!.moveDown();
+  });
+  await flush();
+
+  await act(async () => {
+    hook!.selectItem(); // index 3 = API Key
+  });
+  await flush();
+
+  t.is(hook!.phase, 'wizard_key');
+  t.is(inputVal, 'secret-key', 'input should be populated with current apiKey');
 
   await act(async () => {
     renderer.unmount();

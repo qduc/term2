@@ -400,6 +400,7 @@ const InputBox: FC<Props> = ({
     setCursorOverride,
     lockCursor,
     remountInput,
+    providersPhase: providers.phase,
   });
   useEffect(() => {
     cursorOffsetRef.current = cursorOffset;
@@ -412,6 +413,7 @@ const InputBox: FC<Props> = ({
       setCursorOverride,
       lockCursor,
       remountInput,
+      providersPhase: providers.phase,
     };
   });
 
@@ -460,6 +462,7 @@ const InputBox: FC<Props> = ({
       setCursorOverride: overrideCursor,
       lockCursor: lockCurrentCursor,
       remountInput: remountCurrentInput,
+      providersPhase,
     } = stateRef.current;
     const currentCursor = cursorOffsetRef.current;
     if (currentMode === 'text') return;
@@ -538,8 +541,10 @@ const InputBox: FC<Props> = ({
     if (key.backspace) {
       if (currentMode === 'undo_selection') return;
       if (currentMode === 'provider_selection') {
-        currentHandlers[currentMode].onDelete?.();
-        return;
+        if (providersPhase !== 'wizard_name' && providersPhase !== 'wizard_url' && providersPhase !== 'wizard_key') {
+          currentHandlers[currentMode].onDelete?.();
+          return;
+        }
       }
       if (currentCursor <= 0) return;
       const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
@@ -553,8 +558,10 @@ const InputBox: FC<Props> = ({
     if (key.delete) {
       if (currentMode === 'undo_selection') return;
       if (currentMode === 'provider_selection') {
-        currentHandlers[currentMode].onDelete?.();
-        return;
+        if (providersPhase !== 'wizard_name' && providersPhase !== 'wizard_url' && providersPhase !== 'wizard_key') {
+          currentHandlers[currentMode].onDelete?.();
+          return;
+        }
       }
       if (currentCursor >= currentValue.length) return;
       const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);

@@ -107,7 +107,7 @@ const hasProviderNameConflict = (
 };
 
 export const useProviderSelection = (settingsService: SettingsService) => {
-  const { mode, setMode } = useInputContext();
+  const { mode, setMode, setInput } = useInputContext();
 
   const [phase, setPhase] = useState<ProviderSelectionPhase>('list');
   const [items, setItems] = useState<ProviderSelectionItem[]>([]);
@@ -317,6 +317,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         });
         setPhase('wizard_name');
         setSelectedIndex(0);
+        setInput('');
       } else {
         // Provider selected
         const provider = items[index]!;
@@ -346,6 +347,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setFieldErrors({});
           setPhase('edit_fields');
           setSelectedIndex(0);
+          setInput('');
         } else if (provider.id !== 'codex') {
           // Allow editing apiKey for built-in providers (except Codex)
           setFieldErrors({});
@@ -360,6 +362,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setEditingOriginalName(provider.id);
           setPhase('edit_fields');
           setSelectedIndex(2);
+          setInput('');
         }
       }
     } else if (phase === 'wizard_type') {
@@ -391,6 +394,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setEditingField('apiKey');
           setDraftModified(false);
           setPhase('wizard_key');
+          setInput(draft.apiKey || '');
         } else if (index === 3) {
           // Save Changes
           saveDraft();
@@ -401,6 +405,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setDraft(null);
           setEditingOriginalName(null);
           setFieldErrors({});
+          setInput('');
         }
       } else {
         if (index === 0) {
@@ -408,22 +413,26 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setEditingField('name');
           setDraftModified(false);
           setPhase('wizard_name');
+          setInput(draft.name || '');
         } else if (index === 1) {
           // Edit Type
           setEditingField('type');
           setDraftModified(false);
           setPhase('wizard_type');
           setSelectedIndex(PROVIDER_TYPES.indexOf(draft.type));
+          setInput('');
         } else if (index === 2) {
           // Edit Base URL
           setEditingField('baseUrl');
           setDraftModified(false);
           setPhase('wizard_url');
+          setInput(draft.baseUrl || '');
         } else if (index === 3) {
           // Edit API Key
           setEditingField('apiKey');
           setDraftModified(false);
           setPhase('wizard_key');
+          setInput(draft.apiKey || '');
         } else if (index === 4) {
           // Save Changes
           saveDraft();
@@ -433,6 +442,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setSelectedIndex(0);
           setDraft(null);
           setFieldErrors({});
+          setInput('');
         }
       }
     } else if (phase === 'confirm_discard') {
@@ -524,10 +534,12 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     discardFromPhase,
     settingsService,
     loadProviders,
+    setInput,
   ]);
 
   const goBack = useCallback(() => {
     setErrorMessage(null);
+    setInput('');
     if (phase === 'list') {
       close();
     } else if (
@@ -592,7 +604,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       }
       setDiscardFromPhase(null);
     }
-  }, [phase, editingField, close, draftModified, discardFromPhase, draft]);
+  }, [phase, editingField, close, draftModified, discardFromPhase, draft, setInput]);
 
   // Handler for text input submissions from app.tsx wizard manager
   const handleTextInputSubmit = useCallback(
@@ -634,6 +646,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
             setSelectedIndex(0);
           }
         }
+        setInput('');
         return true;
       }
 
@@ -670,6 +683,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
             setSelectedIndex(0);
           }
         }
+        setInput('');
         return true;
       }
 
@@ -694,12 +708,13 @@ export const useProviderSelection = (settingsService: SettingsService) => {
             setDraftModified(false);
           }
         }
+        setInput('');
         return true;
       }
 
       return false;
     },
-    [phase, draft, editingField, editingOriginalName, settingsService],
+    [phase, draft, editingField, editingOriginalName, settingsService, setInput],
   );
 
   const saveDraft = () => {

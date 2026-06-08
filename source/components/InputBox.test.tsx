@@ -1,7 +1,7 @@
 import test from 'ava';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, act } from 'react';
 import { render } from 'ink-testing-library';
-import { Box, Text } from 'ink';
+import { Box, Text, useStdin } from 'ink';
 import InputBox, { calculateInputWidth, getProviderWizardPromptLabel } from './InputBox.js';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
 import SettingsSelectionMenu from './SettingsSelectionMenu.js';
@@ -701,4 +701,78 @@ test('settings value completion shows current custom settings value in suggestio
 
   const frame = lastFrame() ?? '';
   t.true(frame.includes('35 — Current value'), `Should show current custom value in completion list, got:\n${frame}`);
+});
+
+const TestInputBoxWithEmitter = ({ onEmitter, ...props }: any) => {
+  const stdin = useStdin() as any;
+  useEffect(() => {
+    if (stdin?.internal_eventEmitter) {
+      onEmitter(stdin.internal_eventEmitter);
+    }
+  }, [stdin, onEmitter]);
+  return <InputBox {...props} />;
+};
+
+test('InputBox allows backspace and delete keys to modify input in provider wizard phases', async (t) => {
+  const providersMenuRef = { current: null as any };
+  const settingsService = createMockSettingsService();
+  let inputEmitter: any = null;
+
+  const { lastFrame } = render(
+    <InputProvider>
+      <StateDisplay />
+      <TestInputBoxWithEmitter
+        {...defaultProps}
+        settingsService={settingsService}
+        providersMenuRef={providersMenuRef}
+        onEmitter={(emitter: any) => {
+          inputEmitter = emitter;
+        }}
+      />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(10);
+
+  const pressKey = async (keyStr: string) => {
+    await act(async () => {
+      inputEmitter.emit('input', keyStr);
+    });
+    await flushReactUpdates(10);
+  };
+
+  // Open the providers menu
+  await act(async () => {
+    providersMenuRef.current.open();
+  });
+  await flushReactUpdates(10);
+
+  // Navigate up to "Add Custom Provider" (wrapping to the last item) and press Enter
+  await pressKey('\u001B[A'); // Up Arrow
+  await pressKey('\r'); // Enter
+
+  let frame = lastFrame() ?? '';
+  t.true(frame.includes('Mode:provider_selection'), `Mode should be provider_selection, got:\n${frame}`);
+  t.true(frame.includes('Step 1: Provider Name'), `Phase should be wizard_name, got:\n${frame}`);
+
+  // Type character 'a'
+  await pressKey('a');
+  frame = lastFrame() ?? '';
+  t.true(frame.includes('Input:a'), `Input should contain 'a', got:\n${frame}`);
+
+  // Press Backspace (\x7f)
+  await pressKey('\x7f');
+  frame = lastFrame() ?? '';
+  t.true(frame.includes('Input:|'), `Input should be empty after backspace, got:\n${frame}`);
+
+  // Type character 'b'
+  await pressKey('b');
+  frame = lastFrame() ?? '';
+  t.true(frame.includes('Input:b'), `Input should contain 'b', got:\n${frame}`);
+
+  // Move cursor left (\u001B[D) and press Delete (\u001B[3~)
+  await pressKey('\u001B[D'); // Left arrow
+  await pressKey('\u001B[3~'); // Delete
+  frame = lastFrame() ?? '';
+  t.true(frame.includes('Input:|'), `Input should be empty after delete, got:\n${frame}`);
 });

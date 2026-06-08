@@ -6,64 +6,35 @@ This is a terminal-based AI assistant built with React (Ink), OpenAI Agents SDK,
 
 A CLI app that lets users chat with an AI agent in real-time. The agent can execute shell commands and modify files, with interactive approval prompts for safety.
 
-**Key features**: streaming responses, command approval flow, slash commands (e.g. `/clear`, `/quit`, `/model`, `/settings`, `/mentor`, `/lite`, `/plan`, `/undo`, `/usage`, `/effort`, `/copy`, `/auto-approve`, `/handoff`, `/retry`, `/orchestrator`), input history, markdown rendering, tool hallucination retry logic, multi-provider support, SSH mode for remote execution, non-interactive mode, subagent delegation, plan mode, undo/rewind, and conversation persistence.
-
-## Quick Start
-
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
-2. **Set your OpenAI API key**
-   ```bash
-   export OPENAI_API_KEY=your-key-here
-   ```
-3. **Run the app**
-   ```bash
-   npm run dev    # Watch mode
-   npm run build  # Compile TypeScript
-   node dist/cli.js  # Run the CLI
-   ```
-
 ## Project Structure
 
-- **Entry Points**: `cli.tsx` (entry), `app.tsx` (main React component)
-    - **State & Logic**:
-      - `source/hooks/` - UI state (conversation, slash commands, input history, settings)
-      - `source/services/` - Business logic (conversation flow, approval, logging, history, settings, SSH, persistence, subagents)
-    - **Agent & Tools**:
-      - `agent.ts` - Agent configuration
-      - `openai-agent-client.ts` - Agent client with tool interceptor pattern
-      - `source/providers/` - Pluggable provider registry (OpenAI, OpenRouter, OpenAI-compatible, etc.)
-      - `source/tools/` - Tool implementations (shell, search-replace, grep, apply-patch, ask-mentor, find-files, read-file, web-search, create-file, web-fetch, code-context, run-subagent)
-      - `source/prompts/` - System prompts for different model types and subagents
-    - **UI**: `source/components/` - React Ink components for terminal rendering
-    - **Utils**: `source/utils/` - Command safety, diff generation, output sanitization
-    - **Types**: `source/types/` - TypeScript type definitions
-    - **Context**: `source/context/` - React context providers
+- **Entry Points**: `cli.tsx` (CLI entry), `app.tsx` (main React component), `non-interactive.ts` (non-interactive mode)
+- **Agent Config**: `agent.ts` — Agent definition, tool registration (add new tools here)
+- **Agent Client**: `source/lib/openai-agent-client.ts` — Agent client with tool interceptor pattern
+- **Agent Factory**: `source/lib/agent-factory.ts` — Agent construction and wiring
+- **Slash Commands**: `source/commands/` — Individual slash command implementations (add new commands here); routing via `source/hooks/use-slash-commands.ts` and `source/hooks/use-app-commands.ts`
+- **Hooks** (`source/hooks/`): React hooks for UI state — conversation flow (`use-conversation.ts`), slash commands (`use-slash-commands.ts`), input history (`use-input-history.ts`), settings (`use-runtime-settings.ts`), model selection (`use-model-selection.ts`), undo (`use-undo-selection.ts`), trigger detection (`use-trigger-detection.ts`)
+- **Services** (`source/services/`): Business logic — conversation session (`conversation-session.ts`), persistence (`conversation-persistence.ts`), approval flow (`approval-flow-coordinator.ts`, `approval-state.ts`), tool execution ledger (`tool-execution-ledger.ts`), settings (`settings-service.ts`), logging (`logging-service.ts`), SSH (`ssh-service.ts`, `execution-context.ts`), plan mode (`plan-mode-interceptor.ts`), large-input guard (`large-uncached-input-guard.ts`), subagents (`subagents/`)
+- **Providers** (`source/providers/`): Pluggable provider registry — OpenAI, Anthropic, OpenRouter, OpenAI-compatible, Google, Codex, Llama.cpp, OpenCode. Subdirs: `common/`, `fetch/`, `web-search/`. Add new providers here and register in `registry.ts`.
+- **Tools** (`source/tools/`): Tool implementations — shell, search-replace, apply-patch, grep, find-files, read-file, create-file, web-search, web-fetch, code-context, ask-mentor, ask-user, run-subagent, edit-healing. Subdir: `languages/`. Add new tools here and register in `agent.ts`.
+- **Prompts** (`source/prompts/`): System prompts for model types and subagents. Subdirs: `fragments/`, `subagents/`. Modify agent behavior here.
+- **Components** (`source/components/`): React Ink terminal UI — InputBox, MessageList, ChatMessage, DiffView, StatusBar, ApprovalPrompt, SlashCommandMenu, ModelSelectionMenu, SettingsSelectionMenu, etc. Change the UI here.
+- **Utils** (`source/utils/`): Utilities — command safety (`command-safety/`), diff generation, output trimming, token usage, streaming, clipboard, logging, etc.
+- **Types** (`source/types/`): TypeScript type definitions
+- **Context** (`source/context/`): React context providers
+- **Contracts** (`source/contracts/`): Shared interfaces (e.g. `conversation.ts`)
+- **Lib** (`source/lib/`): Core agent infrastructure — `openai-agent-client.ts`, `agent-factory.ts`, `retry-executor.ts`, `tool-invoke.ts`, `tool-selection-policy.ts`, `openai-strict-tool-schema.ts`, `editor-impl.ts`, `chained-input-filter.ts`
 
 ## How It Works
 
 1. User types a message → `app.tsx` captures it
-2. `use-conversation.ts` hook sends it to `conversation-service.ts`
-    3. Service calls the agent via `openai-agent-client.ts`, which selects a provider through the Provider Registry
-4. Agent response streams back in real-time with text, reasoning, and tool requests
-5. Tool requests are validated and paused for user approval before execution (except in standard mode for patches)
-6. User approves/rejects via approval prompts
+2. `use-conversation.ts` hook calls `conversationService.sendMessage()`
+3. `ConversationService` (thin facade) delegates to `ConversationSession`, which calls the agent via `source/lib/openai-agent-client.ts`
+4. The agent client selects a provider through the Provider Registry and streams the response
+5. Tool requests are validated by the `approval-flow-coordinator.ts` and paused for user approval before execution (auto-approved in standard mode for patches)
+6. User approves/rejects via `ApprovalPrompt` component
 7. Service executes the tool or continues streaming
 8. Final response appears in the message list
-
-## Architecture Highlights
-
-- **Pluggable Provider Registry**: Providers (e.g. OpenAI, OpenRouter, OpenAI-compatible) register via `source/providers/` with dependency-injected runner creation to avoid circular imports.
-    - **Tool Interceptor and Approval Model**: Tools run through centralized validation and approval flow.
-- **Tool Hallucination Retry Logic**: Automatic retry with partial stream recovery when the agent hallucinates tool responses (MAX_HALLUCINATION_RETRIES = 2).
-- **Session & Streaming Model**: Conversation sessions stream deltas, capture reasoning separately, and surface tool calls.
-- **App Mode Support**: standard, lite, mentor, plan, and orchestrator modes are supported. Lite mode is minimal-context; standard mode auto-approves apply_patch operations within workspace; plan mode is a cache-stable read-only mode for researching and proposing step-by-step implementation plans; orchestrator mode delegates complex task execution to specialized subagents.
-- **SSH Mode**: Execution of commands and file operations on remote servers over SSH.
-- **Subagent Manager**: Equips the agent with `run_subagent` to delegate tasks to specialized synchronous subagents (`explorer`, `worker`, `researcher`, `mentor`) to conserve context.
-- **Conversation State Persistence**: Automatic and manual session persistence, allowing resuming a conversation with `--resume`.
-- **Undo / Rewind**: Allows user to select and rewind conversation to any past user message.
 
 ## Testing & Quality
 
@@ -117,32 +88,3 @@ jq 'select(.direction == "received") | .summary.payload' <file.jsonl>
 - When testing command parsing or safety classification, put cases in an AVA test file or another quoted fixture file and run the test harness. Do not pass dangerous command examples through `node -e`, `tsx -e`, `sh -c`, command substitution, or inline shell one-liners.
 - If you need to inspect classifier behavior interactively, use hardcoded string literals inside a committed/temporary test file and execute only the test runner. Keep dangerous strings as data, never as shell syntax.
 - Before running any command that could modify or delete files outside the intended edit set, stop and use a safer read-only inspection path or ask for explicit approval.
-
-
-## Key Concepts
-
-- **Tool Interceptors**: Centralized validation and approval flow.
-- **Tool Approval**: Pauses for user approval (unless in standard mode).
-- **Subagents**: Synchronous workers (`explorer`, `worker`, `researcher`, `mentor`) to isolate task execution.
-- **Plan Mode**: Strict read-only mode that blocks file modifications and state-changing shell commands.
-- **Orchestrator Mode**: Delegates complex execution details to specialized subagents to conserve context window space.
-- **Undo/Rewind**: State rewinding capability.
-- **Conversation Resumption**: Session serialization to resume later.
-- **Event-Log Conversation Persistence**: Robust session saving, session replay, and tool execution recovery.
-
-## Where to Look
-
-- **Adding a slash command?** → `use-slash-commands.ts` and `use-app-commands.ts`
-    - **Modifying agent behavior/prompts?** → `source/prompts/` and `agent.ts`
-    - **Adding a new tool?** → Create in `source/tools/` and register in `agent.ts`
-    - **Adding a new provider?** → Create in `source/providers/` and register in provider registry
-    - **Changing the UI?** → `source/components/` and `app.tsx`
-    - **Conversation persistence?** → `conversation-persistence.ts` and `conversation-log-events.ts`
-    - **Tool execution ledger?** → `tool-execution-ledger.ts`
-    - **Large uncached input guard?** → `large-uncached-input-guard.ts`
-    - **Subagents?** → `run-subagent.ts` and `source/services/subagents/`
-    - **Plan mode logic?** → `plan-mode-interceptor.ts`
-    - **Web search config?** → `settings-service.ts` and `source/providers/web-search/`
-    - **SSH mode?** → `ssh-service.ts` and `execution-context.ts`
-    - **Command safety?** → `source/utils/command-safety/`
-    - **Testing?** → See `test/` directory for test utilities. Use `npm run test:verbose -- <file>` or `npx ava <file>` to run specific tests. For `.tsx` tests, run via compiled files in `dist/` where the leading `source/` segment is stripped.

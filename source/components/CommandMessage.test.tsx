@@ -851,3 +851,108 @@ test('CommandMessage renders web_fetch result in standard mode', async (t) => {
   t.true(output.includes('Table of Contents'), `Expected TOC header: ${output}`);
   t.true(output.includes('Markdown content here'), `Expected content: ${output}`);
 });
+
+test('CommandMessage renders ask_user concise single question when running', async (t) => {
+  const clock = createFakeTimerClock();
+  const props = {
+    command: 'ask_user',
+    toolName: 'ask_user',
+    toolArgs: {
+      questions: [{ question: 'What is your favorite color?' }],
+    },
+    status: 'running' as const,
+    displayMode: 'concise' as const,
+  };
+
+  let lastFrame: (() => string | undefined) | undefined;
+  try {
+    await act(async () => {
+      ({ lastFrame } = render(<CommandMessage {...props} />));
+      clock.advanceBy(1100);
+    });
+
+    const output = stripAnsi(lastFrame?.() ?? '');
+
+    t.true(output.includes('▶'), `Expected running icon: ${output}`);
+    t.true(
+      output.includes('Asked user "What is your favorite color?"'),
+      `Expected single question in output: ${output}`,
+    );
+  } finally {
+    clock.restore();
+  }
+});
+
+test('CommandMessage renders ask_user concise multiple questions when running', async (t) => {
+  const clock = createFakeTimerClock();
+  const props = {
+    command: 'ask_user',
+    toolName: 'ask_user',
+    toolArgs: {
+      questions: [{ question: 'Color?' }, { question: 'Name?' }],
+    },
+    status: 'running' as const,
+    displayMode: 'concise' as const,
+  };
+
+  let lastFrame: (() => string | undefined) | undefined;
+  try {
+    await act(async () => {
+      ({ lastFrame } = render(<CommandMessage {...props} />));
+      clock.advanceBy(1100);
+    });
+
+    const output = stripAnsi(lastFrame?.() ?? '');
+
+    t.true(output.includes('▶'), `Expected running icon: ${output}`);
+    t.true(output.includes('Asked user ["Color?, Name?"]'), `Expected multiple questions preview: ${output}`);
+  } finally {
+    clock.restore();
+  }
+});
+
+test('CommandMessage renders ask_user answer in second line in concise mode when completed', async (t) => {
+  const props = {
+    command: 'ask_user',
+    toolName: 'ask_user',
+    toolArgs: {
+      questions: [{ question: 'What is your favorite color?' }],
+    },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'Question: What is your favorite color?\nAnswer: Red',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  t.true(lines.length >= 2, `Expected at least 2 lines, got: ${output}`);
+  t.true(lines[0]!.includes('✔'), `Expected checkmark on line 1: ${lines[0]}`);
+  t.true(lines[0]!.includes('Asked user "What is your favorite color?"'), `Expected question on line 1: ${lines[0]}`);
+  t.true(lines[1]!.includes('Response: Red'), `Expected response on line 2: ${lines[1]}`);
+});
+
+test('CommandMessage renders ask_user declined answer in second line in concise mode', async (t) => {
+  const props = {
+    command: 'ask_user',
+    toolName: 'ask_user',
+    toolArgs: {
+      questions: [{ question: 'What is your favorite color?' }],
+    },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'User declined to answer.',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  t.true(lines.length >= 2, `Expected at least 2 lines, got: ${output}`);
+  t.true(lines[0]!.includes('✔'), `Expected checkmark on line 1: ${lines[0]}`);
+  t.true(lines[0]!.includes('Asked user "What is your favorite color?"'), `Expected question on line 1: ${lines[0]}`);
+  t.true(lines[1]!.includes('Response: User declined to answer.'), `Expected response on line 2: ${lines[1]}`);
+});

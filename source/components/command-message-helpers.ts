@@ -513,6 +513,19 @@ export const formatToolArgs = (
       }
 
       case 'ask_user': {
+        const questions = normalizedArgs.questions;
+        if (Array.isArray(questions) && questions.length > 0) {
+          const qList = questions.map((q: any) => q?.question).filter(Boolean);
+          if (qList.length === 1) {
+            const question = qList[0];
+            const qPreview = question.length > 40 ? `${question.slice(0, 40)}...` : question;
+            return `"${qPreview.replace(/\r?\n/g, ' ')}"`;
+          } else if (qList.length > 1) {
+            const joined = qList.join(', ');
+            const qPreview = joined.length > 40 ? `${joined.slice(0, 40)}...` : joined;
+            return `["${qPreview.replace(/\r?\n/g, ' ')}"]`;
+          }
+        }
         const question = normalizedArgs.question || 'Unknown question';
         const qPreview = question.length > 40 ? `${question.slice(0, 40)}...` : question;
         return `"${qPreview.replace(/\r?\n/g, ' ')}"`;

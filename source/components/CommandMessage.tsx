@@ -32,6 +32,23 @@ type Props = {
   displayMode?: 'standard' | 'concise';
 };
 
+const getConciseAskUserResponse = (output: string | undefined): string => {
+  if (!output) return 'No response';
+
+  const lines = output.split('\n');
+  const answers: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('Answer: ')) {
+      answers.push(trimmed.slice('Answer: '.length).trim());
+    }
+  }
+  if (answers.length > 0) {
+    return answers.join(', ');
+  }
+  return output;
+};
+
 const CommandMessage: FC<Props> = ({
   command,
   output,
@@ -251,6 +268,18 @@ const CommandMessage: FC<Props> = ({
     }
 
     // Success (one line)
+    if (toolName === 'ask_user') {
+      const responseText = getConciseAskUserResponse(output);
+      return (
+        <Box flexDirection="column">
+          <Text color="green">
+            <Text bold>✔</Text> {displayAction}
+          </Text>
+          <Text color="green"> Response: {responseText}</Text>
+        </Box>
+      );
+    }
+
     return (
       <Box>
         <Text color="green">

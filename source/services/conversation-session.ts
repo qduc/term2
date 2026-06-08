@@ -154,7 +154,17 @@ export class ConversationSession {
       if (this.#inputSurgeKind === 'delta') {
         this.conversationStore.appendOutput(s.output as AgentInputItem[]);
       } else {
-        this.conversationStore.replaceHistory(s.history as AgentInputItem[]);
+        // For full-history mode, prefer appending only the new items so we
+        // don't lose assistant text content that the SDK's history reconstruction
+        // may have stripped (e.g. turning assistant+tool_call messages into
+        // separate function_call items with null content).
+        const outputItems = Array.isArray(s.output) ? s.output : [];
+        const newItems = outputItems.length > 0 ? outputItems : Array.isArray(s.newItems) ? s.newItems : [];
+        if (newItems.length > 0) {
+          this.conversationStore.appendOutput(newItems as AgentInputItem[]);
+        } else if (Array.isArray(s.history) && s.history.length > 0) {
+          this.conversationStore.replaceHistory(s.history as AgentInputItem[]);
+        }
       }
     }
   }

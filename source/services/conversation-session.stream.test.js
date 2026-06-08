@@ -990,6 +990,81 @@ test('run() sends full history for non-OpenAI providers (client-side state)', as
   t.is(emitted[emitted.length - 1].type, 'final');
 });
 
+test('run() preserves assistant text prefix when SDK full-history reconstruction strips it', async (t) => {
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'I will inspect the files.' }]);
+  firstStream.finalOutput = 'I will inspect the files.';
+  firstStream.output = [];
+  firstStream.newItems = [
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'I will inspect the files.' }],
+    },
+  ];
+  firstStream.history = [
+    { role: 'user', type: 'message', content: 'Investigate cache issue' },
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        {
+          id: 'call_read',
+          type: 'function',
+          function: { name: 'read_file', arguments: '{"path":"source/app.tsx"}' },
+        },
+      ],
+    },
+  ];
+
+  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Continuing.' }]);
+  secondStream.finalOutput = 'Continuing.';
+  secondStream.output = [
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Continuing.' }],
+    },
+  ];
+
+  const calls = [];
+  const mockClient = {
+    async startStream(input) {
+      calls.push(input);
+      return calls.length === 1 ? firstStream : secondStream;
+    },
+    getProvider() {
+      return 'openrouter';
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  for await (const _ of session.run('Investigate cache issue')) {
+    // consume events
+  }
+  for await (const _ of session.run('Continue after max turns')) {
+    // consume events
+  }
+
+  const secondInput = calls[1];
+  t.true(Array.isArray(secondInput));
+  t.deepEqual(secondInput.slice(0, 3), [
+    { role: 'user', type: 'message', content: 'Investigate cache issue' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'I will inspect the files.' }],
+    },
+    { role: 'user', type: 'message', content: 'Continue after max turns' },
+  ]);
+});
+
 test('run() sends full history for openai-compatible providers', async (t) => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
   stream.finalOutput = 'Response';

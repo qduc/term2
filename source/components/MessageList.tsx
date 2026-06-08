@@ -240,7 +240,21 @@ const MessageList: FC<Props> = ({
     return { staticItems: staticItemsRef.current, deferredHistory: deferred };
   }, [active, bannerItems, history, restoredStaticMessageIdSet]);
 
-  const dynamicItems = useMemo(() => [...deferredHistory, ...active], [deferredHistory, active]);
+  // Active messages that were already committed to <Static> in a prior render
+  // (e.g. a bot lead-in text that became a toolLeadIn) must not be rendered again
+  // in the dynamic area, or they would appear twice – once in the permanent
+  // static output and once in the re-rendered dynamic region.
+  const dynamicItems = useMemo(() => {
+    const committedActiveIds = new Set<string>();
+    for (const message of active) {
+      const committedSignature = committedMessageSignaturesRef.current.get(message.id);
+      if (committedSignature !== undefined && committedSignature === createMessageSignature(message)) {
+        committedActiveIds.add(message.id);
+      }
+    }
+    const filteredActive = committedActiveIds.size > 0 ? active.filter((m) => !committedActiveIds.has(m.id)) : active;
+    return [...deferredHistory, ...filteredActive];
+  }, [deferredHistory, active]);
 
   const renderMessage = (msg: any, idx: number, collection: any[], maxWidth?: number) => {
     // Helper to get previous message safely from either StaticItem[] or MessageLike[]

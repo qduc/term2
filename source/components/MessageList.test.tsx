@@ -644,3 +644,114 @@ test('MessageList retains chronological order when active message is finalized i
   t.true(listIndex !== -1, 'List item should be present');
   t.true(headingIndex < listIndex, `Heading should render before list item. Output was: \n${output}`);
 });
+
+// --- Bug fix: headings rendered after content (cross-render toolLeadIn duplication) ---
+
+// When a message is committed to <Static> in one render and then becomes a
+// toolLeadIn (moved from history into the active area) in a later render, it
+// must NOT be rendered in both the static and dynamic areas simultaneously.
+test('MessageList does not duplicate heading when it becomes toolLeadIn after being committed to static', (t) => {
+  // Render 1: Heading is streaming
+  const renderer = render(
+    <MessageList messages={[{ id: 'heading', sender: 'bot', status: 'streaming', text: '### Intro' }]} />,
+  );
+
+  // Render 2: Heading finalizes (committed to static)
+  renderer.rerender(
+    <MessageList messages={[{ id: 'heading', sender: 'bot', status: 'finalized', text: '### Intro' }]} />,
+  );
+
+  // Render 3: A command starts running (heading becomes toolLeadIn)
+  // Without the fix, heading would appear in both static AND dynamic areas.
+  renderer.rerender(
+    <MessageList
+      messages={
+        [
+          { id: 'heading', sender: 'bot', status: 'finalized', text: '### Intro' },
+          { id: 'cmd', sender: 'command', status: 'running', command: 'ls', output: '', toolName: 'shell' },
+        ] as any
+      }
+    />,
+  );
+
+  const output = stripAnsi(renderer.lastFrame() ?? '');
+  const introCount = (output.match(/### Intro/g) || []).length;
+  t.is(introCount, 1, `Heading should appear exactly once, not duplicated. Output: \n${output}`);
+});
+
+// When a heading was committed to static and a command later completes,
+// the heading and command should appear in the correct order.
+test('MessageList preserves heading-command order when heading was committed before command appeared', (t) => {
+  const renderer = render(
+    <MessageList messages={[{ id: 'heading', sender: 'bot', status: 'streaming', text: '### Setup' }]} />,
+  );
+
+  // Heading finalizes (committed to static)
+  renderer.rerender(
+    <MessageList messages={[{ id: 'heading', sender: 'bot', status: 'finalized', text: '### Setup' }]} />,
+  );
+
+  // Command completes after heading
+  renderer.rerender(
+    <MessageList
+      messages={
+        [
+          { id: 'heading', sender: 'bot', status: 'finalized', text: '### Setup' },
+          {
+            id: 'cmd',
+            sender: 'command',
+            status: 'completed',
+            command: 'npm install',
+            output: 'added 10 packages',
+            toolName: 'shell',
+          },
+        ] as any
+      }
+    />,
+  );
+
+  const output = stripAnsi(renderer.lastFrame() ?? '');
+  const headingIdx = output.indexOf('### Setup');
+  const cmdIdx = output.indexOf('npm install');
+
+  t.true(headingIdx !== -1, 'Heading should be present');
+  t.true(cmdIdx !== -1, 'Command should be present');
+  t.true(headingIdx < cmdIdx, `Heading should render before command. Output: \n${output}`);
+});
+
+// When content was already in static and a heading appears later as toolLeadIn,
+// the heading must not be duplicated and the order must be preserved.
+test('MessageList preserves order when earlier content is static and heading becomes toolLeadIn', (t) => {
+  // Render 1: Content streaming then finalized
+  const renderer = render(
+    <MessageList messages={[{ id: 'content', sender: 'bot', status: 'streaming', text: 'Body text' }]} />,
+  );
+
+  // Content finalizes (committed to static)
+  renderer.rerender(
+    <MessageList messages={[{ id: 'content', sender: 'bot', status: 'finalized', text: 'Body text' }]} />,
+  );
+
+  // A new heading + command appears (heading is toolLeadIn for command)
+  // BUT: content was committed before the heading appeared. The new messages
+  // arrive after the already-committed content.
+  renderer.rerender(
+    <MessageList
+      messages={
+        [
+          { id: 'content', sender: 'bot', status: 'finalized', text: 'Body text' },
+          { id: 'heading', sender: 'bot', status: 'finalized', text: '### Next Section' },
+          { id: 'cmd', sender: 'command', status: 'running', command: 'ls', output: '', toolName: 'shell' },
+        ] as any
+      }
+    />,
+  );
+
+  const output = stripAnsi(renderer.lastFrame() ?? '');
+  const contentIdx = output.indexOf('Body text');
+  const headingIdx = output.indexOf('### Next Section');
+
+  t.true(contentIdx !== -1, 'Content should be present');
+  t.true(headingIdx !== -1, 'Heading should be present');
+  t.true(contentIdx < headingIdx, `Content should render before heading. Output: \n${output}`);
+});

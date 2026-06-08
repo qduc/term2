@@ -6,7 +6,46 @@ import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { OpenAIAgentClient } from '../../lib/openai-agent-client.js';
 import { registerProvider } from '../../providers/registry.js';
 import { ExecutionContext } from '../execution-context.js';
+import { MAX_SUBAGENT_MODEL_RETRIES } from '../conversation-retry-policy.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
+
+const ROLE_MENTOR = 'mentor';
+const ROLE_EXPLORER = 'explorer';
+const ROLE_UNKNOWN = 'nonexistent-role-xyz';
+
+const PROVIDER_MENTOR_MANAGER = 'mock-mentor-manager';
+const PROVIDER_EXPLORER = 'mock-explorer-provider';
+
+const MODEL_MAIN = 'main-model';
+const MODEL_MENTOR = 'mentor-model';
+const MODEL_MOCK = 'mock-model';
+
+const TASK_ADVISE_ME = 'advise me';
+const TASK_FIRST_QUESTION = 'first question';
+const TASK_SECOND_QUESTION = 'second question';
+const TASK_FRESH_QUESTION = 'fresh question';
+const TASK_FIND_TS_FILES = 'find all TypeScript files';
+const TASK_INSPECT_WORKSPACE = 'inspect the workspace';
+const TASK_INSPECT_TEMP_WORKSPACE = 'inspect a temp workspace';
+const TASK_FIND_FILES = 'find files';
+
+const UNKNOWN_ROLE_ERROR_FRAGMENT = ROLE_UNKNOWN;
+const MENTOR_MODEL_NOT_CONFIGURED_ERROR = 'Mentor model is not configured';
+const EXPLORER_BLOCKED_PREFIX =
+  'Error: command blocked - explorer can only run read-only (GREEN) shell commands. Command: ';
+
+const GREEN_SHELL_COMMANDS = ['pwd', 'ls', 'cat package.json', 'git status', 'git log --oneline'];
+const YELLOW_SHELL_COMMANDS = ['touch blocked.txt', 'npm test', 'unknown_tool_name', 'cat ../outside.txt'];
+const RED_SHELL_COMMANDS = ['rm -rf x', 'sudo ls'];
+
+const TEMP_WORKSPACE_PREFIX = 'term2-test-explorer-shell-block-';
+const TEMP_SOURCE_FILE = 'source.txt';
+const TEMP_BLOCKED_CASES = [
+  { command: 'touch blocked-touch.txt', path: 'blocked-touch.txt' },
+  { command: 'echo marker > blocked-redirect.txt', path: 'blocked-redirect.txt' },
+  { command: 'cat source.txt > blocked-copy.txt', path: 'blocked-copy.txt' },
+  { command: 'printf marker | tee blocked-tee.txt', path: 'blocked-tee.txt' },
+];
 
 const createSessionContextService = () => ({
   runWithContext: <T>(_context: any, fn: () => T) => fn(),
@@ -149,7 +188,7 @@ let mentorManagerProviderRegistered = false;
 function ensureMentorManagerProviderRegistered() {
   if (!mentorManagerProviderRegistered) {
     registerProvider({
-      id: 'mock-mentor-manager',
+      id: PROVIDER_MENTOR_MANAGER,
       label: 'Mock Mentor Manager',
       createRunner: () =>
         ({
@@ -166,7 +205,7 @@ function ensureMentorManagerProviderRegistered() {
             return _options?.stream ? wrapResultAsAgentStream(result) : result;
           },
         } as any),
-      fetchModels: async () => [{ id: 'mock-model' }],
+      fetchModels: async () => [{ id: MODEL_MOCK }],
     });
     mentorManagerProviderRegistered = true;
   }
@@ -178,7 +217,7 @@ let explorerRunnerCalls: any[] = [];
 function ensureExplorerProviderRegistered() {
   if (!explorerManagerProviderRegistered) {
     registerProvider({
-      id: 'mock-explorer-provider',
+      id: PROVIDER_EXPLORER,
       label: 'Mock Explorer Provider',
       createRunner: () =>
         ({
@@ -193,7 +232,7 @@ function ensureExplorerProviderRegistered() {
             return options?.stream ? wrapResultAsAgentStream(result) : result;
           },
         } as any),
-      fetchModels: async () => [{ id: 'mock-model' }],
+      fetchModels: async () => [{ id: MODEL_MOCK }],
     });
     explorerManagerProviderRegistered = true;
   }
@@ -211,8 +250,8 @@ test.beforeEach(() => {
 
 test.serial('run() returns failed result for unknown role', async (t) => {
   const settings = createMockSettings({
-    'agent.model': 'mock-model',
-    'agent.provider': 'mock-mentor-manager',
+    'agent.model': MODEL_MOCK,
+    'agent.provider': PROVIDER_MENTOR_MANAGER,
   });
   const manager = new SubagentManager({
     logger: createMockLogger(),
@@ -220,21 +259,21 @@ test.serial('run() returns failed result for unknown role', async (t) => {
     sessionContextService: createSessionContextService() as any,
   });
 
-  const result = await manager.run({ role: 'nonexistent-role-xyz', task: 'do something' });
+  const result = await manager.run({ role: ROLE_UNKNOWN, task: 'do something' });
 
   t.is(result.status, 'failed');
   t.truthy(result.error);
-  t.true(result.error!.includes('nonexistent-role-xyz'));
+  t.true(result.error!.includes(UNKNOWN_ROLE_ERROR_FRAGMENT));
 });
 
 // ========== Mentor role ==========
 
 test.serial('run() with mentor role uses mentorModel setting', async (t) => {
   const settings = createMockSettings({
-    'agent.model': 'main-model',
-    'agent.provider': 'mock-mentor-manager',
-    'agent.mentorModel': 'mentor-model',
-    'agent.mentorProvider': 'mock-mentor-manager',
+    'agent.model': MODEL_MAIN,
+    'agent.provider': PROVIDER_MENTOR_MANAGER,
+    'agent.mentorModel': MODEL_MENTOR,
+    'agent.mentorProvider': PROVIDER_MENTOR_MANAGER,
   });
   const manager = new SubagentManager({
     logger: createMockLogger(),
@@ -242,19 +281,19 @@ test.serial('run() with mentor role uses mentorModel setting', async (t) => {
     sessionContextService: createSessionContextService() as any,
   });
 
-  const result = await manager.run({ role: 'mentor', task: 'advise me' });
+  const result = await manager.run({ role: ROLE_MENTOR, task: TASK_ADVISE_ME });
 
   t.is(result.status, 'completed');
-  t.is(result.role, 'mentor');
+  t.is(result.role, ROLE_MENTOR);
   t.true(result.finalText.includes('mentor-response'));
   t.is(mentorManagerRunnerCalls.length, 1);
-  t.is(mentorManagerRunnerCalls[0].agent.model, 'mentor-model');
+  t.is(mentorManagerRunnerCalls[0].agent.model, MODEL_MENTOR);
 });
 
 test.serial('run() with mentor role fails when mentorModel is not set', async (t) => {
   const settings = createMockSettings({
-    'agent.model': 'main-model',
-    'agent.provider': 'mock-mentor-manager',
+    'agent.model': MODEL_MAIN,
+    'agent.provider': PROVIDER_MENTOR_MANAGER,
   });
   const manager = new SubagentManager({
     logger: createMockLogger(),
@@ -262,18 +301,18 @@ test.serial('run() with mentor role fails when mentorModel is not set', async (t
     sessionContextService: createSessionContextService() as any,
   });
 
-  const result = await manager.run({ role: 'mentor', task: 'advise me' });
+  const result = await manager.run({ role: ROLE_MENTOR, task: TASK_ADVISE_ME });
 
   t.is(result.status, 'failed');
-  t.true(result.error!.includes('Mentor model is not configured'));
+  t.true(result.error!.includes(MENTOR_MODEL_NOT_CONFIGURED_ERROR));
 });
 
 test.serial('run() mentor maintains conversation history across calls', async (t) => {
   const settings = createMockSettings({
-    'agent.model': 'main-model',
-    'agent.provider': 'mock-mentor-manager',
-    'agent.mentorModel': 'mentor-model',
-    'agent.mentorProvider': 'mock-mentor-manager',
+    'agent.model': MODEL_MAIN,
+    'agent.provider': PROVIDER_MENTOR_MANAGER,
+    'agent.mentorModel': MODEL_MENTOR,
+    'agent.mentorProvider': PROVIDER_MENTOR_MANAGER,
   });
   const manager = new SubagentManager({
     logger: createMockLogger(),
@@ -281,8 +320,8 @@ test.serial('run() mentor maintains conversation history across calls', async (t
     sessionContextService: createSessionContextService() as any,
   });
 
-  await manager.run({ role: 'mentor', task: 'first question' });
-  await manager.run({ role: 'mentor', task: 'second question' });
+  await manager.run({ role: ROLE_MENTOR, task: TASK_FIRST_QUESTION });
+  await manager.run({ role: ROLE_MENTOR, task: TASK_SECOND_QUESTION });
 
   t.is(mentorManagerRunnerCalls.length, 2);
   // Second call should have history (array with previous messages)
@@ -292,10 +331,10 @@ test.serial('run() mentor maintains conversation history across calls', async (t
 
 test.serial('resetMentorSession() clears conversation history', async (t) => {
   const settings = createMockSettings({
-    'agent.model': 'main-model',
-    'agent.provider': 'mock-mentor-manager',
-    'agent.mentorModel': 'mentor-model',
-    'agent.mentorProvider': 'mock-mentor-manager',
+    'agent.model': MODEL_MAIN,
+    'agent.provider': PROVIDER_MENTOR_MANAGER,
+    'agent.mentorModel': MODEL_MENTOR,
+    'agent.mentorProvider': PROVIDER_MENTOR_MANAGER,
   });
   const manager = new SubagentManager({
     logger: createMockLogger(),
@@ -303,12 +342,12 @@ test.serial('resetMentorSession() clears conversation history', async (t) => {
     sessionContextService: createSessionContextService() as any,
   });
 
-  await manager.run({ role: 'mentor', task: 'first question' });
+  await manager.run({ role: ROLE_MENTOR, task: TASK_FIRST_QUESTION });
   t.true(mentorManagerRunnerCalls[0].input.length >= 1);
 
   manager.resetMentorSession();
 
-  await manager.run({ role: 'mentor', task: 'fresh question' });
+  await manager.run({ role: ROLE_MENTOR, task: TASK_FRESH_QUESTION });
   // After reset, second call should have only 1 message (fresh start)
   t.is(mentorManagerRunnerCalls[1].input.length, 1);
 });
@@ -317,8 +356,8 @@ test.serial('resetMentorSession() clears conversation history', async (t) => {
 
 test.serial('run() with explorer role returns SubagentResult', async (t) => {
   const settings = createMockSettings({
-    'agent.model': 'mock-model',
-    'agent.provider': 'mock-explorer-provider',
+    'agent.model': MODEL_MOCK,
+    'agent.provider': PROVIDER_EXPLORER,
   });
   const manager = new SubagentManager({
     logger: createMockLogger(),
@@ -326,10 +365,10 @@ test.serial('run() with explorer role returns SubagentResult', async (t) => {
     sessionContextService: createSessionContextService() as any,
   });
 
-  const result = await manager.run({ role: 'explorer', task: 'find all TypeScript files' });
+  const result = await manager.run({ role: ROLE_EXPLORER, task: TASK_FIND_TS_FILES });
 
   t.is(result.status, 'completed');
-  t.is(result.role, 'explorer');
+  t.is(result.role, ROLE_EXPLORER);
   t.truthy(result.agentId);
   t.is(result.filesChanged.length, 0);
   t.truthy(result.finalText);
@@ -337,8 +376,8 @@ test.serial('run() with explorer role returns SubagentResult', async (t) => {
 
 test.serial('run() passes parent abort signal into the delegated provider run', async (t) => {
   const settings = createMockSettings({
-    'agent.model': 'mock-model',
-    'agent.provider': 'mock-explorer-provider',
+    'agent.model': MODEL_MOCK,
+    'agent.provider': PROVIDER_EXPLORER,
   });
   const manager = new SubagentManager({
     logger: createMockLogger(),
@@ -348,8 +387,8 @@ test.serial('run() passes parent abort signal into the delegated provider run', 
   const abortController = new AbortController();
 
   await manager.run({
-    role: 'explorer',
-    task: 'find all TypeScript files',
+    role: ROLE_EXPLORER,
+    task: TASK_FIND_TS_FILES,
     signal: abortController.signal,
   });
 
@@ -379,7 +418,7 @@ test.serial('run() cancels a delegated provider run when the parent signal abort
   });
 
   const settings = createMockSettings({
-    'agent.model': 'mock-model',
+    'agent.model': MODEL_MOCK,
     'agent.provider': 'mock-aborted-subagent-provider',
   });
   const manager = new SubagentManager({
@@ -389,8 +428,8 @@ test.serial('run() cancels a delegated provider run when the parent signal abort
   });
   const abortController = new AbortController();
   const resultPromise = manager.run({
-    role: 'explorer',
-    task: 'find all TypeScript files',
+    role: ROLE_EXPLORER,
+    task: TASK_FIND_TS_FILES,
     signal: abortController.signal,
   });
 
@@ -403,8 +442,8 @@ test.serial('run() cancels a delegated provider run when the parent signal abort
 
 test.serial('explorer shell tool executes GREEN commands and blocks YELLOW and RED commands', async (t) => {
   const settings = createMockSettings({
-    'agent.model': 'mock-model',
-    'agent.provider': 'mock-explorer-provider',
+    'agent.model': MODEL_MOCK,
+    'agent.provider': PROVIDER_EXPLORER,
   });
   const manager = new SubagentManager({
     logger: createMockLogger(),
@@ -412,7 +451,7 @@ test.serial('explorer shell tool executes GREEN commands and blocks YELLOW and R
     sessionContextService: createSessionContextService() as any,
   });
 
-  await manager.run({ role: 'explorer', task: 'inspect the workspace' });
+  await manager.run({ role: ROLE_EXPLORER, task: TASK_INSPECT_WORKSPACE });
 
   t.is(explorerRunnerCalls.length, 1);
   const agent = explorerRunnerCalls[0].agent;
@@ -421,23 +460,21 @@ test.serial('explorer shell tool executes GREEN commands and blocks YELLOW and R
   t.is(await shell.needsApproval({}, { command: 'pwd' }), false);
 
   const invokeShell = async (command: string) => shell.invoke({}, JSON.stringify({ command }), {});
-  const blockedPrefix = 'Error: command blocked - explorer can only run read-only (GREEN) shell commands. Command: ';
-
-  for (const command of ['pwd', 'ls', 'cat package.json', 'git status', 'git log --oneline']) {
+  for (const command of GREEN_SHELL_COMMANDS) {
     const output = await invokeShell(command);
     t.true(output.includes('exit 0'), `expected GREEN command to execute: ${command}`);
-    t.false(output.startsWith(blockedPrefix), `expected GREEN command to not be blocked: ${command}`);
+    t.false(output.startsWith(EXPLORER_BLOCKED_PREFIX), `expected GREEN command to not be blocked: ${command}`);
   }
 
-  for (const command of ['touch blocked.txt', 'npm test', 'unknown_tool_name', 'cat ../outside.txt']) {
+  for (const command of YELLOW_SHELL_COMMANDS) {
     const output = await invokeShell(command);
-    t.true(output.startsWith(blockedPrefix), `expected YELLOW command to be blocked: ${command}`);
+    t.true(output.startsWith(EXPLORER_BLOCKED_PREFIX), `expected YELLOW command to be blocked: ${command}`);
     t.true(output.includes(command), `blocked output should mention the command: ${command}`);
   }
 
-  for (const command of ['rm -rf x', 'sudo ls']) {
+  for (const command of RED_SHELL_COMMANDS) {
     const output = await invokeShell(command);
-    t.true(output.startsWith(blockedPrefix), `expected RED command to be blocked: ${command}`);
+    t.true(output.startsWith(EXPLORER_BLOCKED_PREFIX), `expected RED command to be blocked: ${command}`);
     t.true(output.includes(command), `blocked output should mention the command: ${command}`);
   }
 });
@@ -445,13 +482,13 @@ test.serial('explorer shell tool executes GREEN commands and blocks YELLOW and R
 test.serial(
   'explorer shell tool blocks write-like shell commands without creating files in a temp workspace',
   async (t) => {
-    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-explorer-shell-block-'));
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', TEMP_WORKSPACE_PREFIX));
     t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
-    fs.writeFileSync(path.join(tmpDir, 'source.txt'), 'source content');
+    fs.writeFileSync(path.join(tmpDir, TEMP_SOURCE_FILE), 'source content');
 
     const settings = createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': 'mock-explorer-provider',
+      'agent.model': MODEL_MOCK,
+      'agent.provider': PROVIDER_EXPLORER,
     });
     const manager = new SubagentManager({
       logger: createMockLogger(),
@@ -464,23 +501,15 @@ test.serial(
       } as unknown as ExecutionContext,
     });
 
-    await manager.run({ role: 'explorer', task: 'inspect a temp workspace' });
+    await manager.run({ role: ROLE_EXPLORER, task: TASK_INSPECT_TEMP_WORKSPACE });
 
     const agent = explorerRunnerCalls[explorerRunnerCalls.length - 1].agent;
     const shell = getAgentTool(agent, 'shell');
     t.truthy(shell);
 
-    const blockedPrefix = 'Error: command blocked - explorer can only run read-only (GREEN) shell commands. Command: ';
-    const cases = [
-      { command: 'touch blocked-touch.txt', path: 'blocked-touch.txt' },
-      { command: 'echo marker > blocked-redirect.txt', path: 'blocked-redirect.txt' },
-      { command: 'cat source.txt > blocked-copy.txt', path: 'blocked-copy.txt' },
-      { command: 'printf marker | tee blocked-tee.txt', path: 'blocked-tee.txt' },
-    ];
-
-    for (const { command, path: relativePath } of cases) {
+    for (const { command, path: relativePath } of TEMP_BLOCKED_CASES) {
       const output = await shell.invoke({}, JSON.stringify({ command }), {});
-      t.true(output.startsWith(blockedPrefix), `expected command to be blocked: ${command}`);
+      t.true(output.startsWith(EXPLORER_BLOCKED_PREFIX), `expected command to be blocked: ${command}`);
       t.false(fs.existsSync(path.join(tmpDir, relativePath)), `expected no file to be created: ${relativePath}`);
     }
   },
@@ -488,8 +517,8 @@ test.serial(
 
 test.serial('run() with explorer role uses read-only tools only', async (t) => {
   const settings = createMockSettings({
-    'agent.model': 'mock-model',
-    'agent.provider': 'mock-explorer-provider',
+    'agent.model': MODEL_MOCK,
+    'agent.provider': PROVIDER_EXPLORER,
   });
   const manager = new SubagentManager({
     logger: createMockLogger(),
@@ -497,7 +526,7 @@ test.serial('run() with explorer role uses read-only tools only', async (t) => {
     sessionContextService: createSessionContextService() as any,
   });
 
-  await manager.run({ role: 'explorer', task: 'find files' });
+  await manager.run({ role: ROLE_EXPLORER, task: TASK_FIND_FILES });
 
   t.is(explorerRunnerCalls.length, 1);
   const agent = explorerRunnerCalls[0].agent;
@@ -1560,7 +1589,7 @@ test.serial(
     t.is(retryEvent.toolName, 'bash');
     t.is(retryEvent.retryType, 'hallucination');
     t.is(retryEvent.attempt, 1);
-    t.is(retryEvent.maxRetries, 1);
+    t.is(retryEvent.maxRetries, MAX_SUBAGENT_MODEL_RETRIES);
 
     const retryLog = logWarnCalls.find((c) => c.meta?.eventType === 'retry.model_error');
     t.truthy(retryLog, 'should log subagent model error retry');
@@ -1601,10 +1630,10 @@ test.serial('run() exhausts retries on repeated recoverable model errors and ret
   t.is(result.status, 'failed');
   t.truthy(result.error);
   t.true(result.error!.includes('bash'));
-  // Should have tried: initial + MAX_SUBAGENT_MODEL_RETRIES (1) = 2 attempts
-  t.is(runCount, 2);
+  // Should have tried: initial + MAX_SUBAGENT_MODEL_RETRIES retries.
+  t.is(runCount, 1 + MAX_SUBAGENT_MODEL_RETRIES);
   const retryEvents = events.filter((e) => e.type === 'retry');
-  t.is(retryEvents.length, 1, 'should emit one retry event before exhaustion');
+  t.is(retryEvents.length, MAX_SUBAGENT_MODEL_RETRIES, 'should emit one retry event per retry attempt');
 });
 
 test.serial('run() does not retry on non-recoverable ModelBehaviorError', async (t) => {

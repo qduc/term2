@@ -207,7 +207,6 @@ export const createRunSubagentToolDefinition = (
     'Delegate a bounded task to a specialized subagent. The subagent runs synchronously and returns a structured result. ' +
     'The subagent runs in its own context and returns only a summary, preserving your context. ' +
     '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
-    getSubagentsRolesSection() +
     '## Task Requirements\n' +
     'The task must be fully self-contained. Include all context, constraints, and the expected output format. ' +
     'The subagent has no access to your conversation history or reasoning.',

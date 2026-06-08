@@ -221,11 +221,3 @@ test('getSubagentsRolesSection extracts descriptions from markdown files', (t) =
   t.regex(section, /-\s+`researcher`:\s+\S+/);
   t.regex(section, /-\s+`worker`:\s+\S+/);
 });
-
-test('createRunSubagentToolDefinition includes dynamic roles description', (t) => {
-  const tool = createRunSubagentToolDefinition(async () => makeResult());
-
-  t.true(tool.description.includes('## Roles'));
-  t.true(tool.description.includes('`explorer`'));
-  t.regex(tool.description, /-\s+`explorer`:\s+\S+/);
-});

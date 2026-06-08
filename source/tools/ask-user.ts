@@ -47,9 +47,8 @@ export const createAskUserToolDefinition = (
 ): ToolDefinition => ({
   name: TOOL_NAME_ASK_USER,
   description:
-    'Ask the user clarifying questions when missing user decisions block correct progress or when proceeding would require guessing materially important requirements. ' +
-    'Provide concise options when possible; the first option must be the recommended/default choice. ' +
-    'If the user declines to answer, proceed using the safest reasonable defaults and state the assumptions in your final response.',
+    'Ask the user clarifying questions when missing user decisions block correct progress. ' +
+    'Returns the answers selected/entered by the user.',
   parameters: askUserSchema,
   needsApproval: () => true,
   execute: async (_params, _context, details) => {

@@ -1,13 +1,13 @@
 import type { AgentInputItem, JsonSchemaDefinition } from '@openai/agents';
 import type { LLMAdvisory } from '../contracts/conversation.js';
 import { executeWithRetry } from '../lib/retry-executor.js';
-import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import { classifyCommandDetailed, SafetyStatus } from '../utils/command-safety/index.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './service-interfaces.js';
 import {
   SHELL_AUTO_APPROVAL_INSTRUCTIONS,
   SHELL_AUTO_APPROVAL_PROMPT_VERSION,
 } from '../prompts/shell-auto-approval.js';
+import type { ShellAutoApprovalAgentClient } from './conversation-agent-client.js';
 
 export type ShellAutoApprovalCommand = {
   id: string;
@@ -292,7 +292,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   commands: ShellAutoApprovalCommand[];
   history: AgentInputItem[];
   settingsService?: ISettingsService;
-  agentClient: Pick<OpenAIAgentClient, 'chat'> & Partial<Pick<OpenAIAgentClient, 'chatJson'>>;
+  agentClient: ShellAutoApprovalAgentClient;
   logger: ILoggingService;
   sessionContextService: ISessionContextService;
   throwOnError?: boolean;

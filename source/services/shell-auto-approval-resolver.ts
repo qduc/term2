@@ -1,15 +1,15 @@
-import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './service-interfaces.js';
 import type { ConversationStore } from './conversation-store.js';
 import type { LLMAdvisory } from '../contracts/conversation.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from './interruption-info.js';
+import type { ShellAutoApprovalAgentClient } from './conversation-agent-client.js';
 
 export type AutoApproveMode = 'off' | 'advisory' | 'auto';
 
 export interface ShellAutoApprovalResolverDeps {
   conversationStore: ConversationStore;
-  agentClient: OpenAIAgentClient;
+  agentClient: ShellAutoApprovalAgentClient;
   logger: ILoggingService;
   settingsService?: ISettingsService;
   sessionContextService: ISessionContextService;

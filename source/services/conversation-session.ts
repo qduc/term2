@@ -1,4 +1,3 @@
-import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from './service-interfaces.js';
 import { ConversationStore } from './conversation-store.js';
 import type { AgentInputItem } from '@openai/agents';
@@ -34,6 +33,7 @@ import { ConversationLogger } from './conversation-logger.js';
 import { describeError } from '../utils/error-helpers.js';
 import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
+import type { ConversationAgentClient } from './conversation-agent-client.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -110,7 +110,7 @@ const warnIfStreamHistoryReplayedTools = ({
 export class ConversationSession {
   public readonly id: string;
   public readonly startedAt: string;
-  private agentClient: OpenAIAgentClient;
+  private agentClient: ConversationAgentClient;
   private logger: ILoggingService;
   private conversationStore: ConversationStore;
   private previousResponseId: string | null = null;
@@ -201,7 +201,7 @@ export class ConversationSession {
       sessionStartedAt,
       retryOptions,
     }: {
-      agentClient: OpenAIAgentClient;
+      agentClient: ConversationAgentClient;
       deps: {
         logger: ILoggingService;
         settingsService?: ISettingsService;

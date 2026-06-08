@@ -1,5 +1,4 @@
 import type { AgentInputItem } from '@openai/agents';
-import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import type { AgentStream } from './agent-stream.js';
 import { decideRetry, isTransientRetryableError } from './conversation-retry-policy.js';
 import { ConversationStore } from './conversation-store.js';
@@ -10,6 +9,7 @@ import {
   ToolExecutionLedger,
   type SavedToolExecution,
 } from './tool-execution-ledger.js';
+import type { ConversationAgentClient } from './conversation-agent-client.js';
 
 export type RetryDecision =
   | { kind: 'none' }
@@ -23,7 +23,7 @@ export class RetryHandler {
   constructor(
     private logger: ILoggingService,
     private sessionId: string,
-    private agentClient: OpenAIAgentClient,
+    private agentClient: ConversationAgentClient,
     private random: () => number = Math.random,
   ) {}
 

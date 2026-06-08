@@ -1,4 +1,3 @@
-import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import type { ILoggingService } from './service-interfaces.js';
 import type { ConversationEvent } from './conversation-events.js';
 import { ApprovalState, type AbortedApprovalContext, type PendingApprovalContext } from './approval-state.js';
@@ -15,11 +14,12 @@ import {
 } from './interruption-info.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
 import { createInvalidToolCallDiagnostic } from './logging-contract.js';
+import type { ConversationAgentClient } from './conversation-agent-client.js';
 
 const noop = () => undefined;
 
 export interface ApprovalFlowCoordinatorDeps {
-  agentClient: OpenAIAgentClient;
+  agentClient: ConversationAgentClient;
   approvalState: ApprovalState;
   logger: ILoggingService;
   sessionId: string;

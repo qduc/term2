@@ -37,7 +37,7 @@ import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { tryAcquireFileLock } from '../../tools/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../utils/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../shell-auto-approval-evaluator.js';
-import type { OpenAIAgentClient } from '../../lib/openai-agent-client.js';
+import type { ISubagentClient, ISubagentClientFactory } from './subagent-client-types.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
 const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
@@ -412,13 +412,8 @@ export class SubagentManager {
   #sessionContextService: ISessionContextService;
   #executionContext?: ExecutionContext;
   #onEvent?: (event: ConversationEvent) => void;
-  #agentClient?: Pick<OpenAIAgentClient, 'chat'>;
-  #createClient?: (opts: {
-    agent: any;
-    provider: string;
-    maxTurns: number;
-    retryAttempts?: number;
-  }) => OpenAIAgentClient;
+  #agentClient?: ISubagentClient;
+  #createClient?: ISubagentClientFactory['createClient'];
   #mentorSession: SubagentSession;
 
   constructor(deps: {
@@ -427,13 +422,8 @@ export class SubagentManager {
     executionContext?: ExecutionContext;
     sessionContextService: ISessionContextService;
     onEvent?: (event: ConversationEvent) => void;
-    agentClient?: Pick<OpenAIAgentClient, 'chat'>;
-    createClient?: (args: {
-      agent: any;
-      provider: string;
-      maxTurns: number;
-      retryAttempts?: number;
-    }) => OpenAIAgentClient;
+    agentClient?: ISubagentClient;
+    createClient?: ISubagentClientFactory['createClient'];
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;

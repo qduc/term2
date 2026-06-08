@@ -1,10 +1,10 @@
-import type { OpenAIAgentClient } from '../lib/openai-agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './service-interfaces.js';
 import { ConversationSession } from './conversation-session.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
 import type { UserTurn } from '../types/user-turn.js';
+import type { ConversationAgentClient } from './conversation-agent-client.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../contracts/conversation.js';
 export type { CommandMessage } from './conversation-session.js';
@@ -16,7 +16,7 @@ export type { CommandMessage } from './conversation-session.js';
  */
 export class ConversationService {
   #session: ConversationSession;
-  readonly #agentClient: OpenAIAgentClient;
+  readonly #agentClient: ConversationAgentClient;
   readonly #deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;
@@ -29,7 +29,7 @@ export class ConversationService {
     sessionId = 'default',
     sessionStartedAt,
   }: {
-    agentClient: OpenAIAgentClient;
+    agentClient: ConversationAgentClient;
     deps: {
       logger: ILoggingService;
       settingsService?: ISettingsService;

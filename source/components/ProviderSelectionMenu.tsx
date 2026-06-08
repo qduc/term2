@@ -68,7 +68,7 @@ const ProviderSelectionMenu: FC<Props> = ({
       case 'wizard_key':
         return 'Type value below and press Enter · Esc → Go Back';
       case 'reorder':
-        return '▲↓→ Move Up/Down · Enter → Save Order · Esc → Cancel';
+        return '[ and ] → Move Up/Down · Enter → Save Order · Esc → Cancel';
       default:
         return '';
     }

@@ -569,6 +569,14 @@ const InputBox: FC<Props> = ({
       overrideCursor(currentCursor);
       return;
     }
+    if (_input === '[' && currentHandlers[currentMode].onMoveItemUp) {
+      currentHandlers[currentMode].onMoveItemUp?.();
+      return;
+    }
+    if (_input === ']' && currentHandlers[currentMode].onMoveItemDown) {
+      currentHandlers[currentMode].onMoveItemDown?.();
+      return;
+    }
     if (
       _input &&
       !key.ctrl &&

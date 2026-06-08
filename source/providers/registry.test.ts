@@ -1,5 +1,5 @@
 import test from 'ava';
-import { getProvider, getAllProviders, getProviderIds } from './index.js';
+import { getProvider, getAllProviders, getProviderIds, sortProvidersByOrder } from './index.js';
 
 test('openai provider is registered', (t) => {
   const provider = getProvider('openai');
@@ -105,4 +105,34 @@ test('openrouter provider has sensitive setting keys', (t) => {
   t.true(Array.isArray(provider?.sensitiveSettingKeys));
   t.true(provider!.sensitiveSettingKeys!.includes('agent.openrouter.apiKey'));
   t.true(provider!.sensitiveSettingKeys!.includes('agent.openrouter.baseUrl'));
+});
+
+test('sortProvidersByOrder returns original order when providerOrder is empty', (t) => {
+  const ids = ['openai', 'openrouter', 'codex'];
+  const result = sortProvidersByOrder(ids, []);
+  t.deepEqual(result, ['openai', 'openrouter', 'codex']);
+});
+
+test('sortProvidersByOrder reorders according to providerOrder', (t) => {
+  const ids = ['openai', 'openrouter', 'codex'];
+  const result = sortProvidersByOrder(ids, ['codex', 'openai']);
+  t.deepEqual(result, ['codex', 'openai', 'openrouter']);
+});
+
+test('sortProvidersByOrder appends unknown providers at the end', (t) => {
+  const ids = ['openai', 'openrouter', 'codex'];
+  const result = sortProvidersByOrder(ids, ['anthropic', 'codex']);
+  t.deepEqual(result, ['codex', 'openai', 'openrouter']);
+});
+
+test('sortProvidersByOrder ignores providerOrder entries not in the list', (t) => {
+  const ids = ['openai', 'openrouter'];
+  const result = sortProvidersByOrder(ids, ['codex', 'openrouter', 'openai']);
+  t.deepEqual(result, ['openrouter', 'openai']);
+});
+
+test('sortProvidersByOrder preserves relative order of unordered providers', (t) => {
+  const ids = ['a', 'b', 'c', 'd'];
+  const result = sortProvidersByOrder(ids, ['c', 'a']);
+  t.deepEqual(result, ['c', 'a', 'b', 'd']);
 });

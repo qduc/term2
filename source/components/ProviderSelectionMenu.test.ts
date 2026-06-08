@@ -114,3 +114,27 @@ test('ProviderSelectionMenu renders the confirm discard warning', (t) => {
   t.true(frame.includes('⚠ You have unsaved changes. Discard them?'));
   t.true(frame.includes('No, keep editing'));
 });
+
+test('ProviderSelectionMenu renders reorder phase with provider items', (t) => {
+  const { lastFrame } = render(
+    React.createElement(ProviderSelectionMenu, {
+      phase: 'reorder',
+      selectedIndex: 0,
+      activeItems: [
+        { kind: 'reorder-item', id: 'openai', label: 'OpenAI' },
+        { kind: 'reorder-item', id: 'openrouter', label: 'OpenRouter' },
+        { kind: 'reorder-item', id: 'codex', label: 'Codex' },
+      ],
+      errorMessage: null,
+      fieldErrors: {},
+      selectedProviderName: undefined,
+      draft: null,
+    }),
+  );
+
+  const frame = lastFrame()!;
+  t.true(frame.includes('Reorder Providers'));
+  t.true(frame.includes('OpenAI'));
+  t.true(frame.includes('OpenRouter'));
+  t.true(frame.includes('Codex'));
+});

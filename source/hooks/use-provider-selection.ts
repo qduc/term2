@@ -13,7 +13,8 @@ export type ProviderSelectionPhase =
   | 'wizard_url'
   | 'wizard_key'
   | 'confirm_delete'
-  | 'confirm_discard';
+  | 'confirm_discard'
+  | 'reorder';
 
 export interface CustomProviderDraft {
   name: string;
@@ -65,6 +66,11 @@ export type ProviderSelectionMenuItem =
     }
   | {
       kind: 'type';
+      label: string;
+    }
+  | {
+      kind: 'reorder-item';
+      id: string;
       label: string;
     };
 
@@ -119,6 +125,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
   const [discardFromPhase, setDiscardFromPhase] = useState<ProviderSelectionPhase | null>(null);
   const [draftModified, setDraftModified] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
+  const [reorderList, setReorderList] = useState<string[]>([]);
 
   const activeItems = useMemo((): ProviderSelectionMenuItem[] => {
     switch (phase) {
@@ -132,6 +139,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
             isCustom: i.isCustom,
           })),
           { kind: 'add-provider' as const, label: 'Add Custom Provider' },
+          { kind: 'action' as const, label: 'Reorder Providers' },
         ];
       case 'wizard_type':
         return PROVIDER_TYPES.map((type) => ({ kind: 'type' as const, label: type }));
@@ -182,10 +190,17 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           { kind: 'action' as const, label: 'Yes, delete this provider', tone: 'destructive' as const },
           { kind: 'action' as const, label: 'No, keep it' },
         ];
+      case 'reorder':
+        return [
+          ...reorderList.map((id) => {
+            const providerDef = getAllProviders().find((p) => p.id === id);
+            return { kind: 'reorder-item' as const, id, label: providerDef?.label ?? id };
+          }),
+        ];
       default:
         return [];
     }
-  }, [phase, items, draft, editingOriginalName]);
+  }, [phase, items, draft, editingOriginalName, reorderList]);
 
   const checkIsInactive = useCallback((item: ProviderSelectionMenuItem) => {
     return item.kind === 'provider' && item.id === 'codex';
@@ -318,6 +333,28 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         setPhase('wizard_name');
         setSelectedIndex(0);
         setInput('');
+      } else if (index === items.length + 1) {
+        // "Reorder Providers" selected
+        const providerOrder = settingsService.get<string[]>('providerOrder') ?? [];
+        const allIds = items.map((i) => i.id);
+        const orderedIds =
+          providerOrder.length > 0
+            ? (() => {
+                const orderIndex = new Map<string, number>();
+                providerOrder.forEach((id, idx) => orderIndex.set(id, idx));
+                return [...allIds].sort((a, b) => {
+                  const aI = orderIndex.get(a);
+                  const bI = orderIndex.get(b);
+                  if (aI !== undefined && bI !== undefined) return aI - bI;
+                  if (aI !== undefined) return -1;
+                  if (bI !== undefined) return 1;
+                  return 0;
+                });
+              })()
+            : allIds;
+        setReorderList(orderedIds);
+        setPhase('reorder');
+        setSelectedIndex(0);
       } else {
         // Provider selected
         const provider = items[index]!;
@@ -445,8 +482,13 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           setInput('');
         }
       }
+    } else if (phase === 'reorder') {
+      // Enter saves the current order
+      settingsService.setPersistent('providerOrder', reorderList);
+      setPhase('list');
+      setSelectedIndex(0);
+      setReorderList([]);
     } else if (phase === 'confirm_discard') {
-      if (!discardFromPhase) return;
       if (index === 0) {
         setDraftModified(false);
         const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
@@ -494,7 +536,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         setDiscardFromPhase(null);
         setFieldErrors({});
       } else {
-        setPhase(discardFromPhase);
+        setPhase(discardFromPhase!);
         setSelectedIndex(0);
         setDiscardFromPhase(null);
       }
@@ -535,6 +577,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     settingsService,
     loadProviders,
     setInput,
+    reorderList,
   ]);
 
   const goBack = useCallback(() => {
@@ -593,6 +636,10 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       setSelectedIndex(0);
       setDraft(null);
       setEditingOriginalName(null);
+    } else if (phase === 'reorder') {
+      setPhase('list');
+      setSelectedIndex(0);
+      setReorderList([]);
     } else if (phase === 'confirm_delete') {
       setPhase('list');
       setSelectedIndex(0);
@@ -829,6 +876,37 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
   const getActiveItems = useCallback(() => activeItems, [activeItems]);
 
+  const saveProviderOrder = useCallback(() => {
+    settingsService.setPersistent('providerOrder', reorderList);
+    setPhase('list');
+    setSelectedIndex(0);
+    setReorderList([]);
+  }, [settingsService, reorderList]);
+
+  const moveProviderUp = useCallback(() => {
+    if (phase !== 'reorder') return;
+    const idx = selectedIndex;
+    if (idx <= 0) return;
+    setReorderList((prev) => {
+      const next = [...prev];
+      [next[idx - 1], next[idx]] = [next[idx]!, next[idx - 1]!];
+      return next;
+    });
+    selectionMoveUp();
+  }, [phase, selectedIndex, selectionMoveUp]);
+
+  const moveProviderDown = useCallback(() => {
+    if (phase !== 'reorder') return;
+    const idx = selectedIndex;
+    if (idx >= reorderList.length - 1) return;
+    setReorderList((prev) => {
+      const next = [...prev];
+      [next[idx], next[idx + 1]] = [next[idx + 1]!, next[idx]!];
+      return next;
+    });
+    selectionMoveDown();
+  }, [phase, selectedIndex, reorderList.length, selectionMoveDown]);
+
   const selectedProviderName = editingOriginalName ?? undefined;
 
   return {
@@ -852,5 +930,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     requestDelete,
     getActiveItems,
     handleTextInputSubmit,
+    saveProviderOrder,
+    moveProviderUp,
+    moveProviderDown,
   };
 };

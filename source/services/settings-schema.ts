@@ -258,6 +258,11 @@ export const SENSITIVE_SETTING_KEYS = getSensitiveSettingKeys();
 
 export const SettingsSchema = z.object({
   providers: z.array(CustomProviderSchema).optional().default([]),
+  providerOrder: z
+    .array(z.string())
+    .optional()
+    .default([])
+    .describe('Preferred order of provider IDs for display in model selection tab bar'),
   agent: AgentSettingsSchema.optional(),
   shell: ShellSettingsSchema.optional(),
   ui: UISettingsSchema.optional(),
@@ -273,6 +278,7 @@ export const SettingsSchema = z.object({
 // Type definitions
 export interface SettingsData {
   providers: Array<z.infer<typeof CustomProviderSchema>>;
+  providerOrder: string[];
   agent: z.infer<typeof AgentSettingsSchema>;
   shell: z.infer<typeof ShellSettingsSchema>;
   ui: z.infer<typeof UISettingsSchema>;
@@ -441,6 +447,7 @@ export const SETTING_KEYS = {
   WEB_SEARCH_PROVIDER: 'webSearch.provider',
   WEB_SEARCH_TAVILY_API_KEY: 'webSearch.tavily.apiKey',
   WEB_SEARCH_EXA_API_KEY: 'webSearch.exa.apiKey',
+  PROVIDER_ORDER: 'providerOrder',
 } as const;
 
 // Define which settings are modifiable at runtime
@@ -490,6 +497,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.WEB_SEARCH_PROVIDER,
   SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY,
   SETTING_KEYS.WEB_SEARCH_EXA_API_KEY,
+  SETTING_KEYS.PROVIDER_ORDER,
 ]);
 
 export interface AppModes {
@@ -529,6 +537,7 @@ export const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
 // Default settings
 export const DEFAULT_SETTINGS: SettingsData = {
   providers: [],
+  providerOrder: [],
   agent: {
     model: 'gpt-5.1',
     reasoningEffort: 'default',

@@ -14,5 +14,6 @@ export {
   getProvider,
   getAllProviders,
   getProviderIds,
+  sortProvidersByOrder,
   type ProviderDefinition,
 } from './registry.js';

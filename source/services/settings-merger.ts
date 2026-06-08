@@ -76,6 +76,7 @@ export function mergeSettings(
   // Ensure all required fields are present
   const merged: SettingsData = {
     providers: result.providers || JSON.parse(JSON.stringify(defaults.providers)),
+    providerOrder: result.providerOrder ?? JSON.parse(JSON.stringify(defaults.providerOrder)),
     agent: result.agent || JSON.parse(JSON.stringify(defaults.agent)),
     shell: result.shell || JSON.parse(JSON.stringify(defaults.shell)),
     ui: result.ui || JSON.parse(JSON.stringify(defaults.ui)),
@@ -95,6 +96,7 @@ export function mergeSettings(
     // Ensure we return a complete SettingsData object
     return {
       providers: merged.providers,
+      providerOrder: merged.providerOrder,
       agent: merged.agent,
       shell: merged.shell,
       ui: merged.ui,

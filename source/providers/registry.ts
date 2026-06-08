@@ -116,3 +116,27 @@ export function getAllProviders(): ProviderDefinition[] {
 export function getProviderIds(): string[] {
   return Array.from(providers.keys());
 }
+
+/**
+ * Sort provider IDs according to a preferred order.
+ * Providers listed in `providerOrder` appear first (in that order);
+ * any providers not in the list are appended afterward in their original order.
+ */
+export function sortProvidersByOrder(providerIds: string[], providerOrder: string[]): string[] {
+  if (!providerOrder || providerOrder.length === 0) return providerIds;
+
+  const orderIndex = new Map<string, number>();
+  providerOrder.forEach((id, idx) => orderIndex.set(id, idx));
+
+  return [...providerIds].sort((a, b) => {
+    const aIdx = orderIndex.get(a);
+    const bIdx = orderIndex.get(b);
+    // Both in providerOrder: sort by their position
+    if (aIdx !== undefined && bIdx !== undefined) return aIdx - bIdx;
+    // Only one in providerOrder: the one with order comes first
+    if (aIdx !== undefined) return -1;
+    if (bIdx !== undefined) return 1;
+    // Neither in providerOrder: keep original relative order
+    return 0;
+  });
+}

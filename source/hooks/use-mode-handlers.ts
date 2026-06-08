@@ -18,6 +18,8 @@ export type ModeHandler = {
   onSubmit?: (submittedValue: string) => SubmitResult;
   onReset?: () => void;
   onDelete?: () => void;
+  onMoveItemUp?: () => void;
+  onMoveItemDown?: () => void;
 };
 
 type Movable = {
@@ -50,6 +52,8 @@ type Providers = {
   goBack: () => void;
   requestDelete: () => void;
   handleTextInputSubmit: (value: string) => boolean;
+  moveProviderUp: () => void;
+  moveProviderDown: () => void;
 };
 
 type Options = {
@@ -225,6 +229,16 @@ export const useModeHandlers = ({
         onDelete: () => {
           if (providers.phase === 'list') {
             providers.requestDelete();
+          }
+        },
+        onMoveItemUp: () => {
+          if (providers.phase === 'reorder') {
+            providers.moveProviderUp();
+          }
+        },
+        onMoveItemDown: () => {
+          if (providers.phase === 'reorder') {
+            providers.moveProviderDown();
           }
         },
       },

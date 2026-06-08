@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import { fetchModels, filterModels, type ModelInfo } from '../services/model-service.js';
-import { getProviderIds } from '../providers/index.js';
+import { getProviderIds, sortProvidersByOrder } from '../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { parseModelProviderArg } from '../utils/model-provider-arg.js';
 import { MODEL_CMD_TRIGGER, getModelSettingConfigForInput, MODEL_SETTING_CONFIGS } from '../utils/model-settings.js';
@@ -225,18 +225,21 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
   const toggleProvider = useCallback(
     (direction: 'next' | 'prev' = 'next') => {
       const allProviderIds = getProviderIds();
+      const providerOrder = settingsService.get<string[]>('providerOrder') ?? [];
+      const orderedProviderIds =
+        providerOrder.length > 0 ? sortProvidersByOrder(allProviderIds, providerOrder) : allProviderIds;
 
       // If no providers available, stay on current
-      if (allProviderIds.length === 0) return;
+      if (orderedProviderIds.length === 0) return;
 
-      const currentProvider = providerRef.current || getInitialProvider() || allProviderIds[0];
-      const currentIndex = allProviderIds.indexOf(currentProvider);
+      const currentProvider = providerRef.current || getInitialProvider() || orderedProviderIds[0];
+      const currentIndex = orderedProviderIds.indexOf(currentProvider);
       const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
       const nextIndex =
         direction === 'prev'
-          ? (safeCurrentIndex - 1 + allProviderIds.length) % allProviderIds.length
-          : (safeCurrentIndex + 1) % allProviderIds.length;
-      const nextProvider = allProviderIds[nextIndex];
+          ? (safeCurrentIndex - 1 + orderedProviderIds.length) % orderedProviderIds.length
+          : (safeCurrentIndex + 1) % orderedProviderIds.length;
+      const nextProvider = orderedProviderIds[nextIndex];
       const cachedModels = modelsByProviderRef.current.get(nextProvider);
 
       // If the user manually selects it, we should allow retrying it
@@ -249,7 +252,7 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
       setError(null);
       setCurrentProvider(nextProvider);
     },
-    [getInitialProvider, setCurrentProvider],
+    [getInitialProvider, setCurrentProvider, settingsService],
   );
 
   return {

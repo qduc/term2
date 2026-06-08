@@ -1,7 +1,7 @@
 import React, { FC, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import type { ModelInfo } from '../services/model-service.js';
-import { getAllProviders } from '../providers/index.js';
+import { getAllProviders, sortProvidersByOrder } from '../providers/index.js';
 import { hasProviderCredentials } from '../utils/provider-credentials.js';
 import type { SettingsService } from '../services/settings-service.js';
 import { MenuContainer } from './Common/MenuContainer.js';
@@ -32,15 +32,24 @@ const ModelSelectionMenu: FC<Props> = ({
   canSwitchProvider = true,
   settingsService,
 }) => {
-  const tabItems = useMemo(
-    () =>
-      getAllProviders().map((p) => ({
-        id: p.id,
-        label: p.label,
-        hasCredentials: hasProviderCredentials(settingsService, p.id),
-      })),
-    [settingsService],
-  );
+  const tabItems = useMemo(() => {
+    const all = getAllProviders();
+    const providerOrder = settingsService.get<string[]>('providerOrder') ?? [];
+    const sorted =
+      providerOrder.length > 0
+        ? sortProvidersByOrder(
+            all.map((p) => p.id),
+            providerOrder,
+          )
+            .map((id) => all.find((p) => p.id === id)!)
+            .filter(Boolean)
+        : all;
+    return sorted.map((p) => ({
+      id: p.id,
+      label: p.label,
+      hasCredentials: hasProviderCredentials(settingsService, p.id),
+    }));
+  }, [settingsService]);
 
   const tabBar = (
     <ScrollableTabBar

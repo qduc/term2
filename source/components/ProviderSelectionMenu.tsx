@@ -46,6 +46,8 @@ const ProviderSelectionMenu: FC<Props> = ({
         return 'Step 3: Base URL';
       case 'wizard_key':
         return 'Step 4: API Key';
+      case 'reorder':
+        return 'Reorder Providers';
       default:
         return 'Manage Providers';
     }
@@ -65,6 +67,8 @@ const ProviderSelectionMenu: FC<Props> = ({
       case 'wizard_url':
       case 'wizard_key':
         return 'Type value below and press Enter · Esc → Go Back';
+      case 'reorder':
+        return '▲↓→ Move Up/Down · Enter → Save Order · Esc → Cancel';
       default:
         return '';
     }
@@ -207,6 +211,14 @@ const ProviderSelectionMenu: FC<Props> = ({
             prefix = '  ';
             if (item.kind === 'field' && item.detail) {
               label = `${item.label}: ${item.detail}`;
+            }
+          } else if (item.kind === 'reorder-item') {
+            prefix = '  ';
+            suffix = index === 0 ? '↑' : isSelected ? '↓' : '';
+            if (index > 0 && index < activeItems.length - 1) {
+              suffix = '↕';
+            } else if (index === activeItems.length - 1) {
+              suffix = '↓';
             }
           }
 

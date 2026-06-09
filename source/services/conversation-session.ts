@@ -1389,6 +1389,28 @@ export class ConversationSession {
 
             if (!this.#isCurrentGeneration(gen)) return;
 
+            if (!stream) {
+              this.retryHandler.restoreForRetry({
+                ledgerSnapshot,
+                stream,
+                toolLedger: this.toolLedger,
+                conversationStore: this.conversationStore,
+                clearPreviousResponseId: () => {
+                  this.previousResponseId = null;
+                },
+                restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
+                removeLastUserMessage: () => this.conversationStore.removeLastUserMessage(),
+              });
+
+              const lastUserText = this.conversationStore.getLastUserMessage();
+              const dummyTurn: UserTurn = { text: lastUserText };
+              yield* this.run(dummyTurn, {
+                skipUserMessage: true,
+                transientRetryCount,
+              });
+              return;
+            }
+
             // Rollback the tool ledger to the state right before this continuation started
             this.toolLedger.import(ledgerSnapshot);
 

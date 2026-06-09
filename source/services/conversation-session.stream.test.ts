@@ -1,6 +1,7 @@
 // @ts-nocheck - Complex mock patterns deferred to follow-up
 import test from 'ava';
 import { ModelBehaviorError } from '@openai/agents';
+import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import { ConversationSession } from './conversation-session.js';
 import { MockStream } from './test-helpers/mock-stream.js';
 
@@ -817,6 +818,133 @@ test('continue() retries on transient error during stream iteration', async (t) 
   t.is(typeof calls[3].input, 'string', 'successful retry should allow later turns to chain again');
   t.is(calls[3].input, 'after continue');
   t.is(calls[3].opts.previousResponseId, 'resp-recovered');
+});
+
+test('run() retries malformed tool-call interruption before surfacing approval', async (t) => {
+  const malformedStream = new MockStream([]);
+  malformedStream.interruptions = [
+    {
+      name: 'shell',
+      callId: 'call-malformed',
+      arguments: '{"command":"echo hi"',
+      agent: { name: 'CLI Agent' },
+    },
+  ];
+  malformedStream.state = { approve() {}, reject() {} };
+
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  successStream.finalOutput = 'Recovered';
+  successStream.lastResponseId = 'resp-recovered';
+
+  let startCalls = 0;
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream() {
+      startCalls++;
+      return startCalls === 1 ? malformedStream : successStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('run command')) {
+    emitted.push(ev);
+  }
+
+  t.is(startCalls, 2);
+  t.deepEqual(
+    emitted.map((event) => event.type),
+    ['retry', 'text_delta', 'final'],
+  );
+  t.is(emitted[0].retryType, 'parsing_error');
+  t.is(emitted[emitted.length - 1].finalText, 'Recovered');
+});
+
+test('continue() falls back to full-history replay when continuation request fails before a stream starts', async (t) => {
+  const interruption = {
+    name: 'shell',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ command: 'echo hi' }),
+    callId: 'call-continue-fallback',
+  };
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = { approve() {}, reject() {} };
+  initialStream.lastResponseId = 'resp-initial';
+
+  const recoveryStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered after replay' }]);
+  recoveryStream.finalOutput = 'Recovered after replay';
+  recoveryStream.lastResponseId = 'resp-recovered';
+  recoveryStream.history = [
+    { role: 'user', type: 'message', content: 'run command' },
+    {
+      type: 'function_call',
+      callId: 'call-continue-fallback',
+      name: 'shell',
+      arguments: JSON.stringify({ command: 'echo hi' }),
+    },
+    {
+      type: 'function_call_result',
+      callId: 'call-continue-fallback',
+      name: 'shell',
+      output: 'ok',
+    },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Recovered after replay' }],
+    },
+  ];
+
+  let startCalls = 0;
+  let continueCalls = 0;
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream(input, opts) {
+      startCalls++;
+      calls.push({ kind: 'start', input, opts });
+      return startCalls === 1 ? initialStream : recoveryStream;
+    },
+    async continueRunStream(state, opts) {
+      continueCalls++;
+      calls.push({ kind: 'continue', state, opts });
+      throw new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP');
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  for await (const _ of session.run('run command')) {
+  }
+
+  const cont = [];
+  for await (const ev of session.continue({ answer: 'y' })) {
+    cont.push(ev);
+  }
+
+  t.is(continueCalls, 1);
+  t.is(startCalls, 2);
+  t.is(calls[2].kind, 'start');
+  t.is(calls[2].opts.previousResponseId, null);
+  t.deepEqual(
+    cont.map((event) => event.type),
+    ['tool_started', 'retry', 'text_delta', 'final'],
+  );
+  t.is(cont[cont.length - 1].finalText, 'Recovered after replay');
 });
 
 test('sendMessage() preserves callId on approval_required terminal result', async (t) => {

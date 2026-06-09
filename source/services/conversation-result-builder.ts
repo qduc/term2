@@ -1,15 +1,18 @@
 import type { ConversationEvent } from './conversation-events.js';
+import { ModelBehaviorError } from '@openai/agents';
 import type { ConversationTerminal, LLMAdvisory } from '../contracts/conversation.js';
 import type { ILoggingService } from './service-interfaces.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 import { extractUsage } from '../utils/token-usage.js';
 import { extractCommandMessages } from '../utils/extract-command-messages.js';
 import { attachCachedArguments } from './command-message-streaming.js';
+import { createInvalidToolCallDiagnostic } from './logging-contract.js';
 import { asRecord, getCallIdFromObject, getString, getToolInfoFromInterruption } from './interruption-info.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import type { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
+import { parseToolCallArguments } from './tool-call-arguments.js';
 import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 
 export type ConversationResult = ConversationTerminal;
@@ -79,6 +82,24 @@ export async function buildConversationResult(
   if (result.interruptions && result.interruptions.length > 0) {
     const interruption = result.interruptions[0];
     const interruptionRecord = asRecord(interruption);
+    const callId = getCallIdFromObject(interruption);
+    const { toolName, argumentsText, rawArguments } = getToolInfoFromInterruption(interruption);
+
+    const parseResult = parseToolCallArguments(rawArguments, {
+      callId: callId ?? 'unknown-call-id',
+      toolName,
+      sessionId,
+      traceId: logger.getCorrelationId() ?? 'trace-unknown',
+    });
+
+    if (parseResult.invalidJsonDiagnostic) {
+      logger.error('Invalid tool call argument payload', {
+        ...createInvalidToolCallDiagnostic(parseResult.invalidJsonDiagnostic),
+        sessionId,
+        messageId: callId ?? 'unknown-call-id',
+      });
+      throw new ModelBehaviorError(`Error parsing tool arguments for ${toolName}: arguments must be valid JSON.`);
+    }
 
     approvalFlow.recordPending({
       state: result.state,
@@ -89,8 +110,6 @@ export async function buildConversationResult(
     });
 
     const agent = asRecord(interruptionRecord?.agent);
-    const callId = getCallIdFromObject(interruption);
-    const { toolName, argumentsText } = getToolInfoFromInterruption(interruption);
 
     let llmAdvisory: LLMAdvisory | undefined;
     if (toolName === 'shell' || toolName === 'bash') {

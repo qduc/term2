@@ -610,6 +610,7 @@ export class ConversationSession {
       transportFallbackRetryCount = 0,
       maxModelRetries,
       signal,
+      resumeState,
     }: {
       skipUserMessage?: boolean;
       flexServiceTierFallbackCount?: number;
@@ -618,6 +619,7 @@ export class ConversationSession {
       transportFallbackRetryCount?: number;
       maxModelRetries?: number;
       signal?: AbortSignal;
+      resumeState?: any;
     } = {},
   ): AsyncIterable<ConversationEvent> {
     if (
@@ -827,10 +829,17 @@ export class ConversationSession {
       }
 
       try {
-        stream = (await this.agentClient.startStream(streamInput, {
-          previousResponseId: inputSurgeKind === 'delta' ? this.previousResponseId : null,
-          sessionId: this.id,
-        })) as AgentStream;
+        if (resumeState && typeof this.agentClient.continueRunStream === 'function') {
+          stream = (await this.agentClient.continueRunStream(resumeState, {
+            previousResponseId: this.previousResponseId,
+            sessionId: this.id,
+          })) as AgentStream;
+        } else {
+          stream = (await this.agentClient.startStream(streamInput, {
+            previousResponseId: inputSurgeKind === 'delta' ? this.previousResponseId : null,
+            sessionId: this.id,
+          })) as AgentStream;
+        }
       } catch (chainingError) {
         // When WS degrades to HTTP mid-request and the provider requires WS for
         // chaining (e.g. Codex), the model layer throws ChainingTransportDowngradeError.
@@ -998,9 +1007,10 @@ export class ConversationSession {
             delayMs: decision.delay,
           });
 
+          const isResuming = Boolean(stream?.state && typeof this.agentClient.continueRunStream === 'function');
           yield {
             type: 'retry',
-            toolName: 'turn',
+            toolName: isResuming ? 'continuation' : 'turn',
             attempt: decision.attempt,
             maxRetries: maxTransientRetries,
             errorMessage: error instanceof Error ? error.message : String(error),
@@ -1009,17 +1019,19 @@ export class ConversationSession {
 
           if (!this.#isCurrentGeneration(gen)) return;
 
-          this.retryHandler.restoreForRetry({
-            ledgerSnapshot,
-            stream,
-            toolLedger: this.toolLedger,
-            conversationStore: this.conversationStore,
-            clearPreviousResponseId: () => {
-              this.previousResponseId = null;
-            },
-            restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
-            removeLastUserMessage: () => this.conversationStore.removeLastUserMessage(),
-          });
+          if (!isResuming) {
+            this.retryHandler.restoreForRetry({
+              ledgerSnapshot,
+              stream,
+              toolLedger: this.toolLedger,
+              conversationStore: this.conversationStore,
+              clearPreviousResponseId: () => {
+                this.previousResponseId = null;
+              },
+              restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
+              removeLastUserMessage: () => this.conversationStore.removeLastUserMessage(),
+            });
+          }
 
           await new Promise((resolve) => setTimeout(resolve, decision.delay));
           yield* this.run(turn, {
@@ -1027,6 +1039,7 @@ export class ConversationSession {
             transientRetryCount: decision.attempt,
             transportFallbackRetryCount,
             maxModelRetries,
+            resumeState: isResuming ? stream?.state : undefined,
           });
           return;
         }
@@ -1376,26 +1389,11 @@ export class ConversationSession {
 
             if (!this.#isCurrentGeneration(gen)) return;
 
-            this.retryHandler.restoreForRetry({
-              ledgerSnapshot,
-              stream,
-              toolLedger: this.toolLedger,
-              conversationStore: this.conversationStore,
-              clearPreviousResponseId: () => {
-                this.previousResponseId = null;
-              },
-              restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
-              removeLastUserMessage: () => this.conversationStore.removeLastUserMessage(),
-            });
+            // Rollback the tool ledger to the state right before this continuation started
+            this.toolLedger.import(ledgerSnapshot);
 
-            const lastUserText = this.conversationStore.getLastUserMessage();
-            const dummyTurn: UserTurn = { text: lastUserText };
-
-            yield* this.run(dummyTurn, {
-              skipUserMessage: true,
-              transientRetryCount,
-            });
-            return;
+            // Loop again to retry the continueRunStream call
+            continue;
           }
           throw error;
         }

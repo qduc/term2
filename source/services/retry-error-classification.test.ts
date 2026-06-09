@@ -135,3 +135,10 @@ test('isTransientRetryableError: non-retryable errors return false', (t) => {
   t.false(isTransientRetryableError(new Error('unterminated string')));
   t.false(isTransientRetryableError(42));
 });
+
+test('isTransientRetryableError: stream parsing and JSON syntax errors are retryable', (t) => {
+  t.true(isTransientRetryableError(new Error("Expecting ',' delimiter: line 1 column 680 (char 679)")));
+  t.true(isTransientRetryableError(new SyntaxError('Unexpected end of JSON input')));
+  t.true(isTransientRetryableError(new Error('Unexpected token < in JSON at position 0')));
+  t.true(isTransientRetryableError(new SyntaxError('Expected double-quoted property name in JSON at position 39')));
+});

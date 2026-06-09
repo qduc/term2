@@ -143,6 +143,15 @@ export const isTransientRetryableError = (error: unknown): boolean => {
     }
 
     if (
+      message.includes("expecting ',' delimiter") ||
+      message.includes('unexpected end of json') ||
+      message.includes('is not valid json') ||
+      (message.includes('json') && (message.includes('unexpected') || message.includes('expected')))
+    ) {
+      return true;
+    }
+
+    if (
       message.includes('rate limit') ||
       message.includes('too many requests') ||
       message.includes('rate_limit') ||

@@ -776,11 +776,12 @@ test('continue() retries on transient error during stream iteration', async (t) 
     async startStream(input, opts) {
       startCalls++;
       calls.push({ input, opts });
-      return startCalls === 1 ? initialStream : startCalls === 2 ? successStream : followUpStream;
+      return startCalls === 1 ? initialStream : followUpStream;
     },
-    async continueRunStream() {
+    async continueRunStream(state, opts) {
       continueCalls++;
-      return failingStream;
+      calls.push({ state, opts });
+      return continueCalls === 1 ? failingStream : successStream;
     },
   };
 
@@ -796,15 +797,14 @@ test('continue() retries on transient error during stream iteration', async (t) 
   }
   t.is(first[0].type, 'approval_required');
 
-  // Continue — first attempt fails, second succeeds via startStream retry
+  // Continue — first attempt fails, second succeeds via continueRunStream retry
   const cont = [];
   for await (const ev of session.continue({ answer: 'y' })) {
     cont.push(ev);
   }
 
-  t.is(continueCalls, 1);
-  t.is(startCalls, 2);
-  t.is(calls[1].opts.previousResponseId, null, 'retry should replay full history without chaining');
+  t.is(continueCalls, 2);
+  t.is(startCalls, 1);
   const types = cont.map((e) => e.type);
   t.true(types.includes('retry'), 'should emit a retry event');
   t.true(types.includes('final'), 'should emit a final event after retry');
@@ -813,10 +813,10 @@ test('continue() retries on transient error during stream iteration', async (t) 
   for await (const _ of session.run('after continue')) {
   }
 
-  t.is(startCalls, 3);
-  t.is(typeof calls[2].input, 'string', 'successful retry should allow later turns to chain again');
-  t.is(calls[2].input, 'after continue');
-  t.is(calls[2].opts.previousResponseId, 'resp-recovered');
+  t.is(startCalls, 2);
+  t.is(typeof calls[3].input, 'string', 'successful retry should allow later turns to chain again');
+  t.is(calls[3].input, 'after continue');
+  t.is(calls[3].opts.previousResponseId, 'resp-recovered');
 });
 
 test('sendMessage() preserves callId on approval_required terminal result', async (t) => {

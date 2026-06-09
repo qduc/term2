@@ -52,6 +52,19 @@ type RetryState = {
   transportFallbackRetryCount?: number;
 };
 
+type RetryHandlerContext = {
+  error: unknown;
+  turn: UserTurn;
+  gen: number;
+  stream: AgentStream | null;
+  streamInput: string | AgentInputItem | AgentInputItem[];
+  addedUserMessage: boolean;
+  ledgerSnapshot: SavedToolExecution[];
+  retries: RetryState;
+  maxTransientRetries: number;
+  maxModelRetries?: number;
+};
+
 type BuiltOutgoingInput = {
   streamInput: string | AgentInputItem | AgentInputItem[];
   inputSurgeKind: 'delta' | 'full_history';
@@ -993,228 +1006,265 @@ export class ConversationSession {
 
       yield toTerminalEvent(resolvedResult);
     } catch (error) {
-      const streamHistoryLength = Array.isArray((stream as any)?.history) ? (stream as any).history.length : 0;
-      let decision: RetryDecision = this.retryHandler.classifyError({
+      const handled = yield* this.#handleRetryDecision({
         error,
-        transientRetryCount,
-        transportFallbackRetryCount,
-        hallucinationRetryCount,
-        flexServiceTierFallbackCount,
-        maxTransientRetries,
+        turn,
+        gen,
         stream,
-        streamHistoryLength,
+        streamInput,
+        addedUserMessage,
+        ledgerSnapshot,
+        retries: {
+          transientRetryCount,
+          flexServiceTierFallbackCount,
+          hallucinationRetryCount,
+          transportFallbackRetryCount,
+        },
+        maxTransientRetries,
         maxModelRetries,
       });
+      if (handled) return;
 
-      if (!this.allowFreshStartRetries && !stream && decision.kind !== 'none' && decision.kind !== 'unrecoverable') {
-        this.logger.warn('Retry requires fresh start but fresh-start retries are disabled for this session', {
-          eventType: 'retry.fresh_start_blocked',
-          category: 'retry',
-          phase: 'retry',
-          sessionId: this.id,
-          traceId: this.logger.getCorrelationId(),
-          retryKind: decision.kind,
-          errorMessage: error instanceof Error ? error.message : String(error),
-        });
-        decision = { kind: 'unrecoverable' };
-      }
-
-      switch (decision.kind) {
-        case 'flex_fallback': {
-          this.#logRetry(
-            'Flex service tier timed out, retrying with standard service tier',
-            'retry.flex_service_tier',
-            {
-              retryType: 'flex_service_tier',
-              retryAttempt: 1,
-              attempt: 1,
-              maxRetries: 1,
-              errorMessage: error instanceof Error ? error.message : String(error),
-            },
-          );
-
-          yield {
-            type: 'retry',
-            toolName: 'service_tier',
-            attempt: 1,
-            maxRetries: 1,
-            errorMessage: 'Flex service tier timed out. Falling back to standard service tier and retrying.',
-            retryType: 'flex_service_tier',
-          };
-
-          getMethod<[], void>(this.agentClient, 'useStandardServiceTierForNextRequest')?.call(this.agentClient);
-          this.#commonRestoreForRetry(ledgerSnapshot, stream);
-          yield* this.run(turn, {
-            skipUserMessage: true,
-            retries: { ...retries, flexServiceTierFallbackCount: flexServiceTierFallbackCount + 1 },
-            maxModelRetries,
-          });
-          return;
-        }
-        case 'transient': {
-          this.#logRetry('Transient upstream error detected, retrying turn', 'retry.transient', {
-            retryType: 'upstream',
-            retryAttempt: decision.attempt,
-            attempt: decision.attempt,
-            maxRetries: maxTransientRetries,
-            errorMessage: error instanceof Error ? error.message : String(error),
-            delayMs: decision.delay,
-          });
-
-          const isResuming = Boolean(stream?.state && typeof this.agentClient.continueRunStream === 'function');
-          yield {
-            type: 'retry',
-            toolName: isResuming ? 'continuation' : 'turn',
-            attempt: decision.attempt,
-            maxRetries: maxTransientRetries,
-            errorMessage: error instanceof Error ? error.message : String(error),
-            retryType: 'upstream',
-          };
-
-          if (!this.#isCurrentGeneration(gen)) return;
-
-          if (!isResuming) {
-            this.#commonRestoreForRetry(ledgerSnapshot, stream, { removeLastUserMessage: true });
-          }
-
-          await new Promise((resolve) => setTimeout(resolve, decision.delay));
-          yield* this.run(turn, {
-            skipUserMessage: Boolean(stream),
-            retries: { ...retries, transientRetryCount: decision.attempt },
-            maxModelRetries,
-            resumeState: isResuming ? stream?.state : undefined,
-          });
-          return;
-        }
-        case 'transport_downgrade': {
-          const attempt = transportFallbackRetryCount + 1;
-
-          this.#logRetry(
-            'Transient upstream error exhausted WS retries, forcing HTTP fallback',
-            'retry.transport_fallback',
-            {
-              retryType: 'upstream',
-              retryAttempt: attempt,
-              attempt,
-              maxRetries: 1,
-              errorMessage: error instanceof Error ? error.message : String(error),
-            },
-          );
-
-          yield {
-            type: 'retry',
-            toolName: 'transport',
-            attempt,
-            maxRetries: 1,
-            errorMessage: 'WebSocket retries exhausted. Falling back to HTTP transport and retrying.',
-            retryType: 'upstream',
-          };
-
-          if (!this.#isCurrentGeneration(gen)) return;
-
-          this.#commonRestoreForRetry(ledgerSnapshot, stream, { removeLastUserMessage: true });
-
-          yield* this.run(turn, {
-            skipUserMessage: Boolean(stream),
-            retries: { transientRetryCount: 0, transportFallbackRetryCount: attempt },
-            maxModelRetries,
-          });
-          return;
-        }
-        case 'hallucination': {
-          const decisionResult = decision.decision;
-          if (decisionResult.kind !== 'retry') {
-            break;
-          }
-
-          this.#logRetry('Recoverable model error detected, retrying', 'retry.model_error', {
-            toolName: decisionResult.logPayload.toolName,
-            retryType: decisionResult.logPayload.retryType,
-            retryAttempt: decisionResult.attempt,
-            attempt: decisionResult.attempt,
-            maxRetries: maxModelRetries ?? MAX_HALLUCINATION_RETRIES,
-            errorMessage: decisionResult.message,
-          });
-
-          yield decisionResult.retryEvent;
-
-          if (!this.#isCurrentGeneration(gen)) return;
-
-          if (decisionResult.hadStream && stream) {
-            this.toolLedger.import(ledgerSnapshot);
-            if (decisionResult.shouldInjectErrorContext) {
-              this.conversationStore.addErrorContext(decisionResult.errorContextMessage);
-            }
-          } else {
-            this.conversationStore.removeLastUserMessage();
-          }
-
-          yield* this.run(turn, {
-            ...decisionResult.nextRunOptions,
-            maxModelRetries,
-          });
-          return;
-        }
-        case 'none':
-        case 'unrecoverable':
-          break;
-      }
-
-      // Drop the just-added user turn from the store before yielding so the
-      // generator-cleanup path doesn't strand the removal — and so the error
-      // event can carry the dropped text for UI restoration.
-      let droppedUserMessage: { text: string; imageCount: number } | undefined;
-      if (addedUserMessage && !stream && this.#isCurrentGeneration(gen)) {
-        this.conversationStore.removeLastUserMessage();
-        droppedUserMessage = { text: turn.text, imageCount: turn.images?.length ?? 0 };
-      }
-      if (stream && this.#isCurrentGeneration(gen)) {
-        this.toolLedger.markOpenCallsAborted(error instanceof Error ? error.message : String(error));
-        // Persist completed tool call/result pairs (and the recovery notice) into
-        // canonical history so the next user turn doesn't ship a request with two
-        // consecutive user messages and no record of the tool activity.
-        const reconciled = reconcileHistoryWithToolLedger(
-          this.conversationStore.getHistory(),
-          this.toolLedger.export(),
-        );
-        if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
-          this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
-        }
-        this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
-          kind: 'full_history',
-          previousInput: streamInput,
-        });
-        const recoverySummary = this.toolLedger.getRecoverySummary();
-        if (recoverySummary) {
-          yield {
-            type: 'tool_recovery',
-            recoveredCallIds: recoverySummary.recoveredCallIds,
-            droppedCallIds: recoverySummary.droppedCallIds,
-            message: recoverySummary.message,
-          };
-        }
-      }
-      yield {
-        type: 'error',
-        message: describeError(error),
-        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
-        ...(droppedUserMessage ? { droppedUserMessage } : {}),
-      };
-      this.logger.error('Conversation stream error', {
-        eventType: 'stream.failed',
-        category: 'stream',
-        phase: 'abort',
-        sessionId: this.id,
-        traceId: this.logger.getCorrelationId(),
-        errorMessage: describeError(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
       throw error;
     } finally {
       if (signal && abortListener) {
         signal.removeEventListener('abort', abortListener);
       }
     }
+  }
+
+  /**
+   * Classify a streaming error and either retry the turn or yield error/cleanup events.
+   * Returns true when the error was handled (retry dispatched or generation stale),
+   * false when the caller should throw the original error.
+   */
+  async *#handleRetryDecision(ctx: RetryHandlerContext): AsyncGenerator<ConversationEvent, boolean> {
+    const {
+      error,
+      turn,
+      gen,
+      stream,
+      streamInput,
+      addedUserMessage,
+      ledgerSnapshot,
+      retries,
+      maxTransientRetries,
+      maxModelRetries,
+    } = ctx;
+    const {
+      transientRetryCount = 0,
+      flexServiceTierFallbackCount = 0,
+      hallucinationRetryCount = 0,
+      transportFallbackRetryCount = 0,
+    } = retries;
+
+    const streamHistoryLength = Array.isArray((stream as any)?.history) ? (stream as any).history.length : 0;
+    let decision: RetryDecision = this.retryHandler.classifyError({
+      error,
+      transientRetryCount,
+      transportFallbackRetryCount,
+      hallucinationRetryCount,
+      flexServiceTierFallbackCount,
+      maxTransientRetries,
+      stream,
+      streamHistoryLength,
+      maxModelRetries,
+    });
+
+    if (!this.allowFreshStartRetries && !stream && decision.kind !== 'none' && decision.kind !== 'unrecoverable') {
+      this.logger.warn('Retry requires fresh start but fresh-start retries are disabled for this session', {
+        eventType: 'retry.fresh_start_blocked',
+        category: 'retry',
+        phase: 'retry',
+        sessionId: this.id,
+        traceId: this.logger.getCorrelationId(),
+        retryKind: decision.kind,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      decision = { kind: 'unrecoverable' };
+    }
+
+    switch (decision.kind) {
+      case 'flex_fallback': {
+        this.#logRetry('Flex service tier timed out, retrying with standard service tier', 'retry.flex_service_tier', {
+          retryType: 'flex_service_tier',
+          retryAttempt: 1,
+          attempt: 1,
+          maxRetries: 1,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+
+        yield {
+          type: 'retry',
+          toolName: 'service_tier',
+          attempt: 1,
+          maxRetries: 1,
+          errorMessage: 'Flex service tier timed out. Falling back to standard service tier and retrying.',
+          retryType: 'flex_service_tier',
+        };
+
+        getMethod<[], void>(this.agentClient, 'useStandardServiceTierForNextRequest')?.call(this.agentClient);
+        this.#commonRestoreForRetry(ledgerSnapshot, stream);
+        yield* this.run(turn, {
+          skipUserMessage: true,
+          retries: { ...retries, flexServiceTierFallbackCount: flexServiceTierFallbackCount + 1 },
+          maxModelRetries,
+        });
+        return true;
+      }
+      case 'transient': {
+        this.#logRetry('Transient upstream error detected, retrying turn', 'retry.transient', {
+          retryType: 'upstream',
+          retryAttempt: decision.attempt,
+          attempt: decision.attempt,
+          maxRetries: maxTransientRetries,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          delayMs: decision.delay,
+        });
+
+        const isResuming = Boolean(stream?.state && typeof this.agentClient.continueRunStream === 'function');
+        yield {
+          type: 'retry',
+          toolName: isResuming ? 'continuation' : 'turn',
+          attempt: decision.attempt,
+          maxRetries: maxTransientRetries,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          retryType: 'upstream',
+        };
+
+        if (!this.#isCurrentGeneration(gen)) return true;
+
+        if (!isResuming) {
+          this.#commonRestoreForRetry(ledgerSnapshot, stream, { removeLastUserMessage: true });
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, decision.delay));
+        yield* this.run(turn, {
+          skipUserMessage: Boolean(stream),
+          retries: { ...retries, transientRetryCount: decision.attempt },
+          maxModelRetries,
+          resumeState: isResuming ? stream?.state : undefined,
+        });
+        return true;
+      }
+      case 'transport_downgrade': {
+        const attempt = transportFallbackRetryCount + 1;
+
+        this.#logRetry(
+          'Transient upstream error exhausted WS retries, forcing HTTP fallback',
+          'retry.transport_fallback',
+          {
+            retryType: 'upstream',
+            retryAttempt: attempt,
+            attempt,
+            maxRetries: 1,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          },
+        );
+
+        yield {
+          type: 'retry',
+          toolName: 'transport',
+          attempt,
+          maxRetries: 1,
+          errorMessage: 'WebSocket retries exhausted. Falling back to HTTP transport and retrying.',
+          retryType: 'upstream',
+        };
+
+        if (!this.#isCurrentGeneration(gen)) return true;
+
+        this.#commonRestoreForRetry(ledgerSnapshot, stream, { removeLastUserMessage: true });
+
+        yield* this.run(turn, {
+          skipUserMessage: Boolean(stream),
+          retries: { transientRetryCount: 0, transportFallbackRetryCount: attempt },
+          maxModelRetries,
+        });
+        return true;
+      }
+      case 'hallucination': {
+        const decisionResult = decision.decision;
+        if (decisionResult.kind !== 'retry') {
+          break;
+        }
+
+        this.#logRetry('Recoverable model error detected, retrying', 'retry.model_error', {
+          toolName: decisionResult.logPayload.toolName,
+          retryType: decisionResult.logPayload.retryType,
+          retryAttempt: decisionResult.attempt,
+          attempt: decisionResult.attempt,
+          maxRetries: maxModelRetries ?? MAX_HALLUCINATION_RETRIES,
+          errorMessage: decisionResult.message,
+        });
+
+        yield decisionResult.retryEvent;
+
+        if (!this.#isCurrentGeneration(gen)) return true;
+
+        if (decisionResult.hadStream && stream) {
+          this.toolLedger.import(ledgerSnapshot);
+          if (decisionResult.shouldInjectErrorContext) {
+            this.conversationStore.addErrorContext(decisionResult.errorContextMessage);
+          }
+        } else {
+          this.conversationStore.removeLastUserMessage();
+        }
+
+        yield* this.run(turn, {
+          ...decisionResult.nextRunOptions,
+          maxModelRetries,
+        });
+        return true;
+      }
+      case 'none':
+      case 'unrecoverable':
+        break;
+    }
+
+    // Drop the just-added user turn from the store before yielding so the
+    // generator-cleanup path doesn't strand the removal — and so the error
+    // event can carry the dropped text for UI restoration.
+    let droppedUserMessage: { text: string; imageCount: number } | undefined;
+    if (addedUserMessage && !stream && this.#isCurrentGeneration(gen)) {
+      this.conversationStore.removeLastUserMessage();
+      droppedUserMessage = { text: turn.text, imageCount: turn.images?.length ?? 0 };
+    }
+    if (stream && this.#isCurrentGeneration(gen)) {
+      this.toolLedger.markOpenCallsAborted(error instanceof Error ? error.message : String(error));
+      const reconciled = reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolLedger.export());
+      if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
+        this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+      }
+      this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
+        kind: 'full_history',
+        previousInput: streamInput,
+      });
+      const recoverySummary = this.toolLedger.getRecoverySummary();
+      if (recoverySummary) {
+        yield {
+          type: 'tool_recovery',
+          recoveredCallIds: recoverySummary.recoveredCallIds,
+          droppedCallIds: recoverySummary.droppedCallIds,
+          message: recoverySummary.message,
+        };
+      }
+    }
+    yield {
+      type: 'error',
+      message: describeError(error),
+      ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
+      ...(droppedUserMessage ? { droppedUserMessage } : {}),
+    };
+    this.logger.error('Conversation stream error', {
+      eventType: 'stream.failed',
+      category: 'stream',
+      phase: 'abort',
+      sessionId: this.id,
+      traceId: this.logger.getCorrelationId(),
+      errorMessage: describeError(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return false;
   }
 
   /**

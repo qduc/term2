@@ -1,24 +1,25 @@
 import test from 'ava';
-import { logCommandExecution } from '../../dist/utils/command-logger.js';
+import { logCommandExecution } from './command-logger.js';
 
-const buildSettingsService = (overrides = {}) => ({
-  get: (key) => {
+const buildSettingsService = (overrides: Record<string, unknown> = {}) => ({
+  get: <T = unknown>(key: string): T => {
     switch (key) {
       case 'debug.debugBashTool':
-        return true;
+        return true as T;
       case 'logging.suppressConsoleOutput':
-        return true;
+        return true as T;
       case 'environment.nodeEnv':
-        return 'test';
+        return 'test' as T;
       default:
-        return overrides[key];
+        return overrides[key] as T;
     }
   },
+  set: () => {},
 });
 
 test('logCommandExecution does not write to console when suppressed', (t) => {
   const originalConsoleError = console.error;
-  const calls = [];
+  const calls: string[][] = [];
 
   console.error = (...args) => {
     calls.push(args);

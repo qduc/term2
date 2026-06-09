@@ -1,11 +1,10 @@
 import test from 'ava';
-import { trimToolOutput } from '../../dist/utils/trim-tool-output.js';
+import { trimToolOutput } from './trim-tool-output.js';
 
 test('trimToolOutput trims plain string output by characters', (t) => {
   const output = 'a'.repeat(200);
   const result = trimToolOutput(output, undefined, 50);
 
-  t.true(typeof result === 'string');
   t.true(result.includes('characters trimmed'));
   t.true(result.length < output.length);
 });

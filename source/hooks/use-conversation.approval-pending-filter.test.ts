@@ -1,5 +1,5 @@
 import test from 'ava';
-import { filterPendingCommandMessagesForApproval } from '../../dist/services/approval-presentation-policy.js';
+import { filterPendingCommandMessagesForApproval } from '../services/approval-presentation-policy.js';
 
 test('filters pending/running command messages matching approval callId', (t) => {
   const messages = [

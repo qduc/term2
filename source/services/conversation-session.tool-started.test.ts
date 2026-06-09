@@ -1,8 +1,13 @@
 import test from 'ava';
-import { ConversationSession } from '../../dist/services/conversation-session.js';
+import type { ConversationEvent } from './conversation-events.js';
+import type { LogEvent } from './conversation-log-events.js';
+import { ConversationSession } from './conversation-session.js';
 
 const createMockLogger = () => {
-  const events = [];
+  const events: Array<{
+    level: 'info' | 'warn' | 'error' | 'debug';
+    meta: Record<string, unknown> | undefined;
+  }> = [];
   return {
     events,
     logger: {
@@ -32,7 +37,16 @@ const sessionContextService = {
 };
 
 class MockStream {
-  constructor(events) {
+  events: any[];
+  completed: Promise<void>;
+  lastResponseId: string;
+  interruptions: any[];
+  state: any;
+  newItems: any[];
+  history: any[];
+  finalOutput: string;
+
+  constructor(events: any[]) {
     this.events = events;
     this.completed = Promise.resolve();
     this.lastResponseId = 'resp_test';
@@ -65,7 +79,7 @@ test('run() emits tool_started with parsed arguments when function_call argument
     },
   ]);
 
-  const mockClient = {
+  const mockClient: any = {
     async startStream() {
       return stream;
     },
@@ -77,14 +91,17 @@ test('run() emits tool_started with parsed arguments when function_call argument
     deps: { logger, sessionContextService },
   });
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of session.run('hi')) {
     emitted.push(ev);
   }
 
-  t.is(emitted[0].type, 'tool_started');
-  t.true(typeof emitted[0].arguments === 'object');
-  t.is(emitted[0].arguments.command, 'echo hi');
+  const firstEvent = emitted[0] as Extract<ConversationEvent, { type: 'tool_started' }> & {
+    arguments: { command: string };
+  };
+  t.is(firstEvent.type, 'tool_started');
+  t.true(typeof firstEvent.arguments === 'object');
+  t.is(firstEvent.arguments.command, 'echo hi');
 });
 
 test('run() emits one diagnostic packet when tool arguments contain malformed JSON', async (t) => {
@@ -113,7 +130,7 @@ test('run() emits one diagnostic packet when tool arguments contain malformed JS
     },
   ]);
 
-  const mockClient = {
+  const mockClient: any = {
     async startStream() {
       return stream;
     },
@@ -133,9 +150,15 @@ test('run() emits one diagnostic packet when tool arguments contain malformed JS
     (entry) => entry.level === 'error' && entry.meta?.eventType === 'tool_call.parse_failed',
   );
   t.is(packets.length, 1);
-  t.is(packets[0].meta.errorCode, 'INVALID_TOOL_CALL_FORMAT');
-  t.is(packets[0].meta.traceId, 'trace-test-1');
-  t.true(Array.isArray(packets[0].meta.validationErrors));
+  const packet = packets[0]!;
+  const packetMeta = packet.meta as {
+    errorCode: string;
+    traceId: string;
+    validationErrors: unknown[];
+  };
+  t.is(packetMeta.errorCode, 'INVALID_TOOL_CALL_FORMAT');
+  t.is(packetMeta.traceId, 'trace-test-1');
+  t.true(Array.isArray(packetMeta.validationErrors));
 });
 
 test('approval continuation does not persist duplicate tool_started when SDK replays function_call', async (t) => {
@@ -174,7 +197,7 @@ test('approval continuation does not persist duplicate tool_started when SDK rep
   ]);
   continuationStream.finalOutput = 'done';
 
-  const mockClient = {
+  const mockClient: any = {
     async startStream() {
       return initialStream;
     },
@@ -188,15 +211,20 @@ test('approval continuation does not persist duplicate tool_started when SDK rep
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
-  const persisted = [];
-  session.setLogSink((event) => persisted.push(event));
+  const persisted: LogEvent[] = [];
+  session.setLogSink((event) => {
+    persisted.push(event);
+  });
 
   await session.sendMessage('hi');
   await session.handleApprovalDecision('y');
 
-  const starts = persisted.filter((event) => event.type === 'tool_started' && event.toolCallId === callId);
+  const starts = persisted.filter(
+    (event): event is Extract<LogEvent, { type: 'tool_started' }> =>
+      event.type === 'tool_started' && event.toolCallId === callId,
+  );
   t.is(starts.length, 1);
-  t.deepEqual(starts[0].arguments, { command: 'git status' });
+  t.deepEqual(starts[0]!.arguments, { command: 'git status' });
 });
 
 test('run() emits one tool_started for duplicate function_call events with the same callId', async (t) => {
@@ -226,7 +254,7 @@ test('run() emits one tool_started for duplicate function_call events with the s
   ]);
   stream.finalOutput = 'done';
 
-  const mockClient = {
+  const mockClient: any = {
     async startStream() {
       return stream;
     },
@@ -238,12 +266,15 @@ test('run() emits one tool_started for duplicate function_call events with the s
     deps: { logger, sessionContextService },
   });
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of session.run('hi')) {
     emitted.push(ev);
   }
 
-  const starts = emitted.filter((event) => event.type === 'tool_started' && event.toolCallId === 'call-dup');
+  const starts = emitted.filter(
+    (event): event is Extract<ConversationEvent, { type: 'tool_started' }> =>
+      event.type === 'tool_started' && event.toolCallId === 'call-dup',
+  );
   t.is(starts.length, 1);
-  t.deepEqual(starts[0].arguments, { command: 'npm test' });
+  t.deepEqual(starts[0]!.arguments, { command: 'npm test' });
 });

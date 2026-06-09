@@ -5,10 +5,8 @@ import test from 'ava';
 
 test('applyRuntimeSetting - parses model without provider', (t) => {
   const value = 'gpt-4o';
-  const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
-  const modelId = String(value)
-    .replace(/\s*--provider=(openai|openrouter)\s*/, '')
-    .trim();
+  const providerMatch = value.match(/--provider=(openai|openrouter)/);
+  const modelId = value.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
 
   t.is(providerMatch, null);
   t.is(modelId, 'gpt-4o');
@@ -16,37 +14,31 @@ test('applyRuntimeSetting - parses model without provider', (t) => {
 
 test('applyRuntimeSetting - parses model with openai provider', (t) => {
   const value = 'gpt-4o --provider=openai';
-  const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
-  const modelId = String(value)
-    .replace(/\s*--provider=(openai|openrouter)\s*/, '')
-    .trim();
+  const providerMatch = value.match(/--provider=(openai|openrouter)/);
+  const modelId = value.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
 
   t.truthy(providerMatch);
-  t.is(providerMatch[1], 'openai');
+  t.is(providerMatch![1], 'openai');
   t.is(modelId, 'gpt-4o');
 });
 
 test('applyRuntimeSetting - parses model with openrouter provider', (t) => {
   const value = 'anthropic/claude-3.5-sonnet --provider=openrouter';
-  const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
-  const modelId = String(value)
-    .replace(/\s*--provider=(openai|openrouter)\s*/, '')
-    .trim();
+  const providerMatch = value.match(/--provider=(openai|openrouter)/);
+  const modelId = value.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
 
   t.truthy(providerMatch);
-  t.is(providerMatch[1], 'openrouter');
+  t.is(providerMatch![1], 'openrouter');
   t.is(modelId, 'anthropic/claude-3.5-sonnet');
 });
 
 test('applyRuntimeSetting - handles model with provider and extra whitespace', (t) => {
   const value = 'gpt-4o    --provider=openai   ';
-  const providerMatch = String(value).match(/--provider=(openai|openrouter)/);
-  const modelId = String(value)
-    .replace(/\s*--provider=(openai|openrouter)\s*/, '')
-    .trim();
+  const providerMatch = value.match(/--provider=(openai|openrouter)/);
+  const modelId = value.replace(/\s*--provider=(openai|openrouter)\s*/, '').trim();
 
   t.truthy(providerMatch);
-  t.is(providerMatch[1], 'openai');
+  t.is(providerMatch![1], 'openai');
   t.is(modelId, 'gpt-4o');
 });
 

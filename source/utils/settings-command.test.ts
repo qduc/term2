@@ -1,6 +1,8 @@
 import test from 'ava';
-import { createSettingsCommand, formatSettingsSummary, parseSettingValue } from '../../dist/utils/settings-command.js';
-import { unregisterProvider, upsertProvider } from '../../dist/providers/index.js';
+import { createSettingsCommand, formatSettingsSummary, parseSettingValue } from './settings-command.js';
+import { unregisterProvider, upsertProvider } from '../providers/index.js';
+import type { SettingsWithSources } from '../services/settings-schema.js';
+import type { SettingsService } from '../services/settings-service.js';
 
 const baseSettings = {
   agent: {
@@ -31,21 +33,28 @@ const baseSettings = {
     mentorMode: { value: false, source: 'default' },
     editMode: { value: false, source: 'default' },
   },
-};
+} as unknown as SettingsWithSources;
 
-const createDeps = (overrides = {}) => {
-  const messages = [];
-  const setCalls = [];
-  const resetCalls = [];
-  const applied = [];
+const createDeps = (
+  overrides: {
+    values?: Record<string, unknown>;
+    sources?: Record<string, string>;
+    isRuntimeModifiable?: (key: string) => boolean;
+    settingsService?: Record<string, unknown>;
+  } = {},
+) => {
+  const messages: string[] = [];
+  const setCalls: Array<{ key: string; value: unknown }> = [];
+  const resetCalls: string[] = [];
+  const applied: Array<{ key: string; value: unknown }> = [];
 
   const settingsService = {
     getAll: () => baseSettings,
-    get: (key) => overrides.values?.[key] ?? 'value-for-' + key,
-    getSource: (key) => overrides.sources?.[key] ?? 'default',
-    reset: (key) => resetCalls.push(key),
+    get: <T = unknown>(key: string): T => (overrides.values?.[key] ?? 'value-for-' + key) as T,
+    getSource: (key: string) => overrides.sources?.[key] ?? 'default',
+    reset: (key: string) => resetCalls.push(key),
     isRuntimeModifiable: overrides.isRuntimeModifiable || (() => true),
-    set: (key, value) => setCalls.push({ key, value }),
+    set: (key: string, value: unknown) => setCalls.push({ key, value }),
     ...overrides.settingsService,
   };
 
@@ -54,10 +63,10 @@ const createDeps = (overrides = {}) => {
     setCalls,
     resetCalls,
     applied,
-    settingsService,
-    addSystemMessage: (message) => messages.push(message),
-    applyRuntimeSetting: (key, value) => applied.push({ key, value }),
-    setInput: () => {},
+    settingsService: settingsService as unknown as SettingsService,
+    addSystemMessage: (message: string) => messages.push(message),
+    applyRuntimeSetting: (key: string, value: unknown) => applied.push({ key, value }),
+    setInput: (_value: string) => {},
   };
 };
 

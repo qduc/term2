@@ -2,10 +2,10 @@ import test from 'ava';
 import React from 'react';
 import { render } from 'ink-testing-library';
 // Import the built component (tests run against compiled files)
-import MarkdownRenderer from '../../dist/components/MarkdownRenderer.js';
+import MarkdownRenderer from './MarkdownRenderer.js';
 
-const stripAnsi = (s) => s.replaceAll(/\u001B\[[0-9;]*m/g, '');
-const rstrip = (s) => s.replaceAll(/[ \t]+$/g, '');
+const stripAnsi = (s: string | undefined) => (s ?? '').replaceAll(/\u001B\[[0-9;]*m/g, '');
+const rstrip = (s: string) => s.replaceAll(/[ \t]+$/g, '');
 
 // --- Basic text rendering ---
 
@@ -273,7 +273,7 @@ test('renders table borders and header separator with the same width as table ro
   t.true(headerLine.length > 0);
   t.is(headerLine.length, top.length);
 
-  const dataLine = lines.findLast((line) => line.trimStart().startsWith('|')) ?? '';
+  const dataLine = [...lines].reverse().find((line) => line.trimStart().startsWith('|')) ?? '';
   t.true(dataLine.length > 0);
   t.is(dataLine.length, top.length);
 });
@@ -330,7 +330,7 @@ test('accepts pre-parsed tokens instead of children', (t) => {
 });
 
 test('rerenders pre-parsed tokens without raw content', (t) => {
-  const makeTokens = (text) => [
+  const makeTokens = (text: string) => [
     {
       type: 'paragraph',
       tokens: [

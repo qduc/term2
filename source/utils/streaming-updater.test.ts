@@ -1,5 +1,6 @@
 import test from 'ava';
-import { createStreamingUpdateCoordinator } from '../../dist/utils/streaming-updater.js';
+import { createStreamingUpdateCoordinator } from './streaming-updater.js';
+import type { ThrottleScheduler } from './throttle.js';
 
 const createScheduler = () => {
   let now = 1000;
@@ -9,16 +10,16 @@ const createScheduler = () => {
   return {
     scheduler: {
       now: () => now,
-      setTimeout: (callback, delayMs) => {
+      setTimeout: (callback: () => void, delayMs: number) => {
         const id = nextId++;
         timers.set(id, { callback, dueAt: now + delayMs });
-        return id;
+        return id as unknown as ReturnType<typeof setTimeout>;
       },
-      clearTimeout: (id) => {
-        timers.delete(id);
+      clearTimeout: (id: ReturnType<typeof setTimeout>) => {
+        timers.delete(id as unknown as number);
       },
-    },
-    advance: (ms) => {
+    } satisfies ThrottleScheduler,
+    advance: (ms: number) => {
       now += ms;
       const ready = [...timers.entries()]
         .filter(([, timer]) => timer.dueAt <= now)
@@ -33,9 +34,9 @@ const createScheduler = () => {
 };
 
 test('coalesces rapid updates and uses latest value', (t) => {
-  const calls = [];
+  const calls: string[] = [];
   const clock = createScheduler();
-  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 40, clock.scheduler);
+  const updater = createStreamingUpdateCoordinator((value: string) => calls.push(value), 40, clock.scheduler);
 
   updater.push('a');
   updater.push('b');
@@ -48,9 +49,9 @@ test('coalesces rapid updates and uses latest value', (t) => {
 });
 
 test('skips duplicate updates', (t) => {
-  const calls = [];
+  const calls: string[] = [];
   const clock = createScheduler();
-  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 20, clock.scheduler);
+  const updater = createStreamingUpdateCoordinator((value: string) => calls.push(value), 20, clock.scheduler);
 
   updater.push('same');
   updater.push('same');
@@ -61,9 +62,9 @@ test('skips duplicate updates', (t) => {
 });
 
 test('flush emits pending update immediately', (t) => {
-  const calls = [];
+  const calls: string[] = [];
   const clock = createScheduler();
-  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 100, clock.scheduler);
+  const updater = createStreamingUpdateCoordinator((value: string) => calls.push(value), 100, clock.scheduler);
 
   updater.push('a');
   updater.push('b');
@@ -76,9 +77,9 @@ test('flush emits pending update immediately', (t) => {
 });
 
 test('cancel drops pending update', (t) => {
-  const calls = [];
+  const calls: string[] = [];
   const clock = createScheduler();
-  const updater = createStreamingUpdateCoordinator((value) => calls.push(value), 50, clock.scheduler);
+  const updater = createStreamingUpdateCoordinator((value: string) => calls.push(value), 50, clock.scheduler);
 
   updater.push('a');
   updater.push('b');

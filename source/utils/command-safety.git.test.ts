@@ -1,5 +1,5 @@
 import test from 'ava';
-import { validateCommandSafety } from '../../dist/utils/command-safety/index.js';
+import { validateCommandSafety } from './command-safety/index.js';
 
 // Safe git commands (GREEN - auto-approved)
 test('git status is green (safe)', (t) => {

@@ -1,5 +1,5 @@
 import test from 'ava';
-import { trimOutput, setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG } from '../../dist/utils/output-trim.js';
+import { trimOutput, setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG } from './output-trim.js';
 
 test('returns output unchanged when below both limits', (t) => {
   const output = 'line1\nline2\nline3';
@@ -9,7 +9,7 @@ test('returns output unchanged when below both limits', (t) => {
 
 test('trims output when exceeding line limit', (t) => {
   // Create output with more than default max lines (1000)
-  const lines = [];
+  const lines = Array<string>();
   for (let i = 1; i <= 1200; i++) {
     lines.push(`line ${i}`);
   }
@@ -50,7 +50,7 @@ test('trims few-line output with one very long line by character limit', (t) => 
 });
 
 test('respects maxLines override parameter', (t) => {
-  const lines = [];
+  const lines = Array<string>();
   for (let i = 1; i <= 100; i++) {
     lines.push(`line ${i}`);
   }
@@ -81,7 +81,7 @@ test('respects maxCharacters override parameter', (t) => {
 test('does not trim when lines are equal to keepLines * 2', (t) => {
   // With default maxLines 1000, keepLines = 400
   // Create exactly 800 lines (keepLines * 2)
-  const lines = [];
+  const lines = Array<string>();
   for (let i = 1; i <= 800; i++) {
     lines.push(`line ${i}`);
   }
@@ -94,7 +94,7 @@ test('does not trim when lines are equal to keepLines * 2', (t) => {
 
 test('ensures minimum of 10 lines are kept', (t) => {
   // Set very small limits
-  const lines = [];
+  const lines = Array<string>();
   for (let i = 1; i <= 50; i++) {
     lines.push(`line ${i}`);
   }
@@ -111,7 +111,7 @@ test('ensures minimum of 10 lines are kept', (t) => {
 });
 
 test('shows correct trimmed count in message', (t) => {
-  const lines = [];
+  const lines = Array<string>();
   for (let i = 1; i <= 1100; i++) {
     lines.push(`line ${i}`);
   }
@@ -177,7 +177,7 @@ test('trimOutput uses updated config after setTrimConfig', (t) => {
     // Set very low limits
     setTrimConfig({ maxLines: 10, maxCharacters: 100 });
 
-    const lines = [];
+    const lines = Array<string>();
     for (let i = 1; i <= 50; i++) {
       lines.push(`line ${i}`);
     }
@@ -203,7 +203,7 @@ test('handles single line', (t) => {
 });
 
 test('preserves newlines in trimmed output', (t) => {
-  const lines = [];
+  const lines = Array<string>();
   for (let i = 1; i <= 100; i++) {
     lines.push(`line ${i}`);
   }

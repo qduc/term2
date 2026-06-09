@@ -1,5 +1,5 @@
 import test from 'ava';
-import { createThrottledFunction } from '../../dist/utils/throttle.js';
+import { createThrottledFunction, type ThrottleScheduler } from './throttle.js';
 
 const createScheduler = () => {
   let now = 1000;
@@ -9,16 +9,16 @@ const createScheduler = () => {
   return {
     scheduler: {
       now: () => now,
-      setTimeout: (callback, delayMs) => {
+      setTimeout: (callback: () => void, delayMs: number) => {
         const id = nextId++;
         timers.set(id, { callback, dueAt: now + delayMs });
-        return id;
+        return id as unknown as ReturnType<typeof setTimeout>;
       },
-      clearTimeout: (id) => {
-        timers.delete(id);
+      clearTimeout: (id: ReturnType<typeof setTimeout>) => {
+        timers.delete(id as unknown as number);
       },
-    },
-    advance: (ms) => {
+    } satisfies ThrottleScheduler,
+    advance: (ms: number) => {
       now += ms;
       const ready = [...timers.entries()]
         .filter(([, timer]) => timer.dueAt <= now)
@@ -33,9 +33,9 @@ const createScheduler = () => {
 };
 
 test('throttle batches updates and uses latest args', (t) => {
-  const calls = [];
+  const calls: string[] = [];
   const clock = createScheduler();
-  const { throttled } = createThrottledFunction((value) => calls.push(value), 40, clock.scheduler);
+  const { throttled } = createThrottledFunction((value: string) => calls.push(value), 40, clock.scheduler);
 
   throttled('a');
   throttled('b');
@@ -48,9 +48,9 @@ test('throttle batches updates and uses latest args', (t) => {
 });
 
 test('flush emits pending call immediately', (t) => {
-  const calls = [];
+  const calls: string[] = [];
   const clock = createScheduler();
-  const { throttled, flush } = createThrottledFunction((value) => calls.push(value), 100, clock.scheduler);
+  const { throttled, flush } = createThrottledFunction((value: string) => calls.push(value), 100, clock.scheduler);
 
   throttled('a');
   throttled('b');
@@ -63,9 +63,9 @@ test('flush emits pending call immediately', (t) => {
 });
 
 test('cancel drops pending call', (t) => {
-  const calls = [];
+  const calls: string[] = [];
   const clock = createScheduler();
-  const { throttled, cancel } = createThrottledFunction((value) => calls.push(value), 50, clock.scheduler);
+  const { throttled, cancel } = createThrottledFunction((value: string) => calls.push(value), 50, clock.scheduler);
 
   throttled('a');
   throttled('b');

@@ -2,7 +2,7 @@ import test from 'ava';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LoggingService } from '../../dist/services/logging-service.js';
+import { LoggingService } from './logging-service.js';
 
 // Set NODE_ENV to test for simple file logging
 process.env.NODE_ENV = 'test';
@@ -25,13 +25,13 @@ const cleanupLogs = () => {
   }
 };
 
-const formatDateDaysAgo = (days) => {
+const formatDateDaysAgo = (days: number) => {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return date.toISOString().slice(0, 10);
 };
 
-const findMainLogFile = (logDir) => {
+const findMainLogFile = (logDir: string) => {
   const files = fs.readdirSync(logDir);
   return files.find((f) => f.endsWith('.log') && f.startsWith('term2-') && !f.includes('openrouter'));
 };
@@ -282,9 +282,9 @@ test.serial('cleans up old provider traffic files and directories by date', asyn
 test.serial('suppresses console output when configured', async (t) => {
   const logDir = getTestLogDir();
   const originalConsoleError = console.error;
-  const calls = [];
+  const calls: any[][] = [];
 
-  console.error = (...args) => {
+  console.error = (...args: any[]) => {
     calls.push(args);
   };
 
@@ -426,7 +426,7 @@ test.serial('truncates base64 image data in provider.request.started', async (t)
 
   fs.mkdirSync(logDir, { recursive: true });
   const mainLogFile = findMainLogFile(logDir);
-  const logFile = path.join(logDir, mainLogFile);
+  const logFile = path.join(logDir, mainLogFile!);
   const content = fs.readFileSync(logFile, 'utf8');
   const lines = content.split('\n').filter(Boolean);
   const entry = JSON.parse(lines[lines.length - 1]);

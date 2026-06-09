@@ -1,17 +1,14 @@
 import test from 'ava';
-import { clearApprovalRejectionMarkers, extractCommandMessages } from '../../dist/utils/extract-command-messages.js';
-import { clearToolFormatters, registerToolFormatters } from '../../dist/tools/command-message-formatters.js';
-import { formatApplyPatchCommandMessage } from '../../dist/tools/apply-patch.js';
-import { formatAskMentorCommandMessage } from '../../dist/tools/ask-mentor.js';
-import {
-  formatCodeContextSearchCommandMessage,
-  formatReadCodeOutlineCommandMessage,
-} from '../../dist/tools/code-context.js';
-import { formatGrepCommandMessage } from '../../dist/tools/grep.js';
-import { formatReadFileCommandMessage } from '../../dist/tools/read-file.js';
-import { formatShellCommandMessage } from '../../dist/tools/shell.js';
+import { clearApprovalRejectionMarkers, extractCommandMessages } from './extract-command-messages.js';
+import { clearToolFormatters, registerToolFormatters } from '../tools/command-message-formatters.js';
+import { formatApplyPatchCommandMessage } from '../tools/apply-patch.js';
+import { formatAskMentorCommandMessage } from '../tools/ask-mentor.js';
+import { formatCodeContextSearchCommandMessage, formatReadCodeOutlineCommandMessage } from '../tools/code-context.js';
+import { formatGrepCommandMessage } from '../tools/grep.js';
+import { formatReadFileCommandMessage } from '../tools/read-file.js';
+import { formatShellCommandMessage } from '../tools/shell.js';
 
-const withStubbedNow = (value) => {
+const withStubbedNow = (value: number) => {
   const realNow = Date.now;
   Date.now = () => value;
   return () => {

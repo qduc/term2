@@ -1,5 +1,5 @@
 import test from 'ava';
-import { injectWarningIntoToolOutput } from '../../dist/utils/inject-warning-into-tool-output.js';
+import { injectWarningIntoToolOutput } from './inject-warning-into-tool-output.js';
 
 test('injectWarningIntoToolOutput appends to plain text', (t) => {
   const output = 'Hello World';

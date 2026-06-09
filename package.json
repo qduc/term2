@@ -112,7 +112,11 @@
         "source/": "dist/"
       },
       "compile": "tsc"
-    }
+    },
+    "files": [
+      "source/**/*.test.ts",
+      "source/**/*.test.tsx"
+    ]
   },
   "xo": {
     "extends": "xo-react",

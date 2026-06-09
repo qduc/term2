@@ -1,5 +1,5 @@
 import test from 'ava';
-import { validateCommandSafety } from '../../dist/utils/command-safety/index.js';
+import { validateCommandSafety } from './command-safety/index.js';
 
 test('throws on empty command', (t) => {
   t.throws(() => validateCommandSafety(''), {

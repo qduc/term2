@@ -5,22 +5,19 @@
 
 import type { ConversationEvent } from '../services/conversation-events.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
-import {
-  createConversationEventHandler,
-  type ConversationEventHandlerDeps,
-  type UIMessage,
-} from './conversation-event-handler.js';
+import { createConversationEventHandler, type ConversationEventHandlerDeps } from './conversation-event-handler.js';
+import type { BotMessage, ReasoningMessage } from '../types/message.js';
 import { createStreamingState, type StreamingState } from './conversation-utils.js';
 import { createStreamingUpdateCoordinator } from './streaming-updater.js';
 import type { NormalizedUsage } from './token-usage.js';
 import type { CodexRateLimitInfo } from '../services/conversation-events.js';
 import { createMessageIdFactory } from '../hooks/message-id.js';
 
-export interface StreamingSessionFactoryDeps<MessageT extends UIMessage = UIMessage> {
-  appendMessages: ConversationEventHandlerDeps<MessageT>['appendMessages'];
-  setMessages: ConversationEventHandlerDeps<MessageT>['setMessages'];
-  trimMessages: ConversationEventHandlerDeps<MessageT>['trimMessages'];
-  annotateCommandMessage: ConversationEventHandlerDeps<MessageT>['annotateCommandMessage'];
+export interface StreamingSessionFactoryDeps {
+  appendMessages: ConversationEventHandlerDeps['appendMessages'];
+  setMessages: ConversationEventHandlerDeps['setMessages'];
+  trimMessages: ConversationEventHandlerDeps['trimMessages'];
+  annotateCommandMessage: ConversationEventHandlerDeps['annotateCommandMessage'];
   loggingService: ILoggingService;
   setLastUsage: (usage: NormalizedUsage) => void;
   setCodexRateLimit?: (rateLimit: CodexRateLimitInfo) => void;
@@ -38,10 +35,7 @@ export interface StreamingSession {
   applyConversationEvent: (event: ConversationEvent) => void;
 }
 
-export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
-  deps: StreamingSessionFactoryDeps<MessageT>,
-  label: string,
-): StreamingSession {
+export function createStreamingSession(deps: StreamingSessionFactoryDeps, label: string): StreamingSession {
   const now = deps.now ?? Date.now;
   const createState = deps.createStreamingState ?? createStreamingState;
   const createCoordinator = deps.createStreamingUpdateCoordinator ?? createStreamingUpdateCoordinator;
@@ -66,15 +60,13 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
 
       const newId = createMessageId();
       streamingState.currentBotMessageId = newId;
-      return deps.trimMessages([
-        ...prev,
-        {
-          id: newId,
-          sender: 'bot',
-          status: 'streaming',
-          text: newBotText,
-        },
-      ] as unknown as MessageT[]);
+      const streamingMessage: BotMessage = {
+        id: newId,
+        sender: 'bot',
+        status: 'streaming',
+        text: newBotText,
+      };
+      return deps.trimMessages([...prev, streamingMessage]);
     });
   }, 150);
 
@@ -94,14 +86,12 @@ export function createStreamingSession<MessageT extends UIMessage = UIMessage>(
 
       const newId = createMessageId();
       streamingState.currentReasoningMessageId = newId;
-      return deps.trimMessages([
-        ...prev,
-        {
-          id: newId,
-          sender: 'reasoning',
-          text: newReasoningText,
-        },
-      ] as unknown as MessageT[]);
+      const reasoningMessage: ReasoningMessage = {
+        id: newId,
+        sender: 'reasoning',
+        text: newReasoningText,
+      };
+      return deps.trimMessages([...prev, reasoningMessage]);
     });
   }, deps.reasoningThrottleMs);
 

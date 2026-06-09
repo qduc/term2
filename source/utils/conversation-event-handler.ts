@@ -4,7 +4,15 @@
  */
 
 import type { ConversationEvent } from '../services/conversation-events.js';
-import type { CommandMessage } from '../tools/types.js';
+import type {
+  BotMessage,
+  CommandMessage,
+  Message,
+  ReasoningMessage,
+  SubagentActivityMessage,
+  SystemMessage,
+} from '../types/message.js';
+import { isCommandMessage, isSubagentActivityMessage } from '../types/message.js';
 import { parseToolArguments, formatToolCommand, type StreamingState } from './conversation-utils.js';
 
 /**
@@ -61,50 +69,7 @@ function countOutputLines(output: string | undefined): number {
   return trimmed.split('\n').filter((line) => line.trim().length > 0).length;
 }
 
-/**
- * Message types used by the event handler.
- */
-export interface BotMessage {
-  id: string;
-  sender: 'bot';
-  text: string;
-  status?: 'streaming' | 'finalized';
-}
-
-export interface SystemMessage {
-  id: string;
-  sender: 'system';
-  text: string;
-}
-
-export interface ReasoningMessage {
-  id: string;
-  sender: 'reasoning';
-  text: string;
-  status?: 'finalized';
-}
-
-export interface SubagentActivityMessage {
-  id: string;
-  sender: 'subagent';
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
-  agentId: string;
-  role: string;
-  task: string;
-  tools: string[];
-}
-
-export type UIMessage = {
-  id: string | number;
-  sender: string;
-  callId?: string;
-  status?: string;
-};
-
-export interface ConversationEventHandlerDeps<
-  MessageT extends UIMessage = UIMessage,
-  CommandMessageT extends CommandMessage = CommandMessage,
-> {
+export interface ConversationEventHandlerDeps {
   botResponseUpdater: {
     push: (text: string) => void;
     cancel: () => void;
@@ -115,11 +80,11 @@ export interface ConversationEventHandlerDeps<
     cancel: () => void;
     flush: () => void;
   };
-  appendMessages: (messages: MessageT[]) => void;
-  setMessages: (updater: (prev: MessageT[]) => MessageT[]) => void;
+  appendMessages: (messages: Message[]) => void;
+  setMessages: (updater: (prev: Message[]) => Message[]) => void;
   createMessageId: () => string;
-  trimMessages: (messages: MessageT[]) => MessageT[];
-  annotateCommandMessage: (msg: CommandMessageT) => CommandMessageT;
+  trimMessages: (messages: Message[]) => Message[];
+  annotateCommandMessage: (msg: CommandMessage) => CommandMessage;
 }
 
 /**
@@ -130,11 +95,8 @@ export interface ConversationEventHandlerDeps<
  * @param state - Mutable streaming state object
  * @returns Event handler function
  */
-export function createConversationEventHandler<
-  MessageT extends UIMessage = UIMessage,
-  CommandMessageT extends CommandMessage = CommandMessage,
->(
-  deps: ConversationEventHandlerDeps<MessageT, CommandMessageT>,
+export function createConversationEventHandler(
+  deps: ConversationEventHandlerDeps,
   state: StreamingState,
 ): (event: ConversationEvent) => void {
   const {
@@ -221,7 +183,7 @@ export function createConversationEventHandler<
         status: 'finalized',
         text: unescapedText,
       };
-      appendMessages([finalizedMessage as unknown as MessageT]);
+      appendMessages([finalizedMessage]);
     }
   };
 
@@ -264,7 +226,7 @@ export function createConversationEventHandler<
                 status: 'finalized',
                 text: finalizedText,
               };
-              appendMessages([finalizedMessage as unknown as MessageT]);
+              appendMessages([finalizedMessage]);
             }
             state.textWasFlushed = true;
             state.flushedTextLength += finalizedText.length;
@@ -304,7 +266,7 @@ export function createConversationEventHandler<
                 status: 'finalized',
                 text: finalizedText,
               };
-              appendMessages([finalizedMessage as unknown as MessageT]);
+              appendMessages([finalizedMessage]);
             }
             state.flushedReasoningLength += finalizedText.length;
           }
@@ -359,7 +321,7 @@ export function createConversationEventHandler<
           return;
         }
 
-        appendMessages([pendingMessage as unknown as MessageT]);
+        appendMessages([pendingMessage]);
         return;
       }
 
@@ -368,7 +330,7 @@ export function createConversationEventHandler<
         if (cmdMsg.callId) {
           activeRunningToolCallIds.delete(cmdMsg.callId);
         }
-        const annotated = annotateCommandMessage(cmdMsg as CommandMessageT);
+        const annotated = annotateCommandMessage(cmdMsg);
 
         // Flush reasoning state
         flushReasoning();
@@ -393,11 +355,11 @@ export function createConversationEventHandler<
             next[pendingIndex] = {
               ...annotated,
               id: prev[pendingIndex].id,
-            } as unknown as MessageT;
+            };
             return trimMessages(next);
           }
 
-          return trimMessages([...prev, annotated as unknown as MessageT]);
+          return trimMessages([...prev, annotated]);
         });
         return;
       }
@@ -434,7 +396,7 @@ export function createConversationEventHandler<
           }
         }
 
-        const subagentMsg: any = {
+        const subagentMsg: SubagentActivityMessage = {
           id: `subagent-${event.agentId}`,
           sender: 'subagent',
           status: 'running',
@@ -447,13 +409,13 @@ export function createConversationEventHandler<
           subagentMsg.callId = matchingCallId;
         }
 
-        appendMessages([subagentMsg as unknown as MessageT]);
+        appendMessages([subagentMsg]);
         return;
       }
 
       case 'subagent_tool_started': {
         setMessages((prev) => {
-          const index = prev.findIndex((msg) => msg.sender === 'subagent' && (msg as any).agentId === event.agentId);
+          const index = prev.findIndex((msg) => isSubagentActivityMessage(msg) && msg.agentId === event.agentId);
           const toolLabels =
             event.commandMessages
               ?.map((message) => message.command)
@@ -472,7 +434,7 @@ export function createConversationEventHandler<
             }
             return [formatted];
           })();
-          const appendTool = (message: any) => ({
+          const appendTool = (message: SubagentActivityMessage): SubagentActivityMessage => ({
             ...message,
             status: 'running',
             role: message.role ?? event.role,
@@ -490,12 +452,16 @@ export function createConversationEventHandler<
                 role: event.role,
                 task: '',
                 tools: newTools.slice(-3),
-              } as unknown as MessageT,
+              },
             ]);
           }
 
           const next = [...prev];
-          next[index] = appendTool(next[index]) as unknown as MessageT;
+          const current = next[index];
+          if (!isSubagentActivityMessage(current)) {
+            return prev;
+          }
+          next[index] = appendTool(current);
           return trimMessages(next);
         });
         return;
@@ -503,7 +469,7 @@ export function createConversationEventHandler<
 
       case 'subagent_command_message': {
         setMessages((prev) => {
-          const index = prev.findIndex((msg) => msg.sender === 'subagent' && (msg as any).agentId === event.agentId);
+          const index = prev.findIndex((msg) => isSubagentActivityMessage(msg) && msg.agentId === event.agentId);
           const command = event.message?.command;
           if (!command) return prev;
 
@@ -538,7 +504,7 @@ export function createConversationEventHandler<
             return `${displayCommand}${suffix}`;
           })();
 
-          const appendOrReplaceTool = (message: any) => {
+          const appendOrReplaceTool = (message: SubagentActivityMessage): SubagentActivityMessage => {
             const currentTools = Array.isArray(message.tools) ? [...message.tools] : [];
             let toolIndex = -1;
             if (toolName) {
@@ -576,12 +542,16 @@ export function createConversationEventHandler<
                 role: event.role,
                 task: '',
                 tools: [finishedCommand],
-              } as unknown as MessageT,
+              },
             ]);
           }
 
           const next = [...prev];
-          next[index] = appendOrReplaceTool(next[index]) as unknown as MessageT;
+          const current = next[index];
+          if (!isSubagentActivityMessage(current)) {
+            return prev;
+          }
+          next[index] = appendOrReplaceTool(current);
           return trimMessages(next);
         });
         return;
@@ -591,7 +561,7 @@ export function createConversationEventHandler<
         setMessages((prev) => {
           return trimMessages(
             prev.map((msg) => {
-              if (msg.sender === 'subagent' && (msg as any).agentId === event.result.agentId) {
+              if (isSubagentActivityMessage(msg) && msg.agentId === event.result.agentId) {
                 return {
                   ...msg,
                   status: event.result.status,
@@ -624,7 +594,7 @@ export function createConversationEventHandler<
           sender: 'system',
           text,
         };
-        setMessages((prev) => [...prev, systemMessage as unknown as MessageT]);
+        setMessages((prev) => [...prev, systemMessage]);
         return;
       }
 
@@ -638,22 +608,23 @@ export function createConversationEventHandler<
 
         setMessages((prev) => {
           const next = prev.map((message) => {
-            if (message.sender !== 'command' || !message.callId || !droppedCallIds.has(message.callId)) {
+            if (!isCommandMessage(message) || !message.callId || !droppedCallIds.has(message.callId)) {
               return message;
             }
 
-            return {
+            const failedMessage: CommandMessage = {
               ...message,
               status: 'failed',
-              output:
-                typeof (message as any).output === 'string' && (message as any).output.trim()
-                  ? (message as any).output
-                  : 'This tool call was interrupted and was not sent to model history.',
+              output: message.output.trim()
+                ? message.output
+                : 'This tool call was interrupted and was not sent to model history.',
               failureReason: 'Dropped during recovery',
             };
+
+            return failedMessage;
           });
 
-          return trimMessages([...next, systemMessage as unknown as MessageT]);
+          return trimMessages([...next, systemMessage]);
         });
         return;
       }

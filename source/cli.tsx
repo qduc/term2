@@ -41,7 +41,7 @@ import fs from 'fs';
 import path from 'path';
 import { createInterface } from 'node:readline/promises';
 import { stdin as nodeStdin, stdout as nodeStdout } from 'node:process';
-import type { Message } from './hooks/use-conversation.js';
+import type { Message } from './types/message.js';
 import {
   confirmHomeDirectoryStart,
   HOME_DIRECTORY_START_WARNING,

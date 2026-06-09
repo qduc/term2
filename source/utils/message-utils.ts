@@ -1,4 +1,4 @@
-import type { Message } from '../hooks/use-conversation.js';
+import type { Message } from '../types/message.js';
 
 /**
  * Get the text content of the final assistant response, combining contiguous

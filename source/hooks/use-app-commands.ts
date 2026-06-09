@@ -14,7 +14,7 @@ import { createAutoApproveSlashCommand } from '../commands/auto-approve-command.
 import { createEffortSlashCommand } from '../commands/effort-command.js';
 import { createHandoffSlashCommand } from '../commands/handoff-command.js';
 import { createGuardedSettingsCommand } from '../commands/guarded-settings-command.js';
-import type { Message } from './use-conversation.js';
+import type { Message } from '../types/message.js';
 
 interface UseAppCommandsProps {
   settingsService: SettingsService;

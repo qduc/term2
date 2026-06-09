@@ -7,7 +7,8 @@ import { appendMessagesCapped } from '../utils/message-buffer.js';
 import { createMessageId } from './message-id.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils.js';
 import { createStreamingSession } from '../utils/streaming-session-factory.js';
-import type { CommandMessage as BaseCommandMessage } from '../tools/types.js';
+import type { BotMessage, CommandMessage, Message, UserMessage } from '../types/message.js';
+import { isBotMessage, isCommandMessage, isUserMessage } from '../types/message.js';
 import type { NormalizedUsage, UsageAccumulator } from '../utils/token-usage.js';
 import type { CodexRateLimitInfo } from '../services/conversation-events.js';
 import type { ConversationTerminal, PendingApproval, ReasoningEffortSetting } from '../contracts/conversation.js';
@@ -20,60 +21,15 @@ import {
 } from '../services/approval-presentation-policy.js';
 import { formatUserTurnForDisplay, hasUserTurnContent, normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 
-export interface UserMessage {
-  id: string;
-  sender: 'user';
-  text: string;
-  /**
-   * True when the input was consumed as resolution for an aborted tool approval
-   * rather than added to the conversation store as a new user turn. /undo and the
-   * undo selection menu must skip these so UI and store stay aligned.
-   */
-  consumedForAbort?: boolean;
-}
-
-export interface BotMessage {
-  id: string;
-  sender: 'bot';
-  text: string;
-  status?: 'streaming' | 'finalized';
-  reasoningText?: string;
-  usage?: NormalizedUsage;
-}
-
-export type CommandMessage = BaseCommandMessage & {
-  hadApproval?: boolean;
-};
-
-export interface SystemMessage {
-  id: string;
-  sender: 'system';
-  text: string;
-}
-
-export interface ReasoningMessage {
-  id: string;
-  sender: 'reasoning';
-  text: string;
-}
-
-export interface SubagentActivityMessage {
-  id: string;
-  sender: 'subagent';
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
-  agentId: string;
-  role: string;
-  task: string;
-  tools: string[];
-}
-
-export type Message =
-  | UserMessage
-  | BotMessage
-  | CommandMessage
-  | SystemMessage
-  | ReasoningMessage
-  | SubagentActivityMessage;
+export type {
+  BotMessage,
+  CommandMessage,
+  Message,
+  ReasoningMessage,
+  SubagentActivityMessage,
+  SystemMessage,
+  UserMessage,
+} from '../types/message.js';
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 const MAX_MESSAGE_COUNT = 300;
@@ -87,10 +43,10 @@ const clearsThinkingIndicator = (eventType: string): boolean =>
 const getInitialLastUsage = (messages: Message[]): NormalizedUsage | null => {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
-    if (message.sender !== 'bot') {
+    if (!isBotMessage(message)) {
       continue;
     }
-    const usage = (message as BotMessage).usage;
+    const usage = message.usage;
     if (usage && Object.keys(usage).length > 0) {
       return usage;
     }
@@ -261,10 +217,9 @@ export const useConversation = ({
         const cleaned =
           completedCallIds.size > 0
             ? prev.filter((msg) => {
-                if (msg.sender !== 'command') return true;
-                const cmd = msg as CommandMessage;
-                if (cmd.status !== 'running' && cmd.status !== 'pending') return true;
-                return !cmd.callId || !completedCallIds.has(cmd.callId);
+                if (!isCommandMessage(msg)) return true;
+                if (msg.status !== 'running' && msg.status !== 'pending') return true;
+                return !msg.callId || !completedCallIds.has(msg.callId);
               })
             : prev;
         let next = [...cleaned, ...annotatedCommands];
@@ -313,30 +268,29 @@ export const useConversation = ({
       setThinkingStartedAt(null);
       setToolCallStreamingInfo(null);
 
-      const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
-        createStreamingSession<Message>(
-          {
-            appendMessages,
-            setMessages,
-            trimMessages,
-            annotateCommandMessage,
-            loggingService,
-            setLastUsage,
-            setCodexRateLimit,
-            reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
-          },
-          'sendUserMessage',
-        );
+      const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = createStreamingSession(
+        {
+          appendMessages,
+          setMessages,
+          trimMessages,
+          annotateCommandMessage,
+          loggingService,
+          setLastUsage,
+          setCodexRateLimit,
+          reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
+        },
+        'sendUserMessage',
+      );
 
       const wrappedOnEvent = (event: any) => {
         if (event?.type === 'user_message_consumed_for_abort') {
           setMessages((prev) => {
             for (let i = prev.length - 1; i >= 0; i--) {
               const msg = prev[i];
-              if (msg.sender === 'user') {
-                if ((msg as UserMessage).consumedForAbort) return prev;
+              if (isUserMessage(msg)) {
+                if (msg.consumedForAbort) return prev;
                 const next = prev.slice();
-                next[i] = { ...(msg as UserMessage), consumedForAbort: true };
+                next[i] = { ...msg, consumedForAbort: true };
                 return next;
               }
             }
@@ -514,20 +468,19 @@ export const useConversation = ({
         setThinkingStartedAt(null);
         setToolCallStreamingInfo(null);
 
-        const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
-          createStreamingSession<Message>(
-            {
-              appendMessages,
-              setMessages,
-              trimMessages,
-              annotateCommandMessage,
-              loggingService,
-              setLastUsage,
-              setCodexRateLimit,
-              reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
-            },
-            'maxTurnsContinuation',
-          );
+        const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = createStreamingSession(
+          {
+            appendMessages,
+            setMessages,
+            trimMessages,
+            annotateCommandMessage,
+            loggingService,
+            setLastUsage,
+            setCodexRateLimit,
+            reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
+          },
+          'maxTurnsContinuation',
+        );
 
         try {
           // Send a continuation message to resume work
@@ -575,20 +528,19 @@ export const useConversation = ({
       setIsProcessing(true);
       setThinkingStartedAt(null);
       setToolCallStreamingInfo(null);
-      const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
-        createStreamingSession<Message>(
-          {
-            appendMessages,
-            setMessages,
-            trimMessages,
-            annotateCommandMessage,
-            loggingService,
-            setLastUsage,
-            setCodexRateLimit,
-            reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
-          },
-          'approvalDecision',
-        );
+      const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = createStreamingSession(
+        {
+          appendMessages,
+          setMessages,
+          trimMessages,
+          annotateCommandMessage,
+          loggingService,
+          setLastUsage,
+          setCodexRateLimit,
+          reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
+        },
+        'approvalDecision',
+      );
 
       try {
         const result = await conversationService.handleApprovalDecision(answer, rejectionReason, {
@@ -688,7 +640,7 @@ export const useConversation = ({
     let lastUserIndex = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
-      if (m.sender === 'user' && !(m as UserMessage).consumedForAbort) {
+      if (isUserMessage(m) && !m.consumedForAbort) {
         lastUserIndex = i;
         break;
       }
@@ -698,7 +650,7 @@ export const useConversation = ({
     }
 
     const lastUserMessage = messages[lastUserIndex];
-    const uiText = lastUserMessage.sender === 'user' ? lastUserMessage.text : '';
+    const uiText = isUserMessage(lastUserMessage) ? lastUserMessage.text : '';
     conversationService.abort();
     const removed = conversationService.undoLastUserTurn();
     const restored = removed ?? { text: uiText };
@@ -720,8 +672,8 @@ export const useConversation = ({
     const result: { uiIndex: number; text: string }[] = [];
     for (let i = 0; i < messages.length; i++) {
       const m = messages[i];
-      if (m.sender === 'user' && !(m as UserMessage).consumedForAbort) {
-        result.push({ uiIndex: i, text: (m as UserMessage).text });
+      if (isUserMessage(m) && !m.consumedForAbort) {
+        result.push({ uiIndex: i, text: m.text });
       }
     }
     return result;
@@ -734,15 +686,15 @@ export const useConversation = ({
       let undoCount = 0;
       for (let i = uiIndex; i < messages.length; i++) {
         const m = messages[i];
-        if (m.sender === 'user' && !(m as UserMessage).consumedForAbort) {
+        if (isUserMessage(m) && !m.consumedForAbort) {
           undoCount++;
         }
       }
 
       if (undoCount === 0) return null;
 
-      const selectedMessage = messages[uiIndex] as UserMessage;
-      const uiText = selectedMessage?.text ?? '';
+      const selectedMessage = messages[uiIndex];
+      const uiText = isUserMessage(selectedMessage) ? selectedMessage.text : '';
 
       conversationService.abort();
       const removed = conversationService.undoNUserTurns(undoCount);

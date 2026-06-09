@@ -1,5 +1,5 @@
 import type { SlashCommand } from '../slash-commands.js';
-import type { Message } from '../hooks/use-conversation.js';
+import type { Message } from '../types/message.js';
 import { getLastFinalAssistantText } from '../utils/message-utils.js';
 import { copyToClipboard } from '../utils/clipboard.js';
 

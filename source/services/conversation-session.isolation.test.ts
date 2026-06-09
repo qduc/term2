@@ -1,6 +1,7 @@
 // @ts-nocheck - Complex mock patterns deferred to follow-up
 import test from 'ava';
 import { ConversationSession } from './conversation-session.js';
+import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import { MockStream } from './test-helpers/mock-stream.js';
 
 const mockLogger = {
@@ -239,4 +240,126 @@ test('queueModeNotice preserves prefix stability by modifying only the next user
   );
   t.true(noticeIdx >= 0);
   t.is((turn3Input[noticeIdx].rawItem ?? turn3Input[noticeIdx]).content, 'Plan Mode toggled OFF\n\nSecond question');
+});
+
+test('queueModeNotice is consumed after a retrying request and does not leak to the next turn', async (t) => {
+  const startCalls = [];
+  const successfulStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
+  successfulStream.finalOutput = 'First reply';
+  successfulStream.lastResponseId = 'resp-notice-retry';
+
+  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Second reply' }]);
+  secondStream.finalOutput = 'Second reply';
+  secondStream.lastResponseId = 'resp-notice-follow-up';
+
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    abort() {},
+    async startStream(text, options) {
+      startCalls.push({ text, options });
+      if (startCalls.length === 1) {
+        throw new ChainingTransportDowngradeError('transport downgrade during chained request');
+      }
+
+      return startCalls.length === 2 ? successfulStream : secondStream;
+    },
+  };
+
+  const session = new ConversationSession('notice-retry-stability', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  session.queueModeNotice('Plan mode toggled ON');
+
+  const firstTurn = await session.sendMessage('First question');
+  t.is(firstTurn.type, 'response');
+  t.is(startCalls.length, 2);
+  t.is(startCalls[0].text, 'Plan mode toggled ON\n\nFirst question');
+  t.true(Array.isArray(startCalls[1].text));
+
+  const secondTurn = await session.sendMessage('Second question');
+  t.is(secondTurn.type, 'response');
+  t.is(startCalls.length, 3);
+  t.true(Array.isArray(startCalls[2].text));
+  t.is(startCalls[2].text.at(-1).content, 'Second question');
+});
+
+test('aborted approval resolution restores cached tool arguments for command messages', async (t) => {
+  const callId = 'call-abort-restore';
+  const initialStream = new MockStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId,
+          name: 'shell',
+          arguments: JSON.stringify({ command: 'echo restored-args' }),
+        },
+      },
+    },
+  ]);
+  initialStream.interruptions = [
+    {
+      name: 'shell',
+      agent: { name: 'CLI Agent' },
+      arguments: JSON.stringify({ command: 'echo restored-args' }),
+      callId,
+    },
+  ];
+  initialStream.state = {
+    approve: () => undefined,
+    reject: () => undefined,
+  };
+
+  const resolvedStream = new MockStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call_output',
+          callId,
+          name: 'shell',
+          output: 'exit 0\nrestored',
+        },
+      },
+    },
+  ]);
+  resolvedStream.finalOutput = 'restored';
+  resolvedStream.lastResponseId = 'resp-abort-restore';
+
+  const mockClient = {
+    abort() {},
+    addToolInterceptor() {
+      return () => undefined;
+    },
+    async startStream() {
+      return initialStream;
+    },
+    async continueRunStream() {
+      return resolvedStream;
+    },
+  };
+
+  const session = new ConversationSession('abort-restore-stability', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const approvalResult = await session.sendMessage('run the approved shell command');
+  t.is(approvalResult.type, 'approval_required');
+
+  session.abort();
+
+  const emitted = [];
+  for await (const event of session.run('resume the aborted approval')) {
+    emitted.push(event);
+  }
+
+  const commandMessage = emitted.find((event) => event.type === 'command_message');
+  t.truthy(commandMessage);
+  t.is(commandMessage.message.command, 'shell "echo restored-args"');
 });

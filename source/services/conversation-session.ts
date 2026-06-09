@@ -1,6 +1,5 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from './service-interfaces.js';
 import { ConversationStore } from './conversation-store.js';
-import type { AgentInputItem } from '@openai/agents';
 
 import { SessionRetryOrchestrator, type RetryState } from './session-retry-orchestrator.js';
 import type { ConversationEvent } from './conversation-events.js';
@@ -9,41 +8,38 @@ import { type NormalizedUsage } from '../utils/token-usage.js';
 import { ApprovalState } from './approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
-import { collectTerminalResult } from './terminal-result-collector.js';
-import { getMethod, getCallIdFromObject } from './interruption-info.js';
+import { getCallIdFromObject } from './interruption-info.js';
 import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
-import { buildConversationResult } from './conversation-result-builder.js';
 import type { AgentStream } from './agent-stream.js';
 // stream-snapshot imports removed as they are now used in SessionStreamProcessor
-import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
+import type { UserTurn } from '../types/user-turn.js';
 import { type LargeUncachedInputDecision } from './large-uncached-input-guard.js';
 // input-surge-guard import removed as it is now used in SessionStreamProcessor
 import { SessionToolTracker } from './session-tool-tracker.js';
-import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
 import { type SavedToolExecution } from './tool-execution-ledger.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
 import { ConversationLogger } from './conversation-logger.js';
-import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionStateController } from './session-state-controller.js';
 import { ApprovalContinuationRunner } from './approval-continuation-runner.js';
 import { ConversationTurnRunner } from './conversation-turn-runner.js';
-import { SessionStreamProcessor } from './session-stream-processor.js';
+import { SessionStateFacade } from './session-state-facade.js';
+import {
+  createConversationSessionComposition,
+  type ConversationSessionRetryOptions,
+} from './conversation-session-composition.js';
+import { ConversationTerminalAdapter } from './conversation-terminal-adapter.js';
+import { SessionRuntimeController } from './session-runtime-controller.js';
+import { AutoApprovalContinuationResolver } from './auto-approval-continuation-resolver.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
 
 // StreamHistorySource removed
 
-type ConversationSessionRetryOptions = {
-  /**
-   * When false, retries are only allowed if an AgentStream exists so the turn
-   * can resume from captured history instead of replaying from the beginning.
-   */
-  allowFreshStartRetries?: boolean;
-};
+export type { ConversationSessionRetryOptions };
 
 // stream-history replayed tools warning has been extracted to SessionStreamProcessor
 
@@ -53,7 +49,8 @@ export class ConversationSession {
   private agentClient: ConversationAgentClient;
   private logger: ILoggingService;
   private conversationStore: ConversationStore;
-  private approvalState = new ApprovalState();
+  /* @internal — exposed for test access */
+  approvalState: ApprovalState;
   private toolTracker: SessionToolTracker;
   private shellAutoApproval: ShellAutoApprovalResolver;
   private approvalFlow: ApprovalFlowCoordinator;
@@ -62,7 +59,11 @@ export class ConversationSession {
   #state: SessionStateController;
   #continuationRunner: ApprovalContinuationRunner;
   #turnRunner: ConversationTurnRunner;
-  #streamProcessor: SessionStreamProcessor;
+  #terminalAdapter: ConversationTerminalAdapter;
+  #runtimeController: SessionRuntimeController;
+  #stateFacade: SessionStateFacade;
+
+  #autoApprovalResolver: AutoApprovalContinuationResolver;
 
   #breakChaining(): void {
     this.retryOrchestrator.breakChaining();
@@ -108,109 +109,71 @@ export class ConversationSession {
     this.logger = deps.logger;
     this.settingsService = deps.settingsService;
     this.sessionContextService = deps.sessionContextService;
-    this.conversationStore = new ConversationStore();
-    this.toolTracker = new SessionToolTracker(this.conversationStore);
-    this.retryOrchestrator = new SessionRetryOrchestrator(
-      this.logger,
-      this.id,
-      this.agentClient,
-      retryOptions?.allowFreshStartRetries ?? true,
-    );
-    this.shellAutoApproval = new ShellAutoApprovalResolver({
-      conversationStore: this.conversationStore,
+
+    const composition = createConversationSessionComposition({
+      sessionId: id,
+      agentClient,
+      deps,
+      retryOptions: retryOptions ?? {},
+      turnAccumulator: this.turnAccumulator,
+      callbacks: {
+        breakChaining: () => this.#breakChaining(),
+        buildAndResolve: (result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage) =>
+          this.#buildAndResolve(result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage),
+        restartTurn: (turn, options) => this.run(turn, { ...options }),
+        isCurrentGeneration: (gen) => this.#isCurrentGeneration(gen),
+      },
+    });
+
+    this.conversationStore = composition.conversationStore;
+    this.approvalState = composition.approvalState;
+    this.toolTracker = composition.toolTracker;
+    this.retryOrchestrator = composition.retryOrchestrator;
+    this.shellAutoApproval = composition.shellAutoApproval;
+    this.#inputPlanner = composition.inputPlanner;
+    this.#state = composition.state;
+    this.conversationLogger = composition.conversationLogger;
+    this.approvalFlow = composition.approvalFlow;
+    this.#continuationRunner = composition.continuationRunner;
+    this.#turnRunner = composition.turnRunner;
+
+    this.#autoApprovalResolver = new AutoApprovalContinuationResolver({
+      approvalFlow: this.approvalFlow,
+      shellAutoApproval: () => this.shellAutoApproval,
+      logger: this.logger,
+      sessionId: this.id,
+      toolTracker: this.toolTracker,
+      turnAccumulator: this.turnAccumulator,
+      continuationRunner: this.#continuationRunner,
+      retryOrchestrator: this.retryOrchestrator,
+    });
+
+    this.#terminalAdapter = new ConversationTerminalAdapter({
+      sessionId: this.id,
+      startedAt: this.startedAt,
       agentClient: this.agentClient,
       logger: this.logger,
       settingsService: this.settingsService,
       sessionContextService: this.sessionContextService,
-    });
-    this.#inputPlanner = new SessionInputPlanner({
-      settingsService: deps.settingsService,
-      agentClient,
-      toolTracker: this.toolTracker,
-      retryOrchestrator: this.retryOrchestrator,
-    });
-
-    this.#state = new SessionStateController({
-      retryOrchestrator: this.retryOrchestrator,
-      inputPlanner: this.#inputPlanner,
-      approvalState: this.approvalState,
-      toolTracker: this.toolTracker,
-      shellAutoApproval: this.shellAutoApproval,
-      turnAccumulator: this.turnAccumulator,
       conversationStore: this.conversationStore,
-      agentClient,
-      logger: this.logger,
-      sessionId: this.id,
+      conversationLogger: this.conversationLogger,
+      approvalFlow: this.approvalFlow,
+      run: (input, options) => this.run(input, { ...options }),
+      continueAfterApproval: (opts) => this.continueAfterApproval(opts),
     });
 
-    this.conversationLogger = new ConversationLogger({
-      turnAccumulator: this.turnAccumulator,
-      logger: this.logger,
-      getAssistantTurnState: () => {
-        const fn = getMethod<[], string>(this.agentClient, 'getProvider');
-        const provider = fn ? fn.call(this.agentClient) : this.settingsService?.get<string>('agent.provider');
-        const model = this.settingsService?.get<string>('agent.model');
-        return {
-          previousResponseId: this.#state.previousResponseId,
-          ...(model ? { model } : {}),
-          ...(provider ? { provider } : {}),
-        };
-      },
-      getToolLedger: () => this.toolTracker.export(),
-    });
-    this.approvalFlow = new ApprovalFlowCoordinator({
+    this.#runtimeController = new SessionRuntimeController({
       agentClient: this.agentClient,
-      approvalState: this.approvalState,
-      logger: this.logger,
-      sessionId: this.id,
+      state: this.#state,
     });
 
-    this.#streamProcessor = new SessionStreamProcessor({
-      logger: this.logger,
-      sessionId: this.id,
-      toolTracker: this.toolTracker,
+    this.#stateFacade = new SessionStateFacade({
       conversationStore: this.conversationStore,
-      conversationLogger: this.conversationLogger,
-      retryOrchestrator: this.retryOrchestrator,
-      state: this.#state,
-      inputPlanner: this.#inputPlanner,
-    });
-
-    this.#continuationRunner = new ApprovalContinuationRunner({
-      agentClient,
-      approvalFlow: this.approvalFlow,
       toolTracker: this.toolTracker,
-      conversationStore: this.conversationStore,
-      conversationLogger: this.conversationLogger,
-      retryOrchestrator: this.retryOrchestrator,
-      inputPlanner: this.#inputPlanner,
       state: this.#state,
-      logger: this.logger,
-      sessionId: this.id,
-      streamProcessor: this.#streamProcessor,
-      buildAndResolve: (result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage) =>
-        this.#buildAndResolve(result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage),
-      restartTurn: (turn, options) => this.run(turn, { ...options }),
-    });
-
-    this.#turnRunner = new ConversationTurnRunner({
-      agentClient,
-      logger: this.logger,
-      sessionId: this.id,
-      turnAccumulator: this.turnAccumulator,
-      retryOrchestrator: this.retryOrchestrator,
-      toolTracker: this.toolTracker,
-      conversationStore: this.conversationStore,
       conversationLogger: this.conversationLogger,
-      approvalFlow: this.approvalFlow,
-      shellAutoApproval: this.shellAutoApproval,
-      inputPlanner: this.#inputPlanner,
-      state: this.#state,
-      streamProcessor: this.#streamProcessor,
-      breakChaining: () => this.#breakChaining(),
-      buildAndResolve: (result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage) =>
-        this.#buildAndResolve(result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage),
-      isCurrentGeneration: (gen) => this.#isCurrentGeneration(gen),
+      agentClient: this.agentClient,
+      settingsService: this.settingsService,
     });
 
     // When the WS transport degrades to HTTP for a provider that requires
@@ -221,157 +184,110 @@ export class ConversationSession {
     }
   }
 
+  /** @internal Compatibility delegate; owned by SessionInputPlanner. */
   previewLargeUncachedInput(input: string | UserTurn, now = Date.now()): LargeUncachedInputDecision {
     return this.#inputPlanner.previewLargeUncachedInput(input, now, {
       pendingModeNotice: this.#state.pendingModeNotice,
     });
   }
 
-  #getFirstUserMessagePreview(currentTurn?: string): string {
-    const [firstTurn] = this.conversationStore.listUserTurns();
-    return firstTurn?.text ?? currentTurn ?? '';
-  }
-
-  #withTrafficContext<T>(currentTurn: string | undefined, fn: () => T): T {
-    // Re-derive traffic mode via the agent client directly since the planner
-    // is the only object that encapsulates settings-based mode decisions.
-    const mode = this.#getTrafficMode();
-    return this.sessionContextService.runWithContext(
-      {
-        sessionId: this.id,
-        sessionStartedAt: this.startedAt,
-        firstUserMessagePreview: this.#getFirstUserMessagePreview(currentTurn),
-        mode,
-        traceId: this.logger.getCorrelationId(),
-      },
-      fn,
-    );
-  }
-
-  /** Mode string derived from settings, kept for traffic context. */
-  #getTrafficMode(): string {
-    if (!this.settingsService) return 'standard';
-    if (this.settingsService.get<boolean>('app.orchestratorMode')) return 'orchestrator';
-    if (this.settingsService.get<boolean>('app.liteMode')) return 'lite';
-    if (this.settingsService.get<boolean>('app.planMode')) return 'plan';
-    if (this.settingsService.get<boolean>('app.mentorMode')) return 'mentor';
-    return 'standard';
-  }
-
   #isCurrentGeneration(gen: number): boolean {
     return this.retryOrchestrator.isCurrentGeneration(gen);
   }
 
-  #afterUndo(count: number): void {
-    this.#state.afterUndo();
-    this.conversationLogger.log({ type: 'undo', removedUserTurns: count, snapshot: this.getCurrentSnapshot() });
-  }
-
+  /** @internal Compatibility delegate; owned by SessionStateFacade. */
   reset(): void {
-    this.#state.resetSession();
+    this.#stateFacade.reset();
   }
 
+  /** @internal Compatibility delegate; owned by SessionStateFacade. */
   undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null {
-    const removed = this.conversationStore.removeLastUserTurn();
-    if (removed === null) return null;
-    this.#afterUndo(1);
-    return removed;
+    return this.#stateFacade.undoLastUserTurn();
   }
 
+  /** @internal Compatibility delegate; owned by SessionStateFacade. */
   listUserTurns(): { index: number; text: string; imageCount: number }[] {
-    return this.conversationStore.listUserTurns();
+    return this.#stateFacade.listUserTurns();
   }
 
+  /** @internal Compatibility delegate; owned by SessionStateFacade. */
   undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null {
-    const removed = this.conversationStore.removeNLastUserTurns(n);
-    if (removed === null) return null;
-    this.#afterUndo(n);
-    return removed;
+    return this.#stateFacade.undoNUserTurns(n);
   }
 
+  /** @internal Compatibility delegate; owned by SessionRuntimeController. */
   setModel(model: string): void {
-    this.#state.afterProviderChanged();
-    this.agentClient.setModel(model);
+    this.#runtimeController.setModel(model);
   }
 
+  /** @internal Compatibility delegate; owned by SessionRuntimeController. */
   setReasoningEffort(effort: ReasoningEffortSetting): void {
-    this.#state.afterProviderChanged();
-    const setReasoningEffort = getMethod<[ReasoningEffortSetting], void>(this.agentClient, 'setReasoningEffort');
-    setReasoningEffort?.call(this.agentClient, effort);
+    this.#runtimeController.setReasoningEffort(effort);
   }
 
+  /** @internal Compatibility delegate; owned by SessionRuntimeController. */
   setTemperature(temperature?: number): void {
-    this.#state.afterProviderChanged();
-    const setTemperature = getMethod<[number | undefined], void>(this.agentClient, 'setTemperature');
-    setTemperature?.call(this.agentClient, temperature);
+    this.#runtimeController.setTemperature(temperature);
   }
 
+  /** @internal Compatibility delegate; owned by SessionRuntimeController. */
   setProvider(provider: string): void {
-    this.#state.afterProviderChanged();
-    const setProvider = getMethod<[string], void>(this.agentClient, 'setProvider');
-    setProvider?.call(this.agentClient, provider);
+    this.#runtimeController.setProvider(provider);
   }
 
   /** Alias for setProvider, kept for public API surface. */
+  /** @internal Compatibility delegate; owned by SessionRuntimeController. */
   switchProvider(provider: string): void {
-    this.setProvider(provider);
+    this.#runtimeController.switchProvider(provider);
   }
 
+  /** @internal Compatibility delegate; owned by SessionRuntimeController. */
   setRetryCallback(callback: () => void): void {
-    if (typeof this.agentClient.setRetryCallback === 'function') {
-      this.agentClient.setRetryCallback(callback);
-    }
+    this.#runtimeController.setRetryCallback(callback);
   }
 
   setLogSink(sink: ((event: LogEvent) => void) | null): void {
     this.conversationLogger.setLogSink(sink);
   }
 
+  /** @internal Compatibility delegate; owned by SessionStateFacade. */
   getCurrentSnapshot(): StateSnapshot {
-    const providerFn = getMethod<[], string>(this.agentClient, 'getProvider');
-    const provider = providerFn
-      ? providerFn.call(this.agentClient)
-      : this.settingsService?.get<string>('agent.provider');
-    const model = this.settingsService?.get<string>('agent.model');
-    return {
-      history: reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolTracker.export())
-        .history as AgentInputItem[],
-      previousResponseId: this.#state.previousResponseId,
-      toolLedger: this.toolTracker.export(),
-      ...(model ? { model } : {}),
-      ...(provider ? { provider } : {}),
-    };
+    return this.#stateFacade.getCurrentSnapshot();
   }
 
   // dedupeToolStarted has been extracted to SessionStreamProcessor
 
-  /** Used in tests to seed the input surge guard baseline. */
+  /** @internal Used in tests to seed the input surge guard baseline. Owned by SessionInputPlanner. */
   __testSeedInputSurgeBaseline(data: unknown[], kind: 'delta' | 'full_history'): void {
     this.#inputPlanner.recordSuccess(data, { kind, previousInput: undefined });
   }
 
+  /** @internal Compatibility delegate; owned by SessionStateFacade. */
   exportState(): {
     history: unknown[];
     previousResponseId: string | null;
     toolLedger: SavedToolExecution[];
   } {
-    return this.#state.exportPersistedState();
+    return this.#stateFacade.exportState();
   }
 
+  /** @internal Compatibility delegate; owned by SessionStateFacade. */
   importState(state: {
     history: unknown[];
     previousResponseId: string | null;
     toolLedger?: SavedToolExecution[];
     updatedAt?: string;
   }): void {
-    this.#state.importPersistedState(state);
+    this.#stateFacade.importState(state);
   }
 
+  /** @internal Compatibility delegate; owned by SessionStateFacade. */
   addShellContext(historyText: string): void {
-    this.conversationStore.addShellContext(historyText);
+    this.#stateFacade.addShellContext(historyText);
   }
+  /** @internal Compatibility delegate; owned by SessionStateFacade. */
   queueModeNotice(text: string): void {
-    this.#state.pendingModeNotice = text;
+    this.#stateFacade.queueModeNotice(text);
   }
   /**
    * Abort the current running operation
@@ -436,6 +352,7 @@ export class ConversationSession {
     });
   }
 
+  /** @internal Compatibility delegate; owned by ConversationTerminalAdapter. */
   async sendMessage(
     input: string | UserTurn,
     {
@@ -452,51 +369,16 @@ export class ConversationSession {
       hallucinationRetryCount?: number;
     } = {},
   ): Promise<ConversationResult> {
-    const turn = normalizeUserTurn(input);
-    return this.#withTrafficContext(turn.text, async () => {
-      const wrappedOnEvent = (event: ConversationEvent) => {
-        this.conversationLogger.dispatchEventToLog(event);
-        onEvent?.(event);
-      };
-      getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
-        this.agentClient,
-        wrappedOnEvent,
-      );
-      let result: ConversationResult;
-      try {
-        result = await collectTerminalResult(this.run(input, { retries: { hallucinationRetryCount } }), {
-          onTextChunk,
-          onReasoningChunk,
-          onCommandMessage,
-          onEvent: wrappedOnEvent,
-          getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
-          onFinalEvent: (event) => {
-            this.logger.debug('sendMessage received final event', {
-              sessionId: this.id,
-              hasUsage: Boolean(event.usage),
-              usage: event.usage,
-            });
-          },
-        });
-      } finally {
-        getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
-          this.agentClient,
-          null,
-        );
-      }
-
-      if (result.type === 'response') {
-        this.logger.debug('sendMessage returning response', {
-          sessionId: this.id,
-          hasUsage: Boolean(result.usage),
-          usage: result.usage,
-        });
-      }
-
-      return result;
+    return this.#terminalAdapter.sendMessage(input, {
+      onTextChunk,
+      onReasoningChunk,
+      onCommandMessage,
+      onEvent,
+      hallucinationRetryCount,
     });
   }
 
+  /** @internal Compatibility delegate; owned by ConversationTerminalAdapter. */
   async handleApprovalDecision(
     answer: string,
     rejectionReason?: string,
@@ -514,64 +396,12 @@ export class ConversationSession {
       approvalAnswer?: string;
     } = {},
   ): Promise<ConversationResult | null> {
-    if (!this.approvalFlow.getPending()) {
-      return null;
-    }
-
-    if (answer === 'y' && approvalAnswer) {
-      const pending = this.approvalFlow.getPending();
-      const callId = pending ? getCallIdFromObject(pending.interruption) : undefined;
-      if (callId) {
-        this.agentClient.setAskUserAnswer(callId, approvalAnswer);
-      }
-    }
-
-    this.conversationLogger.log({
-      type: 'approval_resolved',
-      answer: answer === 'y' ? 'y' : 'n',
-      ...(rejectionReason ? { rejectionReason } : {}),
-    });
-    return this.#withTrafficContext(undefined, async () => {
-      const wrappedOnEvent = (event: ConversationEvent) => {
-        this.conversationLogger.dispatchEventToLog(event);
-        onEvent?.(event);
-      };
-      getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
-        this.agentClient,
-        wrappedOnEvent,
-      );
-      let result: ConversationResult | null;
-      try {
-        result = await collectTerminalResult(this.continueAfterApproval({ answer, rejectionReason }), {
-          onTextChunk,
-          onReasoningChunk,
-          onCommandMessage,
-          onEvent: wrappedOnEvent,
-          getRawInterruption: () => this.approvalFlow.getPendingInterruption(),
-          onFinalEvent: (event) => {
-            this.logger.debug('handleApprovalDecision received final event', {
-              sessionId: this.id,
-              hasUsage: Boolean(event.usage),
-              usage: event.usage,
-            });
-          },
-        });
-      } finally {
-        getMethod<[((event: ConversationEvent) => void) | null], void>(this.agentClient, 'setSubagentEventSink')?.call(
-          this.agentClient,
-          null,
-        );
-      }
-
-      if (result.type === 'response') {
-        this.logger.debug('handleApprovalDecision returning response', {
-          sessionId: this.id,
-          hasUsage: Boolean(result.usage),
-          usage: result.usage,
-        });
-      }
-
-      return result;
+    return this.#terminalAdapter.handleApprovalDecision(answer, rejectionReason, {
+      onTextChunk,
+      onReasoningChunk,
+      onCommandMessage,
+      onEvent,
+      approvalAnswer,
     });
   }
 
@@ -582,92 +412,12 @@ export class ConversationSession {
     emittedCommandIds: Set<string> | undefined,
     usage: NormalizedUsage | undefined,
   ): AsyncGenerator<ConversationEvent, ConversationResult, void> {
-    const outcome = await buildConversationResult(
-      {
-        result,
-        finalOutputOverride,
-        reasoningOutputOverride,
-        emittedCommandIds,
-        usage,
-        toolCallArgumentsById: this.toolTracker.argumentsById,
-        turnItems: this.turnAccumulator.getTurnItems(),
-      },
-      {
-        approvalFlow: this.approvalFlow,
-        shellAutoApproval: this.shellAutoApproval,
-        logger: this.logger,
-        sessionId: this.id,
-      },
+    return yield* this.#autoApprovalResolver.buildAndResolve(
+      result,
+      finalOutputOverride,
+      reasoningOutputOverride,
+      emittedCommandIds,
+      usage,
     );
-
-    if (outcome.kind !== 'auto_approve') {
-      return outcome.result;
-    }
-
-    let finalText = '';
-    let reasoningText = '';
-    let finalUsage: NormalizedUsage | undefined;
-    let continuationApprovalUsage: NormalizedUsage | undefined;
-    const commandMessages: CommandMessage[] = [];
-    let approvalRequiredResult: ConversationResult | undefined;
-    let continuationTurnItems: PersistedAssistantTurnItem[] | undefined;
-
-    for await (const event of this.#continuationRunner.continueAfterApproval({
-      answer: 'y',
-      generation: this.retryOrchestrator.currentGeneration,
-    })) {
-      if (event.type === 'approval_required') {
-        continuationApprovalUsage = event.usage;
-        // The continuation resumes the same live RunState, so its usage
-        // accumulator is already cumulative for the whole run (it includes the
-        // first, auto-approved turn). Prefer it directly; only fall back to the
-        // first turn's usage if the continuation didn't report any.
-        const mergedUsage = continuationApprovalUsage ?? usage;
-        const usagePatch = mergedUsage && Object.keys(mergedUsage).length > 0 ? { usage: mergedUsage } : {};
-
-        // collectTerminalResult returns on the first approval_required event, so
-        // attach the run-cumulative usage onto the event itself.
-        yield { ...event, ...usagePatch };
-
-        approvalRequiredResult = {
-          type: 'approval_required',
-          approval: {
-            ...event.approval,
-            rawInterruption: this.approvalFlow.getPendingInterruption(),
-          },
-          ...usagePatch,
-        };
-      } else if (event.type === 'final') {
-        finalText = event.finalText;
-        reasoningText = event.reasoningText ?? '';
-        finalUsage = event.usage;
-        if (event.commandMessages) {
-          commandMessages.push(...event.commandMessages);
-        }
-        if (event.turnItems) {
-          continuationTurnItems = event.turnItems;
-        }
-      } else {
-        yield event;
-      }
-    }
-
-    if (approvalRequiredResult) {
-      return approvalRequiredResult;
-    }
-
-    // finalUsage comes from the continuation, which reused the same live
-    // RunState and therefore already accumulated the first (auto-approved)
-    // turn. Prefer it; fall back to the first turn's usage only when the
-    // continuation produced none.
-    const combinedUsage = finalUsage ?? usage;
-    return {
-      type: 'response',
-      commandMessages,
-      finalText: finalText || 'Done.',
-      ...(reasoningText ? { reasoningText } : {}),
-      ...(combinedUsage && Object.keys(combinedUsage).length > 0 ? { usage: combinedUsage } : {}),
-      turnItems: continuationTurnItems ?? this.turnAccumulator.getTurnItems(),
-    };
   }
 }

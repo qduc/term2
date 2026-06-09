@@ -3,6 +3,10 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import { ConversationSession } from './services/conversation-session.js';
 import { SessionContextService } from './services/session-context-service.js';
 import type { ConversationEvent } from './services/conversation-events.js';
+import type { UserTurn } from './types/user-turn.js';
+import type { ConversationTerminal } from './contracts/conversation.js';
+import type { SendMessageOptions, HandleApprovalDecisionOptions } from './services/conversation-terminal-adapter.js';
+import type { SavedToolExecution } from './services/tool-execution-ledger.js';
 import { randomUUID } from 'node:crypto';
 import { classifyCommandDetailed } from './utils/command-safety/index.js';
 import { SafetyStatus } from './utils/command-safety/constants.js';
@@ -24,9 +28,13 @@ export const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --aut
 export const createNonInteractiveSessionId = (): string => `non-interactive-${randomUUID()}`;
 
 export interface ConversationSessionLike {
-  sendMessage: ConversationSession['sendMessage'];
-  handleApprovalDecision: ConversationSession['handleApprovalDecision'];
-  exportState?: ConversationSession['exportState'];
+  sendMessage(input: string | UserTurn, options?: SendMessageOptions): Promise<ConversationTerminal>;
+  handleApprovalDecision(
+    answer: string,
+    rejectionReason?: string,
+    options?: HandleApprovalDecisionOptions,
+  ): Promise<ConversationTerminal | null>;
+  exportState?(): { history: unknown[]; previousResponseId: string | null; toolLedger: SavedToolExecution[] };
 }
 
 const safePreview = (value: unknown, maxLen = 500): string => {

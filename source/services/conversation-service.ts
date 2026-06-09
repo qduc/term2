@@ -5,9 +5,11 @@ import type { SavedToolExecution } from './tool-execution-ledger.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
+import type { SendMessageOptions, HandleApprovalDecisionOptions } from './conversation-terminal-adapter.js';
+import type { LargeUncachedInputDecision } from './large-uncached-input-guard.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../contracts/conversation.js';
-export type { CommandMessage } from './conversation-session.js';
+export type { CommandMessage } from '../tools/types.js';
 
 /**
  * Backward-compatible facade for the CLI.
@@ -118,20 +120,20 @@ export class ConversationService {
     this.#session.abort();
   }
 
-  sendMessage(...args: Parameters<ConversationSession['sendMessage']>): Promise<ConversationTerminal> {
-    return this.#session.sendMessage(...args);
+  sendMessage(input: string | UserTurn, options?: SendMessageOptions): Promise<ConversationTerminal> {
+    return this.#session.sendMessage(input, options);
   }
 
-  previewLargeUncachedInput(
-    ...args: Parameters<ConversationSession['previewLargeUncachedInput']>
-  ): ReturnType<ConversationSession['previewLargeUncachedInput']> {
-    return this.#session.previewLargeUncachedInput(...args);
+  previewLargeUncachedInput(input: string | UserTurn, now?: number): LargeUncachedInputDecision {
+    return this.#session.previewLargeUncachedInput(input, now);
   }
 
   handleApprovalDecision(
-    ...args: Parameters<ConversationSession['handleApprovalDecision']>
+    answer: string,
+    rejectionReason?: string,
+    options?: HandleApprovalDecisionOptions,
   ): Promise<ConversationTerminal | null> {
-    return this.#session.handleApprovalDecision(...args);
+    return this.#session.handleApprovalDecision(answer, rejectionReason, options);
   }
 
   exportState(): {

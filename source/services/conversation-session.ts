@@ -15,10 +15,10 @@ import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { buildConversationResult } from './conversation-result-builder.js';
 import type { AgentStream } from './agent-stream.js';
-import { extractReplaySnapshot, extractFinalizationSnapshot, type StreamReplaySnapshot } from './stream-snapshot.js';
+// stream-snapshot imports removed as they are now used in SessionStreamProcessor
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 import { type LargeUncachedInputDecision } from './large-uncached-input-guard.js';
-import { collectDuplicateToolCallResultPairs } from './input-surge-guard.js';
+// input-surge-guard import removed as it is now used in SessionStreamProcessor
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
 import { type SavedToolExecution } from './tool-execution-ledger.js';
@@ -30,11 +30,12 @@ import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionStateController } from './session-state-controller.js';
 import { ApprovalContinuationRunner } from './approval-continuation-runner.js';
 import { ConversationTurnRunner } from './conversation-turn-runner.js';
+import { SessionStreamProcessor } from './session-stream-processor.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
 
-type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
+// StreamHistorySource removed
 
 type ConversationSessionRetryOptions = {
   /**
@@ -44,45 +45,7 @@ type ConversationSessionRetryOptions = {
   allowFreshStartRetries?: boolean;
 };
 
-const warnIfStreamHistoryReplayedTools = ({
-  logger,
-  sessionId,
-  source,
-  snapshot,
-}: {
-  logger: ILoggingService;
-  sessionId: string;
-  source: StreamHistorySource;
-  snapshot: StreamReplaySnapshot;
-}): void => {
-  const { history, newItems, generatedItems } = snapshot;
-
-  const historyDuplicates = collectDuplicateToolCallResultPairs(history);
-  const newItemsDuplicates = collectDuplicateToolCallResultPairs(newItems);
-  const stateGeneratedItemsDuplicates = collectDuplicateToolCallResultPairs(generatedItems);
-
-  if (historyDuplicates.pairs === 0 && newItemsDuplicates.pairs === 0 && stateGeneratedItemsDuplicates.pairs === 0) {
-    return;
-  }
-
-  logger.warn('Completed stream history contains replayed tool call/result pairs', {
-    eventType: 'conversation.stream_history.replayed_tools',
-    category: 'provider',
-    phase: 'post_stream',
-    sessionId,
-    traceId: logger.getCorrelationId(),
-    source,
-    historyLength: history.length,
-    newItemsLength: newItems.length,
-    stateGeneratedItemsLength: generatedItems.length,
-    historyDuplicatePairs: historyDuplicates.pairs,
-    historyMaxCopies: historyDuplicates.maxCopies,
-    newItemsDuplicatePairs: newItemsDuplicates.pairs,
-    newItemsMaxCopies: newItemsDuplicates.maxCopies,
-    stateGeneratedItemsDuplicatePairs: stateGeneratedItemsDuplicates.pairs,
-    stateGeneratedItemsMaxCopies: stateGeneratedItemsDuplicates.maxCopies,
-  });
-};
+// stream-history replayed tools warning has been extracted to SessionStreamProcessor
 
 export class ConversationSession {
   public readonly id: string;
@@ -99,6 +62,7 @@ export class ConversationSession {
   #state: SessionStateController;
   #continuationRunner: ApprovalContinuationRunner;
   #turnRunner: ConversationTurnRunner;
+  #streamProcessor: SessionStreamProcessor;
 
   #breakChaining(): void {
     this.retryOrchestrator.breakChaining();
@@ -112,36 +76,7 @@ export class ConversationSession {
     });
   }
 
-  #finalizeStreamOutcome(stream: AgentStream, gen: number, source: StreamHistorySource): void {
-    if (!this.retryOrchestrator.isCurrentGeneration(gen)) return;
-    const snapshot = extractFinalizationSnapshot(stream);
-    this.#state.previousResponseId = snapshot.lastResponseId;
-    this.#inputPlanner.previousResponseId = snapshot.lastResponseId;
-    warnIfStreamHistoryReplayedTools({
-      logger: this.logger,
-      sessionId: this.id,
-      source,
-      snapshot: extractReplaySnapshot(stream),
-    });
-    const terminal = !stream.interruptions || stream.interruptions.length === 0;
-    if (terminal) {
-      if (this.retryOrchestrator.inputSurgeKindState === 'delta') {
-        this.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
-      } else {
-        // For full-history mode, prefer appending only the new items so we
-        // don't lose assistant text content that the SDK's history reconstruction
-        // may have stripped (e.g. turning assistant+tool_call messages into
-        // separate function_call items with null content).
-        const outputItems = snapshot.output;
-        const newItems = outputItems.length > 0 ? outputItems : snapshot.newItems;
-        if (newItems.length > 0) {
-          this.conversationStore.appendOutput(newItems as AgentInputItem[]);
-        } else if (snapshot.history.length > 0) {
-          this.conversationStore.replaceHistory(snapshot.history as AgentInputItem[]);
-        }
-      }
-    }
-  }
+  // finalizeStreamOutcome has been extracted to SessionStreamProcessor
 
   private turnAccumulator = new TurnItemAccumulator();
 
@@ -230,6 +165,17 @@ export class ConversationSession {
       sessionId: this.id,
     });
 
+    this.#streamProcessor = new SessionStreamProcessor({
+      logger: this.logger,
+      sessionId: this.id,
+      toolTracker: this.toolTracker,
+      conversationStore: this.conversationStore,
+      conversationLogger: this.conversationLogger,
+      retryOrchestrator: this.retryOrchestrator,
+      state: this.#state,
+      inputPlanner: this.#inputPlanner,
+    });
+
     this.#continuationRunner = new ApprovalContinuationRunner({
       agentClient,
       approvalFlow: this.approvalFlow,
@@ -241,8 +187,7 @@ export class ConversationSession {
       state: this.#state,
       logger: this.logger,
       sessionId: this.id,
-      dedupeToolStarted: (event) => this.#dedupeToolStarted(event),
-      finalizeStreamOutcome: (stream, gen, source) => this.#finalizeStreamOutcome(stream, gen, source),
+      streamProcessor: this.#streamProcessor,
       buildAndResolve: (result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage) =>
         this.#buildAndResolve(result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage),
       restartTurn: (turn, options) => this.run(turn, { ...options }),
@@ -261,9 +206,8 @@ export class ConversationSession {
       shellAutoApproval: this.shellAutoApproval,
       inputPlanner: this.#inputPlanner,
       state: this.#state,
+      streamProcessor: this.#streamProcessor,
       breakChaining: () => this.#breakChaining(),
-      finalizeStreamOutcome: (stream, gen, source) => this.#finalizeStreamOutcome(stream, gen, source),
-      dedupeToolStarted: (event) => this.#dedupeToolStarted(event),
       buildAndResolve: (result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage) =>
         this.#buildAndResolve(result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage),
       isCurrentGeneration: (gen) => this.#isCurrentGeneration(gen),
@@ -399,9 +343,7 @@ export class ConversationSession {
     };
   }
 
-  #dedupeToolStarted(event: ConversationEvent): ConversationEvent | null {
-    return this.toolTracker.dedupeToolStarted(event);
-  }
+  // dedupeToolStarted has been extracted to SessionStreamProcessor
 
   /** Used in tests to seed the input surge guard baseline. */
   __testSeedInputSurgeBaseline(data: unknown[], kind: 'delta' | 'full_history'): void {

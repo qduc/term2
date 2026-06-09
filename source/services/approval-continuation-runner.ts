@@ -11,12 +11,12 @@ import type { AgentStream } from './agent-stream.js';
 import type { ConversationTerminal } from '../contracts/conversation.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 import { getCallIdFromObject, getMethod } from './interruption-info.js';
-import { createStreamAccumulator, processStreamEvents } from './stream-event-processor.js';
 import { getMaxTransientRetries } from './conversation-retry-policy.js';
 import { toTerminalEvent } from './conversation-result-builder.js';
-import { type SavedToolExecution, callIdOf, toolNameOf, outputOf } from './tool-execution-ledger.js';
+import { type SavedToolExecution } from './tool-execution-ledger.js';
 import { describeError } from '../utils/error-helpers.js';
 import type { UserTurn } from '../types/user-turn.js';
+import { SessionStreamProcessor } from './session-stream-processor.js';
 
 /**
  * Callback signature for buildAndResolve: processes a resolved stream into
@@ -36,15 +36,7 @@ export type RestartTurnFn = (
   options: { skipUserMessage: boolean; retries: { transientRetryCount: number } },
 ) => AsyncIterable<ConversationEvent>;
 
-/** Callback to deduplicate tool_started events. */
-export type DedupeToolStartedFn = (event: ConversationEvent) => ConversationEvent | null;
-
-/** Callback to finalize stream outcome (update store, response IDs, etc.). */
-export type FinalizeStreamOutcomeFn = (
-  stream: AgentStream,
-  gen: number,
-  source: 'startStream' | 'continueRunStream' | 'abortResolution',
-) => void;
+// Callback types have been refactored
 
 export interface ApprovalContinuationRunnerDeps {
   agentClient: ConversationAgentClient;
@@ -57,10 +49,9 @@ export interface ApprovalContinuationRunnerDeps {
   state: { previousResponseId: string | null };
   logger: ILoggingService;
   sessionId: string;
+  streamProcessor: SessionStreamProcessor;
 
   // Callbacks into the owning session
-  dedupeToolStarted: DedupeToolStartedFn;
-  finalizeStreamOutcome: FinalizeStreamOutcomeFn;
   buildAndResolve: BuildAndResolveFn;
   restartTurn: RestartTurnFn;
 }
@@ -107,7 +98,7 @@ export class ApprovalContinuationRunner {
     let stream: AgentStream | null = null;
 
     if (toolStartedEvent) {
-      const filtered = this.deps.dedupeToolStarted(toolStartedEvent);
+      const filtered = this.deps.toolTracker.dedupeToolStarted(toolStartedEvent);
       if (filtered) yield filtered;
     }
 
@@ -133,38 +124,13 @@ export class ApprovalContinuationRunner {
             toolResultCallIds: approvedToolResultCallIds,
           })) as AgentStream;
 
-          const acc = createStreamAccumulator();
-          for await (const event of processStreamEvents(
-            stream,
-            acc,
-            {
-              toolCallArgumentsById: this.deps.toolTracker.argumentsById,
-              emittedInvalidToolCallPackets: this.deps.toolTracker.invalidPackets,
-              preserveExistingToolArgs: true,
-              onFunctionCallItem: (item) => this.deps.toolTracker.recordFunctionCall(item),
-              onFunctionResultItem: (item) => {
-                this.deps.toolTracker.recordFunctionResult(item);
-                const cid = callIdOf(item);
-                if (cid && this.deps.conversationLogger.hasSink()) {
-                  const entry = this.deps.toolTracker.export().find((e) => e.callId === cid);
-                  this.deps.conversationLogger.log({
-                    type: 'tool_result',
-                    callId: cid,
-                    toolName: entry?.toolName ?? toolNameOf(item),
-                    status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
-                    output: entry?.output ?? outputOf(item),
-                    ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
-                  });
-                }
-              },
-            },
-            { logger: this.deps.logger, sessionId: this.deps.sessionId },
-          )) {
-            const filtered = this.deps.dedupeToolStarted(event);
-            if (filtered) yield filtered;
-          }
+          const acc = yield* this.deps.streamProcessor.process(stream, {
+            gen,
+            source: 'continueRunStream',
+            preserveExistingToolArgs: true,
+          });
 
-          this.deps.finalizeStreamOutcome(stream, gen, 'continueRunStream');
+          this.deps.streamProcessor.finalize(stream, gen, 'continueRunStream');
 
           // Merge previously emitted command IDs with newly emitted ones
           // This prevents duplicates when result.history contains commands from the initial stream

@@ -5,13 +5,13 @@ import type { RetryState, SessionRetryOrchestrator } from './session-retry-orche
 import type { ConversationEvent } from './conversation-events.js';
 import type { NormalizedUsage } from '../utils/token-usage.js';
 import { getMethod, getCallIdFromObject } from './interruption-info.js';
-import { createStreamAccumulator, processStreamEvents } from './stream-event-processor.js';
 import type { AgentStream } from './agent-stream.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
-import { type SavedToolExecution, callIdOf, toolNameOf, outputOf } from './tool-execution-ledger.js';
+import { type SavedToolExecution } from './tool-execution-ledger.js';
 import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
+import { SessionStreamProcessor } from './session-stream-processor.js';
 import { describeError } from '../utils/error-helpers.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { SessionStateController } from './session-state-controller.js';
@@ -26,16 +26,10 @@ import type { ConversationTerminal } from '../contracts/conversation.js';
 
 // ── Public types ──────────────────────────────────────────────────
 
-export type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
-
 export type RestartTurnFn = (
   turn: { text: string; images?: UserTurn['images'] },
   options: { skipUserMessage?: boolean; retries?: { transientRetryCount?: number } },
 ) => AsyncIterable<ConversationEvent>;
-
-export type DedupeToolStartedFn = (event: ConversationEvent) => ConversationEvent | null;
-
-export type FinalizeStreamOutcomeFn = (stream: AgentStream, gen: number, source: StreamHistorySource) => void;
 
 export type BuildAndResolveFn = (
   result: AgentStream,
@@ -73,11 +67,10 @@ export interface ConversationTurnRunnerDeps {
   shellAutoApproval: ShellAutoApprovalResolver;
   inputPlanner: SessionInputPlanner;
   state: SessionStateController;
+  streamProcessor: SessionStreamProcessor;
 
   // Callbacks that must go back through the owning session
   breakChaining: () => void;
-  finalizeStreamOutcome: FinalizeStreamOutcomeFn;
-  dedupeToolStarted: DedupeToolStartedFn;
   buildAndResolve: BuildAndResolveFn;
   isCurrentGeneration: (gen: number) => boolean;
 }
@@ -209,39 +202,14 @@ export class ConversationTurnRunner {
             ),
           })) as AgentStream;
 
-          const acc = createStreamAccumulator();
-          acc.emittedCommandIds = new Set<string>(abortedContext.emittedCommandIds);
-          for await (const event of processStreamEvents(
-            continuedStream,
-            acc,
-            {
-              toolCallArgumentsById: this.deps.toolTracker.argumentsById,
-              emittedInvalidToolCallPackets: this.deps.toolTracker.invalidPackets,
-              preserveExistingToolArgs: true,
-              onFunctionCallItem: (item) => this.deps.toolTracker.recordFunctionCall(item),
-              onFunctionResultItem: (item) => {
-                this.deps.toolTracker.recordFunctionResult(item);
-                const cid = callIdOf(item);
-                if (cid && this.deps.conversationLogger.hasSink()) {
-                  const entry = this.deps.toolTracker.export().find((e) => e.callId === cid);
-                  this.deps.conversationLogger.log({
-                    type: 'tool_result',
-                    callId: cid,
-                    toolName: entry?.toolName ?? toolNameOf(item),
-                    status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
-                    output: entry?.output ?? outputOf(item),
-                    ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
-                  });
-                }
-              },
-            },
-            { logger: this.deps.logger, sessionId: this.deps.sessionId },
-          )) {
-            const filtered = this.deps.dedupeToolStarted(event);
-            if (filtered) yield filtered;
-          }
+          const acc = yield* this.deps.streamProcessor.process(continuedStream, {
+            gen,
+            source: 'abortResolution',
+            preserveExistingToolArgs: true,
+            previouslyEmittedCommandIds: abortedContext.emittedCommandIds,
+          });
 
-          this.deps.finalizeStreamOutcome(continuedStream, gen, 'abortResolution');
+          this.deps.streamProcessor.finalize(continuedStream, gen, 'abortResolution');
 
           if (continuedStream.interruptions && continuedStream.interruptions.length > 0) {
             this.deps.logger.warn('Another interruption occurred after fake execution - handling as approval');
@@ -366,24 +334,13 @@ export class ConversationTurnRunner {
         }
       }
 
-      const acc = createStreamAccumulator();
-      for await (const event of processStreamEvents(
-        stream,
-        acc,
-        {
-          toolCallArgumentsById: this.deps.toolTracker.argumentsById,
-          emittedInvalidToolCallPackets: this.deps.toolTracker.invalidPackets,
-          preserveExistingToolArgs: false,
-          onFunctionCallItem: (item) => this.deps.toolTracker.recordFunctionCall(item),
-          onFunctionResultItem: (item) => this.deps.toolTracker.recordFunctionResult(item),
-        },
-        { logger: this.deps.logger, sessionId: this.deps.sessionId },
-      )) {
-        const filtered = this.deps.dedupeToolStarted(event);
-        if (filtered) yield filtered;
-      }
+      const acc = yield* this.deps.streamProcessor.process(stream, {
+        gen,
+        source: 'startStream',
+        preserveExistingToolArgs: false,
+      });
 
-      this.deps.finalizeStreamOutcome(stream, gen, 'startStream');
+      this.deps.streamProcessor.finalize(stream, gen, 'startStream');
 
       const resolvedResult = yield* this.deps.buildAndResolve(
         stream,

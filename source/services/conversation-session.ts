@@ -31,6 +31,7 @@ import { ChainingTransportDowngradeError } from '../providers/fallback-responses
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
 import { SessionInputPlanner } from './session-input-planner.js';
+import { SessionStateController } from './session-state-controller.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -104,17 +105,17 @@ export class ConversationSession {
   private agentClient: ConversationAgentClient;
   private logger: ILoggingService;
   private conversationStore: ConversationStore;
-  private previousResponseId: string | null = null;
   private approvalState = new ApprovalState();
   private toolTracker: SessionToolTracker;
   private shellAutoApproval: ShellAutoApprovalResolver;
   private approvalFlow: ApprovalFlowCoordinator;
   private retryOrchestrator: SessionRetryOrchestrator;
   #inputPlanner: SessionInputPlanner;
+  #state: SessionStateController;
 
   #breakChaining(): void {
     this.retryOrchestrator.breakChaining();
-    this.previousResponseId = null;
+    this.#state.previousResponseId = null;
     this.#inputPlanner.previousResponseId = null;
     this.logger.warn('WS-to-HTTP downgrade detected: chaining disabled, switching to full-history mode', {
       eventType: 'conversation.chaining_broken',
@@ -127,7 +128,7 @@ export class ConversationSession {
   #finalizeStreamOutcome(stream: AgentStream, gen: number, source: StreamHistorySource): void {
     if (!this.retryOrchestrator.isCurrentGeneration(gen)) return;
     const snapshot = extractFinalizationSnapshot(stream);
-    this.previousResponseId = snapshot.lastResponseId;
+    this.#state.previousResponseId = snapshot.lastResponseId;
     this.#inputPlanner.previousResponseId = snapshot.lastResponseId;
     warnIfStreamHistoryReplayedTools({
       logger: this.logger,
@@ -167,7 +168,6 @@ export class ConversationSession {
 
   private settingsService?: ISettingsService;
   private sessionContextService: ISessionContextService;
-  private pendingModeNotice: string | null = null;
   private conversationLogger: ConversationLogger;
 
   constructor(
@@ -216,6 +216,19 @@ export class ConversationSession {
       retryOrchestrator: this.retryOrchestrator,
     });
 
+    this.#state = new SessionStateController({
+      retryOrchestrator: this.retryOrchestrator,
+      inputPlanner: this.#inputPlanner,
+      approvalState: this.approvalState,
+      toolTracker: this.toolTracker,
+      shellAutoApproval: this.shellAutoApproval,
+      turnAccumulator: this.turnAccumulator,
+      conversationStore: this.conversationStore,
+      agentClient,
+      logger: this.logger,
+      sessionId: this.id,
+    });
+
     this.conversationLogger = new ConversationLogger({
       turnAccumulator: this.turnAccumulator,
       logger: this.logger,
@@ -224,7 +237,7 @@ export class ConversationSession {
         const provider = fn ? fn.call(this.agentClient) : this.settingsService?.get<string>('agent.provider');
         const model = this.settingsService?.get<string>('agent.model');
         return {
-          previousResponseId: this.previousResponseId,
+          previousResponseId: this.#state.previousResponseId,
           ...(model ? { model } : {}),
           ...(provider ? { provider } : {}),
         };
@@ -248,7 +261,7 @@ export class ConversationSession {
 
   previewLargeUncachedInput(input: string | UserTurn, now = Date.now()): LargeUncachedInputDecision {
     return this.#inputPlanner.previewLargeUncachedInput(input, now, {
-      pendingModeNotice: this.pendingModeNotice,
+      pendingModeNotice: this.#state.pendingModeNotice,
     });
   }
 
@@ -287,32 +300,6 @@ export class ConversationSession {
     return this.retryOrchestrator.isCurrentGeneration(gen);
   }
 
-  #resetProviderContinuity({ clearConversations = true }: { clearConversations?: boolean } = {}): void {
-    this.retryOrchestrator.incrementGeneration();
-    this.previousResponseId = null;
-    this.#inputPlanner.previousResponseId = null;
-    this.approvalState.clearPending();
-    this.approvalState.consumeAborted();
-    this.toolTracker.clearArguments();
-    this.toolTracker.clearEmittedToolStarted();
-    this.shellAutoApproval.clearCache();
-    this.#inputPlanner.reset();
-    this.turnAccumulator.resetPersistedTurnState();
-
-    if (clearConversations) {
-      const clearConversationsFn = getMethod<[], void>(this.agentClient, 'clearConversations');
-      clearConversationsFn?.call(this.agentClient);
-    }
-  }
-
-  #pruneToolLedgerToCurrentHistory(): void {
-    this.toolTracker.pruneToCurrentHistory();
-  }
-
-  #setInputSurgeKind(kind: 'delta' | 'full_history'): void {
-    this.retryOrchestrator.setInputSurgeKind(kind);
-  }
-
   #commonRestoreForRetry(
     ledgerSnapshot: SavedToolExecution[],
     stream: AgentStream | null,
@@ -324,7 +311,7 @@ export class ConversationSession {
       toolLedger: this.toolTracker.ledger,
       conversationStore: this.conversationStore,
       clearPreviousResponseId: () => {
-        this.previousResponseId = null;
+        this.#state.previousResponseId = null;
         this.#inputPlanner.previousResponseId = null;
       },
       restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
@@ -335,19 +322,12 @@ export class ConversationSession {
   }
 
   #afterUndo(count: number): void {
-    this.#pruneToolLedgerToCurrentHistory();
-    this.#resetProviderContinuity();
-    this.#inputPlanner.markUndoOrRewind();
-    this.#setInputSurgeKind('delta');
+    this.#state.afterUndo();
     this.conversationLogger.log({ type: 'undo', removedUserTurns: count, snapshot: this.getCurrentSnapshot() });
   }
 
   reset(): void {
-    this.#resetProviderContinuity();
-    this.conversationStore.clear();
-    this.toolTracker.reset();
-    this.#inputPlanner.reset();
-    this.#setInputSurgeKind('delta');
+    this.#state.resetSession();
   }
 
   undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null {
@@ -369,24 +349,24 @@ export class ConversationSession {
   }
 
   setModel(model: string): void {
-    this.#resetProviderContinuity();
+    this.#state.afterProviderChanged();
     this.agentClient.setModel(model);
   }
 
   setReasoningEffort(effort: ReasoningEffortSetting): void {
-    this.#resetProviderContinuity();
+    this.#state.afterProviderChanged();
     const setReasoningEffort = getMethod<[ReasoningEffortSetting], void>(this.agentClient, 'setReasoningEffort');
     setReasoningEffort?.call(this.agentClient, effort);
   }
 
   setTemperature(temperature?: number): void {
-    this.#resetProviderContinuity();
+    this.#state.afterProviderChanged();
     const setTemperature = getMethod<[number | undefined], void>(this.agentClient, 'setTemperature');
     setTemperature?.call(this.agentClient, temperature);
   }
 
   setProvider(provider: string): void {
-    this.#resetProviderContinuity();
+    this.#state.afterProviderChanged();
     const setProvider = getMethod<[string], void>(this.agentClient, 'setProvider');
     setProvider?.call(this.agentClient, provider);
   }
@@ -415,7 +395,7 @@ export class ConversationSession {
     return {
       history: reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolTracker.export())
         .history as AgentInputItem[],
-      previousResponseId: this.previousResponseId,
+      previousResponseId: this.#state.previousResponseId,
       toolLedger: this.toolTracker.export(),
       ...(model ? { model } : {}),
       ...(provider ? { provider } : {}),
@@ -436,11 +416,7 @@ export class ConversationSession {
     previousResponseId: string | null;
     toolLedger: SavedToolExecution[];
   } {
-    return {
-      history: this.toolTracker.getReconciledHistory(),
-      previousResponseId: this.previousResponseId,
-      toolLedger: this.toolTracker.export(),
-    };
+    return this.#state.exportPersistedState();
   }
 
   importState(state: {
@@ -449,45 +425,14 @@ export class ConversationSession {
     toolLedger?: SavedToolExecution[];
     updatedAt?: string;
   }): void {
-    this.conversationStore.clear();
-    this.toolTracker.import(state.toolLedger);
-    const reconciled = reconcileHistoryWithToolLedger(state.history, state.toolLedger);
-    if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
-      this.logger.warn('Reconciled saved conversation history with tool execution ledger', {
-        eventType: 'conversation.tool_ledger.reconciled',
-        category: 'conversation',
-        phase: 'resume',
-        sessionId: this.id,
-        addedCompletedPairs: reconciled.addedCompletedPairs,
-        droppedIncompleteCalls: reconciled.droppedIncompleteCalls,
-      });
-    }
-    for (const item of reconciled.history as import('@openai/agents').AgentInputItem[]) {
-      this.conversationStore.addImportedItem(item);
-    }
-    // Provider-side response chains can expire while the local transcript remains valid.
-    // Force the first resumed turn to resync from full history; successful completion
-    // will populate a fresh previousResponseId for subsequent chained turns.
-    this.previousResponseId = null;
-    this.#inputPlanner.previousResponseId = null;
-    this.toolTracker.clearEmittedToolStarted();
-    this.#inputPlanner.reset();
-    this.shellAutoApproval.clearCache();
-    this.approvalState.clearPending();
-    this.approvalState.consumeAborted();
-    this.toolTracker.clearArguments();
-    this.turnAccumulator.resetPersistedTurnState();
-    this.#inputPlanner.markResumedSession({
-      updatedAtMs: state.updatedAt ? Date.parse(state.updatedAt) : null,
-    });
-    this.retryOrchestrator.incrementGeneration();
+    this.#state.importPersistedState(state);
   }
 
   addShellContext(historyText: string): void {
     this.conversationStore.addShellContext(historyText);
   }
   queueModeNotice(text: string): void {
-    this.pendingModeNotice = text;
+    this.#state.pendingModeNotice = text;
   }
   /**
    * Abort the current running operation
@@ -545,8 +490,8 @@ export class ConversationSession {
     let streamInput: string | AgentInputItem | AgentInputItem[] = '';
     let inputSurgeKind: 'delta' | 'full_history' = 'delta';
     const normalized = normalizeUserTurn(input);
-    const turn: UserTurn = this.pendingModeNotice?.trim()
-      ? { ...normalized, text: `${this.pendingModeNotice}\n\n${normalized.text}` }
+    const turn: UserTurn = this.#state.pendingModeNotice?.trim()
+      ? { ...normalized, text: `${this.#state.pendingModeNotice}\n\n${normalized.text}` }
       : normalized;
     const text = turn.text;
     let addedUserMessage = false;
@@ -613,7 +558,7 @@ export class ConversationSession {
               ? this.conversationStore.getHistory()
               : undefined;
           const continuedStream = (await this.agentClient.continueRunStream(abortedContext.state, {
-            previousResponseId: this.previousResponseId,
+            previousResponseId: this.#state.previousResponseId,
             sessionId: this.id,
             toolResultCallIds: [getCallIdFromObject(abortedContext.interruption)].filter(
               (callId): callId is string => typeof callId === 'string' && callId.length > 0,
@@ -693,11 +638,11 @@ export class ConversationSession {
       // local store, so we fall back to full-history mode to re-establish context.
       const plan = this.#inputPlanner.build(turn, {
         includeTurn: false,
-        pendingModeNotice: this.pendingModeNotice,
+        pendingModeNotice: this.#state.pendingModeNotice,
       });
       streamInput = plan.streamInput;
       inputSurgeKind = plan.inputSurgeKind;
-      this.#setInputSurgeKind(inputSurgeKind);
+      this.#state.setInputSurgeKind(inputSurgeKind);
       const surgeDecision = this.#inputPlanner.inspectForSurge(streamInput, inputSurgeKind);
       if (surgeDecision.action === 'block') {
         let droppedUserMessage: { text: string; imageCount: number } | undefined;
@@ -726,19 +671,19 @@ export class ConversationSession {
         return;
       }
 
-      if (this.pendingModeNotice) {
-        this.pendingModeNotice = null;
+      if (this.#state.pendingModeNotice) {
+        this.#state.pendingModeNotice = null;
       }
 
       try {
         if (resumeState && typeof this.agentClient.continueRunStream === 'function') {
           stream = (await this.agentClient.continueRunStream(resumeState, {
-            previousResponseId: this.previousResponseId,
+            previousResponseId: this.#state.previousResponseId,
             sessionId: this.id,
           })) as AgentStream;
         } else {
           stream = (await this.agentClient.startStream(streamInput, {
-            previousResponseId: inputSurgeKind === 'delta' ? this.previousResponseId : null,
+            previousResponseId: inputSurgeKind === 'delta' ? this.#state.previousResponseId : null,
             sessionId: this.id,
           })) as AgentStream;
         }
@@ -764,10 +709,10 @@ export class ConversationSession {
 
           const fullHistoryRetryPlan = this.#inputPlanner.build(turn, {
             includeTurn: false,
-            pendingModeNotice: this.pendingModeNotice,
+            pendingModeNotice: this.#state.pendingModeNotice,
           });
           inputSurgeKind = fullHistoryRetryPlan.inputSurgeKind;
-          this.#setInputSurgeKind(inputSurgeKind);
+          this.#state.setInputSurgeKind(inputSurgeKind);
           stream = (await this.agentClient.startStream(fullHistoryRetryPlan.streamInput, {
             previousResponseId: null,
             sessionId: this.id,
@@ -1027,7 +972,7 @@ export class ConversationSession {
               ? this.conversationStore.getHistory()
               : undefined;
           stream = (await this.agentClient.continueRunStream(state, {
-            previousResponseId: this.previousResponseId,
+            previousResponseId: this.#state.previousResponseId,
             sessionId: this.id,
             toolResultCallIds: approvedToolResultCallIds,
           })) as AgentStream;

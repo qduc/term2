@@ -107,6 +107,11 @@ const warnIfStreamHistoryReplayedTools = ({
   });
 };
 
+const generatedItemsOf = (state: unknown): unknown[] => {
+  const record = state && typeof state === 'object' ? (state as { _generatedItems?: unknown }) : null;
+  return asArray(record?._generatedItems);
+};
+
 export class ConversationSession {
   public readonly id: string;
   public readonly startedAt: string;
@@ -193,6 +198,34 @@ export class ConversationSession {
     }
 
     this.toolLedger.import(merged);
+  }
+
+  #recoverApprovedToolResultsFromState(state: unknown, expectedCallIds: readonly string[]): void {
+    const callIds = new Set(
+      expectedCallIds.filter((callId): callId is string => typeof callId === 'string' && callId.length > 0),
+    );
+    if (callIds.size === 0) {
+      return;
+    }
+
+    let recoveredAny = false;
+    for (const item of generatedItemsOf(state)) {
+      const callId = callIdOf(item);
+      if (!callId || !callIds.has(callId)) {
+        continue;
+      }
+      this.toolLedger.recordFunctionResult(item);
+      recoveredAny = true;
+    }
+
+    if (!recoveredAny) {
+      return;
+    }
+
+    const reconciled = reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolLedger.export());
+    if (reconciled.addedCompletedPairs > 0) {
+      this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
+    }
   }
 
   private turnAccumulator = new TurnItemAccumulator();
@@ -1390,6 +1423,7 @@ export class ConversationSession {
             if (!this.#isCurrentGeneration(gen)) return;
 
             if (!stream) {
+              this.#recoverApprovedToolResultsFromState(state, approvedToolResultCallIds);
               this.retryHandler.restoreForRetry({
                 ledgerSnapshot,
                 stream,
@@ -1399,7 +1433,6 @@ export class ConversationSession {
                   this.previousResponseId = null;
                 },
                 restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
-                removeLastUserMessage: () => this.conversationStore.removeLastUserMessage(),
               });
 
               const lastUserText = this.conversationStore.getLastUserMessage();

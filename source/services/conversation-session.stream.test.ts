@@ -947,6 +947,87 @@ test('continue() falls back to full-history replay when continuation request fai
   t.is(cont[cont.length - 1].finalText, 'Recovered after replay');
 });
 
+test('continue() persists the approved tool call/result pair before full-history replay after downgrade', async (t) => {
+  const approvedCallId = 'call-approved-fallback';
+  const state = {
+    _generatedItems: [],
+    approve() {
+      this._generatedItems = [
+        {
+          rawItem: {
+            type: 'function_call_output',
+            callId: approvedCallId,
+            output: 'ok',
+          },
+        },
+      ];
+    },
+    reject() {},
+  };
+
+  const interruption = {
+    name: 'shell',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ command: 'echo hi' }),
+    callId: approvedCallId,
+  };
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = state;
+  initialStream.lastResponseId = 'resp-initial';
+
+  const recoveryStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered after replay' }]);
+  recoveryStream.finalOutput = 'Recovered after replay';
+  recoveryStream.lastResponseId = 'resp-recovered';
+
+  let retryInput;
+  let startCalls = 0;
+  let onDowngrade;
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    onDowngrade(callback) {
+      onDowngrade = callback;
+    },
+    async startStream(input) {
+      startCalls++;
+      if (startCalls === 1) {
+        return initialStream;
+      }
+      retryInput = input;
+      return recoveryStream;
+    },
+    async continueRunStream() {
+      onDowngrade?.();
+      throw new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP');
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  for await (const _ of session.run('run command')) {
+  }
+
+  for await (const _ of session.continue({ answer: 'y' })) {
+  }
+
+  t.true(Array.isArray(retryInput), 'retry should send full history');
+  const approvedItems = retryInput.filter(
+    (item) =>
+      (item.callId || item.call_id) === approvedCallId ||
+      (item.rawItem?.callId || item.rawItem?.call_id) === approvedCallId,
+  );
+  t.deepEqual(
+    approvedItems.map((item) => item.rawItem?.type || item.type),
+    ['function_call', 'function_call_output'],
+  );
+});
+
 test('sendMessage() preserves callId on approval_required terminal result', async (t) => {
   const interruption = {
     name: 'shell',
@@ -1975,6 +2056,90 @@ test('run() resyncs full history after resume before returning to chaining provi
   }
   t.is(calls[1].input, 'Second follow-up', 'Second resumed turn should return to delta chaining');
   t.is(calls[1].opts.previousResponseId, 'resp-resynced');
+});
+
+test('run() ignores a stale completion after importState() bumps generation', async (t) => {
+  let releaseGate;
+  const gate = new Promise((resolve) => {
+    releaseGate = resolve;
+  });
+
+  class GatedStream extends MockStream {
+    constructor() {
+      super([]);
+      this.lastResponseId = 'resp-stale';
+      this.finalOutput = 'stale reply';
+      this.history = [
+        { role: 'user', type: 'message', content: 'stale request' },
+        {
+          role: 'assistant',
+          type: 'message',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'stale reply' }],
+        },
+      ];
+      this.output = [
+        {
+          role: 'assistant',
+          type: 'message',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'stale reply' }],
+        },
+      ];
+    }
+
+    async *[Symbol.asyncIterator]() {
+      yield { type: 'response.output_text.delta', delta: 'stale reply' };
+      await gate;
+    }
+  }
+
+  const freshStream = new MockStream([{ type: 'response.output_text.delta', delta: 'fresh reply' }]);
+  freshStream.finalOutput = 'fresh reply';
+  freshStream.lastResponseId = 'resp-fresh';
+
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream(input, opts) {
+      calls.push({ input, opts });
+      return calls.length === 1 ? new GatedStream() : freshStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const staleRun = (async () => {
+    for await (const _ of session.run('stale request')) {
+      // consume
+    }
+  })();
+
+  await Promise.resolve();
+
+  session.importState({
+    history: [],
+    previousResponseId: null,
+    toolLedger: [],
+    updatedAt: new Date().toISOString(),
+  });
+
+  releaseGate();
+  await staleRun;
+
+  t.deepEqual(session.exportState().history, []);
+
+  for await (const _ of session.run('fresh request')) {
+    // consume
+  }
+
+  t.is(calls[1].input, 'fresh request');
+  t.falsy(calls[1].opts.previousResponseId);
 });
 
 test('run() with image attachment does not throw when supportsChaining is true', async (t) => {

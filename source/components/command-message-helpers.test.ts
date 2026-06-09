@@ -20,6 +20,19 @@ test('getMatchCount returns 0 when output is empty or undefined', (t) => {
   t.is(getMatchCount(undefined, 'grep -rn hello source/', undefined), 0);
 });
 
+test('getMatchCount returns 0 for "No matches found." output', (t) => {
+  t.is(getMatchCount('grep', 'grep', 'No matches found.'), 0);
+});
+
+test('getMatchCount returns 0 for "No files found matching pattern: ..." output', (t) => {
+  t.is(getMatchCount('find_files', 'find_files', 'No files found matching pattern: *.ts'), 0);
+});
+
+test('getMatchCount returns 0 for fallback shell output indicating no results', (t) => {
+  t.is(getMatchCount(undefined, 'grep hello', 'No matches found.'), 0);
+  t.is(getMatchCount(undefined, 'find . -name "*.ts"', 'No files found'), 0);
+});
+
 test('getMatchCount returns the sum of matches across files for structured grep output', (t) => {
   const output = 'file1.ts:1:hello\nfile1.ts:3:hello again\nfile2.ts:2:hello';
 

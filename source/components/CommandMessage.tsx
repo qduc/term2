@@ -19,6 +19,17 @@ import {
 import { COLOR_TOOL_OUTPUT } from './theme.js';
 import DiffView from './DiffView.js';
 
+// --- Command Message Theme Colors ---
+// Customize these values to change the color scheme per theme.
+const COLOR_ERROR = 'red';
+const COLOR_SUCCESS = '#A0A0A0';
+const COLOR_WARNING = 'yellow';
+const COLOR_INFO = 'cyan';
+const COLOR_MUTED = 'gray';
+const COLOR_CONTENT = 'white';
+const COLOR_LINK = 'blue';
+const COLOR_SPECIAL = 'magenta';
+
 type Props = {
   command: string;
   output?: string;
@@ -124,7 +135,7 @@ const CommandMessage: FC<Props> = ({
   const changeStatsElement = changeStats ? (
     <>
       {' '}
-      (<Text color="green">+{changeStats.added}</Text>, <Text color="red">-{changeStats.removed}</Text>)
+      (<Text color={COLOR_SUCCESS}>+{changeStats.added}</Text>, <Text color={COLOR_ERROR}>-{changeStats.removed}</Text>)
     </>
   ) : null;
 
@@ -137,12 +148,11 @@ const CommandMessage: FC<Props> = ({
 
   const matchCountElement =
     matchCount > 0 ? (
-      <>
-        {' '}
-        <Text>
+      <Box paddingLeft={2}>
+        <Text color={COLOR_MUTED}>
           ({matchCount} match{matchCount !== 1 ? 'es' : ''})
         </Text>
-      </>
+      </Box>
     ) : null;
 
   useEffect(() => {
@@ -168,7 +178,7 @@ const CommandMessage: FC<Props> = ({
       if (isShell) {
         return (
           <>
-            <Text color="gray">$</Text> <Text>{command}</Text>
+            <Text color={COLOR_MUTED}>$</Text> <Text>{command}</Text>
           </>
         );
       }
@@ -222,11 +232,11 @@ const CommandMessage: FC<Props> = ({
     if (isApprovalRejection) {
       return (
         <Box flexDirection="column">
-          <Text color="red">
+          <Text color={COLOR_ERROR}>
             <Text bold>✖</Text> {displayAction}
             {changeStatsElement}
           </Text>
-          <Text color="red"> → DENIED: {denialReason}</Text>
+          <Text color={COLOR_ERROR}> → DENIED: {denialReason}</Text>
         </Box>
       );
     }
@@ -234,7 +244,7 @@ const CommandMessage: FC<Props> = ({
     if (isRunning) {
       return (
         <Box>
-          <Text color="yellow">
+          <Text color={COLOR_WARNING}>
             <Text bold>▶</Text> {displayAction}
             {changeStatsElement}
           </Text>
@@ -257,12 +267,12 @@ const CommandMessage: FC<Props> = ({
       })();
       return (
         <Box flexDirection="column">
-          <Text color="red">
+          <Text color={COLOR_ERROR}>
             <Text bold>✖</Text> {displayAction}
             {changeStatsElement}
-            {matchCountElement}
           </Text>
-          <Text color="red"> Error: {truncatedError}</Text>
+          {matchCountElement}
+          <Text color={COLOR_ERROR}> Error: {truncatedError}</Text>
         </Box>
       );
     }
@@ -272,21 +282,27 @@ const CommandMessage: FC<Props> = ({
       const responseText = getConciseAskUserResponse(output);
       return (
         <Box flexDirection="column">
-          <Text color="green">
-            <Text bold>✔</Text> {displayAction}
+          <Text color={COLOR_SUCCESS}>
+            <Text color={'green'} bold>
+              ✔
+            </Text>{' '}
+            {displayAction}
           </Text>
-          <Text color="green"> Response: {responseText}</Text>
+          <Text color={COLOR_SUCCESS}> Response: {responseText}</Text>
         </Box>
       );
     }
 
     return (
-      <Box>
-        <Text color="green">
-          <Text bold>✔</Text> {displayAction}
+      <Box flexDirection="column">
+        <Text color={COLOR_SUCCESS}>
+          <Text color={'green'} bold>
+            ✔
+          </Text>{' '}
+          {displayAction}
           {changeStatsElement}
-          {matchCountElement}
         </Text>
+        {matchCountElement}
       </Box>
     );
   }
@@ -311,7 +327,7 @@ const CommandMessage: FC<Props> = ({
     if (hadApproval) {
       return (
         <Box flexDirection="column">
-          <Text color={success === false ? 'red' : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+          <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
         </Box>
       );
     }
@@ -320,14 +336,14 @@ const CommandMessage: FC<Props> = ({
     return (
       <Box flexDirection="column">
         <Box>
-          <Text color={isCreate ? 'green' : 'yellow'} bold>
+          <Text color={isCreate ? COLOR_SUCCESS : COLOR_WARNING} bold>
             {isCreate ? '[CREATE FILE]' : '[PATCH]'}
           </Text>
           <Text> {toolArgs.path}</Text>
         </Box>
         {toolArgs.diff && success !== false && <DiffView diff={toolArgs.diff} />}
-        {failureReason && <Text color="red">Error: {failureReason}</Text>}
-        <Text color={success === false ? 'red' : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+        {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
+        <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
       </Box>
     );
   }
@@ -338,7 +354,7 @@ const CommandMessage: FC<Props> = ({
     if (hadApproval) {
       return (
         <Box flexDirection="column">
-          <Text color={success === false ? 'red' : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+          <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
         </Box>
       );
     }
@@ -347,14 +363,14 @@ const CommandMessage: FC<Props> = ({
     return (
       <Box flexDirection="column">
         <Box>
-          <Text color="yellow" bold>
+          <Text color={COLOR_WARNING} bold>
             [SEARCH & REPLACE]
           </Text>
           <Text> {toolArgs.path}</Text>
         </Box>
         <DiffView diff={diff} />
-        {failureReason && <Text color="red">Error: {failureReason}</Text>}
-        <Text color={success === false ? 'red' : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+        {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
+        <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
       </Box>
     );
   }
@@ -364,14 +380,14 @@ const CommandMessage: FC<Props> = ({
     return (
       <Box flexDirection="column">
         <Box>
-          <Text color={success === false ? 'red' : 'green'} bold>
+          <Text color={success === false ? COLOR_ERROR : COLOR_SUCCESS} bold>
             [CREATE]
           </Text>
           <Text> {toolArgs.path}</Text>
         </Box>
         {success !== false && <DiffView diff={createFileDiffLines} />}
-        {failureReason && <Text color="red">Error: {failureReason}</Text>}
-        <Text color={success === false ? 'red' : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+        {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
+        <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
       </Box>
     );
   }
@@ -406,7 +422,7 @@ const CommandMessage: FC<Props> = ({
         return (
           <Box flexDirection="column" marginY={1}>
             <Box>
-              <Text color="cyan" bold>
+              <Text color={COLOR_INFO} bold>
                 📖 [READ FILE]
               </Text>
               <Text>
@@ -414,11 +430,11 @@ const CommandMessage: FC<Props> = ({
                 {filePath} (Lines {startLine}-{endLine} of {totalLines})
               </Text>
             </Box>
-            <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginTop={1}>
+            <Box flexDirection="column" borderStyle="single" borderColor={COLOR_MUTED} paddingX={1} marginTop={1}>
               {displayLines.map((line, idx) => {
                 if (line.lineNum === -1) {
                   return (
-                    <Text key={idx} color="gray" dimColor>
+                    <Text key={idx} color={COLOR_MUTED} dimColor>
                       {line.content}
                     </Text>
                   );
@@ -426,7 +442,7 @@ const CommandMessage: FC<Props> = ({
                 const lineNumStr = String(line.lineNum).padStart(5, ' ');
                 return (
                   <Text key={idx}>
-                    <Text color="gray" dimColor>
+                    <Text color={COLOR_MUTED} dimColor>
                       {lineNumStr} │{' '}
                     </Text>
                     <Text color={COLOR_TOOL_OUTPUT}>{line.content}</Text>
@@ -447,7 +463,7 @@ const CommandMessage: FC<Props> = ({
         return (
           <Box flexDirection="column" marginY={1}>
             <Box marginBottom={1}>
-              <Text color="cyan" bold>
+              <Text color={COLOR_INFO} bold>
                 🔍 [GREP RESULTS]
               </Text>
               <Text> for {toolArgs?.pattern || ''}</Text>
@@ -457,10 +473,10 @@ const CommandMessage: FC<Props> = ({
               return (
                 <Box key={fileIdx} flexDirection="column" marginBottom={1}>
                   <Box>
-                    <Text color="cyan" bold>
+                    <Text color={COLOR_INFO} bold>
                       📄 {filePath}
                     </Text>
-                    <Text color="gray">
+                    <Text color={COLOR_MUTED}>
                       {' '}
                       ({matches.length} match{matches.length !== 1 ? 'es' : ''})
                     </Text>
@@ -470,7 +486,7 @@ const CommandMessage: FC<Props> = ({
                       const lineNumStr = String(match.lineNum).padStart(4, ' ');
                       return (
                         <Text key={matchIdx}>
-                          <Text color="gray" dimColor>
+                          <Text color={COLOR_MUTED} dimColor>
                             {lineNumStr}:{' '}
                           </Text>
                           <Text color={COLOR_TOOL_OUTPUT}>{match.content}</Text>
@@ -483,7 +499,7 @@ const CommandMessage: FC<Props> = ({
             })}
             {note && (
               <Box marginTop={1}>
-                <Text color="yellow">{note}</Text>
+                <Text color={COLOR_WARNING}>{note}</Text>
               </Box>
             )}
           </Box>
@@ -498,7 +514,7 @@ const CommandMessage: FC<Props> = ({
         return (
           <Box flexDirection="column" marginY={1}>
             <Box marginBottom={1}>
-              <Text color="cyan" bold>
+              <Text color={COLOR_INFO} bold>
                 📂 [FILE SEARCH]
               </Text>
               <Text>
@@ -515,7 +531,7 @@ const CommandMessage: FC<Props> = ({
             </Box>
             {note && (
               <Box marginTop={1}>
-                <Text color="yellow">{note}</Text>
+                <Text color={COLOR_WARNING}>{note}</Text>
               </Box>
             )}
           </Box>
@@ -527,11 +543,11 @@ const CommandMessage: FC<Props> = ({
       const parsed = parseSubagentOutput(output, toolArgs) as any;
       if (parsed) {
         const { role, status, toolsUsed, filesChanged, mainText } = parsed;
-        const statusColor = status === 'completed' ? 'green' : status === 'failed' ? 'red' : 'yellow';
+        const statusColor = status === 'completed' ? COLOR_SUCCESS : status === 'failed' ? COLOR_ERROR : COLOR_WARNING;
         return (
           <Box flexDirection="column" marginY={1}>
             <Box>
-              <Text color="cyan" bold>
+              <Text color={COLOR_INFO} bold>
                 🤖 [SUBAGENT]
               </Text>
               <Text> {role} </Text>
@@ -542,19 +558,19 @@ const CommandMessage: FC<Props> = ({
             {(toolsUsed || filesChanged) && (
               <Box flexDirection="column" paddingLeft={2} marginY={0.5}>
                 {toolsUsed && (
-                  <Text color="gray">
-                    🛠️ Tools: <Text color="white">{toolsUsed}</Text>
+                  <Text color={COLOR_MUTED}>
+                    🛠️ Tools: <Text color={COLOR_CONTENT}>{toolsUsed}</Text>
                   </Text>
                 )}
                 {filesChanged && (
-                  <Text color="gray">
-                    📝 Changed: <Text color="white">{filesChanged}</Text>
+                  <Text color={COLOR_MUTED}>
+                    📝 Changed: <Text color={COLOR_CONTENT}>{filesChanged}</Text>
                   </Text>
                 )}
               </Box>
             )}
             {mainText && (
-              <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1} marginTop={1}>
+              <Box flexDirection="column" borderStyle="single" borderColor={COLOR_INFO} paddingX={1} marginTop={1}>
                 <Text color={COLOR_TOOL_OUTPUT}>{mainText}</Text>
               </Box>
             )}
@@ -570,14 +586,14 @@ const CommandMessage: FC<Props> = ({
         return (
           <Box flexDirection="column" marginY={1}>
             <Box marginBottom={1}>
-              <Text color="cyan" bold>
+              <Text color={COLOR_INFO} bold>
                 🌐 [WEB SEARCH]
               </Text>
               <Text> "{toolArgs?.query || ''}"</Text>
             </Box>
             {answer && (
-              <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginBottom={1}>
-                <Text color="yellow" bold>
+              <Box flexDirection="column" borderStyle="round" borderColor={COLOR_WARNING} paddingX={1} marginBottom={1}>
+                <Text color={COLOR_WARNING} bold>
                   💡 Answer Summary
                 </Text>
                 <Text color={COLOR_TOOL_OUTPUT}>{answer}</Text>
@@ -585,19 +601,19 @@ const CommandMessage: FC<Props> = ({
             )}
             {results && results.length > 0 && (
               <Box flexDirection="column">
-                <Text color="cyan" bold>
+                <Text color={COLOR_INFO} bold>
                   📋 Search Results:
                 </Text>
                 {results.map((res: any, idx: number) => (
                   <Box key={idx} flexDirection="column" marginTop={1} paddingLeft={2}>
-                    <Text bold color="white">
+                    <Text bold color={COLOR_CONTENT}>
                       {idx + 1}. {res.title}
                     </Text>
-                    <Text color="blue" underline>
+                    <Text color={COLOR_LINK} underline>
                       🔗 {res.url}
                     </Text>
                     {res.published && (
-                      <Text color="gray" dimColor>
+                      <Text color={COLOR_MUTED} dimColor>
                         📅 Published: {res.published}
                       </Text>
                     )}
@@ -630,34 +646,41 @@ const CommandMessage: FC<Props> = ({
         return (
           <Box flexDirection="column" marginY={1}>
             <Box>
-              <Text color="cyan" bold>
+              <Text color={COLOR_INFO} bold>
                 📥 [WEB FETCH]
               </Text>
               <Text> {title}</Text>
             </Box>
             <Box paddingLeft={2}>
-              <Text color="blue" underline>
+              <Text color={COLOR_LINK} underline>
                 🔗 {url}
               </Text>
             </Box>
             {toc && (
-              <Box flexDirection="column" borderStyle="classic" borderColor="gray" paddingX={1} marginY={1} width={50}>
-                <Text color="yellow" bold>
+              <Box
+                flexDirection="column"
+                borderStyle="classic"
+                borderColor={COLOR_MUTED}
+                paddingX={1}
+                marginY={1}
+                width={50}
+              >
+                <Text color={COLOR_WARNING} bold>
                   📋 Table of Contents
                 </Text>
-                <Text color="gray">{toc}</Text>
+                <Text color={COLOR_MUTED}>{toc}</Text>
               </Box>
             )}
             {content && (
-              <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginTop={1}>
+              <Box flexDirection="column" borderStyle="single" borderColor={COLOR_MUTED} paddingX={1} marginTop={1}>
                 <Text color={COLOR_TOOL_OUTPUT}>{displayContent}</Text>
               </Box>
             )}
             {tempFile && (
               <Box marginTop={1}>
-                <Text color="yellow">
+                <Text color={COLOR_WARNING}>
                   💾 Full content saved to:{' '}
-                  <Text bold color="white">
+                  <Text bold color={COLOR_CONTENT}>
                     {tempFile}
                   </Text>
                 </Text>
@@ -665,7 +688,7 @@ const CommandMessage: FC<Props> = ({
             )}
             {notes && (
               <Box marginTop={0.5}>
-                <Text color="yellow">⚠️ {notes}</Text>
+                <Text color={COLOR_WARNING}>⚠️ {notes}</Text>
               </Box>
             )}
           </Box>
@@ -677,16 +700,16 @@ const CommandMessage: FC<Props> = ({
       return (
         <Box flexDirection="column" marginY={1}>
           <Box>
-            <Text color="cyan" bold>
+            <Text color={COLOR_INFO} bold>
               🧠 [MENTOR QUESTION]
             </Text>
-            <Text color="white" italic>
+            <Text color={COLOR_CONTENT} italic>
               {' '}
               "{toolArgs?.question || ''}"
             </Text>
           </Box>
-          <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={1} marginTop={1}>
-            <Text color="magenta" bold>
+          <Box flexDirection="column" borderStyle="round" borderColor={COLOR_SPECIAL} paddingX={1} marginTop={1}>
+            <Text color={COLOR_SPECIAL} bold>
               💬 Mentor Response
             </Text>
             <Text color={COLOR_TOOL_OUTPUT}>{output}</Text>
@@ -700,24 +723,24 @@ const CommandMessage: FC<Props> = ({
       return (
         <Box flexDirection="column" marginY={1}>
           <Box>
-            <Text color="cyan" bold>
+            <Text color={COLOR_INFO} bold>
               ❓ [ASK USER]
             </Text>
-            <Text color="white"> {toolArgs?.question || 'Unknown question'}</Text>
+            <Text color={COLOR_CONTENT}> {toolArgs?.question || 'Unknown question'}</Text>
           </Box>
           {options && Array.isArray(options) && options.length > 0 && (
             <Box paddingLeft={2} marginY={0.5}>
-              <Text color="gray">Options: </Text>
+              <Text color={COLOR_MUTED}>Options: </Text>
               {options.map((opt: string, idx: number) => (
-                <Text key={idx} color={idx === 0 ? 'green' : 'white'}>
+                <Text key={idx} color={idx === 0 ? COLOR_SUCCESS : COLOR_CONTENT}>
                   {idx > 0 ? ', ' : ''}[{opt}]{idx === 0 ? ' (Recommended)' : ''}
                 </Text>
               ))}
             </Box>
           )}
           <Box paddingLeft={2} marginTop={0.5}>
-            <Text color="gray">🗣️ Response: </Text>
-            <Text color="green" bold>
+            <Text color={COLOR_MUTED}>🗣️ Response: </Text>
+            <Text color={COLOR_SUCCESS} bold>
               {output || 'No response yet'}
             </Text>
           </Box>
@@ -732,7 +755,7 @@ const CommandMessage: FC<Props> = ({
         return (
           <Box flexDirection="column" marginY={1}>
             <Box marginBottom={1}>
-              <Text color="cyan" bold>
+              <Text color={COLOR_INFO} bold>
                 📑 [CODE OUTLINE]
               </Text>
               <Text>
@@ -742,7 +765,7 @@ const CommandMessage: FC<Props> = ({
             </Box>
             {imports && imports.length > 0 && (
               <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
-                <Text color="yellow" bold>
+                <Text color={COLOR_WARNING} bold>
                   📦 Imports:
                 </Text>
                 {imports.map((imp: string, idx: number) => (
@@ -755,7 +778,7 @@ const CommandMessage: FC<Props> = ({
             )}
             {exports && exports.length > 0 && (
               <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
-                <Text color="green" bold>
+                <Text color={COLOR_SUCCESS} bold>
                   📤 Exports:
                 </Text>
                 {exports.map((exp: string, idx: number) => (
@@ -768,7 +791,7 @@ const CommandMessage: FC<Props> = ({
             )}
             {decls && decls.length > 0 && (
               <Box flexDirection="column" paddingLeft={2}>
-                <Text color="blue" bold>
+                <Text color={COLOR_LINK} bold>
                   🛠️ Declarations:
                 </Text>
                 {decls.map((decl: string, idx: number) => (
@@ -793,21 +816,21 @@ const CommandMessage: FC<Props> = ({
           return (
             <Box flexDirection="column" marginY={1}>
               <Box marginBottom={1}>
-                <Text color="cyan" bold>
+                <Text color={COLOR_INFO} bold>
                   🔗 [RELATED FILES]
                 </Text>
                 <Text> for {target}</Text>
               </Box>
               {!relatedFiles || relatedFiles.length === 0 ? (
                 <Box paddingLeft={2}>
-                  <Text color="gray">No related files found.</Text>
+                  <Text color={COLOR_MUTED}>No related files found.</Text>
                 </Box>
               ) : (
                 <Box flexDirection="column" paddingLeft={2}>
                   {relatedFiles.map((f: any, idx: number) => (
                     <Box key={idx} flexDirection="column" marginBottom={0.5}>
-                      <Text color="white">📄 {f.filePath}</Text>
-                      <Text color="gray" dimColor>
+                      <Text color={COLOR_CONTENT}>📄 {f.filePath}</Text>
+                      <Text color={COLOR_MUTED} dimColor>
                         {' '}
                         Relations: {f.relations}
                       </Text>
@@ -822,31 +845,31 @@ const CommandMessage: FC<Props> = ({
           return (
             <Box flexDirection="column" marginY={1}>
               <Box marginBottom={1}>
-                <Text color="cyan" bold>
+                <Text color={COLOR_INFO} bold>
                   🔍 [SYMBOL SEARCH]
                 </Text>
                 <Text> "{symbol}"</Text>
               </Box>
               {!results || results.length === 0 ? (
                 <Box paddingLeft={2}>
-                  <Text color="gray">No symbol declarations found.</Text>
+                  <Text color={COLOR_MUTED}>No symbol declarations found.</Text>
                 </Box>
               ) : (
                 <Box flexDirection="column" paddingLeft={2}>
                   {results.map((res: any, idx: number) => (
                     <Text key={idx}>
-                      <Text color="white">
+                      <Text color={COLOR_CONTENT}>
                         📄 {res.filePath}:{res.lineNum}
                       </Text>
-                      <Text color="gray" dimColor>
+                      <Text color={COLOR_MUTED} dimColor>
                         {' '}
                         │{' '}
                       </Text>
-                      <Text color="yellow">
+                      <Text color={COLOR_WARNING}>
                         {res.kind} {res.name}
                       </Text>
                       {res.exported && (
-                        <Text color="green" dimColor>
+                        <Text color={COLOR_SUCCESS} dimColor>
                           {' '}
                           (exported)
                         </Text>
@@ -869,22 +892,22 @@ const CommandMessage: FC<Props> = ({
     const displayCommand = formattedArgs || command;
     return (
       <Box flexDirection="column">
-        <Text color="red" bold>
+        <Text color={COLOR_ERROR} bold>
           $ <Text bold>{displayCommand}</Text>
         </Text>
-        <Text color="red">→ DENIED: {denialReason}</Text>
+        <Text color={COLOR_ERROR}>→ DENIED: {denialReason}</Text>
       </Box>
     );
   }
 
   return (
     <Box flexDirection="column">
-      <Text color={success === false ? 'red' : isRunning ? 'yellow' : 'cyan'}>
+      <Text color={success === false ? COLOR_ERROR : isRunning ? COLOR_WARNING : COLOR_INFO}>
         $ <Text bold>{command}</Text>
-        {isRunning && formattedArgs && command === toolName && <Text color="yellow"> {formattedArgs}</Text>}
+        {isRunning && formattedArgs && command === toolName && <Text color={COLOR_WARNING}> {formattedArgs}</Text>}
       </Text>
-      {failureReason && <Text color="red">Error: {failureReason}</Text>}
-      <Text color={success === false ? 'red' : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+      {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
+      <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
     </Box>
   );
 };

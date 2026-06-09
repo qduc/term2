@@ -109,13 +109,17 @@ export const getMatchCount = (toolName: string | undefined, command: string, out
   for (let line of output.split('\n')) {
     line = line.trim();
     if (!line) continue;
+    const lowerLine = line.toLowerCase();
     if (
       line.startsWith('Note:') ||
       line.startsWith('Error:') ||
       line.startsWith('grep: ') ||
       line.startsWith('rg: ') ||
       line.startsWith('find: ') ||
-      line === '--'
+      line === '--' ||
+      lowerLine.startsWith('no matches found') ||
+      lowerLine.startsWith('no files found') ||
+      lowerLine === 'no matches'
     ) {
       continue;
     }

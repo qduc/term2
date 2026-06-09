@@ -718,6 +718,23 @@ test('CommandMessage does not show match count when output is empty', async (t) 
   t.false(output.includes('match'), `Expected no match count for empty output: ${output}`);
 });
 
+test('CommandMessage does not show match count when output is "No matches found."', async (t) => {
+  const props = {
+    command: 'grep',
+    toolName: 'grep',
+    toolArgs: { pattern: 'nonexistent', path: 'source' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    output: 'No matches found.',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = lastFrame() ?? '';
+
+  t.false(output.includes('match'), `Expected no match count for "No matches found.": ${output}`);
+});
+
 test('CommandMessage truncates error message in concise mode when error is longer than 4 lines', async (t) => {
   const longError = 'Error line 1\nError line 2\nError line 3\nError line 4\nError line 5\nError line 6';
   const props = {

@@ -15,7 +15,7 @@ import {
   type SettingsData,
   type SettingsWithSources,
 } from './settings-schema.js';
-import { buildEnvOverrides, isTestEnvironment, parseBooleanEnv } from './settings-env.js';
+import { isTestEnvironment, parseBooleanEnv } from './settings-env.js';
 import { flattenSettings, mergeSettings, trackSettingSources } from './settings-merger.js';
 import { buildSettingsWithSources } from './settings-sources.js';
 import {
@@ -547,55 +547,6 @@ export class SettingsService {
 }
 
 export { buildEnvOverrides } from './settings-env.js';
-
-/**
- * @deprecated DO NOT USE - Singleton pattern is deprecated
- *
- * This singleton is deprecated and should not be used in application code.
- * Instead, pass the SettingsService instance via dependency injection:
- *
- * - In App component: Accept as a prop from cli.tsx
- * - In services/tools: Accept via constructor deps parameter
- * - In hooks: Use a context provider or accept as parameter
- *
- * This export now throws an error when accessed to catch deprecated usage.
- * It's only allowed in test files for backwards compatibility.
- */
-const _settingsServiceInstance = new SettingsService({
-  env: buildEnvOverrides(),
-  loggingService: new LoggingService({
-    disableLogging: parseBooleanEnv(process.env.DISABLE_LOGGING) || isTestEnvironment(),
-    debugLogging: parseBooleanEnv(process.env.DEBUG_LOGGING),
-  }),
-});
-
-export const settingsService = new Proxy(_settingsServiceInstance, {
-  get(target, prop) {
-    // Allow access in test environment for backwards compatibility
-    if (isTestEnvironment()) {
-      const value = target[prop as keyof typeof target];
-      // Bind methods to the original target to preserve 'this' context
-      if (typeof value === 'function') {
-        return value.bind(target);
-      }
-      return value;
-    }
-
-    // Get the caller's stack trace to show where the deprecated usage is
-    const stack = new Error().stack || '';
-    const callerLine = stack.split('\n')[2] || 'unknown location';
-
-    throw new Error(
-      `DEPRECATED: Direct use of settingsService singleton is not allowed.\n` +
-        `Called from: ${callerLine.trim()}\n\n` +
-        `Instead, pass SettingsService via dependency injection:\n` +
-        `  - In App component: Accept as prop from cli.tsx\n` +
-        `  - In services/tools: Accept via 'deps' constructor parameter\n` +
-        `  - In hooks: Accept as parameter or use a context provider\n\n` +
-        `See source/app.tsx for an example of proper dependency injection.`,
-    );
-  },
-});
 
 export { SETTING_KEYS, SENSITIVE_SETTINGS } from './settings-schema.js';
 export type { SettingsData, SettingSource, SettingWithSource, SettingsWithSources } from './settings-schema.js';

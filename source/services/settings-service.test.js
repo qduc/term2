@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SettingsService } from '../../dist/services/settings-service.js';
-import { loggingService } from '../../dist/services/logging-service.js';
 import { getProvider, getAllProviders, unregisterProvider } from '../../dist/providers/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -905,24 +904,27 @@ test.serial('does not update config file when no new settings are added', async 
   fs.writeFileSync(configFile, JSON.stringify(originalConfig), 'utf-8');
   // Spy on loggingService to ensure no update was triggered
   let updateLogged = false;
-  const originalInfo = loggingService.info;
-  loggingService.info = (msg, meta) => {
-    // Only track updates for this specific test's settings file
-    if (msg.includes('Updated settings file') && meta?.settingsFile?.startsWith(settingsDir)) {
-      updateLogged = true;
-    }
+  const mockLogging = {
+    info: () => {},
+    error: () => {},
+    warn: () => {},
+    debug: (msg, meta) => {
+      if (msg.includes('Updated settings file') && meta?.settingsFile?.startsWith(settingsDir)) {
+        updateLogged = true;
+      }
+    },
+    security: () => {},
+    setLogLevel: () => {},
+    getLogLevel: () => 'info',
+    setCorrelationId: () => {},
   };
 
-  try {
-    // Initialize service - it should NOT update the file since all settings are present
-    // We must enable logging to catch the "update" log if it were to happen
-    new SettingsService({
-      settingsDir,
-      disableLogging: false,
-    });
-  } finally {
-    loggingService.info = originalInfo;
-  }
+  // Initialize service - it should NOT update the file since all settings are present
+  new SettingsService({
+    settingsDir,
+    disableLogging: false,
+    loggingService: mockLogging,
+  });
 
   t.false(updateLogged, 'Should not have logged an update to the settings file');
 });
@@ -967,23 +969,27 @@ test.serial('does not update config file when format differs but content is same
   fs.writeFileSync(configFile, JSON.stringify(compactConfig), 'utf-8');
   // Spy on loggingService to ensure no update was triggered
   let updateLogged = false;
-  const originalInfo = loggingService.info;
-  loggingService.info = (msg, meta) => {
-    // Only track updates for this specific test's settings file
-    if (msg.includes('Updated settings file') && meta?.settingsFile?.startsWith(settingsDir)) {
-      updateLogged = true;
-    }
+  const mockLogging = {
+    info: () => {},
+    error: () => {},
+    warn: () => {},
+    debug: (msg, meta) => {
+      if (msg.includes('Updated settings file') && meta?.settingsFile?.startsWith(settingsDir)) {
+        updateLogged = true;
+      }
+    },
+    security: () => {},
+    setLogLevel: () => {},
+    getLogLevel: () => 'info',
+    setCorrelationId: () => {},
   };
 
-  try {
-    // Initialize service - it should NOT update the file even though format differs
-    new SettingsService({
-      settingsDir,
-      disableLogging: false,
-    });
-  } finally {
-    loggingService.info = originalInfo;
-  }
+  // Initialize service - it should NOT update the file even though format differs
+  new SettingsService({
+    settingsDir,
+    disableLogging: false,
+    loggingService: mockLogging,
+  });
 
   t.false(updateLogged, 'Should not have logged an update to the settings file');
 });

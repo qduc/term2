@@ -717,7 +717,7 @@ test('continue() streams events after approval decision', async (t) => {
   t.is(first[0].approval.callId, 'call-xyz');
 
   const cont = [];
-  for await (const ev of session.continue({ answer: 'y' })) {
+  for await (const ev of session.continueAfterApproval({ answer: 'y' })) {
     cont.push(ev);
   }
 
@@ -800,7 +800,7 @@ test('continue() retries on transient error during stream iteration', async (t) 
 
   // Continue — first attempt fails, second succeeds via continueRunStream retry
   const cont = [];
-  for await (const ev of session.continue({ answer: 'y' })) {
+  for await (const ev of session.continueAfterApproval({ answer: 'y' })) {
     cont.push(ev);
   }
 
@@ -932,7 +932,7 @@ test('continue() falls back to full-history replay when continuation request fai
   }
 
   const cont = [];
-  for await (const ev of session.continue({ answer: 'y' })) {
+  for await (const ev of session.continueAfterApproval({ answer: 'y' })) {
     cont.push(ev);
   }
 
@@ -1013,7 +1013,7 @@ test('continue() persists the approved tool call/result pair before full-history
   for await (const _ of session.run('run command')) {
   }
 
-  for await (const _ of session.continue({ answer: 'y' })) {
+  for await (const _ of session.continueAfterApproval({ answer: 'y' })) {
   }
 
   t.true(Array.isArray(retryInput), 'retry should send full history');

@@ -65,7 +65,7 @@ export type RetryDecision =
       /** True when stream produced no usable history; caller should inject error-context message. */
       shouldInjectErrorContext: boolean;
       errorContextMessage: string;
-      nextRunOptions: { hallucinationRetryCount: number; skipUserMessage: boolean };
+      nextRunOptions: { retries: { hallucinationRetryCount: number }; skipUserMessage: boolean };
     };
 
 /**
@@ -136,7 +136,7 @@ export const decideRetry = (
     shouldInjectErrorContext: hadStream && streamHistoryLength === 0,
     errorContextMessage: `[System: Previous attempt failed with error: ${message}. Please retry with corrected output.]`,
     nextRunOptions: {
-      hallucinationRetryCount: attempt,
+      retries: { hallucinationRetryCount: attempt },
       skipUserMessage: hadStream,
     },
   };

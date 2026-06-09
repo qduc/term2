@@ -57,7 +57,7 @@ test('decideRetry: hallucination at attempt 0 returns retry with tool name extra
   t.is(decision.logPayload.toolName, 'fake_tool');
   t.true(decision.hadStream);
   t.false(decision.shouldInjectErrorContext);
-  t.deepEqual(decision.nextRunOptions, { hallucinationRetryCount: 1, skipUserMessage: true });
+  t.deepEqual(decision.nextRunOptions, { retries: { hallucinationRetryCount: 1 }, skipUserMessage: true });
 });
 
 test('decideRetry: parsing error returns retry with toolName=model and parsing_error type', (t) => {
@@ -91,7 +91,7 @@ test('decideRetry: without stream returns retry with skipUserMessage=false', asy
   if (decision.kind !== 'retry') return;
   t.false(decision.hadStream);
   t.false(decision.shouldInjectErrorContext);
-  t.deepEqual(decision.nextRunOptions, { hallucinationRetryCount: 1, skipUserMessage: false });
+  t.deepEqual(decision.nextRunOptions, { retries: { hallucinationRetryCount: 1 }, skipUserMessage: false });
 });
 
 // ========== decideRecoverableModelRetry (shared helper) ==========

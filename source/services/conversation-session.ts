@@ -45,6 +45,13 @@ const supportsConversationChaining = (providerId: string): boolean => {
 
 const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 
+type RetryState = {
+  transientRetryCount?: number;
+  flexServiceTierFallbackCount?: number;
+  hallucinationRetryCount?: number;
+  transportFallbackRetryCount?: number;
+};
+
 type BuiltOutgoingInput = {
   streamInput: string | AgentInputItem | AgentInputItem[];
   inputSurgeKind: 'delta' | 'full_history';
@@ -274,10 +281,7 @@ export class ConversationSession {
       turnAccumulator: this.turnAccumulator,
       logger: this.logger,
       getAssistantTurnState: () => {
-        const getProvider = getMethod<[], string>(this.agentClient, 'getProvider');
-        const provider = getProvider
-          ? getProvider.call(this.agentClient)
-          : this.settingsService?.get<string>('agent.provider');
+        const provider = this.#getCurrentProvider(true);
         const model = this.settingsService?.get<string>('agent.model');
         return {
           previousResponseId: this.previousResponseId,
@@ -319,11 +323,16 @@ export class ConversationSession {
     return this.settingsService?.get<string>('agent.reasoningEffort') ?? null;
   }
 
+  #getCurrentProvider(nullable: true): string | null;
+  #getCurrentProvider(nullable?: false): string;
+  #getCurrentProvider(nullable?: boolean): string | null {
+    const fn = getMethod<[], string>(this.agentClient, 'getProvider');
+    const result = fn ? fn.call(this.agentClient) : this.settingsService?.get<string>('agent.provider');
+    return nullable ? result ?? null : result!;
+  }
+
   #getProviderForGuard(): string | null {
-    const getProvider = getMethod<[], string>(this.agentClient, 'getProvider');
-    return getProvider
-      ? getProvider.call(this.agentClient)
-      : this.settingsService?.get<string>('agent.provider') ?? null;
+    return this.#getCurrentProvider(true);
   }
 
   #recordInputSurgeSuccess(input: unknown, options: { kind: 'delta' | 'full_history'; previousInput?: unknown }): void {
@@ -574,10 +583,7 @@ export class ConversationSession {
   }
 
   getCurrentSnapshot(): StateSnapshot {
-    const getProvider = getMethod<[], string>(this.agentClient, 'getProvider');
-    const provider = getProvider
-      ? getProvider.call(this.agentClient)
-      : this.settingsService?.get<string>('agent.provider');
+    const provider = this.#getCurrentProvider(true);
     const model = this.settingsService?.get<string>('agent.model');
     return {
       history: reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolLedger.export())
@@ -682,24 +688,24 @@ export class ConversationSession {
     input: string | UserTurn,
     {
       skipUserMessage = false,
-      flexServiceTierFallbackCount = 0,
-      hallucinationRetryCount = 0,
-      transientRetryCount = 0,
-      transportFallbackRetryCount = 0,
+      retries = {},
       maxModelRetries,
       signal,
       resumeState,
     }: {
       skipUserMessage?: boolean;
-      flexServiceTierFallbackCount?: number;
-      hallucinationRetryCount?: number;
-      transientRetryCount?: number;
-      transportFallbackRetryCount?: number;
+      retries?: RetryState;
       maxModelRetries?: number;
       signal?: AbortSignal;
-      resumeState?: any;
+      resumeState?: unknown;
     } = {},
   ): AsyncIterable<ConversationEvent> {
+    const {
+      transientRetryCount = 0,
+      flexServiceTierFallbackCount = 0,
+      hallucinationRetryCount = 0,
+      transportFallbackRetryCount = 0,
+    } = retries;
     if (
       !skipUserMessage ||
       hallucinationRetryCount > 0 ||
@@ -818,23 +824,8 @@ export class ConversationSession {
 
           this.#finalizeStreamOutcome(continuedStream, gen, 'abortResolution');
 
-          // Check if another interruption occurred
           if (continuedStream.interruptions && continuedStream.interruptions.length > 0) {
             this.logger.warn('Another interruption occurred after fake execution - handling as approval');
-            // Let the normal flow handle this
-            const resolvedResult = yield* this.#buildAndResolve(
-              continuedStream,
-              acc.finalOutput,
-              acc.reasoningOutput,
-              acc.emittedCommandIds,
-              acc.latestUsage,
-            );
-            this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
-              kind: this.#inputSurgeKind,
-              previousInput: previousInputForSurge,
-            });
-            yield toTerminalEvent(resolvedResult);
-            return;
           }
 
           // Successfully resolved - agent should now have processed the fake rejection
@@ -1055,7 +1046,7 @@ export class ConversationSession {
           this.#commonRestoreForRetry(ledgerSnapshot, stream);
           yield* this.run(turn, {
             skipUserMessage: true,
-            flexServiceTierFallbackCount: flexServiceTierFallbackCount + 1,
+            retries: { ...retries, flexServiceTierFallbackCount: flexServiceTierFallbackCount + 1 },
             maxModelRetries,
           });
           return;
@@ -1089,8 +1080,7 @@ export class ConversationSession {
           await new Promise((resolve) => setTimeout(resolve, decision.delay));
           yield* this.run(turn, {
             skipUserMessage: Boolean(stream),
-            transientRetryCount: decision.attempt,
-            transportFallbackRetryCount,
+            retries: { ...retries, transientRetryCount: decision.attempt },
             maxModelRetries,
             resumeState: isResuming ? stream?.state : undefined,
           });
@@ -1126,8 +1116,7 @@ export class ConversationSession {
 
           yield* this.run(turn, {
             skipUserMessage: Boolean(stream),
-            transientRetryCount: 0,
-            transportFallbackRetryCount: attempt,
+            retries: { transientRetryCount: 0, transportFallbackRetryCount: attempt },
             maxModelRetries,
           });
           return;
@@ -1229,11 +1218,9 @@ export class ConversationSession {
   }
 
   /**
-   * Phase 4: continue a session after an approval decision.
-   *
-   * Named as a string-literal because `continue` is a keyword.
+   * Continue a session after an approval decision.
    */
-  async *['continue']({
+  async *continueAfterApproval({
     answer,
     rejectionReason,
   }: {
@@ -1434,7 +1421,7 @@ export class ConversationSession {
               const dummyTurn: UserTurn = { text: lastUserText };
               yield* this.run(dummyTurn, {
                 skipUserMessage: true,
-                transientRetryCount,
+                retries: { transientRetryCount },
               });
               return;
             }
@@ -1498,7 +1485,7 @@ export class ConversationSession {
       );
       let result: ConversationResult;
       try {
-        result = await collectTerminalResult(this.run(input, { hallucinationRetryCount }), {
+        result = await collectTerminalResult(this.run(input, { retries: { hallucinationRetryCount } }), {
           onTextChunk,
           onReasoningChunk,
           onCommandMessage,
@@ -1576,7 +1563,7 @@ export class ConversationSession {
       );
       let result: ConversationResult | null;
       try {
-        result = await collectTerminalResult(this['continue']({ answer, rejectionReason }), {
+        result = await collectTerminalResult(this.continueAfterApproval({ answer, rejectionReason }), {
           onTextChunk,
           onReasoningChunk,
           onCommandMessage,
@@ -1646,7 +1633,7 @@ export class ConversationSession {
     let approvalRequiredResult: ConversationResult | undefined;
     let continuationTurnItems: PersistedAssistantTurnItem[] | undefined;
 
-    for await (const event of this['continue']({ answer: 'y' })) {
+    for await (const event of this.continueAfterApproval({ answer: 'y' })) {
       if (event.type === 'approval_required') {
         continuationApprovalUsage = event.usage;
         // The continuation resumes the same live RunState, so its usage

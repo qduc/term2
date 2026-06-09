@@ -7,7 +7,6 @@ import { SessionRetryOrchestrator, type RetryState } from './session-retry-orche
 import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../tools/types.js';
 import { type NormalizedUsage } from '../utils/token-usage.js';
-import { getProvider } from '../providers/index.js';
 import { ApprovalState } from './approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
@@ -20,8 +19,8 @@ import { buildConversationResult, toTerminalEvent } from './conversation-result-
 import type { AgentStream } from './agent-stream.js';
 import { extractReplaySnapshot, extractFinalizationSnapshot, type StreamReplaySnapshot } from './stream-snapshot.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
-import { collectDuplicateToolCallResultPairs, InputSurgeGuard } from './input-surge-guard.js';
-import { LargeUncachedInputGuard, type LargeUncachedInputDecision } from './large-uncached-input-guard.js';
+import { collectDuplicateToolCallResultPairs } from './input-surge-guard.js';
+import { type LargeUncachedInputDecision } from './large-uncached-input-guard.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
 import { type SavedToolExecution, callIdOf, toolNameOf, outputOf } from './tool-execution-ledger.js';
@@ -31,14 +30,10 @@ import { describeError } from '../utils/error-helpers.js';
 import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
+import { SessionInputPlanner } from './session-input-planner.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
-
-const supportsConversationChaining = (providerId: string): boolean => {
-  const providerDef = getProvider(providerId);
-  return providerDef?.capabilities?.supportsConversationChaining ?? false;
-};
 
 type RetryHandlerContext = {
   error: unknown;
@@ -51,11 +46,6 @@ type RetryHandlerContext = {
   retries: RetryState;
   maxTransientRetries: number;
   maxModelRetries?: number;
-};
-
-type BuiltOutgoingInput = {
-  streamInput: string | AgentInputItem | AgentInputItem[];
-  inputSurgeKind: 'delta' | 'full_history';
 };
 
 type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
@@ -119,13 +109,13 @@ export class ConversationSession {
   private toolTracker: SessionToolTracker;
   private shellAutoApproval: ShellAutoApprovalResolver;
   private approvalFlow: ApprovalFlowCoordinator;
-  private inputSurgeGuard = new InputSurgeGuard();
-  private largeUncachedInputGuard = new LargeUncachedInputGuard();
   private retryOrchestrator: SessionRetryOrchestrator;
+  #inputPlanner: SessionInputPlanner;
 
   #breakChaining(): void {
     this.retryOrchestrator.breakChaining();
     this.previousResponseId = null;
+    this.#inputPlanner.previousResponseId = null;
     this.logger.warn('WS-to-HTTP downgrade detected: chaining disabled, switching to full-history mode', {
       eventType: 'conversation.chaining_broken',
       category: 'provider',
@@ -138,6 +128,7 @@ export class ConversationSession {
     if (!this.retryOrchestrator.isCurrentGeneration(gen)) return;
     const snapshot = extractFinalizationSnapshot(stream);
     this.previousResponseId = snapshot.lastResponseId;
+    this.#inputPlanner.previousResponseId = snapshot.lastResponseId;
     warnIfStreamHistoryReplayedTools({
       logger: this.logger,
       sessionId: this.id,
@@ -218,11 +209,19 @@ export class ConversationSession {
       settingsService: this.settingsService,
       sessionContextService: this.sessionContextService,
     });
+    this.#inputPlanner = new SessionInputPlanner({
+      settingsService: deps.settingsService,
+      agentClient,
+      toolTracker: this.toolTracker,
+      retryOrchestrator: this.retryOrchestrator,
+    });
+
     this.conversationLogger = new ConversationLogger({
       turnAccumulator: this.turnAccumulator,
       logger: this.logger,
       getAssistantTurnState: () => {
-        const provider = this.#getCurrentProvider(true);
+        const fn = getMethod<[], string>(this.agentClient, 'getProvider');
+        const provider = fn ? fn.call(this.agentClient) : this.settingsService?.get<string>('agent.provider');
         const model = this.settingsService?.get<string>('agent.model');
         return {
           previousResponseId: this.previousResponseId,
@@ -247,106 +246,9 @@ export class ConversationSession {
     }
   }
 
-  #getTrafficMode(): string {
-    if (!this.settingsService) return 'standard';
-    if (this.settingsService.get<boolean>('app.orchestratorMode')) return 'orchestrator';
-    if (this.settingsService.get<boolean>('app.liteMode')) return 'lite';
-    if (this.settingsService.get<boolean>('app.planMode')) return 'plan';
-    if (this.settingsService.get<boolean>('app.mentorMode')) return 'mentor';
-    return 'standard';
-  }
-
-  #getModelForGuard(): string | null {
-    return this.settingsService?.get<string>('agent.model') ?? null;
-  }
-
-  #getReasoningEffortForGuard(): string | null {
-    return this.settingsService?.get<string>('agent.reasoningEffort') ?? null;
-  }
-
-  #getCurrentProvider(nullable: true): string | null;
-  #getCurrentProvider(nullable?: false): string;
-  #getCurrentProvider(nullable?: boolean): string | null {
-    const fn = getMethod<[], string>(this.agentClient, 'getProvider');
-    const result = fn ? fn.call(this.agentClient) : this.settingsService?.get<string>('agent.provider');
-    return nullable ? result ?? null : result!;
-  }
-
-  #getProviderForGuard(): string | null {
-    return this.#getCurrentProvider(true);
-  }
-
-  #recordInputSurgeSuccess(input: unknown, options: { kind: 'delta' | 'full_history'; previousInput?: unknown }): void {
-    this.inputSurgeGuard.recordSuccessfulInput(input, options);
-    this.largeUncachedInputGuard.recordSuccessfulInput({
-      input,
-      now: Date.now(),
-      provider: this.#getProviderForGuard(),
-      model: this.#getModelForGuard(),
-      reasoningEffort: this.#getReasoningEffortForGuard(),
-      mode: this.#getTrafficMode(),
-    });
-  }
-
-  #makeUserInputItem(turn: UserTurn): AgentInputItem {
-    const images = turn.images ?? [];
-    if (images.length === 0) {
-      return { role: 'user', type: 'message', content: turn.text ?? '' };
-    }
-
-    const content: any[] = [];
-    if (turn.text) {
-      content.push({ type: 'input_text', text: turn.text });
-    }
-    for (const image of images) {
-      content.push({
-        type: 'input_image',
-        image: `data:${image.mimeType};base64,${image.data}`,
-        detail: 'auto',
-      });
-    }
-
-    return { role: 'user', type: 'message', content } as AgentInputItem;
-  }
-
-  #turnWithModeNotice(turn: UserTurn, notice: string | null): UserTurn {
-    if (!notice?.trim()) {
-      return turn;
-    }
-
-    const text = turn.text ? `${notice}\n\n${turn.text}` : notice;
-    return { ...turn, text };
-  }
-
-  #buildOutgoingInput(turn: UserTurn, { includeTurn }: { includeTurn: boolean }): BuiltOutgoingInput {
-    const provider = this.#getProviderForGuard() ?? 'openai';
-    const supportsChaining = supportsConversationChaining(provider);
-    const history = this.toolTracker.getReconciledHistory();
-    const effectiveTurn = includeTurn ? this.#turnWithModeNotice(turn, this.pendingModeNotice) : turn;
-    const outgoingHistory = includeTurn ? [...history, this.#makeUserInputItem(effectiveTurn)] : history;
-    const useChaining =
-      supportsChaining &&
-      !this.retryOrchestrator.chainingBrokenState &&
-      (!!this.previousResponseId || outgoingHistory.length <= 1);
-    const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
-    const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;
-
-    return {
-      streamInput: useChaining ? (typeof chainedInput === 'string' ? chainedInput : [chainedInput]) : outgoingHistory,
-      inputSurgeKind: useChaining ? 'delta' : 'full_history',
-    };
-  }
-
   previewLargeUncachedInput(input: string | UserTurn, now = Date.now()): LargeUncachedInputDecision {
-    const turn = normalizeUserTurn(input);
-    const { streamInput } = this.#buildOutgoingInput(turn, { includeTurn: true });
-    return this.largeUncachedInputGuard.inspect({
-      input: streamInput,
-      now,
-      provider: this.#getProviderForGuard(),
-      model: this.#getModelForGuard(),
-      reasoningEffort: this.#getReasoningEffortForGuard(),
-      mode: this.#getTrafficMode(),
+    return this.#inputPlanner.previewLargeUncachedInput(input, now, {
+      pendingModeNotice: this.pendingModeNotice,
     });
   }
 
@@ -356,16 +258,29 @@ export class ConversationSession {
   }
 
   #withTrafficContext<T>(currentTurn: string | undefined, fn: () => T): T {
+    // Re-derive traffic mode via the agent client directly since the planner
+    // is the only object that encapsulates settings-based mode decisions.
+    const mode = this.#getTrafficMode();
     return this.sessionContextService.runWithContext(
       {
         sessionId: this.id,
         sessionStartedAt: this.startedAt,
         firstUserMessagePreview: this.#getFirstUserMessagePreview(currentTurn),
-        mode: this.#getTrafficMode(),
+        mode,
         traceId: this.logger.getCorrelationId(),
       },
       fn,
     );
+  }
+
+  /** Mode string derived from settings, kept for traffic context. */
+  #getTrafficMode(): string {
+    if (!this.settingsService) return 'standard';
+    if (this.settingsService.get<boolean>('app.orchestratorMode')) return 'orchestrator';
+    if (this.settingsService.get<boolean>('app.liteMode')) return 'lite';
+    if (this.settingsService.get<boolean>('app.planMode')) return 'plan';
+    if (this.settingsService.get<boolean>('app.mentorMode')) return 'mentor';
+    return 'standard';
   }
 
   #isCurrentGeneration(gen: number): boolean {
@@ -375,12 +290,13 @@ export class ConversationSession {
   #resetProviderContinuity({ clearConversations = true }: { clearConversations?: boolean } = {}): void {
     this.retryOrchestrator.incrementGeneration();
     this.previousResponseId = null;
+    this.#inputPlanner.previousResponseId = null;
     this.approvalState.clearPending();
     this.approvalState.consumeAborted();
     this.toolTracker.clearArguments();
     this.toolTracker.clearEmittedToolStarted();
     this.shellAutoApproval.clearCache();
-    this.inputSurgeGuard.reset();
+    this.#inputPlanner.reset();
     this.turnAccumulator.resetPersistedTurnState();
 
     if (clearConversations) {
@@ -394,15 +310,6 @@ export class ConversationSession {
   }
 
   #setInputSurgeKind(kind: 'delta' | 'full_history'): void {
-    const current = this.retryOrchestrator.inputSurgeKindState;
-    if (kind !== current) {
-      this.logger.debug('Input surge kind changed', {
-        eventType: 'session.input_surge_kind_changed',
-        from: current,
-        to: kind,
-        sessionId: this.id,
-      });
-    }
     this.retryOrchestrator.setInputSurgeKind(kind);
   }
 
@@ -418,6 +325,7 @@ export class ConversationSession {
       conversationStore: this.conversationStore,
       clearPreviousResponseId: () => {
         this.previousResponseId = null;
+        this.#inputPlanner.previousResponseId = null;
       },
       restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
       ...(extras?.removeLastUserMessage
@@ -429,7 +337,7 @@ export class ConversationSession {
   #afterUndo(count: number): void {
     this.#pruneToolLedgerToCurrentHistory();
     this.#resetProviderContinuity();
-    this.largeUncachedInputGuard.markUndoOrRewind();
+    this.#inputPlanner.markUndoOrRewind();
     this.#setInputSurgeKind('delta');
     this.conversationLogger.log({ type: 'undo', removedUserTurns: count, snapshot: this.getCurrentSnapshot() });
   }
@@ -438,7 +346,7 @@ export class ConversationSession {
     this.#resetProviderContinuity();
     this.conversationStore.clear();
     this.toolTracker.reset();
-    this.largeUncachedInputGuard.reset();
+    this.#inputPlanner.reset();
     this.#setInputSurgeKind('delta');
   }
 
@@ -499,7 +407,10 @@ export class ConversationSession {
   }
 
   getCurrentSnapshot(): StateSnapshot {
-    const provider = this.#getCurrentProvider(true);
+    const providerFn = getMethod<[], string>(this.agentClient, 'getProvider');
+    const provider = providerFn
+      ? providerFn.call(this.agentClient)
+      : this.settingsService?.get<string>('agent.provider');
     const model = this.settingsService?.get<string>('agent.model');
     return {
       history: reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolTracker.export())
@@ -513,6 +424,11 @@ export class ConversationSession {
 
   #dedupeToolStarted(event: ConversationEvent): ConversationEvent | null {
     return this.toolTracker.dedupeToolStarted(event);
+  }
+
+  /** Used in tests to seed the input surge guard baseline. */
+  __testSeedInputSurgeBaseline(data: unknown[], kind: 'delta' | 'full_history'): void {
+    this.#inputPlanner.recordSuccess(data, { kind, previousInput: undefined });
   }
 
   exportState(): {
@@ -553,14 +469,15 @@ export class ConversationSession {
     // Force the first resumed turn to resync from full history; successful completion
     // will populate a fresh previousResponseId for subsequent chained turns.
     this.previousResponseId = null;
+    this.#inputPlanner.previousResponseId = null;
     this.toolTracker.clearEmittedToolStarted();
-    this.inputSurgeGuard.reset();
+    this.#inputPlanner.reset();
     this.shellAutoApproval.clearCache();
     this.approvalState.clearPending();
     this.approvalState.consumeAborted();
     this.toolTracker.clearArguments();
     this.turnAccumulator.resetPersistedTurnState();
-    this.largeUncachedInputGuard.markResumedSession({
+    this.#inputPlanner.markResumedSession({
       updatedAtMs: state.updatedAt ? Date.parse(state.updatedAt) : null,
     });
     this.retryOrchestrator.incrementGeneration();
@@ -627,7 +544,10 @@ export class ConversationSession {
     let stream: AgentStream | null = null;
     let streamInput: string | AgentInputItem | AgentInputItem[] = '';
     let inputSurgeKind: 'delta' | 'full_history' = 'delta';
-    const turn = this.#turnWithModeNotice(normalizeUserTurn(input), this.pendingModeNotice);
+    const normalized = normalizeUserTurn(input);
+    const turn: UserTurn = this.pendingModeNotice?.trim()
+      ? { ...normalized, text: `${this.pendingModeNotice}\n\n${normalized.text}` }
+      : normalized;
     const text = turn.text;
     let addedUserMessage = false;
     const ledgerSnapshot = this.toolTracker.export();
@@ -748,7 +668,7 @@ export class ConversationSession {
             acc.emittedCommandIds,
             acc.latestUsage,
           );
-          this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
+          this.#inputPlanner.recordSuccess(this.conversationStore.getHistory(), {
             kind: this.retryOrchestrator.inputSurgeKindState,
             previousInput: previousInputForSurge,
           });
@@ -771,11 +691,14 @@ export class ConversationSession {
       // resync (fresh start with just the current message). After undo the chain
       // is severed (previousResponseId = null) while prior turns remain in the
       // local store, so we fall back to full-history mode to re-establish context.
-      ({ streamInput, inputSurgeKind } = this.#buildOutgoingInput(turn, {
+      const plan = this.#inputPlanner.build(turn, {
         includeTurn: false,
-      }));
+        pendingModeNotice: this.pendingModeNotice,
+      });
+      streamInput = plan.streamInput;
+      inputSurgeKind = plan.inputSurgeKind;
       this.#setInputSurgeKind(inputSurgeKind);
-      const surgeDecision = this.inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind });
+      const surgeDecision = this.#inputPlanner.inspectForSurge(streamInput, inputSurgeKind);
       if (surgeDecision.action === 'block') {
         let droppedUserMessage: { text: string; imageCount: number } | undefined;
         if (addedUserMessage && this.#isCurrentGeneration(gen)) {
@@ -839,10 +762,13 @@ export class ConversationSession {
             errorMessage: chainingError instanceof Error ? chainingError.message : String(chainingError),
           });
 
-          const fullHistoryRetry = this.#buildOutgoingInput(turn, { includeTurn: false });
-          inputSurgeKind = fullHistoryRetry.inputSurgeKind;
+          const fullHistoryRetryPlan = this.#inputPlanner.build(turn, {
+            includeTurn: false,
+            pendingModeNotice: this.pendingModeNotice,
+          });
+          inputSurgeKind = fullHistoryRetryPlan.inputSurgeKind;
           this.#setInputSurgeKind(inputSurgeKind);
-          stream = (await this.agentClient.startStream(fullHistoryRetry.streamInput, {
+          stream = (await this.agentClient.startStream(fullHistoryRetryPlan.streamInput, {
             previousResponseId: null,
             sessionId: this.id,
           })) as AgentStream;
@@ -878,7 +804,7 @@ export class ConversationSession {
         acc.latestUsage,
       );
 
-      this.#recordInputSurgeSuccess(
+      this.#inputPlanner.recordSuccess(
         inputSurgeKind === 'delta' ? streamInput : this.conversationStore.getHistory(),
         inputSurgeKind === 'delta' ? { kind: inputSurgeKind } : { kind: inputSurgeKind, previousInput: streamInput },
       );
@@ -1011,7 +937,7 @@ export class ConversationSession {
       if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
         this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
       }
-      this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
+      this.#inputPlanner.recordSuccess(this.conversationStore.getHistory(), {
         kind: 'full_history',
         previousInput: streamInput,
       });
@@ -1168,7 +1094,7 @@ export class ConversationSession {
               traceId: this.logger.getCorrelationId(),
               toolName: resolvedResult.approval.toolName,
             });
-            this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
+            this.#inputPlanner.recordSuccess(this.conversationStore.getHistory(), {
               kind: this.retryOrchestrator.inputSurgeKindState,
               previousInput: previousInputForSurge,
             });
@@ -1176,7 +1102,7 @@ export class ConversationSession {
             return;
           }
 
-          this.#recordInputSurgeSuccess(this.conversationStore.getHistory(), {
+          this.#inputPlanner.recordSuccess(this.conversationStore.getHistory(), {
             kind: this.retryOrchestrator.inputSurgeKindState,
             previousInput: previousInputForSurge,
           });

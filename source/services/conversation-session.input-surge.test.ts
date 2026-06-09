@@ -180,7 +180,7 @@ const createSessionHarness = ({
 };
 
 const seedInputSurgeBaseline = (session: ConversationSession, count = 65) => {
-  (session as any).inputSurgeGuard.recordSuccessfulInput(makeHistoryItems(count, 'seed'), { kind: 'full_history' });
+  (session as any).__testSeedInputSurgeBaseline(makeHistoryItems(count, 'seed'), 'full_history');
 };
 
 const expectApprovalRequired = (result: ConversationResult | null): ApprovalRequiredResult => {
@@ -302,7 +302,7 @@ test.serial(
     });
 
     seedInputSurgeBaseline(session, 201);
-    (session as any).toolLedger.import([
+    (session as any).toolTracker.import([
       {
         turnId: 'turn-1',
         callId: 'call-reconcile',

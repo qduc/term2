@@ -32,6 +32,7 @@ import type { PersistedAssistantTurnItem } from './conversation-persistence-type
 import type { ConversationAgentClient } from './conversation-agent-client.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionStateController } from './session-state-controller.js';
+import { ApprovalContinuationRunner } from './approval-continuation-runner.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
@@ -112,6 +113,7 @@ export class ConversationSession {
   private retryOrchestrator: SessionRetryOrchestrator;
   #inputPlanner: SessionInputPlanner;
   #state: SessionStateController;
+  #continuationRunner: ApprovalContinuationRunner;
 
   #breakChaining(): void {
     this.retryOrchestrator.breakChaining();
@@ -158,10 +160,6 @@ export class ConversationSession {
 
   #restoreCompletedToolLedgerEntries(snapshot: SavedToolExecution[]): void {
     this.toolTracker.restoreCompletedEntries(snapshot);
-  }
-
-  #recoverApprovedToolResultsFromState(state: unknown, expectedCallIds: readonly string[]): void {
-    this.toolTracker.recoverApprovedResultsFromState(state, expectedCallIds);
   }
 
   private turnAccumulator = new TurnItemAccumulator();
@@ -249,6 +247,24 @@ export class ConversationSession {
       approvalState: this.approvalState,
       logger: this.logger,
       sessionId: this.id,
+    });
+
+    this.#continuationRunner = new ApprovalContinuationRunner({
+      agentClient,
+      approvalFlow: this.approvalFlow,
+      toolTracker: this.toolTracker,
+      conversationStore: this.conversationStore,
+      conversationLogger: this.conversationLogger,
+      retryOrchestrator: this.retryOrchestrator,
+      inputPlanner: this.#inputPlanner,
+      state: this.#state,
+      logger: this.logger,
+      sessionId: this.id,
+      dedupeToolStarted: (event) => this.#dedupeToolStarted(event),
+      finalizeStreamOutcome: (stream, gen, source) => this.#finalizeStreamOutcome(stream, gen, source),
+      buildAndResolve: (result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage) =>
+        this.#buildAndResolve(result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage),
+      restartTurn: (turn, options) => this.run(turn, { ...options }),
     });
 
     // When the WS transport degrades to HTTP for a provider that requires
@@ -916,6 +932,7 @@ export class ConversationSession {
 
   /**
    * Continue a session after an approval decision.
+   * Delegates to the ApprovalContinuationRunner.
    */
   async *continueAfterApproval({
     answer,
@@ -924,218 +941,11 @@ export class ConversationSession {
     answer: string;
     rejectionReason?: string;
   }): AsyncIterable<ConversationEvent> {
-    const gen = this.retryOrchestrator.currentGeneration;
-    const plan = this.approvalFlow.prepareContinuation(answer, rejectionReason);
-    if (!plan) {
-      return;
-    }
-
-    if (answer !== 'y') {
-      const interruption = plan.pendingApprovalContext.interruption;
-      const callId = getCallIdFromObject(interruption);
-      const output = rejectionReason
-        ? `Tool execution was not approved. User's reason: ${rejectionReason}`
-        : 'Tool execution was not approved.';
-      this.toolTracker.recordAbortedApproval(output, output, callId);
-    }
-
-    const {
-      pendingApprovalContext: { state, interruption, toolCallArgumentsById, emittedCommandIds: previouslyEmittedIds },
-      toolStartedEvent,
-      removeInterceptor,
-    } = plan;
-    const ledgerSnapshot = this.toolTracker.export();
-    const approvedToolResultCallIds = [getCallIdFromObject(interruption)].filter(
-      (callId): callId is string => typeof callId === 'string' && callId.length > 0,
-    );
-    let stream: AgentStream | null = null;
-
-    if (toolStartedEvent) {
-      const filtered = this.#dedupeToolStarted(toolStartedEvent);
-      if (filtered) yield filtered;
-    }
-
-    // Restore cached tool-call arguments so continuation outputs can attach them
-    this.toolTracker.clearArguments();
-    if (toolCallArgumentsById?.size) {
-      for (const [key, value] of toolCallArgumentsById.entries()) {
-        this.toolTracker.argumentsById.set(key, value);
-      }
-    }
-
-    try {
-      let transientRetryCount = 0;
-      while (true) {
-        try {
-          const previousInputForSurge =
-            this.retryOrchestrator.inputSurgeKindState === 'full_history'
-              ? this.conversationStore.getHistory()
-              : undefined;
-          stream = (await this.agentClient.continueRunStream(state, {
-            previousResponseId: this.#state.previousResponseId,
-            sessionId: this.id,
-            toolResultCallIds: approvedToolResultCallIds,
-          })) as AgentStream;
-
-          const acc = createStreamAccumulator();
-          for await (const event of processStreamEvents(
-            stream,
-            acc,
-            {
-              toolCallArgumentsById: this.toolTracker.argumentsById,
-              emittedInvalidToolCallPackets: this.toolTracker.invalidPackets,
-              preserveExistingToolArgs: true,
-              onFunctionCallItem: (item) => this.toolTracker.recordFunctionCall(item),
-              onFunctionResultItem: (item) => {
-                this.toolTracker.recordFunctionResult(item);
-                const cid = callIdOf(item);
-                if (cid && this.conversationLogger.hasSink()) {
-                  const entry = this.toolTracker.export().find((e) => e.callId === cid);
-                  this.conversationLogger.log({
-                    type: 'tool_result',
-                    callId: cid,
-                    toolName: entry?.toolName ?? toolNameOf(item),
-                    status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
-                    output: entry?.output ?? outputOf(item),
-                    ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
-                  });
-                }
-              },
-            },
-            { logger: this.logger, sessionId: this.id },
-          )) {
-            const filtered = this.#dedupeToolStarted(event);
-            if (filtered) yield filtered;
-          }
-
-          this.#finalizeStreamOutcome(stream, gen, 'continueRunStream');
-
-          // Merge previously emitted command IDs with newly emitted ones
-          // This prevents duplicates when result.history contains commands from the initial stream
-          const allEmittedIds = new Set([...previouslyEmittedIds, ...acc.emittedCommandIds]);
-
-          const resolvedResult = yield* this.#buildAndResolve(
-            stream,
-            acc.finalOutput || undefined,
-            acc.reasoningOutput || undefined,
-            allEmittedIds,
-            acc.latestUsage,
-          );
-
-          if (resolvedResult.type === 'approval_required') {
-            if (resolvedResult.approval.callId) {
-              this.toolTracker.recordFunctionCall({
-                type: 'function_call',
-                callId: resolvedResult.approval.callId,
-                name: resolvedResult.approval.toolName,
-                arguments: resolvedResult.approval.argumentsText,
-              });
-            }
-            this.logger.debug('Tool approval required', {
-              eventType: 'approval.required',
-              category: 'approval',
-              phase: 'approval',
-              sessionId: this.id,
-              traceId: this.logger.getCorrelationId(),
-              toolName: resolvedResult.approval.toolName,
-            });
-            this.#inputPlanner.recordSuccess(this.conversationStore.getHistory(), {
-              kind: this.retryOrchestrator.inputSurgeKindState,
-              previousInput: previousInputForSurge,
-            });
-            yield toTerminalEvent(resolvedResult);
-            return;
-          }
-
-          this.#inputPlanner.recordSuccess(this.conversationStore.getHistory(), {
-            kind: this.retryOrchestrator.inputSurgeKindState,
-            previousInput: previousInputForSurge,
-          });
-          yield toTerminalEvent(resolvedResult);
-          return;
-        } catch (error) {
-          const maxTransientRetries = getMaxTransientRetries({
-            streamMaxRetries: getMethod<[], number | undefined>(this.agentClient, 'getStreamMaxRetries')?.call(
-              this.agentClient,
-            ),
-          });
-          const decision = this.retryOrchestrator.classifyForContinuation({
-            error,
-            transientRetryCount,
-            stream,
-            maxTransientRetries,
-          });
-          if (decision.kind !== 'transient') {
-            throw error;
-          }
-          if (decision.kind === 'transient') {
-            transientRetryCount = decision.attempt;
-            this.logger.warn('Transient error in continuation, retrying', {
-              eventType: 'retry.transient',
-              category: 'retry',
-              phase: 'retry',
-              retryType: 'upstream',
-              retryAttempt: transientRetryCount,
-              maxRetries: maxTransientRetries,
-              sessionId: this.id,
-              traceId: this.logger.getCorrelationId(),
-              errorMessage: error instanceof Error ? error.message : String(error),
-              delayMs: decision.delay,
-            });
-            yield {
-              type: 'retry',
-              toolName: 'continuation',
-              attempt: transientRetryCount,
-              maxRetries: maxTransientRetries,
-              errorMessage: error instanceof Error ? error.message : String(error),
-              retryType: 'upstream',
-            };
-            await new Promise((resolve) => setTimeout(resolve, decision.delay));
-
-            if (!this.retryOrchestrator.isCurrentGeneration(gen)) return;
-
-            if (!stream) {
-              this.#recoverApprovedToolResultsFromState(state, approvedToolResultCallIds);
-              this.#commonRestoreForRetry(ledgerSnapshot, stream);
-
-              const lastUserText = this.conversationStore.getLastUserMessage();
-              const dummyTurn: UserTurn = { text: lastUserText };
-              yield* this.run(dummyTurn, {
-                skipUserMessage: true,
-                retries: { transientRetryCount },
-              });
-              return;
-            }
-
-            // Rollback the tool ledger to the state right before this continuation started
-            this.toolTracker.import(ledgerSnapshot);
-
-            // Loop again to retry the continueRunStream call
-            continue;
-          }
-          throw error;
-        }
-      }
-    } catch (error) {
-      this.logger.error('Conversation stream error during continuation', {
-        eventType: 'stream.failed',
-        category: 'stream',
-        phase: 'abort',
-        sessionId: this.id,
-        traceId: this.logger.getCorrelationId(),
-        errorMessage: describeError(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      yield {
-        type: 'error',
-        message: describeError(error),
-        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
-      };
-      throw error;
-    } finally {
-      // Clean up interceptor if one was added for rejection reason
-      removeInterceptor();
-    }
+    yield* this.#continuationRunner.continueAfterApproval({
+      answer,
+      rejectionReason,
+      generation: this.retryOrchestrator.currentGeneration,
+    });
   }
 
   async sendMessage(
@@ -1314,7 +1124,10 @@ export class ConversationSession {
     let approvalRequiredResult: ConversationResult | undefined;
     let continuationTurnItems: PersistedAssistantTurnItem[] | undefined;
 
-    for await (const event of this.continueAfterApproval({ answer: 'y' })) {
+    for await (const event of this.#continuationRunner.continueAfterApproval({
+      answer: 'y',
+      generation: this.retryOrchestrator.currentGeneration,
+    })) {
       if (event.type === 'approval_required') {
         continuationApprovalUsage = event.usage;
         // The continuation resumes the same live RunState, so its usage

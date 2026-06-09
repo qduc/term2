@@ -472,7 +472,7 @@ export class FallbackResponsesModel implements Model {
 
       return response;
     } catch (error) {
-      if (isRetryableTransportError(error).transportFallback || isWsResponseOutputMissing(error)) {
+      if (isRetryableTransportError(error, this.loggingService).transportFallback || isWsResponseOutputMissing(error)) {
         if (this.loggingService && this.providerId) {
           this.loggingService.error(`${this.providerId} ws request failed`, {
             eventType: 'provider.response.failed',
@@ -605,7 +605,7 @@ export class FallbackResponsesModel implements Model {
       }
       return;
     } catch (error) {
-      if (isRetryableTransportError(error).transportFallback) {
+      if (isRetryableTransportError(error, this.loggingService).transportFallback) {
         if (this.loggingService && this.providerId) {
           this.loggingService.error(`${this.providerId} ws stream request failed`, {
             eventType: 'provider.response.failed',

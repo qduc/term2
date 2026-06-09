@@ -1,5 +1,6 @@
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
 import { OpenAICompatibleError, OpenRouterError } from '../providers/common/provider-errors.js';
+import type { ILoggingService } from './service-interfaces.js';
 
 export type RetryableTransportDecision = {
   retryable: boolean;
@@ -37,6 +38,23 @@ const getMessage = (error: unknown): string => {
     return String((error as { message?: unknown }).message ?? '');
   }
   return '';
+};
+
+const logWebSocketCloseCode = (
+  logger: Pick<ILoggingService, 'info'> | undefined,
+  error: unknown,
+  closeCode: string,
+): void => {
+  try {
+    logger?.info('WebSocket close code detected', {
+      eventType: 'retry.websocket_close_code_detected',
+      category: 'retry',
+      closeCode,
+      errorMessage: getMessage(error),
+    });
+  } catch {
+    // Logging should never affect retry classification.
+  }
 };
 
 export function isNetworkProtocolError(error: unknown): boolean {
@@ -97,18 +115,24 @@ export function isNetworkProtocolError(error: unknown): boolean {
 const isFirstFrameTimeoutError = (error: unknown): boolean =>
   getMessage(error).toLowerCase().includes('websocket first frame timeout');
 
-const isRetryableAbnormalCloseError = (error: unknown): boolean => {
+const isRetryableAbnormalCloseError = (error: unknown, logger?: Pick<ILoggingService, 'info'>): boolean => {
   const message = getMessage(error).toLowerCase();
   if (!message.includes('websocket connection closed before response completed')) {
     return false;
   }
   const closeCode = extractWebSocketCloseCode(message);
+  if (closeCode) {
+    logWebSocketCloseCode(logger, error, closeCode);
+  }
   return closeCode ? RETRYABLE_WEBSOCKET_CLOSE_CODES.has(closeCode) : true;
 };
 
-export const isRetryableTransportError = (error: unknown): RetryableTransportDecision => {
+export const isRetryableTransportError = (
+  error: unknown,
+  logger?: Pick<ILoggingService, 'info'>,
+): RetryableTransportDecision => {
   const retryable =
-    isFirstFrameTimeoutError(error) || isRetryableAbnormalCloseError(error) || isNetworkProtocolError(error);
+    isFirstFrameTimeoutError(error) || isRetryableAbnormalCloseError(error, logger) || isNetworkProtocolError(error);
   return {
     retryable,
     transportFallback: retryable && isNetworkProtocolError(error),
@@ -119,7 +143,7 @@ export const isRetryableTransportError = (error: unknown): RetryableTransportDec
  * Returns true when the error is a transient upstream failure (429 / 5xx /
  * connection timeout) that is worth retrying automatically.
  */
-export const isTransientRetryableError = (error: unknown): boolean => {
+export const isTransientRetryableError = (error: unknown, logger?: Pick<ILoggingService, 'info'>): boolean => {
   if (
     error instanceof APIConnectionError ||
     error instanceof APIConnectionTimeoutError ||
@@ -155,27 +179,31 @@ export const isTransientRetryableError = (error: unknown): boolean => {
       return true;
     }
 
-    const message = getMessage(error).toLowerCase();
-    if (message.includes('websocket connection closed') || message.includes('websocket closed')) {
+    const message = getMessage(error);
+    const lowerMessage = message.toLowerCase();
+    if (lowerMessage.includes('websocket connection closed') || lowerMessage.includes('websocket closed')) {
       const closeCode = extractWebSocketCloseCode(message);
+      if (closeCode) {
+        logWebSocketCloseCode(logger, error, closeCode);
+      }
       return closeCode ? RETRYABLE_WEBSOCKET_CLOSE_CODES.has(closeCode) : true;
     }
 
     if (
-      message.includes("expecting ',' delimiter") ||
-      message.includes('unexpected end of json') ||
-      message.includes('is not valid json') ||
-      (message.includes('json') && (message.includes('unexpected') || message.includes('expected')))
+      lowerMessage.includes("expecting ',' delimiter") ||
+      lowerMessage.includes('unexpected end of json') ||
+      lowerMessage.includes('is not valid json') ||
+      (lowerMessage.includes('json') && (lowerMessage.includes('unexpected') || lowerMessage.includes('expected')))
     ) {
       return true;
     }
 
     if (
-      message.includes('rate limit') ||
-      message.includes('too many requests') ||
-      message.includes('rate_limit') ||
-      message === 'terminated' ||
-      message.startsWith('terminated:')
+      lowerMessage.includes('rate limit') ||
+      lowerMessage.includes('too many requests') ||
+      lowerMessage.includes('rate_limit') ||
+      lowerMessage === 'terminated' ||
+      lowerMessage.startsWith('terminated:')
     ) {
       return true;
     }

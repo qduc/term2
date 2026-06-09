@@ -2355,6 +2355,54 @@ test('run() omits droppedUserMessage when no user turn was added (skipUserMessag
   t.is(errorEvent.droppedUserMessage, undefined);
 });
 
+test('transport downgrade retries replay the full transcript instead of dropping the current user turn', async (t) => {
+  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
+  firstStream.finalOutput = 'First reply';
+  firstStream.lastResponseId = 'resp-first';
+
+  const recoveryStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered reply' }]);
+  recoveryStream.finalOutput = 'Recovered reply';
+  recoveryStream.lastResponseId = 'resp-recovered';
+
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream(input, options) {
+      calls.push({ input, options });
+      if (calls.length === 1) {
+        return firstStream;
+      }
+      if (calls.length === 2) {
+        throw new ChainingTransportDowngradeError('transport downgrade during chained request');
+      }
+      return recoveryStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  for await (const _ of session.run('first question')) {
+  }
+
+  for await (const _ of session.run('second question')) {
+  }
+
+  t.is(calls.length, 3);
+  t.is(calls[1].input, 'second question');
+  t.is(calls[1].options.previousResponseId, 'resp-first');
+  t.true(Array.isArray(calls[2].input), 'retry should replay full history after transport downgrade');
+  t.falsy(calls[2].options.previousResponseId, 'HTTP retry must not use previousResponseId');
+  t.deepEqual(
+    calls[2].input.filter((item) => item.role === 'user').map((item) => item.content),
+    ['first question', 'second question'],
+  );
+});
+
 test('run() emits user_message_consumed_for_abort when an aborted approval is being resolved', async (t) => {
   // Plant an aborted approval context directly via approvalState so the
   // session's consumeAborted() picks it up. The downstream fake-execution

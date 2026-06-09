@@ -48,7 +48,7 @@ export type RetryOutcome =
   | {
       kind: 'retry_transport_downgrade';
       runOptions: { skipUserMessage: boolean; retries: RetryState; maxModelRetries?: number };
-      restoreOptions: { removeLastUserMessage: true };
+      restoreOptions?: { removeLastUserMessage?: boolean };
     }
   | {
       kind: 'retry_hallucination';
@@ -312,7 +312,6 @@ export class SessionRetryOrchestrator {
             retries: { transientRetryCount: 0, transportFallbackRetryCount: attempt },
             maxModelRetries,
           },
-          restoreOptions: { removeLastUserMessage: true },
         };
       }
       case 'hallucination': {

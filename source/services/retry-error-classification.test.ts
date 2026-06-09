@@ -13,6 +13,18 @@ function asInstanceOf<T extends object>(prototype: object, props: Partial<T>): T
   return Object.assign(Object.create(prototype), props) as T;
 }
 
+function createLoggerMock() {
+  const calls: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+  return {
+    calls,
+    logger: {
+      info(message: string, meta?: Record<string, unknown>) {
+        calls.push({ message, meta });
+      },
+    },
+  };
+}
+
 test('isNetworkProtocolError correctly flags network protocol errors', (t) => {
   t.true(isNetworkProtocolError({ code: 'ENOTFOUND' }));
   t.true(isNetworkProtocolError({ code: 'ECONNREFUSED' }));
@@ -79,6 +91,25 @@ test('isRetryableTransportError separates retryable errors from HTTP fallback ca
   });
 });
 
+test('isRetryableTransportError logs websocket close code at info level', (t) => {
+  const { calls, logger } = createLoggerMock();
+
+  const decision = isRetryableTransportError(
+    new Error('WebSocket connection closed before response completed (code=1006)'),
+    logger,
+  );
+
+  t.deepEqual(decision, { retryable: true, transportFallback: true });
+  t.is(calls.length, 1);
+  t.is(calls[0]?.message, 'WebSocket close code detected');
+  t.deepEqual(calls[0]?.meta, {
+    eventType: 'retry.websocket_close_code_detected',
+    category: 'retry',
+    closeCode: '1006',
+    errorMessage: 'WebSocket connection closed before response completed (code=1006)',
+  });
+});
+
 test('isTransientRetryableError: OpenAI SDK errors are retryable', (t) => {
   t.true(isTransientRetryableError(asInstanceOf(APIConnectionError.prototype, { message: 'conn error' })));
   t.true(isTransientRetryableError(asInstanceOf(APIConnectionTimeoutError.prototype, { message: 'timeout' })));
@@ -134,6 +165,26 @@ test('isTransientRetryableError: websocket response completion closes are retrya
   );
   t.false(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1002)')));
   t.false(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1003)')));
+});
+
+test('isTransientRetryableError logs websocket close code at info level', (t) => {
+  const { calls, logger } = createLoggerMock();
+
+  t.true(
+    isTransientRetryableError(
+      new Error('WebSocket connection closed before response completed (code=1012, reason="service restart")'),
+      logger,
+    ),
+  );
+
+  t.is(calls.length, 1);
+  t.is(calls[0]?.message, 'WebSocket close code detected');
+  t.deepEqual(calls[0]?.meta, {
+    eventType: 'retry.websocket_close_code_detected',
+    category: 'retry',
+    closeCode: '1012',
+    errorMessage: 'WebSocket connection closed before response completed (code=1012, reason="service restart")',
+  });
 });
 
 test('isTransientRetryableError: terminated errors are retryable', (t) => {

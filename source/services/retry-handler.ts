@@ -62,7 +62,9 @@ export class RetryHandler {
       return { kind: 'flex_fallback' };
     }
 
-    if (isTransientRetryableError(error) && transientRetryCount < maxTransientRetries) {
+    const transientRetryable = isTransientRetryableError(error, this.logger);
+
+    if (transientRetryable && transientRetryCount < maxTransientRetries) {
       const attempt = transientRetryCount + 1;
       const upstreamRetryClassification = classifyUpstreamRetryableError(error);
       return {
@@ -76,7 +78,7 @@ export class RetryHandler {
       };
     }
 
-    if (isTransientRetryableError(error) && transportFallbackRetryCount < 1) {
+    if (transientRetryable && transportFallbackRetryCount < 1) {
       const forceTransportDowngrade =
         typeof this.agentClient.forceTransportDowngrade === 'function'
           ? this.agentClient.forceTransportDowngrade(error)

@@ -458,22 +458,69 @@ export class ConversationSession {
     this.toolLedger.import(filteredEntries);
   }
 
+  #setInputSurgeKind(kind: 'delta' | 'full_history'): void {
+    if (kind !== this.#inputSurgeKind) {
+      this.logger.debug('Input surge kind changed', {
+        eventType: 'session.input_surge_kind_changed',
+        from: this.#inputSurgeKind,
+        to: kind,
+        sessionId: this.id,
+      });
+    }
+    this.#inputSurgeKind = kind;
+  }
+
+  #commonRestoreForRetry(
+    ledgerSnapshot: SavedToolExecution[],
+    stream: AgentStream | null,
+    extras?: { removeLastUserMessage?: boolean },
+  ): void {
+    this.retryHandler.restoreForRetry({
+      ledgerSnapshot,
+      stream,
+      toolLedger: this.toolLedger,
+      conversationStore: this.conversationStore,
+      clearPreviousResponseId: () => {
+        this.previousResponseId = null;
+      },
+      restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
+      ...(extras?.removeLastUserMessage
+        ? { removeLastUserMessage: () => this.conversationStore.removeLastUserMessage() }
+        : {}),
+    });
+  }
+
+  #logRetry(message: string, eventType: string, fields: Record<string, unknown>): void {
+    this.logger.warn(message, {
+      eventType,
+      category: 'retry',
+      phase: 'retry',
+      sessionId: this.id,
+      traceId: this.logger.getCorrelationId(),
+      ...fields,
+    });
+  }
+
+  #afterUndo(count: number): void {
+    this.#pruneToolLedgerToCurrentHistory();
+    this.#resetProviderContinuity();
+    this.largeUncachedInputGuard.markUndoOrRewind();
+    this.#setInputSurgeKind('delta');
+    this.conversationLogger.log({ type: 'undo', removedUserTurns: count, snapshot: this.getCurrentSnapshot() });
+  }
+
   reset(): void {
     this.#resetProviderContinuity();
     this.conversationStore.clear();
     this.toolLedger = new ToolExecutionLedger();
     this.largeUncachedInputGuard.reset();
-    this.#inputSurgeKind = 'delta';
+    this.#setInputSurgeKind('delta');
   }
 
   undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null {
     const removed = this.conversationStore.removeLastUserTurn();
     if (removed === null) return null;
-    this.#pruneToolLedgerToCurrentHistory();
-    this.#resetProviderContinuity();
-    this.largeUncachedInputGuard.markUndoOrRewind();
-    this.#inputSurgeKind = 'delta';
-    this.conversationLogger.log({ type: 'undo', removedUserTurns: 1, snapshot: this.getCurrentSnapshot() });
+    this.#afterUndo(1);
     return removed;
   }
 
@@ -484,11 +531,7 @@ export class ConversationSession {
   undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null {
     const removed = this.conversationStore.removeNLastUserTurns(n);
     if (removed === null) return null;
-    this.#pruneToolLedgerToCurrentHistory();
-    this.#resetProviderContinuity();
-    this.largeUncachedInputGuard.markUndoOrRewind();
-    this.#inputSurgeKind = 'delta';
-    this.conversationLogger.log({ type: 'undo', removedUserTurns: n, snapshot: this.getCurrentSnapshot() });
+    this.#afterUndo(n);
     return removed;
   }
 
@@ -515,9 +558,11 @@ export class ConversationSession {
     setProvider?.call(this.agentClient, provider);
   }
 
+  /** Alias for setProvider, kept for public API surface. */
   switchProvider(provider: string): void {
     this.setProvider(provider);
   }
+
   setRetryCallback(callback: () => void): void {
     if (typeof this.agentClient.setRetryCallback === 'function') {
       this.agentClient.setRetryCallback(callback);
@@ -828,7 +873,7 @@ export class ConversationSession {
       ({ streamInput, inputSurgeKind } = this.#buildOutgoingInput(turn, {
         includeTurn: false,
       }));
-      this.#inputSurgeKind = inputSurgeKind;
+      this.#setInputSurgeKind(inputSurgeKind);
       const surgeDecision = this.inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind });
       if (surgeDecision.action === 'block') {
         let droppedUserMessage: { text: string; imageCount: number } | undefined;
@@ -892,7 +937,7 @@ export class ConversationSession {
 
           const fullHistoryRetry = this.#buildOutgoingInput(turn, { includeTurn: false });
           inputSurgeKind = fullHistoryRetry.inputSurgeKind;
-          this.#inputSurgeKind = inputSurgeKind;
+          this.#setInputSurgeKind(inputSurgeKind);
           stream = (await this.agentClient.startStream(fullHistoryRetry.streamInput, {
             previousResponseId: null,
             sessionId: this.id,
@@ -985,18 +1030,17 @@ export class ConversationSession {
 
       switch (decision.kind) {
         case 'flex_fallback': {
-          this.logger.warn('Flex service tier timed out, retrying with standard service tier', {
-            eventType: 'retry.flex_service_tier',
-            category: 'retry',
-            phase: 'retry',
-            retryType: 'flex_service_tier',
-            retryAttempt: 1,
-            attempt: 1,
-            maxRetries: 1,
-            sessionId: this.id,
-            traceId: this.logger.getCorrelationId(),
-            errorMessage: error instanceof Error ? error.message : String(error),
-          });
+          this.#logRetry(
+            'Flex service tier timed out, retrying with standard service tier',
+            'retry.flex_service_tier',
+            {
+              retryType: 'flex_service_tier',
+              retryAttempt: 1,
+              attempt: 1,
+              maxRetries: 1,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            },
+          );
 
           yield {
             type: 'retry',
@@ -1008,16 +1052,7 @@ export class ConversationSession {
           };
 
           getMethod<[], void>(this.agentClient, 'useStandardServiceTierForNextRequest')?.call(this.agentClient);
-          this.retryHandler.restoreForRetry({
-            ledgerSnapshot,
-            stream,
-            toolLedger: this.toolLedger,
-            conversationStore: this.conversationStore,
-            clearPreviousResponseId: () => {
-              this.previousResponseId = null;
-            },
-            restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
-          });
+          this.#commonRestoreForRetry(ledgerSnapshot, stream);
           yield* this.run(turn, {
             skipUserMessage: true,
             flexServiceTierFallbackCount: flexServiceTierFallbackCount + 1,
@@ -1026,16 +1061,11 @@ export class ConversationSession {
           return;
         }
         case 'transient': {
-          this.logger.warn('Transient upstream error detected, retrying turn', {
-            eventType: 'retry.transient',
-            category: 'retry',
-            phase: 'retry',
+          this.#logRetry('Transient upstream error detected, retrying turn', 'retry.transient', {
             retryType: 'upstream',
             retryAttempt: decision.attempt,
             attempt: decision.attempt,
             maxRetries: maxTransientRetries,
-            sessionId: this.id,
-            traceId: this.logger.getCorrelationId(),
             errorMessage: error instanceof Error ? error.message : String(error),
             delayMs: decision.delay,
           });
@@ -1053,17 +1083,7 @@ export class ConversationSession {
           if (!this.#isCurrentGeneration(gen)) return;
 
           if (!isResuming) {
-            this.retryHandler.restoreForRetry({
-              ledgerSnapshot,
-              stream,
-              toolLedger: this.toolLedger,
-              conversationStore: this.conversationStore,
-              clearPreviousResponseId: () => {
-                this.previousResponseId = null;
-              },
-              restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
-              removeLastUserMessage: () => this.conversationStore.removeLastUserMessage(),
-            });
+            this.#commonRestoreForRetry(ledgerSnapshot, stream, { removeLastUserMessage: true });
           }
 
           await new Promise((resolve) => setTimeout(resolve, decision.delay));
@@ -1079,18 +1099,17 @@ export class ConversationSession {
         case 'transport_downgrade': {
           const attempt = transportFallbackRetryCount + 1;
 
-          this.logger.warn('Transient upstream error exhausted WS retries, forcing HTTP fallback', {
-            eventType: 'retry.transport_fallback',
-            category: 'retry',
-            phase: 'retry',
-            retryType: 'upstream',
-            retryAttempt: attempt,
-            attempt,
-            maxRetries: 1,
-            sessionId: this.id,
-            traceId: this.logger.getCorrelationId(),
-            errorMessage: error instanceof Error ? error.message : String(error),
-          });
+          this.#logRetry(
+            'Transient upstream error exhausted WS retries, forcing HTTP fallback',
+            'retry.transport_fallback',
+            {
+              retryType: 'upstream',
+              retryAttempt: attempt,
+              attempt,
+              maxRetries: 1,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            },
+          );
 
           yield {
             type: 'retry',
@@ -1103,17 +1122,7 @@ export class ConversationSession {
 
           if (!this.#isCurrentGeneration(gen)) return;
 
-          this.retryHandler.restoreForRetry({
-            ledgerSnapshot,
-            stream,
-            toolLedger: this.toolLedger,
-            conversationStore: this.conversationStore,
-            clearPreviousResponseId: () => {
-              this.previousResponseId = null;
-            },
-            restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
-            removeLastUserMessage: () => this.conversationStore.removeLastUserMessage(),
-          });
+          this.#commonRestoreForRetry(ledgerSnapshot, stream, { removeLastUserMessage: true });
 
           yield* this.run(turn, {
             skipUserMessage: Boolean(stream),
@@ -1129,17 +1138,12 @@ export class ConversationSession {
             break;
           }
 
-          this.logger.warn('Recoverable model error detected, retrying', {
-            eventType: 'retry.model_error',
-            category: 'retry',
-            phase: 'retry',
+          this.#logRetry('Recoverable model error detected, retrying', 'retry.model_error', {
             toolName: decisionResult.logPayload.toolName,
             retryType: decisionResult.logPayload.retryType,
             retryAttempt: decisionResult.attempt,
             attempt: decisionResult.attempt,
             maxRetries: maxModelRetries ?? MAX_HALLUCINATION_RETRIES,
-            sessionId: this.id,
-            traceId: this.logger.getCorrelationId(),
             errorMessage: decisionResult.message,
           });
 
@@ -1424,16 +1428,7 @@ export class ConversationSession {
 
             if (!stream) {
               this.#recoverApprovedToolResultsFromState(state, approvedToolResultCallIds);
-              this.retryHandler.restoreForRetry({
-                ledgerSnapshot,
-                stream,
-                toolLedger: this.toolLedger,
-                conversationStore: this.conversationStore,
-                clearPreviousResponseId: () => {
-                  this.previousResponseId = null;
-                },
-                restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
-              });
+              this.#commonRestoreForRetry(ledgerSnapshot, stream);
 
               const lastUserText = this.conversationStore.getLastUserMessage();
               const dummyTurn: UserTurn = { text: lastUserText };

@@ -1,7 +1,6 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from './service-interfaces.js';
 import { ConversationStore } from './conversation-store.js';
 import type { AgentInputItem } from '@openai/agents';
-import { getMaxTransientRetries } from './conversation-retry-policy.js';
 
 import { SessionRetryOrchestrator, type RetryState } from './session-retry-orchestrator.js';
 import type { ConversationEvent } from './conversation-events.js';
@@ -12,43 +11,28 @@ import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import type { ConversationTerminal, ReasoningEffortSetting } from '../contracts/conversation.js';
 import { collectTerminalResult } from './terminal-result-collector.js';
 import { getMethod, getCallIdFromObject } from './interruption-info.js';
-import { createStreamAccumulator, processStreamEvents } from './stream-event-processor.js';
 import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
-import { buildConversationResult, toTerminalEvent } from './conversation-result-builder.js';
+import { buildConversationResult } from './conversation-result-builder.js';
 import type { AgentStream } from './agent-stream.js';
 import { extractReplaySnapshot, extractFinalizationSnapshot, type StreamReplaySnapshot } from './stream-snapshot.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
-import { collectDuplicateToolCallResultPairs } from './input-surge-guard.js';
 import { type LargeUncachedInputDecision } from './large-uncached-input-guard.js';
+import { collectDuplicateToolCallResultPairs } from './input-surge-guard.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
-import { type SavedToolExecution, callIdOf, toolNameOf, outputOf } from './tool-execution-ledger.js';
+import { type SavedToolExecution } from './tool-execution-ledger.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
 import { ConversationLogger } from './conversation-logger.js';
-import { describeError } from '../utils/error-helpers.js';
-import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionStateController } from './session-state-controller.js';
 import { ApprovalContinuationRunner } from './approval-continuation-runner.js';
+import { ConversationTurnRunner } from './conversation-turn-runner.js';
 
 export type { CommandMessage };
 export type ConversationResult = ConversationTerminal;
-
-type RetryHandlerContext = {
-  error: unknown;
-  turn: UserTurn;
-  gen: number;
-  stream: AgentStream | null;
-  streamInput: string | AgentInputItem | AgentInputItem[];
-  addedUserMessage: boolean;
-  ledgerSnapshot: SavedToolExecution[];
-  retries: RetryState;
-  maxTransientRetries: number;
-  maxModelRetries?: number;
-};
 
 type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
 
@@ -114,6 +98,7 @@ export class ConversationSession {
   #inputPlanner: SessionInputPlanner;
   #state: SessionStateController;
   #continuationRunner: ApprovalContinuationRunner;
+  #turnRunner: ConversationTurnRunner;
 
   #breakChaining(): void {
     this.retryOrchestrator.breakChaining();
@@ -156,10 +141,6 @@ export class ConversationSession {
         }
       }
     }
-  }
-
-  #restoreCompletedToolLedgerEntries(snapshot: SavedToolExecution[]): void {
-    this.toolTracker.restoreCompletedEntries(snapshot);
   }
 
   private turnAccumulator = new TurnItemAccumulator();
@@ -267,6 +248,27 @@ export class ConversationSession {
       restartTurn: (turn, options) => this.run(turn, { ...options }),
     });
 
+    this.#turnRunner = new ConversationTurnRunner({
+      agentClient,
+      logger: this.logger,
+      sessionId: this.id,
+      turnAccumulator: this.turnAccumulator,
+      retryOrchestrator: this.retryOrchestrator,
+      toolTracker: this.toolTracker,
+      conversationStore: this.conversationStore,
+      conversationLogger: this.conversationLogger,
+      approvalFlow: this.approvalFlow,
+      shellAutoApproval: this.shellAutoApproval,
+      inputPlanner: this.#inputPlanner,
+      state: this.#state,
+      breakChaining: () => this.#breakChaining(),
+      finalizeStreamOutcome: (stream, gen, source) => this.#finalizeStreamOutcome(stream, gen, source),
+      dedupeToolStarted: (event) => this.#dedupeToolStarted(event),
+      buildAndResolve: (result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage) =>
+        this.#buildAndResolve(result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage),
+      isCurrentGeneration: (gen) => this.#isCurrentGeneration(gen),
+    });
+
     // When the WS transport degrades to HTTP for a provider that requires
     // WS for conversation chaining, sever the chain and switch to full-history
     // mode for the rest of the session.
@@ -314,27 +316,6 @@ export class ConversationSession {
 
   #isCurrentGeneration(gen: number): boolean {
     return this.retryOrchestrator.isCurrentGeneration(gen);
-  }
-
-  #commonRestoreForRetry(
-    ledgerSnapshot: SavedToolExecution[],
-    stream: AgentStream | null,
-    extras?: { removeLastUserMessage?: boolean },
-  ): void {
-    this.retryOrchestrator.restoreForRetry({
-      ledgerSnapshot,
-      stream,
-      toolLedger: this.toolTracker.ledger,
-      conversationStore: this.conversationStore,
-      clearPreviousResponseId: () => {
-        this.#state.previousResponseId = null;
-        this.#inputPlanner.previousResponseId = null;
-      },
-      restoreCompletedToolLedgerEntries: (snapshot) => this.#restoreCompletedToolLedgerEntries(snapshot),
-      ...(extras?.removeLastUserMessage
-        ? { removeLastUserMessage: () => this.conversationStore.removeLastUserMessage() }
-        : {}),
-    });
   }
 
   #afterUndo(count: number): void {
@@ -486,448 +467,13 @@ export class ConversationSession {
       resumeState?: unknown;
     } = {},
   ): AsyncIterable<ConversationEvent> {
-    const {
-      transientRetryCount = 0,
-      flexServiceTierFallbackCount = 0,
-      hallucinationRetryCount = 0,
-      transportFallbackRetryCount = 0,
-    } = retries;
-    if (
-      !skipUserMessage ||
-      hallucinationRetryCount > 0 ||
-      flexServiceTierFallbackCount > 0 ||
-      transientRetryCount > 0 ||
-      transportFallbackRetryCount > 0
-    ) {
-      this.turnAccumulator.resetPersistedTurnState();
-    }
-    const gen = this.retryOrchestrator.currentGeneration;
-    let stream: AgentStream | null = null;
-    let streamInput: string | AgentInputItem | AgentInputItem[] = '';
-    let inputSurgeKind: 'delta' | 'full_history' = 'delta';
-    const normalized = normalizeUserTurn(input);
-    const turn: UserTurn = this.#state.pendingModeNotice?.trim()
-      ? { ...normalized, text: `${this.#state.pendingModeNotice}\n\n${normalized.text}` }
-      : normalized;
-    const text = turn.text;
-    let addedUserMessage = false;
-    const ledgerSnapshot = this.toolTracker.export();
-    const maxTransientRetries = getMaxTransientRetries({
-      streamMaxRetries: getMethod<[], number | undefined>(this.agentClient, 'getStreamMaxRetries')?.call(
-        this.agentClient,
-      ),
-    });
-    this.toolTracker.ledger.beginTurn();
-    let abortListener: (() => void) | undefined;
-    if (signal) {
-      if (signal.aborted) {
-        this.agentClient.abort();
-        throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
-      }
-      abortListener = () => {
-        this.agentClient.abort();
-      };
-      signal.addEventListener('abort', abortListener);
-    }
-    try {
-      this.logger.debug('Conversation stream start', {
-        eventType: 'stream.started',
-        category: 'stream',
-        phase: 'request_start',
-        sessionId: this.id,
-        traceId: this.logger.getCorrelationId(),
-      });
-      const abortedContext = this.approvalFlow.consumeAborted();
-      const shouldAddUserMessage = !skipUserMessage && !abortedContext;
-
-      // Maintain canonical local history regardless of provider.
-      if (shouldAddUserMessage) {
-        this.conversationStore.addUserTurn(turn);
-        addedUserMessage = true;
-      } else if (abortedContext && !skipUserMessage) {
-        // The UI appended a user message for this input, but the store will consume it
-        // as fake tool output for the aborted approval rather than as a new user turn.
-        // Signal the UI to mark it so /undo skips it.
-        yield { type: 'user_message_consumed_for_abort' };
-      }
-
-      // If there's an aborted approval, we need to resolve it first.
-      // The user's message is a new input, but the agent is stuck waiting for tool output.
-      if (abortedContext) {
-        this.logger.debug('Resolving aborted approval with fake execution', {
-          message: text,
-        });
-
-        // Restore cached tool-call arguments captured before abort so continuation can attach them
-        this.toolTracker.clearArguments();
-        if (abortedContext.toolCallArgumentsById?.size) {
-          for (const [key, value] of abortedContext.toolCallArgumentsById.entries()) {
-            this.toolTracker.argumentsById.set(key, value);
-          }
-        }
-
-        const { removeInterceptor } = this.approvalFlow.prepareAbortResolution(abortedContext, text);
-
-        try {
-          const previousInputForSurge =
-            this.retryOrchestrator.inputSurgeKindState === 'full_history'
-              ? this.conversationStore.getHistory()
-              : undefined;
-          const continuedStream = (await this.agentClient.continueRunStream(abortedContext.state, {
-            previousResponseId: this.#state.previousResponseId,
-            sessionId: this.id,
-            toolResultCallIds: [getCallIdFromObject(abortedContext.interruption)].filter(
-              (callId): callId is string => typeof callId === 'string' && callId.length > 0,
-            ),
-          })) as AgentStream;
-
-          const acc = createStreamAccumulator();
-          acc.emittedCommandIds = new Set<string>(abortedContext.emittedCommandIds);
-          for await (const event of processStreamEvents(
-            continuedStream,
-            acc,
-            {
-              toolCallArgumentsById: this.toolTracker.argumentsById,
-              emittedInvalidToolCallPackets: this.toolTracker.invalidPackets,
-              preserveExistingToolArgs: true,
-              onFunctionCallItem: (item) => this.toolTracker.recordFunctionCall(item),
-              onFunctionResultItem: (item) => {
-                this.toolTracker.recordFunctionResult(item);
-                const cid = callIdOf(item);
-                if (cid && this.conversationLogger.hasSink()) {
-                  const entry = this.toolTracker.export().find((e) => e.callId === cid);
-                  this.conversationLogger.log({
-                    type: 'tool_result',
-                    callId: cid,
-                    toolName: entry?.toolName ?? toolNameOf(item),
-                    status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
-                    output: entry?.output ?? outputOf(item),
-                    ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
-                  });
-                }
-              },
-            },
-            { logger: this.logger, sessionId: this.id },
-          )) {
-            const filtered = this.#dedupeToolStarted(event);
-            if (filtered) yield filtered;
-          }
-
-          this.#finalizeStreamOutcome(continuedStream, gen, 'abortResolution');
-
-          if (continuedStream.interruptions && continuedStream.interruptions.length > 0) {
-            this.logger.warn('Another interruption occurred after fake execution - handling as approval');
-          }
-
-          // Successfully resolved - agent should now have processed the fake rejection
-          this.logger.debug('Fake execution completed, agent received rejection message');
-
-          const resolvedResult = yield* this.#buildAndResolve(
-            continuedStream,
-            acc.finalOutput,
-            acc.reasoningOutput,
-            acc.emittedCommandIds,
-            acc.latestUsage,
-          );
-          this.#inputPlanner.recordSuccess(this.conversationStore.getHistory(), {
-            kind: this.retryOrchestrator.inputSurgeKindState,
-            previousInput: previousInputForSurge,
-          });
-          yield toTerminalEvent(resolvedResult);
-          return;
-        } catch (error) {
-          this.logger.warn('Error resolving aborted approval with fake execution', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-          // Fall through to normal message flow
-        } finally {
-          // Always remove interceptor after use
-          removeInterceptor();
-        }
-      }
-
-      // Normal message flow
-      // Use chaining mode only when the provider supports it AND either a valid
-      // chain exists (previousResponseId is set) or there is no prior history to
-      // resync (fresh start with just the current message). After undo the chain
-      // is severed (previousResponseId = null) while prior turns remain in the
-      // local store, so we fall back to full-history mode to re-establish context.
-      const plan = this.#inputPlanner.build(turn, {
-        includeTurn: false,
-        pendingModeNotice: this.#state.pendingModeNotice,
-      });
-      streamInput = plan.streamInput;
-      inputSurgeKind = plan.inputSurgeKind;
-      this.#state.setInputSurgeKind(inputSurgeKind);
-      const surgeDecision = this.#inputPlanner.inspectForSurge(streamInput, inputSurgeKind);
-      if (surgeDecision.action === 'block') {
-        let droppedUserMessage: { text: string; imageCount: number } | undefined;
-        if (addedUserMessage && this.#isCurrentGeneration(gen)) {
-          this.conversationStore.removeLastUserMessage();
-          droppedUserMessage = { text: turn.text, imageCount: turn.images?.length ?? 0 };
-        }
-
-        this.logger.warn('Input surge guard blocked provider request', {
-          eventType: 'input_surge.blocked',
-          category: 'provider',
-          phase: 'request_start',
-          sessionId: this.id,
-          traceId: this.logger.getCorrelationId(),
-          reason: surgeDecision.reason,
-          stats: surgeDecision.stats,
-          previousStats: surgeDecision.previousStats,
-        });
-
-        yield {
-          type: 'error',
-          kind: 'input_surge_guard',
-          message: `${surgeDecision.reason} Request blocked to prevent runaway context growth. Try /undo or /clear, or compact the conversation history.`,
-          ...(droppedUserMessage ? { droppedUserMessage } : {}),
-        };
-        return;
-      }
-
-      if (this.#state.pendingModeNotice) {
-        this.#state.pendingModeNotice = null;
-      }
-
-      try {
-        if (resumeState && typeof this.agentClient.continueRunStream === 'function') {
-          stream = (await this.agentClient.continueRunStream(resumeState, {
-            previousResponseId: this.#state.previousResponseId,
-            sessionId: this.id,
-          })) as AgentStream;
-        } else {
-          stream = (await this.agentClient.startStream(streamInput, {
-            previousResponseId: inputSurgeKind === 'delta' ? this.#state.previousResponseId : null,
-            sessionId: this.id,
-          })) as AgentStream;
-        }
-      } catch (chainingError) {
-        // When WS degrades to HTTP mid-request and the provider requires WS for
-        // chaining (e.g. Codex), the model layer throws ChainingTransportDowngradeError.
-        // Break chaining and retry with full history.
-        if (
-          chainingError instanceof ChainingTransportDowngradeError &&
-          this.retryOrchestrator.freshStartRetriesAllowed
-        ) {
-          this.#breakChaining();
-
-          this.logger.warn('ChainingTransportDowngradeError caught, retrying with full history', {
-            eventType: 'retry.chaining_downgrade',
-            category: 'retry',
-            phase: 'retry',
-            retryType: 'chaining_downgrade',
-            sessionId: this.id,
-            traceId: this.logger.getCorrelationId(),
-            errorMessage: chainingError instanceof Error ? chainingError.message : String(chainingError),
-          });
-
-          const fullHistoryRetryPlan = this.#inputPlanner.build(turn, {
-            includeTurn: false,
-            pendingModeNotice: this.#state.pendingModeNotice,
-          });
-          inputSurgeKind = fullHistoryRetryPlan.inputSurgeKind;
-          this.#state.setInputSurgeKind(inputSurgeKind);
-          stream = (await this.agentClient.startStream(fullHistoryRetryPlan.streamInput, {
-            previousResponseId: null,
-            sessionId: this.id,
-          })) as AgentStream;
-        } else {
-          throw chainingError;
-        }
-      }
-
-      const acc = createStreamAccumulator();
-      for await (const event of processStreamEvents(
-        stream,
-        acc,
-        {
-          toolCallArgumentsById: this.toolTracker.argumentsById,
-          emittedInvalidToolCallPackets: this.toolTracker.invalidPackets,
-          preserveExistingToolArgs: false,
-          onFunctionCallItem: (item) => this.toolTracker.recordFunctionCall(item),
-          onFunctionResultItem: (item) => this.toolTracker.recordFunctionResult(item),
-        },
-        { logger: this.logger, sessionId: this.id },
-      )) {
-        const filtered = this.#dedupeToolStarted(event);
-        if (filtered) yield filtered;
-      }
-
-      this.#finalizeStreamOutcome(stream, gen, 'startStream');
-
-      const resolvedResult = yield* this.#buildAndResolve(
-        stream,
-        acc.finalOutput || undefined,
-        acc.reasoningOutput || undefined,
-        acc.emittedCommandIds,
-        acc.latestUsage,
-      );
-
-      this.#inputPlanner.recordSuccess(
-        inputSurgeKind === 'delta' ? streamInput : this.conversationStore.getHistory(),
-        inputSurgeKind === 'delta' ? { kind: inputSurgeKind } : { kind: inputSurgeKind, previousInput: streamInput },
-      );
-
-      if (resolvedResult.type === 'approval_required') {
-        if (resolvedResult.approval.callId) {
-          this.toolTracker.recordFunctionCall({
-            type: 'function_call',
-            callId: resolvedResult.approval.callId,
-            name: resolvedResult.approval.toolName,
-            arguments: resolvedResult.approval.argumentsText,
-          });
-        }
-        this.logger.debug('Tool approval required', {
-          eventType: 'approval.required',
-          category: 'approval',
-          phase: 'approval',
-          sessionId: this.id,
-          traceId: this.logger.getCorrelationId(),
-          toolName: resolvedResult.approval.toolName,
-        });
-        yield toTerminalEvent(resolvedResult);
-        return;
-      }
-
-      yield toTerminalEvent(resolvedResult);
-    } catch (error) {
-      const handled = yield* this.#handleRetryDecision({
-        error,
-        turn,
-        gen,
-        stream,
-        streamInput,
-        addedUserMessage,
-        ledgerSnapshot,
-        retries: {
-          transientRetryCount,
-          flexServiceTierFallbackCount,
-          hallucinationRetryCount,
-          transportFallbackRetryCount,
-        },
-        maxTransientRetries,
-        maxModelRetries,
-      });
-      if (handled) return;
-
-      throw error;
-    } finally {
-      if (signal && abortListener) {
-        signal.removeEventListener('abort', abortListener);
-      }
-    }
-  }
-
-  /**
-   * Classify a streaming error and either retry the turn or yield error/cleanup events.
-   * Returns true when the error was handled (retry dispatched or generation stale),
-   * false when the caller should throw the original error.
-   */
-  async *#handleRetryDecision(ctx: RetryHandlerContext): AsyncGenerator<ConversationEvent, boolean> {
-    const {
-      error,
-      turn,
-      gen,
-      stream,
-      streamInput,
-      addedUserMessage,
-      ledgerSnapshot,
+    yield* this.#turnRunner.run(input, {
+      skipUserMessage,
       retries,
-      maxTransientRetries,
       maxModelRetries,
-    } = ctx;
-
-    const outcome = yield* this.retryOrchestrator.handleRetryDecision({
-      error,
-      turn,
-      gen,
-      stream,
-      retries,
-      maxTransientRetries,
-      maxModelRetries,
+      signal,
+      resumeState,
     });
-
-    switch (outcome.kind) {
-      case 'stale_generation':
-        return true;
-      case 'retry_flex_fallback': {
-        getMethod<[], void>(this.agentClient, 'useStandardServiceTierForNextRequest')?.call(this.agentClient);
-        this.#commonRestoreForRetry(ledgerSnapshot, stream);
-        yield* this.run(turn, outcome.runOptions);
-        return true;
-      }
-      case 'retry_transient': {
-        if (outcome.restoreOptions) {
-          this.#commonRestoreForRetry(ledgerSnapshot, stream, outcome.restoreOptions);
-        }
-        yield* this.run(turn, outcome.runOptions);
-        return true;
-      }
-      case 'retry_transport_downgrade': {
-        this.#commonRestoreForRetry(ledgerSnapshot, stream, outcome.restoreOptions);
-        yield* this.run(turn, outcome.runOptions);
-        return true;
-      }
-      case 'retry_hallucination': {
-        if (outcome.hadStream && stream) {
-          this.toolTracker.import(ledgerSnapshot);
-          if (outcome.addErrorContext) {
-            this.conversationStore.addErrorContext(outcome.addErrorContext);
-          }
-        } else {
-          this.conversationStore.removeLastUserMessage();
-        }
-        yield* this.run(turn, outcome.runOptions);
-        return true;
-      }
-    }
-
-    // Drop the just-added user turn from the store before yielding so the
-    // generator-cleanup path doesn't strand the removal — and so the error
-    // event can carry the dropped text for UI restoration.
-    let droppedUserMessage: { text: string; imageCount: number } | undefined;
-    if (addedUserMessage && !stream && this.#isCurrentGeneration(gen)) {
-      this.conversationStore.removeLastUserMessage();
-      droppedUserMessage = { text: turn.text, imageCount: turn.images?.length ?? 0 };
-    }
-    if (stream && this.#isCurrentGeneration(gen)) {
-      this.toolTracker.markOpenCallsAborted(error instanceof Error ? error.message : String(error));
-      const reconciled = reconcileHistoryWithToolLedger(this.conversationStore.getHistory(), this.toolTracker.export());
-      if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
-        this.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
-      }
-      this.#inputPlanner.recordSuccess(this.conversationStore.getHistory(), {
-        kind: 'full_history',
-        previousInput: streamInput,
-      });
-      const recoverySummary = this.toolTracker.getRecoverySummary();
-      if (recoverySummary) {
-        yield {
-          type: 'tool_recovery',
-          recoveredCallIds: recoverySummary.recoveredCallIds,
-          droppedCallIds: recoverySummary.droppedCallIds,
-          message: recoverySummary.message,
-        };
-      }
-    }
-    yield {
-      type: 'error',
-      message: describeError(error),
-      ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
-      ...(droppedUserMessage ? { droppedUserMessage } : {}),
-    };
-    this.logger.error('Conversation stream error', {
-      eventType: 'stream.failed',
-      category: 'stream',
-      phase: 'abort',
-      sessionId: this.id,
-      traceId: this.logger.getCorrelationId(),
-      errorMessage: describeError(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-    return false;
   }
 
   /**

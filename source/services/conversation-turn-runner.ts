@@ -99,12 +99,14 @@ export class ConversationTurnRunner {
       maxModelRetries,
       signal,
       resumeState,
+      resumePreviousResponseId,
     }: {
       skipUserMessage?: boolean;
       retries?: RetryState;
       maxModelRetries?: number;
       signal?: AbortSignal;
       resumeState?: unknown;
+      resumePreviousResponseId?: string | null;
     } = {},
   ): AsyncIterable<ConversationEvent> {
     const {
@@ -290,7 +292,7 @@ export class ConversationTurnRunner {
       try {
         if (resumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
           stream = (await this.deps.agentClient.continueRunStream(resumeState, {
-            previousResponseId: this.deps.state.previousResponseId,
+            previousResponseId: resumePreviousResponseId ?? this.deps.state.previousResponseId,
             sessionId: this.deps.sessionId,
           })) as AgentStream;
         } else {

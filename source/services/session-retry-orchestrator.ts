@@ -39,6 +39,7 @@ export type RetryOutcome =
         retries: RetryState;
         maxModelRetries?: number;
         resumeState?: unknown;
+        resumePreviousResponseId?: string | null;
       };
       delayMs: number;
       isResuming: boolean;
@@ -269,6 +270,7 @@ export class SessionRetryOrchestrator {
             retries: { ...retries, transientRetryCount: decision.attempt },
             maxModelRetries,
             resumeState: isResuming ? stream?.state : undefined,
+            resumePreviousResponseId: isResuming ? stream?.lastResponseId ?? null : undefined,
           },
           delayMs: decision.delay,
           isResuming,

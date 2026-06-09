@@ -743,6 +743,7 @@ test('continue() retries on transient error during stream iteration', async (t) 
 
   const initialStream = new MockStream([]);
   initialStream.interruptions = [interruption];
+  initialStream.lastResponseId = 'resp-initial';
   initialStream.state = {
     approve(arg) {},
   };
@@ -772,7 +773,7 @@ test('continue() retries on transient error during stream iteration', async (t) 
   const calls = [];
   const mockClient = {
     getProvider() {
-      return 'openai';
+      return 'codex';
     },
     async startStream(input, opts) {
       startCalls++;
@@ -806,6 +807,8 @@ test('continue() retries on transient error during stream iteration', async (t) 
 
   t.is(continueCalls, 2);
   t.is(startCalls, 1);
+  t.is(calls[1].opts.previousResponseId, 'resp-initial');
+  t.is(calls[2].opts.previousResponseId, 'resp-initial');
   const types = cont.map((e) => e.type);
   t.true(types.includes('retry'), 'should emit a retry event');
   t.true(types.includes('final'), 'should emit a final event after retry');
@@ -2854,6 +2857,72 @@ test('run() retries chaining streamed transient errors by breaking chaining and 
   t.is(typeof calls[2].input, 'string', 'successful retry should allow later turns to chain again');
   t.is(calls[2].input, 'follow up');
   t.is(calls[2].opts.previousResponseId, 'resp-recovered');
+});
+
+test('run() resumes streamed transient tool continuations with the failed response id', async (t) => {
+  const resumeState = { _generatedItems: [] };
+
+  class FailingStream extends MockStream {
+    constructor() {
+      super([]);
+      this.state = resumeState;
+      this.lastResponseId = 'resp-current-tool-call';
+    }
+
+    async *[Symbol.asyncIterator]() {
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call',
+            id: 'fc_1',
+            callId: 'call-read',
+            name: 'read_file',
+            arguments: '{}',
+          },
+        },
+      };
+      throw new Error('WebSocket connection closed before response completed (code=1006)');
+    }
+  }
+
+  const resumedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  resumedStream.finalOutput = 'Recovered';
+  resumedStream.lastResponseId = 'resp-recovered';
+
+  const calls = [];
+  const mockClient = {
+    getProvider() {
+      return 'codex';
+    },
+    async startStream(input, opts) {
+      calls.push({ kind: 'start', input, opts });
+      return new FailingStream();
+    },
+    async continueRunStream(state, opts) {
+      calls.push({ kind: 'continue', state, opts });
+      return resumedStream;
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('inspect')) {
+    emitted.push(ev);
+  }
+
+  t.is(calls.length, 2);
+  t.is(calls[1].kind, 'continue');
+  t.is(calls[1].state, resumeState);
+  t.is(calls[1].opts.previousResponseId, 'resp-current-tool-call');
+  t.deepEqual(
+    emitted.map((event) => event.type),
+    ['tool_started', 'retry', 'text_delta', 'final'],
+  );
 });
 
 test.serial('run() forces HTTP fallback after streamed WS retries are exhausted', async (t) => {

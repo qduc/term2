@@ -273,8 +273,11 @@ if (providerFlag && !validatedProviderFlag) {
 const validReasoningEfforts = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', null] as const;
 type ModelSettingsReasoningEffort = (typeof validReasoningEfforts)[number];
 
+const isValidReasoningEffort = (v: string): v is Exclude<ModelSettingsReasoningEffort, null> =>
+  (validReasoningEfforts as readonly string[]).includes(v);
+
 const validatedReasoningEffort: ModelSettingsReasoningEffort | undefined =
-  reasoningEffort && validReasoningEfforts.includes(reasoningEffort as any)
+  reasoningEffort && isValidReasoningEffort(reasoningEffort)
     ? (reasoningEffort as ModelSettingsReasoningEffort)
     : undefined;
 
@@ -323,7 +326,13 @@ if (forkRequested) {
 }
 
 // Apply CLI overrides to settings service
-const cliOverrides: any = {};
+interface CliOverrides {
+  agent?: Record<string, unknown>;
+  app?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+const cliOverrides: CliOverrides = {};
 
 if (resumedConversation) {
   cliOverrides.agent = {};
@@ -336,7 +345,7 @@ if (resumedConversation) {
   if (
     resumedConversation.reasoningEffort &&
     !validatedReasoningEffort &&
-    validReasoningEfforts.includes(resumedConversation.reasoningEffort as any)
+    isValidReasoningEffort(resumedConversation.reasoningEffort)
   ) {
     cliOverrides.agent.reasoningEffort = resumedConversation.reasoningEffort;
   }
@@ -376,7 +385,10 @@ const sessionContextService = new SessionContextService();
 // exclusive modes before deciding the implicit lite default.
 const settings = new SettingsService({
   env: buildEnvOverrides(),
-  cli: Object.keys(cliOverrides).length > 0 ? cliOverrides : undefined,
+  cli:
+    Object.keys(cliOverrides).length > 0
+      ? (cliOverrides as Partial<import('./services/settings-schema.js').SettingsData>)
+      : undefined,
   loggingService: logger,
 });
 
@@ -387,7 +399,7 @@ const settings = new SettingsService({
 {
   let resolvedLiteMode: boolean;
   if (resumedConversation) {
-    resolvedLiteMode = cliOverrides.app?.liteMode ?? false;
+    resolvedLiteMode = (cliOverrides.app?.liteMode as boolean | undefined) ?? false;
   } else if (cli.flags.lite) {
     resolvedLiteMode = true;
   } else {
@@ -482,8 +494,11 @@ if (sshFlag) {
         const { stdout } = await service.executeCommand('pwd');
         remoteDir = stdout.trim();
         console.log(`Defaulting to remote directory: ${remoteDir}`);
-      } catch (e: any) {
-        console.warn('Failed to detect remote home directory, defaulting to "."', e.message);
+      } catch (e: unknown) {
+        console.warn(
+          'Failed to detect remote home directory, defaulting to "."',
+          e instanceof Error ? e.message : String(e),
+        );
         remoteDir = '.';
       }
     }
@@ -504,8 +519,8 @@ if (sshFlag) {
     process.on('exit', cleanup);
     process.on('SIGINT', cleanup);
     process.on('SIGTERM', cleanup);
-  } catch (e: any) {
-    console.error(`Failed to connect via SSH to ${host}:`, e.message);
+  } catch (e: unknown) {
+    console.error(`Failed to connect via SSH to ${host}:`, e instanceof Error ? e.message : String(e));
     process.exit(1);
   }
 

@@ -5,12 +5,79 @@ const MAX_TOOL_CALL_LEN = 20;
 const MAX_TOOL_OUTPUT_LEN = 20;
 const MAX_LOG_TEXT_LEN = 100;
 
+// ── Structural types for chat-format metadata passed to sanitisation ──
+
+/** Content part containing a base64-encoded image. */
+export interface ImageContentPart {
+  type?: string;
+  image?: string;
+  image_url?: { url?: string; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
+/** A tool_call object inside an assistant message. */
+interface ToolCallEntry {
+  function?: {
+    arguments?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** A single chat message as it appears in provider traffic logs. */
+export interface ChatMessage {
+  role?: string;
+  content?: string | ImageContentPart[];
+  tool_calls?: ToolCallEntry[];
+  [key: string]: unknown;
+}
+
+/** A tool definition object as it appears in request metadata. */
+interface ToolDefinition {
+  function?: {
+    description?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** Top-level metadata shape accepted by sanitisation. */
+export interface LogMetadata {
+  messages?: ChatMessage[];
+  tools?: ToolDefinition[];
+  [key: string]: unknown;
+}
+
+// ── Type guards ──
+
+function isNonNullObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function isChatMessage(value: unknown): value is ChatMessage {
+  return isNonNullObject(value);
+}
+
+function isImageContentPart(value: unknown): value is ImageContentPart {
+  return isNonNullObject(value);
+}
+
+function isToolCallEntry(value: unknown): value is ToolCallEntry {
+  return isNonNullObject(value);
+}
+
+function isToolDefinition(value: unknown): value is ToolDefinition {
+  return isNonNullObject(value);
+}
+
+// ── Main sanitisation ──
+
 /**
  * Truncates verbose data in log metadata to prevent log overflow.
  * Targets: base64 images in messages, system/developer prompt content, tool descriptions,
  * tool call arguments, and tool output.
  */
-export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, any> {
+export function sanitizeLogMetadata(meta: LogMetadata): LogMetadata {
   if (!meta || typeof meta !== 'object') {
     return meta;
   }
@@ -21,22 +88,22 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
   if (Array.isArray(result.messages)) {
     let messagesModified = false;
 
-    const messages = result.messages.map((msg: any) => {
-      if (!msg || typeof msg !== 'object') {
+    const messages = result.messages.map((msg) => {
+      if (!isChatMessage(msg)) {
         return msg;
       }
 
-      let newMsg: Record<string, any> | null = null;
+      let newMsg: ChatMessage | null = null;
 
       // Truncate base64 images in content array items
       if (Array.isArray(msg.content)) {
-        const newContent = msg.content.map((item: any) => {
-          if (!item || typeof item !== 'object') {
+        const newContent = msg.content.map((item) => {
+          if (!isImageContentPart(item)) {
             return item;
           }
 
           let itemModified = false;
-          const newItem = { ...item };
+          const newItem: ImageContentPart = { ...item };
 
           if (typeof newItem.image === 'string' && newItem.image.startsWith('data:image/')) {
             newItem.image = truncateBase64(newItem.image);
@@ -57,7 +124,7 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
           return itemModified ? newItem : item;
         });
 
-        const contentModified = newContent.some((item: any, index: number) => item !== msg.content[index]);
+        const contentModified = newContent.some((item, index) => item !== msg.content![index]);
         if (contentModified) {
           newMsg = { ...msg, content: newContent };
         }
@@ -84,8 +151,8 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
 
       // Truncate assistant tool call arguments
       if (Array.isArray(msg.tool_calls)) {
-        const toolCalls = msg.tool_calls.map((toolCall: any) => {
-          if (!toolCall || typeof toolCall !== 'object') {
+        const toolCalls = msg.tool_calls.map((toolCall) => {
+          if (!isToolCallEntry(toolCall)) {
             return toolCall;
           }
 
@@ -105,7 +172,7 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
           return fnModified ? { ...toolCall, function: newFn } : toolCall;
         });
 
-        const toolCallsModified = toolCalls.some((toolCall: any, index: number) => toolCall !== msg.tool_calls[index]);
+        const toolCallsModified = toolCalls.some((toolCall, index) => toolCall !== msg.tool_calls![index]);
         if (toolCallsModified) {
           const base = newMsg ?? { ...msg };
           newMsg = { ...base, tool_calls: toolCalls };
@@ -116,16 +183,17 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
       if (msg.role === 'tool') {
         const base = newMsg ?? { ...msg };
         let toolMsgModified = false;
-        const updatedToolMsg = { ...base };
+        const updatedToolMsg: ChatMessage = { ...base };
 
         if (typeof updatedToolMsg.content === 'string' && updatedToolMsg.content.length > MAX_TOOL_OUTPUT_LEN) {
           updatedToolMsg.content = truncateString(updatedToolMsg.content, MAX_TOOL_OUTPUT_LEN);
           toolMsgModified = true;
         }
 
-        for (const key of ['output', 'result', 'data']) {
-          if (typeof updatedToolMsg[key] === 'string' && updatedToolMsg[key].length > MAX_TOOL_OUTPUT_LEN) {
-            updatedToolMsg[key] = truncateString(updatedToolMsg[key], MAX_TOOL_OUTPUT_LEN);
+        for (const key of ['output', 'result', 'data'] as const) {
+          const val = updatedToolMsg[key];
+          if (typeof val === 'string' && val.length > MAX_TOOL_OUTPUT_LEN) {
+            updatedToolMsg[key] = truncateString(val, MAX_TOOL_OUTPUT_LEN);
             toolMsgModified = true;
           }
         }
@@ -138,7 +206,7 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
       return newMsg ?? msg;
     });
 
-    messagesModified = messages.some((msg: any, index: number) => msg !== result.messages[index]);
+    messagesModified = messages.some((msg, index) => msg !== result.messages![index]);
     if (messagesModified) {
       result = { ...result, messages };
     }
@@ -146,8 +214,8 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
 
   // Truncate tool descriptions
   if (Array.isArray(result.tools)) {
-    const tools = result.tools.map((tool: any) => {
-      if (!tool || typeof tool !== 'object') return tool;
+    const tools = result.tools.map((tool) => {
+      if (!isToolDefinition(tool)) return tool;
 
       const fn = tool.function;
       if (!fn || typeof fn !== 'object') return tool;
@@ -163,7 +231,7 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
       return fnModified ? { ...tool, function: newFn } : tool;
     });
 
-    const toolsModified = tools.some((t: any, i: number) => t !== result.tools[i]);
+    const toolsModified = tools.some((t, i) => t !== result.tools![i]);
     if (toolsModified) {
       result = { ...result, tools };
     }
@@ -172,7 +240,7 @@ export function sanitizeLogMetadata(meta: Record<string, any>): Record<string, a
   return result;
 }
 
-export function truncateImageData(meta: Record<string, any>): Record<string, any> {
+export function truncateImageData(meta: LogMetadata): LogMetadata {
   return sanitizeLogMetadata(meta);
 }
 

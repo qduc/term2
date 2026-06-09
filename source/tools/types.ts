@@ -16,7 +16,7 @@ export interface CommandMessage {
 }
 
 export type FormatCommandMessage = (
-  item: any,
+  item: import('./format-helpers.js').ToolResultItem,
   index: number,
   toolCallArgumentsById: Map<string, unknown>,
 ) => CommandMessage[];

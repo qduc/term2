@@ -1,12 +1,12 @@
 import path from 'path';
-import { LanguageProvider, Outline } from './types.js';
+import { LanguageProvider, Outline, ImportEntry, DeclEntry, ExportEntry } from './types.js';
 import { escapeRegExp, normalizeRelativePath, fileExists } from './utils.js';
 
 function extractPythonOutline(source: string): Outline {
   const lines = source.split('\n');
-  const imports: any[] = [];
-  const decls: any[] = [];
-  const exports: any[] = [];
+  const imports: ImportEntry[] = [];
+  const decls: DeclEntry[] = [];
+  const exports: ExportEntry[] = [];
 
   let inFromImportBlock = false;
   let fromImportSpecifier = '';

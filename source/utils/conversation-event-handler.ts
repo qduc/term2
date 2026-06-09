@@ -110,7 +110,7 @@ export function createConversationEventHandler(
   } = deps;
 
   const activeRunningToolCallIds = new Set<string>();
-  const pendingSubagentToolCalls = new Map<string, any>();
+  const pendingSubagentToolCalls = new Map<string, { role?: string; task?: string; [key: string]: unknown }>();
 
   const markCurrentReasoningFinalized = () => {
     if (!state.currentReasoningMessageId) {
@@ -316,7 +316,7 @@ export function createConversationEventHandler(
         // run_subagent shows its own title via SubagentActivityMessage
         if (toolName === 'run_subagent') {
           if (toolCallId) {
-            pendingSubagentToolCalls.set(toolCallId, args);
+            pendingSubagentToolCalls.set(toolCallId, args as { role?: string; task?: string; [key: string]: unknown });
           }
           return;
         }

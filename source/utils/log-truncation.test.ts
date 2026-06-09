@@ -1,9 +1,10 @@
 import test from 'ava';
 import { sanitizeLogMetadata, truncateLogText } from './log-truncation.js';
+import type { LogMetadata, ImageContentPart } from './log-truncation.js';
 
 test('sanitizeLogMetadata truncates image payloads in messages content', (t) => {
   const longBase64 = 'data:image/png;base64,' + 'a'.repeat(10000);
-  const meta = {
+  const meta: LogMetadata = {
     eventType: 'provider.request.started',
     messages: [
       {
@@ -18,17 +19,18 @@ test('sanitizeLogMetadata truncates image payloads in messages content', (t) => 
   };
 
   const sanitized = sanitizeLogMetadata(meta);
-  const firstMessage = sanitized.messages[0]!;
-  const directImage = firstMessage.content[1].image;
-  const imageUrl = firstMessage.content[2].image_url!.url;
+  const firstMessage = sanitized.messages![0]!;
+  const content = firstMessage.content as ImageContentPart[];
+  const directImage = content[1].image!;
+  const imageUrl = content[2].image_url!.url!;
 
   t.not(sanitized, meta);
   t.true(directImage.length < 500);
   t.true(directImage.endsWith('... (truncated)'));
   t.true(imageUrl.length < 500);
   t.true(imageUrl.endsWith('... (truncated)'));
-  t.is(meta.messages[0]!.content[1].image, longBase64);
-  t.is(meta.messages[0]!.content[2].image_url!.url, longBase64);
+  t.is((meta.messages![0]!.content as ImageContentPart[])[1].image, longBase64);
+  t.is((meta.messages![0]!.content as ImageContentPart[])[2].image_url!.url, longBase64);
 });
 
 test('sanitizeLogMetadata returns metadata unchanged when there are no truncation targets', (t) => {
@@ -61,12 +63,12 @@ test('sanitizeLogMetadata truncates long system prompt content', (t) => {
   };
 
   const sanitized = sanitizeLogMetadata(meta);
-  const systemMsg = sanitized.messages[0];
+  const systemMsg = sanitized.messages![0]!;
 
   t.not(sanitized, meta);
   t.true(typeof systemMsg.content === 'string');
-  t.true(systemMsg.content.length < 700);
-  t.true(systemMsg.content.includes('... (truncated'));
+  t.true((systemMsg.content as string).length < 700);
+  t.true((systemMsg.content as string).includes('... (truncated'));
 });
 
 test('sanitizeLogMetadata truncates developer role content', (t) => {
@@ -79,7 +81,7 @@ test('sanitizeLogMetadata truncates developer role content', (t) => {
 
   const sanitized = sanitizeLogMetadata(meta);
   t.not(sanitized, meta);
-  t.true(sanitized.messages[0].content.includes('... (truncated'));
+  t.true((sanitized.messages![0]!.content as string).includes('... (truncated'));
 });
 
 test('sanitizeLogMetadata does not truncate short system prompt', (t) => {
@@ -110,7 +112,7 @@ test('sanitizeLogMetadata truncates long tool descriptions', (t) => {
   };
 
   const sanitized = sanitizeLogMetadata(meta);
-  const desc = sanitized.tools[0].function.description;
+  const desc = sanitized.tools![0]!.function!.description!;
 
   t.not(sanitized, meta);
   t.true(desc.length < 500);
@@ -154,8 +156,8 @@ test('sanitizeLogMetadata handles both messages and tools together', (t) => {
 
   const sanitized = sanitizeLogMetadata(meta);
   t.not(sanitized, meta);
-  t.true(sanitized.messages[0].content.length < longSystem.length);
-  t.true(sanitized.tools[0].function.description.length < longDesc.length);
+  t.true((sanitized.messages![0]!.content as string).length < longSystem.length);
+  t.true(sanitized.tools![0]!.function!.description!.length < longDesc.length);
 });
 
 test('sanitizeLogMetadata returns original when tools array has no descriptions to truncate', (t) => {
@@ -187,10 +189,10 @@ test('sanitizeLogMetadata omits reasoning fields from assistant messages', (t) =
   };
 
   const sanitized = sanitizeLogMetadata(meta);
-  const msg = sanitized.messages[0]!;
+  const msg = sanitized.messages![0]!;
   t.false('reasoning' in msg);
   t.false('reasoning_content' in msg);
-  t.deepEqual(msg.content, meta.messages[0]!.content);
+  t.deepEqual(msg.content, meta.messages![0]!.content as ImageContentPart[]);
 });
 
 test('truncateLogText keeps the head and tail of long text', (t) => {

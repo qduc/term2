@@ -1,10 +1,10 @@
 import path from 'path';
-import { LanguageProvider, Outline, DeclarationKind, DeclEntry, ExportEntry } from './types.js';
+import { LanguageProvider, Outline, DeclarationKind, ImportEntry, DeclEntry, ExportEntry } from './types.js';
 import { escapeRegExp, normalizeRelativePath, fileExists } from './utils.js';
 
 function extractGoOutline(source: string): Outline {
   const lines = source.split('\n');
-  const imports: any[] = [];
+  const imports: ImportEntry[] = [];
   const decls: DeclEntry[] = [];
   const exports: ExportEntry[] = [];
   let inImportBlock = false;

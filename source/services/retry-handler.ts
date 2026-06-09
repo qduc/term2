@@ -76,12 +76,14 @@ export class RetryHandler {
       };
     }
 
-    const forceTransportDowngrade =
-      typeof this.agentClient.forceTransportDowngrade === 'function'
-        ? this.agentClient.forceTransportDowngrade(error)
-        : false;
-    if (isTransientRetryableError(error) && transportFallbackRetryCount < 1 && forceTransportDowngrade) {
-      return { kind: 'transport_downgrade' };
+    if (isTransientRetryableError(error) && transportFallbackRetryCount < 1) {
+      const forceTransportDowngrade =
+        typeof this.agentClient.forceTransportDowngrade === 'function'
+          ? this.agentClient.forceTransportDowngrade(error)
+          : false;
+      if (forceTransportDowngrade) {
+        return { kind: 'transport_downgrade' };
+      }
     }
 
     const hallucinationDecision = decideRetry(

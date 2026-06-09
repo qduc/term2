@@ -52,6 +52,27 @@ test('isRetryableTransportError separates retryable errors from HTTP fallback ca
       transportFallback: true,
     },
   );
+  t.deepEqual(
+    isRetryableTransportError(new Error('WebSocket connection closed before response completed (code=1001)')),
+    {
+      retryable: true,
+      transportFallback: true,
+    },
+  );
+  t.deepEqual(
+    isRetryableTransportError(new Error('WebSocket connection closed before response completed (code=1012)')),
+    {
+      retryable: true,
+      transportFallback: true,
+    },
+  );
+  t.deepEqual(
+    isRetryableTransportError(new Error('WebSocket connection closed before response completed (code=1008)')),
+    {
+      retryable: true,
+      transportFallback: true,
+    },
+  );
   t.deepEqual(isRetryableTransportError(new Error('unexpected server response: 401')), {
     retryable: false,
     transportFallback: false,
@@ -99,11 +120,20 @@ test('isTransientRetryableError: generic errors with rate-limit message are retr
 test('isTransientRetryableError: websocket response completion closes are retryable unless policy close code is present', (t) => {
   t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed')));
   t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1006)')));
+  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1001)')));
+  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1011)')));
+  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1012)')));
+  t.true(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1013)')));
+  t.true(
+    isTransientRetryableError(new Error('WebSocket closed before response.completed (code 1006: Connection ended)')),
+  );
   t.false(
     isTransientRetryableError(
       new Error('WebSocket connection closed before response completed (code=1008, reason="rate limit exceeded")'),
     ),
   );
+  t.false(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1002)')));
+  t.false(isTransientRetryableError(new Error('WebSocket connection closed before response completed (code=1003)')));
 });
 
 test('isTransientRetryableError: terminated errors are retryable', (t) => {

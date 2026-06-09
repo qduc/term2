@@ -104,6 +104,30 @@ test('classifyError returns transport downgrade when forced', (t) => {
   t.deepEqual(decision, { kind: 'transport_downgrade' });
 });
 
+test('classifyError does not force transport downgrade when error is not transiently retryable', (t) => {
+  let downgradeCalled = false;
+  const handler = makeHandler({
+    forceTransportDowngrade: () => {
+      downgradeCalled = true;
+      return true;
+    },
+  });
+
+  const decision = handler.classifyError({
+    error: new Error('boom'),
+    transientRetryCount: 0,
+    transportFallbackRetryCount: 0,
+    hallucinationRetryCount: 0,
+    flexServiceTierFallbackCount: 0,
+    maxTransientRetries: 5,
+    stream: null,
+    streamHistoryLength: 0,
+  });
+
+  t.deepEqual(decision, { kind: 'unrecoverable' });
+  t.false(downgradeCalled, 'forceTransportDowngrade should not be called for non-retryable errors');
+});
+
 test('classifyError returns hallucination retry when the model error is recoverable', (t) => {
   const handler = makeHandler();
 

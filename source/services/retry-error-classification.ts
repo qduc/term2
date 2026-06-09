@@ -16,6 +16,21 @@ const TRANSIENT_SYSTEM_ERROR_CODES = new Set([
   'ENETUNREACH',
 ]);
 
+// WebSocket close codes that indicate temporary conditions worth retrying.
+// Keep all retryable codes in one place.
+const RETRYABLE_WEBSOCKET_CLOSE_CODES = new Set([
+  '1001', // Going Away — server shutdown, may come back
+  '1006', // Abnormal Close — network drop, no close frame
+  '1011', // Internal Error — server hit unexpected condition
+  '1012', // Service Restart — server is restarting
+  '1013', // Try Again Later — server overloaded
+]);
+
+const extractWebSocketCloseCode = (message: string): string | undefined => {
+  const match = message.match(/code[=\s](\d+)/);
+  return match?.[1];
+};
+
 const getMessage = (error: unknown): string => {
   if (typeof error === 'string') return error;
   if (error && typeof error === 'object' && 'message' in error) {
@@ -84,7 +99,11 @@ const isFirstFrameTimeoutError = (error: unknown): boolean =>
 
 const isRetryableAbnormalCloseError = (error: unknown): boolean => {
   const message = getMessage(error).toLowerCase();
-  return message.includes('websocket connection closed before response completed') && message.includes('code=1006');
+  if (!message.includes('websocket connection closed before response completed')) {
+    return false;
+  }
+  const closeCode = extractWebSocketCloseCode(message);
+  return closeCode ? RETRYABLE_WEBSOCKET_CLOSE_CODES.has(closeCode) : true;
 };
 
 export const isRetryableTransportError = (error: unknown): RetryableTransportDecision => {
@@ -137,9 +156,9 @@ export const isTransientRetryableError = (error: unknown): boolean => {
     }
 
     const message = getMessage(error).toLowerCase();
-    if (message.includes('websocket connection closed before response completed')) {
-      const closeCode = message.match(/code=(\d+)/)?.[1];
-      return closeCode ? closeCode === '1006' : true;
+    if (message.includes('websocket connection closed') || message.includes('websocket closed')) {
+      const closeCode = extractWebSocketCloseCode(message);
+      return closeCode ? RETRYABLE_WEBSOCKET_CLOSE_CODES.has(closeCode) : true;
     }
 
     if (

@@ -1,4 +1,5 @@
 import test, { type ExecutionContext, type Macro } from 'ava';
+import { type ConversationEvent } from './conversation-events.js';
 import { type ConversationResult } from './conversation-session.js';
 import { createConversationSession } from './conversation-session-factory.js';
 import { createMockSettingsService } from './settings-service.mock.js';
@@ -651,6 +652,44 @@ test('auto mode: LLM-approved safe command skips approval_required and returns f
   if (result?.type !== 'response') throw new Error('Expected response');
   t.is(result.finalText, 'Files listed.');
   t.is(chatCalls.length, 1);
+});
+
+test('auto mode: approved continuation emits tool_started before streamed output and final', async (t) => {
+  const initialStream = createInterruptedStream([
+    createShellInterruption({ callId: 'call-auto-sequence', command: 'ls source' }),
+  ]);
+  const finalStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Files listed.' }]);
+  finalStream.finalOutput = 'Files listed.';
+
+  const { bundle } = createSessionHarness({
+    settingsOverrides: { 'shell.autoApproveMode': 'auto' },
+    startStreams: [initialStream],
+    continuationStreams: [finalStream],
+    chatImpl: async () =>
+      JSON.stringify({
+        results: [{ id: 'call-auto-sequence', reasoning: 'Listing files is safe.', approved: true }],
+      }),
+  });
+
+  const events: ConversationEvent[] = [];
+  for await (const event of bundle.session.run('list the source files')) {
+    events.push(event);
+  }
+
+  t.deepEqual(
+    events.map((event) =>
+      event.type === 'tool_started'
+        ? { type: event.type, callId: event.toolCallId, toolName: event.toolName }
+        : event.type === 'text_delta' || event.type === 'final'
+        ? { type: event.type, text: event.type === 'text_delta' ? event.delta : event.finalText }
+        : { type: event.type },
+    ),
+    [
+      { type: 'tool_started', callId: 'call-auto-sequence', toolName: 'shell' },
+      { type: 'text_delta', text: 'Files listed.' },
+      { type: 'final', text: 'Files listed.' },
+    ],
+  );
 });
 
 test('auto mode: LLM-rejected command still prompts user with advisory', async (t) => {

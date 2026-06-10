@@ -946,3 +946,223 @@ test('sendMessage sets firstUserMessagePreview to first turn text even on subseq
   t.is(contextLog[0].firstUserMessagePreview, 'first turn');
   t.is(contextLog[1].firstUserMessagePreview, 'first turn', 'Second turn should keep first turn as preview');
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// 9. TurnCoordinator observable event sequences
+// ══════════════════════════════════════════════════════════════════════════
+
+test('approval then approval emits each terminal boundary in order', async (t) => {
+  const first = createShellInterruption({ callId: 'call-first', command: 'echo first' });
+  const second = createShellInterruption({ callId: 'call-second', command: 'echo second' });
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [first];
+  initialStream.state = createApprovalState();
+
+  const continuationStream = new MockStream([]);
+  continuationStream.interruptions = [second];
+  continuationStream.state = createApprovalState();
+
+  const mockClient = {
+    async startStream() {
+      return initialStream;
+    },
+    async continueRunStream() {
+      return continuationStream;
+    },
+  };
+
+  const { session } = createConversationSession({
+    sessionId: 'approval-then-approval',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+  });
+
+  const events = [];
+  for await (const event of session.run('run both commands')) {
+    events.push(event);
+  }
+  for await (const event of session.continueAfterApproval({ answer: 'y' })) {
+    events.push(event);
+  }
+
+  t.deepEqual(
+    events.map((event) =>
+      event.type === 'approval_required'
+        ? { type: event.type, callId: event.approval.callId }
+        : event.type === 'tool_started'
+        ? { type: event.type, callId: event.toolCallId }
+        : { type: event.type },
+    ),
+    [
+      { type: 'approval_required', callId: 'call-first' },
+      { type: 'tool_started', callId: 'call-first' },
+      { type: 'approval_required', callId: 'call-second' },
+    ],
+  );
+});
+
+test('approval then rejection emits no tool_started event for the rejected tool', async (t) => {
+  const interruption = createShellInterruption({ callId: 'call-rejected', command: 'echo rejected' });
+  const approvalState = createApprovalState();
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = approvalState;
+
+  const rejectedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Rejected.' }]);
+  rejectedStream.finalOutput = 'Rejected.';
+
+  const mockClient = {
+    async startStream() {
+      return initialStream;
+    },
+    async continueRunStream() {
+      return rejectedStream;
+    },
+  };
+
+  const { session } = createConversationSession({
+    sessionId: 'approval-then-rejection',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+  });
+
+  const events = [];
+  for await (const event of session.run('run a command')) {
+    events.push(event);
+  }
+  for await (const event of session.continueAfterApproval({
+    answer: 'n',
+    rejectionReason: 'Not needed',
+  })) {
+    events.push(event);
+  }
+
+  t.deepEqual(
+    events.map((event) =>
+      event.type === 'approval_required'
+        ? { type: event.type, callId: event.approval.callId }
+        : event.type === 'text_delta' || event.type === 'final'
+        ? { type: event.type, text: event.type === 'text_delta' ? event.delta : event.finalText }
+        : { type: event.type },
+    ),
+    [
+      { type: 'approval_required', callId: 'call-rejected' },
+      { type: 'text_delta', text: 'Rejected.' },
+      { type: 'final', text: 'Rejected.' },
+    ],
+  );
+  t.deepEqual(approvalState.approveCalls, []);
+  t.deepEqual(approvalState.rejectCalls, [interruption]);
+});
+
+test('multiple sequential interruptions preserve approval and tool-start ordering', async (t) => {
+  const interruptions = [
+    createShellInterruption({ callId: 'call-one', command: 'echo one' }),
+    createShellInterruption({ callId: 'call-two', command: 'echo two' }),
+    createShellInterruption({ callId: 'call-three', command: 'echo three' }),
+  ];
+
+  const streams = interruptions.map((interruption) => {
+    const stream = new MockStream([]);
+    stream.interruptions = [interruption];
+    stream.state = createApprovalState();
+    return stream;
+  });
+  const finalStream = new MockStream([{ type: 'response.output_text.delta', delta: 'All done.' }]);
+  finalStream.finalOutput = 'All done.';
+  let continuationIndex = 0;
+
+  const mockClient = {
+    async startStream() {
+      return streams[0];
+    },
+    async continueRunStream() {
+      continuationIndex++;
+      return continuationIndex < streams.length ? streams[continuationIndex] : finalStream;
+    },
+  };
+
+  const { session } = createConversationSession({
+    sessionId: 'sequential-interruptions',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+  });
+
+  const events = [];
+  for await (const event of session.run('run three commands')) {
+    events.push(event);
+  }
+  for (let index = 0; index < 3; index++) {
+    for await (const event of session.continueAfterApproval({ answer: 'y' })) {
+      events.push(event);
+    }
+  }
+
+  t.deepEqual(
+    events.map((event) => {
+      if (event.type === 'approval_required') {
+        return `${event.type}:${event.approval.callId}`;
+      }
+      if (event.type === 'tool_started') {
+        return `${event.type}:${event.toolCallId}`;
+      }
+      return event.type;
+    }),
+    [
+      'approval_required:call-one',
+      'tool_started:call-one',
+      'approval_required:call-two',
+      'tool_started:call-two',
+      'approval_required:call-three',
+      'tool_started:call-three',
+      'text_delta',
+      'final',
+    ],
+  );
+});
+
+test('aborted approval resolved by new user input emits the abort marker before resumed output', async (t) => {
+  const interruption = createShellInterruption({ callId: 'call-aborted', command: 'echo pending' });
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = createApprovalState();
+
+  const resolvedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Changed course.' }]);
+  resolvedStream.finalOutput = 'Changed course.';
+
+  const mockClient = {
+    abort() {},
+    async startStream() {
+      return initialStream;
+    },
+    async continueRunStream() {
+      return resolvedStream;
+    },
+  };
+
+  const bundle = createConversationSession({
+    sessionId: 'aborted-approval-resolution',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+  });
+
+  const events = [];
+  for await (const event of bundle.session.run('run pending command')) {
+    events.push(event);
+  }
+  bundle.session.abort();
+  for await (const event of bundle.session.run('do something else')) {
+    events.push(event);
+  }
+
+  t.deepEqual(
+    events.map((event) => event.type),
+    ['approval_required', 'user_message_consumed_for_abort', 'text_delta', 'final'],
+  );
+  t.deepEqual(
+    bundle.stateFacade.listUserTurns().map(({ text, imageCount }) => ({ text, imageCount })),
+    [{ text: 'run pending command', imageCount: 0 }],
+  );
+});

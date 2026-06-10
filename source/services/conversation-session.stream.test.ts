@@ -150,6 +150,58 @@ test('run() falls back to standard service tier after flex timeout', async (t) =
   t.deepEqual(calls, ['hi', 'fallback', 'hi']);
 });
 
+test('run() emits an ordered transient retry before stream creation', async (t) => {
+  const transientError = new Error("We're currently processing too many requests - please try again later.");
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
+  successStream.finalOutput = 'Recovered';
+  let calls = 0;
+
+  const mockClient = {
+    getStreamMaxRetries() {
+      return 1;
+    },
+    async startStream() {
+      calls++;
+      if (calls === 1) {
+        throw transientError;
+      }
+      return successStream;
+    },
+  };
+
+  const bundle = createConversationSession({
+    sessionId: 'pre-stream-transient-retry',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const emitted = [];
+  for await (const event of bundle.session.run('retry me')) {
+    emitted.push(event);
+  }
+
+  t.deepEqual(
+    emitted.map((event) =>
+      event.type === 'retry'
+        ? {
+            type: event.type,
+            toolName: event.toolName,
+            attempt: event.attempt,
+            maxRetries: event.maxRetries,
+            retryType: event.retryType,
+          }
+        : event.type === 'text_delta' || event.type === 'final'
+        ? { type: event.type, text: event.type === 'text_delta' ? event.delta : event.finalText }
+        : { type: event.type },
+    ),
+    [
+      { type: 'retry', toolName: 'turn', attempt: 1, maxRetries: 1, retryType: 'upstream' },
+      { type: 'text_delta', text: 'Recovered' },
+      { type: 'final', text: 'Recovered' },
+    ],
+  );
+});
+
 test('run() retries streamed recoverable errors without committing failed stream history', async (t) => {
   class FailingStream extends MockStream {
     constructor() {
@@ -283,8 +335,25 @@ test('run() retries streamed transient websocket close 1006 by replaying the tur
   }
 
   t.deepEqual(
-    emitted.map((event) => event.type),
-    ['text_delta', 'retry', 'text_delta', 'final'],
+    emitted.map((event) =>
+      event.type === 'retry'
+        ? {
+            type: event.type,
+            toolName: event.toolName,
+            attempt: event.attempt,
+            maxRetries: event.maxRetries,
+            retryType: event.retryType,
+          }
+        : event.type === 'text_delta' || event.type === 'final'
+        ? { type: event.type, text: event.type === 'text_delta' ? event.delta : event.finalText }
+        : { type: event.type },
+    ),
+    [
+      { type: 'text_delta', text: 'partial' },
+      { type: 'retry', toolName: 'turn', attempt: 1, maxRetries: 5, retryType: 'upstream' },
+      { type: 'text_delta', text: 'Recovered' },
+      { type: 'final', text: 'Recovered' },
+    ],
   );
   t.is(emitted[1].retryType, 'upstream');
   t.is(calls.length, 2);
@@ -544,6 +613,10 @@ test('run() emits tool_recovery before error when a streamed turn fails after to
   t.true(recovery.message.includes('Recovered 1 completed'));
   t.true(
     emitted.findIndex((event) => event.type === 'tool_recovery') < emitted.findIndex((event) => event.type === 'error'),
+  );
+  t.deepEqual(
+    emitted.map((event) => event.type),
+    ['tool_started', 'command_message', 'tool_started', 'tool_recovery', 'error'],
   );
 
   // Regression: after a mid-stream failure, completed tool call/result pairs
@@ -2404,9 +2477,10 @@ test('run() ignores a stale completion after importState() bumps generation', as
   });
   const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
+  const staleEvents = [];
   const staleRun = (async () => {
-    for await (const _ of session.run('stale request')) {
-      // consume
+    for await (const event of session.run('stale request')) {
+      staleEvents.push(event);
     }
   })();
 
@@ -2422,6 +2496,17 @@ test('run() ignores a stale completion after importState() bumps generation', as
   releaseGate();
   await staleRun;
 
+  t.deepEqual(
+    staleEvents.map((event) =>
+      event.type === 'text_delta' || event.type === 'final'
+        ? { type: event.type, text: event.type === 'text_delta' ? event.delta : event.finalText }
+        : { type: event.type },
+    ),
+    [
+      { type: 'text_delta', text: 'stale reply' },
+      { type: 'final', text: 'stale reply' },
+    ],
+  );
   t.deepEqual(stateFacade.exportState().history, []);
 
   for await (const _ of session.run('fresh request')) {

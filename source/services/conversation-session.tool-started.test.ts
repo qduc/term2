@@ -1,7 +1,7 @@
 import test from 'ava';
 import type { ConversationEvent } from './conversation-events.js';
 import type { LogEvent } from './conversation-log-events.js';
-import { ConversationSession } from './conversation-session.js';
+import { createConversationSession } from './conversation-session-factory.js';
 
 const createMockLogger = () => {
   const events: Array<{
@@ -86,10 +86,12 @@ test('run() emits tool_started with parsed arguments when function_call argument
   };
 
   const { logger } = createMockLogger();
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
+  const { session } = bundle;
 
   const emitted: ConversationEvent[] = [];
   for await (const ev of session.run('hi')) {
@@ -137,10 +139,12 @@ test('run() emits one diagnostic packet when tool arguments contain malformed JS
   };
 
   const { logger, events } = createMockLogger();
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
+  const { session } = bundle;
 
   for await (const _ev of session.run('hi')) {
     // consume stream
@@ -207,17 +211,19 @@ test('approval continuation does not persist duplicate tool_started when SDK rep
   };
 
   const { logger } = createMockLogger();
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
+  const { terminalAdapter, conversationLogger } = bundle;
   const persisted: LogEvent[] = [];
-  session.setLogSink((event) => {
+  conversationLogger.setLogSink((event) => {
     persisted.push(event);
   });
 
-  await session.sendMessage('hi');
-  await session.handleApprovalDecision('y');
+  await terminalAdapter.sendMessage('hi');
+  await terminalAdapter.handleApprovalDecision('y');
 
   const starts = persisted.filter(
     (event): event is Extract<LogEvent, { type: 'tool_started' }> =>
@@ -261,10 +267,12 @@ test('run() emits one tool_started for duplicate function_call events with the s
   };
 
   const { logger } = createMockLogger();
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
+  const { session } = bundle;
 
   const emitted: ConversationEvent[] = [];
   for await (const ev of session.run('hi')) {

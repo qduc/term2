@@ -1,5 +1,6 @@
 import test from 'ava';
-import { ConversationSession, type ConversationResult } from './conversation-session.js';
+import { type ConversationResult } from './conversation-session.js';
+import { createConversationSession } from './conversation-session-factory.js';
 
 type ApprovalRequiredResult = Extract<ConversationResult, { type: 'approval_required' }>;
 type ResponseResult = Extract<ConversationResult, { type: 'response' }>;
@@ -168,7 +169,8 @@ const createSessionHarness = ({
     },
   };
 
-  const session = new ConversationSession('session-input-surge', {
+  const bundle = createConversationSession({
+    sessionId: 'session-input-surge',
     agentClient: agentClient as any,
     deps: {
       logger: createLogger() as any,
@@ -176,11 +178,11 @@ const createSessionHarness = ({
     },
   });
 
-  return { session };
+  return { session: bundle.session, bundle };
 };
 
-const seedInputSurgeBaseline = (session: ConversationSession, count = 65) => {
-  (session as any).__testSeedInputSurgeBaseline(makeHistoryItems(count, 'seed'), 'full_history');
+const seedInputSurgeBaseline = (bundle: any, count = 65) => {
+  bundle.inputPlanner.seedInputSurgeBaseline(makeHistoryItems(count, 'seed'), 'full_history');
 };
 
 const expectApprovalRequired = (result: ConversationResult | null): ApprovalRequiredResult => {
@@ -208,74 +210,84 @@ const expectResponse = (result: ConversationResult | null): ResponseResult => {
 };
 
 test('handleApprovalDecision updates the InputSurgeGuard baseline when approval triggers store growth', async (t) => {
-  const { session } = createSessionHarness({
+  const { bundle } = createSessionHarness({
     startStreams: [createInterruptedStream(), createTerminalStream(5, 'follow-up')],
     continuationStreams: [createTerminalStream(800, 'approved')],
   });
 
-  seedInputSurgeBaseline(session);
+  seedInputSurgeBaseline(bundle);
 
-  const firstResult = expectApprovalRequired(await session.sendMessage('please review this patch'));
+  const firstResult = expectApprovalRequired(await bundle.terminalAdapter.sendMessage('please review this patch'));
   t.truthy(firstResult.approval.callId);
 
-  const approvedResult = expectResponse(await session.handleApprovalDecision('y'));
+  const approvedResult = expectResponse(await bundle.terminalAdapter.handleApprovalDecision('y'));
   t.is(approvedResult.finalText, 'approved-final');
 
-  const followUpResult = expectResponse(await session.sendMessage('next turn after approval'));
+  const followUpResult = expectResponse(await bundle.terminalAdapter.sendMessage('next turn after approval'));
   t.is(followUpResult.finalText, 'follow-up-final');
 });
 
 test('handleApprovalDecision preserves the next-turn pending block for a very large appended tool result', async (t) => {
-  const { session } = createSessionHarness({
+  const { bundle } = createSessionHarness({
     startStreams: [createInterruptedStream()],
     continuationStreams: [createTerminalStreamWithLargeToolResult(120_000, 2, 'approved')],
   });
 
-  const firstResult = expectApprovalRequired(await session.sendMessage('approve a tool that returns a huge payload'));
+  const firstResult = expectApprovalRequired(
+    await bundle.terminalAdapter.sendMessage('approve a tool that returns a huge payload'),
+  );
   t.truthy(firstResult.approval.callId);
 
-  const approvedResult = expectResponse(await session.handleApprovalDecision('y'));
+  const approvedResult = expectResponse(await bundle.terminalAdapter.handleApprovalDecision('y'));
   t.is(approvedResult.finalText, 'approved-final');
 
-  const followUpError = await t.throwsAsync(session.sendMessage('next turn after huge tool result'));
+  const followUpError = await t.throwsAsync(bundle.terminalAdapter.sendMessage('next turn after huge tool result'));
   t.regex(followUpError.message, /New tool result added/);
 });
 
 test('abort-resolution updates the InputSurgeGuard baseline when a new message resumes a pending approval', async (t) => {
-  const { session } = createSessionHarness({
+  const { bundle } = createSessionHarness({
     startStreams: [createInterruptedStream(), createTerminalStream(6, 'follow-up')],
     continuationStreams: [createTerminalStream(800, 'abort-resolved')],
   });
 
-  seedInputSurgeBaseline(session);
+  seedInputSurgeBaseline(bundle);
 
-  const firstResult = expectApprovalRequired(await session.sendMessage('start a tool run'));
+  const firstResult = expectApprovalRequired(await bundle.terminalAdapter.sendMessage('start a tool run'));
   t.truthy(firstResult.approval.callId);
 
-  session.abort();
+  bundle.session.abort();
 
-  const resolvedResult = expectResponse(await session.sendMessage('replace the pending approval with new input'));
+  const resolvedResult = expectResponse(
+    await bundle.terminalAdapter.sendMessage('replace the pending approval with new input'),
+  );
   t.is(resolvedResult.finalText, 'abort-resolved-final');
 
-  const followUpResult = expectResponse(await session.sendMessage('next turn after abort resolution'));
+  const followUpResult = expectResponse(await bundle.terminalAdapter.sendMessage('next turn after abort resolution'));
   t.is(followUpResult.finalText, 'follow-up-final');
 });
 
 test('abort-resolution preserves the next-turn pending block for a very large appended tool result', async (t) => {
-  const { session } = createSessionHarness({
+  const { bundle } = createSessionHarness({
     startStreams: [createInterruptedStream()],
     continuationStreams: [createTerminalStreamWithLargeToolResult(120_000, 2, 'start a tool run that will be aborted')],
   });
 
-  const firstResult = expectApprovalRequired(await session.sendMessage('start a tool run that will be aborted'));
+  const firstResult = expectApprovalRequired(
+    await bundle.terminalAdapter.sendMessage('start a tool run that will be aborted'),
+  );
   t.truthy(firstResult.approval.callId);
 
-  session.abort();
+  bundle.session.abort();
 
-  const resolvedResult = expectResponse(await session.sendMessage('replace the pending approval with new input'));
+  const resolvedResult = expectResponse(
+    await bundle.terminalAdapter.sendMessage('replace the pending approval with new input'),
+  );
   t.is(resolvedResult.finalText, 'start a tool run that will be aborted-final');
 
-  const followUpError = await t.throwsAsync(session.sendMessage('next turn after aborted huge tool result'));
+  const followUpError = await t.throwsAsync(
+    bundle.terminalAdapter.sendMessage('next turn after aborted huge tool result'),
+  );
   t.regex(followUpError.message, /New tool result added/);
 });
 
@@ -296,13 +308,13 @@ test.serial(
       ...makeHistoryItems(198, 'reconciled'),
     ];
 
-    const { session } = createSessionHarness({
+    const { bundle } = createSessionHarness({
       startStreams: [createErrorStream(new Error('Max turns (100) exceeded')), createTerminalStream(5, 'recovered')],
       continuationStreams: [],
     });
 
-    seedInputSurgeBaseline(session, 201);
-    (session as any).toolTracker.import([
+    seedInputSurgeBaseline(bundle, 201);
+    bundle.toolTracker.import([
       {
         turnId: 'turn-1',
         callId: 'call-reconcile',
@@ -314,9 +326,9 @@ test.serial(
       },
     ]);
 
-    await t.throwsAsync(session.sendMessage('run until the SDK max-turns limit is reached'));
+    await t.throwsAsync(bundle.terminalAdapter.sendMessage('run until the SDK max-turns limit is reached'));
 
-    const followUpResult = expectResponse(await session.sendMessage('next turn after reconciliation'));
+    const followUpResult = expectResponse(await bundle.terminalAdapter.sendMessage('next turn after reconciliation'));
     t.is(followUpResult.finalText, 'recovered-final');
   },
 );

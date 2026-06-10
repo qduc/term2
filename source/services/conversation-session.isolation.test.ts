@@ -1,6 +1,6 @@
 // @ts-nocheck - Complex mock patterns deferred to follow-up
 import test from 'ava';
-import { ConversationSession } from './conversation-session.js';
+import { createConversationSession } from './conversation-session-factory.js';
 import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import { MockStream } from './test-helpers/mock-stream.js';
 
@@ -41,18 +41,22 @@ test('sessions do not share previousResponseId', async (t) => {
     },
   };
 
-  const sessionA = new ConversationSession('A', {
+  const bundleA = createConversationSession({
+    sessionId: 'A',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const sessionB = new ConversationSession('B', {
+  const { session: sessionA, terminalAdapter: terminalAdapterA, stateFacade: stateFacadeA } = bundleA;
+  const bundleB = createConversationSession({
+    sessionId: 'B',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session: sessionB, terminalAdapter: terminalAdapterB, stateFacade: stateFacadeB } = bundleB;
 
-  await sessionA.sendMessage('A1');
-  await sessionB.sendMessage('B1');
-  await sessionA.sendMessage('A2');
+  await terminalAdapterA.sendMessage('A1');
+  await terminalAdapterB.sendMessage('B1');
+  await terminalAdapterA.sendMessage('A2');
 
   t.deepEqual(startCalls, [
     { text: 'A1', options: { previousResponseId: null, sessionId: 'A' } },
@@ -100,26 +104,30 @@ test('sessions do not share pending approval context', async (t) => {
     },
   };
 
-  const sessionA = new ConversationSession('A', {
+  const bundleA = createConversationSession({
+    sessionId: 'A',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const sessionB = new ConversationSession('B', {
+  const { session: sessionA, terminalAdapter: terminalAdapterA, stateFacade: stateFacadeA } = bundleA;
+  const bundleB = createConversationSession({
+    sessionId: 'B',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session: sessionB, terminalAdapter: terminalAdapterB, stateFacade: stateFacadeB } = bundleB;
 
-  const approvalResult = await sessionA.sendMessage('needs approval');
+  const approvalResult = await terminalAdapterA.sendMessage('needs approval');
   t.is(approvalResult.type, 'approval_required');
 
-  const normalResult = await sessionB.sendMessage('normal');
+  const normalResult = await terminalAdapterB.sendMessage('normal');
   t.is(normalResult.type, 'response');
   t.is(normalResult.finalText, 'Hello');
 
-  const bApproval = await sessionB.handleApprovalDecision('y');
+  const bApproval = await terminalAdapterB.handleApprovalDecision('y');
   t.is(bApproval, null);
 
-  const aFinal = await sessionA.handleApprovalDecision('y');
+  const aFinal = await terminalAdapterA.handleApprovalDecision('y');
   t.is(aFinal.type, 'response');
   t.is(aFinal.finalText, 'Approved');
 });
@@ -142,13 +150,15 @@ test('queueModeNotice prefixes the next user message in stream input (chaining p
     },
   };
 
-  const session = new ConversationSession('notice-test-chaining', {
+  const bundle = createConversationSession({
+    sessionId: 'notice-test-chaining',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade } = bundle;
 
-  session.queueModeNotice('Mode change notice chaining');
-  await session.sendMessage('User msg');
+  stateFacade.queueModeNotice('Mode change notice chaining');
+  await terminalAdapter.sendMessage('User msg');
 
   t.is(startCalls.length, 1);
   t.is(startCalls[0].text, 'Mode change notice chaining\n\nUser msg');
@@ -170,13 +180,15 @@ test('queueModeNotice prefixes the next user message in stream input (non-chaini
     },
   };
 
-  const session = new ConversationSession('notice-test-non-chaining', {
+  const bundle = createConversationSession({
+    sessionId: 'notice-test-non-chaining',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade } = bundle;
 
-  session.queueModeNotice('Mode change notice non-chaining');
-  await session.sendMessage('User msg');
+  stateFacade.queueModeNotice('Mode change notice non-chaining');
+  await terminalAdapter.sendMessage('User msg');
 
   t.is(startCalls.length, 1);
   const passedHistory = startCalls[0].text;
@@ -189,7 +201,7 @@ test('queueModeNotice prefixes the next user message in stream input (non-chaini
   });
 
   // The notice is persisted as part of the user turn, not as a separate turn.
-  const persisted = session.exportState().history;
+  const persisted = stateFacade.exportState().history;
   t.is(persisted.length, 1);
   t.is((persisted[0].rawItem ?? persisted[0]).content, 'Mode change notice non-chaining\n\nUser msg');
 });
@@ -210,22 +222,24 @@ test('queueModeNotice preserves prefix stability by modifying only the next user
     },
   };
 
-  const session = new ConversationSession('notice-prefix-stability', {
+  const bundle = createConversationSession({
+    sessionId: 'notice-prefix-stability',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade } = bundle;
 
   // Turn 1: establish a conversation prefix with no notice.
-  await session.sendMessage('First question');
+  await terminalAdapter.sendMessage('First question');
   const turn1Input = startCalls[0].text;
 
   // Turn 2: switch modes mid-session, then send another message.
-  session.queueModeNotice('Plan Mode toggled OFF');
-  await session.sendMessage('Second question');
+  stateFacade.queueModeNotice('Plan Mode toggled OFF');
+  await terminalAdapter.sendMessage('Second question');
   const turn2Input = startCalls[1].text;
 
   // Turn 3: a normal message with no notice.
-  await session.sendMessage('Third question');
+  await terminalAdapter.sendMessage('Third question');
   const turn3Input = startCalls[2].text;
 
   // Turn 2's input is turn 1's prefix grown by the next user turn with the
@@ -267,20 +281,22 @@ test('queueModeNotice is consumed after a retrying request and does not leak to 
     },
   };
 
-  const session = new ConversationSession('notice-retry-stability', {
+  const bundle = createConversationSession({
+    sessionId: 'notice-retry-stability',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade } = bundle;
 
-  session.queueModeNotice('Plan mode toggled ON');
+  stateFacade.queueModeNotice('Plan mode toggled ON');
 
-  const firstTurn = await session.sendMessage('First question');
+  const firstTurn = await terminalAdapter.sendMessage('First question');
   t.is(firstTurn.type, 'response');
   t.is(startCalls.length, 2);
   t.is(startCalls[0].text, 'Plan mode toggled ON\n\nFirst question');
   t.true(Array.isArray(startCalls[1].text));
 
-  const secondTurn = await session.sendMessage('Second question');
+  const secondTurn = await terminalAdapter.sendMessage('Second question');
   t.is(secondTurn.type, 'response');
   t.is(startCalls.length, 3);
   t.true(Array.isArray(startCalls[2].text));
@@ -344,12 +360,14 @@ test('aborted approval resolution restores cached tool arguments for command mes
     },
   };
 
-  const session = new ConversationSession('abort-restore-stability', {
+  const bundle = createConversationSession({
+    sessionId: 'abort-restore-stability',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade } = bundle;
 
-  const approvalResult = await session.sendMessage('run the approved shell command');
+  const approvalResult = await terminalAdapter.sendMessage('run the approved shell command');
   t.is(approvalResult.type, 'approval_required');
 
   session.abort();

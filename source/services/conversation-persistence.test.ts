@@ -6,7 +6,7 @@ import path from 'node:path';
 import * as persistenceModule from './conversation-persistence.js';
 import { createConversationLogWriter, LockConflictError } from './conversation-log-writer.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
-import { ConversationSession } from './conversation-session.js';
+import { createConversationSession } from './conversation-session-factory.js';
 import { createMockSettingsService } from './settings-service.mock.js';
 
 const createSessionContextService = () => ({
@@ -780,7 +780,8 @@ test.serial('session logging writes compact v3 assistant_turn state without cumu
       content: [{ type: 'output_text', text: 'Done.' }],
     },
   ];
-  const session = new ConversationSession(id, {
+  const bundle = createConversationSession({
+    sessionId: id,
     agentClient: {
       startStream: async () => stream,
       getProvider: () => 'openai',
@@ -795,9 +796,10 @@ test.serial('session logging writes compact v3 assistant_turn state without cumu
     },
     sessionStartedAt: '2026-05-26T00:00:00.000Z',
   });
-  session.setLogSink((event) => writer.append(event));
+  const { terminalAdapter, conversationLogger } = bundle;
+  conversationLogger.setLogSink((event) => writer.append(event));
 
-  const result = await session.sendMessage('hello');
+  const result = await terminalAdapter.sendMessage('hello');
   t.is(result.type, 'response');
   await writer.close();
 
@@ -893,7 +895,8 @@ test.serial('session logging persists displayUsage separately from cumulative as
     usage: { inputTokens: 300, outputTokens: 50, totalTokens: 350 },
   };
 
-  const session = new ConversationSession(id, {
+  const bundle = createConversationSession({
+    sessionId: id,
     agentClient: {
       getProvider: () => 'openai',
       startStream: async () => initialStream,
@@ -909,16 +912,17 @@ test.serial('session logging persists displayUsage separately from cumulative as
     },
     sessionStartedAt: '2026-05-26T00:00:00.000Z',
   });
+  const { terminalAdapter, conversationLogger, shellAutoApproval } = bundle;
 
-  (session as any).shellAutoApproval = {
+  (shellAutoApproval as any).setDelegate({
     resolveAdvisoryForInterruption: async () => ({ model: 'gpt-5', reasoning: 'allow', decision: 'approve' }),
     shouldAutoApprove: () => true,
     clearCache: () => {},
-  };
+  });
 
-  session.setLogSink((event) => writer.append(event));
+  conversationLogger.setLogSink((event) => writer.append(event));
 
-  await session.sendMessage('hello');
+  await terminalAdapter.sendMessage('hello');
   await writer.close();
 
   const filePath = path.join(testDir, `${id}.jsonl`);
@@ -1030,7 +1034,8 @@ test.serial(
       },
     } as any;
 
-    const session = new ConversationSession(id, {
+    const bundle = createConversationSession({
+      sessionId: id,
       agentClient: mockAgentClient,
       deps: {
         logger: stubLogger,
@@ -1042,17 +1047,18 @@ test.serial(
       },
       sessionStartedAt: '2026-05-26T00:00:00.000Z',
     });
+    const { terminalAdapter, conversationLogger, shellAutoApproval } = bundle;
 
     // Inject a mock shellAutoApproval resolver that auto-approves
-    (session as any).shellAutoApproval = {
+    (shellAutoApproval as any).setDelegate({
       resolveAdvisoryForInterruption: async () => ({ model: 'gpt-5', reasoning: 'allow', decision: 'approve' }),
       shouldAutoApprove: () => true,
       clearCache: () => {},
-    };
+    });
 
-    session.setLogSink((event) => writer.append(event));
+    conversationLogger.setLogSink((event) => writer.append(event));
 
-    const result = await session.sendMessage('hello');
+    const result = await terminalAdapter.sendMessage('hello');
     t.is(result.type, 'response');
     t.true(continueCalled);
     await writer.close();

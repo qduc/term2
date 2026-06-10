@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import { ExecutionContext } from '../execution-context.js';
 import { getProvider } from '../../providers/index.js';
-import { ConversationSession } from '../conversation-session.js';
+import { createConversationSession } from '../conversation-session-factory.js';
 import { SubagentSession } from './subagent-session.js';
 import type { SubagentRequest, SubagentResult, SubagentDefinition, SubagentRole } from './types.js';
 import type { ConversationEvent } from '../conversation-events.js';
@@ -660,7 +660,8 @@ export class SubagentManager {
       retryAttempts: 2,
     });
 
-    const session = new ConversationSession(`subagent-${agentId}`, {
+    const session = createConversationSession({
+      sessionId: `subagent-${agentId}`,
       agentClient: subClient,
       deps: {
         logger: this.#logger,
@@ -670,7 +671,7 @@ export class SubagentManager {
       retryOptions: {
         allowFreshStartRetries: false,
       },
-    });
+    }).session;
 
     const userTurn = { text: request.task, images: [] as any[] };
     let finalText = '';

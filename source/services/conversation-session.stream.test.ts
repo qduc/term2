@@ -3,6 +3,7 @@ import test from 'ava';
 import { ModelBehaviorError } from '@openai/agents';
 import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import { ConversationSession } from './conversation-session.js';
+import { createConversationSession } from './conversation-session-factory.js';
 import { MockStream } from './test-helpers/mock-stream.js';
 
 const mockLogger = {
@@ -37,10 +38,12 @@ test('run() streams ConversationEvents (text_delta → final) in order', async (
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('hi')) {
@@ -81,10 +84,12 @@ test('run() warns when completed stream history already contains duplicated tool
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ev of session.run('hi')) {
     // consume stream
@@ -124,10 +129,12 @@ test('run() falls back to standard service tier after flex timeout', async (t) =
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('hi')) {
@@ -183,11 +190,13 @@ test('run() retries streamed recoverable errors without committing failed stream
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
     retryOptions: { allowFreshStartRetries: false },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('retry me')) {
@@ -215,11 +224,13 @@ test('run() does not retry recoverable errors from a fresh start when disabled',
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
     retryOptions: { allowFreshStartRetries: false },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   await t.throwsAsync(async () => {
@@ -259,10 +270,12 @@ test('run() retries streamed transient websocket close 1006 by replaying the tur
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('retry me')) {
@@ -345,10 +358,12 @@ test('run() retries non-chaining streamed transient errors from completed tool c
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('inspect')) {
@@ -373,7 +388,7 @@ test('run() retries non-chaining streamed transient errors from completed tool c
     ['function_call', 'function_call_result'],
   );
 
-  const state = session.exportState();
+  const state = stateFacade.exportState();
   t.is(state.toolLedger.filter((entry) => entry.callId === 'call-read').length, 1);
   t.is(state.toolLedger.find((entry) => entry.callId === 'call-read').status, 'completed');
 });
@@ -430,10 +445,12 @@ test('run() exports completed tool pairs from a stream that later fails', async 
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   await t.throwsAsync(async () => {
     for await (const _ev of session.run('inspect')) {
@@ -441,7 +458,7 @@ test('run() exports completed tool pairs from a stream that later fails', async 
     }
   });
 
-  const state = session.exportState();
+  const state = stateFacade.exportState();
   // Reconciled history: user message + completed call/result pair.
   // The aborted second call has no result yet, so it is not pushed into history.
   t.is(state.history.length, 3);
@@ -506,10 +523,12 @@ test('run() emits tool_recovery before error when a streamed turn fails after to
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   await t.throwsAsync(async () => {
@@ -530,19 +549,21 @@ test('run() emits tool_recovery before error when a streamed turn fails after to
   // Regression: after a mid-stream failure, completed tool call/result pairs
   // captured by the ledger must be reconciled into canonical history so the
   // next turn does not send two consecutive user messages with no tool record.
-  const state = session.exportState();
+  const state = stateFacade.exportState();
   const types = state.history.map((item) => item.rawItem?.type ?? item.type);
   t.true(types.includes('function_call'));
   t.true(types.includes('function_call_result') || types.includes('function_call_output'));
 });
 
 test('importState() reconciles completed ledger pairs into canonical history', (t) => {
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: {},
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  session.importState({
+  stateFacade.importState({
     previousResponseId: null,
     history: [{ role: 'user', type: 'message', content: 'inspect' }],
     toolLedger: [
@@ -570,7 +591,7 @@ test('importState() reconciles completed ledger pairs into canonical history', (
     ],
   });
 
-  const state = session.exportState();
+  const state = stateFacade.exportState();
   t.is(state.history.length, 3);
   t.is(state.history[1].callId, 'call-read');
   t.is(state.history[2].callId, 'call-read');
@@ -599,12 +620,14 @@ test('run() allows a follow-up after a long non-chaining run expands full histor
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  session.importState({
+  stateFacade.importState({
     previousResponseId: null,
     history: [{ role: 'user', type: 'message', content: 'seed' }],
   });
@@ -651,18 +674,20 @@ test('sendMessage() allows a follow-up after a long non-chaining run expands ful
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  session.importState({
+  stateFacade.importState({
     previousResponseId: null,
     history: [{ role: 'user', type: 'message', content: 'seed' }],
   });
 
-  await session.sendMessage('first');
-  const second = await session.sendMessage('second');
+  await terminalAdapter.sendMessage('first');
+  const second = await terminalAdapter.sendMessage('second');
 
   t.is(second.type, 'response');
   t.is(calls.length, 2);
@@ -703,10 +728,12 @@ test('continue() streams events after approval decision', async (t) => {
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const first = [];
   for await (const ev of session.run('run command')) {
@@ -787,10 +814,12 @@ test('continue() retries on transient error during stream iteration', async (t) 
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   // Trigger approval_required
   const first = [];
@@ -850,10 +879,12 @@ test('run() retries malformed tool-call interruption before surfacing approval',
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('run command')) {
@@ -926,10 +957,12 @@ test('continue() falls back to full-history replay when continuation request fai
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('run command')) {
   }
@@ -1008,10 +1041,12 @@ test('continue() persists the approved tool call/result pair before full-history
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('run command')) {
   }
@@ -1109,10 +1144,12 @@ test('follow-up after approval downgrade replay keeps full transcript even when 
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('run command')) {
   }
@@ -1202,7 +1239,8 @@ test('continue() downgrade recovery uses rawItem.callId from tool_approval_item 
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: {
       ...mockClient,
       async startStream(input) {
@@ -1215,6 +1253,7 @@ test('continue() downgrade recovery uses rawItem.callId from tool_approval_item 
     },
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('run command')) {
   }
@@ -1254,12 +1293,14 @@ test('sendMessage() preserves callId on approval_required terminal result', asyn
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  const result = await session.sendMessage('run command');
+  const result = await terminalAdapter.sendMessage('run command');
   t.is(result.type, 'approval_required');
   t.is(result.approval.callId, 'call-preserve-1');
 });
@@ -1301,16 +1342,18 @@ test('handleApprovalDecision() preserves callId on subsequent approval_required 
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  const first = await session.sendMessage('run command');
+  const first = await terminalAdapter.sendMessage('run command');
   t.is(first.type, 'approval_required');
   t.is(first.approval.callId, 'call-first');
 
-  const second = await session.handleApprovalDecision('y');
+  const second = await terminalAdapter.handleApprovalDecision('y');
   t.truthy(second);
   t.is(second?.type, 'approval_required');
   if (second?.type === 'approval_required') {
@@ -1330,10 +1373,12 @@ test('run() sends text for OpenAI provider (server-side state)', async (t) => {
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('Hello')) {
@@ -1369,10 +1414,12 @@ test('run() sends full history for non-OpenAI providers (client-side state)', as
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('Hello')) {
@@ -1436,10 +1483,12 @@ test('run() preserves assistant text prefix when SDK full-history reconstruction
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('Investigate cache issue')) {
     // consume events
@@ -1497,10 +1546,12 @@ test('run() sends full history for openai-compatible providers', async (t) => {
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   // First message
   for await (const ev of session.run('First message')) {
@@ -1558,10 +1609,12 @@ test('run() chains follow-up turns for Codex provider over websocket', async (t)
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('First message')) {
     // consume events
@@ -1590,12 +1643,14 @@ test('sendMessage() returns usage from final event', async (t) => {
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  const result = await session.sendMessage('Hello');
+  const result = await terminalAdapter.sendMessage('Hello');
 
   t.is(result.type, 'response');
   t.deepEqual(result.usage, {
@@ -1635,15 +1690,17 @@ test('handleApprovalDecision() returns usage from final event', async (t) => {
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  const approvalResult = await session.sendMessage('run command');
+  const approvalResult = await terminalAdapter.sendMessage('run command');
   t.is(approvalResult.type, 'approval_required');
 
-  const finalResult = await session.handleApprovalDecision('y');
+  const finalResult = await terminalAdapter.handleApprovalDecision('y');
   t.is(finalResult.type, 'response');
   t.deepEqual(finalResult.usage, {
     prompt_tokens: 21,
@@ -1673,12 +1730,14 @@ test('sendMessage() logs usage handoff at DEBUG level', async (t) => {
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  await session.sendMessage('Hello');
+  await terminalAdapter.sendMessage('Hello');
 
   const hasUsageReturnLog = debugLogs.some(
     (log) => log.message === 'sendMessage returning response' && log.meta?.hasUsage === true,
@@ -1705,12 +1764,14 @@ test('logs diagnostics when usage is missing in stream completion', async (t) =>
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  await session.sendMessage('Hello');
+  await terminalAdapter.sendMessage('Hello');
 
   const missingUsageLog = debugLogs.find((log) => log.message === 'No usage found in stream completion');
   t.truthy(missingUsageLog);
@@ -1729,12 +1790,14 @@ test('sendMessage() extracts usage from stream.rawResponses when completed is vo
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  const result = await session.sendMessage('Hello');
+  const result = await terminalAdapter.sendMessage('Hello');
   t.is(result.type, 'response');
   t.deepEqual(result.usage, {
     prompt_tokens: 13,
@@ -1771,12 +1834,14 @@ test('sendMessage() preserves cache usage from streaming events when final usage
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  const result = await session.sendMessage('Hello');
+  const result = await terminalAdapter.sendMessage('Hello');
   t.is(result.type, 'response');
   t.deepEqual(result.usage, {
     prompt_tokens: 100,
@@ -1811,10 +1876,12 @@ test('run() emits usage_update when usage is nested in event.data (raw_model_str
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('hi')) {
@@ -1858,10 +1925,12 @@ test('run() emits usage_update when raw model stream usage is nested in event.da
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('hi')) {
@@ -1896,10 +1965,12 @@ test('run() emits usage_update when usage is at top level of event', async (t) =
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('hi')) {
@@ -1930,16 +2001,18 @@ test('undoLastUserTurn() returns { text, imageCount: 0 } after a completed run',
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('hello')) {
     // consume
   }
 
-  const result = session.undoLastUserTurn();
+  const result = stateFacade.undoLastUserTurn();
   t.deepEqual(result, { text: 'hello', imageCount: 0 });
 });
 
@@ -1950,12 +2023,14 @@ test('undoLastUserTurn() returns null when no genuine user turn exists', async (
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  const result = session.undoLastUserTurn();
+  const result = stateFacade.undoLastUserTurn();
   t.is(result, null);
 });
 
@@ -2019,10 +2094,12 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   // (a) Run msg1 to completion — store now has msg1 + Reply1.
   for await (const _ of session.run('msg1')) {
@@ -2042,7 +2119,7 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
   await Promise.resolve();
 
   // (c) While msg2 is gated, undo it — bumps generation.
-  const undone = session.undoLastUserTurn();
+  const undone = stateFacade.undoLastUserTurn();
   t.deepEqual(undone, { text: 'msg2', imageCount: 0 });
 
   // (d) Resolve the gate so the gated run completes (but its store write should be skipped).
@@ -2071,10 +2148,12 @@ test('run() throws AbortError when the stream is cancelled/aborted', async (t) =
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   await t.throwsAsync(
     async () => {
@@ -2156,10 +2235,12 @@ test('run() sends full history after undo on a chaining provider (Responses API)
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   // Turn 1: chaining provider sends just the text string
   for await (const _ of session.run('First message')) {
@@ -2173,7 +2254,7 @@ test('run() sends full history after undo on a chaining provider (Responses API)
   t.is(typeof calls[1].input, 'string', 'Turn 2: chaining sends just the text');
 
   // Undo: removes second user turn, nullifies previousResponseId
-  session.undoLastUserTurn();
+  stateFacade.undoLastUserTurn();
 
   // Turn 3 (after undo): must send full history, NOT just the latest message
   for await (const _ of session.run('Retry message')) {
@@ -2229,11 +2310,13 @@ test('run() resyncs full history after resume before returning to chaining provi
     },
   };
 
-  const session = new ConversationSession('resumed-session', {
+  const bundle = createConversationSession({
+    sessionId: 'resumed-session',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  session.importState({
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  stateFacade.importState({
     history: [
       { role: 'user', type: 'message', content: 'Earlier message' },
       {
@@ -2314,10 +2397,12 @@ test('run() ignores a stale completion after importState() bumps generation', as
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const staleRun = (async () => {
     for await (const _ of session.run('stale request')) {
@@ -2327,7 +2412,7 @@ test('run() ignores a stale completion after importState() bumps generation', as
 
   await Promise.resolve();
 
-  session.importState({
+  stateFacade.importState({
     history: [],
     previousResponseId: null,
     toolLedger: [],
@@ -2337,7 +2422,7 @@ test('run() ignores a stale completion after importState() bumps generation', as
   releaseGate();
   await staleRun;
 
-  t.deepEqual(session.exportState().history, []);
+  t.deepEqual(stateFacade.exportState().history, []);
 
   for await (const _ of session.run('fresh request')) {
     // consume
@@ -2362,10 +2447,12 @@ test('run() with image attachment does not throw when supportsChaining is true',
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const turn = {
     text: 'describe this image',
@@ -2412,18 +2499,20 @@ test('previewLargeUncachedInput() does not mutate history or consume pending mod
       return settings.get(key);
     },
   };
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, settingsService, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  session.queueModeNotice('Plan mode enabled');
-  const before = session.exportState();
+  stateFacade.queueModeNotice('Plan mode enabled');
+  const before = stateFacade.exportState();
 
-  const decision = session.previewLargeUncachedInput('hello', 1_000);
+  const decision = stateFacade.previewLargeUncachedInput('hello', 1_000);
 
   t.is(decision.action, 'allow');
-  t.deepEqual(session.exportState(), before);
+  t.deepEqual(stateFacade.exportState(), before);
 });
 
 test('previewLargeUncachedInput() estimates from outgoing input instead of accepting accumulated session usage overrides', (t) => {
@@ -2442,13 +2531,15 @@ test('previewLargeUncachedInput() estimates from outgoing input instead of accep
       return settings.get(key);
     },
   };
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, settingsService, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const large = 'x'.repeat(64_000 * 4);
-  const decision = session.previewLargeUncachedInput(large, 1_000);
+  const decision = stateFacade.previewLargeUncachedInput(large, 1_000);
 
   t.is(decision.action, 'allow');
   t.true(decision.estimatedTokens >= 64_000);
@@ -2480,17 +2571,19 @@ test('sendMessage() records successful large guard state after provider request 
       return settings.get(key);
     },
   };
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, settingsService, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const large = 'x'.repeat(64_000 * 4);
-  t.is(session.previewLargeUncachedInput(large, 1_000).action, 'allow');
+  t.is(stateFacade.previewLargeUncachedInput(large, 1_000).action, 'allow');
 
-  await session.sendMessage(large);
+  await terminalAdapter.sendMessage(large);
 
-  const decision = session.previewLargeUncachedInput(large, Date.now() + 5 * 60 * 1_000 + 1);
+  const decision = stateFacade.previewLargeUncachedInput(large, Date.now() + 5 * 60 * 1_000 + 1);
   t.is(decision.action, 'warn');
   t.true(decision.reasons.includes('idle_timeout'));
 });
@@ -2502,10 +2595,12 @@ test('run() yields an error event carrying droppedUserMessage when startStream f
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   let thrown = null;
@@ -2527,7 +2622,7 @@ test('run() yields an error event carrying droppedUserMessage when startStream f
   t.is(errorEvent.droppedUserMessage.imageCount, 0);
 
   // And the store should have rolled back the user turn so /undo state is clean.
-  t.is(session.listUserTurns().length, 0);
+  t.is(stateFacade.listUserTurns().length, 0);
   t.truthy(thrown);
 });
 
@@ -2538,10 +2633,12 @@ test('run() omits droppedUserMessage when no user turn was added (skipUserMessag
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   try {
@@ -2583,10 +2680,12 @@ test('transport downgrade retries replay the full transcript instead of dropping
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('first question')) {
   }
@@ -2618,18 +2717,20 @@ test('run() emits user_message_consumed_for_abort when an aborted approval is be
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  session.approvalState.setPending({
+  approvalState.setPending({
     state: {},
     interruption: { type: 'tool_approval_item', rawItem: { name: 'noop', callId: 'c1' } },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
   });
-  session.approvalState.abortPending();
+  approvalState.abortPending();
 
   const emitted = [];
   try {
@@ -2643,7 +2744,7 @@ test('run() emits user_message_consumed_for_abort when an aborted approval is be
   const idx = emitted.findIndex((e) => e.type === 'user_message_consumed_for_abort');
   t.true(idx >= 0, 'must emit user_message_consumed_for_abort');
   // The store must not have a genuine user turn for this input.
-  t.is(session.listUserTurns().length, 0);
+  t.is(stateFacade.listUserTurns().length, 0);
 });
 
 test('switchProvider() clears provider continuity but preserves transcript history', async (t) => {
@@ -2674,25 +2775,31 @@ test('switchProvider() clears provider continuity but preserves transcript histo
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('First message')) {
   }
 
-  session.approvalState.setPending({
+  approvalState.setPending({
     state: {},
     interruption: { type: 'tool_approval_item', rawItem: { name: 'noop', callId: 'c1' } },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
   });
-  session.approvalState.abortPending();
+  approvalState.abortPending();
 
-  session.switchProvider('openrouter');
+  runtimeController.switchProvider('openrouter');
 
-  t.is(await session.handleApprovalDecision('y'), null, 'pending approval should be cleared on provider switch');
+  t.is(
+    await terminalAdapter.handleApprovalDecision('y'),
+    null,
+    'pending approval should be cleared on provider switch',
+  );
 
   const emitted = [];
   for await (const ev of session.run('Second message')) {
@@ -2711,7 +2818,7 @@ test('switchProvider() clears provider continuity but preserves transcript histo
   t.true(secondCall.input.length >= 2, 'replayed history should include the earlier user turn');
   t.falsy(secondCall.opts.previousResponseId, 'provider switch must discard previousResponseId from the old provider');
   t.deepEqual(
-    session.listUserTurns().map((turn) => turn.text),
+    stateFacade.listUserTurns().map((turn) => turn.text),
     ['First message', 'Second message'],
   );
 });
@@ -2741,15 +2848,17 @@ test('setModel() clears provider continuity and forces full-history replay on th
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('First message')) {
   }
 
-  session.setModel('gpt-next');
+  runtimeController.setModel('gpt-next');
 
   for await (const _ of session.run('Second message')) {
   }
@@ -2835,10 +2944,12 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   // Run turn 1 to completion — tool ledger now has the tool call entry.
   for await (const _ of session.run('run echo hello')) {
@@ -2846,14 +2957,14 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
   }
 
   // Verify ledger has entries before undo.
-  const stateBefore = session.exportState();
+  const stateBefore = stateFacade.exportState();
   t.true(stateBefore.toolLedger.length > 0, 'tool ledger should have entries before undo');
 
   // Undo the turn.
-  session.undoLastUserTurn();
+  stateFacade.undoLastUserTurn();
 
   // Verify ledger is cleared after undo.
-  const stateAfter = session.exportState();
+  const stateAfter = stateFacade.exportState();
   t.is(stateAfter.toolLedger.length, 0, 'tool ledger must be empty after undo');
 
   // Retry the same message — the model must NOT see the old tool call/result pair.
@@ -2978,10 +3089,12 @@ test('undoLastUserTurn() preserves earlier tool ledger entries that still belong
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('first tool turn')) {
   }
@@ -2989,9 +3102,9 @@ test('undoLastUserTurn() preserves earlier tool ledger entries that still belong
   for await (const _ of session.run('second tool turn')) {
   }
 
-  session.undoLastUserTurn();
+  stateFacade.undoLastUserTurn();
 
-  const stateAfterUndo = session.exportState();
+  const stateAfterUndo = stateFacade.exportState();
   t.deepEqual(
     stateAfterUndo.toolLedger.map((entry) => entry.callId),
     [firstToolCallId],
@@ -3075,10 +3188,12 @@ test('run() retries chaining streamed transient errors by breaking chaining and 
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('inspect')) {
@@ -3155,10 +3270,12 @@ test('run() resumes streamed transient tool continuations with the failed respon
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   for await (const ev of session.run('inspect')) {
@@ -3235,10 +3352,12 @@ test.serial('run() forces HTTP fallback after streamed WS retries are exhausted'
     },
   };
 
-  const session = new ConversationSession('s1', {
+  const bundle = createConversationSession({
+    sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
+  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   for await (const _ of session.run('first')) {
     // establish a chained Codex response id
@@ -3287,7 +3406,7 @@ test.serial('run() forces HTTP fallback after streamed WS retries are exhausted'
   t.is(emitted.filter((event) => event.type === 'retry' && event.toolName === 'turn').length, 5);
   t.is(emitted.filter((event) => event.type === 'retry' && event.toolName === 'transport').length, 1);
 
-  const state = session.exportState();
+  const state = stateFacade.exportState();
   const assistantTexts = state.history
     .filter((item) => item.role === 'assistant')
     .flatMap((item) => item.content || [])

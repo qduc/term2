@@ -9,6 +9,10 @@ import type { ConversationTerminalAdapter } from './conversation-terminal-adapte
 import type { SessionStateFacade } from './session-state-facade.js';
 import type { SessionRuntimeController } from './session-runtime-controller.js';
 import type { ConversationLogger } from './conversation-logger.js';
+import type { ApprovalState } from './approval-state.js';
+import type { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
+import type { SessionToolTracker } from './session-tool-tracker.js';
+import type { SessionInputPlanner } from './session-input-planner.js';
 import { ConversationSession } from './conversation-session.js';
 
 // ── Options for the top-level session factory ─────────────────────
@@ -33,6 +37,10 @@ export type ConversationSessionBundle = {
   stateFacade: SessionStateFacade;
   runtimeController: SessionRuntimeController;
   conversationLogger: ConversationLogger;
+  approvalState: ApprovalState;
+  shellAutoApproval: ShellAutoApprovalResolver;
+  toolTracker: SessionToolTracker;
+  inputPlanner: SessionInputPlanner;
   dispose: () => void;
 };
 
@@ -70,6 +78,10 @@ export function createConversationSession(options: CreateConversationSessionOpti
     stateFacade: composition.stateFacade,
     runtimeController: composition.runtimeController,
     conversationLogger: composition.conversationLogger,
+    approvalState: composition.approvalState,
+    shellAutoApproval: composition.shellAutoApproval,
+    toolTracker: composition.toolTracker,
+    inputPlanner: composition.inputPlanner,
     dispose: composition.dispose,
   };
 }

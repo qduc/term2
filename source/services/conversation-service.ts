@@ -51,7 +51,7 @@ export class ConversationService {
 
   resetWithNewId(newId: string): void {
     const previousLogSink = this.#logSink;
-    this.#bundle.session.reset();
+    this.#bundle.stateFacade.reset();
     this.#bundle.dispose();
     this.#bundle = createConversationSession({
       agentClient: this.#agentClient,
@@ -127,7 +127,7 @@ export class ConversationService {
   }
 
   previewLargeUncachedInput(input: string | UserTurn, now?: number): LargeUncachedInputDecision {
-    return this.#bundle.session.previewLargeUncachedInput(input, now);
+    return this.#bundle.stateFacade.previewLargeUncachedInput(input, now);
   }
 
   handleApprovalDecision(

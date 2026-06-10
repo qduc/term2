@@ -1,6 +1,7 @@
 // @ts-nocheck - Characterization tests for ConversationSession refactoring
 import test from 'ava';
 import { ConversationSession } from './conversation-session.js';
+import { createConversationSession } from './conversation-session-factory.js';
 import { createMockSettingsService } from './settings-service.mock.js';
 import { MockStream } from './test-helpers/mock-stream.js';
 
@@ -69,12 +70,14 @@ test('sendMessage installs setSubagentEventSink with a function then clears it t
     },
   };
 
-  const session = new ConversationSession('sink-test', {
+  const bundle = createConversationSession({
+    sessionId: 'sink-test',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { session, terminalAdapter } = bundle;
 
-  await session.sendMessage('hello');
+  await terminalAdapter.sendMessage('hello');
 
   // First call: a function (the wrapped onEvent)
   t.is(sinkCalls[0], 'function', 'First setSubagentEventSink call should install a function callback');
@@ -98,12 +101,14 @@ test('sendMessage dispatches events through conversationLogger before onEvent ca
     setSubagentEventSink() {},
   };
 
-  const session = new ConversationSession('log-dispatch', {
+  const bundle = createConversationSession({
+    sessionId: 'log-dispatch',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { terminalAdapter } = bundle;
 
-  const result = await session.sendMessage('hi', {
+  const result = await terminalAdapter.sendMessage('hi', {
     onEvent: (event) => {
       eventLog.push({ phase: 'onEvent', type: event.type });
     },
@@ -128,13 +133,15 @@ test('handleApprovalDecision returns null when no approval is pending', async (t
     },
   };
 
-  const session = new ConversationSession('no-pending', {
+  const bundle = createConversationSession({
+    sessionId: 'no-pending',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { terminalAdapter } = bundle;
 
   // No approval pending
-  const result = await session.handleApprovalDecision('y');
+  const result = await terminalAdapter.handleApprovalDecision('y');
   t.is(result, null);
 });
 
@@ -148,12 +155,14 @@ test('handleApprovalDecision returns null for rejection when no approval is pend
     },
   };
 
-  const session = new ConversationSession('reject-no-pending', {
+  const bundle = createConversationSession({
+    sessionId: 'reject-no-pending',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { terminalAdapter } = bundle;
 
-  const result = await session.handleApprovalDecision('n', 'User rejected');
+  const result = await terminalAdapter.handleApprovalDecision('n', 'User rejected');
   t.is(result, null);
 });
 
@@ -185,15 +194,17 @@ test('handleApprovalDecision forwards approvalAnswer to agentClient.setAskUserAn
     },
   };
 
-  const session = new ConversationSession('ask-user-test', {
+  const bundle = createConversationSession({
+    sessionId: 'ask-user-test',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { terminalAdapter } = bundle;
 
-  const approvalResult = await session.sendMessage('ask the user');
+  const approvalResult = await terminalAdapter.sendMessage('ask the user');
   t.is(approvalResult.type, 'approval_required');
 
-  const finalResult = await session.handleApprovalDecision('y', undefined, {
+  const finalResult = await terminalAdapter.handleApprovalDecision('y', undefined, {
     approvalAnswer: 'Use option B',
   });
 
@@ -225,15 +236,17 @@ test('handleApprovalDecision does not call setAskUserAnswer when answer is not y
     },
   };
 
-  const session = new ConversationSession('reject-no-ask', {
+  const bundle = createConversationSession({
+    sessionId: 'reject-no-ask',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { terminalAdapter } = bundle;
 
-  const approvalResult = await session.sendMessage('run command');
+  const approvalResult = await terminalAdapter.sendMessage('run command');
   t.is(approvalResult.type, 'approval_required');
 
-  const rejectionResult = await session.handleApprovalDecision('n', 'User rejected', {
+  const rejectionResult = await terminalAdapter.handleApprovalDecision('n', 'User rejected', {
     approvalAnswer: 'Use option B',
   });
 
@@ -265,16 +278,18 @@ test('handleApprovalDecision does not call setAskUserAnswer when approvalAnswer 
     },
   };
 
-  const session = new ConversationSession('no-answer-test', {
+  const bundle = createConversationSession({
+    sessionId: 'no-answer-test',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { terminalAdapter } = bundle;
 
-  const approvalResult = await session.sendMessage('run command');
+  const approvalResult = await terminalAdapter.sendMessage('run command');
   t.is(approvalResult.type, 'approval_required');
 
   // No approvalAnswer provided; handleApprovalDecision still calls continueAfterApproval
-  const result = await session.handleApprovalDecision('y');
+  const result = await terminalAdapter.handleApprovalDecision('y');
   t.is(result.type, 'response');
   t.false(askUserCalls.length > 0, 'setAskUserAnswer should NOT be called without approvalAnswer');
 });
@@ -295,16 +310,18 @@ test('abort with no pending approval does not throw and produces no change in sn
     },
   };
 
-  const session = new ConversationSession('abort-empty', {
+  const bundle = createConversationSession({
+    sessionId: 'abort-empty',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { session, stateFacade } = bundle;
 
   // No approval pending; abort should be a no-op
   session.abort();
 
   // The tool ledger should still be empty
-  const snapshot = session.getCurrentSnapshot();
+  const snapshot = stateFacade.getCurrentSnapshot();
   t.deepEqual(snapshot.toolLedger, [], 'Tool ledger should be empty when no approval was pending at abort');
 });
 
@@ -320,18 +337,20 @@ test('abort with pending approval records aborted entry in tool ledger', async (
     },
   };
 
-  const session = new ConversationSession('abort-pending', {
+  const bundle = createConversationSession({
+    sessionId: 'abort-pending',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { session, terminalAdapter, stateFacade } = bundle;
 
-  await session.sendMessage('run command');
+  await terminalAdapter.sendMessage('run command');
 
   // Now abort
   session.abort();
 
   // Verify the tool ledger has an aborted entry
-  const snapshot = session.getCurrentSnapshot();
+  const snapshot = stateFacade.getCurrentSnapshot();
   const abortedEntries = snapshot.toolLedger.filter((entry) => entry.status === 'aborted');
   t.true(abortedEntries.length > 0, 'Should have at least one aborted entry in the tool ledger');
   t.is(abortedEntries[0].callId, 'call-abort-1');
@@ -352,12 +371,14 @@ test('getCurrentSnapshot returns expected shape with history, previousResponseId
     },
   };
 
-  const session = new ConversationSession('snapshot-test', {
+  const bundle = createConversationSession({
+    sessionId: 'snapshot-test',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { stateFacade } = bundle;
 
-  const snapshot = session.getCurrentSnapshot();
+  const snapshot = stateFacade.getCurrentSnapshot();
 
   t.true(Array.isArray(snapshot.history));
   t.true(snapshot.previousResponseId === null || typeof snapshot.previousResponseId === 'string');
@@ -377,12 +398,14 @@ test('getCurrentSnapshot includes provider from agentClient.getProvider when ava
     },
   };
 
-  const session = new ConversationSession('provider-test', {
+  const bundle = createConversationSession({
+    sessionId: 'provider-test',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { stateFacade } = bundle;
 
-  const snapshot = session.getCurrentSnapshot();
+  const snapshot = stateFacade.getCurrentSnapshot();
   t.is(snapshot.provider, 'test-provider');
 });
 
@@ -396,7 +419,8 @@ test('getCurrentSnapshot includes model from settingsService when available', as
     },
   };
 
-  const session = new ConversationSession('model-test', {
+  const bundle = createConversationSession({
+    sessionId: 'model-test',
     agentClient: mockClient,
     deps: {
       logger: mockLogger,
@@ -404,8 +428,9 @@ test('getCurrentSnapshot includes model from settingsService when available', as
       sessionContextService: createSessionContextService(),
     },
   });
+  const { stateFacade } = bundle;
 
-  const snapshot = session.getCurrentSnapshot();
+  const snapshot = stateFacade.getCurrentSnapshot();
   t.is(snapshot.model, 'gpt-4o-test');
 });
 
@@ -429,12 +454,14 @@ test('setModel calls afterProviderChanged then agentClient.setModel', async (t) 
     },
   };
 
-  const session = new ConversationSession('set-model', {
+  const bundle = createConversationSession({
+    sessionId: 'set-model',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { runtimeController } = bundle;
 
-  session.setModel('gpt-4');
+  runtimeController.setModel('gpt-4');
 
   t.is(calls.length, 1);
   t.is(calls[0].method, 'setModel');
@@ -456,12 +483,14 @@ test('setProvider calls afterProviderChanged then agentClient.setProvider', asyn
     },
   };
 
-  const session = new ConversationSession('set-provider', {
+  const bundle = createConversationSession({
+    sessionId: 'set-provider',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { runtimeController } = bundle;
 
-  session.setProvider('anthropic');
+  runtimeController.setProvider('anthropic');
 
   t.is(calls.length, 1);
   t.is(calls[0].method, 'setProvider');
@@ -483,12 +512,14 @@ test('setProvider is idempotent via switchProvider alias', async (t) => {
     },
   };
 
-  const session = new ConversationSession('switch-provider', {
+  const bundle = createConversationSession({
+    sessionId: 'switch-provider',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { runtimeController } = bundle;
 
-  session.switchProvider('openai');
+  runtimeController.switchProvider('openai');
 
   t.is(calls.length, 1);
   t.is(calls[0].provider, 'openai');
@@ -509,12 +540,14 @@ test('setTemperature calls afterProviderChanged then agentClient.setTemperature'
     },
   };
 
-  const session = new ConversationSession('set-temp', {
+  const bundle = createConversationSession({
+    sessionId: 'set-temp',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { runtimeController } = bundle;
 
-  session.setTemperature(0.7);
+  runtimeController.setTemperature(0.7);
 
   t.is(calls.length, 1);
   t.is(calls[0].method, 'setTemperature');
@@ -536,12 +569,14 @@ test('setTemperature with undefined is passed through to agentClient', async (t)
     },
   };
 
-  const session = new ConversationSession('set-temp-undef', {
+  const bundle = createConversationSession({
+    sessionId: 'set-temp-undef',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { runtimeController } = bundle;
 
-  session.setTemperature(undefined);
+  runtimeController.setTemperature(undefined);
 
   t.is(calls.length, 1);
   t.is(calls[0].temp, undefined);
@@ -562,12 +597,14 @@ test('setReasoningEffort calls afterProviderChanged then agentClient.setReasonin
     },
   };
 
-  const session = new ConversationSession('set-reasoning', {
+  const bundle = createConversationSession({
+    sessionId: 'set-reasoning',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { runtimeController } = bundle;
 
-  session.setReasoningEffort('high');
+  runtimeController.setReasoningEffort('high');
 
   t.is(calls.length, 1);
   t.is(calls[0].method, 'setReasoningEffort');
@@ -585,13 +622,15 @@ test('setReasoningEffort is a no-op when agentClient lacks setReasoningEffort', 
     },
   };
 
-  const session = new ConversationSession('no-reasoning', {
+  const bundle = createConversationSession({
+    sessionId: 'no-reasoning',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
+  const { runtimeController } = bundle;
 
   // Should not throw
-  session.setReasoningEffort('low');
+  runtimeController.setReasoningEffort('low');
   t.pass();
 });
 
@@ -631,7 +670,8 @@ test('auto-approve: cumulative usage from continuation supersedes first-turn usa
     },
   };
 
-  const session = new ConversationSession('auto-usage-test', {
+  const bundle = createConversationSession({
+    sessionId: 'auto-usage-test',
     agentClient: mockClient,
     deps: {
       logger: mockLogger,
@@ -643,8 +683,9 @@ test('auto-approve: cumulative usage from continuation supersedes first-turn usa
       sessionContextService: createSessionContextService(),
     },
   });
+  const { terminalAdapter } = bundle;
 
-  const result = await session.sendMessage('list the source files');
+  const result = await terminalAdapter.sendMessage('list the source files');
 
   t.is(result.type, 'response');
   if (result.type !== 'response') return;
@@ -680,7 +721,8 @@ test('auto-approve: finalText comes from auto-approved continuation', async (t) 
     },
   };
 
-  const session = new ConversationSession('auto-text-test', {
+  const bundle = createConversationSession({
+    sessionId: 'auto-text-test',
     agentClient: mockClient,
     deps: {
       logger: mockLogger,
@@ -692,8 +734,9 @@ test('auto-approve: finalText comes from auto-approved continuation', async (t) 
       sessionContextService: createSessionContextService(),
     },
   });
+  const { terminalAdapter } = bundle;
 
-  const result = await session.sendMessage('echo hello');
+  const result = await terminalAdapter.sendMessage('echo hello');
 
   t.is(result.type, 'response');
   if (result.type !== 'response') return;
@@ -726,7 +769,8 @@ test('auto-approve: command messages from continuation are preserved in final re
     },
   };
 
-  const session = new ConversationSession('auto-cmd-test', {
+  const bundle = createConversationSession({
+    sessionId: 'auto-cmd-test',
     agentClient: mockClient,
     deps: {
       logger: mockLogger,
@@ -738,8 +782,9 @@ test('auto-approve: command messages from continuation are preserved in final re
       sessionContextService: createSessionContextService(),
     },
   });
+  const { terminalAdapter } = bundle;
 
-  const result = await session.sendMessage('list files');
+  const result = await terminalAdapter.sendMessage('list files');
 
   t.is(result.type, 'response');
   if (result.type !== 'response') return;
@@ -776,7 +821,8 @@ test('auto-approve: two auto-approved commands continue until approval_required 
     },
   };
 
-  const session = new ConversationSession('auto-batch-test', {
+  const bundle = createConversationSession({
+    sessionId: 'auto-batch-test',
     agentClient: mockClient,
     deps: {
       logger: mockLogger,
@@ -788,10 +834,11 @@ test('auto-approve: two auto-approved commands continue until approval_required 
       sessionContextService: createSessionContextService(),
     },
   });
+  const { terminalAdapter } = bundle;
 
   // First command is auto-approved; continuation hits the second which is
   // rejected by the LLM, so we should get an approval_required event
-  const result = await session.sendMessage('list files and print working directory');
+  const result = await terminalAdapter.sendMessage('list files and print working directory');
 
   t.is(result.type, 'approval_required');
   if (result.type !== 'approval_required') return;
@@ -831,12 +878,14 @@ test('sendMessage runs inside sessionContextService.runWithContext with session 
     },
   };
 
-  const session = new ConversationSession('traffic-test', {
+  const bundle = createConversationSession({
+    sessionId: 'traffic-test',
     agentClient: mockClient,
     deps: { logger: loggerWithTrace, sessionContextService },
   });
+  const { terminalAdapter } = bundle;
 
-  await session.sendMessage('my first question');
+  await terminalAdapter.sendMessage('my first question');
 
   t.is(contextLog.length, 1);
   const ctx = contextLog[0];
@@ -879,15 +928,17 @@ test('sendMessage sets firstUserMessagePreview to first turn text even on subseq
     },
   };
 
-  const session = new ConversationSession('traffic-preview', {
+  const bundle = createConversationSession({
+    sessionId: 'traffic-preview',
     agentClient: mockClient,
     deps: { logger: loggerWithTrace, sessionContextService },
   });
+  const { terminalAdapter } = bundle;
 
   // First message becomes the "first user message"
-  await session.sendMessage('first turn');
+  await terminalAdapter.sendMessage('first turn');
   // Second message should still show "first turn" as the firstUserMessagePreview
-  await session.sendMessage('second turn');
+  await terminalAdapter.sendMessage('second turn');
 
   t.is(contextLog.length, 2);
 

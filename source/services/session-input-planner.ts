@@ -107,6 +107,13 @@ export class SessionInputPlanner {
   }
 
   /**
+   * Seed the input surge guard baseline for testing.
+   */
+  seedInputSurgeBaseline(data: unknown[], kind: 'delta' | 'full_history'): void {
+    this.recordSuccess(data, { kind, previousInput: undefined });
+  }
+
+  /**
    * Build an input plan for the given user turn.
    *
    * @param turn - The user turn to build input for (already normalized by the session).

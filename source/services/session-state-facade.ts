@@ -7,6 +7,7 @@ import { ConversationLogger } from './conversation-logger.js';
 import type { StateSnapshot } from './conversation-log-events.js';
 import { SessionStateController } from './session-state-controller.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
+import { SessionInputPlanner } from './session-input-planner.js';
 import { reconcileHistoryWithToolLedger, type SavedToolExecution } from './tool-execution-ledger.js';
 import { getMethod } from './interruption-info.js';
 
@@ -22,6 +23,7 @@ export class SessionStateFacade {
   readonly #conversationLogger: ConversationLogger;
   readonly #agentClient: ConversationAgentClient;
   readonly #settingsService?: ISettingsService;
+  readonly #inputPlanner: SessionInputPlanner;
 
   constructor(deps: {
     conversationStore: ConversationStore;
@@ -30,6 +32,7 @@ export class SessionStateFacade {
     conversationLogger: ConversationLogger;
     agentClient: ConversationAgentClient;
     settingsService?: ISettingsService;
+    inputPlanner: SessionInputPlanner;
   }) {
     this.#conversationStore = deps.conversationStore;
     this.#toolTracker = deps.toolTracker;
@@ -37,6 +40,7 @@ export class SessionStateFacade {
     this.#conversationLogger = deps.conversationLogger;
     this.#agentClient = deps.agentClient;
     this.#settingsService = deps.settingsService;
+    this.#inputPlanner = deps.inputPlanner;
   }
 
   // ── Reset ─────────────────────────────────────────────────────────
@@ -108,6 +112,12 @@ export class SessionStateFacade {
 
   queueModeNotice(text: string): void {
     this.#state.pendingModeNotice = text;
+  }
+
+  previewLargeUncachedInput(input: string | UserTurn, now = Date.now()) {
+    return this.#inputPlanner.previewLargeUncachedInput(input, now, {
+      pendingModeNotice: this.#state.pendingModeNotice,
+    });
   }
 
   // ── Private helpers ───────────────────────────────────────────────

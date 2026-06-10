@@ -1,5 +1,5 @@
 import test from 'ava';
-import { ConversationSession } from './conversation-session.js';
+import { createConversationSession } from './conversation-session-factory.js';
 import { LoggingService } from './logging-service.js';
 
 const logger = new LoggingService({ disableLogging: true });
@@ -53,10 +53,11 @@ test('ConversationSession extracts reasoning_content from stream', async (t) => 
     }),
   };
 
-  const session = new ConversationSession('test-session', {
+  const session = createConversationSession({
+    sessionId: 'test-session',
     agentClient: mockAgentClient,
     deps: { logger, sessionContextService: createSessionContextService() as any },
-  } as any);
+  } as any).session;
 
   const events: any[] = [];
   for await (const event of session.run('hi')) {

@@ -208,6 +208,7 @@ export function createConversationSessionComposition(
     conversationLogger,
     agentClient,
     settingsService,
+    inputPlanner,
   });
 
   const runtimeController = new SessionRuntimeController({

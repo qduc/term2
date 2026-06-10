@@ -192,3 +192,57 @@ test('SessionStreamProcessor.finalize() updates state and planner previousRespon
   t.is(state.previousResponseId, 'resp-123');
   t.is(inputPlanner.previousResponseId, 'resp-123');
 });
+
+test('SessionStreamProcessor.finalize() prefers full replay history when full-history output only contains tool results', (t) => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const conversationLogger = {} as unknown as ConversationLogger;
+
+  const retryOrchestrator = {
+    isCurrentGeneration: () => true,
+    inputSurgeKindState: 'full_history',
+  } as unknown as SessionRetryOrchestrator;
+
+  const state = {
+    previousResponseId: null as string | null,
+  } as unknown as SessionStateController;
+
+  const inputPlanner = {
+    previousResponseId: null as string | null,
+  } as unknown as SessionInputPlanner;
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    retryOrchestrator,
+    state,
+    inputPlanner,
+  });
+
+  const fullHistory = [
+    { role: 'user', type: 'message', content: 'Inspect the logs' },
+    { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
+    { type: 'function_call_output', callId: 'call-read', output: 'log contents' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'I found the problem.' }],
+    },
+  ];
+
+  const stream = makeStream([], {
+    interruptions: [],
+    lastResponseId: 'resp-123',
+  });
+  (stream as any).history = fullHistory;
+  (stream as any).output = [{ type: 'function_call_output', callId: 'call-read', output: 'log contents' }];
+  (stream as any).newItems = [];
+
+  processor.finalize(stream, 1, 'startStream');
+
+  t.deepEqual(conversationStore.getHistory(), fullHistory);
+});

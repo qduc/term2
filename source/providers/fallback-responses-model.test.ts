@@ -1377,3 +1377,30 @@ test('FallbackResponsesModel.getResponse uses exponential backoff between WS ret
   t.is(sleep.delays[1], 1000, 'second retry delay');
   t.is(sleep.delays[2], 2000, 'third retry delay');
 });
+
+test('FallbackResponsesModel invokes onRetry before each WS retry backoff', async (t) => {
+  let wsCalled = 0;
+  let retryCount = 0;
+
+  const wsError = new Error('WebSocket first frame timeout after 5000ms');
+  const wsModel = makeMockModel({
+    getResponse: async () => {
+      wsCalled++;
+      throw wsError;
+    },
+  });
+  const httpModel = makeMockModel({
+    getResponse: async () => ({ usage: {} as any, output: [] }),
+  });
+
+  const state = { isDowngraded: false, onRetry: () => retryCount++ };
+  const model = new FallbackResponsesModel(wsModel, httpModel, state, undefined, undefined, undefined, undefined, {
+    sleep: async () => {},
+    random: () => 0.5,
+  });
+
+  await model.getResponse({} as any);
+
+  t.is(wsCalled, DEFAULT_STREAM_MAX_RETRIES + 1);
+  t.is(retryCount, DEFAULT_STREAM_MAX_RETRIES);
+});

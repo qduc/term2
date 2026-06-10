@@ -64,6 +64,17 @@ test('getCallIdFromObject falls back to rawItem keys when top-level is missing',
   t.is(getCallIdFromObject(null), undefined);
 });
 
+test('getCallIdFromObject prefers rawItem.callId over wrapper id for approval items', (t) => {
+  t.is(
+    getCallIdFromObject({
+      type: 'tool_approval_item',
+      id: 'approval-wrapper-id',
+      rawItem: { id: 'fc_provider_item', callId: 'call-real-id' },
+    }),
+    'call-real-id',
+  );
+});
+
 test('getCommandFromArgs handles JSON-string command shape', (t) => {
   t.is(getCommandFromArgs(JSON.stringify({ command: 'ls -la' })), 'ls -la');
 });

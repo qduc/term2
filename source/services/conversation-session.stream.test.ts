@@ -1031,6 +1031,208 @@ test('continue() persists the approved tool call/result pair before full-history
   );
 });
 
+test('follow-up after approval downgrade replay keeps full transcript even when recovery output only contains tool results', async (t) => {
+  const approvedCallId = 'call-approved-follow-up';
+  const state = {
+    _generatedItems: [],
+    approve() {
+      this._generatedItems = [
+        {
+          rawItem: {
+            type: 'function_call_output',
+            callId: approvedCallId,
+            output: 'ok',
+          },
+        },
+      ];
+    },
+    reject() {},
+  };
+
+  const interruption = {
+    name: 'shell',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ command: 'echo hi' }),
+    callId: approvedCallId,
+  };
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = state;
+  initialStream.lastResponseId = 'resp-initial';
+
+  const recoveryStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered after replay' }]);
+  recoveryStream.finalOutput = 'Recovered after replay';
+  recoveryStream.lastResponseId = 'resp-recovered';
+  recoveryStream.output = [{ type: 'function_call_output', callId: approvedCallId, output: 'ok' }];
+  recoveryStream.history = [
+    { role: 'user', type: 'message', content: 'run command' },
+    { type: 'function_call', callId: approvedCallId, name: 'shell', arguments: '{"command":"echo hi"}' },
+    { type: 'function_call_output', callId: approvedCallId, output: 'ok' },
+    {
+      role: 'assistant',
+      type: 'message',
+      status: 'completed',
+      content: [{ type: 'output_text', text: 'Recovered after replay' }],
+    },
+  ];
+
+  const followUpStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Follow up answer' }]);
+  followUpStream.finalOutput = 'Follow up answer';
+  followUpStream.lastResponseId = 'resp-follow-up';
+
+  const calls: Array<{ kind: 'start' | 'continue'; input?: any; opts?: any }> = [];
+  let startCalls = 0;
+  let onDowngrade: (() => void) | undefined;
+  const mockClient = {
+    getProvider() {
+      return 'codex';
+    },
+    onDowngrade(callback) {
+      onDowngrade = callback;
+    },
+    async startStream(input, opts) {
+      startCalls++;
+      calls.push({ kind: 'start', input, opts });
+      if (startCalls === 1) {
+        return initialStream;
+      }
+      if (startCalls === 2) {
+        return recoveryStream;
+      }
+      return followUpStream;
+    },
+    async continueRunStream(_state, opts) {
+      calls.push({ kind: 'continue', opts });
+      onDowngrade?.();
+      throw new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP');
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  for await (const _ of session.run('run command')) {
+  }
+
+  for await (const _ of session.continueAfterApproval({ answer: 'y' })) {
+  }
+
+  for await (const _ of session.run('what next?')) {
+  }
+
+  const followUpCall = calls[calls.length - 1];
+  t.is(followUpCall.kind, 'start');
+  t.true(Array.isArray(followUpCall.input));
+  t.deepEqual(
+    followUpCall.input.filter((item: any) => item.role === 'user').map((item: any) => item.content),
+    ['run command', 'what next?'],
+  );
+  t.true(
+    followUpCall.input.some((item: any) => item.type === 'function_call' && item.callId === approvedCallId),
+    'follow-up should keep approved tool call in replay history',
+  );
+  t.true(
+    followUpCall.input.some((item: any) => item.role === 'assistant' && item.type === 'message'),
+    'follow-up should keep recovered assistant message in replay history',
+  );
+});
+
+test('continue() downgrade recovery uses rawItem.callId from tool_approval_item wrappers', async (t) => {
+  const realCallId = 'call-real-id';
+  const state = {
+    _generatedItems: [],
+    approve() {
+      this._generatedItems = [
+        {
+          rawItem: {
+            type: 'function_call_output',
+            callId: realCallId,
+            output: 'ok',
+          },
+        },
+      ];
+    },
+    reject() {},
+  };
+
+  const interruption = {
+    type: 'tool_approval_item',
+    id: 'approval-wrapper-id',
+    rawItem: {
+      id: 'fc_provider_item',
+      callId: realCallId,
+      name: 'shell',
+      arguments: JSON.stringify({ command: 'echo hi' }),
+    },
+    agent: { name: 'CLI Agent' },
+    name: 'shell',
+    arguments: JSON.stringify({ command: 'echo hi' }),
+  };
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = state;
+  initialStream.lastResponseId = 'resp-initial';
+
+  let retryInput: any[] | undefined;
+  let onDowngrade: (() => void) | undefined;
+  const recoveryStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered after replay' }]);
+  recoveryStream.finalOutput = 'Recovered after replay';
+  recoveryStream.lastResponseId = 'resp-recovered';
+
+  const mockClient = {
+    getProvider() {
+      return 'codex';
+    },
+    onDowngrade(callback) {
+      onDowngrade = callback;
+    },
+    async startStream(input) {
+      if (!retryInput) {
+        return initialStream;
+      }
+      return recoveryStream;
+    },
+    async continueRunStream() {
+      onDowngrade?.();
+      throw new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP');
+    },
+  };
+
+  const session = new ConversationSession('s1', {
+    agentClient: {
+      ...mockClient,
+      async startStream(input) {
+        if (Array.isArray(input)) {
+          retryInput = input;
+          return recoveryStream;
+        }
+        return initialStream;
+      },
+    },
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  for await (const _ of session.run('run command')) {
+  }
+
+  for await (const _ of session.continueAfterApproval({ answer: 'y' })) {
+  }
+
+  t.true(Array.isArray(retryInput), 'retry should send full history');
+  t.true(
+    retryInput!.some((item: any) => item.type === 'function_call' && item.callId === realCallId),
+    'recovered full history must include the matching function_call',
+  );
+  t.true(
+    retryInput!.some((item: any) => item.type === 'function_call_output' && item.callId === realCallId),
+    'recovered full history must include the matching function_call_output',
+  );
+});
+
 test('sendMessage() preserves callId on approval_required terminal result', async (t) => {
   const interruption = {
     name: 'shell',

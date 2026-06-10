@@ -83,7 +83,10 @@ class FallbackOpenAIProvider implements ModelProvider {
     private readonly openAIClient: OpenAI,
     private readonly loggingService: any,
     private readonly sessionContextService?: any,
-  ) {}
+    onRetry?: () => void,
+  ) {
+    this.fallbackState.onRetry = onRetry;
+  }
 
   getModel(modelName?: string): Model {
     const model = modelName || 'gpt-4o';
@@ -130,7 +133,7 @@ class FallbackOpenAIProvider implements ModelProvider {
 registerProvider({
   id: 'openai',
   label: 'OpenAI',
-  createRunner: ({ settingsService, loggingService, sessionContextService }) => {
+  createRunner: ({ settingsService, loggingService, sessionContextService, onRetry }) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
     const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
     const openAIClient = new OpenAI({
@@ -143,7 +146,7 @@ registerProvider({
     });
 
     return new Runner({
-      modelProvider: new FallbackOpenAIProvider(openAIClient, loggingService, sessionContextService),
+      modelProvider: new FallbackOpenAIProvider(openAIClient, loggingService, sessionContextService, onRetry),
     });
   },
   fetchModels: fetchOpenAIModels,

@@ -6,6 +6,7 @@ export interface ProviderDeps {
   settingsService: ISettingsService;
   loggingService: ILoggingService;
   sessionContextService?: ISessionContextService;
+  onRetry?: () => void;
 }
 
 export type ProviderFetch = (url: string, options?: any) => Promise<any>;

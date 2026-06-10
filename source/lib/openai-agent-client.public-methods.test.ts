@@ -837,6 +837,48 @@ test.serial('setRetryCallback accepts callback function', (t) => {
   t.notThrows(() => client.setRetryCallback(() => {}));
 });
 
+test.serial('setRetryCallback is forwarded to the provider runner', async (t) => {
+  const providerId = 'mock-retry-callback-provider';
+  let providerRetryHook: (() => void) | undefined;
+  let retryCount = 0;
+
+  registerProvider({
+    id: providerId,
+    label: 'Mock Retry Callback Provider',
+    createRunner: (deps) => {
+      providerRetryHook = deps.onRetry;
+      return {
+        run: async () => {
+          deps.onRetry?.();
+          return {
+            status: 'completed',
+            finalOutput: 'mock response',
+            messages: [],
+          };
+        },
+      } as any;
+    },
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const settings = createMockSettings({
+    'agent.provider': providerId,
+    'agent.model': 'mock-model',
+  });
+  const client = new OpenAIAgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  client.setRetryCallback(() => {
+    retryCount += 1;
+  });
+
+  await client.chat('trigger retry hook');
+
+  t.truthy(providerRetryHook);
+  t.is(retryCount, 1);
+});
+
 test.serial('setAskUserAnswer stores and consumes answers by call id', (t) => {
   const settings = createMockSettings();
   const client = new OpenAIAgentClient({

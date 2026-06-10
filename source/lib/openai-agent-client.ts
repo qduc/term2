@@ -41,6 +41,7 @@ export class OpenAIAgentClient {
   #provider: string;
   #maxTurns: number;
   #retryAttempts: number;
+  #retryCallback: (() => void) | null = null;
   #currentAbortController: AbortController | null = null;
   #currentCorrelationId: string | null = null;
   #runner: Runner | null = null;
@@ -388,6 +389,7 @@ export class OpenAIAgentClient {
       settingsService: this.#settings,
       loggingService: this.#logger,
       sessionContextService: this.#sessionContextService,
+      onRetry: () => this.#retryCallback?.(),
     });
   }
 
@@ -408,7 +410,7 @@ export class OpenAIAgentClient {
   }
 
   setRetryCallback(callback: () => void): void {
-    void callback;
+    this.#retryCallback = callback;
   }
 
   shouldRetryWithoutFlexServiceTier(error: unknown): boolean {

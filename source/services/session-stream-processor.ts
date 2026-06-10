@@ -15,6 +15,14 @@ import type { AgentInputItem } from '@openai/agents';
 
 export type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
 
+const hasConversationMessageItems = (items: unknown[]): boolean =>
+  items.some((item) => {
+    const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
+    const raw = record?.rawItem;
+    const candidate = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : record;
+    return candidate?.type === 'message' && typeof candidate?.role === 'string';
+  });
+
 const warnIfStreamHistoryReplayedTools = ({
   logger,
   sessionId,
@@ -148,16 +156,20 @@ export class SessionStreamProcessor {
       if (this.deps.retryOrchestrator.inputSurgeKindState === 'delta') {
         this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
       } else {
-        // For full-history mode, prefer appending only the new items so we
-        // don't lose assistant text content that the SDK's history reconstruction
-        // may have stripped (e.g. turning assistant+tool_call messages into
-        // separate function_call items with null content).
-        const outputItems = snapshot.output;
-        const newItems = outputItems.length > 0 ? outputItems : snapshot.newItems;
-        if (newItems.length > 0) {
-          this.deps.conversationStore.appendOutput(newItems as AgentInputItem[]);
+        // In full-history mode, prefer message-bearing incremental items so we
+        // preserve assistant text that SDK history reconstruction may strip.
+        // If the incremental payload is only tool outputs, fall back to the
+        // authoritative replay history instead of poisoning the canonical store.
+        if (hasConversationMessageItems(snapshot.output)) {
+          this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
+        } else if (hasConversationMessageItems(snapshot.newItems)) {
+          this.deps.conversationStore.appendOutput(snapshot.newItems as AgentInputItem[]);
         } else if (snapshot.history.length > 0) {
           this.deps.conversationStore.replaceHistory(snapshot.history as AgentInputItem[]);
+        } else if (snapshot.output.length > 0) {
+          this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
+        } else if (snapshot.newItems.length > 0) {
+          this.deps.conversationStore.appendOutput(snapshot.newItems as AgentInputItem[]);
         }
       }
     }

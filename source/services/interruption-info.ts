@@ -19,25 +19,28 @@ export const getMethod = <TArgs extends unknown[], TResult>(
 
 export const getCallIdFromObject = (value: unknown): string | undefined => {
   const record = asRecord(value);
-  const callId =
+  const rawItem = asRecord(record?.rawItem);
+  const topLevelCallId =
     getString(record, 'callId') ??
     getString(record, 'call_id') ??
     getString(record, 'tool_call_id') ??
-    getString(record, 'toolCallId') ??
-    getString(record, 'id');
+    getString(record, 'toolCallId');
 
-  if (callId) {
-    return callId;
+  if (topLevelCallId) {
+    return topLevelCallId;
   }
 
-  const rawItem = asRecord(record?.rawItem);
-  return (
+  const nestedCallId =
     getString(rawItem, 'callId') ??
     getString(rawItem, 'call_id') ??
     getString(rawItem, 'tool_call_id') ??
-    getString(rawItem, 'toolCallId') ??
-    getString(rawItem, 'id')
-  );
+    getString(rawItem, 'toolCallId');
+
+  if (nestedCallId) {
+    return nestedCallId;
+  }
+
+  return getString(rawItem, 'id') ?? getString(record, 'id');
 };
 
 export const getCommandFromArgs = (args: unknown): string => {

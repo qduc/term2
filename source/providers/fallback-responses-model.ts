@@ -13,6 +13,8 @@ export interface FallbackState {
   isDowngraded: boolean;
   /** Called the first time the WS transport degrades to HTTP. */
   onDowngrade?: () => void;
+  /** Called before each retry backoff while WS transport is still retrying. */
+  onRetry?: () => void;
   /** Forces the transport into downgraded HTTP mode after session-level retry exhaustion. */
   forceDowngrade?: (error: unknown) => void;
 }
@@ -509,6 +511,7 @@ export class FallbackResponsesModel implements Model {
 
         lastTransportError = error;
         if (wsAttempt < maxWsAttempts) {
+          this.state.onRetry?.();
           const delayMs = computeUpstreamRetryDelayMs({
             attemptNumber: wsAttempt,
             random: this.warmupRandom,
@@ -667,6 +670,7 @@ export class FallbackResponsesModel implements Model {
 
         lastTransportError = error;
         if (wsAttempt < maxWsAttempts) {
+          this.state.onRetry?.();
           const delayMs = computeUpstreamRetryDelayMs({
             attemptNumber: wsAttempt,
             random: this.warmupRandom,

@@ -145,7 +145,7 @@ export function computeUpstreamRetryDelayMs({
   }
 
   if (attemptIndex !== undefined) {
-    const baseDelay = 500 + random() * 500;
+    const baseDelay = 5000 + random() * 25000;
     const exponentialDelay = baseDelay * Math.pow(2, attemptIndex);
     const cappedDelay = Math.min(exponentialDelay, 30000);
     return random() * cappedDelay;

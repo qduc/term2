@@ -422,7 +422,10 @@ class FallbackCodexProvider implements ModelProvider {
     private readonly tokenManager: CodexTokenManager,
     private readonly loggingService: any,
     private readonly sessionContextService?: ISessionContextService,
-  ) {}
+    onRetry?: () => void,
+  ) {
+    this.fallbackState.onRetry = onRetry;
+  }
 
   async getModel(modelName?: string): Promise<Model> {
     const resolvedModel = modelName || getDefaultModel();
@@ -539,7 +542,7 @@ function codexHeadersMiddleware(sessionContextService?: ISessionContextService):
 registerProvider({
   id: 'codex',
   label: 'Codex',
-  createRunner: ({ settingsService, loggingService, sessionContextService }) => {
+  createRunner: ({ settingsService, loggingService, sessionContextService, onRetry }) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-5.3-codex';
     const tokenManager = new CodexTokenManager();
 
@@ -562,7 +565,13 @@ registerProvider({
     });
 
     return new Runner({
-      modelProvider: new FallbackCodexProvider(openAIClient, tokenManager, loggingService, sessionContextService),
+      modelProvider: new FallbackCodexProvider(
+        openAIClient,
+        tokenManager,
+        loggingService,
+        sessionContextService,
+        onRetry,
+      ),
     });
   },
   fetchModels: fetchCodexModels,

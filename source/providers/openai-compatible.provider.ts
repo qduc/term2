@@ -134,6 +134,7 @@ export class OpencodeAnthropicFormatProvider implements ModelProvider {
     const openAIClient = new OpenAI({
       baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
       apiKey: runtimeConfig.apiKey || 'no-key',
+      maxRetries: 0,
       fetch: buildProviderFetch(this.config, this.deps, [
         createOpenAICompatibleMiddleware(this.config.type || 'opencode', runtimeConfig.baseUrl, {
           sessionContextService: this.deps.sessionContextService,
@@ -183,6 +184,7 @@ export function createCustomProviderModelProvider(
       const openAIClient = new OpenAI({
         apiKey: config.apiKey,
         baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
+        maxRetries: 0,
         fetch: buildProviderFetch(config, deps, [createOpenAIResponsesMiddleware()]) as any,
       });
       return new OpenAIProvider({
@@ -226,6 +228,7 @@ export function createCustomProviderModelProvider(
       const openAIClient = new OpenAI({
         baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
         apiKey: runtimeConfig.apiKey || 'no-key',
+        maxRetries: 0,
         fetch: buildProviderFetch(config, deps, [
           createOpenAICompatibleMiddleware(providerType, runtimeConfig.baseUrl, {
             sessionContextService: deps.sessionContextService,

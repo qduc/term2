@@ -1,6 +1,6 @@
 import type { OpenAIAgentClient } from './lib/openai-agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './services/service-interfaces.js';
-import { ConversationSession } from './services/conversation-session.js';
+import { createConversationSession } from './services/conversation-session-factory.js';
 import { SessionContextService } from './services/session-context-service.js';
 import type { ConversationEvent } from './services/conversation-events.js';
 import type { UserTurn } from './types/user-turn.js';
@@ -204,7 +204,8 @@ export async function runNonInteractive(
   },
 ): Promise<number> {
   const sessionContextService = config.sessionContextService ?? new SessionContextService();
-  const session = new ConversationSession(createNonInteractiveSessionId(), {
+  const { terminalAdapter, dispose } = createConversationSession({
+    sessionId: createNonInteractiveSessionId(),
     agentClient: config.agentClient,
     deps: {
       logger: config.logger,
@@ -213,5 +214,9 @@ export async function runNonInteractive(
     },
   });
 
-  return runWithSession(session, { ...config, sessionContextService });
+  try {
+    return await runWithSession(terminalAdapter, { ...config, sessionContextService });
+  } finally {
+    dispose();
+  }
 }

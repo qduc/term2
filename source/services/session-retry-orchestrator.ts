@@ -1,3 +1,4 @@
+import { type RunState } from '@openai/agents';
 import type { AgentStream } from './agent-stream.js';
 import type { ConversationEvent } from './conversation-events.js';
 import { MAX_HALLUCINATION_RETRIES } from './conversation-retry-policy.js';
@@ -38,7 +39,7 @@ export type RetryOutcome =
         skipUserMessage: boolean;
         retries: RetryState;
         maxModelRetries?: number;
-        resumeState?: unknown;
+        resumeState?: RunState<any, any>;
         resumePreviousResponseId?: string | null;
       };
       delayMs: number;

@@ -1,17 +1,8 @@
 import type { ILoggingService } from './service-interfaces.js';
 import type { ConversationEvent } from './conversation-events.js';
 import { ApprovalState, type AbortedApprovalContext, type PendingApprovalContext } from './approval-state.js';
-import {
-  installApprovalRejectionInterceptor,
-  tryInstallApprovalRejectionInterceptor,
-} from './approval-rejection-interceptor.js';
-import {
-  asRecord,
-  getCallIdFromObject,
-  getMethod,
-  getString,
-  getToolInfoFromInterruption,
-} from './interruption-info.js';
+import { markToolCallAsApprovalRejection } from '../utils/extract-command-messages.js';
+import { getCallIdFromObject, getToolInfoFromInterruption } from './interruption-info.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
 import { createInvalidToolCallDiagnostic } from './logging-contract.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
@@ -67,31 +58,14 @@ export class ApprovalFlowCoordinator {
    * parent interceptor path to avoid interceptor stacking issues.
    */
   prepareAbortResolution(abortedContext: AbortedApprovalContext, userText: string): AbortResolutionPlan {
-    const interruptionRecord = asRecord(abortedContext.interruption);
-    const toolName = getString(interruptionRecord, 'name') ?? 'unknown';
     const expectedCallId = getCallIdFromObject(abortedContext.interruption);
     const rejectionMessage = `Tool execution was not approved. User provided new input instead: ${userText}`;
 
-    const removeInterceptor: () => void = abortedContext.nestedSubagent
-      ? () => {
-          // no-op: nested path uses SDK-native reject() instead of
-          // a parent interceptor, so there is nothing to clean up.
-        }
-      : installApprovalRejectionInterceptor(this.deps.agentClient, {
-          toolName,
-          expectedCallId,
-          rejectionMessage,
-        });
+    markToolCallAsApprovalRejection(expectedCallId);
 
-    if (abortedContext.nestedSubagent) {
-      const reject = getMethod<[unknown], void>(abortedContext.state, 'reject');
-      reject?.call(abortedContext.state, abortedContext.interruption);
-    } else {
-      const approve = getMethod<[unknown], void>(abortedContext.state, 'approve');
-      approve?.call(abortedContext.state, abortedContext.interruption);
-    }
+    abortedContext.state.reject(abortedContext.interruption as any, { message: rejectionMessage });
 
-    return { abortedContext, removeInterceptor };
+    return { abortedContext, removeInterceptor: noop };
   }
 
   /**
@@ -106,7 +80,6 @@ export class ApprovalFlowCoordinator {
     }
 
     const { state, interruption } = pendingApprovalContext;
-    const interruptionRecord = asRecord(interruption);
 
     let toolStartedEvent: ConversationEvent | undefined;
 
@@ -145,45 +118,16 @@ export class ApprovalFlowCoordinator {
         arguments: parseResult.arguments,
       };
 
-      const approve = getMethod<[unknown], void>(state, 'approve');
-      approve?.call(state, interruption);
+      state.approve(interruption as any);
     } else {
-      const toolName = getString(interruptionRecord, 'name') ?? 'unknown';
       const expectedCallId = getCallIdFromObject(interruption);
       const rejectionMessage = rejectionReason
         ? `Tool execution was not approved. User's reason: ${rejectionReason}`
         : 'Tool execution was not approved.';
 
-      if (pendingApprovalContext.nestedSubagent) {
-        // Nested subagent: use SDK-native rejection path (no parent interceptor).
-        const reject = getMethod<[unknown], void>(state, 'reject');
-        reject?.call(state, interruption);
-      } else {
-        const installedInterceptor = tryInstallApprovalRejectionInterceptor(this.deps.agentClient, {
-          toolName,
-          expectedCallId,
-          rejectionMessage,
-        });
+      markToolCallAsApprovalRejection(expectedCallId);
 
-        if (installedInterceptor) {
-          const approve = getMethod<[unknown], void>(state, 'approve');
-          approve?.call(state, interruption);
-          this.deps.approvalState.setPendingRemoveInterceptor(installedInterceptor);
-        } else {
-          this.deps.logger.warn(
-            'Approval rejection interceptor could not be installed — agent client lacks addToolInterceptor support. Falling back to SDK-native reject.',
-            {
-              eventType: 'approval.interceptor_missing',
-              category: 'approval',
-              phase: 'approval',
-              sessionId: this.deps.sessionId,
-              traceId: this.deps.logger.getCorrelationId(),
-            },
-          );
-          const reject = getMethod<[unknown], void>(state, 'reject');
-          reject?.call(state, interruption);
-        }
-      }
+      state.reject?.(interruption as any, { message: rejectionMessage });
 
       this.deps.logger.debug('Tool approval rejected', {
         eventType: 'approval.rejected',
@@ -194,7 +138,7 @@ export class ApprovalFlowCoordinator {
       });
     }
 
-    const removeInterceptor = this.deps.approvalState.getPending()?.removeInterceptor ?? noop;
+    const removeInterceptor = noop;
 
     return { pendingApprovalContext, toolStartedEvent, removeInterceptor };
   }

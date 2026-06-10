@@ -22,12 +22,12 @@ test.afterEach(() => {
 });
 
 const logger = new LoggingService({ disableLogging: true });
-const makeStream = (extras: Partial<AgentStream> = {}): AgentStream =>
+const makeStream = (extras: any = {}): AgentStream =>
   ({
     [Symbol.asyncIterator]: async function* () {},
     completed: Promise.resolve(null),
     ...extras,
-  } as AgentStream);
+  } as any);
 
 const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off') => {
   const conversationStore = new ConversationStore();

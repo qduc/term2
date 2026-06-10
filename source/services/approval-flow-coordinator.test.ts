@@ -28,7 +28,7 @@ test('abort delegates to agentClient and approvalState', (t) => {
   const client: any = { abort: () => (abortCalled = true) };
   const approvalState = new ApprovalState();
   approvalState.setPending({
-    state: {},
+    state: {} as any,
     interruption: {},
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
@@ -122,12 +122,16 @@ test('prepareContinuation answer=y normalizes JSON string tool_started arguments
   }
 });
 
-test('prepareContinuation rejection: with interceptor support, approves with installed interceptor', (t) => {
+test('prepareContinuation rejection calls state.reject with the correct rejection message', (t) => {
   let approved = false;
-  let rejected = false;
+  let rejectedInterruption: any = null;
+  let rejectedOptions: any = null;
   const state: any = {
     approve: () => (approved = true),
-    reject: () => (rejected = true),
+    reject: (interruption: any, options?: any) => {
+      rejectedInterruption = interruption;
+      rejectedOptions = options;
+    },
   };
   const interruption = { name: 'shell', callId: 'c1', arguments: { command: 'rm -rf /' } };
   const approvalState = new ApprovalState();
@@ -138,7 +142,7 @@ test('prepareContinuation rejection: with interceptor support, approves with ins
     toolCallArgumentsById: new Map(),
   });
 
-  const { client, installs } = makeMockAgentClient();
+  const { client } = makeMockAgentClient();
   const coord = new ApprovalFlowCoordinator({
     agentClient: client,
     approvalState,
@@ -148,60 +152,33 @@ test('prepareContinuation rejection: with interceptor support, approves with ins
 
   const plan = coord.prepareContinuation('n', 'too dangerous');
   t.truthy(plan);
-  t.true(approved, 'approve is called when interceptor is installed');
-  t.false(rejected, 'reject is NOT called when interceptor is available');
-  t.is(installs.length, 1, 'one interceptor was installed');
-  t.is(plan?.toolStartedEvent, undefined, 'no tool_started for rejection');
+  t.false(approved);
+  t.is(rejectedInterruption, interruption);
+  t.deepEqual(rejectedOptions, { message: "Tool execution was not approved. User's reason: too dangerous" });
 });
 
-test('prepareContinuation rejection: without interceptor support, falls back to reject', (t) => {
+test('prepareContinuation rejection for nested subagent calls state.reject with the correct rejection message', (t) => {
   let approved = false;
-  let rejected = false;
+  let rejectedInterruption: any = null;
+  let rejectedOptions: any = null;
   const state: any = {
     approve: () => (approved = true),
-    reject: () => (rejected = true),
+    reject: (interruption: any, options?: any) => {
+      rejectedInterruption = interruption;
+      rejectedOptions = options;
+    },
   };
-  const interruption = { name: 'shell', callId: 'c1', arguments: { command: 'rm -rf /' } };
+  const interruption = { name: 'shell', callId: 'worker-shell', arguments: { command: 'npm test' } };
   const approvalState = new ApprovalState();
   approvalState.setPending({
     state,
     interruption,
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
-  });
-
-  // agentClient lacks addToolInterceptor — interceptor cannot be installed
-  const client: any = {};
-  const coord = new ApprovalFlowCoordinator({
-    agentClient: client,
-    approvalState,
-    logger,
-    sessionId: 's1',
-  });
-
-  const plan = coord.prepareContinuation('n', undefined);
-  t.truthy(plan);
-  t.false(approved);
-  t.true(rejected);
-});
-
-test('prepareContinuation rejection: nested subagent approval rejects without parent interceptor', (t) => {
-  let approved = false;
-  let rejected = false;
-  const state: any = {
-    approve: () => (approved = true),
-    reject: () => (rejected = true),
-  };
-  const approvalState = new ApprovalState();
-  approvalState.setPending({
-    state,
-    interruption: { name: 'shell', callId: 'worker-shell', arguments: { command: 'npm test' } },
-    emittedCommandIds: new Set(),
-    toolCallArgumentsById: new Map(),
     nestedSubagent: true,
   });
 
-  const { client, installs } = makeMockAgentClient();
+  const { client } = makeMockAgentClient();
   const coord = new ApprovalFlowCoordinator({
     agentClient: client,
     approvalState,
@@ -212,44 +189,8 @@ test('prepareContinuation rejection: nested subagent approval rejects without pa
   const plan = coord.prepareContinuation('n', 'do not run it');
   t.truthy(plan);
   t.false(approved);
-  t.true(rejected);
-  t.is(installs.length, 0);
-});
-
-test('prepareContinuation rejection: non-nested with no interceptor support falls back to reject (distinct from nested path)', (t) => {
-  // This test verifies that non-nested + no interceptor is handled via a distinct branch
-  // (not the same as nested subagent rejection). The observable outcome is:
-  //   - reject() is called (not approve())
-  //   - no interceptor is installed
-  let approved = false;
-  let rejected = false;
-  const state: any = {
-    approve: () => (approved = true),
-    reject: () => (rejected = true),
-  };
-  const interruption = { name: 'shell', callId: 'c1', arguments: { command: 'rm -rf /' } };
-  const approvalState = new ApprovalState();
-  approvalState.setPending({
-    state,
-    interruption,
-    emittedCommandIds: new Set(),
-    toolCallArgumentsById: new Map(),
-    // nestedSubagent is NOT set — this is the non-nested path
-  });
-
-  // agentClient lacks addToolInterceptor — interceptor cannot be installed
-  const noInterceptorClient: any = {};
-  const coord = new ApprovalFlowCoordinator({
-    agentClient: noInterceptorClient,
-    approvalState,
-    logger,
-    sessionId: 's1',
-  });
-
-  const plan = coord.prepareContinuation('n', undefined);
-  t.truthy(plan);
-  t.false(approved, 'approve should not be called when interceptor cannot be installed');
-  t.true(rejected, 'non-nested rejection without interceptor support falls back to reject');
+  t.is(rejectedInterruption, interruption);
+  t.deepEqual(rejectedOptions, { message: "Tool execution was not approved. User's reason: do not run it" });
 });
 
 test('prepareContinuation rejection: nested subagent where state.reject is undefined — does not throw', (t) => {
@@ -281,9 +222,15 @@ test('prepareContinuation rejection: nested subagent where state.reject is undef
   });
 });
 
-test('prepareAbortResolution installs interceptor and approves', (t) => {
-  let approved = false;
-  const state: any = { approve: () => (approved = true) };
+test('prepareAbortResolution calls state.reject with the correct rejection message', (t) => {
+  let rejectedInterruption: any = null;
+  let rejectedOptions: any = null;
+  const state: any = {
+    reject: (interruption: any, options?: any) => {
+      rejectedInterruption = interruption;
+      rejectedOptions = options;
+    },
+  };
   const aborted = {
     state,
     interruption: { name: 'shell', callId: 'c1', arguments: { command: 'ls' } },
@@ -291,7 +238,7 @@ test('prepareAbortResolution installs interceptor and approves', (t) => {
     toolCallArgumentsById: new Map(),
   };
 
-  const { client, installs } = makeMockAgentClient();
+  const { client } = makeMockAgentClient();
   const coord = new ApprovalFlowCoordinator({
     agentClient: client,
     approvalState: new ApprovalState(),
@@ -300,7 +247,9 @@ test('prepareAbortResolution installs interceptor and approves', (t) => {
   });
 
   const plan = coord.prepareAbortResolution(aborted, 'a new question');
-  t.true(approved);
-  t.is(installs.length, 1);
+  t.is(rejectedInterruption, aborted.interruption);
+  t.deepEqual(rejectedOptions, {
+    message: 'Tool execution was not approved. User provided new input instead: a new question',
+  });
   t.is(typeof plan.removeInterceptor, 'function');
 });

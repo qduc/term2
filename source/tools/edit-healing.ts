@@ -179,7 +179,7 @@ async function runHealingPrompt(
     name: 'EditHealer',
     model,
     instructions,
-    modelSettings: { reasoning: { effort: 'none' }, temperature: 0 },
+    modelSettings: { reasoning: { effort: 'none' }, temperature: 0, retry: { maxRetries: 0 } },
   });
 
   const options: any = {

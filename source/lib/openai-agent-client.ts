@@ -1,4 +1,13 @@
-import { Agent, run, type AgentInputItem, Runner, type JsonSchemaDefinition } from '@openai/agents';
+import {
+  Agent,
+  run,
+  type AgentInputItem,
+  Runner,
+  type JsonSchemaDefinition,
+  type RunState,
+  type StreamedRunResult,
+  type RunResult,
+} from '@openai/agents';
 import { buildAgent, type AgentFactoryDeps } from './agent-factory.js';
 import { getProvider } from '../providers/index.js';
 import { type FallbackState } from '../providers/fallback-responses-model.js';
@@ -502,7 +511,7 @@ export class OpenAIAgentClient {
   async startStream(
     userInput: string | AgentInputItem | AgentInputItem[],
     { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
-  ): Promise<any> {
+  ): Promise<StreamedRunResult<any, any>> {
     // Abort any previous operation
     this.abort();
 
@@ -603,9 +612,9 @@ export class OpenAIAgentClient {
   }
 
   async continueRun(
-    state: any,
+    state: RunState<any, any>,
     { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
-  ): Promise<any> {
+  ): Promise<RunResult<any, any>> {
     this.abort();
     this.#currentAbortController = new AbortController();
     const signal = this.#currentAbortController.signal;
@@ -655,9 +664,9 @@ export class OpenAIAgentClient {
   }
 
   async continueRunStream(
-    state: any,
+    state: RunState<any, any>,
     { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
-  ): Promise<any> {
+  ): Promise<StreamedRunResult<any, any>> {
     this.abort();
     this.#currentAbortController = new AbortController();
     const signal = this.#currentAbortController.signal;
@@ -792,7 +801,9 @@ export class OpenAIAgentClient {
       const tempEffort = options.reasoningEffort || this.#reasoningEffort;
 
       if (options.model || options.reasoningEffort || options.instructions || options.provider) {
-        const modelSettings: any = {};
+        const modelSettings: any = {
+          retry: { maxRetries: 0 },
+        };
 
         let effectiveEffort = tempEffort;
         if (tempProvider === 'codex' && isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
@@ -867,7 +878,9 @@ export class OpenAIAgentClient {
     try {
       const tempModel = options.model || this.#model;
       const tempEffort = options.reasoningEffort || this.#reasoningEffort;
-      const modelSettings: any = {};
+      const modelSettings: any = {
+        retry: { maxRetries: 0 },
+      };
 
       let effectiveEffort = tempEffort;
       if (tempProvider === 'codex' && isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {

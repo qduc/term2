@@ -10,14 +10,14 @@ import type { AgentStream } from './agent-stream.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
-const makeStream = (events: unknown[], extras: Partial<AgentStream> = {}): AgentStream => {
+const makeStream = (events: unknown[], extras: any = {}): AgentStream => {
   return {
     [Symbol.asyncIterator]: async function* () {
       for (const e of events) yield e;
     },
     completed: Promise.resolve(extras.completed ?? null),
     ...extras,
-  } as AgentStream;
+  } as any;
 };
 
 const baseOpts = (): StreamProcessorOptions => ({

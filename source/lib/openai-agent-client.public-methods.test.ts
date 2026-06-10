@@ -380,7 +380,7 @@ test.serial(
       ],
     };
 
-    await client.continueRunStream(state, { previousResponseId: 'resp-prev' });
+    await client.continueRunStream(state as any, { previousResponseId: 'resp-prev' });
 
     t.is(chainingRunnerCalls.length, 1);
     const call = chainingRunnerCalls[0];
@@ -415,7 +415,9 @@ test.serial(
       deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
     });
 
-    await client.continueRunStream({ _context: { context: { turnCount: 0 } } }, { previousResponseId: 'resp-prev' });
+    await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
+      previousResponseId: 'resp-prev',
+    });
 
     const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
       context: { turnCount: 0 },
@@ -446,7 +448,9 @@ test.serial('continueRunStream keeps the latest user item when chained model inp
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  await client.continueRunStream({ _context: { context: { turnCount: 0 } } }, { previousResponseId: 'resp-prev' });
+  await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
+    previousResponseId: 'resp-prev',
+  });
 
   const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
     context: { turnCount: 0 },
@@ -510,7 +514,7 @@ test.serial('continueRun filters replayed history to delta input when chaining f
     ],
   };
 
-  await client.continueRun(state, { previousResponseId: 'resp-prev' });
+  await client.continueRun(state as any, { previousResponseId: 'resp-prev' });
 
   t.is(chainingRunnerCalls.length, 1);
   const call = chainingRunnerCalls[0];
@@ -542,10 +546,10 @@ test.serial('continueRunStream keeps only expected approved tool outputs when ch
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  await client.continueRunStream(
-    { _context: { context: { turnCount: 0 } } },
-    { previousResponseId: 'resp-prev', toolResultCallIds: ['call-current'] },
-  );
+  await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
+    previousResponseId: 'resp-prev',
+    toolResultCallIds: ['call-current'],
+  });
 
   const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
     context: { turnCount: 0 },
@@ -575,7 +579,9 @@ test.serial('continueRunStream warns when chained delta input item count spikes'
     deps: { logger, settings, sessionContextService: createSessionContextService() as any },
   });
 
-  await client.continueRunStream({ _context: { context: { turnCount: 0 } } }, { previousResponseId: 'resp-prev' });
+  await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
+    previousResponseId: 'resp-prev',
+  });
   const filter = chainingRunnerCalls[0].options.callModelInputFilter;
   filter({
     context: { turnCount: 0 },
@@ -612,7 +618,9 @@ test.serial('continueRunStream filters and keeps user message even with custom t
     deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
   });
 
-  await client.continueRunStream({ _context: { context: { turnCount: 0 } } }, { previousResponseId: 'resp-prev' });
+  await client.continueRunStream({ _context: { context: { turnCount: 0 } } } as any, {
+    previousResponseId: 'resp-prev',
+  });
 
   const filtered = chainingRunnerCalls[0].options.callModelInputFilter({
     context: { turnCount: 0 },

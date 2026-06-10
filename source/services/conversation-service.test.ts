@@ -240,7 +240,8 @@ test('emits events when resolving aborted approval on next message', async (t) =
   t.true(resolvedEvents.some((e) => e.type === 'text_delta'));
   t.true(resolvedEvents.some((e) => e.type === 'final'));
   t.is(interceptorCount, 0);
-  t.deepEqual(initialStream.state.approveCalls, [interruption]);
+  t.deepEqual(initialStream.state.approveCalls, []);
+  t.deepEqual(initialStream.state.rejectCalls, [interruption]);
 });
 
 test('reject with reason and abort+new input yield the same history', async (t) => {
@@ -979,12 +980,8 @@ test('handleApprovalDecision() rejects interruption when answer is n', async (t)
   const finalResult = await service.handleApprovalDecision('n');
 
   t.is(finalResult.type, 'response');
-  t.deepEqual(initialStream.state.approveCalls, [interruption]);
-  t.deepEqual(initialStream.state.rejectCalls, []);
-  t.truthy(interceptorFn);
-  t.true(interceptorRemoved);
-  const rejection = await interceptorFn('bash', {}, undefined);
-  t.is(rejection, 'Tool execution was not approved.');
+  t.deepEqual(initialStream.state.approveCalls, []);
+  t.deepEqual(initialStream.state.rejectCalls, [interruption]);
 });
 
 test('handleApprovalDecision() returns null when no pending approval', async (t) => {

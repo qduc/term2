@@ -216,7 +216,9 @@ function buildModelSettings({
   // Build modelSettings only if an explicit effort value (other than
   // 'default') was provided. 'default' means we should not pass the
   // effort param and allow the underlying API to choose the default.
-  const modelSettings: Record<string, any> = {};
+  const modelSettings: Record<string, any> = {
+    retry: { maxRetries: 0 },
+  };
   if (reasoningEffort && reasoningEffort !== 'default') {
     modelSettings.reasoning = {
       effort: reasoningEffort,

@@ -545,7 +545,9 @@ export class SubagentManager {
 
     const mentorAgent = this.#mentorSession.ensureAgent(() => {
       const reasoningEffort = this.#settings.get<string>('agent.mentorReasoningEffort');
-      const modelSettings: any = {};
+      const modelSettings: any = {
+        retry: { maxRetries: 0 },
+      };
       if (reasoningEffort && reasoningEffort !== 'default') {
         modelSettings.reasoning = { effort: reasoningEffort, summary: 'auto' };
       }
@@ -614,7 +616,9 @@ export class SubagentManager {
       },
     });
 
-    const modelSettings: any = {};
+    const modelSettings: any = {
+      retry: { maxRetries: 0 },
+    };
     if (definition.reasoningEffort && definition.reasoningEffort !== 'default') {
       modelSettings.reasoning = { effort: definition.reasoningEffort, summary: 'auto' };
     }

@@ -11,6 +11,7 @@ import type { ILoggingService } from './service-interfaces.js';
 import { getMethod } from './interruption-info.js';
 import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
+import { type ApplicationSessionState } from './turn-coordinator.js';
 
 /**
  * Owns and manages session-level state transitions:
@@ -40,6 +41,7 @@ export class SessionStateController {
   #agentClient: ConversationAgentClient;
   #logger: ILoggingService;
   #sessionId: string;
+  #appState: ApplicationSessionState;
 
   constructor(deps: {
     retryOrchestrator: SessionRetryOrchestrator;
@@ -52,6 +54,7 @@ export class SessionStateController {
     agentClient: ConversationAgentClient;
     logger: ILoggingService;
     sessionId: string;
+    appState: ApplicationSessionState;
   }) {
     this.#retryOrchestrator = deps.retryOrchestrator;
     this.#inputPlanner = deps.inputPlanner;
@@ -63,6 +66,7 @@ export class SessionStateController {
     this.#agentClient = deps.agentClient;
     this.#logger = deps.logger;
     this.#sessionId = deps.sessionId;
+    this.#appState = deps.appState;
   }
 
   // ── Public lifecycle methods ─────────────────────────────────────
@@ -77,6 +81,7 @@ export class SessionStateController {
     this.#toolTracker.reset();
     this.#inputPlanner.reset();
     this.setInputSurgeKind('delta');
+    this.#appState.status = 'idle';
   }
 
   /**

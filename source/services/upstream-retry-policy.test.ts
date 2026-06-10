@@ -82,8 +82,8 @@ test('computeUpstreamRetryDelayMs uses Retry-After override before jittered back
     return value;
   };
 
-  t.is(computeUpstreamRetryDelayMs({ attemptIndex: 0, random }), 140);
-  t.is(computeUpstreamRetryDelayMs({ attemptIndex: 1, random }), 1200);
+  t.is(computeUpstreamRetryDelayMs({ attemptIndex: 0, random }), 3000);
+  t.is(computeUpstreamRetryDelayMs({ attemptIndex: 1, random }), 24000);
 });
 
 test('computeUpstreamRetryDelayMs uses session attempt numbers for bounded jitter', (t) => {

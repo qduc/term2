@@ -4,7 +4,7 @@ import { ApprovalState } from './approval-state.js';
 test('set/get pending context', (t) => {
   const state = new ApprovalState();
   const pending = {
-    state: { id: 'state' },
+    state: { id: 'state' } as any,
     interruption: { name: 'tool' },
     emittedCommandIds: new Set(['cmd-1']),
     toolCallArgumentsById: new Map([['call-1', { foo: 'bar' }]]),
@@ -18,7 +18,7 @@ test('set/get pending context', (t) => {
 test('setPendingRemoveInterceptor stores cleanup on pending', (t) => {
   const state = new ApprovalState();
   const pending = {
-    state: { id: 'state' },
+    state: { id: 'state' } as any,
     interruption: { name: 'tool' },
     emittedCommandIds: new Set(['cmd-1']),
     toolCallArgumentsById: new Map(),
@@ -34,7 +34,7 @@ test('setPendingRemoveInterceptor stores cleanup on pending', (t) => {
 test('abortPending() moves pending to aborted and clears pending', (t) => {
   const state = new ApprovalState();
   const pending = {
-    state: { id: 'state' },
+    state: { id: 'state' } as any,
     interruption: { name: 'tool' },
     emittedCommandIds: new Set(['cmd-1']),
     toolCallArgumentsById: new Map([['call-1', { foo: 'bar' }]]),
@@ -56,7 +56,7 @@ test('abortPending() moves pending to aborted and clears pending', (t) => {
 test('consumeAborted() returns aborted context and clears it', (t) => {
   const state = new ApprovalState();
   const pending = {
-    state: { id: 'state' },
+    state: { id: 'state' } as any,
     interruption: { name: 'tool' },
     emittedCommandIds: new Set(['cmd-1']),
     toolCallArgumentsById: new Map([['call-1', { foo: 'bar' }]]),
@@ -78,7 +78,7 @@ test('abortPending carries forward removeInterceptor when set', (t) => {
   };
 
   state.setPending({
-    state: { id: 'state' },
+    state: { id: 'state' } as any,
     interruption: { name: 'tool' },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),

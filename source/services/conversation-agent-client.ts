@@ -1,4 +1,4 @@
-import type { AgentInputItem } from '@openai/agents';
+import type { AgentInputItem, RunState } from '@openai/agents';
 import type { JsonSchemaDefinition } from '@openai/agents';
 import type { ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
@@ -34,7 +34,7 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
     userInput: string | AgentInputItem | AgentInputItem[],
     options?: AgentClientRunOptions,
   ): Promise<AgentStream>;
-  continueRunStream(state: unknown, options?: AgentClientRunOptions): Promise<AgentStream>;
+  continueRunStream(state: RunState<any, any>, options?: AgentClientRunOptions): Promise<AgentStream>;
   abort(): void;
   setModel(model: string): void;
   setAskUserAnswer(callId: string, answer: string): void;
@@ -44,7 +44,7 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   forceTransportDowngrade?(error: unknown): boolean;
   getProvider?(): string;
   getStreamMaxRetries?(): number | undefined;
-  onDowngrade?(callback: () => void): void;
+  onDowngrade?(callback: () => void): (() => void) | void;
   setProvider?(provider: string): void;
   setReasoningEffort?(effort?: ReasoningEffortSetting): void;
   setRetryCallback?(callback: () => void): void;

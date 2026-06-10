@@ -10,16 +10,13 @@ import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from './conversation-logger.js';
 import type { AssistantTurnState } from './conversation-log-events.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
-import type { ConversationEvent } from './conversation-events.js';
-import type { ConversationTerminal } from '../contracts/conversation.js';
-import type { NormalizedUsage } from '../utils/token-usage.js';
-import type { AgentStream } from './agent-stream.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionStateController } from './session-state-controller.js';
-import { ApprovalContinuationRunner } from './approval-continuation-runner.js';
-import { ConversationTurnRunner } from './conversation-turn-runner.js';
+import { TurnCoordinator, ApplicationSessionState } from './turn-coordinator.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
-import type { UserTurn } from '../types/user-turn.js';
+import { SessionStateFacade } from './session-state-facade.js';
+import { SessionRuntimeController } from './session-runtime-controller.js';
+import { ConversationTerminalAdapter } from './conversation-terminal-adapter.js';
 
 // ── Public types ──────────────────────────────────────────────────
 
@@ -30,21 +27,6 @@ export type ConversationSessionRetryOptions = {
    */
   allowFreshStartRetries?: boolean;
 };
-
-/** AsyncGenerator callback for buildAndResolve. */
-export type BuildAndResolveFn = (
-  result: AgentStream,
-  finalOutputOverride: string | undefined,
-  reasoningOutputOverride: string | undefined,
-  emittedCommandIds: Set<string> | undefined,
-  usage: NormalizedUsage | undefined,
-) => AsyncGenerator<ConversationEvent, ConversationTerminal, void>;
-
-/** Callback for restarting a turn. */
-export type RestartTurnFn = (
-  turn: { text: string; images?: UserTurn['images'] },
-  options: { skipUserMessage?: boolean; retries?: { transientRetryCount?: number } },
-) => AsyncIterable<ConversationEvent>;
 
 /** All collaborator instances created by the composition factory. */
 export type ConversationSessionComposition = {
@@ -58,14 +40,27 @@ export type ConversationSessionComposition = {
   state: SessionStateController;
   conversationLogger: ConversationLogger;
   streamProcessor: SessionStreamProcessor;
-  continuationRunner: ApprovalContinuationRunner;
-  turnRunner: ConversationTurnRunner;
+  appState: ApplicationSessionState;
+  turnCoordinator: TurnCoordinator;
+  /** Adapter that provides the legacy sendMessage/handleApprovalDecision surface. */
+  terminalAdapter: ConversationTerminalAdapter;
+  /** Facade for state/persistence/undo/snapshot operations. */
+  stateFacade: SessionStateFacade;
+  /** Controller for runtime model/provider/retry settings. */
+  runtimeController: SessionRuntimeController;
+  /**
+   * Idempotent disposal: aborts active SDK work, invalidates the active
+   * generation, unsubscribes downgrade listeners, clears per-turn state.
+   */
+  dispose: () => void;
 };
 
-// ── Options for the factory ───────────────────────────────────────
+// ── Options for the composition factory ──────────────────────────
 
 export type CreateConversationSessionCompositionOptions = {
   sessionId: string;
+  /** ISO timestamp; defaults to now. */
+  sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
   deps: {
     logger: ILoggingService;
@@ -74,24 +69,16 @@ export type CreateConversationSessionCompositionOptions = {
   };
   retryOptions?: ConversationSessionRetryOptions;
   turnAccumulator: TurnItemAccumulator;
-
-  /** Callbacks that wire back into the owning session. */
-  callbacks: {
-    breakChaining: () => void;
-    buildAndResolve: BuildAndResolveFn;
-    restartTurn: RestartTurnFn;
-    isCurrentGeneration: (gen: number) => boolean;
-  };
 };
 
-// ── Factory function ──────────────────────────────────────────────
+// ── Composition factory ───────────────────────────────────────────
 
 export function createConversationSessionComposition(
   options: CreateConversationSessionCompositionOptions,
 ): ConversationSessionComposition {
-  const { sessionId: id, agentClient, deps, retryOptions, turnAccumulator, callbacks } = options;
+  const { sessionId: id, sessionStartedAt, agentClient, deps, retryOptions, turnAccumulator } = options;
   const { logger, settingsService, sessionContextService } = deps;
-  const { breakChaining, buildAndResolve, restartTurn, isCurrentGeneration } = callbacks;
+  const startedAt = sessionStartedAt ?? new Date().toISOString();
 
   const conversationStore = new ConversationStore();
   const approvalState = new ApprovalState();
@@ -104,13 +91,29 @@ export function createConversationSessionComposition(
     retryOptions?.allowFreshStartRetries ?? true,
   );
 
-  const shellAutoApproval = new ShellAutoApprovalResolver({
+  let currentShellAutoApproval = new ShellAutoApprovalResolver({
     conversationStore,
     agentClient,
     logger,
     settingsService,
     sessionContextService,
   });
+
+  const shellAutoApproval = new Proxy(
+    {},
+    {
+      get(_target, prop, receiver) {
+        if (prop === 'setDelegate') {
+          return (newDelegate: ShellAutoApprovalResolver) => {
+            currentShellAutoApproval = newDelegate;
+          };
+        }
+        return Reflect.get(currentShellAutoApproval, prop, receiver);
+      },
+    },
+  ) as unknown as ShellAutoApprovalResolver;
+
+  const appState = new ApplicationSessionState();
 
   const inputPlanner = new SessionInputPlanner({
     settingsService,
@@ -130,6 +133,7 @@ export function createConversationSessionComposition(
     agentClient,
     logger,
     sessionId: id,
+    appState,
   });
 
   const conversationLogger = new ConversationLogger({
@@ -166,23 +170,20 @@ export function createConversationSessionComposition(
     inputPlanner,
   });
 
-  const continuationRunner = new ApprovalContinuationRunner({
-    agentClient,
-    approvalFlow,
-    toolTracker,
-    conversationStore,
-    conversationLogger,
-    retryOrchestrator,
-    inputPlanner,
-    state,
-    logger,
-    sessionId: id,
-    streamProcessor,
-    buildAndResolve,
-    restartTurn,
-  });
+  // breakChaining is a local closure — no callback back into ConversationSession.
+  const breakChaining = (): void => {
+    retryOrchestrator.breakChaining();
+    state.previousResponseId = null;
+    inputPlanner.previousResponseId = null;
+    logger.warn('WS-to-HTTP downgrade detected: chaining disabled, switching to full-history mode', {
+      eventType: 'conversation.chaining_broken',
+      category: 'provider',
+      phase: 'post_stream',
+      sessionId: id,
+    });
+  };
 
-  const turnRunner = new ConversationTurnRunner({
+  const turnCoordinator = new TurnCoordinator({
     agentClient,
     logger,
     sessionId: id,
@@ -196,10 +197,65 @@ export function createConversationSessionComposition(
     inputPlanner,
     state,
     streamProcessor,
+    appState,
     breakChaining,
-    buildAndResolve,
-    isCurrentGeneration,
   });
+
+  const stateFacade = new SessionStateFacade({
+    conversationStore,
+    toolTracker,
+    state,
+    conversationLogger,
+    agentClient,
+    settingsService,
+  });
+
+  const runtimeController = new SessionRuntimeController({
+    agentClient,
+    state,
+  });
+
+  // terminalAdapter wires directly to turnCoordinator — no callback through ConversationSession.
+  const terminalAdapter = new ConversationTerminalAdapter({
+    sessionId: id,
+    startedAt,
+    agentClient,
+    logger,
+    settingsService,
+    sessionContextService,
+    conversationStore,
+    conversationLogger,
+    approvalFlow,
+    run: (input, opts) => turnCoordinator.start(input, opts),
+    continueAfterApproval: (opts) => turnCoordinator.continueAfterApproval(opts),
+  });
+
+  // Subscribe to transport downgrade events; store unsubscribe handle for disposal.
+  let unsubscribeDowngrade: (() => void) | undefined;
+  if (typeof agentClient.onDowngrade === 'function') {
+    const result = agentClient.onDowngrade(() => breakChaining());
+    if (typeof result === 'function') {
+      unsubscribeDowngrade = result;
+    }
+  }
+
+  let disposed = false;
+  const dispose = (): void => {
+    if (disposed) return;
+    disposed = true;
+    // Abort any active SDK work only if a turn is currently running.
+    if (appState.status !== 'idle') {
+      if (typeof agentClient.abort === 'function') {
+        agentClient.abort();
+      }
+      approvalState.abortPending();
+      appState.status = 'idle';
+    }
+    retryOrchestrator.breakChaining();
+    state.previousResponseId = null;
+    inputPlanner.previousResponseId = null;
+    unsubscribeDowngrade?.();
+  };
 
   return {
     conversationStore,
@@ -212,7 +268,11 @@ export function createConversationSessionComposition(
     state,
     conversationLogger,
     streamProcessor,
-    continuationRunner,
-    turnRunner,
+    appState,
+    turnCoordinator,
+    terminalAdapter,
+    stateFacade,
+    runtimeController,
+    dispose,
   };
 }

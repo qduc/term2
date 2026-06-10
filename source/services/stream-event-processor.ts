@@ -409,7 +409,7 @@ export async function* processStreamEvents(
     }
   }
 
-  const completedResult = await stream.completed;
+  const completedResult = (await stream.completed) as unknown;
   if (stream.cancelled) {
     const abortError = new Error('The user aborted a request.');
     abortError.name = 'AbortError';

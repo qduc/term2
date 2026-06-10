@@ -49,7 +49,7 @@ test('retries transient OpenAI errors with jitter backoff and logs payload', asy
   t.is(attempts, 3);
   t.is(callbackCount, 2);
   t.is(warnLogs.length, 2);
-  t.deepEqual(delays, [140, 1200]);
+  t.deepEqual(delays, [3000, 24000]);
   t.deepEqual(warnLogs[0], {
     message: 'Agent operation retry',
     meta: {
@@ -63,7 +63,7 @@ test('retries transient OpenAI errors with jitter backoff and logs payload', asy
       retryAttempt: 1,
       errorType: 'APIConnectionError',
       retriesRemaining: 1,
-      delayMs: 140,
+      delayMs: 3000,
       attemptIndex: 0,
       errorMessage: 'temporary network issue',
     },

@@ -1,5 +1,7 @@
+import { type RunState } from '@openai/agents';
+
 export type PendingApprovalContext = {
-  state: unknown;
+  state: RunState<any, any>;
   interruption: unknown;
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
@@ -9,7 +11,7 @@ export type PendingApprovalContext = {
 };
 
 export type AbortedApprovalContext = {
-  state: unknown;
+  state: RunState<any, any>;
   interruption: unknown;
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;

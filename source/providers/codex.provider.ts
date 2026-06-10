@@ -549,6 +549,7 @@ registerProvider({
     const openAIClient = new OpenAI({
       apiKey: 'placeholder',
       baseURL: 'https://chatgpt.com/backend-api/codex',
+      maxRetries: 0,
       fetch: createProviderFetch({
         providerId: 'codex',
         defaultModel,

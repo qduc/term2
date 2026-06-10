@@ -365,7 +365,7 @@ export class TurnCoordinator {
         preserveExistingToolArgs: false,
       });
 
-      this.deps.streamProcessor.finalize(stream, gen, 'startStream');
+      this.deps.streamProcessor.finalize(stream, gen, this.deps.retryOrchestrator.inputSurgeKindState, 'startStream');
 
       const outcome = await buildConversationResult(
         {

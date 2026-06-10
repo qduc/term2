@@ -168,7 +168,12 @@ export class ContinuationDriver {
             previouslyEmittedCommandIds: allEmittedIds,
           });
 
-          this.deps.streamProcessor.finalize(stream, init.generation, source);
+          this.deps.streamProcessor.finalize(
+            stream,
+            init.generation,
+            this.deps.retryOrchestrator.inputSurgeKindState,
+            source,
+          );
 
           const mergedEmittedIds = new Set([...allEmittedIds, ...acc.emittedCommandIds]);
 

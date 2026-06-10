@@ -4,7 +4,6 @@ import { SessionStreamProcessor } from './session-stream-processor.js';
 import { ConversationStore } from './conversation-store.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from './conversation-logger.js';
-import { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
 import { ProviderContinuity } from './provider-continuity.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ConversationEvent } from './conversation-events.js';
@@ -32,7 +31,6 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
     log: (event: any) => loggedEvents.push(event),
   } as unknown as ConversationLogger;
 
-  const retryOrchestrator = {} as unknown as SessionRetryOrchestrator;
   const providerContinuity = new ProviderContinuity();
 
   const processor = new SessionStreamProcessor({
@@ -41,7 +39,6 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
     toolTracker,
     conversationStore,
     conversationLogger,
-    retryOrchestrator,
     providerContinuity,
     generationGuard: new GenerationGuard(),
   });
@@ -108,7 +105,6 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
     log: (event: any) => loggedEvents.push(event),
   } as unknown as ConversationLogger;
 
-  const retryOrchestrator = {} as unknown as SessionRetryOrchestrator;
   const providerContinuity = new ProviderContinuity();
 
   const processor = new SessionStreamProcessor({
@@ -117,7 +113,6 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
     toolTracker,
     conversationStore,
     conversationLogger,
-    retryOrchestrator,
     providerContinuity,
     generationGuard: new GenerationGuard(),
   });
@@ -154,14 +149,8 @@ test('SessionStreamProcessor.finalize() updates providerContinuity previousRespo
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   const conversationLogger = {} as unknown as ConversationLogger;
-
-  let isCurrentGeneration = true;
-  const retryOrchestrator = {
-    isCurrentGeneration: () => isCurrentGeneration,
-    inputSurgeKindState: 'delta',
-  } as unknown as SessionRetryOrchestrator;
-
   const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
 
   const processor = new SessionStreamProcessor({
     logger,
@@ -169,18 +158,19 @@ test('SessionStreamProcessor.finalize() updates providerContinuity previousRespo
     toolTracker,
     conversationStore,
     conversationLogger,
-    retryOrchestrator,
     providerContinuity,
-    generationGuard: new GenerationGuard(),
+    generationGuard,
   });
 
+  const token = generationGuard.capture();
   const stream = makeStream([], {
     interruptions: [],
     lastResponseId: 'resp-123',
   });
 
-  processor.finalize(stream, 1, 'startStream');
+  const result = processor.finalize(stream, token, 'delta', 'startStream');
 
+  t.deepEqual(result, { kind: 'committed' });
   t.is(providerContinuity.previousResponseId, 'resp-123');
 });
 
@@ -188,13 +178,8 @@ test('SessionStreamProcessor.finalize() prefers full replay history when full-hi
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   const conversationLogger = {} as unknown as ConversationLogger;
-
-  const retryOrchestrator = {
-    isCurrentGeneration: () => true,
-    inputSurgeKindState: 'full_history',
-  } as unknown as SessionRetryOrchestrator;
-
   const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
 
   const processor = new SessionStreamProcessor({
     logger,
@@ -202,9 +187,8 @@ test('SessionStreamProcessor.finalize() prefers full replay history when full-hi
     toolTracker,
     conversationStore,
     conversationLogger,
-    retryOrchestrator,
     providerContinuity,
-    generationGuard: new GenerationGuard(),
+    generationGuard,
   });
 
   const fullHistory = [
@@ -219,6 +203,7 @@ test('SessionStreamProcessor.finalize() prefers full replay history when full-hi
     },
   ];
 
+  const token = generationGuard.capture();
   const stream = makeStream([], {
     interruptions: [],
     lastResponseId: 'resp-123',
@@ -227,7 +212,73 @@ test('SessionStreamProcessor.finalize() prefers full replay history when full-hi
   (stream as any).output = [{ type: 'function_call_output', callId: 'call-read', output: 'log contents' }];
   (stream as any).newItems = [];
 
-  processor.finalize(stream, 1, 'startStream');
+  const result = processor.finalize(stream, token, 'full_history', 'startStream');
 
+  t.deepEqual(result, { kind: 'committed' });
   t.deepEqual(conversationStore.getHistory(), fullHistory);
+});
+
+test('SessionStreamProcessor.finalize() - stale finalization mutates neither continuity nor history and returns stale', (t) => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const conversationLogger = {} as unknown as ConversationLogger;
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    providerContinuity,
+    generationGuard,
+  });
+
+  const staleToken = generationGuard.capture();
+  generationGuard.invalidate(); // invalidates staleToken
+
+  const stream = makeStream([], {
+    interruptions: [],
+    lastResponseId: 'resp-123',
+  });
+  (stream as any).output = [{ role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'hello' }] }];
+
+  const result = processor.finalize(stream, staleToken, 'delta', 'startStream');
+
+  t.deepEqual(result, { kind: 'stale' });
+  t.is(providerContinuity.previousResponseId, null);
+  t.is(conversationStore.getHistory().length, 0);
+});
+
+test('SessionStreamProcessor.finalize() - interrupted stream returns partial, updates continuity, but does not commit terminal history', (t) => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const conversationLogger = {} as unknown as ConversationLogger;
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    providerContinuity,
+    generationGuard,
+  });
+
+  const token = generationGuard.capture();
+
+  const stream = makeStream([], {
+    interruptions: [{ type: 'tool_approval_item' }] as any,
+    lastResponseId: 'resp-123',
+  });
+  (stream as any).output = [{ role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'hello' }] }];
+
+  const result = processor.finalize(stream, token, 'delta', 'startStream');
+
+  t.deepEqual(result, { kind: 'partial' });
+  t.is(providerContinuity.previousResponseId, 'resp-123');
+  t.is(conversationStore.getHistory().length, 0); // Should not commit history
 });

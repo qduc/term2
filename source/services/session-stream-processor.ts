@@ -10,9 +10,14 @@ import { extractReplaySnapshot, extractFinalizationSnapshot, type StreamReplaySn
 import { collectDuplicateToolCallResultPairs } from './input-surge-guard.js';
 import { callIdOf, toolNameOf, outputOf } from './tool-execution-ledger.js';
 import type { AgentInputItem } from '@openai/agents';
-import { GenerationGuard } from './generation-guard.js';
+import { GenerationGuard, type GenerationToken } from './generation-guard.js';
 
 export type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
+
+export type StreamFinalizationResult =
+  | { kind: 'stale' }
+  | { kind: 'partial' } // continuity applied; interrupted stream did not commit terminal history
+  | { kind: 'committed' }; // continuity and terminal history applied
 
 const hasConversationMessageItems = (items: unknown[]): boolean =>
   items.some((item) => {
@@ -68,7 +73,6 @@ export interface SessionStreamProcessorDeps {
   toolTracker: SessionToolTracker;
   conversationStore: ConversationStore;
   conversationLogger: ConversationLogger;
-  retryOrchestrator: import('./session-retry-orchestrator.js').SessionRetryOrchestrator;
   providerContinuity: ProviderContinuity;
   generationGuard: GenerationGuard;
 }
@@ -139,37 +143,50 @@ export class SessionStreamProcessor {
    * Finalizes the stream outcome by updating previousResponseId,
    * checking for replayed tools, and updating the conversation store history.
    */
-  finalize(stream: AgentStream, gen: number, source: StreamHistorySource): void {
-    if (!this.deps.retryOrchestrator.isCurrentGeneration(gen)) return;
-    const snapshot = extractFinalizationSnapshot(stream);
-    this.deps.providerContinuity.update(snapshot.lastResponseId);
-    warnIfStreamHistoryReplayedTools({
-      logger: this.deps.logger,
-      sessionId: this.deps.sessionId,
-      source,
-      snapshot: extractReplaySnapshot(stream),
-    });
-    const terminal = !stream.interruptions || stream.interruptions.length === 0;
-    if (terminal) {
-      if (this.deps.retryOrchestrator.inputSurgeKindState === 'delta') {
-        this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
-      } else {
-        // In full-history mode, prefer message-bearing incremental items so we
-        // preserve assistant text that SDK history reconstruction may strip.
-        // If the incremental payload is only tool outputs, fall back to the
-        // authoritative replay history instead of poisoning the canonical store.
-        if (hasConversationMessageItems(snapshot.output)) {
+  finalize(
+    stream: AgentStream,
+    token: GenerationToken,
+    inputMode: 'delta' | 'full_history',
+    source: StreamHistorySource,
+  ): StreamFinalizationResult {
+    let result: StreamFinalizationResult = { kind: 'stale' };
+
+    const ran = this.deps.generationGuard.runIfCurrent(token, () => {
+      const snapshot = extractFinalizationSnapshot(stream);
+      this.deps.providerContinuity.update(snapshot.lastResponseId);
+      warnIfStreamHistoryReplayedTools({
+        logger: this.deps.logger,
+        sessionId: this.deps.sessionId,
+        source,
+        snapshot: extractReplaySnapshot(stream),
+      });
+      const terminal = !stream.interruptions || stream.interruptions.length === 0;
+      if (terminal) {
+        if (inputMode === 'delta') {
           this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
-        } else if (hasConversationMessageItems(snapshot.newItems)) {
-          this.deps.conversationStore.appendOutput(snapshot.newItems as AgentInputItem[]);
-        } else if (snapshot.history.length > 0) {
-          this.deps.conversationStore.replaceHistory(snapshot.history as AgentInputItem[]);
-        } else if (snapshot.output.length > 0) {
-          this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
-        } else if (snapshot.newItems.length > 0) {
-          this.deps.conversationStore.appendOutput(snapshot.newItems as AgentInputItem[]);
+        } else {
+          // In full-history mode, prefer message-bearing incremental items so we
+          // preserve assistant text that SDK history reconstruction may strip.
+          // If the incremental payload is only tool outputs, fall back to the
+          // authoritative replay history instead of poisoning the canonical store.
+          if (hasConversationMessageItems(snapshot.output)) {
+            this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
+          } else if (hasConversationMessageItems(snapshot.newItems)) {
+            this.deps.conversationStore.appendOutput(snapshot.newItems as AgentInputItem[]);
+          } else if (snapshot.history.length > 0) {
+            this.deps.conversationStore.replaceHistory(snapshot.history as AgentInputItem[]);
+          } else if (snapshot.output.length > 0) {
+            this.deps.conversationStore.appendOutput(snapshot.output as AgentInputItem[]);
+          } else if (snapshot.newItems.length > 0) {
+            this.deps.conversationStore.appendOutput(snapshot.newItems as AgentInputItem[]);
+          }
         }
+        result = { kind: 'committed' };
+      } else {
+        result = { kind: 'partial' };
       }
-    }
+    });
+
+    return ran ? result : { kind: 'stale' };
   }
 }

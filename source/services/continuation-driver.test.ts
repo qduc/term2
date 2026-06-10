@@ -19,6 +19,8 @@ import { SessionStreamProcessor } from './session-stream-processor.js';
 import { ConversationLogger } from './conversation-logger.js';
 import type { ConversationEvent } from './conversation-events.js';
 
+import { GenerationGuard } from './generation-guard.js';
+
 const logger = new LoggingService({ disableLogging: true });
 
 class MockStream {
@@ -140,14 +142,17 @@ const createHarness = ({
     getToolLedger: () => toolTracker.export(),
   });
 
+  const generationGuard = new GenerationGuard();
+  generationGuard.capture(); // Bump to 1 to match tests passing generation: 1
+
   const streamProcessor = new SessionStreamProcessor({
     logger,
     sessionId: 'test-session',
     toolTracker,
     conversationStore,
     conversationLogger,
-    retryOrchestrator,
     providerContinuity,
+    generationGuard,
   });
 
   const driver = new ContinuationDriver({
@@ -163,6 +168,7 @@ const createHarness = ({
     conversationStore,
     turnAccumulator,
     shellAutoApproval,
+    generationGuard,
   });
 
   return {

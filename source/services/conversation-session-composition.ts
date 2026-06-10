@@ -179,7 +179,6 @@ export function createConversationSessionComposition(
     toolTracker,
     conversationStore,
     conversationLogger,
-    retryOrchestrator,
     providerContinuity,
     generationGuard,
   });

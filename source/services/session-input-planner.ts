@@ -53,17 +53,6 @@ export class SessionInputPlanner {
   }
 
   /**
-   * @deprecated Use ProviderContinuity directly.
-   */
-  get previousResponseId(): string | null {
-    return this.#providerContinuity.previousResponseId;
-  }
-
-  set previousResponseId(id: string | null) {
-    this.#providerContinuity.update(id);
-  }
-
-  /**
    * Inspect the input for a potential input surge condition.
    * Used by the session after building a plan to decide whether to block.
    */

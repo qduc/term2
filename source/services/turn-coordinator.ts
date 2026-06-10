@@ -5,17 +5,11 @@ import { TurnStatusMachine } from './turn-status-machine.js';
 import { ContinuationDriver } from './continuation-driver.js';
 import { InitialTurnRunner, type InitialTurnOutcome } from './initial-turn-runner.js';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
-import { type PendingApprovalContext } from './approval-state.js';
 
 export type SessionStatus = 'idle' | 'streaming' | 'awaiting_approval' | 'continuing';
 
 export class TurnState {
   statusMachine = new TurnStatusMachine();
-  currentGeneration = 0;
-  pendingModeNotice: string | null = null;
-  previousResponseId: string | null = null;
-  transportDowngradeOccurred = false;
-  pendingApproval: PendingApprovalContext | null = null;
 }
 
 export interface TurnCoordinatorDeps {

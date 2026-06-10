@@ -2,7 +2,6 @@ import { type RunState, type AgentInputItem } from '@openai/agents';
 import type { ConversationEvent } from './conversation-events.js';
 import type { ConversationTerminal } from '../contracts/conversation.js';
 import type { ILoggingService } from './service-interfaces.js';
-import type { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ConversationStore } from './conversation-store.js';
 import type { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
@@ -58,7 +57,7 @@ export interface InitialTurnRunnerDeps {
   generationGuard: GenerationGuard;
   retryClassifier: DefaultRetryClassifier;
   retryEventPresenter: RetryEventPresenter;
-  retryOrchestrator: SessionRetryOrchestrator;
+  freshStartRetriesAllowed: boolean;
 }
 
 export class InitialTurnRunner {
@@ -217,8 +216,6 @@ export class InitialTurnRunner {
           pendingModeNotice: this.deps.state.pendingModeNotice,
         });
         attempt.attachInput(plan);
-        this.deps.state.setInputSurgeKind(attempt.inputMode!);
-
         const surgeDecision = this.deps.inputPlanner.inspectForSurge(attempt.streamInput, attempt.inputMode!);
         if (surgeDecision.action === 'block') {
           let droppedUserMessage: { text: string; imageCount: number } | undefined;
@@ -268,10 +265,7 @@ export class InitialTurnRunner {
               })) as AgentStream;
             }
           } catch (chainingError) {
-            if (
-              chainingError instanceof ChainingTransportDowngradeError &&
-              this.deps.retryOrchestrator.freshStartRetriesAllowed
-            ) {
+            if (chainingError instanceof ChainingTransportDowngradeError && this.deps.freshStartRetriesAllowed) {
               this.deps.breakChaining();
 
               this.deps.logger.warn('ChainingTransportDowngradeError caught, retrying with full history', {
@@ -289,7 +283,6 @@ export class InitialTurnRunner {
                 pendingModeNotice: this.deps.state.pendingModeNotice,
               });
               attempt.attachInput(fullHistoryRetryPlan);
-              this.deps.state.setInputSurgeKind(attempt.inputMode!);
               stream = (await this.deps.agentClient.startStream(attempt.streamInput!, {
                 previousResponseId: null,
                 sessionId: this.deps.sessionId,
@@ -468,7 +461,7 @@ export class InitialTurnRunner {
       maxModelRetries: attempt.maxModelRetries,
     });
 
-    if (!this.deps.retryOrchestrator.freshStartRetriesAllowed && !stream && classified.kind !== 'unrecoverable') {
+    if (!this.deps.freshStartRetriesAllowed && !stream && classified.kind !== 'unrecoverable') {
       this.deps.logger.warn('Retry requires fresh start but fresh-start retries are disabled for this session', {
         eventType: 'retry.fresh_start_blocked',
         category: 'retry',
@@ -557,7 +550,7 @@ export class InitialTurnRunner {
       stream,
       retryCounts: attempt.retryCounts,
       maxModelRetries: attempt.maxModelRetries,
-      freshStartRetriesAllowed: this.deps.retryOrchestrator.freshStartRetriesAllowed,
+      freshStartRetriesAllowed: this.deps.freshStartRetriesAllowed,
     });
 
     const recoveryState: RecoveryState = {

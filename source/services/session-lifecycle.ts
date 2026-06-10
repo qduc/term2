@@ -1,5 +1,4 @@
 import type { AgentInputItem } from '@openai/agents';
-import { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { ApprovalState } from './approval-state.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
@@ -39,7 +38,6 @@ export class SessionLifecycle {
   /** A pending mode-notice text to prepend to the next user turn. */
   pendingModeNotice: string | null = null;
 
-  #retryOrchestrator: SessionRetryOrchestrator;
   #inputPlanner: SessionInputPlanner;
   #approvalState: ApprovalState;
   #toolTracker: SessionToolTracker;
@@ -54,7 +52,6 @@ export class SessionLifecycle {
   #generationGuard: GenerationGuard;
 
   constructor(deps: {
-    retryOrchestrator: SessionRetryOrchestrator;
     inputPlanner: SessionInputPlanner;
     approvalState: ApprovalState;
     toolTracker: SessionToolTracker;
@@ -68,7 +65,6 @@ export class SessionLifecycle {
     providerContinuity: ProviderContinuity;
     generationGuard: GenerationGuard;
   }) {
-    this.#retryOrchestrator = deps.retryOrchestrator;
     this.#inputPlanner = deps.inputPlanner;
     this.#approvalState = deps.approvalState;
     this.#toolTracker = deps.toolTracker;
@@ -95,7 +91,6 @@ export class SessionLifecycle {
     this.#conversationStore.clear();
     this.#toolTracker.reset();
     this.#inputPlanner.reset();
-    this.setInputSurgeKind('delta');
     this.#appState.statusMachine.abort();
   }
 
@@ -119,7 +114,6 @@ export class SessionLifecycle {
     this.#pruneToolLedgerToCurrentHistory();
     this.#resetProviderContinuity();
     this.#inputPlanner.markUndoOrRewind();
-    this.setInputSurgeKind('delta');
     this.#appState.statusMachine.abort();
   }
 
@@ -171,7 +165,6 @@ export class SessionLifecycle {
     // Force the first resumed turn to resync from full history; successful completion
     // will populate a fresh previousResponseId for subsequent chained turns.
     this.previousResponseId = null;
-    this.#inputPlanner.previousResponseId = null;
     this.#toolTracker.clearEmittedToolStarted();
     this.#inputPlanner.reset();
     this.#shellAutoApproval.clearCache();
@@ -183,14 +176,12 @@ export class SessionLifecycle {
       updatedAtMs: state.updatedAt ? Date.parse(state.updatedAt) : null,
     });
     this.#generationGuard.invalidate();
-    this.#retryOrchestrator.incrementGeneration();
     this.#appState.statusMachine.abort();
   }
 
   // ── Internal helpers ──────────────────────────────────────────────
 
   #resetProviderContinuity({ clearConversations = true }: { clearConversations?: boolean } = {}): void {
-    this.#retryOrchestrator.incrementGeneration();
     this.#providerContinuity.clear();
     this.#approvalState.clearPending();
     this.#approvalState.consumeAborted();
@@ -208,9 +199,5 @@ export class SessionLifecycle {
 
   #pruneToolLedgerToCurrentHistory(): void {
     this.#toolTracker.pruneToCurrentHistory();
-  }
-
-  setInputSurgeKind(kind: 'delta' | 'full_history'): void {
-    this.#retryOrchestrator.setInputSurgeKind(kind);
   }
 }

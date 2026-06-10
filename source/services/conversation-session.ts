@@ -41,7 +41,7 @@ export class ConversationSession {
       resumeState,
     }: {
       skipUserMessage?: boolean;
-      retries?: import('./session-retry-orchestrator.js').RetryState;
+      retries?: Record<string, number>;
       maxModelRetries?: number;
       signal?: AbortSignal;
       resumeState?: RunState<any, any>;

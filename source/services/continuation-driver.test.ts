@@ -11,7 +11,7 @@ import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationStore } from './conversation-store.js';
 import { LoggingService } from './logging-service.js';
 import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
-import { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
+
 import { ProviderContinuity } from './provider-continuity.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
@@ -109,7 +109,6 @@ const createHarness = ({
   const approvalState = new ApprovalState();
   const turnAccumulator = new TurnItemAccumulator();
 
-  const retryOrchestrator = new SessionRetryOrchestrator(logger, 'test-session', client as any, true);
   const providerContinuity = new ProviderContinuity();
 
   const inputPlanner = new SessionInputPlanner({
@@ -196,8 +195,6 @@ const createHarness = ({
     approvalFlow,
     toolTracker,
     conversationStore,
-    providerContinuity,
-    retryOrchestrator,
     shellAutoApproval,
   };
 };

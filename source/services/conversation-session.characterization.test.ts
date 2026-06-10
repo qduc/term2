@@ -1319,7 +1319,7 @@ test('characterization - synchronous chaining downgrade followed by full-history
     ['text_delta', 'final'],
   );
   t.is(calls, 2);
-  t.is(composition.retryOrchestrator.inputSurgeKindState, 'full_history');
+  t.true(composition.providerContinuity.chainingBroken);
 });
 
 test('characterization - provider change during a retry delay aborts retry', async (t) => {

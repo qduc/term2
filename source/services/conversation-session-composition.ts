@@ -1,6 +1,5 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from './service-interfaces.js';
 import { ConversationStore } from './conversation-store.js';
-import { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
 import { ApprovalState } from './approval-state.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { getMethod } from './interruption-info.js';
@@ -43,7 +42,7 @@ export type ConversationSessionComposition = {
   toolTracker: SessionToolTracker;
   shellAutoApproval: ShellAutoApprovalResolver;
   approvalFlow: ApprovalFlowCoordinator;
-  retryOrchestrator: SessionRetryOrchestrator;
+
   inputPlanner: SessionInputPlanner;
   state: SessionLifecycle;
   conversationLogger: ConversationLogger;
@@ -71,6 +70,7 @@ export type ConversationSessionComposition = {
   retryEventPresenter: RetryEventPresenter;
   turnAccumulator: TurnItemAccumulator;
   initialTurnRunner: InitialTurnRunner;
+  freshStartRetriesAllowed: boolean;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -103,14 +103,6 @@ export function createConversationSessionComposition(
   const conversationStore = new ConversationStore();
   const approvalState = new ApprovalState();
   const toolTracker = new SessionToolTracker(conversationStore);
-
-  const retryOrchestrator = new SessionRetryOrchestrator(
-    logger,
-    id,
-    agentClient,
-    retryOptions?.allowFreshStartRetries ?? true,
-    generationGuard,
-  );
 
   let currentShellAutoApproval = new ShellAutoApprovalResolver({
     conversationStore,
@@ -145,7 +137,6 @@ export function createConversationSessionComposition(
   });
 
   const state = new SessionLifecycle({
-    retryOrchestrator,
     inputPlanner,
     approvalState,
     toolTracker,
@@ -195,9 +186,7 @@ export function createConversationSessionComposition(
     generationGuard,
   });
 
-  // breakChaining is a local closure — no callback back into ConversationSession.
   const breakChaining = (): void => {
-    retryOrchestrator.breakChaining();
     providerContinuity.breakChaining();
     logger.warn('WS-to-HTTP downgrade detected: chaining disabled, switching to full-history mode', {
       eventType: 'conversation.chaining_broken',
@@ -255,7 +244,7 @@ export function createConversationSessionComposition(
     generationGuard,
     retryClassifier,
     retryEventPresenter,
-    retryOrchestrator,
+    freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
   });
 
   const turnCoordinator = new TurnCoordinator({
@@ -317,7 +306,6 @@ export function createConversationSessionComposition(
       approvalState.abortPending();
       appState.statusMachine.abort();
     }
-    retryOrchestrator.breakChaining();
     providerContinuity.clear();
     unsubscribeDowngrade?.();
   };
@@ -328,7 +316,6 @@ export function createConversationSessionComposition(
     toolTracker,
     shellAutoApproval,
     approvalFlow,
-    retryOrchestrator,
     inputPlanner,
     state,
     conversationLogger,
@@ -349,5 +336,6 @@ export function createConversationSessionComposition(
     retryEventPresenter,
     turnAccumulator,
     initialTurnRunner,
+    freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
   };
 }

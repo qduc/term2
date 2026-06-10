@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ModelBehaviorError } from '@openai/agents';
 import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
-import { OpenAIAgentClient } from '../../lib/openai-agent-client.js';
+import { AgentClient } from '../../lib/agent-client.js';
 import { registerProvider } from '../../providers/registry.js';
 import { ExecutionContext } from '../execution-context.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../conversation-retry-policy.js';
@@ -61,7 +61,7 @@ const SubagentManager = class extends RealSubagentManager {
       createClient:
         deps.createClient ??
         (({ agent, provider, maxTurns, retryAttempts }: any) =>
-          new OpenAIAgentClient({
+          new AgentClient({
             model: agent.model,
             maxTurns,
             retryAttempts,

@@ -5,7 +5,7 @@ import { ConversationStore } from './conversation-store.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from './conversation-logger.js';
 import { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
-import { SessionStateController } from './session-state-controller.js';
+import { SessionLifecycle } from './session-lifecycle.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ConversationEvent } from './conversation-events.js';
@@ -33,7 +33,7 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
   } as unknown as ConversationLogger;
 
   const retryOrchestrator = {} as unknown as SessionRetryOrchestrator;
-  const state = {} as unknown as SessionStateController;
+  const state = {} as unknown as SessionLifecycle;
   const inputPlanner = {} as unknown as SessionInputPlanner;
 
   const processor = new SessionStreamProcessor({
@@ -110,7 +110,7 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
   } as unknown as ConversationLogger;
 
   const retryOrchestrator = {} as unknown as SessionRetryOrchestrator;
-  const state = {} as unknown as SessionStateController;
+  const state = {} as unknown as SessionLifecycle;
   const inputPlanner = {} as unknown as SessionInputPlanner;
 
   const processor = new SessionStreamProcessor({
@@ -165,7 +165,7 @@ test('SessionStreamProcessor.finalize() updates state and planner previousRespon
 
   const state = {
     previousResponseId: null as string | null,
-  } as unknown as SessionStateController;
+  } as unknown as SessionLifecycle;
 
   const inputPlanner = {
     previousResponseId: null as string | null,
@@ -205,7 +205,7 @@ test('SessionStreamProcessor.finalize() prefers full replay history when full-hi
 
   const state = {
     previousResponseId: null as string | null,
-  } as unknown as SessionStateController;
+  } as unknown as SessionLifecycle;
 
   const inputPlanner = {
     previousResponseId: null as string | null,

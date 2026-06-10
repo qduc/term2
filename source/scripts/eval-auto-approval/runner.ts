@@ -3,7 +3,7 @@ import { loadDataset, filterDataset, Case } from './dataset.js';
 import { createMockSettingsService } from '../../services/settings-service.mock.js';
 import { LoggingService } from '../../services/logging-service.js';
 import { SessionContextService } from '../../services/session-context-service.js';
-import { OpenAIAgentClient } from '../../lib/openai-agent-client.js';
+import { AgentClient } from '../../lib/agent-client.js';
 import {
   evaluateShellAutoApprovalAdvisories,
   SHELL_AUTO_APPROVAL_PROMPT_VERSION,
@@ -201,7 +201,7 @@ async function run() {
       ...(process.env['OPENROUTER_API_KEY'] ? { 'agent.openrouter.apiKey': process.env['OPENROUTER_API_KEY'] } : {}),
     });
 
-    const agentClient = new OpenAIAgentClient({
+    const agentClient = new AgentClient({
       model: run.model,
       deps: {
         logger,

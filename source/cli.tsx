@@ -7,7 +7,7 @@ import meow from 'meow';
 import App from './app.js';
 import { SSHInfo } from './hooks/use-shell-mode.js';
 import { getInkRenderOptions } from './utils/ink-render-options.js';
-import { OpenAIAgentClient } from './lib/openai-agent-client.js';
+import { AgentClient } from './lib/agent-client.js';
 import { ConversationService } from './services/conversation-service.js';
 import { SettingsService, buildEnvOverrides } from './services/settings-service.js';
 import { SessionContextService } from './services/session-context-service.js';
@@ -537,7 +537,7 @@ const history = new HistoryService({
 const usedModel = settings.get('agent.model');
 const usedReasoningEffort = settings.get('agent.reasoningEffort');
 
-const agentClient = new OpenAIAgentClient({
+const agentClient = new AgentClient({
   model: usedModel,
   reasoningEffort: usedReasoningEffort as ModelSettingsReasoningEffort,
   maxTurns: settings.get('agent.maxTurns'),

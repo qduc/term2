@@ -10,11 +10,11 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 
 - **Entry Points**: `cli.tsx` (CLI entry), `app.tsx` (main React component), `non-interactive.ts` (non-interactive mode)
 - **Agent Config**: `agent.ts` — Agent definition, tool registration (add new tools here)
-- **Agent Client**: `source/lib/openai-agent-client.ts` — Agent client with tool interceptor pattern
+- **Agent Client**: `source/lib/agent-client.ts` — Agent client with tool interceptor pattern
 - **Agent Factory**: `source/lib/agent-factory.ts` — Agent construction and wiring
 - **Slash Commands**: `source/commands/` — Individual slash command implementations (add new commands here); routing via `source/hooks/use-slash-commands.ts` and `source/hooks/use-app-commands.ts`
 - **Hooks** (`source/hooks/`): React hooks for UI state — conversation flow (`use-conversation.ts`), slash commands (`use-slash-commands.ts`), input history (`use-input-history.ts`), settings (`use-runtime-settings.ts`), model selection (`use-model-selection.ts`), undo (`use-undo-selection.ts`), trigger detection (`use-trigger-detection.ts`)
-- **Services** (`source/services/`): Business logic — conversation session coordinator (`conversation-session.ts`) and its collaborators (wiring factory `conversation-session-composition.ts`, terminal adapter `conversation-terminal-adapter.ts`, runtime controller `session-runtime-controller.ts`, state facade `session-state-facade.ts`, and auto-approval resolver `auto-approval-continuation-resolver.ts`), persistence (`conversation-persistence.ts`), approval flow (`approval-flow-coordinator.ts`, `approval-state.ts`), tool execution ledger (`tool-execution-ledger.ts`), settings (`settings-service.ts`), logging (`logging-service.ts`), SSH (`ssh-service.ts`, `execution-context.ts`), plan mode (`plan-mode-interceptor.ts`), large-input guard (`large-uncached-input-guard.ts`), subagents (`subagents/`)
+- **Services** (`source/services/`): Business logic — `conversation-session.ts` is a thin shell that holds session identity (`id`, `startedAt`) and delegates all turn execution to collaborators assembled by `conversation-session-composition.ts`. Key collaborators: `turn-coordinator.ts` (owns the run/continueAfterApproval loop), `session-stream-processor.ts` (processes agent stream events), `session-retry-orchestrator.ts` (retry classification and state), `session-input-planner.ts` (builds agent input per turn), `session-lifecycle.ts` (per-turn mutable state), `conversation-adapter.ts` (legacy sendMessage/handleApprovalDecision surface, wires directly to `TurnCoordinator`), `session-runtime-controller.ts` (runtime model/provider settings), `session-manager.ts` (state/persistence/undo/snapshot operations), `shell-auto-approval-resolver.ts` (auto-approval decisions), `conversation-store.ts` (in-memory conversation history), `conversation-logger.ts` (turn logging), `approval-flow-coordinator.ts` / `approval-state.ts` (tool approval flow), `session-tool-tracker.ts` (tool execution ledger), `settings-service.ts`, `logging-service.ts`, SSH (`ssh-service.ts`, `execution-context.ts`), plan mode (`plan-mode-interceptor.ts`), large-input guard (`large-uncached-input-guard.ts`), subagents (`subagents/`)
 - **Providers** (`source/providers/`): Pluggable provider registry — OpenAI, Anthropic, OpenRouter, OpenAI-compatible, Google, Codex, Llama.cpp, OpenCode. Subdirs: `common/`, `fetch/`, `web-search/`. Add new providers here and register in `registry.ts`.
 - **Tools** (`source/tools/`): Tool implementations — shell, search-replace, apply-patch, grep, find-files, read-file, create-file, web-search, web-fetch, code-context, ask-mentor, ask-user, run-subagent, edit-healing. Subdir: `languages/`. Add new tools here and register in `agent.ts`.
 - **Prompts** (`source/prompts/`): System prompts for model types and subagents. Subdirs: `fragments/`, `subagents/`. Modify agent behavior here.
@@ -23,18 +23,20 @@ A CLI app that lets users chat with an AI agent in real-time. The agent can exec
 - **Types** (`source/types/`): TypeScript type definitions
 - **Context** (`source/context/`): React context providers
 - **Contracts** (`source/contracts/`): Shared interfaces (e.g. `conversation.ts`)
-- **Lib** (`source/lib/`): Core agent infrastructure — `openai-agent-client.ts`, `agent-factory.ts`, `retry-executor.ts`, `tool-invoke.ts`, `tool-selection-policy.ts`, `openai-strict-tool-schema.ts`, `editor-impl.ts`, `chained-input-filter.ts`
+- **Lib** (`source/lib/`): Core agent infrastructure — `agent-client.ts`, `agent-factory.ts`, `retry-executor.ts`, `tool-invoke.ts`, `tool-selection-policy.ts`, `openai-strict-tool-schema.ts`, `editor-impl.ts`, `chained-input-filter.ts`
 
 ## How It Works
 
 1. User types a message → `app.tsx` captures it
 2. `use-conversation.ts` hook calls `conversationService.sendMessage()`
-3. `ConversationService` (thin facade) delegates to `ConversationSession`, which delegates terminal collection and user turns to the `ConversationTerminalAdapter` which calls the agent via `source/lib/openai-agent-client.ts`
-4. The agent client selects a provider through the Provider Registry and streams the response
-5. Tool requests are validated by the `approval-flow-coordinator.ts` and paused for user approval before execution (auto-approved in standard mode for patches)
-6. User approves/rejects via `ApprovalPrompt` component
-7. Service executes the tool or continues streaming
-8. Final response appears in the message list
+3. `ConversationService` (thin facade) delegates to `ConversationSession`, which is itself a thin shell — it holds session identity (`id`, `startedAt`) and forwards `run()` / `continueAfterApproval()` calls to `TurnCoordinator` via the composition
+4. `TurnCoordinator` orchestrates each turn: it calls `SessionInputPlanner` to build the agent input, drives the agent via `source/lib/agent-client.ts`, and feeds the stream to `SessionStreamProcessor`
+5. `ConversationAdapter` provides the legacy `sendMessage`/`handleApprovalDecision` surface and wires directly to `TurnCoordinator` (no round-trip through `ConversationSession`)
+6. The agent client selects a provider through the Provider Registry and streams the response
+7. Tool requests are validated by `ApprovalFlowCoordinator` and paused for user approval before execution (auto-approved in standard mode for patches)
+8. User approves/rejects via `ApprovalPrompt` component; `continueAfterApproval()` resumes the turn via `TurnCoordinator`
+9. `SessionRetryOrchestrator` classifies errors and emits retry events; `TurnCoordinator` re-drives the turn on retry
+10. Final response appears in the message list
 
 ## Testing & Quality
 

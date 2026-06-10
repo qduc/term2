@@ -10,7 +10,7 @@ import { ConversationLogger } from './conversation-logger.js';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { SessionInputPlanner } from './session-input-planner.js';
-import { SessionStateController } from './session-state-controller.js';
+import { SessionLifecycle } from './session-lifecycle.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { ConversationAgentClient } from './conversation-agent-client.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
@@ -28,7 +28,7 @@ import { type PendingApprovalContext } from './approval-state.js';
 
 export type SessionStatus = 'idle' | 'streaming' | 'awaiting_approval' | 'continuing';
 
-export class ApplicationSessionState {
+export class TurnState {
   status: SessionStatus = 'idle';
   currentGeneration = 0;
   pendingModeNotice: string | null = null;
@@ -49,9 +49,9 @@ export interface TurnCoordinatorDeps {
   approvalFlow: ApprovalFlowCoordinator;
   shellAutoApproval: ShellAutoApprovalResolver;
   inputPlanner: SessionInputPlanner;
-  state: SessionStateController;
+  state: SessionLifecycle;
   streamProcessor: SessionStreamProcessor;
-  appState: ApplicationSessionState;
+  appState: TurnState;
   breakChaining: () => void;
 }
 

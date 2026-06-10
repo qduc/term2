@@ -1,5 +1,5 @@
 import test from 'ava';
-import { OpenAIAgentClient } from './openai-agent-client.js';
+import { AgentClient } from './agent-client.js';
 import { registerProvider } from '../providers/registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 
@@ -71,7 +71,7 @@ test.before(() => {
 test.serial('OpenAIAgentClient.chatJson passes outputType into the temporary Agent', async (t) => {
   lastRunAgent = null;
 
-  const client = new OpenAIAgentClient({
+  const client = new AgentClient({
     deps: {
       logger: mockLogger,
       settings: createMockSettings('mock-provider-chat'),
@@ -112,7 +112,7 @@ test.serial('OpenAIAgentClient.chatJson passes outputType into the temporary Age
 });
 
 test.serial('OpenAIAgentClient.chat falls back to messages if finalOutput is missing', async (t) => {
-  const client = new OpenAIAgentClient({
+  const client = new AgentClient({
     deps: {
       logger: mockLogger,
       settings: createMockSettings('mock-provider-chat'),
@@ -127,7 +127,7 @@ test.serial('OpenAIAgentClient.chat falls back to messages if finalOutput is mis
 test.serial('disables Agents SDK tracing for non-OpenAI providers', async (t) => {
   lastRunOptions = null;
 
-  const client = new OpenAIAgentClient({
+  const client = new AgentClient({
     deps: {
       logger: mockLogger,
       settings: createMockSettings('mock-provider-chat'),
@@ -143,7 +143,7 @@ test.serial('disables Agents SDK tracing for non-OpenAI providers', async (t) =>
 test.serial('keeps Agents SDK tracing enabled when provider supports it', async (t) => {
   lastRunOptions = null;
 
-  const client = new OpenAIAgentClient({
+  const client = new AgentClient({
     deps: {
       logger: mockLogger,
       settings: createMockSettings('mock-provider-chat-tracing'),

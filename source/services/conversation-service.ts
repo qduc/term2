@@ -4,7 +4,7 @@ import type { SavedToolExecution } from './tool-execution-ledger.js';
 import type { LogEvent, StateSnapshot } from './conversation-log-events.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
-import type { SendMessageOptions, HandleApprovalDecisionOptions } from './conversation-terminal-adapter.js';
+import type { SendMessageOptions, HandleApprovalDecisionOptions } from './conversation-adapter.js';
 import type { LargeUncachedInputDecision } from './large-uncached-input-guard.js';
 import { createConversationSession, type ConversationSessionBundle } from './conversation-session-factory.js';
 

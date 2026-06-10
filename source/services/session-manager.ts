@@ -5,7 +5,7 @@ import type { ISettingsService } from './service-interfaces.js';
 import { ConversationStore } from './conversation-store.js';
 import { ConversationLogger } from './conversation-logger.js';
 import type { StateSnapshot } from './conversation-log-events.js';
-import { SessionStateController } from './session-state-controller.js';
+import { SessionLifecycle } from './session-lifecycle.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { reconcileHistoryWithToolLedger, type SavedToolExecution } from './tool-execution-ledger.js';
@@ -16,10 +16,10 @@ import { getMethod } from './interruption-info.js';
  * for the conversation session. Extracted from ConversationSession to reduce
  * its surface area and make the delegation boundary explicit.
  */
-export class SessionStateFacade {
+export class SessionManager {
   readonly #conversationStore: ConversationStore;
   readonly #toolTracker: SessionToolTracker;
-  readonly #state: SessionStateController;
+  readonly #state: SessionLifecycle;
   readonly #conversationLogger: ConversationLogger;
   readonly #agentClient: ConversationAgentClient;
   readonly #settingsService?: ISettingsService;
@@ -28,7 +28,7 @@ export class SessionStateFacade {
   constructor(deps: {
     conversationStore: ConversationStore;
     toolTracker: SessionToolTracker;
-    state: SessionStateController;
+    state: SessionLifecycle;
     conversationLogger: ConversationLogger;
     agentClient: ConversationAgentClient;
     settingsService?: ISettingsService;

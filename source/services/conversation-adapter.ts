@@ -28,7 +28,7 @@ export type HandleApprovalDecisionOptions = {
   approvalAnswer?: string;
 };
 
-export class ConversationTerminalAdapter {
+export class ConversationAdapter {
   #sessionId: string;
   #startedAt: string;
   #agentClient: ConversationAgentClient;

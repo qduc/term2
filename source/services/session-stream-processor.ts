@@ -3,7 +3,7 @@ import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ConversationStore } from './conversation-store.js';
 import type { ConversationLogger } from './conversation-logger.js';
 import type { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
-import type { SessionStateController } from './session-state-controller.js';
+import type { SessionLifecycle } from './session-lifecycle.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ConversationEvent } from './conversation-events.js';
@@ -70,7 +70,7 @@ export interface SessionStreamProcessorDeps {
   conversationStore: ConversationStore;
   conversationLogger: ConversationLogger;
   retryOrchestrator: SessionRetryOrchestrator;
-  state: SessionStateController;
+  state: SessionLifecycle;
   inputPlanner: SessionInputPlanner;
 }
 

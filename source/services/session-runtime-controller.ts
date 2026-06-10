@@ -1,7 +1,7 @@
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
 import { getMethod } from './interruption-info.js';
-import type { SessionStateController } from './session-state-controller.js';
+import type { SessionLifecycle } from './session-lifecycle.js';
 
 /**
  * Manages runtime settings that affect the agent client's behavior:
@@ -13,9 +13,9 @@ import type { SessionStateController } from './session-state-controller.js';
  */
 export class SessionRuntimeController {
   readonly #agentClient: ConversationAgentClient;
-  readonly #state: SessionStateController;
+  readonly #state: SessionLifecycle;
 
-  constructor(deps: { agentClient: ConversationAgentClient; state: SessionStateController }) {
+  constructor(deps: { agentClient: ConversationAgentClient; state: SessionLifecycle }) {
     this.#agentClient = deps.agentClient;
     this.#state = deps.state;
   }

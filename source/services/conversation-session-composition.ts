@@ -11,12 +11,12 @@ import { ConversationLogger } from './conversation-logger.js';
 import type { AssistantTurnState } from './conversation-log-events.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
 import { SessionInputPlanner } from './session-input-planner.js';
-import { SessionStateController } from './session-state-controller.js';
-import { TurnCoordinator, ApplicationSessionState } from './turn-coordinator.js';
+import { SessionLifecycle } from './session-lifecycle.js';
+import { TurnCoordinator, TurnState } from './turn-coordinator.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
-import { SessionStateFacade } from './session-state-facade.js';
+import { SessionManager } from './session-manager.js';
 import { SessionRuntimeController } from './session-runtime-controller.js';
-import { ConversationTerminalAdapter } from './conversation-terminal-adapter.js';
+import { ConversationAdapter } from './conversation-adapter.js';
 
 // ── Public types ──────────────────────────────────────────────────
 
@@ -37,15 +37,15 @@ export type ConversationSessionComposition = {
   approvalFlow: ApprovalFlowCoordinator;
   retryOrchestrator: SessionRetryOrchestrator;
   inputPlanner: SessionInputPlanner;
-  state: SessionStateController;
+  state: SessionLifecycle;
   conversationLogger: ConversationLogger;
   streamProcessor: SessionStreamProcessor;
-  appState: ApplicationSessionState;
+  appState: TurnState;
   turnCoordinator: TurnCoordinator;
   /** Adapter that provides the legacy sendMessage/handleApprovalDecision surface. */
-  terminalAdapter: ConversationTerminalAdapter;
+  terminalAdapter: ConversationAdapter;
   /** Facade for state/persistence/undo/snapshot operations. */
-  stateFacade: SessionStateFacade;
+  stateFacade: SessionManager;
   /** Controller for runtime model/provider/retry settings. */
   runtimeController: SessionRuntimeController;
   /**
@@ -113,7 +113,7 @@ export function createConversationSessionComposition(
     },
   ) as unknown as ShellAutoApprovalResolver;
 
-  const appState = new ApplicationSessionState();
+  const appState = new TurnState();
 
   const inputPlanner = new SessionInputPlanner({
     settingsService,
@@ -122,7 +122,7 @@ export function createConversationSessionComposition(
     retryOrchestrator,
   });
 
-  const state = new SessionStateController({
+  const state = new SessionLifecycle({
     retryOrchestrator,
     inputPlanner,
     approvalState,
@@ -201,7 +201,7 @@ export function createConversationSessionComposition(
     breakChaining,
   });
 
-  const stateFacade = new SessionStateFacade({
+  const stateFacade = new SessionManager({
     conversationStore,
     toolTracker,
     state,
@@ -217,7 +217,7 @@ export function createConversationSessionComposition(
   });
 
   // terminalAdapter wires directly to turnCoordinator — no callback through ConversationSession.
-  const terminalAdapter = new ConversationTerminalAdapter({
+  const terminalAdapter = new ConversationAdapter({
     sessionId: id,
     startedAt,
     agentClient,

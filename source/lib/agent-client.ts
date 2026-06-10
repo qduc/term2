@@ -41,7 +41,7 @@ interface ModelProviderWithFallback extends ModelProvider {
  * Minimal adapter that isolates usage of @openai/agents.
  * Swap this module to change the underlying agent provider without touching the UI.
  */
-export class OpenAIAgentClient {
+export class AgentClient {
   #agent: Agent;
   #model!: string;
   // Accept 'default' here to denote 'do not pass this param; use API default'
@@ -213,7 +213,7 @@ export class OpenAIAgentClient {
           maxTurns: number;
           retryAttempts?: number;
         }) =>
-          new OpenAIAgentClient({
+          new AgentClient({
             model: agent.model,
             maxTurns,
             retryAttempts,

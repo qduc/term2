@@ -5,8 +5,8 @@ import {
   createConversationSessionComposition,
   type ConversationSessionRetryOptions,
 } from './conversation-session-composition.js';
-import type { ConversationTerminalAdapter } from './conversation-terminal-adapter.js';
-import type { SessionStateFacade } from './session-state-facade.js';
+import type { ConversationAdapter } from './conversation-adapter.js';
+import type { SessionManager } from './session-manager.js';
 import type { SessionRuntimeController } from './session-runtime-controller.js';
 import type { ConversationLogger } from './conversation-logger.js';
 import type { ApprovalState } from './approval-state.js';
@@ -33,8 +33,8 @@ export type CreateConversationSessionOptions = {
 /** Resources returned to callers (ConversationService, non-interactive, etc.). */
 export type ConversationSessionBundle = {
   session: ConversationSession;
-  terminalAdapter: ConversationTerminalAdapter;
-  stateFacade: SessionStateFacade;
+  terminalAdapter: ConversationAdapter;
+  stateFacade: SessionManager;
   runtimeController: SessionRuntimeController;
   conversationLogger: ConversationLogger;
   approvalState: ApprovalState;

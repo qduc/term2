@@ -11,7 +11,7 @@ import type { ILoggingService } from './service-interfaces.js';
 import { getMethod } from './interruption-info.js';
 import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
-import { type ApplicationSessionState } from './turn-coordinator.js';
+import { type TurnState } from './turn-coordinator.js';
 
 /**
  * Owns and manages session-level state transitions:
@@ -24,7 +24,7 @@ import { type ApplicationSessionState } from './turn-coordinator.js';
  * ConversationSession delegates to this object for lifecycle operations
  * instead of implementing them inline.
  */
-export class SessionStateController {
+export class SessionLifecycle {
   /** The last response ID from the provider, used for conversation chaining. */
   previousResponseId: string | null = null;
 
@@ -41,7 +41,7 @@ export class SessionStateController {
   #agentClient: ConversationAgentClient;
   #logger: ILoggingService;
   #sessionId: string;
-  #appState: ApplicationSessionState;
+  #appState: TurnState;
 
   constructor(deps: {
     retryOrchestrator: SessionRetryOrchestrator;
@@ -54,7 +54,7 @@ export class SessionStateController {
     agentClient: ConversationAgentClient;
     logger: ILoggingService;
     sessionId: string;
-    appState: ApplicationSessionState;
+    appState: TurnState;
   }) {
     this.#retryOrchestrator = deps.retryOrchestrator;
     this.#inputPlanner = deps.inputPlanner;

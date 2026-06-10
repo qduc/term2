@@ -24,6 +24,7 @@ import { DefaultRecoveryExecutor } from './recovery-executor.js';
 import { GenerationGuard } from './generation-guard.js';
 import { DefaultRetryClassifier } from './retry-classifier.js';
 import { RetryEventPresenter } from './retry-event-presenter.js';
+import { InitialTurnRunner } from './initial-turn-runner.js';
 
 // ── Public types ──────────────────────────────────────────────────
 
@@ -61,6 +62,15 @@ export type ConversationSessionComposition = {
    */
   dispose: () => void;
   generationGuard: GenerationGuard;
+  providerContinuity: ProviderContinuity;
+  breakChaining: () => void;
+  continuationDriver: ContinuationDriver;
+  recoveryPolicy: DefaultConversationRecoveryPolicy;
+  recoveryExecutor: DefaultRecoveryExecutor;
+  retryClassifier: DefaultRetryClassifier;
+  retryEventPresenter: RetryEventPresenter;
+  turnAccumulator: TurnItemAccumulator;
+  initialTurnRunner: InitialTurnRunner;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -220,6 +230,29 @@ export function createConversationSessionComposition(
   const retryClassifier = new DefaultRetryClassifier(agentClient);
   const retryEventPresenter = new RetryEventPresenter();
 
+  const initialTurnRunner = new InitialTurnRunner({
+    agentClient,
+    logger,
+    sessionId: id,
+    turnAccumulator,
+    toolTracker,
+    conversationStore,
+    approvalFlow,
+    shellAutoApproval,
+    inputPlanner,
+    state,
+    streamProcessor,
+    providerContinuity,
+    breakChaining,
+    continuationDriver,
+    recoveryPolicy,
+    recoveryExecutor,
+    generationGuard,
+    retryClassifier,
+    retryEventPresenter,
+    retryOrchestrator,
+  });
+
   const turnCoordinator = new TurnCoordinator({
     agentClient,
     logger,
@@ -243,6 +276,7 @@ export function createConversationSessionComposition(
     recoveryPolicy,
     recoveryExecutor,
     generationGuard,
+    initialTurnRunner,
   });
 
   const stateFacade = new SessionManager({
@@ -320,5 +354,14 @@ export function createConversationSessionComposition(
     runtimeController,
     dispose,
     generationGuard,
+    providerContinuity,
+    breakChaining,
+    continuationDriver,
+    recoveryPolicy,
+    recoveryExecutor,
+    retryClassifier,
+    retryEventPresenter,
+    turnAccumulator,
+    initialTurnRunner,
   };
 }

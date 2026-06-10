@@ -416,53 +416,27 @@ export function createConversationEventHandler(
       case 'subagent_tool_started': {
         setMessages((prev) => {
           const index = prev.findIndex((msg) => isSubagentActivityMessage(msg) && msg.agentId === event.agentId);
-          const toolLabels =
-            event.commandMessages
-              ?.map((message) => message.command)
-              .filter((command): command is string => Boolean(command)) ?? [];
-          const newTools = (() => {
-            if (toolLabels.length > 0) {
-              return toolLabels;
-            }
-            const args = parseToolArguments(event.arguments);
-            const formatted = formatToolCommand(event.toolName, args as Record<string, unknown>);
-            if (formatted === event.toolName) {
-              return [event.toolName];
-            }
-            if (event.toolName === 'shell') {
-              return [`shell ${formatted}`];
-            }
-            return [formatted];
-          })();
-          const appendTool = (message: SubagentActivityMessage): SubagentActivityMessage => ({
-            ...message,
-            status: 'running',
-            role: message.role ?? event.role,
-            tools: [...(Array.isArray(message.tools) ? message.tools : []), ...newTools].slice(-3),
-          });
-
-          if (index === -1) {
-            return trimMessages([
-              ...prev,
-              {
-                id: `subagent-${event.agentId}`,
-                sender: 'subagent',
-                status: 'running',
-                agentId: event.agentId,
-                role: event.role,
-                task: '',
-                tools: newTools.slice(-3),
-              },
-            ]);
+          if (index !== -1) {
+            // Message already exists; just mark it running — tools are added on tool end
+            const next = [...prev];
+            const current = next[index];
+            if (!isSubagentActivityMessage(current)) return prev;
+            next[index] = { ...current, status: 'running', role: current.role ?? event.role };
+            return trimMessages(next);
           }
-
-          const next = [...prev];
-          const current = next[index];
-          if (!isSubagentActivityMessage(current)) {
-            return prev;
-          }
-          next[index] = appendTool(current);
-          return trimMessages(next);
+          // Create the placeholder message with no tools yet
+          return trimMessages([
+            ...prev,
+            {
+              id: `subagent-${event.agentId}`,
+              sender: 'subagent',
+              status: 'running',
+              agentId: event.agentId,
+              role: event.role,
+              task: '',
+              tools: [],
+            },
+          ]);
         });
         return;
       }

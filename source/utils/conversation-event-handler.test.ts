@@ -786,44 +786,33 @@ test('subagent events: maintains a live peek with the last three tools', (t) => 
   ]);
 
   handler({
-    type: 'subagent_tool_started',
+    type: 'subagent_command_message',
     agentId: 'agent-1',
     role: 'explorer',
-    toolName: 'find_files',
-    commandMessages: [{ id: 'find', sender: 'command', status: 'running', command: 'find_files "*.ts"', output: '' }],
+    message: { toolName: 'find_files', command: 'find_files "*.ts"', success: true, output: '' },
   } as any);
   handler({
-    type: 'subagent_tool_started',
+    type: 'subagent_command_message',
     agentId: 'agent-1',
     role: 'explorer',
-    toolName: 'grep',
-    commandMessages: [
-      { id: 'grep', sender: 'command', status: 'running', command: 'grep "needle" "source"', output: '' },
-    ],
+    message: { toolName: 'grep', command: 'grep "needle" "source"', success: true, output: 'line1\nline2' },
   } as any);
   handler({
-    type: 'subagent_tool_started',
+    type: 'subagent_command_message',
     agentId: 'agent-1',
     role: 'explorer',
-    toolName: 'read_file',
-    commandMessages: [
-      { id: 'read', sender: 'command', status: 'running', command: 'read_file "source/app.tsx"', output: '' },
-    ],
+    message: { toolName: 'read_file', command: 'read_file "source/app.tsx"', success: true, output: '' },
   } as any);
   handler({
-    type: 'subagent_tool_started',
+    type: 'subagent_command_message',
     agentId: 'agent-1',
     role: 'explorer',
-    toolName: 'read_code_outline',
-    commandMessages: [
-      {
-        id: 'outline',
-        sender: 'command',
-        status: 'running',
-        command: 'read_code_outline "source/app.tsx"',
-        output: '',
-      },
-    ],
+    message: {
+      toolName: 'read_code_outline',
+      command: 'read_code_outline "source/app.tsx"',
+      success: true,
+      output: '',
+    },
   } as any);
 
   let messages = deps.calls.appendedMessages[0];
@@ -839,7 +828,11 @@ test('subagent events: maintains a live peek with the last three tools', (t) => 
       agentId: 'agent-1',
       role: 'explorer',
       task: 'inspect the command message rendering flow and report findings',
-      tools: ['grep "needle" "source"', 'read_file "source/app.tsx"', 'read_code_outline "source/app.tsx"'],
+      tools: [
+        'grep "needle" "source" (2 matches)',
+        'read_file "source/app.tsx" (Success)',
+        'read_code_outline "source/app.tsx" (Success)',
+      ],
     },
   ]);
 });
@@ -1465,7 +1458,7 @@ test('subagent_tool_started: formats shell command with args', (t) => {
     messages = update(messages);
   }
 
-  t.deepEqual(messages[0].tools, ['shell npm test']);
+  t.deepEqual(messages[0].tools, []);
 });
 
 test('subagent_command_message: replaces formatted shell command and appends outcome', (t) => {

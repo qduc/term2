@@ -33,11 +33,11 @@ test('resume_stream returns run instruction with resume state', (t) => {
   const { executor } = makeExecutor();
   const mockState = { _currentTurn: 'x' } as any;
 
-  const result = executor.apply(
-    { kind: 'resume_stream', state: mockState, previousResponseId: 'resp-1' },
-    baseRecoveryState(),
-    baseCounts(),
-  );
+  const result = executor.apply({
+    plan: { kind: 'resume_stream', state: mockState, previousResponseId: 'resp-1' },
+    state: baseRecoveryState(),
+    retryCounts: baseCounts(),
+  });
 
   t.is(result.kind, 'run');
   if (result.kind !== 'run') return;
@@ -51,11 +51,11 @@ test('replay_turn with rollback removes user message and clears continuity', (t)
   deps.conversationStore.addUserMessage('hello');
   deps.providerContinuity.update('resp-old');
 
-  const result = executor.apply(
-    { kind: 'replay_turn', inputMode: 'full_history', rollbackUserMessage: true },
-    baseRecoveryState({ addedUserMessage: true }),
-    baseCounts(),
-  );
+  const result = executor.apply({
+    plan: { kind: 'replay_turn', inputMode: 'full_history', rollbackUserMessage: true },
+    state: baseRecoveryState({ addedUserMessage: true }),
+    retryCounts: baseCounts(),
+  });
 
   t.is(result.kind, 'run');
   t.is(deps.providerContinuity.previousResponseId, null);
@@ -68,11 +68,11 @@ test('replay_turn without rollback keeps user message', (t) => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
 
-  const result = executor.apply(
-    { kind: 'replay_turn', inputMode: 'full_history', rollbackUserMessage: false },
-    baseRecoveryState({ addedUserMessage: true }),
-    baseCounts(),
-  );
+  const result = executor.apply({
+    plan: { kind: 'replay_turn', inputMode: 'full_history', rollbackUserMessage: false },
+    state: baseRecoveryState({ addedUserMessage: true }),
+    retryCounts: baseCounts(),
+  });
 
   t.is(result.kind, 'run');
   t.is(deps.conversationStore.getHistory().length, 1);
@@ -84,16 +84,16 @@ test('replay_turn with errorContext injects error context into conversation stor
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
 
-  executor.apply(
-    {
+  executor.apply({
+    plan: {
       kind: 'replay_turn',
       inputMode: 'full_history',
       rollbackUserMessage: false,
       errorContext: 'Previous attempt failed',
     },
-    baseRecoveryState({ addedUserMessage: true }),
-    baseCounts(),
-  );
+    state: baseRecoveryState({ addedUserMessage: true }),
+    retryCounts: baseCounts(),
+  });
 
   const history = deps.conversationStore.getHistory();
   const errorItem = history.find(
@@ -122,11 +122,14 @@ test('retry_fresh with stream reconciles history and restores ledger', (t) => {
     historyItems: [],
   };
 
-  const result = executor.apply(
-    { kind: 'retry_fresh', inputMode: 'full_history' },
-    baseRecoveryState({ stream: { completed: Promise.resolve(undefined) } as any, ledgerSnapshot: [completedEntry] }),
-    baseCounts(),
-  );
+  const result = executor.apply({
+    plan: { kind: 'retry_fresh', inputMode: 'full_history' },
+    state: baseRecoveryState({
+      stream: { completed: Promise.resolve(undefined) } as any,
+      ledgerSnapshot: [completedEntry],
+    }),
+    retryCounts: baseCounts(),
+  });
 
   t.is(result.kind, 'run');
   t.is(deps.providerContinuity.previousResponseId, null);
@@ -137,11 +140,11 @@ test('retry_fresh without stream removes user message and clears continuity', (t
   deps.conversationStore.addUserMessage('hello');
   deps.providerContinuity.update('resp-old');
 
-  const result = executor.apply(
-    { kind: 'retry_fresh', inputMode: 'full_history' },
-    baseRecoveryState({ addedUserMessage: true, stream: null }),
-    baseCounts(),
-  );
+  const result = executor.apply({
+    plan: { kind: 'retry_fresh', inputMode: 'full_history' },
+    state: baseRecoveryState({ addedUserMessage: true, stream: null }),
+    retryCounts: baseCounts(),
+  });
 
   t.is(result.kind, 'run');
   t.is(deps.providerContinuity.previousResponseId, null);
@@ -153,11 +156,11 @@ test('retry_fresh with useStandardServiceTier passes flag through', (t) => {
   deps.conversationStore.addUserMessage('hello');
   deps.providerContinuity.update('resp-old');
 
-  const result = executor.apply(
-    { kind: 'retry_fresh', inputMode: 'delta', useStandardServiceTier: true },
-    baseRecoveryState({ addedUserMessage: true, stream: null }),
-    baseCounts(),
-  );
+  const result = executor.apply({
+    plan: { kind: 'retry_fresh', inputMode: 'delta', useStandardServiceTier: true },
+    state: baseRecoveryState({ addedUserMessage: true, stream: null }),
+    retryCounts: baseCounts(),
+  });
 
   t.is(result.kind, 'run');
   if (result.kind !== 'run') return;
@@ -168,11 +171,11 @@ test('terminate removes user message when added without stream', (t) => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
 
-  const result = executor.apply(
-    { kind: 'terminate', events: [{ type: 'error', message: 'failed' }] },
-    baseRecoveryState({ addedUserMessage: true, stream: null }),
-    baseCounts(),
-  );
+  const result = executor.apply({
+    plan: { kind: 'terminate', events: [{ type: 'error', message: 'failed' }] },
+    state: baseRecoveryState({ addedUserMessage: true, stream: null }),
+    retryCounts: baseCounts(),
+  });
 
   t.is(result.kind, 'terminated');
   t.is(deps.conversationStore.getHistory().length, 0);
@@ -185,11 +188,11 @@ test('terminate with stream marks open calls aborted and reconciles history', (t
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
 
-  const result = executor.apply(
-    { kind: 'terminate', events: [{ type: 'error', message: 'stream failed' }] },
-    baseRecoveryState({ addedUserMessage: true, stream: { completed: Promise.resolve(undefined) } as any }),
-    baseCounts(),
-  );
+  const result = executor.apply({
+    plan: { kind: 'terminate', events: [{ type: 'error', message: 'stream failed' }] },
+    state: baseRecoveryState({ addedUserMessage: true, stream: { completed: Promise.resolve(undefined) } as any }),
+    retryCounts: baseCounts(),
+  });
 
   t.is(result.kind, 'terminated');
   if (result.kind !== 'terminated') return;
@@ -207,11 +210,11 @@ test('terminate includes tool_recovery event when there are recovered calls', (t
   });
   deps.toolTracker.ledger.recordAbortedApproval('aborted', 'aborted', 'call-1');
 
-  const result = executor.apply(
-    { kind: 'terminate', events: [] },
-    baseRecoveryState({ stream: { completed: Promise.resolve(undefined) } as any }),
-    baseCounts(),
-  );
+  const result = executor.apply({
+    plan: { kind: 'terminate', events: [] },
+    state: baseRecoveryState({ stream: { completed: Promise.resolve(undefined) } as any }),
+    retryCounts: baseCounts(),
+  });
 
   t.is(result.kind, 'terminated');
   if (result.kind !== 'terminated') return;

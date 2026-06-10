@@ -13,6 +13,7 @@ import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
 import { type TurnState } from './turn-coordinator.js';
 import type { ProviderContinuity } from './provider-continuity.js';
+import { GenerationGuard } from './generation-guard.js';
 
 /**
  * Owns and manages session-level state transitions:
@@ -50,6 +51,7 @@ export class SessionLifecycle {
   #sessionId: string;
   #appState: TurnState;
   #providerContinuity: ProviderContinuity;
+  #generationGuard: GenerationGuard;
 
   constructor(deps: {
     retryOrchestrator: SessionRetryOrchestrator;
@@ -64,6 +66,7 @@ export class SessionLifecycle {
     sessionId: string;
     appState: TurnState;
     providerContinuity: ProviderContinuity;
+    generationGuard: GenerationGuard;
   }) {
     this.#retryOrchestrator = deps.retryOrchestrator;
     this.#inputPlanner = deps.inputPlanner;
@@ -77,6 +80,7 @@ export class SessionLifecycle {
     this.#sessionId = deps.sessionId;
     this.#appState = deps.appState;
     this.#providerContinuity = deps.providerContinuity;
+    this.#generationGuard = deps.generationGuard;
   }
 
   // ── Public lifecycle methods ─────────────────────────────────────
@@ -86,6 +90,7 @@ export class SessionLifecycle {
    * and all continuity state.
    */
   resetSession(options?: { clearConversations?: boolean }): void {
+    this.#generationGuard.invalidate();
     this.#resetProviderContinuity(options);
     this.#conversationStore.clear();
     this.#toolTracker.reset();
@@ -99,7 +104,9 @@ export class SessionLifecycle {
    * Keeps the conversation store intact but severs the response chain.
    */
   afterProviderChanged(): void {
+    this.#generationGuard.invalidate();
     this.#resetProviderContinuity();
+    this.#appState.statusMachine.abort();
   }
 
   /**
@@ -108,10 +115,12 @@ export class SessionLifecycle {
    * Call this *after* the user turn has been removed from the conversation store.
    */
   afterUndo(): void {
+    this.#generationGuard.invalidate();
     this.#pruneToolLedgerToCurrentHistory();
     this.#resetProviderContinuity();
     this.#inputPlanner.markUndoOrRewind();
     this.setInputSurgeKind('delta');
+    this.#appState.statusMachine.abort();
   }
 
   /**
@@ -173,7 +182,9 @@ export class SessionLifecycle {
     this.#inputPlanner.markResumedSession({
       updatedAtMs: state.updatedAt ? Date.parse(state.updatedAt) : null,
     });
+    this.#generationGuard.invalidate();
     this.#retryOrchestrator.incrementGeneration();
+    this.#appState.statusMachine.abort();
   }
 
   // ── Internal helpers ──────────────────────────────────────────────

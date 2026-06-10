@@ -20,13 +20,16 @@ import { describeError } from '../utils/error-helpers.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import type { AgentStream } from './agent-stream.js';
-import { type PendingApprovalContext } from './approval-state.js';
+import { type PendingApprovalContext, type AbortedApprovalContext } from './approval-state.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
 import type { ProviderContinuity } from './provider-continuity.js';
 import { ContinuationDriver, ShellAutoApprovalDecisionPolicy } from './continuation-driver.js';
 import { DefaultConversationRecoveryPolicy } from './recovery-policy.js';
 import { DefaultRecoveryExecutor } from './recovery-executor.js';
-import type { ClassifiedFailure, RecoveryState, RetryCounts } from './retry-contracts.js';
+import type { RecoveryState, RetryCounts } from './retry-contracts.js';
+import { GenerationGuard, type GenerationToken } from './generation-guard.js';
+import { DefaultRetryClassifier } from './retry-classifier.js';
+import { RetryEventPresenter } from './retry-event-presenter.js';
 
 export type SessionStatus = 'idle' | 'streaming' | 'awaiting_approval' | 'continuing';
 
@@ -59,6 +62,9 @@ export interface TurnCoordinatorDeps {
   continuationDriver: ContinuationDriver;
   recoveryPolicy: DefaultConversationRecoveryPolicy;
   recoveryExecutor: DefaultRecoveryExecutor;
+  generationGuard: GenerationGuard;
+  retryClassifier: DefaultRetryClassifier;
+  retryEventPresenter: RetryEventPresenter;
 }
 
 export class TurnCoordinator {
@@ -78,9 +84,21 @@ export class TurnCoordinator {
     if (!this.deps.appState.statusMachine.is('idle')) {
       throw new Error('Another foreground turn is already active.');
     }
+    const abortedContext = this.deps.approvalFlow.consumeAborted();
+    let token: GenerationToken;
+    if (abortedContext) {
+      const tokenVal = abortedContext.token ?? 0;
+      if (this.deps.generationGuard.isCurrent(tokenVal)) {
+        token = tokenVal;
+      } else {
+        return;
+      }
+    } else {
+      token = this.deps.generationGuard.capture();
+    }
     this.deps.appState.statusMachine.beginTurn();
     try {
-      yield* this.#executeRun(input, options);
+      yield* this.#executeRun(input, { ...options, token, abortedContext });
     } finally {
       this.deps.appState.statusMachine.complete();
     }
@@ -98,7 +116,8 @@ export class TurnCoordinator {
     }
     this.deps.appState.statusMachine.beginContinuation();
     try {
-      const gen = this.deps.retryOrchestrator.currentGeneration;
+      const pending = this.deps.approvalFlow.getPending();
+      const gen = pending?.token ?? this.deps.retryOrchestrator.currentGeneration;
       const policy = new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
 
       const driveResult = yield* this.deps.continuationDriver.drive(
@@ -117,6 +136,7 @@ export class TurnCoordinator {
         yield* this.#executeRun(dummyTurn, {
           skipUserMessage: true,
           retries: driveResult.retries,
+          token: gen,
         });
       } else {
         yield toTerminalEvent(driveResult.result);
@@ -150,6 +170,8 @@ export class TurnCoordinator {
       signal,
       resumeState,
       resumePreviousResponseId,
+      token,
+      abortedContext,
     }: {
       skipUserMessage?: boolean;
       retries?: RetryState;
@@ -157,6 +179,8 @@ export class TurnCoordinator {
       signal?: AbortSignal;
       resumeState?: RunState<any, any>;
       resumePreviousResponseId?: string | null;
+      token?: GenerationToken;
+      abortedContext?: AbortedApprovalContext | null;
     } = {},
   ): AsyncIterable<ConversationEvent> {
     const {
@@ -176,7 +200,14 @@ export class TurnCoordinator {
       this.deps.turnAccumulator.resetPersistedTurnState();
     }
 
-    const gen = this.deps.retryOrchestrator.currentGeneration;
+    const finalAbortedContext = abortedContext !== undefined ? abortedContext : this.deps.approvalFlow.consumeAborted();
+    if (finalAbortedContext) {
+      const tokenVal = finalAbortedContext.token ?? 0;
+      if (!this.deps.generationGuard.isCurrent(tokenVal)) {
+        return;
+      }
+    }
+    const gen = finalAbortedContext ? finalAbortedContext.token ?? 0 : token ?? this.deps.generationGuard.capture();
     let stream: AgentStream | null = null;
     let streamInput: string | AgentInputItem | AgentInputItem[] = '';
     let inputSurgeKind: 'delta' | 'full_history' = 'delta';
@@ -215,23 +246,22 @@ export class TurnCoordinator {
         traceId: this.deps.logger.getCorrelationId(),
       });
 
-      const abortedContext = this.deps.approvalFlow.consumeAborted();
-      const shouldAddUserMessage = !skipUserMessage && !abortedContext;
+      const shouldAddUserMessage = !skipUserMessage && !finalAbortedContext;
 
       if (shouldAddUserMessage) {
         this.deps.conversationStore.addUserTurn(turn);
         addedUserMessage = true;
-      } else if (abortedContext && !skipUserMessage) {
+      } else if (finalAbortedContext && !skipUserMessage) {
         yield { type: 'user_message_consumed_for_abort' };
       }
 
-      if (abortedContext) {
+      if (finalAbortedContext) {
         this.deps.logger.debug('Resolving aborted approval with fake execution', {
           message: text,
         });
 
         const driveResult = yield* this.deps.continuationDriver.drive(
-          { kind: 'abort_resolution', abortedContext, userText: text, generation: gen },
+          { kind: 'abort_resolution', abortedContext: finalAbortedContext, userText: text, generation: gen },
           new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
         );
 
@@ -346,6 +376,7 @@ export class TurnCoordinator {
           usage: acc.latestUsage,
           toolCallArgumentsById: this.deps.toolTracker.argumentsById,
           turnItems: this.deps.turnAccumulator.getTurnItems(),
+          token: gen,
         },
         {
           approvalFlow: this.deps.approvalFlow,
@@ -474,16 +505,33 @@ export class TurnCoordinator {
       transportFallbackRetryCount = 0,
     } = retries;
 
-    const classified = this.deps.retryOrchestrator.classifyForStart({
-      error,
+    const retryCounts: RetryCounts = {
       transientRetryCount,
-      transportFallbackRetryCount,
-      hallucinationRetryCount,
-      flexServiceTierFallbackCount,
-      maxTransientRetries,
+      serviceTierFallbackCount: flexServiceTierFallbackCount,
+      modelRetryCount: hallucinationRetryCount,
+      transportDowngradeCount: transportFallbackRetryCount,
+    };
+
+    let classified = this.deps.retryClassifier.classify({
+      error,
+      retryCounts,
       stream,
+      maxTransientRetries,
       maxModelRetries,
     });
+
+    if (!this.deps.retryOrchestrator.freshStartRetriesAllowed && !stream && classified.kind !== 'unrecoverable') {
+      this.deps.logger.warn('Retry requires fresh start but fresh-start retries are disabled for this session', {
+        eventType: 'retry.fresh_start_blocked',
+        category: 'retry',
+        phase: 'retry',
+        sessionId: this.deps.sessionId,
+        traceId: this.deps.logger.getCorrelationId(),
+        retryKind: classified.kind,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      classified = { kind: 'unrecoverable' };
+    }
 
     if (classified.kind === 'unrecoverable') {
       let droppedUserMessage: { text: string; imageCount: number } | undefined;
@@ -532,9 +580,21 @@ export class TurnCoordinator {
       return false;
     }
 
-    this.#logRetryDecision(classified, maxTransientRetries, maxModelRetries, error);
+    const presentation = this.deps.retryEventPresenter.present({
+      failure: classified,
+      maxTransientRetries,
+      maxModelRetries,
+      source: 'initial',
+      error,
+    });
 
-    yield this.#buildRetryEvent(classified, maxTransientRetries, maxModelRetries, error);
+    yield presentation.event;
+
+    this.deps.logger.warn(presentation.logMessage, {
+      ...presentation.logFields,
+      sessionId: this.deps.sessionId,
+      traceId: this.deps.logger.getCorrelationId(),
+    });
 
     if (!this.deps.retryOrchestrator.isCurrentGeneration(gen)) {
       return true;
@@ -548,12 +608,6 @@ export class TurnCoordinator {
       }
     }
 
-    const retryCounts: RetryCounts = {
-      transientRetryCount,
-      serviceTierFallbackCount: flexServiceTierFallbackCount,
-      modelRetryCount: hallucinationRetryCount,
-      transportDowngradeCount: transportFallbackRetryCount,
-    };
     const nextRetryCounts = this.deps.recoveryPolicy.nextRetryCounts(retryCounts, classified);
 
     const plan = this.deps.recoveryPolicy.plan({
@@ -571,7 +625,12 @@ export class TurnCoordinator {
       stream,
     };
 
-    const result = this.deps.recoveryExecutor.apply(plan, recoveryState, nextRetryCounts, maxModelRetries);
+    const result = this.deps.recoveryExecutor.apply({
+      plan,
+      state: recoveryState,
+      retryCounts: nextRetryCounts,
+      maxModelRetries,
+    });
 
     if (result.kind === 'terminated') {
       for (const event of result.events) {
@@ -604,66 +663,9 @@ export class TurnCoordinator {
       maxModelRetries: result.instruction.maxModelRetries,
       resumeState: result.instruction.resumeState,
       resumePreviousResponseId: result.instruction.resumePreviousResponseId,
+      token: gen,
     });
     return true;
-  }
-
-  #buildRetryEvent(
-    classified: ClassifiedFailure,
-    maxTransientRetries: number,
-    maxModelRetries: number | undefined,
-    error: unknown,
-  ): ConversationEvent {
-    switch (classified.kind) {
-      case 'service_tier_fallback':
-        return {
-          type: 'retry',
-          toolName: 'service_tier',
-          attempt: 1,
-          maxRetries: 1,
-          errorMessage: 'Flex service tier timed out. Falling back to standard service tier and retrying.',
-          retryType: 'flex_service_tier',
-        };
-      case 'transient':
-        return {
-          type: 'retry',
-          toolName: 'turn',
-          attempt: classified.attempt,
-          maxRetries: maxTransientRetries,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          retryType: 'upstream',
-        };
-      case 'transport_downgrade':
-        return {
-          type: 'retry',
-          toolName: 'transport',
-          attempt: 1,
-          maxRetries: 1,
-          errorMessage: 'WebSocket retries exhausted. Falling back to HTTP transport and retrying.',
-          retryType: 'upstream',
-        };
-      case 'model_retry':
-        if (classified.retryEvent) {
-          return classified.retryEvent;
-        }
-        return {
-          type: 'retry',
-          toolName: 'model',
-          attempt: 1,
-          maxRetries: maxModelRetries ?? 3,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          retryType: 'behavior',
-        };
-      default:
-        return {
-          type: 'retry',
-          toolName: 'turn',
-          attempt: 1,
-          maxRetries: maxTransientRetries,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          retryType: 'upstream',
-        };
-    }
   }
 
   #retryCountsToState(counts: RetryCounts): RetryState {
@@ -673,72 +675,5 @@ export class TurnCoordinator {
       hallucinationRetryCount: counts.modelRetryCount,
       transportFallbackRetryCount: counts.transportDowngradeCount,
     };
-  }
-
-  #logRetryDecision(
-    classified: ClassifiedFailure,
-    maxTransientRetries: number,
-    maxModelRetries: number | undefined,
-    error: unknown,
-  ): void {
-    switch (classified.kind) {
-      case 'service_tier_fallback':
-        this.deps.logger.warn('Flex service tier timed out, retrying with standard service tier', {
-          eventType: 'retry.flex_service_tier',
-          category: 'retry',
-          phase: 'retry',
-          retryType: 'flex_service_tier',
-          retryAttempt: 1,
-          attempt: 1,
-          maxRetries: 1,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          sessionId: this.deps.sessionId,
-          traceId: this.deps.logger.getCorrelationId(),
-        });
-        break;
-      case 'transient':
-        this.deps.logger.warn('Transient upstream error detected, retrying turn', {
-          eventType: 'retry.transient',
-          category: 'retry',
-          phase: 'retry',
-          retryType: 'upstream',
-          retryAttempt: classified.attempt,
-          attempt: classified.attempt,
-          maxRetries: maxTransientRetries,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          delayMs: classified.delayMs,
-          sessionId: this.deps.sessionId,
-          traceId: this.deps.logger.getCorrelationId(),
-        });
-        break;
-      case 'transport_downgrade':
-        this.deps.logger.warn('Transient upstream error exhausted WS retries, forcing HTTP fallback', {
-          eventType: 'retry.transport_fallback',
-          category: 'retry',
-          phase: 'retry',
-          retryType: 'upstream',
-          retryAttempt: 1,
-          attempt: 1,
-          maxRetries: 1,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          sessionId: this.deps.sessionId,
-          traceId: this.deps.logger.getCorrelationId(),
-        });
-        break;
-      case 'model_retry':
-        this.deps.logger.warn('Recoverable model error detected, retrying', {
-          eventType: 'retry.model_error',
-          category: 'retry',
-          phase: 'retry',
-          retryType: 'hallucination',
-          retryAttempt: 1,
-          attempt: 1,
-          maxRetries: maxModelRetries ?? 3,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          sessionId: this.deps.sessionId,
-          traceId: this.deps.logger.getCorrelationId(),
-        });
-        break;
-    }
   }
 }

@@ -8,6 +8,7 @@ import { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
 import { ProviderContinuity } from './provider-continuity.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ConversationEvent } from './conversation-events.js';
+import { GenerationGuard } from './generation-guard.js';
 
 const logger = new LoggingService({ disableLogging: true });
 
@@ -42,6 +43,7 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
     conversationLogger,
     retryOrchestrator,
     providerContinuity,
+    generationGuard: new GenerationGuard(),
   });
 
   const stream = makeStream([
@@ -117,6 +119,7 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
     conversationLogger,
     retryOrchestrator,
     providerContinuity,
+    generationGuard: new GenerationGuard(),
   });
 
   const stream = makeStream([
@@ -168,6 +171,7 @@ test('SessionStreamProcessor.finalize() updates providerContinuity previousRespo
     conversationLogger,
     retryOrchestrator,
     providerContinuity,
+    generationGuard: new GenerationGuard(),
   });
 
   const stream = makeStream([], {
@@ -200,6 +204,7 @@ test('SessionStreamProcessor.finalize() prefers full replay history when full-hi
     conversationLogger,
     retryOrchestrator,
     providerContinuity,
+    generationGuard: new GenerationGuard(),
   });
 
   const fullHistory = [

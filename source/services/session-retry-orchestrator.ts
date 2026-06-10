@@ -70,7 +70,7 @@ export type RetryOutcome =
  */
 export class SessionRetryOrchestrator {
   private retryHandler: RetryHandler;
-  private generationGuard = new GenerationGuard();
+  private generationGuard: GenerationGuard;
   private allowFreshStartRetries: boolean;
   private chainingBroken = false;
   private inputSurgeKind: 'delta' | 'full_history' = 'delta';
@@ -80,8 +80,10 @@ export class SessionRetryOrchestrator {
     private sessionId: string,
     private agentClient: ConversationAgentClient,
     allowFreshStartRetries: boolean = true,
+    generationGuard?: GenerationGuard,
   ) {
     this.allowFreshStartRetries = allowFreshStartRetries;
+    this.generationGuard = generationGuard ?? new GenerationGuard();
     this.retryHandler = new RetryHandler(this.logger, this.sessionId, this.agentClient);
   }
 

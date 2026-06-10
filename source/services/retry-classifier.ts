@@ -58,6 +58,7 @@ export class DefaultRetryClassifier {
         errorContext: hallucinationDecision.shouldInjectErrorContext
           ? hallucinationDecision.errorContextMessage
           : undefined,
+        retryEvent: hallucinationDecision.retryEvent,
       };
     }
 

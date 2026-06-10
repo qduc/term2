@@ -304,7 +304,7 @@ npm run test:verbose -- source/services/retry-event-presenter.test.ts
 ```
 
 Exit criteria for Step 8:
-
+``
 - Each sub-step passed the full characterization gate before the next began.
 - The active initial path uses the explicit retry contracts.
 - `GenerationGuard` has one composition-level instance.

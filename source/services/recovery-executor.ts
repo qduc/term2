@@ -1,13 +1,7 @@
 import type { AgentInputItem } from '@openai/agents';
 import type { ConversationEvent } from './conversation-events.js';
 import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
-import type {
-  NextRunInstruction,
-  RecoveryPlan,
-  RecoveryResult,
-  RecoveryState,
-  RetryCounts,
-} from './retry-contracts.js';
+import type { NextRunInstruction, RecoveryResult, RecoveryExecutor, RecoveryExecutorInput } from './retry-contracts.js';
 import type { ConversationStore } from './conversation-store.js';
 import type { ProviderContinuity } from './provider-continuity.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
@@ -18,10 +12,11 @@ export type RecoveryExecutorDeps = {
   providerContinuity: ProviderContinuity;
 };
 
-export class DefaultRecoveryExecutor {
+export class DefaultRecoveryExecutor implements RecoveryExecutor {
   constructor(private deps: RecoveryExecutorDeps) {}
 
-  apply(plan: RecoveryPlan, state: RecoveryState, retryCounts: RetryCounts, maxModelRetries?: number): RecoveryResult {
+  apply(input: RecoveryExecutorInput): RecoveryResult {
+    const { plan, state, retryCounts, maxModelRetries } = input;
     switch (plan.kind) {
       case 'resume_stream': {
         const instruction: NextRunInstruction = {

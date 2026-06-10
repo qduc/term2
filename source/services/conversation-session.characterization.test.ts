@@ -4,6 +4,9 @@ import { ConversationSession } from './conversation-session.js';
 import { createConversationSession } from './conversation-session-factory.js';
 import { createMockSettingsService } from './settings-service.mock.js';
 import { MockStream } from './test-helpers/mock-stream.js';
+import { createConversationSessionComposition } from './conversation-session-composition.js';
+import { TurnItemAccumulator } from './turn-item-accumulator.js';
+import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 
 // ── Shared mocks ───────────────────────────────────────────────────────────
 
@@ -1164,5 +1167,297 @@ test('aborted approval resolved by new user input emits the abort marker before 
   t.deepEqual(
     bundle.stateFacade.listUserTurns().map(({ text, imageCount }) => ({ text, imageCount })),
     [{ text: 'run pending command', imageCount: 0 }],
+  );
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Refactoring characterization tests
+// ══════════════════════════════════════════════════════════════════════════
+
+test('characterization - service-tier fallback followed by success', async (t) => {
+  const timeoutError = new Error('Flex service tier timed out');
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Success' }]);
+  successStream.finalOutput = 'Success';
+  successStream.lastResponseId = 'resp-success';
+  let calls = 0;
+
+  const mockClient = {
+    shouldRetryWithoutFlexServiceTier(error) {
+      return error === timeoutError;
+    },
+    useStandardServiceTierForNextRequest() {},
+    async startStream() {
+      calls++;
+      if (calls === 1) {
+        throw timeoutError;
+      }
+      return successStream;
+    },
+  };
+
+  const composition = createConversationSessionComposition({
+    sessionId: 'flex-fallback-test',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+    turnAccumulator: new TurnItemAccumulator(),
+  });
+  const session = new ConversationSession('flex-fallback-test', {
+    startedAt: new Date().toISOString(),
+    composition,
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('hi')) {
+    emitted.push(ev);
+  }
+
+  t.is(calls, 2);
+  t.deepEqual(
+    emitted.map((e) => e.type),
+    ['retry', 'text_delta', 'final'],
+  );
+  t.is(emitted[0].retryType, 'flex_service_tier');
+  t.is(emitted[0].toolName, 'service_tier');
+});
+
+test('characterization - transport downgrade after transient retries are exhausted', async (t) => {
+  const transientError = new Error('WebSocket connection closed before response completed (code=1006)');
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'HTTP Success' }]);
+  successStream.finalOutput = 'HTTP Success';
+  successStream.lastResponseId = 'resp-http-success';
+  let calls = 0;
+  let forceTransportDowngradeCalled = false;
+
+  const mockClient = {
+    getStreamMaxRetries() {
+      return 1;
+    },
+    forceTransportDowngrade(error) {
+      forceTransportDowngradeCalled = true;
+      return true;
+    },
+    async startStream() {
+      calls++;
+      if (calls <= 2) {
+        throw transientError;
+      }
+      return successStream;
+    },
+  };
+
+  const composition = createConversationSessionComposition({
+    sessionId: 'transport-downgrade-test',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+    turnAccumulator: new TurnItemAccumulator(),
+  });
+  const session = new ConversationSession('transport-downgrade-test', {
+    startedAt: new Date().toISOString(),
+    composition,
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('hi')) {
+    emitted.push(ev);
+  }
+
+  t.is(calls, 3);
+  t.true(forceTransportDowngradeCalled);
+  t.deepEqual(
+    emitted.map((e) => e.type),
+    ['retry', 'retry', 'text_delta', 'final'],
+  );
+
+  // First retry event: transient turn retry
+  t.is(emitted[0].retryType, 'upstream');
+  t.is(emitted[0].toolName, 'turn');
+  t.is(emitted[0].attempt, 1);
+
+  // Second retry event: transport downgrade retry
+  t.is(emitted[1].retryType, 'upstream');
+  t.is(emitted[1].toolName, 'transport');
+  t.is(emitted[1].attempt, 1);
+});
+
+test('characterization - synchronous chaining downgrade followed by full-history success', async (t) => {
+  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Success' }]);
+  successStream.finalOutput = 'Success';
+  successStream.lastResponseId = 'resp-success';
+
+  let calls = 0;
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream(input, opts) {
+      calls++;
+      if (calls === 1) {
+        throw new ChainingTransportDowngradeError('chaining failed');
+      }
+      return successStream;
+    },
+  };
+
+  const composition = createConversationSessionComposition({
+    sessionId: 'chaining-downgrade-test',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+    turnAccumulator: new TurnItemAccumulator(),
+  });
+  const session = new ConversationSession('chaining-downgrade-test', {
+    startedAt: new Date().toISOString(),
+    composition,
+  });
+
+  const emitted = [];
+  for await (const ev of session.run('hi')) {
+    emitted.push(ev);
+  }
+
+  t.deepEqual(
+    emitted.map((e) => e.type),
+    ['text_delta', 'final'],
+  );
+  t.is(calls, 2);
+  t.is(composition.retryOrchestrator.inputSurgeKindState, 'full_history');
+});
+
+test('characterization - provider change during a retry delay aborts retry', async (t) => {
+  let startStreamCalls = 0;
+  const mockClient = {
+    getStreamMaxRetries() {
+      return 1;
+    },
+    async startStream() {
+      startStreamCalls++;
+      throw new Error('WebSocket connection closed before response completed (code=1006)');
+    },
+    setProvider(provider) {},
+  };
+
+  const composition = createConversationSessionComposition({
+    sessionId: 'provider-change-test',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+    turnAccumulator: new TurnItemAccumulator(),
+  });
+  const session = new ConversationSession('provider-change-test', {
+    startedAt: new Date().toISOString(),
+    composition,
+  });
+
+  const iterator = session.run('hi')[Symbol.asyncIterator]();
+
+  // Get the retry event
+  const firstResult = await iterator.next();
+  t.is(firstResult.value.type, 'retry');
+  t.is(firstResult.value.retryType, 'upstream');
+
+  // Trigger provider change during the delay
+  composition.runtimeController.setProvider('another-provider');
+
+  // Resume iterator: it should detect the stale generation and abort (finish)
+  const secondResult = await iterator.next();
+  t.true(secondResult.done);
+
+  // Assert startStream was only called once
+  t.is(startStreamCalls, 1);
+});
+
+test('characterization - undo while an approval is pending invalidates pending approval and prevents continuation', async (t) => {
+  const interruption = createShellInterruption({ callId: 'call-pending-tool', command: 'rm -rf /' });
+  const interruptedStream = new MockStream([]);
+  interruptedStream.interruptions = [interruption];
+  interruptedStream.state = createApprovalState();
+
+  const mockClient = {
+    async startStream() {
+      return interruptedStream;
+    },
+  };
+
+  const composition = createConversationSessionComposition({
+    sessionId: 'undo-pending-test',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+    turnAccumulator: new TurnItemAccumulator(),
+  });
+  const session = new ConversationSession('undo-pending-test', {
+    startedAt: new Date().toISOString(),
+    composition,
+  });
+
+  const emitted = [];
+  for await (const event of session.run('trigger tool call')) {
+    emitted.push(event);
+  }
+
+  // We should have received approval_required
+  t.is(emitted.length, 1);
+  t.is(emitted[0].type, 'approval_required');
+
+  // Verify there is a pending approval in approvalState
+  t.truthy(composition.approvalState.getPending());
+
+  // Trigger undo
+  composition.stateFacade.undoLastUserTurn();
+
+  // Verify that pending approval is invalidated/cleared
+  t.is(composition.approvalState.getPending(), null);
+
+  // Verify continuation is not allowed (throws error)
+  await t.throwsAsync(
+    async () => {
+      for await (const _ of session.continueAfterApproval({ answer: 'y' })) {
+      }
+    },
+    { message: 'No pending approval to continue.' },
+  );
+});
+
+test('characterization - reset while an approval is pending invalidates pending approval and resets status machine', async (t) => {
+  const interruption = createShellInterruption({ callId: 'call-pending-tool-reset', command: 'rm -rf /' });
+  const interruptedStream = new MockStream([]);
+  interruptedStream.interruptions = [interruption];
+  interruptedStream.state = createApprovalState();
+
+  const mockClient = {
+    async startStream() {
+      return interruptedStream;
+    },
+  };
+
+  const composition = createConversationSessionComposition({
+    sessionId: 'reset-pending-test',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+    turnAccumulator: new TurnItemAccumulator(),
+  });
+  const session = new ConversationSession('reset-pending-test', {
+    startedAt: new Date().toISOString(),
+    composition,
+  });
+
+  const emitted = [];
+  for await (const event of session.run('trigger tool call')) {
+    emitted.push(event);
+  }
+
+  t.is(emitted[0].type, 'approval_required');
+  t.truthy(composition.approvalState.getPending());
+
+  // Trigger reset
+  composition.stateFacade.reset();
+
+  // Verify pending approval is cleared
+  t.is(composition.approvalState.getPending(), null);
+
+  // Verify continuation throws 'No pending approval to continue.' because status machine is reset to idle
+  await t.throwsAsync(
+    async () => {
+      for await (const _ of session.continueAfterApproval({ answer: 'y' })) {
+      }
+    },
+    { message: 'No pending approval to continue.' },
   );
 });

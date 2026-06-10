@@ -1,4 +1,5 @@
 import { type RunState } from '@openai/agents';
+import { type GenerationToken } from './generation-guard.js';
 
 export type PendingApprovalContext = {
   state: RunState<any, any>;
@@ -8,6 +9,7 @@ export type PendingApprovalContext = {
   removeInterceptor?: () => void;
   /** Nested agent-tool approvals must resume through SDK state, not parent tool interceptors. */
   nestedSubagent?: boolean;
+  token?: GenerationToken;
 };
 
 export type AbortedApprovalContext = {
@@ -17,6 +19,7 @@ export type AbortedApprovalContext = {
   toolCallArgumentsById: Map<string, unknown>;
   removeInterceptor?: () => void;
   nestedSubagent?: boolean;
+  token?: GenerationToken;
 };
 
 export class ApprovalState {
@@ -58,6 +61,7 @@ export class ApprovalState {
       toolCallArgumentsById: this.pending.toolCallArgumentsById,
       removeInterceptor: this.pending.removeInterceptor,
       nestedSubagent: this.pending.nestedSubagent,
+      token: this.pending.token,
     };
     this.pending = null;
     return true;

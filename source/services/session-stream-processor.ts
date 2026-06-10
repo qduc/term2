@@ -10,6 +10,7 @@ import { extractReplaySnapshot, extractFinalizationSnapshot, type StreamReplaySn
 import { collectDuplicateToolCallResultPairs } from './input-surge-guard.js';
 import { callIdOf, toolNameOf, outputOf } from './tool-execution-ledger.js';
 import type { AgentInputItem } from '@openai/agents';
+import { GenerationGuard } from './generation-guard.js';
 
 export type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
 
@@ -69,6 +70,7 @@ export interface SessionStreamProcessorDeps {
   conversationLogger: ConversationLogger;
   retryOrchestrator: import('./session-retry-orchestrator.js').SessionRetryOrchestrator;
   providerContinuity: ProviderContinuity;
+  generationGuard: GenerationGuard;
 }
 
 export interface StreamProcessOptions {

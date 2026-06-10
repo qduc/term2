@@ -21,6 +21,9 @@ import { ConversationAdapter } from './conversation-adapter.js';
 import { ContinuationDriver } from './continuation-driver.js';
 import { DefaultConversationRecoveryPolicy } from './recovery-policy.js';
 import { DefaultRecoveryExecutor } from './recovery-executor.js';
+import { GenerationGuard } from './generation-guard.js';
+import { DefaultRetryClassifier } from './retry-classifier.js';
+import { RetryEventPresenter } from './retry-event-presenter.js';
 
 // ── Public types ──────────────────────────────────────────────────
 
@@ -57,6 +60,7 @@ export type ConversationSessionComposition = {
    * generation, unsubscribes downgrade listeners, clears per-turn state.
    */
   dispose: () => void;
+  generationGuard: GenerationGuard;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -84,6 +88,8 @@ export function createConversationSessionComposition(
   const { logger, settingsService, sessionContextService } = deps;
   const startedAt = sessionStartedAt ?? new Date().toISOString();
 
+  const generationGuard = new GenerationGuard();
+
   const conversationStore = new ConversationStore();
   const approvalState = new ApprovalState();
   const toolTracker = new SessionToolTracker(conversationStore);
@@ -93,6 +99,7 @@ export function createConversationSessionComposition(
     id,
     agentClient,
     retryOptions?.allowFreshStartRetries ?? true,
+    generationGuard,
   );
 
   let currentShellAutoApproval = new ShellAutoApprovalResolver({
@@ -140,6 +147,7 @@ export function createConversationSessionComposition(
     sessionId: id,
     appState,
     providerContinuity,
+    generationGuard,
   });
 
   const conversationLogger = new ConversationLogger({
@@ -173,6 +181,7 @@ export function createConversationSessionComposition(
     conversationLogger,
     retryOrchestrator,
     providerContinuity,
+    generationGuard,
   });
 
   // breakChaining is a local closure — no callback back into ConversationSession.
@@ -200,6 +209,7 @@ export function createConversationSessionComposition(
     conversationStore,
     turnAccumulator,
     shellAutoApproval,
+    generationGuard,
   });
 
   const recoveryPolicy = new DefaultConversationRecoveryPolicy();
@@ -208,6 +218,8 @@ export function createConversationSessionComposition(
     conversationStore,
     providerContinuity,
   });
+  const retryClassifier = new DefaultRetryClassifier(agentClient);
+  const retryEventPresenter = new RetryEventPresenter();
 
   const turnCoordinator = new TurnCoordinator({
     agentClient,
@@ -215,6 +227,8 @@ export function createConversationSessionComposition(
     sessionId: id,
     turnAccumulator,
     retryOrchestrator,
+    retryClassifier,
+    retryEventPresenter,
     toolTracker,
     conversationStore,
     conversationLogger,
@@ -229,6 +243,7 @@ export function createConversationSessionComposition(
     continuationDriver,
     recoveryPolicy,
     recoveryExecutor,
+    generationGuard,
   });
 
   const stateFacade = new SessionManager({
@@ -274,6 +289,7 @@ export function createConversationSessionComposition(
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
+    generationGuard.invalidate();
     // Abort any active SDK work only if a turn is currently running.
     if (!appState.statusMachine.is('idle')) {
       if (typeof agentClient.abort === 'function') {
@@ -304,5 +320,6 @@ export function createConversationSessionComposition(
     stateFacade,
     runtimeController,
     dispose,
+    generationGuard,
   };
 }

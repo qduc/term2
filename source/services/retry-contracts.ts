@@ -80,6 +80,13 @@ export type RecoveryResult =
     }
   | { kind: 'terminated'; events: ConversationEvent[] };
 
+export type RecoveryExecutorInput = {
+  plan: RecoveryPlan;
+  state: RecoveryState;
+  retryCounts: RetryCounts;
+  maxModelRetries?: number;
+};
+
 // ── Interfaces ─────────────────────────────────────────────────
 
 export interface RetryClassifier {
@@ -91,5 +98,5 @@ export interface ConversationRecoveryPolicy {
 }
 
 export interface RecoveryExecutor {
-  apply(plan: RecoveryPlan, state: RecoveryState): RecoveryResult;
+  apply(input: RecoveryExecutorInput): RecoveryResult;
 }

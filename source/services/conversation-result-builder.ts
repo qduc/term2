@@ -14,6 +14,7 @@ import type { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.j
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
 import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
+import { type GenerationToken } from './generation-guard.js';
 
 export type ConversationResult = ConversationTerminal;
 
@@ -42,6 +43,7 @@ export interface ResultBuilderInput {
   usage?: NormalizedUsage;
   toolCallArgumentsById: Map<string, unknown>;
   turnItems?: PersistedAssistantTurnItem[];
+  token?: GenerationToken;
 }
 
 const resolveFinalText = (streamedText: string | undefined, completedText: string | undefined): string => {
@@ -107,6 +109,7 @@ export async function buildConversationResult(
       emittedCommandIds: emittedCommandIds ?? new Set(),
       toolCallArgumentsById: new Map(toolCallArgumentsById),
       nestedSubagent: hasPendingNestedAgentToolRun(result.state, logger),
+      token: input.token,
     });
 
     const agent = asRecord(interruptionRecord?.agent);

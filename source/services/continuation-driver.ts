@@ -16,6 +16,7 @@ import type { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.j
 import type { AgentStream } from './agent-stream.js';
 import type { ConversationTerminal, LLMAdvisory } from '../contracts/conversation.js';
 import type { AbortedApprovalContext } from './approval-state.js';
+import { GenerationGuard } from './generation-guard.js';
 
 import { buildConversationResult } from './conversation-result-builder.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from './interruption-info.js';
@@ -88,6 +89,7 @@ export interface ContinuationDriverDeps {
   conversationStore: ConversationStore;
   turnAccumulator: TurnItemAccumulator;
   shellAutoApproval: ShellAutoApprovalResolver;
+  generationGuard: GenerationGuard;
 }
 
 // ── Prepared Continuation ─────────────────────────────────────────
@@ -179,6 +181,7 @@ export class ContinuationDriver {
               usage: acc.latestUsage,
               toolCallArgumentsById: this.deps.toolTracker.argumentsById,
               turnItems: this.deps.turnAccumulator.getTurnItems(),
+              token: init.generation,
             },
             {
               approvalFlow: this.deps.approvalFlow,

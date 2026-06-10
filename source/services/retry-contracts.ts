@@ -56,6 +56,8 @@ export type RecoveryState = {
   ledgerSnapshot: SavedToolExecution[];
   addedUserMessage: boolean;
   stream: AgentStream | null;
+  currentState?: RunState<any, any>;
+  toolResultCallIds?: string[];
 };
 
 // ── Execution Instruction ──────────────────────────────────────

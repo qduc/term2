@@ -15,6 +15,7 @@ import type { PersistedAssistantTurnItem } from './conversation-persistence-type
 import { parseToolCallArguments } from './tool-call-arguments.js';
 import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 import { type GenerationToken } from './generation-guard.js';
+import { type CommandMessage } from '../tools/types.js';
 
 export type ConversationResult = ConversationTerminal;
 
@@ -44,6 +45,10 @@ export interface ResultBuilderInput {
   toolCallArgumentsById: Map<string, unknown>;
   turnItems?: PersistedAssistantTurnItem[];
   token?: GenerationToken;
+  inputMode?: 'delta' | 'full_history';
+  cumulativeUsage?: NormalizedUsage;
+  cumulativeCommandMessages?: CommandMessage[];
+  cumulativeTurnItems?: PersistedAssistantTurnItem[];
 }
 
 const resolveFinalText = (streamedText: string | undefined, completedText: string | undefined): string => {
@@ -110,6 +115,10 @@ export async function buildConversationResult(
       toolCallArgumentsById: new Map(toolCallArgumentsById),
       nestedSubagent: hasPendingNestedAgentToolRun(result.state, logger),
       token: input.token,
+      inputMode: input.inputMode,
+      cumulativeUsage: input.cumulativeUsage,
+      cumulativeCommandMessages: input.cumulativeCommandMessages,
+      cumulativeTurnItems: input.cumulativeTurnItems,
     });
 
     const agent = asRecord(interruptionRecord?.agent);

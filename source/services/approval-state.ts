@@ -1,5 +1,8 @@
 import { type RunState } from '@openai/agents';
 import { type GenerationToken } from './generation-guard.js';
+import { type NormalizedUsage } from '../utils/token-usage.js';
+import { type CommandMessage } from '../tools/types.js';
+import { type PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 
 export type PendingApprovalContext = {
   state: RunState<any, any>;
@@ -10,6 +13,10 @@ export type PendingApprovalContext = {
   /** Nested agent-tool approvals must resume through SDK state, not parent tool interceptors. */
   nestedSubagent?: boolean;
   token?: GenerationToken;
+  inputMode?: 'delta' | 'full_history';
+  cumulativeUsage?: NormalizedUsage;
+  cumulativeCommandMessages?: CommandMessage[];
+  cumulativeTurnItems?: PersistedAssistantTurnItem[];
 };
 
 export type AbortedApprovalContext = {
@@ -20,6 +27,10 @@ export type AbortedApprovalContext = {
   removeInterceptor?: () => void;
   nestedSubagent?: boolean;
   token?: GenerationToken;
+  inputMode?: 'delta' | 'full_history';
+  cumulativeUsage?: NormalizedUsage;
+  cumulativeCommandMessages?: CommandMessage[];
+  cumulativeTurnItems?: PersistedAssistantTurnItem[];
 };
 
 export class ApprovalState {
@@ -62,6 +73,10 @@ export class ApprovalState {
       removeInterceptor: this.pending.removeInterceptor,
       nestedSubagent: this.pending.nestedSubagent,
       token: this.pending.token,
+      inputMode: this.pending.inputMode,
+      cumulativeUsage: this.pending.cumulativeUsage,
+      cumulativeCommandMessages: this.pending.cumulativeCommandMessages,
+      cumulativeTurnItems: this.pending.cumulativeTurnItems,
     };
     this.pending = null;
     return true;

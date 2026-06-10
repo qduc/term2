@@ -8,7 +8,6 @@ import type { ConversationStore } from './conversation-store.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
 import type { SessionStreamProcessor, StreamHistorySource } from './session-stream-processor.js';
 import type { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
-import type { SessionRetryOrchestrator, RetryState } from './session-retry-orchestrator.js';
 import type { ProviderContinuity } from './provider-continuity.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { TurnItemAccumulator } from './turn-item-accumulator.js';
@@ -24,6 +23,13 @@ import { getMaxTransientRetries } from './conversation-retry-policy.js';
 import { getMethod } from './interruption-info.js';
 import { describeError } from '../utils/error-helpers.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
+
+import type { DefaultRetryClassifier } from './retry-classifier.js';
+import type { DefaultConversationRecoveryPolicy } from './recovery-policy.js';
+import type { DefaultRecoveryExecutor } from './recovery-executor.js';
+import type { RetryEventPresenter } from './retry-event-presenter.js';
+import type { RetryCounts, RecoveryState } from './retry-contracts.js';
+import { extractCommandMessages } from '../utils/extract-command-messages.js';
 
 // ── Approval Decision Policy ──────────────────────────────────────
 
@@ -74,7 +80,8 @@ export type ContinuationInit =
 export type ContinuationDriveResult =
   | { kind: 'approval_required'; result: ConversationTerminal }
   | { kind: 'response'; result: ConversationTerminal }
-  | { kind: 'fresh_start_required'; retries: RetryState };
+  | { kind: 'fresh_start_required'; retryCounts: RetryCounts }
+  | { kind: 'stale' };
 
 export interface ContinuationDriverDeps {
   agentClient: ConversationAgentClient;
@@ -83,13 +90,16 @@ export interface ContinuationDriverDeps {
   toolTracker: SessionToolTracker;
   streamProcessor: SessionStreamProcessor;
   approvalFlow: ApprovalFlowCoordinator;
-  retryOrchestrator: SessionRetryOrchestrator;
   providerContinuity: ProviderContinuity;
   inputPlanner: SessionInputPlanner;
   conversationStore: ConversationStore;
   turnAccumulator: TurnItemAccumulator;
   shellAutoApproval: ShellAutoApprovalResolver;
   generationGuard: GenerationGuard;
+  retryClassifier: DefaultRetryClassifier;
+  recoveryPolicy: DefaultConversationRecoveryPolicy;
+  recoveryExecutor: DefaultRecoveryExecutor;
+  retryEventPresenter: RetryEventPresenter;
 }
 
 // ── Prepared Continuation ─────────────────────────────────────────
@@ -102,6 +112,11 @@ interface PreparedContinuation {
   toolStartedEvent?: ConversationEvent;
   removeInterceptor: () => void;
   source: StreamHistorySource;
+  token?: import('./generation-guard.js').GenerationToken;
+  inputMode?: 'delta' | 'full_history';
+  cumulativeUsage?: NormalizedUsage;
+  cumulativeCommandMessages?: CommandMessage[];
+  cumulativeTurnItems?: PersistedAssistantTurnItem[];
 }
 
 // ── ContinuationDriver ────────────────────────────────────────────
@@ -137,23 +152,33 @@ export class ContinuationDriver {
     let currentState = prepared.state;
     let currentCallIds = approvedToolResultCallIds;
 
-    let cumulativeUsage: NormalizedUsage | undefined;
-    const cumulativeCommandMessages: CommandMessage[] = [];
-    let cumulativeTurnItems: PersistedAssistantTurnItem[] | undefined;
+    const token = prepared.token ?? init.generation;
+    let inputMode = prepared.inputMode ?? 'delta';
 
-    let transientRetryCount = 0;
+    let cumulativeUsage = prepared.cumulativeUsage;
+    const cumulativeCommandMessages = prepared.cumulativeCommandMessages ? [...prepared.cumulativeCommandMessages] : [];
+
+    let retryCounts: RetryCounts = {
+      transientRetryCount: 0,
+      serviceTierFallbackCount: 0,
+      modelRetryCount: 0,
+      transportDowngradeCount: 0,
+    };
     let lastStream: AgentStream | null = null;
+    let currentResumePreviousResponseId: string | null | undefined = undefined;
 
     try {
       while (true) {
+        if (!this.deps.generationGuard.isCurrent(token)) {
+          return { kind: 'stale' };
+        }
+
         try {
           const previousInputForSurge =
-            this.deps.retryOrchestrator.inputSurgeKindState === 'full_history'
-              ? this.deps.conversationStore.getHistory()
-              : undefined;
+            inputMode === 'full_history' ? this.deps.conversationStore.getHistory() : undefined;
 
           const stream = (await this.deps.agentClient.continueRunStream(currentState, {
-            previousResponseId: this.deps.providerContinuity.previousResponseId,
+            previousResponseId: currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
             sessionId: this.deps.sessionId,
             toolResultCallIds: currentCallIds,
           })) as AgentStream;
@@ -162,20 +187,24 @@ export class ContinuationDriver {
           const allEmittedIds = new Set([...previouslyEmittedIds]);
 
           const acc = yield* this.deps.streamProcessor.process(stream, {
-            gen: init.generation,
+            gen: token,
             source,
             preserveExistingToolArgs: true,
             previouslyEmittedCommandIds: allEmittedIds,
           });
 
-          this.deps.streamProcessor.finalize(
-            stream,
-            init.generation,
-            this.deps.retryOrchestrator.inputSurgeKindState,
-            source,
-          );
+          const finalizeResult = this.deps.streamProcessor.finalize(stream, token, inputMode, source);
+          if (finalizeResult.kind === 'stale') {
+            return { kind: 'stale' };
+          }
 
           const mergedEmittedIds = new Set([...allEmittedIds, ...acc.emittedCommandIds]);
+
+          const streamMessages = extractCommandMessages(stream.newItems || stream.history || []);
+          const filteredMessages = streamMessages.filter((msg) => !previouslyEmittedIds.has(msg.id));
+          const nextCumulativeMessages = [...cumulativeCommandMessages, ...filteredMessages];
+          const nextCumulativeUsage = acc.latestUsage ?? cumulativeUsage;
+          const nextCumulativeTurnItems = this.deps.turnAccumulator.getTurnItems();
 
           const outcome = await buildConversationResult(
             {
@@ -185,8 +214,12 @@ export class ContinuationDriver {
               emittedCommandIds: mergedEmittedIds,
               usage: acc.latestUsage,
               toolCallArgumentsById: this.deps.toolTracker.argumentsById,
-              turnItems: this.deps.turnAccumulator.getTurnItems(),
-              token: init.generation,
+              turnItems: nextCumulativeTurnItems,
+              token,
+              inputMode,
+              cumulativeUsage: nextCumulativeUsage,
+              cumulativeCommandMessages: nextCumulativeMessages,
+              cumulativeTurnItems: nextCumulativeTurnItems,
             },
             {
               approvalFlow: this.deps.approvalFlow,
@@ -197,20 +230,21 @@ export class ContinuationDriver {
           );
 
           if (outcome.kind === 'response') {
-            this.deps.inputPlanner.recordSuccess(this.deps.conversationStore.getHistory(), {
-              kind: this.deps.retryOrchestrator.inputSurgeKindState,
-              previousInput: previousInputForSurge,
-            });
+            this.deps.inputPlanner.recordSuccess(
+              inputMode === 'delta' ? stream : this.deps.conversationStore.getHistory(),
+              inputMode === 'delta' ? { kind: inputMode } : { kind: inputMode, previousInput: previousInputForSurge },
+            );
 
-            const mergedUsage = acc.latestUsage ?? cumulativeUsage;
             if (outcome.result.type === 'response') {
               const result: ConversationTerminal = {
                 type: 'response',
-                commandMessages: [...cumulativeCommandMessages, ...(outcome.result.commandMessages ?? [])],
+                commandMessages: nextCumulativeMessages,
                 finalText: outcome.result.finalText,
                 ...(outcome.result.reasoningText ? { reasoningText: outcome.result.reasoningText } : {}),
-                ...(mergedUsage && Object.keys(mergedUsage).length > 0 ? { usage: mergedUsage } : {}),
-                turnItems: outcome.result.turnItems ?? cumulativeTurnItems ?? this.deps.turnAccumulator.getTurnItems(),
+                ...(nextCumulativeUsage && Object.keys(nextCumulativeUsage).length > 0
+                  ? { usage: nextCumulativeUsage }
+                  : {}),
+                turnItems: outcome.result.turnItems,
               };
               return { kind: 'response', result };
             }
@@ -231,11 +265,12 @@ export class ContinuationDriver {
               reasoning: outcome.advisory.reasoning,
             });
 
-            cumulativeUsage = acc.latestUsage ?? cumulativeUsage;
+            cumulativeUsage = nextCumulativeUsage;
+            cumulativeCommandMessages.push(...filteredMessages);
 
             const nextPlan = this.deps.approvalFlow.prepareContinuation('y', undefined);
             if (!nextPlan) {
-              const approvalFallback = this.#buildApprovalRequiredFromAutoApprove(outcome, acc.latestUsage);
+              const approvalFallback = this.#buildApprovalRequiredFromAutoApprove(outcome, nextCumulativeUsage);
               return { kind: 'approval_required', result: approvalFallback };
             }
 
@@ -258,6 +293,7 @@ export class ContinuationDriver {
             source = 'continueRunStream';
             previouslyEmittedIds = mergedEmittedIds;
             ledgerSnapshot = this.deps.toolTracker.export();
+            inputMode = nextPlan.pendingApprovalContext.inputMode ?? inputMode;
 
             continue;
           }
@@ -288,22 +324,22 @@ export class ContinuationDriver {
               traceId: this.deps.logger.getCorrelationId(),
               toolName: outcome.result.approval.toolName,
             });
-            this.deps.inputPlanner.recordSuccess(this.deps.conversationStore.getHistory(), {
-              kind: this.deps.retryOrchestrator.inputSurgeKindState,
-              previousInput: previousInputForSurge,
-            });
-
-            const mergedUsage = acc.latestUsage ?? cumulativeUsage;
-            const usagePatch = mergedUsage && Object.keys(mergedUsage).length > 0 ? { usage: mergedUsage } : {};
+            this.deps.inputPlanner.recordSuccess(
+              inputMode === 'delta' ? stream : this.deps.conversationStore.getHistory(),
+              inputMode === 'delta' ? { kind: inputMode } : { kind: inputMode, previousInput: previousInputForSurge },
+            );
 
             const resultWithUsage: ConversationTerminal = {
               ...outcome.result,
-              ...usagePatch,
+              ...(nextCumulativeUsage && Object.keys(nextCumulativeUsage).length > 0
+                ? { usage: nextCumulativeUsage }
+                : {}),
             };
             return { kind: 'approval_required', result: resultWithUsage };
           }
 
-          cumulativeUsage = acc.latestUsage ?? cumulativeUsage;
+          cumulativeUsage = nextCumulativeUsage;
+          cumulativeCommandMessages.push(...filteredMessages);
 
           if (decision === 'approve') {
             this.deps.logger.debug('Shell command auto-approved by policy', {
@@ -351,6 +387,7 @@ export class ContinuationDriver {
           source = 'continueRunStream';
           previouslyEmittedIds = mergedEmittedIds;
           ledgerSnapshot = this.deps.toolTracker.export();
+          inputMode = nextPlan.pendingApprovalContext.inputMode ?? inputMode;
 
           continue;
         } catch (error) {
@@ -360,61 +397,73 @@ export class ContinuationDriver {
             ),
           });
           const retryStream = lastStream;
-          const decision = this.deps.retryOrchestrator.classifyForContinuation({
+
+          const classified = this.deps.retryClassifier.classify({
             error,
-            transientRetryCount,
+            retryCounts,
             stream: retryStream,
             maxTransientRetries,
           });
-          if (decision.kind !== 'transient') {
+
+          if (classified.kind === 'unrecoverable') {
             throw error;
           }
 
-          transientRetryCount = decision.attempt;
-          this.deps.logger.warn('Transient error in continuation, retrying', {
-            eventType: 'retry.transient',
-            category: 'retry',
-            phase: 'retry',
-            retryType: 'upstream',
-            retryAttempt: transientRetryCount,
-            maxRetries: maxTransientRetries,
-            sessionId: this.deps.sessionId,
-            traceId: this.deps.logger.getCorrelationId(),
-            errorMessage: error instanceof Error ? error.message : String(error),
-            delayMs: decision.delay,
+          const presentation = this.deps.retryEventPresenter.present({
+            failure: classified,
+            maxTransientRetries,
+            source: 'continuation',
+            error,
           });
 
-          yield {
-            type: 'retry',
-            toolName: 'continuation',
-            attempt: transientRetryCount,
-            maxRetries: maxTransientRetries,
-            errorMessage: error instanceof Error ? error.message : String(error),
-            retryType: 'upstream',
+          yield presentation.event;
+
+          this.deps.logger.warn(presentation.logMessage, {
+            ...presentation.logFields,
+            sessionId: this.deps.sessionId,
+            traceId: this.deps.logger.getCorrelationId(),
+          });
+
+          if (!this.deps.generationGuard.isCurrent(token)) {
+            return { kind: 'stale' };
+          }
+
+          const nextRetryCounts = this.deps.recoveryPolicy.nextRetryCounts(retryCounts, classified);
+          retryCounts = nextRetryCounts;
+
+          const plan = this.deps.recoveryPolicy.plan({
+            failure: classified,
+            gen: token,
+            stream: retryStream,
+            retryCounts,
+            freshStartRetriesAllowed: true,
+          });
+
+          const recoveryState: RecoveryState = {
+            ledgerSnapshot,
+            addedUserMessage: false,
+            stream: retryStream,
+            currentState,
+            toolResultCallIds: currentCallIds,
           };
-          await new Promise((resolve) => setTimeout(resolve, decision.delay));
 
-          if (!this.deps.retryOrchestrator.isCurrentGeneration(init.generation)) {
-            return { kind: 'fresh_start_required', retries: { transientRetryCount } };
+          const recoveryResult = this.deps.recoveryExecutor.apply({
+            plan,
+            state: recoveryState,
+            retryCounts,
+          });
+
+          if (recoveryResult.kind === 'terminated') {
+            throw error;
           }
 
-          if (!retryStream) {
-            this.deps.toolTracker.recoverApprovedResultsFromState(currentState, currentCallIds);
-            this.deps.retryOrchestrator.restoreForRetry({
-              ledgerSnapshot,
-              stream: null,
-              toolLedger: this.deps.toolTracker.ledger,
-              conversationStore: this.deps.conversationStore,
-              clearPreviousResponseId: () => {
-                this.deps.providerContinuity.clear();
-              },
-              restoreCompletedToolLedgerEntries: (snapshot) => this.deps.toolTracker.restoreCompletedEntries(snapshot),
-            });
-
-            return { kind: 'fresh_start_required', retries: { transientRetryCount } };
+          if (recoveryResult.instruction.resumeState) {
+            currentState = recoveryResult.instruction.resumeState;
+            currentCallIds = [];
+            currentResumePreviousResponseId = recoveryResult.instruction.resumePreviousResponseId;
+          } else {
+            return { kind: 'fresh_start_required', retryCounts };
           }
-
-          this.deps.toolTracker.import(ledgerSnapshot);
         }
       }
     } catch (error) {
@@ -461,6 +510,11 @@ export class ContinuationDriver {
         toolStartedEvent: plan.toolStartedEvent,
         removeInterceptor: plan.removeInterceptor,
         source: 'continueRunStream',
+        token: plan.pendingApprovalContext.token,
+        inputMode: plan.pendingApprovalContext.inputMode,
+        cumulativeUsage: plan.pendingApprovalContext.cumulativeUsage,
+        cumulativeCommandMessages: plan.pendingApprovalContext.cumulativeCommandMessages,
+        cumulativeTurnItems: plan.pendingApprovalContext.cumulativeTurnItems,
       };
     }
 
@@ -475,6 +529,11 @@ export class ContinuationDriver {
       toolStartedEvent: undefined,
       removeInterceptor: plan.removeInterceptor,
       source: 'abortResolution',
+      token: abortedContext.token,
+      inputMode: abortedContext.inputMode,
+      cumulativeUsage: abortedContext.cumulativeUsage,
+      cumulativeCommandMessages: abortedContext.cumulativeCommandMessages,
+      cumulativeTurnItems: abortedContext.cumulativeTurnItems,
     };
   }
 

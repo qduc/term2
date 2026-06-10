@@ -2,7 +2,7 @@ import { type RunState, type AgentInputItem } from '@openai/agents';
 import type { ConversationEvent } from './conversation-events.js';
 import type { ConversationTerminal } from '../contracts/conversation.js';
 import type { ILoggingService } from './service-interfaces.js';
-import type { SessionRetryOrchestrator, RetryState } from './session-retry-orchestrator.js';
+import type { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ConversationStore } from './conversation-store.js';
 import type { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
@@ -21,7 +21,7 @@ import type { GenerationGuard } from './generation-guard.js';
 import type { DefaultRetryClassifier } from './retry-classifier.js';
 import type { RetryEventPresenter } from './retry-event-presenter.js';
 import type { TurnAttempt } from './turn-attempt.js';
-import type { RecoveryState, RetryCounts, NextRunInstruction } from './retry-contracts.js';
+import type { RecoveryState, NextRunInstruction } from './retry-contracts.js';
 import type { AgentStream } from './agent-stream.js';
 import { getMethod } from './interruption-info.js';
 import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
@@ -125,7 +125,10 @@ export class InitialTurnRunner {
           if (driveResult.kind === 'approval_required') {
             return { kind: 'approval_required', terminal: driveResult.result };
           }
-          if (driveResult.kind !== 'fresh_start_required') {
+          if (driveResult.kind === 'stale') {
+            return { kind: 'stale' };
+          }
+          if (driveResult.kind === 'response') {
             return { kind: 'response', terminal: driveResult.result };
           }
 
@@ -259,6 +262,7 @@ export class InitialTurnRunner {
               toolCallArgumentsById: this.deps.toolTracker.argumentsById,
               turnItems: this.deps.turnAccumulator.getTurnItems(),
               token: attempt.token,
+              inputMode: attempt.inputMode!,
             },
             {
               approvalFlow: this.deps.approvalFlow,
@@ -313,13 +317,15 @@ export class InitialTurnRunner {
             if (driveResult.kind === 'approval_required') {
               return { kind: 'approval_required', terminal: driveResult.result };
             }
-            if (driveResult.kind !== 'fresh_start_required') {
+            if (driveResult.kind === 'stale') {
+              return { kind: 'stale' };
+            }
+            if (driveResult.kind === 'response') {
               return { kind: 'response', terminal: driveResult.result };
             }
 
             // Auto-approved fresh start
-            const nextCounts = this.#retryStateToCounts(driveResult.retries ?? {});
-            attempt.advanceRetry(nextCounts);
+            attempt.advanceRetry(driveResult.retryCounts);
             skipUser = true;
             currentResumeState = undefined;
             currentResumePreviousResponseId = undefined;
@@ -529,15 +535,6 @@ export class InitialTurnRunner {
       instruction: result.instruction,
       delayMs: classified.kind === 'transient' ? classified.delayMs : undefined,
       useStandardServiceTier: result.useStandardServiceTier,
-    };
-  }
-
-  #retryStateToCounts(state: RetryState): RetryCounts {
-    return {
-      transientRetryCount: state.transientRetryCount ?? 0,
-      serviceTierFallbackCount: state.flexServiceTierFallbackCount ?? 0,
-      modelRetryCount: state.hallucinationRetryCount ?? 0,
-      transportDowngradeCount: state.transportFallbackRetryCount ?? 0,
     };
   }
 }

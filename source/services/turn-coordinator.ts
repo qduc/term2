@@ -198,7 +198,7 @@ export class TurnCoordinator {
         const attempt = new TurnAttempt({
           turn: dummyTurn,
           token: gen,
-          initialRetryCounts: this.#retryStateToCounts(driveResult.retries ?? {}),
+          initialRetryCounts: driveResult.retryCounts,
           initialLedgerSnapshot: this.deps.toolTracker.export(),
           maxTransientRetries,
           signal: undefined,
@@ -225,6 +225,8 @@ export class TurnCoordinator {
             yield toTerminalEvent(runnerOutcome.terminal);
           }
         }
+      } else if (driveResult.kind === 'stale') {
+        // stale - do nothing
       } else {
         yield toTerminalEvent(driveResult.result);
       }

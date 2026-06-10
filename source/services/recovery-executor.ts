@@ -50,6 +50,12 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
       }
 
       case 'retry_fresh': {
+        if (state.toolResultCallIds) {
+          const runState = state.stream?.state ?? state.currentState;
+          if (runState) {
+            this.deps.toolTracker.recoverApprovedResultsFromState(runState, state.toolResultCallIds);
+          }
+        }
         if (state.stream) {
           this.deps.providerContinuity.clear();
           this.deps.toolTracker.restoreCompletedEntries(state.ledgerSnapshot);
@@ -63,7 +69,9 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
         } else {
           this.deps.providerContinuity.clear();
           this.deps.toolTracker.restoreCompletedEntries(state.ledgerSnapshot);
-          this.deps.conversationStore.removeLastUserMessage();
+          if (state.addedUserMessage) {
+            this.deps.conversationStore.removeLastUserMessage();
+          }
         }
 
         const instruction: NextRunInstruction = {

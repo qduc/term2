@@ -205,22 +205,6 @@ export function createConversationSessionComposition(
     });
   };
 
-  const continuationDriver = new ContinuationDriver({
-    agentClient,
-    logger,
-    sessionId: id,
-    toolTracker,
-    streamProcessor,
-    approvalFlow,
-    retryOrchestrator,
-    providerContinuity,
-    inputPlanner,
-    conversationStore,
-    turnAccumulator,
-    shellAutoApproval,
-    generationGuard,
-  });
-
   const recoveryPolicy = new DefaultConversationRecoveryPolicy();
   const recoveryExecutor = new DefaultRecoveryExecutor({
     toolTracker,
@@ -229,6 +213,25 @@ export function createConversationSessionComposition(
   });
   const retryClassifier = new DefaultRetryClassifier(agentClient);
   const retryEventPresenter = new RetryEventPresenter();
+
+  const continuationDriver = new ContinuationDriver({
+    agentClient,
+    logger,
+    sessionId: id,
+    toolTracker,
+    streamProcessor,
+    approvalFlow,
+    providerContinuity,
+    inputPlanner,
+    conversationStore,
+    turnAccumulator,
+    shellAutoApproval,
+    generationGuard,
+    retryClassifier,
+    recoveryPolicy,
+    recoveryExecutor,
+    retryEventPresenter,
+  });
 
   const initialTurnRunner = new InitialTurnRunner({
     agentClient,

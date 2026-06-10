@@ -1,394 +1,496 @@
-# Conversation Session Next Refactor Plan: Part 2
+# Conversation Session Refactor Part 2: SDK-First Simplification
 
 ## Summary
 
-Part 1 reduced `ConversationSession` by extracting the main behavior-heavy collaborators. The remaining problem is not that `ConversationSession` contains large algorithms. It is that it still acts as a broad compatibility facade, owns too much collaborator topology, and exposes methods from several unrelated domains.
+Part 1 exposed too many collaborators and callback cycles around
+`ConversationSession`. Part 2 should simplify the subsystem by reusing
+`@openai/agents` before introducing new application state machines.
 
-Part 2 should narrow `ConversationSession` into an event-stream session boundary and move the broad CLI-facing API to explicit ports owned by `ConversationService` or a session bundle. The target is interface segregation, cleaner composition ownership, and fewer callback cycles.
+The installed SDK already provides important run primitives:
 
-## Current Shape After Part 1
+- `RunState` for resumable run state.
+- `RunResult` and `StreamedRunResult` for history, output, interruptions, usage, and
+  response IDs.
+- `RunState.approve()` and `RunState.reject()` for tool approval decisions.
+- Resumption by passing the same `RunState` back to `run()` or `Runner.run()`.
+- `AbortSignal` and stream cancellation.
+- The `Session` interface for conversation-history persistence.
+- Model request retry settings and `retryPolicies`, subject to provider and failure
+  category compatibility.
 
-- `source/services/conversation-session.ts` delegates most behavior to collaborators.
-- `source/services/conversation-session-composition.ts` creates the core subsystem graph.
-- `ConversationTerminalAdapter` owns terminal result collection and traffic context.
-- `SessionRuntimeController` owns provider/model/runtime mutation.
-- `SessionStateFacade` owns snapshots, import/export, undo, shell context, and mode notices.
-- `AutoApprovalContinuationResolver` owns automatic approval continuation result assembly.
-- `ConversationSession` still exposes all of those operations as compatibility methods.
+Term2 should coordinate these capabilities, not reproduce them. Application code
+still owns UI events, command admission, provider fallback, persistence compatibility,
+undo, the tool ledger, and product-specific retry behavior.
 
-## Remaining Problems
+## Required SDK Verification Gate
 
-- `ConversationSession` still has a broad public API that mixes streaming, terminal collection, runtime settings, state access, approval continuation, and test helpers.
-- `ConversationSession` still stores references to nearly every collaborator, even when it only delegates to them.
-- `ConversationService` is also a pass-through facade, so there are two broad facades with overlapping responsibilities.
-- `conversation-session-composition.ts` still wires callback cycles back into `ConversationSession` for restart, generation checks, chaining breaks, and auto-approval finalization.
-- Tests continue to instantiate `ConversationSession` directly, preserving pressure to keep its wide API.
+Before removing a class, state field, retry path, persistence path, or workaround,
+dispatch a read-only `gpt-5.4-mini` subagent to audit that exact change.
 
-## Goals
+The subagent must inspect:
 
-- Make `ConversationSession` primarily responsible for session identity plus event-stream operations.
-- Move broad caller-facing methods to explicit ports with small interfaces.
-- Keep `ConversationService` as the stable CLI/application facade.
-- Reduce callback cycles in `conversation-session-composition.ts`.
-- Make production callers depend on narrow interfaces rather than the concrete `ConversationSession` class.
-- Keep behavior unchanged for approval, retry, chaining, traffic context, persistence, undo, and runtime setting changes.
+- The installed `@openai/agents` version and declarations under `node_modules`.
+- Relevant SDK implementation where declarations are insufficient.
+- Current Term2 behavior and tests.
+- Provider-specific implementations used by Term2.
 
-## Non-Goals
+The audit must classify the proposed change as one of:
 
-- Do not remove `ConversationService`.
-- Do not change `ConversationEvent` or `ConversationTerminal` contracts.
-- Do not change persisted state shape.
-- Do not rewrite stream processing, retry policy, approval flow, or tool ledger logic.
-- Do not remove compatibility methods until all production callers and focused tests have a replacement.
+1. **Full SDK replacement**: the SDK preserves all required observable behavior.
+2. **Minimal adapter required**: the SDK owns the core behavior, but Term2 must
+   translate types, events, persistence, logging, or product policy.
+3. **Application-specific keep**: the SDK does not provide equivalent behavior.
 
-## Phase 0: Re-Baseline Current Architecture
+The audit report must cite concrete SDK and Term2 files and answer:
 
-### Files To Inspect
+- Does the SDK preserve the same behavior for streaming and non-streaming runs?
+- Does it work for OpenAI and every custom `Runner` used by the provider registry?
+- Does it preserve nested subagent approval behavior?
+- Does it preserve cancellation, cleanup, and late-event behavior?
+- Does it preserve the current persisted format and undo semantics?
+- Does it preserve cumulative usage and command-message deduplication?
+- Does it preserve transport downgrade and retry behavior?
 
-- `source/services/conversation-session.ts`
-- `source/services/conversation-service.ts`
-- `source/services/conversation-session-composition.ts`
-- `source/services/conversation-terminal-adapter.ts`
-- `source/services/session-runtime-controller.ts`
-- `source/services/session-state-facade.ts`
-- `source/services/approval-continuation-runner.ts`
-- `source/services/conversation-turn-runner.ts`
-- `source/services/auto-approval-continuation-resolver.ts`
-- `source/non-interactive.ts`
-- `source/hooks/use-conversation.ts`
-- `source/services/subagents/subagent-manager.ts`
+No removal proceeds from documentation or type similarity alone. Add or update a
+focused characterization test first, then make the minimum change supported by the
+audit.
 
-### Baseline Commands
+Store each audit as a short section in the implementing PR description or commit
+notes. Do not add permanent audit documents unless the result changes an architectural
+decision that future maintainers need to understand.
 
-Run focused tests before making Part 2 changes:
+## Target Architecture
+
+```text
+UI / non-interactive caller
+        |
+        v
+ConversationService
+        |
+        v
+ConversationSession
+        |
+        v
+TurnCoordinator ------> AgentGateway ------> @openai/agents
+        |                    |
+        |                    +--> RunState / StreamedRunResult
+        |
+        +--> ConversationStore
+        +--> ToolExecutionLedger
+        +--> ApplicationSessionState
+```
+
+The SDK is authoritative for state inside an agent run. Term2 is authoritative for
+application behavior around runs.
+
+### SDK-Owned Run State
+
+- Current agent-run step and generated run items.
+- Approval decisions recorded in `RunState`.
+- Resumable continuation state.
+- Run-cumulative usage inside one SDK `RunState`.
+- Run history exposed by `RunResult`.
+- Run-internal previous response and conversation identifiers.
+- Stream completion and cancellation state.
+- Model-request retries that are explicitly proven to flow through SDK retry policy.
+
+### Term2-Owned State
+
+- Whether the application accepts a new foreground command.
+- Active Term2 logical turn identity and stale-generation protection.
+- Pending UI approval descriptor and reference to the SDK interruption.
+- The current SDK `RunState` reference while approval is pending.
+- Cross-segment usage normalization and UI/subagent accounting.
+- Provider/model runtime configuration.
+- Transport downgrade state across runs.
+- Existing persisted transcript format, undo behavior, and shell context.
+- Tool execution ledger and crash recovery.
+- Command-event deduplication needed by the UI.
+- Input-surge and large-input guard baselines.
+- Hallucination, service-tier, and whole-run retry policy.
+- Log sink, traffic context, and session replacement resources.
+
+Term2 must not copy SDK run history, usage, approval decisions, or continuation data
+into independently mutable representations.
+
+## Primary Components
+
+### ConversationService
+
+- Remains the stable application-facing API.
+- Creates, replaces, and disposes sessions through one factory.
+- Preserves cross-session configuration such as the log sink.
+- Delegates turn execution to `ConversationSession`.
+- Delegates persistence, undo, and runtime workflows to focused owners.
+
+### ConversationSession
+
+- Owns `id` and `startedAt`.
+- Exposes `run`, `continueAfterApproval`, and `abort`.
+- Delegates execution to `TurnCoordinator`.
+- Does not construct its dependency graph.
+- Does not expose compatibility methods after callers migrate.
+
+### TurnCoordinator
+
+`TurnCoordinator` is an application coordinator, not a second agent runner.
+
+It owns:
+
+- Synchronous admission of one foreground Term2 turn.
+- Translation from SDK stream events to `ConversationEvent`.
+- Holding the active `StreamedRunResult` and pending SDK `RunState`.
+- Invoking SDK-native approval and resumption.
+- Product-specific retries that cannot be delegated to SDK retry policy.
+- Coordination of transcript, ledger, UI-event, and cleanup updates.
+
+It does not own:
+
+- A duplicate approval state machine.
+- A duplicate run history.
+- A duplicate SDK usage accumulator. Term2 may retain normalized cross-segment and UI
+  accounting derived from SDK usage.
+- Request retries already handled by SDK retry settings.
+- A custom continuation payload derived from SDK internals.
+
+Representative API:
+
+```typescript
+export interface TurnCoordinator {
+  start(
+    turn: UserTurn,
+    options?: ConversationRunOptions,
+  ): AsyncIterable<ConversationEvent>;
+
+  continueAfterApproval(
+    command: ApprovalCommand,
+  ): AsyncIterable<ConversationEvent>;
+
+  abort(): void;
+}
+```
+
+`start()` and `continueAfterApproval()` reserve application admission synchronously
+before returning an iterable. This is Term2 concurrency policy and is not delegated to
+the SDK.
+
+### ApplicationSessionState
+
+Keep this object small. It owns only application coordination state:
+
+- `idle`, `streaming`, `awaiting_approval`, or `continuing`.
+- Active logical turn ID and generation.
+- Pending mode notice.
+- Provider continuity and transport downgrade state not represented across SDK runs.
+- A pending approval reference containing the SDK `RunState`, interruption, and
+  Term2 UI metadata.
+
+It must not mirror `RunState` fields or own canonical history, generated SDK items,
+or retry counters that belong to one execution attempt. Term2-specific display
+metadata and normalized accounting remain outside this state object.
+
+### AgentGateway
+
+Use SDK types at this boundary instead of broad `unknown` shapes:
+
+```typescript
+export interface AgentGateway {
+  startStream(
+    input: string | AgentInputItem[],
+    options: AgentGatewayRunOptions,
+  ): Promise<StreamedRunResult<any, Agent<any, any>>>;
+
+  resumeStream(
+    state: RunState<any, Agent<any, any>>,
+    options: AgentGatewayRunOptions,
+  ): Promise<StreamedRunResult<any, Agent<any, any>>>;
+
+  abort(): void;
+  configure(settings: AgentRuntimeSettings): void;
+  onTransportDowngrade(callback: () => void): () => void;
+}
+```
+
+Prefer a small type alias around SDK generics if direct types become unreadable. Do
+not replace SDK state with an opaque branded object merely to hide available public
+methods.
+
+The gateway may adapt provider configuration, tracing, input filtering, and transport
+fallback. It must not reinterpret SDK approval or run-state semantics.
+
+### ConversationStore
+
+Keep `ConversationStore` until a mini-agent audit and focused tests prove that an SDK
+`Session` adapter can preserve:
+
+- The current persisted state shape.
+- Undo and rewind behavior.
+- Tool-ledger reconciliation.
+- Shell-history insertion.
+- Input-surge inspection.
+- Provider downgrade resynchronization.
+- Existing UI and logging expectations.
+
+The preferred end state is for `ConversationStore` to implement or adapt to the SDK
+`Session` interface so the SDK and Term2 use one canonical history store. Do not run
+two independent persistence systems.
+
+## Provisional Capability Matrix
+
+Every row requires the SDK verification gate before implementation.
+
+| Current Term2 behavior | Expected decision | Planned direction |
+| --- | --- | --- |
+| Approval decision mutation | Full SDK replacement | Call SDK `approve()` or `reject()` on the retained `RunState`. |
+| Rejection interceptor used to inject a reason | Full replacement or minimal adapter | Prefer `state.reject(interruption, { message })`; retain an adapter only if a provider or nested-run test fails. |
+| Pending/aborted approval lifecycle | Application-specific keep | Keep cross-command pending and aborted state, but store direct SDK references instead of copying SDK-owned fields. |
+| `ApprovalContinuationRunner` | Minimal adapter | Fold event translation and Term2 bookkeeping into `TurnCoordinator`; SDK performs continuation. |
+| SDK run usage source | Full SDK replacement | Read cumulative usage from `RunState.usage` instead of re-summing SDK requests. |
+| Cross-segment, UI, and subagent usage accounting | Application-specific keep | Normalize and expose SDK usage according to existing Term2 contracts. |
+| `AgentStream` with `unknown` fields | Full SDK replacement | Use `StreamedRunResult` or a typed structural alias. |
+| Request-level transient retries | Minimal adapter, pending per-provider proof | Use `ModelSettings.retry` only for failure categories proven to reach SDK policy with equivalent streaming behavior. |
+| Transport downgrade, service-tier, hallucination, whole-run retries | Application-specific keep | Retain focused Term2 policy around SDK runs. |
+| Stream cancellation | Minimal adapter | Use `AbortSignal`/SDK cancellation; retain Term2 admission and exactly-once cleanup. |
+| Previous response ID inside a resumed run | Full SDK replacement | Read SDK result/state. |
+| Previous response continuity across separate Term2 turns and provider downgrade | Minimal adapter | Keep only state required to start the next run when SDK `Session` cannot own it. |
+| Transcript persistence | Minimal adapter, pending proof | Keep Term2 persistence; optionally adapt `ConversationStore` to SDK `Session` only if interrupted runs, undo, and reconciliation remain correct. |
+| Tool execution ledger and crash recovery | Application-specific keep | Continue as a focused Term2 data owner. |
+| UI command deduplication and tool argument display | Application-specific keep | Derive from SDK events/items but retain Term2 presentation state. |
+| Foreground command concurrency | Application-specific keep | Enforce synchronous admission in `TurnCoordinator`. |
+| Stale generation protection after reset/provider change | Application-specific keep | Retain at the application boundary. |
+
+## Behavioral Contract
+
+The application lifecycle remains:
+
+```text
+idle
+  |
+  | start
+  v
+streaming
+  |
+  | SDK interruption
+  v
+awaiting_approval
+  |
+  | approve/reject SDK RunState and resume
+  v
+continuing
+  |
+  +--> idle on completion, failure, or abort
+```
+
+This lifecycle describes Term2 command admission. It must not duplicate the SDK's
+internal run steps.
+
+Required behavior:
+
+- A second `start()` is rejected while a foreground turn is active.
+- Duplicate approval continuation is rejected synchronously.
+- Approval applies only to the retained SDK state and matching logical turn.
+- Reset, provider change, and session replacement invalidate stale events.
+- `abort()` cancels the SDK stream and performs Term2 cleanup exactly once.
+- Early iterator `return()` cancels active work and releases admission.
+- Pending approval abort preserves current Term2 behavior for the next user input.
+- A completed, failed, or aborted iterable permits a new turn.
+
+## Implementation Phases
+
+### Phase 0: Characterize Current Behavior
+
+Add or confirm tests before structural changes:
+
+- Approval and rejection with a custom reason.
+- Nested subagent approval.
+- Auto-approval followed by another interruption.
+- Cumulative usage across continuation.
+- Abort during streaming and continuation.
+- Abort while approval is pending.
+- Early iterator return.
+- Concurrent start and duplicate continuation.
+- Provider downgrade and previous-response invalidation.
+- Retry behavior by retry category.
+- Persistence, import, reset, undo, and ledger reconciliation.
+- Session replacement and listener disposal.
+
+Run the existing focused suites:
 
 ```bash
 npm run test:verbose -- source/services/conversation-session.stream.test.ts source/services/conversation-session.isolation.test.ts source/services/conversation-session.auto-approval.test.ts source/services/conversation-session.input-surge.test.ts
 ```
 
-Run broader caller-facing tests before changing service wiring:
-
 ```bash
-npm run test:verbose -- source/non-interactive.test.ts source/hooks/use-conversation.test.tsx source/services/subagents/subagent-manager.test.ts
+npm run test:verbose -- source/services/conversation-service.test.ts source/non-interactive.test.ts source/services/subagents/subagent-manager.test.ts
 ```
 
-If a listed test file does not exist in the checkout, substitute the closest existing focused test and record the substitution in the final change summary.
+### Phase 1: Type the SDK Boundary
 
-### Characterization To Add Or Confirm
+Before deleting `AgentStream` or changing continuation types:
 
-- `ConversationService` forwards terminal operations without depending on `ConversationSession` method type queries.
-- `ConversationService.resetWithNewId` preserves log sink behavior.
-- Runtime methods call `SessionRuntimeController` behavior exactly once per service call.
-- State methods call `SessionStateFacade` behavior exactly once per service call.
-- `ConversationSession.run` and `continueAfterApproval` remain usable as event-stream primitives.
-- Subagent sessions can still be constructed and run without terminal adapter methods.
+1. Dispatch the mini-agent SDK audit.
+2. Add compile-time or focused runtime tests for all provider runners.
+3. Replace `unknown`/`any` stream and state fields with SDK types.
+4. Keep a minimal adapter only for provider-specific configuration.
 
-## Phase 1: Introduce Narrow Session Ports
+Acceptance criteria:
 
-### New Files
+- `RunState`, interruptions, and streamed results are no longer reflected as unrelated
+  `unknown` objects.
+- No code reaches into private SDK fields such as `_context`.
+- The OpenAI path and custom `Runner` paths satisfy the same gateway contract.
 
-- `source/services/conversation-session-ports.ts`
+### Phase 2: Use SDK-Native Approval
 
-### Modified Files
-
-- `source/services/conversation-service.ts`
-- `source/services/conversation-session.ts`
-- `source/non-interactive.ts`
-- `source/hooks/use-conversation.ts`
-- `source/services/subagents/subagent-manager.ts`
-
-### New Interfaces
-
-Define explicit ports for each domain currently exposed through `ConversationSession`:
+Handle approval through public SDK APIs:
 
 ```typescript
-export interface ConversationEventSession {
-  readonly id: string;
-  readonly startedAt: string;
-
-  run(input: string | UserTurn, options?: ConversationRunOptions): AsyncIterable<ConversationEvent>;
-  continueAfterApproval(options: ContinueAfterApprovalOptions): AsyncIterable<ConversationEvent>;
-  abort(): void;
+if (command.approved) {
+  state.approve(interruption);
+} else {
+  state.reject(interruption, { message: command.reason });
 }
 
-export interface ConversationTerminalPort {
-  sendMessage(input: string | UserTurn, options?: SendMessageOptions): Promise<ConversationTerminal>;
-  handleApprovalDecision(
-    answer: string,
-    rejectionReason?: string,
-    options?: HandleApprovalDecisionOptions,
-  ): Promise<ConversationTerminal | null>;
-}
-
-export interface ConversationRuntimePort {
-  setModel(model: string): void;
-  setReasoningEffort(effort: ReasoningEffortSetting): void;
-  setTemperature(temperature?: number): void;
-  setProvider(provider: string): void;
-  switchProvider(provider: string): void;
-  setRetryCallback(callback: () => void): void;
-}
-
-export interface ConversationStatePort {
-  getCurrentSnapshot(): StateSnapshot;
-  reset(): void;
-  undoLastUserTurn(): { text: string; images?: UserTurn['images'] } | null;
-  listUserTurns(): { index: number; text: string; imageCount: number }[];
-  undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null;
-  exportState(): { history: unknown[]; previousResponseId: string | null; toolLedger: SavedToolExecution[] };
-  importState(state: ImportedConversationState): void;
-  addShellContext(historyText: string): void;
-  queueModeNotice(text: string): void;
-}
-
-export interface ConversationInputGuardPort {
-  previewLargeUncachedInput(input: string | UserTurn, now?: number): LargeUncachedInputDecision;
-}
+const stream = await gateway.resumeStream(state, options);
 ```
 
-Also export option types instead of deriving them from concrete class methods:
+Before removing the rejection interceptor or `ApprovalState` fields:
 
-```typescript
-export type ConversationRunOptions = {
-  skipUserMessage?: boolean;
-  retries?: RetryState;
-  maxModelRetries?: number;
-  signal?: AbortSignal;
-  resumeState?: unknown;
-};
+1. Dispatch a mini-agent audit specifically for rejection messages, nested subagents,
+   and custom providers.
+2. Add regression tests for those paths.
+3. Remove only the behavior proven redundant.
 
-export type ContinueAfterApprovalOptions = {
-  answer: string;
-  rejectionReason?: string;
-};
+Term2 retains the pending UI approval descriptor, logical turn identity, generation,
+ledger updates, and event translation.
 
-export type ImportedConversationState = {
-  history: unknown[];
-  previousResponseId: string | null;
-  toolLedger?: SavedToolExecution[];
-  updatedAt?: string;
-};
-```
+Acceptance criteria:
 
-### Data Flow
+- Approval decisions use public SDK methods.
+- The same SDK `RunState` is resumed.
+- SDK-run cumulative usage comes from SDK state and Term2 normalization remains
+  behaviorally unchanged.
+- No independent mutable copy of SDK-owned approval decisions or continuation
+  internals remains.
+- Term2 still owns pending, aborted, duplicate-claim, and stale-generation approval
+  behavior.
 
-- `ConversationSession` implements only `ConversationEventSession` directly.
-- `ConversationTerminalAdapter` implements `ConversationTerminalPort`.
-- `SessionRuntimeController` implements `ConversationRuntimePort`.
-- `SessionStateFacade` implements `ConversationStatePort`.
-- `SessionInputPlanner` or a thin adapter implements `ConversationInputGuardPort`.
-- `ConversationService` receives or builds these ports and exposes the existing broad compatibility API to CLI callers.
+### Phase 3: Evaluate Request Retries Against SDK Policy
 
-### Acceptance Criteria
+Inventory each current retry category separately.
 
-- Production callers can type against ports instead of `ConversationSession`.
-- `source/non-interactive.ts` uses `ConversationTerminalPort` for `ConversationSessionLike` or replaces its local interface with the exported port.
-- `source/services/subagents/subagent-manager.ts` depends only on `ConversationEventSession` unless it truly needs terminal methods.
-- No behavior changes are required in this phase.
+For each category:
 
-## Phase 2: Create A Session Bundle For Composition Output
+1. Dispatch a mini-agent audit.
+2. Determine whether SDK `ModelSettings.retry` sees the same failure and supports the
+   required streaming/provider behavior.
+3. Add a focused test proving retry count, delay policy, cancellation, and emitted UI
+   events.
+4. Move only supported request retries into SDK policy. The default outcome is to
+   retain the Term2 retry until equivalence is proven.
 
-### New Files
+Keep Term2 orchestration for:
 
-- `source/services/conversation-session-bundle.ts`
+- WebSocket-to-HTTP downgrade that changes chaining behavior.
+- Service-tier fallback that changes runtime configuration.
+- Hallucination recovery that restarts a logical turn.
+- Retry paths that restore ledger or transcript state.
+- Any provider whose errors do not reach SDK retry policy consistently.
 
-### Modified Files
+Do not maintain both an SDK retry and a Term2 retry for the same failure category.
 
-- `source/services/conversation-session-composition.ts`
-- `source/services/conversation-service.ts`
-- `source/services/conversation-session.ts`
+### Phase 4: Evaluate SDK Session Integration
 
-### New Type
+Do not replace `ConversationStore` immediately.
 
-Create a bundle that separates event-session identity from broad ports:
+First dispatch a mini-agent audit comparing `ConversationStore` with the SDK `Session`
+contract: `getSessionId`, `getItems`, `addItems`, `popItem`, and `clearSession`.
 
-```typescript
-export type ConversationSessionBundle = {
-  eventSession: ConversationEventSession;
-  terminal: ConversationTerminalPort;
-  runtime: ConversationRuntimePort;
-  state: ConversationStatePort;
-  inputGuard: ConversationInputGuardPort;
-  logSink: { setLogSink(sink: ((event: LogEvent) => void) | null): void };
-};
-```
+Build a narrow adapter experiment and tests for:
 
-### Factory Shape
+- Normal multi-turn history.
+- Interrupted and resumed runs.
+- Undo.
+- Import and resume.
+- Tool-ledger recovery.
+- Provider downgrade and full-history resynchronization.
 
-Replace direct broad session ownership in `ConversationService` with a bundle factory:
+If all behavior matches, make `ConversationStore` the SDK session implementation and
+remove duplicate manual history append logic. If behavior does not match, retain
+`ConversationStore` and document the minimum adapter boundary.
 
-```typescript
-export function createConversationSessionBundle(options: {
-  sessionId: string;
-  sessionStartedAt?: string;
-  agentClient: ConversationAgentClient;
-  deps: ConversationSessionDeps;
-  retryOptions?: ConversationSessionRetryOptions;
-}): ConversationSessionBundle;
-```
+Acceptance criteria:
 
-### Data Flow
+- Exactly one canonical transcript exists.
+- SDK persistence and Term2 persistence never append the same item twice.
+- The persisted external format remains unchanged.
 
-- The bundle factory creates `ConversationSession` for event streaming.
-- The bundle factory creates or receives the composition object.
-- The bundle exposes terminal/runtime/state/input guard ports directly.
-- `ConversationService` stores the bundle instead of storing `ConversationSession` alone.
+### Phase 5: Introduce TurnCoordinator And Small Application State
 
-### Acceptance Criteria
+Merge `ConversationTurnRunner`, `ApprovalContinuationRunner`, and
+`AutoApprovalContinuationResolver` only after their SDK-owned behavior has been
+removed or delegated.
 
-- `ConversationService` no longer needs to call `this.#session.setModel`, `this.#session.exportState`, or other compatibility delegates.
-- `ConversationService` calls `bundle.runtime`, `bundle.state`, `bundle.terminal`, and `bundle.inputGuard` directly.
-- `ConversationSession` compatibility methods may remain temporarily, but production service code no longer relies on them.
+`TurnCoordinator` should contain only:
 
-### Edge Cases
+- Command admission.
+- SDK run start/resume calls.
+- Event translation.
+- App-specific retry and fallback coordination.
+- Store, ledger, logging, and cleanup coordination.
 
-- `ConversationService.resetWithNewId` must preserve the previous log sink when replacing the bundle.
-- The new bundle must preserve `sessionStartedAt` for traffic context and logs.
-- `retryOptions.allowFreshStartRetries` default behavior must remain unchanged.
+Do not migrate old algorithms unchanged into a larger replacement class.
 
-## Phase 3: Move Composition Ownership Out Of ConversationSession
+Acceptance criteria:
 
-### Modified Files
+- No callback points back through `ConversationSession`.
+- SDK `RunState` remains authoritative during continuation.
+- Application state contains no duplicate SDK history or SDK usage accumulator.
+- Term2 retains normalized usage and UI/subagent accounting where required.
+- Helpers remain focused on parsing, policy, normalization, or persistence.
 
-- `source/services/conversation-session.ts`
-- `source/services/conversation-session-composition.ts`
-- `source/services/conversation-session-bundle.ts`
+### Phase 6: Move Composition Out Of ConversationSession
 
-### Target Constructor
+Create one production factory that returns the session plus private resources required
+by `ConversationService`.
 
-Change `ConversationSession` from constructing the subsystem graph to receiving only its event-stream dependencies:
+Disposal must:
 
-```typescript
-export class ConversationSession implements ConversationEventSession {
-  constructor(args: {
-    id: string;
-    startedAt: string;
-    turnRunner: ConversationTurnRunner;
-    continuationRunner: ApprovalContinuationRunner;
-    approvalFlow: ApprovalFlowCoordinator;
-    toolTracker: SessionToolTracker;
-    retryOrchestrator: SessionRetryOrchestrator;
-    onBreakChaining: () => void;
-  });
-}
-```
+- Abort active SDK work.
+- Invalidate the active Term2 generation.
+- Unsubscribe downgrade listeners.
+- Clear pending approval references and per-turn UI state.
+- Be idempotent.
 
-This exact dependency list can be narrowed during implementation. The rule is that `ConversationSession` should receive already-built collaborators rather than build them.
+Interactive, non-interactive, and subagent paths use the same factory with scoped
+profiles.
 
-### Data Flow
+### Phase 7: Remove Compatibility Surface
 
-- `createConversationSessionBundle` owns construction order.
-- `createConversationSessionComposition` owns low-level collaborator wiring.
-- `ConversationSession` owns event primitive methods only: `run`, `continueAfterApproval`, and `abort`.
-- Downgrade handling remains registered at bundle/composition level but invokes an event-session callback or a chaining controller, not a private session method that mutates multiple collaborators directly.
+For each compatibility method or obsolete class:
 
-### Acceptance Criteria
+1. Confirm no production caller remains.
+2. Dispatch a mini-agent audit for any behavior being removed with it.
+3. Add or retain a behavior-level test at the new owner.
+4. Delete the method or class.
 
-- `ConversationSession` no longer imports `createConversationSessionComposition`.
-- `ConversationSession` constructor no longer accepts raw `deps` or `agentClient`.
-- `ConversationSession` does not instantiate `AutoApprovalContinuationResolver`, `ConversationTerminalAdapter`, `SessionRuntimeController`, or `SessionStateFacade`.
-- The bundle factory is the only production place that assembles the full conversation session graph.
-
-### Edge Cases
-
-- Tests that construct `ConversationSession` directly should switch to a focused event-session test helper or the bundle factory.
-- Avoid creating hidden service locators. The bundle should be explicit, not a generic map of collaborators.
-
-## Phase 4: Remove Callback Cycles From Composition
-
-### Modified Files
-
-- `source/services/conversation-session-composition.ts`
-- `source/services/conversation-turn-runner.ts`
-- `source/services/approval-continuation-runner.ts`
-- `source/services/auto-approval-continuation-resolver.ts`
-- `source/services/session-state-controller.ts`
-
-### Current Callback Cycles To Reduce
-
-- `breakChaining: () => this.#breakChaining()`
-- `buildAndResolve: (...) => this.#buildAndResolve(...)`
-- `restartTurn: (turn, options) => this.run(turn, options)`
-- `isCurrentGeneration: (gen) => this.#isCurrentGeneration(gen)`
-
-### Replacement Collaborators
-
-Introduce narrow shared collaborators where callbacks currently bounce through `ConversationSession`:
-
-```typescript
-export interface ChainingController {
-  breakChaining(): void;
-}
-
-export interface TurnRestartRunner {
-  restartTurn(turn: { text: string; images?: UserTurn['images'] }, options: RestartTurnOptions): AsyncIterable<ConversationEvent>;
-}
-
-export interface GenerationGate {
-  isCurrentGeneration(generation: number): boolean;
-}
-```
-
-`AutoApprovalContinuationResolver` should be passed as an object dependency instead of reached through `ConversationSession.#buildAndResolve`.
-
-### Data Flow
-
-- `SessionRetryOrchestrator` can implement `GenerationGate` directly or expose a small adapter.
-- `ConversationTurnRunner` can implement `TurnRestartRunner` if restart is just another run with specific options.
-- A dedicated chaining controller coordinates `retryOrchestrator.breakChaining`, `state.previousResponseId = null`, `inputPlanner.previousResponseId = null`, and logging.
-
-### Acceptance Criteria
-
-- `createConversationSessionComposition` no longer requires callbacks into `ConversationSession`.
-- Restart and generation checks are represented by named dependencies.
-- Chaining break behavior remains covered by downgrade tests.
-
-### Edge Cases
-
-- Avoid recursive construction where `ConversationTurnRunner` needs a restart runner that needs `ConversationTurnRunner`. If necessary, introduce a late-bound `TurnRestartRunnerRef` with a single `setRunner` method and keep it private to composition.
-- Preserve logging metadata for `conversation.chaining_broken`.
-
-## Phase 5: Demote Or Remove ConversationSession Compatibility Methods
-
-### Modified Files
-
-- `source/services/conversation-session.ts`
-- `source/services/conversation-service.ts`
-- `source/non-interactive.ts`
-- `source/hooks/use-conversation.ts`
-- `source/services/subagents/subagent-manager.ts`
-- Session tests that call compatibility delegates directly
-
-### Migration Steps
-
-1. Move all production callers to ports or `ConversationService`.
-2. Update tests for runtime/state/terminal behavior to instantiate the focused collaborator or bundle instead of `ConversationSession`.
-3. Keep only event-session methods on `ConversationSession`.
-4. Delete compatibility delegates once no production code or focused tests require them.
-
-### Methods To Remove From ConversationSession
+Candidate compatibility methods:
 
 - `previewLargeUncachedInput`
 - `reset`
 - `undoLastUserTurn`
 - `listUserTurns`
 - `undoNUserTurns`
-- `setModel`
-- `setReasoningEffort`
-- `setTemperature`
-- `setProvider`
-- `switchProvider`
+- Runtime model/provider setters
 - `setRetryCallback`
 - `setLogSink`
-- `getCurrentSnapshot`
-- `exportState`
-- `importState`
+- Snapshot import/export methods
 - `addShellContext`
 - `queueModeNotice`
 - `sendMessage`
 - `handleApprovalDecision`
 
-### Methods To Keep On ConversationSession
+Keep on `ConversationSession`:
 
 - `id`
 - `startedAt`
@@ -396,96 +498,82 @@ export interface GenerationGate {
 - `continueAfterApproval`
 - `abort`
 
-### Acceptance Criteria
+## Test Strategy
 
-- `ConversationSession` no longer has a broad facade API.
-- CLI-facing breadth is isolated in `ConversationService`.
-- Tests for terminal collection, state facade, runtime controller, and input guard do not require `ConversationSession`.
+Follow TDD for every implementation slice:
 
-## Phase 6: Add Focused Factory Test Coverage
+1. Add or update a characterization test.
+2. Run it against current behavior.
+3. Dispatch the required mini-agent audit.
+4. Implement the minimum SDK-backed change.
+5. Run the focused tests.
+6. Run the full suite at approval, retry, persistence, and construction milestones.
 
-### New Or Modified Tests
+Prefer behavior-oriented tests:
 
-- `source/services/conversation-session-bundle.test.ts`
-- `source/services/conversation-session-ports.test.ts` only if compile-time or runtime interface guarantees need explicit fixtures
-- Existing `conversation-service` tests
-- Existing `conversation-session` tests narrowed to event-stream behavior
+- `conversation-turn.test.ts`
+- `conversation-approval.test.ts`
+- `conversation-retry.test.ts`
+- `conversation-chaining.test.ts`
+- `conversation-persistence.test.ts`
+- `conversation-session-factory.test.ts`
 
-### Test Cases
-
-- Bundle creates ports that share the same store, tool tracker, approval flow, logger, and state controller.
-- `ConversationService.sendMessage` uses the terminal port.
-- `ConversationService.setModel` uses the runtime port.
-- `ConversationService.exportState` uses the state port.
-- `ConversationService.previewLargeUncachedInput` uses the input guard port.
-- Replacing a service session with `resetWithNewId` creates a new bundle and reapplies the log sink.
-- Downgrade handling still breaks chaining and switches to full-history mode.
-- Subagent construction uses event-session behavior without terminal/runtime/state compatibility methods.
-
-### Verification Commands
-
-Run new focused tests:
-
-```bash
-npm run test:verbose -- source/services/conversation-session-bundle.test.ts source/services/conversation-service.test.ts
-```
-
-Run existing focused session tests:
-
-```bash
-npm run test:verbose -- source/services/conversation-session.stream.test.ts source/services/conversation-session.isolation.test.ts source/services/conversation-session.auto-approval.test.ts
-```
-
-Run caller-facing tests:
-
-```bash
-npm run test:verbose -- source/non-interactive.test.ts source/hooks/use-conversation.test.tsx source/services/subagents/subagent-manager.test.ts
-```
-
-Run full tests before merging:
+Run before merging:
 
 ```bash
 npm test
 ```
 
-Run formatting for changed files:
+Format changed files:
 
 ```bash
-npx prettier --check source/services/conversation-session.ts source/services/conversation-session-ports.ts source/services/conversation-session-bundle.ts source/services/conversation-session-composition.ts source/services/conversation-service.ts source/non-interactive.ts docs/plans/conversation-session-next-refactor.md
+npx prettier --write docs/plans/conversation-session-next-refactor-part-2.md <changed-source-files>
 ```
 
-## Implementation Order
+## Final Acceptance Criteria
 
-1. Add `conversation-session-ports.ts` with narrow interfaces and exported option/state types.
-2. Update non-mutating type references in callers to use the new ports without changing behavior.
-3. Add `conversation-session-bundle.ts` and make `ConversationService` store a bundle.
-4. Route `ConversationService` methods through the matching port instead of through `ConversationSession` compatibility delegates.
-5. Move full composition ownership out of `ConversationSession` and into the bundle/factory layer.
-6. Replace callback cycles in composition with named dependencies: chaining controller, generation gate, restart runner, and auto-approval resolver.
-7. Move production callers and tests off `ConversationSession` compatibility methods.
-8. Delete compatibility delegates from `ConversationSession` once unused.
-9. Run focused tests after each phase and `npm test` before merge.
+- Term2 uses public SDK `RunState` approval and resumption APIs.
+- SDK streamed-result and run-state types replace broad local `unknown` mirrors.
+- SDK state is authoritative for SDK run history, approval decisions, continuation,
+  and usage within one run.
+- Term2 remains authoritative for pending/aborted approval lifecycle, command
+  admission, and normalized cross-segment/UI usage.
+- Supported request retries use SDK retry policy without duplicate Term2 retries.
+- Unsupported product retries remain explicit and focused.
+- There is one canonical conversation transcript.
+- `TurnCoordinator` coordinates application behavior without reimplementing the SDK
+  runner.
+- Application state contains only command admission, generation, pending UI approval,
+  mode notice, and cross-run provider continuity.
+- Tool ledger, undo, persistence compatibility, provider fallback, logging, and UI
+  event behavior remain intact.
+- Every removed behavior has a mini-agent audit and a focused regression test.
+- Composition has no callbacks into a partially constructed session.
+- Replaced sessions dispose listeners and cannot mutate replacement state.
+- Focused tests and the full suite pass.
 
-## Acceptance Criteria
+## Risks And Controls
 
-- `ConversationSession` is an event-stream session boundary, not a broad facade.
-- `ConversationSession` no longer constructs the whole collaborator graph.
-- `ConversationService` owns the broad CLI/application API and delegates to explicit ports.
-- Production code depends on `ConversationEventSession`, `ConversationTerminalPort`, `ConversationRuntimePort`, `ConversationStatePort`, or `ConversationInputGuardPort` as appropriate.
-- `conversation-session-composition.ts` no longer needs callbacks into a concrete `ConversationSession` instance.
-- Existing approval, retry, chaining, traffic context, persistence, undo, runtime mutation, auto-approval, and subagent behavior remains unchanged.
-- Focused tests and the full test suite pass.
+- **SDK API resemblance without behavioral equivalence:** Require the mini-agent audit
+  and a focused test before removal.
+- **Provider differences:** Verify every provider registry `Runner`, not only OpenAI.
+- **Nested approval differences:** Test nested subagents before deleting interceptors
+  or special handling.
+- **Double persistence:** Introduce SDK `Session` only through one canonical store.
+- **Duplicate retries:** Assign each failure category to exactly one retry owner.
+- **Cancellation mismatch:** Keep Term2 admission and cleanup even when SDK performs
+  transport cancellation.
+- **SDK private-field coupling:** Use public `RunState`, result, and session APIs only.
+- **Coordinator growth:** Do not move SDK-owned algorithms unchanged into
+  `TurnCoordinator`.
 
-## Risks
+## Deferred Follow-Up
 
-- Removing compatibility methods too early will create noisy test churn. Migrate production callers and focused tests first, then delete delegates.
-- A session bundle can become another god object if callers receive the whole bundle unnecessarily. Pass only the narrow port each caller needs.
-- Callback-cycle removal can introduce construction-order bugs. Keep replacement collaborators explicit and add factory tests for shared-instance wiring.
-- Chaining downgrade behavior mutates multiple collaborators. Do not split it until there is direct regression coverage for previous response ID, input planner state, retry orchestrator state, and logging.
+After this refactor:
 
-## Assumptions
+- Evaluate whether `ConversationSession` still provides value beyond identity and
+  delegation.
+- Evaluate splitting `OpenAIAgentClient` into runtime configuration,
+  provider/transport execution, and tool/subagent integration.
 
-- Part 1 collaborator extractions are present in the current branch.
-- `ConversationService` remains the stable application-facing facade.
-- It is acceptable for tests to use a bundle factory when they need integration wiring.
-- The final public `ConversationSession` API can be narrower than the current compatibility API as long as `ConversationService` preserves caller behavior.``
+Do not combine either decision with the SDK adoption work.

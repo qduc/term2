@@ -2,9 +2,7 @@ import type { ILoggingService } from './service-interfaces.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ConversationStore } from './conversation-store.js';
 import type { ConversationLogger } from './conversation-logger.js';
-import type { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
-import type { SessionLifecycle } from './session-lifecycle.js';
-import type { SessionInputPlanner } from './session-input-planner.js';
+import type { ProviderContinuity } from './provider-continuity.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ConversationEvent } from './conversation-events.js';
 import { createStreamAccumulator, processStreamEvents, type StreamAccumulator } from './stream-event-processor.js';
@@ -69,9 +67,8 @@ export interface SessionStreamProcessorDeps {
   toolTracker: SessionToolTracker;
   conversationStore: ConversationStore;
   conversationLogger: ConversationLogger;
-  retryOrchestrator: SessionRetryOrchestrator;
-  state: SessionLifecycle;
-  inputPlanner: SessionInputPlanner;
+  retryOrchestrator: import('./session-retry-orchestrator.js').SessionRetryOrchestrator;
+  providerContinuity: ProviderContinuity;
 }
 
 export interface StreamProcessOptions {
@@ -143,8 +140,7 @@ export class SessionStreamProcessor {
   finalize(stream: AgentStream, gen: number, source: StreamHistorySource): void {
     if (!this.deps.retryOrchestrator.isCurrentGeneration(gen)) return;
     const snapshot = extractFinalizationSnapshot(stream);
-    this.deps.state.previousResponseId = snapshot.lastResponseId;
-    this.deps.inputPlanner.previousResponseId = snapshot.lastResponseId;
+    this.deps.providerContinuity.update(snapshot.lastResponseId);
     warnIfStreamHistoryReplayedTools({
       logger: this.deps.logger,
       sessionId: this.deps.sessionId,

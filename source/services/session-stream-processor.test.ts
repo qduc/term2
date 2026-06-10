@@ -5,8 +5,7 @@ import { ConversationStore } from './conversation-store.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from './conversation-logger.js';
 import { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
-import { SessionLifecycle } from './session-lifecycle.js';
-import { SessionInputPlanner } from './session-input-planner.js';
+import { ProviderContinuity } from './provider-continuity.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ConversationEvent } from './conversation-events.js';
 
@@ -33,8 +32,7 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
   } as unknown as ConversationLogger;
 
   const retryOrchestrator = {} as unknown as SessionRetryOrchestrator;
-  const state = {} as unknown as SessionLifecycle;
-  const inputPlanner = {} as unknown as SessionInputPlanner;
+  const providerContinuity = new ProviderContinuity();
 
   const processor = new SessionStreamProcessor({
     logger,
@@ -43,8 +41,7 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
     conversationStore,
     conversationLogger,
     retryOrchestrator,
-    state,
-    inputPlanner,
+    providerContinuity,
   });
 
   const stream = makeStream([
@@ -110,8 +107,7 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
   } as unknown as ConversationLogger;
 
   const retryOrchestrator = {} as unknown as SessionRetryOrchestrator;
-  const state = {} as unknown as SessionLifecycle;
-  const inputPlanner = {} as unknown as SessionInputPlanner;
+  const providerContinuity = new ProviderContinuity();
 
   const processor = new SessionStreamProcessor({
     logger,
@@ -120,8 +116,7 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
     conversationStore,
     conversationLogger,
     retryOrchestrator,
-    state,
-    inputPlanner,
+    providerContinuity,
   });
 
   const stream = makeStream([
@@ -152,7 +147,7 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
   t.is(loggedEvents.length, 0); // Should not log for startStream
 });
 
-test('SessionStreamProcessor.finalize() updates state and planner previousResponseId', async (t) => {
+test('SessionStreamProcessor.finalize() updates providerContinuity previousResponseId', async (t) => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   const conversationLogger = {} as unknown as ConversationLogger;
@@ -163,13 +158,7 @@ test('SessionStreamProcessor.finalize() updates state and planner previousRespon
     inputSurgeKindState: 'delta',
   } as unknown as SessionRetryOrchestrator;
 
-  const state = {
-    previousResponseId: null as string | null,
-  } as unknown as SessionLifecycle;
-
-  const inputPlanner = {
-    previousResponseId: null as string | null,
-  } as unknown as SessionInputPlanner;
+  const providerContinuity = new ProviderContinuity();
 
   const processor = new SessionStreamProcessor({
     logger,
@@ -178,8 +167,7 @@ test('SessionStreamProcessor.finalize() updates state and planner previousRespon
     conversationStore,
     conversationLogger,
     retryOrchestrator,
-    state,
-    inputPlanner,
+    providerContinuity,
   });
 
   const stream = makeStream([], {
@@ -189,8 +177,7 @@ test('SessionStreamProcessor.finalize() updates state and planner previousRespon
 
   processor.finalize(stream, 1, 'startStream');
 
-  t.is(state.previousResponseId, 'resp-123');
-  t.is(inputPlanner.previousResponseId, 'resp-123');
+  t.is(providerContinuity.previousResponseId, 'resp-123');
 });
 
 test('SessionStreamProcessor.finalize() prefers full replay history when full-history output only contains tool results', (t) => {
@@ -203,13 +190,7 @@ test('SessionStreamProcessor.finalize() prefers full replay history when full-hi
     inputSurgeKindState: 'full_history',
   } as unknown as SessionRetryOrchestrator;
 
-  const state = {
-    previousResponseId: null as string | null,
-  } as unknown as SessionLifecycle;
-
-  const inputPlanner = {
-    previousResponseId: null as string | null,
-  } as unknown as SessionInputPlanner;
+  const providerContinuity = new ProviderContinuity();
 
   const processor = new SessionStreamProcessor({
     logger,
@@ -218,8 +199,7 @@ test('SessionStreamProcessor.finalize() prefers full replay history when full-hi
     conversationStore,
     conversationLogger,
     retryOrchestrator,
-    state,
-    inputPlanner,
+    providerContinuity,
   });
 
   const fullHistory = [

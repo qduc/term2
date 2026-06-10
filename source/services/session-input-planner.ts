@@ -2,7 +2,7 @@ import type { AgentInputItem } from '@openai/agents';
 import type { ISettingsService } from './service-interfaces.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
-import type { SessionRetryOrchestrator } from './session-retry-orchestrator.js';
+import type { ProviderContinuity } from './provider-continuity.js';
 import { InputSurgeGuard, type InputSurgeInputKind, type InputSurgeDecision } from './input-surge-guard.js';
 import { LargeUncachedInputGuard, type LargeUncachedInputDecision } from './large-uncached-input-guard.js';
 import { getProvider } from '../providers/index.js';
@@ -36,29 +36,31 @@ export class SessionInputPlanner {
   #settingsService?: ISettingsService;
   #agentClient: ConversationAgentClient;
   #toolTracker: SessionToolTracker;
-  #retryOrchestrator: SessionRetryOrchestrator;
+  #providerContinuity: ProviderContinuity;
   #inputSurgeGuard = new InputSurgeGuard();
   #largeUncachedInputGuard = new LargeUncachedInputGuard();
-  #previousResponseId: string | null = null;
 
   constructor(deps: {
     settingsService?: ISettingsService;
     agentClient: ConversationAgentClient;
     toolTracker: SessionToolTracker;
-    retryOrchestrator: SessionRetryOrchestrator;
+    providerContinuity: ProviderContinuity;
   }) {
     this.#settingsService = deps.settingsService;
     this.#agentClient = deps.agentClient;
     this.#toolTracker = deps.toolTracker;
-    this.#retryOrchestrator = deps.retryOrchestrator;
+    this.#providerContinuity = deps.providerContinuity;
   }
 
   /**
-   * Update the stored previous-response-id after a stream finalizes.
-   * The session calls this when it would normally set its own previousResponseId.
+   * @deprecated Use ProviderContinuity directly.
    */
+  get previousResponseId(): string | null {
+    return this.#providerContinuity.previousResponseId;
+  }
+
   set previousResponseId(id: string | null) {
-    this.#previousResponseId = id;
+    this.#providerContinuity.update(id);
   }
 
   /**
@@ -129,10 +131,7 @@ export class SessionInputPlanner {
     const history = this.#toolTracker.getReconciledHistory();
     const effectiveTurn = options.includeTurn ? this.#turnWithModeNotice(turn, options.pendingModeNotice) : turn;
     const outgoingHistory = options.includeTurn ? [...history, this.#makeUserInputItem(effectiveTurn)] : history;
-    const useChaining =
-      supportsChaining &&
-      !this.#retryOrchestrator.chainingBrokenState &&
-      (!!this.#previousResponseId || outgoingHistory.length <= 1);
+    const useChaining = supportsChaining && this.#providerContinuity.isChainingAvailable(outgoingHistory.length);
     const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
     const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;
 

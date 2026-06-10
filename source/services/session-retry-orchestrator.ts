@@ -7,6 +7,8 @@ import type { ILoggingService } from './service-interfaces.js';
 import { RetryHandler, type RetryDecision } from './retry-handler.js';
 import { extractHistoryLength } from './stream-snapshot.js';
 import type { UserTurn } from '../types/user-turn.js';
+import { GenerationGuard } from './generation-guard.js';
+import type { ClassifiedFailure } from './retry-contracts.js';
 
 export type RetryState = {
   transientRetryCount?: number;
@@ -68,7 +70,7 @@ export type RetryOutcome =
  */
 export class SessionRetryOrchestrator {
   private retryHandler: RetryHandler;
-  private generation = 0;
+  private generationGuard = new GenerationGuard();
   private allowFreshStartRetries: boolean;
   private chainingBroken = false;
   private inputSurgeKind: 'delta' | 'full_history' = 'delta';
@@ -84,15 +86,15 @@ export class SessionRetryOrchestrator {
   }
 
   get currentGeneration(): number {
-    return this.generation;
+    return this.generationGuard.currentGeneration;
   }
 
   isCurrentGeneration(gen: number): boolean {
-    return gen === this.generation;
+    return this.generationGuard.isCurrent(gen);
   }
 
   incrementGeneration(): void {
-    this.generation++;
+    this.generationGuard.invalidate();
   }
 
   get chainingBrokenState(): boolean {
@@ -130,6 +132,57 @@ export class SessionRetryOrchestrator {
       ...opts,
       streamHistoryLength,
     });
+  }
+
+  classifyForStart(opts: {
+    error: unknown;
+    transientRetryCount: number;
+    transportFallbackRetryCount: number;
+    hallucinationRetryCount: number;
+    flexServiceTierFallbackCount: number;
+    maxTransientRetries: number;
+    stream: AgentStream | null;
+    maxModelRetries?: number;
+  }): ClassifiedFailure {
+    let decision = this.classifyError(opts);
+
+    if (!this.allowFreshStartRetries && !opts.stream && decision.kind !== 'none' && decision.kind !== 'unrecoverable') {
+      this.logger.warn('Retry requires fresh start but fresh-start retries are disabled for this session', {
+        eventType: 'retry.fresh_start_blocked',
+        category: 'retry',
+        phase: 'retry',
+        sessionId: this.sessionId,
+        traceId: this.logger.getCorrelationId(),
+        retryKind: decision.kind,
+        errorMessage: opts.error instanceof Error ? opts.error.message : String(opts.error),
+      });
+      decision = { kind: 'unrecoverable' };
+    }
+
+    return this.#toClassifiedFailure(decision);
+  }
+
+  #toClassifiedFailure(decision: RetryDecision): ClassifiedFailure {
+    switch (decision.kind) {
+      case 'flex_fallback':
+        return { kind: 'service_tier_fallback' };
+      case 'transient':
+        return { kind: 'transient', attempt: decision.attempt, delayMs: decision.delay };
+      case 'transport_downgrade':
+        return { kind: 'transport_downgrade' };
+      case 'hallucination':
+        if (decision.decision.kind !== 'retry') {
+          return { kind: 'unrecoverable' };
+        }
+        return {
+          kind: 'model_retry',
+          errorContext: decision.decision.shouldInjectErrorContext ? decision.decision.errorContextMessage : undefined,
+          retryEvent: decision.decision.retryEvent,
+        };
+      case 'none':
+      case 'unrecoverable':
+        return { kind: 'unrecoverable' };
+    }
   }
 
   classifyForContinuation(opts: {

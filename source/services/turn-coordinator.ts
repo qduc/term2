@@ -2,8 +2,6 @@ import { type RunState, type AgentInputItem } from '@openai/agents';
 import type { ILoggingService } from './service-interfaces.js';
 import { type RetryState, SessionRetryOrchestrator } from './session-retry-orchestrator.js';
 import type { ConversationEvent } from './conversation-events.js';
-import type { CommandMessage } from '../tools/types.js';
-import { type NormalizedUsage } from '../utils/token-usage.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationStore } from './conversation-store.js';
 import { ConversationLogger } from './conversation-logger.js';
@@ -14,7 +12,6 @@ import { SessionLifecycle } from './session-lifecycle.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { ConversationAgentClient } from './conversation-agent-client.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
-import type { ConversationTerminal } from '../contracts/conversation.js';
 import { getCallIdFromObject, getMethod } from './interruption-info.js';
 import { getMaxTransientRetries } from './conversation-retry-policy.js';
 import { toTerminalEvent, buildConversationResult } from './conversation-result-builder.js';
@@ -22,14 +19,19 @@ import { type SavedToolExecution, reconcileHistoryWithToolLedger } from './tool-
 import { describeError } from '../utils/error-helpers.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
-import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { AgentStream } from './agent-stream.js';
 import { type PendingApprovalContext } from './approval-state.js';
+import { TurnStatusMachine } from './turn-status-machine.js';
+import type { ProviderContinuity } from './provider-continuity.js';
+import { ContinuationDriver, ShellAutoApprovalDecisionPolicy } from './continuation-driver.js';
+import { DefaultConversationRecoveryPolicy } from './recovery-policy.js';
+import { DefaultRecoveryExecutor } from './recovery-executor.js';
+import type { ClassifiedFailure, RecoveryState, RetryCounts } from './retry-contracts.js';
 
 export type SessionStatus = 'idle' | 'streaming' | 'awaiting_approval' | 'continuing';
 
 export class TurnState {
-  status: SessionStatus = 'idle';
+  statusMachine = new TurnStatusMachine();
   currentGeneration = 0;
   pendingModeNotice: string | null = null;
   previousResponseId: string | null = null;
@@ -52,7 +54,11 @@ export interface TurnCoordinatorDeps {
   state: SessionLifecycle;
   streamProcessor: SessionStreamProcessor;
   appState: TurnState;
+  providerContinuity: ProviderContinuity;
   breakChaining: () => void;
+  continuationDriver: ContinuationDriver;
+  recoveryPolicy: DefaultConversationRecoveryPolicy;
+  recoveryExecutor: DefaultRecoveryExecutor;
 }
 
 export class TurnCoordinator {
@@ -69,16 +75,14 @@ export class TurnCoordinator {
       resumePreviousResponseId?: string | null;
     } = {},
   ): AsyncIterable<ConversationEvent> {
-    if (this.deps.appState.status !== 'idle') {
+    if (!this.deps.appState.statusMachine.is('idle')) {
       throw new Error('Another foreground turn is already active.');
     }
-    this.deps.appState.status = 'streaming';
+    this.deps.appState.statusMachine.beginTurn();
     try {
       yield* this.#executeRun(input, options);
     } finally {
-      if (this.deps.appState.status === 'streaming' || this.deps.appState.status === 'continuing') {
-        this.deps.appState.status = 'idle';
-      }
+      this.deps.appState.statusMachine.complete();
     }
   }
 
@@ -89,20 +93,36 @@ export class TurnCoordinator {
     answer: string;
     rejectionReason?: string;
   }): AsyncIterable<ConversationEvent> {
-    if (this.deps.appState.status !== 'awaiting_approval') {
+    if (!this.deps.appState.statusMachine.is('awaiting_approval')) {
       throw new Error('No pending approval to continue.');
     }
-    this.deps.appState.status = 'continuing';
+    this.deps.appState.statusMachine.beginContinuation();
     try {
-      yield* this.#executeContinuation({
-        answer,
-        rejectionReason,
-        generation: this.deps.retryOrchestrator.currentGeneration,
-      });
-    } finally {
-      if (this.deps.appState.status === 'continuing' || this.deps.appState.status === 'streaming') {
-        this.deps.appState.status = 'idle';
+      const gen = this.deps.retryOrchestrator.currentGeneration;
+      const policy = new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
+
+      const driveResult = yield* this.deps.continuationDriver.drive(
+        { kind: 'approval_decision', answer, rejectionReason, generation: gen },
+        policy,
+      );
+
+      if (driveResult.kind === 'approval_required') {
+        this.deps.appState.statusMachine.requestApproval();
+        yield toTerminalEvent(driveResult.result);
+      } else if (driveResult.kind === 'fresh_start_required') {
+        const lastUserText = this.deps.conversationStore.getLastUserMessage();
+        const dummyTurn: UserTurn = { text: lastUserText };
+
+        this.deps.appState.statusMachine.complete();
+        yield* this.#executeRun(dummyTurn, {
+          skipUserMessage: true,
+          retries: driveResult.retries,
+        });
+      } else {
+        yield toTerminalEvent(driveResult.result);
       }
+    } finally {
+      this.deps.appState.statusMachine.complete();
     }
   }
 
@@ -116,7 +136,7 @@ export class TurnCoordinator {
         callId,
       );
     }
-    this.deps.appState.status = 'idle';
+    this.deps.appState.statusMachine.abort();
   }
 
   // ── Private Execution Loops ────────────────────────────────────────
@@ -210,69 +230,19 @@ export class TurnCoordinator {
           message: text,
         });
 
-        this.deps.toolTracker.clearArguments();
-        if (abortedContext.toolCallArgumentsById?.size) {
-          for (const [key, value] of abortedContext.toolCallArgumentsById.entries()) {
-            this.deps.toolTracker.argumentsById.set(key, value);
-          }
+        const driveResult = yield* this.deps.continuationDriver.drive(
+          { kind: 'abort_resolution', abortedContext, userText: text, generation: gen },
+          new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
+        );
+
+        if (driveResult.kind === 'approval_required') {
+          this.deps.appState.statusMachine.requestApproval();
+        }
+        if (driveResult.kind !== 'fresh_start_required') {
+          yield toTerminalEvent(driveResult.result);
         }
 
-        const { removeInterceptor } = this.deps.approvalFlow.prepareAbortResolution(abortedContext, text);
-
-        try {
-          const previousInputForSurge =
-            this.deps.retryOrchestrator.inputSurgeKindState === 'full_history'
-              ? this.deps.conversationStore.getHistory()
-              : undefined;
-
-          const continuedStream = (await this.deps.agentClient.continueRunStream(abortedContext.state, {
-            previousResponseId: this.deps.state.previousResponseId,
-            sessionId: this.deps.sessionId,
-            toolResultCallIds: [getCallIdFromObject(abortedContext.interruption)].filter(
-              (callId): callId is string => typeof callId === 'string' && callId.length > 0,
-            ),
-          })) as AgentStream;
-
-          const acc = yield* this.deps.streamProcessor.process(continuedStream, {
-            gen,
-            source: 'abortResolution',
-            preserveExistingToolArgs: true,
-            previouslyEmittedCommandIds: abortedContext.emittedCommandIds,
-          });
-
-          this.deps.streamProcessor.finalize(continuedStream, gen, 'abortResolution');
-
-          if (continuedStream.interruptions && continuedStream.interruptions.length > 0) {
-            this.deps.logger.warn('Another interruption occurred after fake execution - handling as approval');
-          }
-
-          this.deps.logger.debug('Fake execution completed, agent received rejection message');
-
-          const resolvedResult = yield* this.#buildAndResolve(
-            continuedStream,
-            acc.finalOutput || undefined,
-            acc.reasoningOutput || undefined,
-            acc.emittedCommandIds,
-            acc.latestUsage,
-          );
-
-          this.deps.inputPlanner.recordSuccess(this.deps.conversationStore.getHistory(), {
-            kind: this.deps.retryOrchestrator.inputSurgeKindState,
-            previousInput: previousInputForSurge,
-          });
-
-          if (resolvedResult.type === 'approval_required') {
-            this.deps.appState.status = 'awaiting_approval';
-          }
-          yield toTerminalEvent(resolvedResult);
-          return;
-        } catch (error) {
-          this.deps.logger.warn('Error resolving aborted approval with fake execution', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        } finally {
-          removeInterceptor();
-        }
+        return;
       }
 
       const plan = this.deps.inputPlanner.build(turn, {
@@ -318,12 +288,12 @@ export class TurnCoordinator {
       try {
         if (resumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
           stream = (await this.deps.agentClient.continueRunStream(resumeState, {
-            previousResponseId: resumePreviousResponseId ?? this.deps.state.previousResponseId,
+            previousResponseId: resumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
             sessionId: this.deps.sessionId,
           })) as AgentStream;
         } else {
           stream = (await this.deps.agentClient.startStream(streamInput, {
-            previousResponseId: inputSurgeKind === 'delta' ? this.deps.state.previousResponseId : null,
+            previousResponseId: inputSurgeKind === 'delta' ? this.deps.providerContinuity.previousResponseId : null,
             sessionId: this.deps.sessionId,
           })) as AgentStream;
         }
@@ -367,42 +337,83 @@ export class TurnCoordinator {
 
       this.deps.streamProcessor.finalize(stream, gen, 'startStream');
 
-      const resolvedResult = yield* this.#buildAndResolve(
-        stream,
-        acc.finalOutput || undefined,
-        acc.reasoningOutput || undefined,
-        acc.emittedCommandIds,
-        acc.latestUsage,
+      const outcome = await buildConversationResult(
+        {
+          result: stream,
+          finalOutputOverride: acc.finalOutput || undefined,
+          reasoningOutputOverride: acc.reasoningOutput || undefined,
+          emittedCommandIds: acc.emittedCommandIds,
+          usage: acc.latestUsage,
+          toolCallArgumentsById: this.deps.toolTracker.argumentsById,
+          turnItems: this.deps.turnAccumulator.getTurnItems(),
+        },
+        {
+          approvalFlow: this.deps.approvalFlow,
+          shellAutoApproval: this.deps.shellAutoApproval,
+          logger: this.deps.logger,
+          sessionId: this.deps.sessionId,
+        },
       );
+
+      if (outcome.kind === 'response') {
+        this.deps.inputPlanner.recordSuccess(
+          inputSurgeKind === 'delta' ? streamInput : this.deps.conversationStore.getHistory(),
+          inputSurgeKind === 'delta' ? { kind: inputSurgeKind } : { kind: inputSurgeKind, previousInput: streamInput },
+        );
+        yield toTerminalEvent(outcome.result);
+        return;
+      }
 
       this.deps.inputPlanner.recordSuccess(
         inputSurgeKind === 'delta' ? streamInput : this.deps.conversationStore.getHistory(),
         inputSurgeKind === 'delta' ? { kind: inputSurgeKind } : { kind: inputSurgeKind, previousInput: streamInput },
       );
 
-      if (resolvedResult.type === 'approval_required') {
-        if (resolvedResult.approval.callId) {
-          this.deps.toolTracker.recordFunctionCall({
-            type: 'function_call',
-            callId: resolvedResult.approval.callId,
-            name: resolvedResult.approval.toolName,
-            arguments: resolvedResult.approval.argumentsText,
-          });
-        }
-        this.deps.logger.debug('Tool approval required', {
-          eventType: 'approval.required',
+      if (outcome.kind === 'auto_approve') {
+        this.deps.logger.debug('Shell command auto-approved by LLM', {
+          eventType: 'approval.auto_approved',
           category: 'approval',
           phase: 'approval',
           sessionId: this.deps.sessionId,
           traceId: this.deps.logger.getCorrelationId(),
-          toolName: resolvedResult.approval.toolName,
+          callId: outcome.callId,
+          command: outcome.argumentsText,
+          model: outcome.advisory.model,
+          reasoning: outcome.advisory.reasoning,
         });
-        this.deps.appState.status = 'awaiting_approval';
-        yield toTerminalEvent(resolvedResult);
+
+        const driveResult = yield* this.deps.continuationDriver.drive(
+          { kind: 'approval_decision', answer: 'y', generation: gen },
+          new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
+        );
+
+        if (driveResult.kind === 'approval_required') {
+          this.deps.appState.statusMachine.requestApproval();
+        }
+        if (driveResult.kind !== 'fresh_start_required') {
+          yield toTerminalEvent(driveResult.result);
+        }
         return;
       }
 
-      yield toTerminalEvent(resolvedResult);
+      if (outcome.result.approval.callId) {
+        this.deps.toolTracker.recordFunctionCall({
+          type: 'function_call',
+          callId: outcome.result.approval.callId,
+          name: outcome.result.approval.toolName,
+          arguments: outcome.result.approval.argumentsText,
+        });
+      }
+      this.deps.logger.debug('Tool approval required', {
+        eventType: 'approval.required',
+        category: 'approval',
+        phase: 'approval',
+        sessionId: this.deps.sessionId,
+        traceId: this.deps.logger.getCorrelationId(),
+        toolName: outcome.result.approval.toolName,
+      });
+      this.deps.appState.statusMachine.requestApproval();
+      yield toTerminalEvent(outcome.result);
     } catch (error) {
       const handled = yield* this.#handleRetryDecision({
         error,
@@ -431,318 +442,6 @@ export class TurnCoordinator {
     }
   }
 
-  async *#executeContinuation({
-    answer,
-    rejectionReason,
-    generation: gen,
-  }: {
-    answer: string;
-    rejectionReason?: string;
-    generation: number;
-  }): AsyncIterable<ConversationEvent> {
-    const plan = this.deps.approvalFlow.prepareContinuation(answer, rejectionReason);
-    if (!plan) {
-      return;
-    }
-
-    if (answer !== 'y') {
-      const interruption = plan.pendingApprovalContext.interruption;
-      const callId = getCallIdFromObject(interruption);
-      const output = rejectionReason
-        ? `Tool execution was not approved. User's reason: ${rejectionReason}`
-        : 'Tool execution was not approved.';
-      this.deps.toolTracker.recordAbortedApproval(output, output, callId);
-    }
-
-    const {
-      pendingApprovalContext: { state, interruption, toolCallArgumentsById, emittedCommandIds: previouslyEmittedIds },
-      toolStartedEvent,
-      removeInterceptor,
-    } = plan;
-    const ledgerSnapshot = this.deps.toolTracker.export();
-    const approvedToolResultCallIds = [getCallIdFromObject(interruption)].filter(
-      (callId): callId is string => typeof callId === 'string' && callId.length > 0,
-    );
-    let stream: AgentStream | null = null;
-
-    if (toolStartedEvent) {
-      const filtered = this.deps.toolTracker.dedupeToolStarted(toolStartedEvent);
-      if (filtered) yield filtered;
-    }
-
-    this.deps.toolTracker.clearArguments();
-    if (toolCallArgumentsById?.size) {
-      for (const [key, value] of toolCallArgumentsById.entries()) {
-        this.deps.toolTracker.argumentsById.set(key, value);
-      }
-    }
-
-    try {
-      let transientRetryCount = 0;
-      while (true) {
-        try {
-          const previousInputForSurge =
-            this.deps.retryOrchestrator.inputSurgeKindState === 'full_history'
-              ? this.deps.conversationStore.getHistory()
-              : undefined;
-
-          stream = (await this.deps.agentClient.continueRunStream(state, {
-            previousResponseId: this.deps.state.previousResponseId,
-            sessionId: this.deps.sessionId,
-            toolResultCallIds: approvedToolResultCallIds,
-          })) as AgentStream;
-
-          const acc = yield* this.deps.streamProcessor.process(stream, {
-            gen,
-            source: 'continueRunStream',
-            preserveExistingToolArgs: true,
-          });
-
-          this.deps.streamProcessor.finalize(stream, gen, 'continueRunStream');
-
-          const allEmittedIds = new Set([...previouslyEmittedIds, ...acc.emittedCommandIds]);
-
-          const resolvedResult = yield* this.#buildAndResolve(
-            stream,
-            acc.finalOutput || undefined,
-            acc.reasoningOutput || undefined,
-            allEmittedIds,
-            acc.latestUsage,
-          );
-
-          if (resolvedResult.type === 'approval_required') {
-            if (resolvedResult.approval.callId) {
-              this.deps.toolTracker.recordFunctionCall({
-                type: 'function_call',
-                callId: resolvedResult.approval.callId,
-                name: resolvedResult.approval.toolName,
-                arguments: resolvedResult.approval.argumentsText,
-              });
-            }
-            this.deps.logger.debug('Tool approval required', {
-              eventType: 'approval.required',
-              category: 'approval',
-              phase: 'approval',
-              sessionId: this.deps.sessionId,
-              traceId: this.deps.logger.getCorrelationId(),
-              toolName: resolvedResult.approval.toolName,
-            });
-            this.deps.inputPlanner.recordSuccess(this.deps.conversationStore.getHistory(), {
-              kind: this.deps.retryOrchestrator.inputSurgeKindState,
-              previousInput: previousInputForSurge,
-            });
-            this.deps.appState.status = 'awaiting_approval';
-            yield toTerminalEvent(resolvedResult);
-            return;
-          }
-
-          this.deps.inputPlanner.recordSuccess(this.deps.conversationStore.getHistory(), {
-            kind: this.deps.retryOrchestrator.inputSurgeKindState,
-            previousInput: previousInputForSurge,
-          });
-          yield toTerminalEvent(resolvedResult);
-          return;
-        } catch (error) {
-          const maxTransientRetries = getMaxTransientRetries({
-            streamMaxRetries: getMethod<[], number | undefined>(this.deps.agentClient, 'getStreamMaxRetries')?.call(
-              this.deps.agentClient,
-            ),
-          });
-          const decision = this.deps.retryOrchestrator.classifyForContinuation({
-            error,
-            transientRetryCount,
-            stream,
-            maxTransientRetries,
-          });
-          if (decision.kind !== 'transient') {
-            throw error;
-          }
-
-          transientRetryCount = decision.attempt;
-          this.deps.logger.warn('Transient error in continuation, retrying', {
-            eventType: 'retry.transient',
-            category: 'retry',
-            phase: 'retry',
-            retryType: 'upstream',
-            retryAttempt: transientRetryCount,
-            maxRetries: maxTransientRetries,
-            sessionId: this.deps.sessionId,
-            traceId: this.deps.logger.getCorrelationId(),
-            errorMessage: error instanceof Error ? error.message : String(error),
-            delayMs: decision.delay,
-          });
-
-          yield {
-            type: 'retry',
-            toolName: 'continuation',
-            attempt: transientRetryCount,
-            maxRetries: maxTransientRetries,
-            errorMessage: error instanceof Error ? error.message : String(error),
-            retryType: 'upstream',
-          };
-          await new Promise((resolve) => setTimeout(resolve, decision.delay));
-
-          if (!this.deps.retryOrchestrator.isCurrentGeneration(gen)) return;
-
-          if (!stream) {
-            this.#recoverApprovedToolResultsFromState(state, approvedToolResultCallIds);
-            this.#commonRestoreForRetry(ledgerSnapshot, stream);
-
-            const lastUserText = this.deps.conversationStore.getLastUserMessage();
-            const dummyTurn: UserTurn = { text: lastUserText };
-
-            // Transition status to continuing/streaming as we restart executing
-            this.deps.appState.status = 'streaming';
-            yield* this.#executeRun(dummyTurn, {
-              skipUserMessage: true,
-              retries: { transientRetryCount },
-            });
-            return;
-          }
-
-          this.deps.toolTracker.import(ledgerSnapshot);
-        }
-      }
-    } catch (error) {
-      this.deps.logger.error('Conversation stream error during continuation', {
-        eventType: 'stream.failed',
-        category: 'stream',
-        phase: 'abort',
-        sessionId: this.deps.sessionId,
-        traceId: this.deps.logger.getCorrelationId(),
-        errorMessage: describeError(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      yield {
-        type: 'error' as const,
-        message: describeError(error),
-        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
-      };
-      throw error;
-    } finally {
-      removeInterceptor();
-    }
-  }
-
-  async *#buildAndResolve(
-    result: AgentStream,
-    finalOutputOverride: string | undefined,
-    reasoningOutputOverride: string | undefined,
-    emittedCommandIds: Set<string> | undefined,
-    usage: NormalizedUsage | undefined,
-  ): AsyncGenerator<ConversationEvent, ConversationTerminal, void> {
-    const outcome = await buildConversationResult(
-      {
-        result,
-        finalOutputOverride,
-        reasoningOutputOverride,
-        emittedCommandIds,
-        usage,
-        toolCallArgumentsById: this.deps.toolTracker.argumentsById,
-        turnItems: this.deps.turnAccumulator.getTurnItems(),
-      },
-      {
-        approvalFlow: this.deps.approvalFlow,
-        shellAutoApproval: this.deps.shellAutoApproval,
-        logger: this.deps.logger,
-        sessionId: this.deps.sessionId,
-      },
-    );
-
-    if (outcome.kind !== 'auto_approve') {
-      return outcome.result;
-    }
-
-    let finalText = '';
-    let reasoningText = '';
-    let finalUsage: NormalizedUsage | undefined;
-    let continuationApprovalUsage: NormalizedUsage | undefined;
-    const commandMessages: CommandMessage[] = [];
-    let approvalRequiredResult: ConversationTerminal | undefined;
-    let continuationTurnItems: PersistedAssistantTurnItem[] | undefined;
-
-    // Save current status and temporarily switch to 'continuing' for auto-approval continuation
-    const originalStatus = this.deps.appState.status;
-    this.deps.appState.status = 'continuing';
-
-    try {
-      for await (const event of this.#executeContinuation({
-        answer: 'y',
-        generation: this.deps.retryOrchestrator.currentGeneration,
-      })) {
-        if (event.type === 'approval_required') {
-          continuationApprovalUsage = event.usage;
-          const mergedUsage = continuationApprovalUsage ?? usage;
-          const usagePatch = mergedUsage && Object.keys(mergedUsage).length > 0 ? { usage: mergedUsage } : {};
-
-          yield { ...event, ...usagePatch };
-
-          approvalRequiredResult = {
-            type: 'approval_required',
-            approval: {
-              ...event.approval,
-              rawInterruption: this.deps.approvalFlow.getPendingInterruption(),
-            },
-            ...usagePatch,
-          };
-        } else if (event.type === 'final') {
-          finalText = event.finalText;
-          reasoningText = event.reasoningText ?? '';
-          finalUsage = event.usage;
-          if (event.commandMessages) {
-            commandMessages.push(...event.commandMessages);
-          }
-          if (event.turnItems) {
-            continuationTurnItems = event.turnItems;
-          }
-        } else {
-          yield event;
-        }
-      }
-    } finally {
-      this.deps.appState.status = originalStatus;
-    }
-
-    if (approvalRequiredResult) {
-      return approvalRequiredResult;
-    }
-
-    const combinedUsage = finalUsage ?? usage;
-    return {
-      type: 'response',
-      commandMessages,
-      finalText: finalText || 'Done.',
-      ...(reasoningText ? { reasoningText } : {}),
-      ...(combinedUsage && Object.keys(combinedUsage).length > 0 ? { usage: combinedUsage } : {}),
-      turnItems: continuationTurnItems ?? this.deps.turnAccumulator.getTurnItems(),
-    };
-  }
-
-  #recoverApprovedToolResultsFromState(state: unknown, expectedCallIds: readonly string[]): void {
-    this.deps.toolTracker.recoverApprovedResultsFromState(state, expectedCallIds);
-  }
-
-  #commonRestoreForRetry(
-    ledgerSnapshot: SavedToolExecution[],
-    stream: AgentStream | null,
-    extras?: { removeLastUserMessage?: boolean },
-  ): void {
-    this.deps.retryOrchestrator.restoreForRetry({
-      ledgerSnapshot,
-      stream,
-      toolLedger: this.deps.toolTracker.ledger,
-      conversationStore: this.deps.conversationStore,
-      clearPreviousResponseId: () => {
-        this.deps.state.previousResponseId = null;
-        this.deps.inputPlanner.previousResponseId = null;
-      },
-      restoreCompletedToolLedgerEntries: (snapshot) => this.deps.toolTracker.restoreCompletedEntries(snapshot),
-      ...(extras?.removeLastUserMessage
-        ? { removeLastUserMessage: () => this.deps.conversationStore.removeLastUserMessage() }
-        : {}),
-    });
-  }
-
   async *#handleRetryDecision(ctx: {
     error: unknown;
     turn: UserTurn;
@@ -768,94 +467,278 @@ export class TurnCoordinator {
       maxModelRetries,
     } = ctx;
 
-    const outcome = yield* this.deps.retryOrchestrator.handleRetryDecision({
+    const {
+      transientRetryCount = 0,
+      flexServiceTierFallbackCount = 0,
+      hallucinationRetryCount = 0,
+      transportFallbackRetryCount = 0,
+    } = retries;
+
+    const classified = this.deps.retryOrchestrator.classifyForStart({
       error,
-      turn,
-      gen,
-      stream,
-      retries,
+      transientRetryCount,
+      transportFallbackRetryCount,
+      hallucinationRetryCount,
+      flexServiceTierFallbackCount,
       maxTransientRetries,
+      stream,
       maxModelRetries,
     });
 
-    switch (outcome.kind) {
-      case 'stale_generation':
-        return true;
-      case 'retry_flex_fallback': {
-        getMethod<[], void>(this.deps.agentClient, 'useStandardServiceTierForNextRequest')?.call(this.deps.agentClient);
-        this.#commonRestoreForRetry(ledgerSnapshot, stream);
-        yield* this.#executeRun(turn, outcome.runOptions);
-        return true;
+    if (classified.kind === 'unrecoverable') {
+      let droppedUserMessage: { text: string; imageCount: number } | undefined;
+      if (addedUserMessage && !stream && this.deps.retryOrchestrator.isCurrentGeneration(gen)) {
+        this.deps.conversationStore.removeLastUserMessage();
+        droppedUserMessage = { text: turn.text, imageCount: turn.images?.length ?? 0 };
       }
-      case 'retry_transient': {
-        if (outcome.restoreOptions) {
-          this.#commonRestoreForRetry(ledgerSnapshot, stream, outcome.restoreOptions);
+      if (stream && this.deps.retryOrchestrator.isCurrentGeneration(gen)) {
+        this.deps.toolTracker.markOpenCallsAborted(error instanceof Error ? error.message : String(error));
+        const reconciled = reconcileHistoryWithToolLedger(
+          this.deps.conversationStore.getHistory(),
+          this.deps.toolTracker.export(),
+        );
+        if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
+          this.deps.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
         }
-        yield* this.#executeRun(turn, outcome.runOptions);
-        return true;
       }
-      case 'retry_transport_downgrade': {
-        this.#commonRestoreForRetry(ledgerSnapshot, stream, outcome.restoreOptions);
-        yield* this.#executeRun(turn, outcome.runOptions);
-        return true;
+      this.deps.inputPlanner.recordSuccess(this.deps.conversationStore.getHistory(), {
+        kind: 'full_history',
+        previousInput: streamInput,
+      });
+      const recoverySummary = this.deps.toolTracker.getRecoverySummary();
+      if (recoverySummary) {
+        yield {
+          type: 'tool_recovery',
+          recoveredCallIds: recoverySummary.recoveredCallIds,
+          droppedCallIds: recoverySummary.droppedCallIds,
+          message: recoverySummary.message,
+        };
       }
-      case 'retry_hallucination': {
-        if (outcome.hadStream && stream) {
-          this.deps.toolTracker.import(ledgerSnapshot);
-          if (outcome.addErrorContext) {
-            this.deps.conversationStore.addErrorContext(outcome.addErrorContext);
-          }
-        } else {
-          this.deps.conversationStore.removeLastUserMessage();
-        }
-        yield* this.#executeRun(turn, outcome.runOptions);
+      yield {
+        type: 'error',
+        message: describeError(error),
+        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
+        ...(droppedUserMessage ? { droppedUserMessage } : {}),
+      };
+      this.deps.logger.error('Conversation stream error', {
+        eventType: 'stream.failed',
+        category: 'stream',
+        phase: 'abort',
+        sessionId: this.deps.sessionId,
+        traceId: this.deps.logger.getCorrelationId(),
+        errorMessage: describeError(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      return false;
+    }
+
+    this.#logRetryDecision(classified, maxTransientRetries, maxModelRetries, error);
+
+    yield this.#buildRetryEvent(classified, maxTransientRetries, maxModelRetries, error);
+
+    if (!this.deps.retryOrchestrator.isCurrentGeneration(gen)) {
+      return true;
+    }
+
+    if (classified.kind === 'transient') {
+      await new Promise((resolve) => setTimeout(resolve, classified.delayMs));
+
+      if (!this.deps.retryOrchestrator.isCurrentGeneration(gen)) {
         return true;
       }
     }
 
-    let droppedUserMessage: { text: string; imageCount: number } | undefined;
-    if (addedUserMessage && !stream && this.deps.retryOrchestrator.isCurrentGeneration(gen)) {
-      this.deps.conversationStore.removeLastUserMessage();
-      droppedUserMessage = { text: turn.text, imageCount: turn.images?.length ?? 0 };
-    }
-    if (stream && this.deps.retryOrchestrator.isCurrentGeneration(gen)) {
-      this.deps.toolTracker.markOpenCallsAborted(error instanceof Error ? error.message : String(error));
-      const reconciled = reconcileHistoryWithToolLedger(
-        this.deps.conversationStore.getHistory(),
-        this.deps.toolTracker.export(),
-      );
-      if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
-        this.deps.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
-      }
-    }
-    this.deps.inputPlanner.recordSuccess(this.deps.conversationStore.getHistory(), {
-      kind: 'full_history',
-      previousInput: streamInput,
-    });
-    const recoverySummary = this.deps.toolTracker.getRecoverySummary();
-    if (recoverySummary) {
-      yield {
-        type: 'tool_recovery',
-        recoveredCallIds: recoverySummary.recoveredCallIds,
-        droppedCallIds: recoverySummary.droppedCallIds,
-        message: recoverySummary.message,
-      };
-    }
-    yield {
-      type: 'error',
-      message: describeError(error),
-      ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
-      ...(droppedUserMessage ? { droppedUserMessage } : {}),
+    const retryCounts: RetryCounts = {
+      transientRetryCount,
+      serviceTierFallbackCount: flexServiceTierFallbackCount,
+      modelRetryCount: hallucinationRetryCount,
+      transportDowngradeCount: transportFallbackRetryCount,
     };
-    this.deps.logger.error('Conversation stream error', {
-      eventType: 'stream.failed',
-      category: 'stream',
-      phase: 'abort',
-      sessionId: this.deps.sessionId,
-      traceId: this.deps.logger.getCorrelationId(),
-      errorMessage: describeError(error),
-      stack: error instanceof Error ? error.stack : undefined,
+    const nextRetryCounts = this.deps.recoveryPolicy.nextRetryCounts(retryCounts, classified);
+
+    const plan = this.deps.recoveryPolicy.plan({
+      failure: classified,
+      gen,
+      stream,
+      retryCounts,
+      maxModelRetries,
+      freshStartRetriesAllowed: this.deps.retryOrchestrator.freshStartRetriesAllowed,
     });
-    return false;
+
+    const recoveryState: RecoveryState = {
+      ledgerSnapshot,
+      addedUserMessage,
+      stream,
+    };
+
+    const result = this.deps.recoveryExecutor.apply(plan, recoveryState, nextRetryCounts, maxModelRetries);
+
+    if (result.kind === 'terminated') {
+      for (const event of result.events) {
+        yield event;
+      }
+      yield {
+        type: 'error',
+        message: describeError(error),
+        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
+      };
+      this.deps.logger.error('Conversation stream error', {
+        eventType: 'stream.failed',
+        category: 'stream',
+        phase: 'abort',
+        sessionId: this.deps.sessionId,
+        traceId: this.deps.logger.getCorrelationId(),
+        errorMessage: describeError(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      return false;
+    }
+
+    if (result.useStandardServiceTier) {
+      getMethod<[], void>(this.deps.agentClient, 'useStandardServiceTierForNextRequest')?.call(this.deps.agentClient);
+    }
+
+    yield* this.#executeRun(turn, {
+      skipUserMessage: result.instruction.skipUserMessage,
+      retries: this.#retryCountsToState(result.instruction.retryCounts),
+      maxModelRetries: result.instruction.maxModelRetries,
+      resumeState: result.instruction.resumeState,
+      resumePreviousResponseId: result.instruction.resumePreviousResponseId,
+    });
+    return true;
+  }
+
+  #buildRetryEvent(
+    classified: ClassifiedFailure,
+    maxTransientRetries: number,
+    maxModelRetries: number | undefined,
+    error: unknown,
+  ): ConversationEvent {
+    switch (classified.kind) {
+      case 'service_tier_fallback':
+        return {
+          type: 'retry',
+          toolName: 'service_tier',
+          attempt: 1,
+          maxRetries: 1,
+          errorMessage: 'Flex service tier timed out. Falling back to standard service tier and retrying.',
+          retryType: 'flex_service_tier',
+        };
+      case 'transient':
+        return {
+          type: 'retry',
+          toolName: 'turn',
+          attempt: classified.attempt,
+          maxRetries: maxTransientRetries,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          retryType: 'upstream',
+        };
+      case 'transport_downgrade':
+        return {
+          type: 'retry',
+          toolName: 'transport',
+          attempt: 1,
+          maxRetries: 1,
+          errorMessage: 'WebSocket retries exhausted. Falling back to HTTP transport and retrying.',
+          retryType: 'upstream',
+        };
+      case 'model_retry':
+        if (classified.retryEvent) {
+          return classified.retryEvent;
+        }
+        return {
+          type: 'retry',
+          toolName: 'model',
+          attempt: 1,
+          maxRetries: maxModelRetries ?? 3,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          retryType: 'behavior',
+        };
+      default:
+        return {
+          type: 'retry',
+          toolName: 'turn',
+          attempt: 1,
+          maxRetries: maxTransientRetries,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          retryType: 'upstream',
+        };
+    }
+  }
+
+  #retryCountsToState(counts: RetryCounts): RetryState {
+    return {
+      transientRetryCount: counts.transientRetryCount,
+      flexServiceTierFallbackCount: counts.serviceTierFallbackCount,
+      hallucinationRetryCount: counts.modelRetryCount,
+      transportFallbackRetryCount: counts.transportDowngradeCount,
+    };
+  }
+
+  #logRetryDecision(
+    classified: ClassifiedFailure,
+    maxTransientRetries: number,
+    maxModelRetries: number | undefined,
+    error: unknown,
+  ): void {
+    switch (classified.kind) {
+      case 'service_tier_fallback':
+        this.deps.logger.warn('Flex service tier timed out, retrying with standard service tier', {
+          eventType: 'retry.flex_service_tier',
+          category: 'retry',
+          phase: 'retry',
+          retryType: 'flex_service_tier',
+          retryAttempt: 1,
+          attempt: 1,
+          maxRetries: 1,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          sessionId: this.deps.sessionId,
+          traceId: this.deps.logger.getCorrelationId(),
+        });
+        break;
+      case 'transient':
+        this.deps.logger.warn('Transient upstream error detected, retrying turn', {
+          eventType: 'retry.transient',
+          category: 'retry',
+          phase: 'retry',
+          retryType: 'upstream',
+          retryAttempt: classified.attempt,
+          attempt: classified.attempt,
+          maxRetries: maxTransientRetries,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          delayMs: classified.delayMs,
+          sessionId: this.deps.sessionId,
+          traceId: this.deps.logger.getCorrelationId(),
+        });
+        break;
+      case 'transport_downgrade':
+        this.deps.logger.warn('Transient upstream error exhausted WS retries, forcing HTTP fallback', {
+          eventType: 'retry.transport_fallback',
+          category: 'retry',
+          phase: 'retry',
+          retryType: 'upstream',
+          retryAttempt: 1,
+          attempt: 1,
+          maxRetries: 1,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          sessionId: this.deps.sessionId,
+          traceId: this.deps.logger.getCorrelationId(),
+        });
+        break;
+      case 'model_retry':
+        this.deps.logger.warn('Recoverable model error detected, retrying', {
+          eventType: 'retry.model_error',
+          category: 'retry',
+          phase: 'retry',
+          retryType: 'hallucination',
+          retryAttempt: 1,
+          attempt: 1,
+          maxRetries: maxModelRetries ?? 3,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          sessionId: this.deps.sessionId,
+          traceId: this.deps.logger.getCorrelationId(),
+        });
+        break;
+    }
   }
 }

@@ -12,6 +12,7 @@ import { getMethod } from './interruption-info.js';
 import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
 import { type TurnState } from './turn-coordinator.js';
+import type { ProviderContinuity } from './provider-continuity.js';
 
 /**
  * Owns and manages session-level state transitions:
@@ -25,8 +26,14 @@ import { type TurnState } from './turn-coordinator.js';
  * instead of implementing them inline.
  */
 export class SessionLifecycle {
-  /** The last response ID from the provider, used for conversation chaining. */
-  previousResponseId: string | null = null;
+  /** The last response ID from the provider, used for conversation chaining. Delegates to ProviderContinuity. */
+  get previousResponseId(): string | null {
+    return this.#providerContinuity.previousResponseId;
+  }
+
+  set previousResponseId(id: string | null) {
+    this.#providerContinuity.update(id);
+  }
 
   /** A pending mode-notice text to prepend to the next user turn. */
   pendingModeNotice: string | null = null;
@@ -42,6 +49,7 @@ export class SessionLifecycle {
   #logger: ILoggingService;
   #sessionId: string;
   #appState: TurnState;
+  #providerContinuity: ProviderContinuity;
 
   constructor(deps: {
     retryOrchestrator: SessionRetryOrchestrator;
@@ -55,6 +63,7 @@ export class SessionLifecycle {
     logger: ILoggingService;
     sessionId: string;
     appState: TurnState;
+    providerContinuity: ProviderContinuity;
   }) {
     this.#retryOrchestrator = deps.retryOrchestrator;
     this.#inputPlanner = deps.inputPlanner;
@@ -67,6 +76,7 @@ export class SessionLifecycle {
     this.#logger = deps.logger;
     this.#sessionId = deps.sessionId;
     this.#appState = deps.appState;
+    this.#providerContinuity = deps.providerContinuity;
   }
 
   // ── Public lifecycle methods ─────────────────────────────────────
@@ -81,7 +91,7 @@ export class SessionLifecycle {
     this.#toolTracker.reset();
     this.#inputPlanner.reset();
     this.setInputSurgeKind('delta');
-    this.#appState.status = 'idle';
+    this.#appState.statusMachine.abort();
   }
 
   /**
@@ -170,8 +180,7 @@ export class SessionLifecycle {
 
   #resetProviderContinuity({ clearConversations = true }: { clearConversations?: boolean } = {}): void {
     this.#retryOrchestrator.incrementGeneration();
-    this.previousResponseId = null;
-    this.#inputPlanner.previousResponseId = null;
+    this.#providerContinuity.clear();
     this.#approvalState.clearPending();
     this.#approvalState.consumeAborted();
     this.#toolTracker.clearArguments();

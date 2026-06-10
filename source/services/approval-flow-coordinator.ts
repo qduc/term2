@@ -6,6 +6,8 @@ import { getCallIdFromObject, getToolInfoFromInterruption } from './interruption
 import { parseToolCallArguments } from './tool-call-arguments.js';
 import { createInvalidToolCallDiagnostic } from './logging-contract.js';
 import type { ConversationAgentClient } from './conversation-agent-client.js';
+import { SessionToolTracker } from './session-tool-tracker.js';
+import { GenerationGuard } from './generation-guard.js';
 
 const noop = () => undefined;
 
@@ -14,6 +16,8 @@ export interface ApprovalFlowCoordinatorDeps {
   approvalState: ApprovalState;
   logger: ILoggingService;
   sessionId: string;
+  toolTracker: SessionToolTracker;
+  generationGuard: GenerationGuard;
 }
 
 export interface AbortResolutionPlan {
@@ -32,9 +36,16 @@ export interface ContinuationPlan {
 export class ApprovalFlowCoordinator {
   constructor(private readonly deps: ApprovalFlowCoordinatorDeps) {}
 
-  abort(): boolean {
+  abort(): { aborted: boolean; callId?: string } {
     this.deps.agentClient.abort();
+    const pending = this.deps.approvalState.getPending();
+    const callId = pending ? getCallIdFromObject(pending.interruption) : undefined;
     if (this.deps.approvalState.abortPending()) {
+      this.deps.toolTracker.recordAbortedApproval(
+        'Tool execution was not approved.',
+        'Tool execution was not approved.',
+        callId,
+      );
       this.deps.logger.debug('Aborted approval - will handle rejection on next message', {
         eventType: 'approval.aborted',
         category: 'approval',
@@ -42,13 +53,25 @@ export class ApprovalFlowCoordinator {
         sessionId: this.deps.sessionId,
         traceId: this.deps.logger.getCorrelationId(),
       });
-      return true;
+      return { aborted: true, callId };
     }
-    return false;
+    return { aborted: false };
   }
 
   consumeAborted(): AbortedApprovalContext | null {
     return this.deps.approvalState.consumeAborted();
+  }
+
+  getAbortedStatus(): { kind: 'none' } | { kind: 'current'; context: AbortedApprovalContext } | { kind: 'stale' } {
+    const aborted = this.deps.approvalState.consumeAborted();
+    if (!aborted) {
+      return { kind: 'none' };
+    }
+    const tokenVal = aborted.token ?? 0;
+    if (this.deps.generationGuard.isCurrent(tokenVal)) {
+      return { kind: 'current', context: aborted };
+    }
+    return { kind: 'stale' };
   }
 
   /**

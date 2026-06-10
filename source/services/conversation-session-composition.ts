@@ -181,6 +181,8 @@ export function createConversationSessionComposition(
     approvalState,
     logger,
     sessionId: id,
+    toolTracker,
+    generationGuard,
   });
 
   const streamProcessor = new SessionStreamProcessor({
@@ -257,29 +259,10 @@ export function createConversationSessionComposition(
   });
 
   const turnCoordinator = new TurnCoordinator({
-    agentClient,
-    logger,
-    sessionId: id,
-    turnAccumulator,
-    retryOrchestrator,
-    retryClassifier,
-    retryEventPresenter,
-    toolTracker,
-    conversationStore,
-    conversationLogger,
-    approvalFlow,
-    shellAutoApproval,
-    inputPlanner,
-    state,
-    streamProcessor,
-    appState,
-    providerContinuity,
-    breakChaining,
-    continuationDriver,
-    recoveryPolicy,
-    recoveryExecutor,
-    generationGuard,
+    statusMachine: appState.statusMachine,
     initialTurnRunner,
+    continuationDriver,
+    approvalFlow,
   });
 
   const stateFacade = new SessionManager({

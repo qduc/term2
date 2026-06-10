@@ -51,6 +51,8 @@ const makeDeps = (mode: 'off' | 'advisory' | 'auto' = 'off') => {
     approvalState: new ApprovalState(),
     logger,
     sessionId: 's1',
+    toolTracker: { recordAbortedApproval: () => {}, export: () => [] } as any,
+    generationGuard: { isCurrent: () => true } as any,
   });
   return { approvalFlow, shellAutoApproval, logger, sessionId: 's1' };
 };
@@ -223,6 +225,8 @@ test('auto_approve outcome when LLM advises approval and mode=auto', async (t) =
     approvalState: new ApprovalState(),
     logger,
     sessionId: 's1',
+    toolTracker: { recordAbortedApproval: () => {}, export: () => [] } as any,
+    generationGuard: { isCurrent: () => true } as any,
   });
   const outcome = await buildConversationResult(
     { result: stream, toolCallArgumentsById: new Map() },

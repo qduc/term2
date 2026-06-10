@@ -4,6 +4,14 @@ import { ApprovalState } from './approval-state.js';
 import { LoggingService } from './logging-service.js';
 
 const logger = new LoggingService({ disableLogging: true });
+const mockToolTracker: any = {
+  recordAbortedApproval: () => {},
+  export: () => [],
+};
+const mockGenerationGuard: any = {
+  isCurrent: () => true,
+  capture: () => 1,
+};
 
 const makeMockAgentClient = () => {
   const installs: any[] = [];
@@ -38,11 +46,13 @@ test('abort delegates to agentClient and approvalState', (t) => {
     approvalState,
     logger,
     sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
   });
 
   const result = coord.abort();
   t.true(abortCalled);
-  t.true(result);
+  t.true(result.aborted);
 });
 
 test('abort returns false when no pending approval', (t) => {
@@ -52,8 +62,10 @@ test('abort returns false when no pending approval', (t) => {
     approvalState: new ApprovalState(),
     logger,
     sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
   });
-  t.false(coord.abort());
+  t.false(coord.abort().aborted);
 });
 
 test('prepareContinuation returns null when no pending approval', (t) => {
@@ -63,6 +75,8 @@ test('prepareContinuation returns null when no pending approval', (t) => {
     approvalState: new ApprovalState(),
     logger,
     sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
   });
   t.is(coord.prepareContinuation('y', undefined), null);
 });
@@ -85,6 +99,8 @@ test('prepareContinuation answer=y emits tool_started and approves', (t) => {
     approvalState,
     logger,
     sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
   });
 
   const plan = coord.prepareContinuation('y', undefined);
@@ -113,6 +129,8 @@ test('prepareContinuation answer=y normalizes JSON string tool_started arguments
     approvalState,
     logger,
     sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
   });
 
   const plan = coord.prepareContinuation('y', undefined);
@@ -148,6 +166,8 @@ test('prepareContinuation rejection calls state.reject with the correct rejectio
     approvalState,
     logger,
     sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
   });
 
   const plan = coord.prepareContinuation('n', 'too dangerous');
@@ -184,6 +204,8 @@ test('prepareContinuation rejection for nested subagent calls state.reject with 
     approvalState,
     logger,
     sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
   });
 
   const plan = coord.prepareContinuation('n', 'do not run it');
@@ -214,6 +236,8 @@ test('prepareContinuation rejection: nested subagent where state.reject is undef
     approvalState,
     logger,
     sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
   });
 
   // Should not throw — reject is optional-chained in the implementation
@@ -244,6 +268,8 @@ test('prepareAbortResolution calls state.reject with the correct rejection messa
     approvalState: new ApprovalState(),
     logger,
     sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
   });
 
   const plan = coord.prepareAbortResolution(aborted, 'a new question');

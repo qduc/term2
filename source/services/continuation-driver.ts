@@ -126,8 +126,9 @@ export class ContinuationDriver {
 
   async *drive(
     init: ContinuationInit,
-    policy: ApprovalDecisionPolicy,
+    policy?: ApprovalDecisionPolicy,
   ): AsyncGenerator<ConversationEvent, ContinuationDriveResult, void> {
+    const activePolicy = policy ?? new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
     const prepared = this.#prepareInit(init);
 
     if (prepared.toolStartedEvent) {
@@ -305,7 +306,7 @@ export class ContinuationDriver {
             llmAdvisory: outcome.result.approval.llmAdvisory,
           };
 
-          const decision = await policy.decide(approvalContext);
+          const decision = await activePolicy.decide(approvalContext);
 
           if (decision === 'prompt') {
             if (outcome.result.approval.callId) {

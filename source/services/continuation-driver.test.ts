@@ -132,11 +132,16 @@ const createHarness = ({
     },
   });
 
+  const generationGuard = new GenerationGuard();
+  generationGuard.capture(); // Bump to 1 to match tests passing generation: 1
+
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient: client as any,
     approvalState,
     logger,
     sessionId: 'test-session',
+    toolTracker,
+    generationGuard,
   });
 
   const conversationLogger = new ConversationLogger({
@@ -145,9 +150,6 @@ const createHarness = ({
     getAssistantTurnState: () => ({ previousResponseId: null }),
     getToolLedger: () => toolTracker.export(),
   });
-
-  const generationGuard = new GenerationGuard();
-  generationGuard.capture(); // Bump to 1 to match tests passing generation: 1
 
   const streamProcessor = new SessionStreamProcessor({
     logger,

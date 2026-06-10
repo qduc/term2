@@ -1,45 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings-service.js';
-import { getAllProviders, upsertProvider, unregisterProvider } from '../providers/index.js';
-import { createOpenAICompatibleProviderDefinition } from '../providers/openai-compatible-lazy.js';
 import { useSelection } from './use-selection.js';
+import {
+  type ProviderSelectionPhase,
+  type CustomProviderDraft,
+  type ProviderSelectionItem,
+  PROVIDER_TYPES,
+  loadProviderItems as loadProviderItemsFromService,
+  saveProvider as saveProviderToService,
+  deleteCustomProvider as deleteCustomProviderFromService,
+  validateWizardName,
+  validateWizardUrl,
+  isProviderBuiltIn,
+  getProviderLabel,
+} from '../providers/provider-service.js';
 
-export type ProviderSelectionPhase =
-  | 'list'
-  | 'edit_fields'
-  | 'wizard_name'
-  | 'wizard_type'
-  | 'wizard_url'
-  | 'wizard_key'
-  | 'confirm_delete'
-  | 'confirm_discard'
-  | 'reorder';
-
-export interface CustomProviderDraft {
-  name: string;
-  type: 'openai-compatible' | 'openai' | 'llama.cpp' | 'anthropic' | 'google' | 'opencode';
-  baseUrl?: string;
-  apiKey?: string;
-}
-
-const PROVIDER_TYPES: CustomProviderDraft['type'][] = [
-  'openai-compatible',
-  'openai',
-  'llama.cpp',
-  'anthropic',
-  'google',
-  'opencode',
-];
-
-const PROVIDER_NAME_REGEX = /^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/;
-
-interface ProviderSelectionItem {
-  id: string;
-  label: string;
-  isCustom: boolean;
-  isActive: boolean;
-}
+export type { ProviderSelectionPhase, CustomProviderDraft, ProviderSelectionItem };
 
 export type ProviderSelectionMenuItem =
   | {
@@ -76,42 +53,6 @@ export type ProviderSelectionMenuItem =
 
 const DELETE_CONFIRM_DEFAULT_INDEX = 1;
 
-const getConfiguredProviderNames = (settingsService: SettingsService): Set<string> => {
-  const names = new Set<string>();
-
-  for (const provider of getAllProviders()) {
-    names.add(provider.id);
-  }
-
-  const configured = settingsService.get<any[]>('providers') || [];
-  for (const provider of configured) {
-    if (provider && provider.name) {
-      names.add(String(provider.name));
-    }
-  }
-
-  return names;
-};
-
-const hasProviderNameConflict = (
-  settingsService: SettingsService,
-  candidate: string,
-  currentName?: string,
-): boolean => {
-  if (!candidate) return false;
-
-  const normalizedCandidate = candidate.trim();
-  if (!normalizedCandidate) return false;
-
-  for (const name of getConfiguredProviderNames(settingsService)) {
-    if (name === normalizedCandidate && name !== currentName) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
 export const useProviderSelection = (settingsService: SettingsService) => {
   const { mode, setMode, setInput } = useInputContext();
 
@@ -145,8 +86,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         return PROVIDER_TYPES.map((type) => ({ kind: 'type' as const, label: type }));
       case 'edit_fields': {
         if (!draft) return [];
-        const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
-        const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+        const isEditingBuiltIn = editingOriginalName ? isProviderBuiltIn(editingOriginalName) : false;
         if (isEditingBuiltIn) {
           return [
             { kind: 'field' as const, label: `Name: ${draft.name || '<empty>'} (Built-in)`, fieldKey: 'name' },
@@ -192,10 +132,11 @@ export const useProviderSelection = (settingsService: SettingsService) => {
         ];
       case 'reorder':
         return [
-          ...reorderList.map((id) => {
-            const providerDef = getAllProviders().find((p) => p.id === id);
-            return { kind: 'reorder-item' as const, id, label: providerDef?.label ?? id };
-          }),
+          ...reorderList.map((id) => ({
+            kind: 'reorder-item' as const,
+            id,
+            label: getProviderLabel(id) ?? id,
+          })),
         ];
       default:
         return [];
@@ -231,53 +172,15 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
   const isOpen = mode === 'provider_selection';
 
-  // Load registered providers
-  const loadProviders = useCallback(() => {
-    const all = getAllProviders();
-    const customList = settingsService.get<any[]>('providers') || [];
-    const activeProvider = settingsService.get<string>('agent.provider') || 'openai';
-
-    // Start with built-ins from registry
-    const providerItems: ProviderSelectionItem[] = all
-      .filter((p: any) => !p.isRuntimeDefined) // filter out custom ones from all to avoid duplicates
-      .map((p) => ({
-        id: p.id,
-        label: p.label,
-        isCustom: false,
-        isActive: p.id === activeProvider,
-      }));
-
-    // Add custom providers from settings
-    for (const c of customList) {
-      if (c && c.name) {
-        if (!providerItems.some((p) => p.id === c.name)) {
-          providerItems.push({
-            id: c.name,
-            label: c.name,
-            isCustom: true,
-            isActive: c.name === activeProvider,
-          });
-        }
-      }
-    }
-
-    // Make sure active provider is marked correctly even if not in all list
-    if (!providerItems.some((p) => p.id === activeProvider)) {
-      providerItems.push({
-        id: activeProvider,
-        label: activeProvider,
-        isCustom: customList.some((c: any) => c && c.name === activeProvider),
-        isActive: true,
-      });
-    }
-
-    setItems(providerItems);
+  // Load provider items from service
+  const loadProviderList = useCallback(() => {
+    setItems(loadProviderItemsFromService(settingsService));
   }, [settingsService]);
 
   // Sync list of providers on open
   useEffect(() => {
     if (isOpen) {
-      loadProviders();
+      loadProviderList();
       setPhase('list');
       setSelectedIndex(0);
       setDraft(null);
@@ -288,7 +191,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       setDiscardFromPhase(null);
       setDraftModified(false);
     }
-  }, [isOpen, loadProviders]);
+  }, [isOpen, loadProviderList]);
 
   const open = useCallback(() => {
     setMode('provider_selection');
@@ -312,6 +215,26 @@ export const useProviderSelection = (settingsService: SettingsService) => {
   const getListCount = (): number => {
     return activeItems.length;
   };
+
+  const saveDraft = useCallback(() => {
+    if (!draft) return;
+    setErrorMessage(null);
+    setFieldErrors({});
+
+    const result = saveProviderToService(settingsService, draft, editingOriginalName);
+    if (!result.success) {
+      if (result.errorMessage) setErrorMessage(result.errorMessage);
+      if (result.fieldErrors) setFieldErrors(result.fieldErrors);
+      return;
+    }
+
+    loadProviderList();
+    setPhase('list');
+    setSelectedIndex(0);
+    setDraft(null);
+    setEditingOriginalName(null);
+    setFieldErrors({});
+  }, [draft, editingOriginalName, settingsService, loadProviderList]);
 
   const selectItem = useCallback(() => {
     const listCount = getListCount();
@@ -422,8 +345,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       }
     } else if (phase === 'edit_fields') {
       if (!draft) return;
-      const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
-      const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+      const isEditingBuiltIn = editingOriginalName ? isProviderBuiltIn(editingOriginalName) : false;
 
       if (isEditingBuiltIn) {
         if (index === 2) {
@@ -491,8 +413,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     } else if (phase === 'confirm_discard') {
       if (index === 0) {
         setDraftModified(false);
-        const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
-        const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+        const isEditingBuiltIn = editingOriginalName ? isProviderBuiltIn(editingOriginalName) : false;
 
         if (discardFromPhase === 'wizard_name') {
           if (editingField !== null) {
@@ -544,17 +465,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       if (index === 0) {
         // Yes, delete
         if (editingOriginalName) {
-          const list = settingsService.get<any[]>('providers') || [];
-          const updated = list.filter((p: any) => p && p.name !== editingOriginalName);
-          settingsService.setPersistent('providers', updated);
-          unregisterProvider(editingOriginalName);
-
-          // If active provider was deleted, fallback
-          const activeProvider = settingsService.get<string>('agent.provider');
-          if (activeProvider === editingOriginalName) {
-            settingsService.set('agent.provider', 'openai');
-          }
-          loadProviders();
+          deleteCustomProviderFromService(settingsService, editingOriginalName);
+          loadProviderList();
         }
         setPhase('list');
         setSelectedIndex(0);
@@ -575,9 +487,10 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     editingField,
     discardFromPhase,
     settingsService,
-    loadProviders,
+    loadProviderList,
     setInput,
     reorderList,
+    saveDraft,
   ]);
 
   const goBack = useCallback(() => {
@@ -622,8 +535,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     } else if (phase === 'wizard_key') {
       if (editingField) {
         setPhase('edit_fields');
-        const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
-        const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+        const isEditingBuiltIn = editingOriginalName ? isProviderBuiltIn(editingOriginalName) : false;
         setSelectedIndex(isEditingBuiltIn ? 2 : 3);
         setEditingField(null);
       } else {
@@ -660,21 +572,14 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       const val = value.trim();
 
       if (phase === 'wizard_name') {
-        if (!val) {
-          setErrorMessage('Name cannot be empty.');
-          return false;
-        }
-        if (!PROVIDER_NAME_REGEX.test(val)) {
-          setErrorMessage(
-            'Name must start with a letter or number and contain only letters, numbers, hyphens, underscores, and dots.',
-          );
-          return false;
-        }
-        // Check for name conflict
-        const isRename = editingField !== null;
-        const originalName = isRename ? editingOriginalName ?? undefined : undefined;
-        if (hasProviderNameConflict(settingsService, val, originalName)) {
-          setErrorMessage(`Provider with name '${val}' already exists.`);
+        const nameValidation = validateWizardName(
+          val,
+          settingsService,
+          editingField !== null,
+          editingOriginalName ?? undefined,
+        );
+        if (!nameValidation.valid) {
+          setErrorMessage(nameValidation.errorMessage!);
           return false;
         }
 
@@ -699,20 +604,10 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
       if (phase === 'wizard_url') {
         const type = draft?.type || 'openai-compatible';
-        const baseUrlRequired = type === 'openai' || type === 'openai-compatible' || type === 'llama.cpp';
-
-        if (baseUrlRequired && !val) {
-          setErrorMessage(`Base URL is required for provider type '${type}'.`);
+        const urlValidation = validateWizardUrl(val, type);
+        if (!urlValidation.valid) {
+          setErrorMessage(urlValidation.errorMessage!);
           return false;
-        }
-
-        if (val) {
-          try {
-            new URL(val);
-          } catch {
-            setErrorMessage('Invalid URL format. Make sure it starts with http:// or https://');
-            return false;
-          }
         }
 
         if (draft) {
@@ -739,8 +634,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           const updatedDraft = { ...draft, apiKey: val || undefined };
           setDraft(updatedDraft);
           setDraftModified(true);
-          const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
-          const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
+          const isEditingBuiltIn = editingOriginalName ? isProviderBuiltIn(editingOriginalName) : false;
           if (editingField) {
             setFieldErrors({});
             setDraftModified(false);
@@ -763,105 +657,6 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     },
     [phase, draft, editingField, editingOriginalName, settingsService, setInput],
   );
-
-  const saveDraft = () => {
-    if (!draft) return;
-    setErrorMessage(null);
-    setFieldErrors({});
-
-    const providerDef = editingOriginalName ? getAllProviders().find((p) => p.id === editingOriginalName) : null;
-    const isEditingBuiltIn = providerDef ? !providerDef.isRuntimeDefined : false;
-
-    if (isEditingBuiltIn && editingOriginalName) {
-      try {
-        settingsService.setPersistent(`agent.${editingOriginalName}.apiKey`, draft.apiKey || undefined);
-        loadProviders();
-        setPhase('list');
-        setSelectedIndex(0);
-        setDraft(null);
-        setEditingOriginalName(null);
-        setFieldErrors({});
-      } catch (err: any) {
-        setErrorMessage(err.message || 'Failed to save provider API key.');
-      }
-      return;
-    }
-
-    // Final checks
-    if (!draft.name.trim()) {
-      setFieldErrors({ name: 'Name cannot be empty.' });
-      return;
-    }
-
-    if (!PROVIDER_NAME_REGEX.test(draft.name.trim())) {
-      setFieldErrors({
-        name: 'Name must start with a letter or number and contain only letters, numbers, hyphens, underscores, and dots.',
-      });
-      return;
-    }
-
-    const originalName = editingOriginalName;
-    if (hasProviderNameConflict(settingsService, draft.name, originalName ?? undefined)) {
-      setFieldErrors({ name: `Provider with name '${draft.name}' already exists.` });
-      return;
-    }
-
-    const type = draft.type;
-    const baseUrlRequired = type === 'openai' || type === 'openai-compatible' || type === 'llama.cpp';
-    if (baseUrlRequired && !draft.baseUrl) {
-      setFieldErrors({ baseUrl: `Base URL is required for provider type '${type}'.` });
-      return;
-    }
-
-    try {
-      const list = settingsService.get<any[]>('providers') || [];
-      const isEdit = originalName !== null;
-      let updatedList;
-
-      if (isEdit && originalName) {
-        // If name changed, delete old provider
-        updatedList = list.filter((p: any) => p && p.name !== originalName);
-        if (originalName !== draft.name) {
-          unregisterProvider(originalName);
-        }
-      } else {
-        updatedList = [...list];
-      }
-
-      const newEntry: any = {
-        name: draft.name,
-        type: draft.type,
-      };
-      if (draft.baseUrl) newEntry.baseUrl = draft.baseUrl;
-      if (draft.apiKey) newEntry.apiKey = draft.apiKey;
-
-      updatedList.push(newEntry);
-      settingsService.setPersistent('providers', updatedList);
-
-      // Instantly register or update at runtime
-      const def = createOpenAICompatibleProviderDefinition({
-        name: draft.name,
-        type: draft.type,
-        baseUrl: draft.baseUrl,
-        apiKey: draft.apiKey,
-      });
-      upsertProvider(def);
-
-      // If active provider was edited and its name changed, update the active setting
-      if (isEdit && originalName && originalName === settingsService.get('agent.provider')) {
-        settingsService.set('agent.provider', draft.name);
-      }
-
-      loadProviders();
-      setPhase('list');
-      setSelectedIndex(0);
-      setDraft(null);
-      setEditingOriginalName(null);
-      setFieldErrors({});
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to save provider.');
-    }
-  };
 
   const requestDelete = useCallback(() => {
     if (phase !== 'list') return;

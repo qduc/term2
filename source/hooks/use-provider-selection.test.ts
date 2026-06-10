@@ -429,35 +429,8 @@ test.serial('useProviderSelection - add provider wizard flow and validation', as
 
   t.is(hook!.phase, 'wizard_name');
 
-  // Submit empty name (fails)
+  // Submit valid name (validation is tested in provider-service.test.ts)
   let success = false;
-  await act(async () => {
-    success = hook!.handleTextInputSubmit('');
-  });
-  await flush();
-  t.false(success);
-  t.is(hook!.errorMessage, 'Name cannot be empty.');
-
-  // Submit invalid name format (fails)
-  await act(async () => {
-    success = hook!.handleTextInputSubmit('my provider');
-  });
-  await flush();
-  t.false(success);
-  t.is(
-    hook!.errorMessage,
-    'Name must start with a letter or number and contain only letters, numbers, hyphens, underscores, and dots.',
-  );
-
-  // Submit duplicate/built-in name (fails)
-  await act(async () => {
-    success = hook!.handleTextInputSubmit('openai');
-  });
-  await flush();
-  t.false(success);
-  t.true(hook!.errorMessage!.includes('already exists'));
-
-  // Submit valid name (success)
   await act(async () => {
     success = hook!.handleTextInputSubmit('my-custom-provider');
   });
@@ -474,15 +447,7 @@ test.serial('useProviderSelection - add provider wizard flow and validation', as
   t.is(hook!.phase, 'wizard_url');
   t.is(hook!.draft?.type, 'openai-compatible');
 
-  // Submit invalid URL (fails)
-  await act(async () => {
-    success = hook!.handleTextInputSubmit('not-a-url');
-  });
-  await flush();
-  t.false(success);
-  t.is(hook!.errorMessage, 'Invalid URL format. Make sure it starts with http:// or https://');
-
-  // Submit valid URL (success)
+  // Submit valid URL (URL validation is tested in provider-service.test.ts)
   await act(async () => {
     success = hook!.handleTextInputSubmit('http://localhost:8000/v1');
   });

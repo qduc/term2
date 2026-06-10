@@ -1,6 +1,7 @@
 // @ts-nocheck - Complex mock patterns
 import test from 'ava';
 import { createConversationSession } from './conversation-session-factory.js';
+import { createConversationSessionComposition } from './conversation-session-composition.js';
 
 const noop = () => {};
 
@@ -92,6 +93,31 @@ test('createConversationSession returns a terminalAdapter with sendMessage', (t)
   });
   t.is(typeof terminalAdapter.sendMessage, 'function');
   t.is(typeof terminalAdapter.handleApprovalDecision, 'function');
+});
+
+test('createConversationSessionComposition composes a plain appState object with a statusMachine', (t) => {
+  const { appState } = createConversationSessionComposition({
+    sessionId: 'app-state-test',
+    agentClient: makeMockClient(),
+    deps: { logger: makeLogger(), sessionContextService },
+    turnAccumulator: {
+      append: () => undefined,
+      reset: () => undefined,
+      resetPersistedTurnState: () => undefined,
+      addPending: () => undefined,
+      addAssistant: () => undefined,
+      addTool: () => undefined,
+      addReasoning: () => undefined,
+      addCommandMessage: () => undefined,
+      addToolStarted: () => undefined,
+      addUser: () => undefined,
+      getTurnItems: () => [],
+      getPendingTurnItems: () => [],
+      getPersistedTurnState: () => [],
+    },
+  });
+  t.is(Object.getPrototypeOf(appState), Object.prototype);
+  t.is(appState.statusMachine.current, 'idle');
 });
 
 test('createConversationSession returns stateFacade with undo/snapshot operations', (t) => {

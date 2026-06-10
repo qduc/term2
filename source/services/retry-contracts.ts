@@ -72,14 +72,17 @@ export type NextRunInstruction = {
 
 // ── Recovery Result ────────────────────────────────────────────
 
+export type RecoveryInstructions = {
+  delayMs?: number;
+  useStandardServiceTier?: boolean;
+};
+
 export type RecoveryResult =
-  | {
+  | ({
       kind: 'run';
       instruction: NextRunInstruction;
-      delayMs?: number;
-      useStandardServiceTier?: boolean;
       events: ConversationEvent[];
-    }
+    } & RecoveryInstructions)
   | { kind: 'terminated'; events: ConversationEvent[] };
 
 export type RecoveryExecutorInput = {

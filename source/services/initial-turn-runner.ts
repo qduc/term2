@@ -1,4 +1,4 @@
-import { type RunState, type AgentInputItem } from '@openai/agents';
+import { type RunState } from '@openai/agents';
 import type { ConversationEvent } from './conversation-events.js';
 import type { ConversationTerminal } from '../contracts/conversation.js';
 import type { ILoggingService } from './service-interfaces.js';
@@ -25,7 +25,6 @@ import type { AgentStream } from './agent-stream.js';
 import { getMethod } from './interruption-info.js';
 import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import { buildConversationResult } from './conversation-result-builder.js';
-import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
 import { describeError } from '../utils/error-helpers.js';
 import { ShellAutoApprovalDecisionPolicy } from './continuation-driver.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
@@ -35,7 +34,7 @@ export type InitialTurnOutcome =
   | { kind: 'response'; terminal: ConversationTerminal }
   | { kind: 'approval_required'; terminal: ConversationTerminal }
   | { kind: 'failed' }
-  | { kind: 'stale'; terminal?: ConversationTerminal };
+  | { kind: 'stale' };
 
 export interface InitialTurnRunnerDeps {
   agentClient: ConversationAgentClient;
@@ -74,6 +73,8 @@ export class InitialTurnRunner {
       retries?: any;
       maxModelRetries?: number;
       signal?: AbortSignal;
+      delayMs?: number;
+      useStandardServiceTier?: boolean;
     } = {},
   ): AsyncGenerator<ConversationEvent, InitialTurnOutcome, void> {
     let attempt: TurnAttempt;
@@ -150,9 +151,19 @@ export class InitialTurnRunner {
       this.deps.turnAccumulator.resetPersistedTurnState();
     }
 
-    this.deps.toolTracker.ledger.beginTurn();
-
     try {
+      if (options.delayMs && options.delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+      }
+      if (!this.deps.generationGuard.isCurrent(attempt.token)) {
+        return { kind: 'stale' };
+      }
+      if (options.useStandardServiceTier) {
+        getMethod<[], void>(this.deps.agentClient, 'useStandardServiceTierForNextRequest')?.call(this.deps.agentClient);
+      }
+
+      this.deps.toolTracker.ledger.beginTurn();
+
       while (true) {
         // 1. Check generation token validity
         if (currentAbortedContext) {
@@ -306,7 +317,9 @@ export class InitialTurnRunner {
             attempt.inputMode!,
             'startStream',
           );
-          const isStale = finalizeResult.kind === 'stale';
+          if (finalizeResult.kind === 'stale') {
+            return { kind: 'stale' };
+          }
 
           // 6. Build outcome
           const outcome = await buildConversationResult(
@@ -328,13 +341,6 @@ export class InitialTurnRunner {
               sessionId: this.deps.sessionId,
             },
           );
-
-          if (isStale) {
-            return {
-              kind: 'stale',
-              terminal: outcome.kind === 'auto_approve' ? undefined : outcome.result,
-            };
-          }
 
           if (outcome.kind === 'response') {
             this.deps.inputPlanner.recordSuccess(
@@ -453,6 +459,10 @@ export class InitialTurnRunner {
   > {
     const { error, attempt, stream } = ctx;
 
+    if (!this.deps.generationGuard.isCurrent(attempt.token)) {
+      return { kind: 'stale' };
+    }
+
     let classified = this.deps.retryClassifier.classify({
       error,
       retryCounts: attempt.retryCounts,
@@ -475,33 +485,35 @@ export class InitialTurnRunner {
     }
 
     if (classified.kind === 'unrecoverable') {
-      let droppedUserMessage: { text: string; imageCount: number } | undefined;
-      if (attempt.addedUserMessage && !stream && this.deps.generationGuard.isCurrent(attempt.token)) {
-        this.deps.conversationStore.removeLastUserMessage();
-        droppedUserMessage = { text: attempt.turn.text, imageCount: attempt.turn.images?.length ?? 0 };
-      }
-      if (stream && this.deps.generationGuard.isCurrent(attempt.token)) {
-        this.deps.toolTracker.markOpenCallsAborted(error instanceof Error ? error.message : String(error));
-        const reconciled = reconcileHistoryWithToolLedger(
-          this.deps.conversationStore.getHistory(),
-          this.deps.toolTracker.export(),
-        );
-        if (reconciled.addedCompletedPairs > 0 || reconciled.droppedIncompleteCalls > 0) {
-          this.deps.conversationStore.replaceHistory(reconciled.history as AgentInputItem[]);
-        }
-      }
+      const droppedUserMessage =
+        attempt.addedUserMessage && !stream
+          ? { text: attempt.turn.text, imageCount: attempt.turn.images?.length ?? 0 }
+          : undefined;
+      const plan = this.deps.recoveryPolicy.plan({
+        failure: classified,
+        gen: attempt.token,
+        stream,
+        retryCounts: attempt.retryCounts,
+        maxModelRetries: attempt.maxModelRetries,
+        freshStartRetriesAllowed: this.deps.freshStartRetriesAllowed,
+      });
+      const recoveryResult = this.deps.recoveryExecutor.apply({
+        plan,
+        state: {
+          ledgerSnapshot: attempt.initialLedgerSnapshot,
+          addedUserMessage: attempt.addedUserMessage,
+          stream,
+        },
+        retryCounts: attempt.retryCounts,
+        maxModelRetries: attempt.maxModelRetries,
+      });
+
       this.deps.inputPlanner.recordSuccess(this.deps.conversationStore.getHistory(), {
         kind: 'full_history',
         previousInput: attempt.streamInput,
       });
-      const recoverySummary = this.deps.toolTracker.getRecoverySummary();
-      if (recoverySummary) {
-        yield {
-          type: 'tool_recovery',
-          recoveredCallIds: recoverySummary.recoveredCallIds,
-          droppedCallIds: recoverySummary.droppedCallIds,
-          message: recoverySummary.message,
-        };
+      for (const event of recoveryResult.events) {
+        yield event;
       }
       yield {
         type: 'error',

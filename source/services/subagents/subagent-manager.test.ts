@@ -1537,7 +1537,6 @@ test.serial('run() extracts usage from error.state.usage when subagent run fails
 test.serial(
   'run() retries on recoverable model error (hallucinated tool) and succeeds on second attempt',
   async (t) => {
-    // TODO: Subagent retry is now handled by ConversationSession/RetryHandler. Re-test at integration level.
     let runCount = 0;
     const events: any[] = [];
     const logWarnCalls: any[] = [];
@@ -1597,7 +1596,6 @@ test.serial(
 );
 
 test.serial('run() exhausts retries on repeated recoverable model errors and returns failed result', async (t) => {
-  // TODO: Subagent retry is now handled by ConversationSession/RetryHandler. Re-test at integration level.
   let runCount = 0;
   const events: any[] = [];
 
@@ -1708,7 +1706,6 @@ test.serial('run() aborted subagent returns cancelled status without model-error
 });
 
 test.serial('run() retries on transient upstream error via executeWithRetry', async (t) => {
-  // TODO: Transient retry is now handled by ConversationSession/RetryHandler.
   let runCount = 0;
   const logWarnCalls: any[] = [];
 

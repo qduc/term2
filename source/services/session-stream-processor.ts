@@ -100,43 +100,92 @@ export class SessionStreamProcessor {
       acc.emittedCommandIds = new Set<string>(options.previouslyEmittedCommandIds);
     }
 
+    if (!this.deps.generationGuard.isCurrent(options.gen)) {
+      return acc;
+    }
+
+    const workingToolArguments = options.preserveExistingToolArgs
+      ? new Map(this.deps.toolTracker.argumentsById)
+      : new Map<string, unknown>();
+    const workingInvalidPackets = new Set(this.deps.toolTracker.invalidPackets);
+    const commitWorkingCaches = (): void => {
+      this.deps.toolTracker.argumentsById.clear();
+      for (const [callId, args] of workingToolArguments) {
+        this.deps.toolTracker.argumentsById.set(callId, args);
+      }
+      for (const packet of workingInvalidPackets) {
+        this.deps.toolTracker.invalidPackets.add(packet);
+      }
+    };
+
     const generator = processStreamEvents(
       stream,
       acc,
       {
-        toolCallArgumentsById: this.deps.toolTracker.argumentsById,
-        emittedInvalidToolCallPackets: this.deps.toolTracker.invalidPackets,
-        preserveExistingToolArgs: options.preserveExistingToolArgs,
-        onFunctionCallItem: (item) => this.deps.toolTracker.recordFunctionCall(item),
+        toolCallArgumentsById: workingToolArguments,
+        emittedInvalidToolCallPackets: workingInvalidPackets,
+        preserveExistingToolArgs: true,
+        onFunctionCallItem: (item) => {
+          this.deps.generationGuard.runIfCurrent(options.gen, () => {
+            this.deps.toolTracker.recordFunctionCall(item);
+          });
+        },
         onFunctionResultItem: (item) => {
-          this.deps.toolTracker.recordFunctionResult(item);
-          if (options.source !== 'startStream') {
-            const cid = callIdOf(item);
-            if (cid && this.deps.conversationLogger.hasSink()) {
-              const entry = this.deps.toolTracker.export().find((e) => e.callId === cid);
-              this.deps.conversationLogger.log({
-                type: 'tool_result',
-                callId: cid,
-                toolName: entry?.toolName ?? toolNameOf(item),
-                status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
-                output: entry?.output ?? outputOf(item),
-                ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
-              });
+          this.deps.generationGuard.runIfCurrent(options.gen, () => {
+            this.deps.toolTracker.recordFunctionResult(item);
+            if (options.source !== 'startStream') {
+              const cid = callIdOf(item);
+              if (cid && this.deps.conversationLogger.hasSink()) {
+                const entry = this.deps.toolTracker.export().find((e) => e.callId === cid);
+                this.deps.conversationLogger.log({
+                  type: 'tool_result',
+                  callId: cid,
+                  toolName: entry?.toolName ?? toolNameOf(item),
+                  status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
+                  output: entry?.output ?? outputOf(item),
+                  ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
+                });
+              }
             }
-          }
+          });
         },
       },
       { logger: this.deps.logger, sessionId: this.deps.sessionId },
     );
 
-    for await (const event of generator) {
-      const filtered = this.deps.toolTracker.dedupeToolStarted(event);
-      if (filtered) {
-        yield filtered;
+    const iterator = generator[Symbol.asyncIterator]();
+    let closed = false;
+    try {
+      while (true) {
+        if (!this.deps.generationGuard.isCurrent(options.gen)) {
+          await iterator.return?.();
+          closed = true;
+          return acc;
+        }
+
+        const next = await iterator.next();
+        if (!this.deps.generationGuard.isCurrent(options.gen)) {
+          await iterator.return?.();
+          closed = true;
+          return acc;
+        }
+        if (next.done) {
+          this.deps.generationGuard.runIfCurrent(options.gen, commitWorkingCaches);
+          closed = true;
+          return acc;
+        }
+
+        this.deps.generationGuard.runIfCurrent(options.gen, commitWorkingCaches);
+        const filtered = this.deps.toolTracker.dedupeToolStarted(next.value);
+        if (filtered) {
+          yield filtered;
+        }
+      }
+    } finally {
+      if (!closed) {
+        await iterator.return?.();
       }
     }
-
-    return acc;
   }
 
   /**

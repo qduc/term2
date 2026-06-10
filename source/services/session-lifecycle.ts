@@ -1,6 +1,5 @@
 import type { AgentInputItem } from '@openai/agents';
 import { SessionInputPlanner } from './session-input-planner.js';
-import { ApprovalState } from './approval-state.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
@@ -10,13 +9,14 @@ import type { ILoggingService } from './service-interfaces.js';
 import { getMethod } from './interruption-info.js';
 import { reconcileHistoryWithToolLedger } from './tool-execution-ledger.js';
 import type { SavedToolExecution } from './tool-execution-ledger.js';
-import { type TurnState } from './turn-coordinator.js';
+import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
+import { TurnStatusMachine } from './turn-status-machine.js';
 import type { ProviderContinuity } from './provider-continuity.js';
 import { GenerationGuard } from './generation-guard.js';
 
 /**
  * Owns and manages session-level state transitions:
- * - previousResponseId and pendingModeNotice
+ * - pendingModeNotice
  * - generation resets, store clearing
  * - import/export reconciliation
  * - undo side effects
@@ -26,20 +26,10 @@ import { GenerationGuard } from './generation-guard.js';
  * instead of implementing them inline.
  */
 export class SessionLifecycle {
-  /** The last response ID from the provider, used for conversation chaining. Delegates to ProviderContinuity. */
-  get previousResponseId(): string | null {
-    return this.#providerContinuity.previousResponseId;
-  }
-
-  set previousResponseId(id: string | null) {
-    this.#providerContinuity.update(id);
-  }
-
   /** A pending mode-notice text to prepend to the next user turn. */
   pendingModeNotice: string | null = null;
 
   #inputPlanner: SessionInputPlanner;
-  #approvalState: ApprovalState;
   #toolTracker: SessionToolTracker;
   #shellAutoApproval: ShellAutoApprovalResolver;
   #turnAccumulator: TurnItemAccumulator;
@@ -47,13 +37,14 @@ export class SessionLifecycle {
   #agentClient: ConversationAgentClient;
   #logger: ILoggingService;
   #sessionId: string;
-  #appState: TurnState;
+  #appState: { statusMachine: TurnStatusMachine };
+  #approvalFlow: ApprovalFlowCoordinator;
   #providerContinuity: ProviderContinuity;
   #generationGuard: GenerationGuard;
 
   constructor(deps: {
     inputPlanner: SessionInputPlanner;
-    approvalState: ApprovalState;
+    approvalFlow: ApprovalFlowCoordinator;
     toolTracker: SessionToolTracker;
     shellAutoApproval: ShellAutoApprovalResolver;
     turnAccumulator: TurnItemAccumulator;
@@ -61,12 +52,11 @@ export class SessionLifecycle {
     agentClient: ConversationAgentClient;
     logger: ILoggingService;
     sessionId: string;
-    appState: TurnState;
+    appState: { statusMachine: TurnStatusMachine };
     providerContinuity: ProviderContinuity;
     generationGuard: GenerationGuard;
   }) {
     this.#inputPlanner = deps.inputPlanner;
-    this.#approvalState = deps.approvalState;
     this.#toolTracker = deps.toolTracker;
     this.#shellAutoApproval = deps.shellAutoApproval;
     this.#turnAccumulator = deps.turnAccumulator;
@@ -75,6 +65,7 @@ export class SessionLifecycle {
     this.#logger = deps.logger;
     this.#sessionId = deps.sessionId;
     this.#appState = deps.appState;
+    this.#approvalFlow = deps.approvalFlow;
     this.#providerContinuity = deps.providerContinuity;
     this.#generationGuard = deps.generationGuard;
   }
@@ -127,7 +118,7 @@ export class SessionLifecycle {
   } {
     return {
       history: this.#toolTracker.getReconciledHistory(),
-      previousResponseId: this.previousResponseId,
+      previousResponseId: this.#providerContinuity.previousResponseId,
       toolLedger: this.#toolTracker.export(),
     };
   }
@@ -164,12 +155,12 @@ export class SessionLifecycle {
     // Provider-side response chains can expire while the local transcript remains valid.
     // Force the first resumed turn to resync from full history; successful completion
     // will populate a fresh previousResponseId for subsequent chained turns.
-    this.previousResponseId = null;
+    this.#providerContinuity.clear();
     this.#toolTracker.clearEmittedToolStarted();
     this.#inputPlanner.reset();
     this.#shellAutoApproval.clearCache();
-    this.#approvalState.clearPending();
-    this.#approvalState.consumeAborted();
+    this.#approvalFlow.clearPending();
+    this.#approvalFlow.consumeAborted();
     this.#toolTracker.clearArguments();
     this.#turnAccumulator.resetPersistedTurnState();
     this.#inputPlanner.markResumedSession({
@@ -183,8 +174,8 @@ export class SessionLifecycle {
 
   #resetProviderContinuity({ clearConversations = true }: { clearConversations?: boolean } = {}): void {
     this.#providerContinuity.clear();
-    this.#approvalState.clearPending();
-    this.#approvalState.consumeAborted();
+    this.#approvalFlow.clearPending();
+    this.#approvalFlow.consumeAborted();
     this.#toolTracker.clearArguments();
     this.#toolTracker.clearEmittedToolStarted();
     this.#shellAutoApproval.clearCache();

@@ -344,6 +344,12 @@ test('unrecoverable failure before stream creation', async (t) => {
   };
 
   const { runner, composition } = setupRunner(mockClient);
+  let recoveryApplyCalls = 0;
+  const originalApply = composition.recoveryExecutor.apply.bind(composition.recoveryExecutor);
+  composition.recoveryExecutor.apply = (input: any) => {
+    recoveryApplyCalls++;
+    return originalApply(input);
+  };
   const token = composition.generationGuard.capture();
   const attempt = new TurnAttempt({
     turn: { text: 'hello' },
@@ -365,6 +371,7 @@ test('unrecoverable failure before stream creation', async (t) => {
   );
 
   t.true(events.some((e) => e.type === 'error'));
+  t.is(recoveryApplyCalls, 1);
 });
 
 test('stale generation during retry delay', async (t) => {
@@ -417,6 +424,99 @@ test('stale generation during retry delay', async (t) => {
   const outcome = await runPromise;
   t.is(outcome.kind, 'stale');
   t.is(startCalls, 1);
+});
+
+test('stale finalization returns no terminal and does not mutate approval state', async (t) => {
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'stale response' }]);
+  stream.finalOutput = 'stale response';
+
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream() {
+      return stream;
+    },
+  };
+
+  const { runner, composition } = setupRunner(mockClient);
+  const token = composition.generationGuard.capture();
+  const pending = {
+    state: {} as any,
+    interruption: { name: 'shell', arguments: '{}', callId: 'pending-call' },
+    emittedCommandIds: new Set<string>(),
+    toolCallArgumentsById: new Map<string, unknown>(),
+    token,
+  };
+  composition.approvalState.setPending(pending);
+  composition.streamProcessor.finalize = () => ({ kind: 'stale' });
+
+  const attempt = new TurnAttempt({
+    turn: { text: 'hello' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialLedgerSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  const iterator = runner.run(attempt);
+  let result = await iterator.next();
+  while (!result.done) {
+    result = await iterator.next();
+  }
+
+  t.deepEqual(result.value, { kind: 'stale' });
+  t.is(composition.approvalState.getPending(), pending);
+});
+
+test('continuation recovery delay checks generation before one-shot client mutation', async (t) => {
+  let startCalls = 0;
+  let standardTierCalls = 0;
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    useStandardServiceTierForNextRequest() {
+      standardTierCalls++;
+    },
+    async startStream() {
+      startCalls++;
+      return new MockStream([]);
+    },
+  };
+
+  const { runner, composition } = setupRunner(mockClient);
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'hello' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialLedgerSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = ((handler: (...args: any[]) => void) => {
+    composition.generationGuard.invalidate();
+    return originalSetTimeout(handler, 0);
+  }) as typeof setTimeout;
+  t.teardown(() => {
+    globalThis.setTimeout = originalSetTimeout;
+  });
+
+  const iterator = runner.run(attempt, {
+    skipUserMessage: true,
+    delayMs: 100,
+    useStandardServiceTier: true,
+  });
+  let result = await iterator.next();
+  while (!result.done) {
+    result = await iterator.next();
+  }
+
+  t.deepEqual(result.value, { kind: 'stale' });
+  t.is(standardTierCalls, 0);
+  t.is(startCalls, 0);
 });
 
 test('aborted-approval input reusing the current token', async (t) => {

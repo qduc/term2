@@ -28,7 +28,7 @@ import type { DefaultRetryClassifier } from './retry-classifier.js';
 import type { DefaultConversationRecoveryPolicy } from './recovery-policy.js';
 import type { DefaultRecoveryExecutor } from './recovery-executor.js';
 import type { RetryEventPresenter } from './retry-event-presenter.js';
-import type { RetryCounts, RecoveryState } from './retry-contracts.js';
+import type { RecoveryInstructions, RetryCounts, RecoveryState } from './retry-contracts.js';
 import { extractCommandMessages } from '../utils/extract-command-messages.js';
 
 // ── Approval Decision Policy ──────────────────────────────────────
@@ -80,7 +80,7 @@ export type ContinuationInit =
 export type ContinuationDriveResult =
   | { kind: 'approval_required'; result: ConversationTerminal }
   | { kind: 'response'; result: ConversationTerminal }
-  | { kind: 'fresh_start_required'; retryCounts: RetryCounts }
+  | ({ kind: 'fresh_start_required'; retryCounts: RetryCounts } & RecoveryInstructions)
   | { kind: 'stale' };
 
 export interface ContinuationDriverDeps {
@@ -129,6 +129,11 @@ export class ContinuationDriver {
     policy?: ApprovalDecisionPolicy,
   ): AsyncGenerator<ConversationEvent, ContinuationDriveResult, void> {
     const activePolicy = policy ?? new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval);
+
+    if (!this.deps.generationGuard.isCurrent(init.generation)) {
+      return { kind: 'stale' };
+    }
+
     const prepared = this.#prepareInit(init);
 
     if (prepared.toolStartedEvent) {
@@ -447,6 +452,7 @@ export class ContinuationDriver {
             currentState,
             toolResultCallIds: currentCallIds,
           };
+          const transientDelayMs = classified.kind === 'transient' ? classified.delayMs : undefined;
 
           const recoveryResult = this.deps.recoveryExecutor.apply({
             plan,
@@ -459,11 +465,22 @@ export class ContinuationDriver {
           }
 
           if (recoveryResult.instruction.resumeState) {
+            if (typeof transientDelayMs === 'number' && transientDelayMs > 0) {
+              await new Promise((resolve) => setTimeout(resolve, transientDelayMs));
+              if (!this.deps.generationGuard.isCurrent(token)) {
+                return { kind: 'stale' };
+              }
+            }
             currentState = recoveryResult.instruction.resumeState;
             currentCallIds = [];
             currentResumePreviousResponseId = recoveryResult.instruction.resumePreviousResponseId;
           } else {
-            return { kind: 'fresh_start_required', retryCounts };
+            return {
+              kind: 'fresh_start_required',
+              retryCounts,
+              ...(typeof transientDelayMs === 'number' ? { delayMs: transientDelayMs } : {}),
+              ...(recoveryResult.useStandardServiceTier ? { useStandardServiceTier: true } : {}),
+            };
           }
         }
       }

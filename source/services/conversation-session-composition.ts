@@ -12,7 +12,7 @@ import type { ConversationAgentClient } from './conversation-agent-client.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { ProviderContinuity } from './provider-continuity.js';
-import { TurnCoordinator, TurnState } from './turn-coordinator.js';
+import { TurnCoordinator } from './turn-coordinator.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { SessionManager } from './session-manager.js';
 import { SessionRuntimeController } from './session-runtime-controller.js';
@@ -24,6 +24,7 @@ import { GenerationGuard } from './generation-guard.js';
 import { DefaultRetryClassifier } from './retry-classifier.js';
 import { RetryEventPresenter } from './retry-event-presenter.js';
 import { InitialTurnRunner } from './initial-turn-runner.js';
+import { TurnStatusMachine } from './turn-status-machine.js';
 
 // ── Public types ──────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ export type ConversationSessionComposition = {
   state: SessionLifecycle;
   conversationLogger: ConversationLogger;
   streamProcessor: SessionStreamProcessor;
-  appState: TurnState;
+  appState: { statusMachine: TurnStatusMachine };
   turnCoordinator: TurnCoordinator;
   /** Adapter that provides the legacy sendMessage/handleApprovalDecision surface. */
   terminalAdapter: ConversationAdapter;
@@ -126,7 +127,7 @@ export function createConversationSessionComposition(
     },
   ) as unknown as ShellAutoApprovalResolver;
 
-  const appState = new TurnState();
+  const appState = { statusMachine: new TurnStatusMachine() };
   const providerContinuity = new ProviderContinuity();
 
   const inputPlanner = new SessionInputPlanner({
@@ -134,21 +135,6 @@ export function createConversationSessionComposition(
     agentClient,
     toolTracker,
     providerContinuity,
-  });
-
-  const state = new SessionLifecycle({
-    inputPlanner,
-    approvalState,
-    toolTracker,
-    shellAutoApproval,
-    turnAccumulator,
-    conversationStore,
-    agentClient,
-    logger,
-    sessionId: id,
-    appState,
-    providerContinuity,
-    generationGuard,
   });
 
   const conversationLogger = new ConversationLogger({
@@ -173,6 +159,21 @@ export function createConversationSessionComposition(
     logger,
     sessionId: id,
     toolTracker,
+    generationGuard,
+  });
+
+  const state = new SessionLifecycle({
+    inputPlanner,
+    approvalFlow,
+    toolTracker,
+    shellAutoApproval,
+    turnAccumulator,
+    conversationStore,
+    agentClient,
+    logger,
+    sessionId: id,
+    appState,
+    providerContinuity,
     generationGuard,
   });
 
@@ -300,10 +301,7 @@ export function createConversationSessionComposition(
     generationGuard.invalidate();
     // Abort any active SDK work only if a turn is currently running.
     if (!appState.statusMachine.is('idle')) {
-      if (typeof agentClient.abort === 'function') {
-        agentClient.abort();
-      }
-      approvalState.abortPending();
+      approvalFlow.abort();
       appState.statusMachine.abort();
     }
     providerContinuity.clear();

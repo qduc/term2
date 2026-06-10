@@ -6,8 +6,10 @@ const makeHarness = () => {
   const statusMachine = new TurnStatusMachine();
 
   let initialRunnerResults: any[] = [];
+  const initialRunnerCalls: any[] = [];
   const initialTurnRunner = {
-    run: async function* (_input: any, _options: any) {
+    run: async function* (input: any, options: any) {
+      initialRunnerCalls.push({ input, options });
       const result = initialRunnerResults.shift();
       if (result?.events) {
         for (const ev of result.events) {
@@ -63,6 +65,7 @@ const makeHarness = () => {
     coordinator,
     statusMachine,
     initialTurnRunner,
+    initialRunnerCalls,
     continuationDriver,
     approvalFlow,
     getAbortCalled: () => abortCalled,
@@ -198,6 +201,70 @@ test('stale leaves status untouched because lifecycle operation resolved it', as
   for await (const _ of coordinator.start('run command')) {
   }
   t.is(statusMachine.current, 'streaming'); // remains streaming
+});
+
+test('stale initial outcome does not emit a terminal event', async (t) => {
+  const { coordinator, initialTurnRunner } = makeHarness();
+  initialTurnRunner.setNextResult({
+    kind: 'stale',
+    terminal: { type: 'response', finalText: 'stale response' },
+  });
+
+  const events: any[] = [];
+  for await (const event of coordinator.start('run command')) {
+    events.push(event);
+  }
+
+  t.deepEqual(events, []);
+});
+
+test('stale continuation leaves a newer turn status untouched', async (t) => {
+  const { coordinator, statusMachine, continuationDriver } = makeHarness();
+  statusMachine.beginTurn();
+  statusMachine.requestApproval();
+
+  continuationDriver.drive = async function* () {
+    statusMachine.abort();
+    statusMachine.beginTurn();
+    return { kind: 'stale' };
+  };
+
+  for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {
+  }
+
+  t.is(statusMachine.current, 'streaming');
+});
+
+test('fresh-start continuation forwards recovery instructions to the initial runner', async (t) => {
+  const { coordinator, statusMachine, continuationDriver, initialTurnRunner, initialRunnerCalls, approvalFlow } =
+    makeHarness();
+  statusMachine.beginTurn();
+  statusMachine.requestApproval();
+  approvalFlow.setPending({ token: 7 });
+  continuationDriver.setNextResult({
+    kind: 'fresh_start_required',
+    retryCounts: {
+      transientRetryCount: 1,
+      serviceTierFallbackCount: 1,
+      modelRetryCount: 0,
+      transportDowngradeCount: 0,
+    },
+    delayMs: 125,
+    useStandardServiceTier: true,
+  });
+  initialTurnRunner.setNextResult({
+    kind: 'response',
+    terminal: { type: 'response', finalText: 'recovered' },
+  });
+
+  for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {
+  }
+
+  t.like(initialRunnerCalls[0]?.options, {
+    token: 7,
+    delayMs: 125,
+    useStandardServiceTier: true,
+  });
 });
 
 test('Abort to idle with pending approval reconciliation', async (t) => {

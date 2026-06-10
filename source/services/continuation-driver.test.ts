@@ -64,6 +64,9 @@ const createMockAgentClient = () => {
     getStreamMaxRetries() {
       return 3;
     },
+    shouldRetryWithoutFlexServiceTier() {
+      return false;
+    },
     setContinueRunStreamResults(results: MockStream[]) {
       continueRunStreamResults = results;
     },
@@ -222,6 +225,14 @@ const createApplyPatchInterruption = (callId = 'call-patch-1') => ({
   agent: { name: 'CLI Agent' },
   arguments: JSON.stringify({ path: 'source/app.tsx' }),
   callId,
+});
+
+const makeTransientRetryAfterError = () => ({
+  status: 429,
+  headers: {
+    'retry-after': '1',
+  },
+  message: 'Rate limit exceeded',
 });
 
 // ── ManualApprovalDecisionPolicy ────────────────────────────────
@@ -518,8 +529,15 @@ test('drive yields error event when continuation stream throws unrecoverable err
 // ── Step 12 Alignment Tests ──────────────────────────────────────
 
 test('stale approval continuation returns stale outcome', async (t) => {
-  const { driver, approvalState } = createHarness();
+  const { driver, approvalState, toolTracker } = createHarness();
   const stateMock = createApprovalStateMock();
+  toolTracker.recordFunctionCall({
+    type: 'function_call',
+    callId: 'call-keep',
+    name: 'shell',
+    arguments: JSON.stringify({ command: 'ls' }),
+  });
+  const initialLedger = toolTracker.export();
   approvalState.setPending({
     state: stateMock as any,
     interruption: createShellInterruption('ls'),
@@ -532,6 +550,9 @@ test('stale approval continuation returns stale outcome', async (t) => {
     driver.drive({ kind: 'approval_decision', answer: 'y', generation: 0 }, new ManualApprovalDecisionPolicy()),
   );
   t.is(result.kind, 'stale');
+  t.is(stateMock.approveCalls.length, 0);
+  t.is(stateMock.rejectCalls.length, 0);
+  t.deepEqual(toolTracker.export(), initialLedger);
 });
 
 test('transient continuation retry with resumable stream resumes stream', async (t) => {
@@ -539,11 +560,21 @@ test('transient continuation retry with resumable stream resumes stream', async 
   const badStream = new MockStream();
   badStream.state = { some: 'sdk-state' };
   badStream[Symbol.asyncIterator] = async function* () {
-    throw new Error('Rate limit exceeded');
+    throw makeTransientRetryAfterError();
   };
 
   const goodStream = new MockStream();
   goodStream.finalOutput = 'Success after retry';
+
+  const originalSetTimeout = globalThis.setTimeout;
+  const observedDelays: number[] = [];
+  globalThis.setTimeout = ((handler: (...args: any[]) => void, timeout?: number, ...args: any[]) => {
+    observedDelays.push(Number(timeout));
+    return originalSetTimeout(() => handler(...args), 0);
+  }) as typeof setTimeout;
+  t.teardown(() => {
+    globalThis.setTimeout = originalSetTimeout;
+  });
 
   const { driver, approvalState } = createHarness({
     agentClient: client,
@@ -566,17 +597,18 @@ test('transient continuation retry with resumable stream resumes stream', async 
   if (result.kind === 'response') {
     t.is(result.result.finalText, 'Success after retry');
   }
+  t.deepEqual(observedDelays, [1000]);
   const retryEvents = events.filter((e) => e.type === 'retry');
   t.is(retryEvents.length, 1);
   t.is(retryEvents[0].toolName, 'continuation');
 });
 
-test('transient continuation retry without state returns fresh_start_required', async (t) => {
+test('transient continuation retry without state preserves delay for fresh-start recovery', async (t) => {
   const client = createMockAgentClient();
   const badStream = new MockStream();
   badStream.state = null;
   badStream[Symbol.asyncIterator] = async function* () {
-    throw new Error('Rate limit exceeded');
+    throw makeTransientRetryAfterError();
   };
 
   const { driver, approvalState } = createHarness({
@@ -597,8 +629,45 @@ test('transient continuation retry without state returns fresh_start_required', 
   );
 
   t.is(result.kind, 'fresh_start_required');
+  if (result.kind === 'fresh_start_required') {
+    t.is(result.delayMs, 1000);
+  }
   const retryEvents = events.filter((e) => e.type === 'retry');
   t.is(retryEvents.length, 1);
+});
+
+test('service tier fallback fresh-start recovery preserves one-shot standard service tier flag', async (t) => {
+  const client = createMockAgentClient();
+  client.shouldRetryWithoutFlexServiceTier = () => true;
+
+  const badStream = new MockStream();
+  badStream.state = null;
+  badStream[Symbol.asyncIterator] = async function* () {
+    throw new Error('Rate limit exceeded');
+  };
+
+  const { driver, approvalState } = createHarness({
+    agentClient: client,
+    continuationStreams: [badStream],
+  });
+
+  const stateMock = createApprovalStateMock();
+  approvalState.setPending({
+    state: stateMock as any,
+    interruption: createShellInterruption('ls'),
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+    token: 1,
+  });
+
+  const { result } = await collectResult(
+    driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
+  );
+
+  t.is(result.kind, 'fresh_start_required');
+  if (result.kind === 'fresh_start_required') {
+    t.true(result.useStandardServiceTier ?? false);
+  }
 });
 
 test('recovery of approved tool result before fresh start records result in ledger', async (t) => {

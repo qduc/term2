@@ -80,7 +80,7 @@ export class SessionManager {
     return {
       history: reconcileHistoryWithToolLedger(this.#conversationStore.getHistory(), this.#toolTracker.export())
         .history as AgentInputItem[],
-      previousResponseId: this.#state.previousResponseId,
+      previousResponseId: this.#state.exportPersistedState().previousResponseId,
       toolLedger: this.#toolTracker.export(),
       ...(model ? { model } : {}),
       ...(provider ? { provider } : {}),

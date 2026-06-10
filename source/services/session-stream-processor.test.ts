@@ -18,7 +18,15 @@ const makeStream = (events: unknown[], extras: Partial<AgentStream> = {}): Agent
     },
     completed: Promise.resolve(extras.completed ?? null),
     ...extras,
-  } as AgentStream;
+  } as unknown as AgentStream;
+};
+
+const createDeferred = <T>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
 };
 
 test('SessionStreamProcessor.process() streams events and updates toolTracker', async (t) => {
@@ -32,6 +40,8 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
   } as unknown as ConversationLogger;
 
   const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+  const token = generationGuard.capture();
 
   const processor = new SessionStreamProcessor({
     logger,
@@ -40,7 +50,7 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
     conversationStore,
     conversationLogger,
     providerContinuity,
-    generationGuard: new GenerationGuard(),
+    generationGuard,
   });
 
   const stream = makeStream([
@@ -70,7 +80,7 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
 
   const events: ConversationEvent[] = [];
   const generator = processor.process(stream, {
-    gen: 1,
+    gen: token,
     source: 'continueRunStream',
     preserveExistingToolArgs: false,
   });
@@ -106,6 +116,8 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
   } as unknown as ConversationLogger;
 
   const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+  const token = generationGuard.capture();
 
   const processor = new SessionStreamProcessor({
     logger,
@@ -114,7 +126,7 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
     conversationStore,
     conversationLogger,
     providerContinuity,
-    generationGuard: new GenerationGuard(),
+    generationGuard,
   });
 
   const stream = makeStream([
@@ -133,7 +145,7 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
 
   const events: ConversationEvent[] = [];
   const generator = processor.process(stream, {
-    gen: 1,
+    gen: token,
     source: 'startStream',
     preserveExistingToolArgs: false,
   });
@@ -143,6 +155,168 @@ test('SessionStreamProcessor.process() does not log tool results for startStream
   }
 
   t.is(loggedEvents.length, 0); // Should not log for startStream
+});
+
+test('SessionStreamProcessor.process() stops pulling stale stream work after generation invalidation', async (t) => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+
+  const loggedEvents: any[] = [];
+  const conversationLogger = {
+    hasSink: () => true,
+    log: (event: any) => loggedEvents.push(event),
+  } as unknown as ConversationLogger;
+
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    providerContinuity,
+    generationGuard,
+  });
+
+  const token = generationGuard.capture();
+  const stream = makeStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId: 'call-1',
+          name: 'shell',
+          arguments: JSON.stringify({ command: 'ls' }),
+        },
+      },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call_result',
+          callId: 'call-1',
+          name: 'shell',
+          output: 'file1.txt',
+        },
+      },
+    },
+  ]);
+
+  const generator = processor.process(stream, {
+    gen: token,
+    source: 'continueRunStream',
+    preserveExistingToolArgs: false,
+  });
+
+  const first = await generator.next();
+  t.false(first.done);
+  t.true('type' in first.value);
+  t.is((first.value as ConversationEvent).type, 'tool_started');
+
+  generationGuard.invalidate();
+
+  const second = await generator.next();
+  t.true(second.done);
+  t.is(toolTracker.export()[0]?.status, 'started');
+  t.is(loggedEvents.length, 0);
+});
+
+test('SessionStreamProcessor.process() ignores a stale tool result that arrives while next() is blocked', async (t) => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+
+  const loggedEvents: any[] = [];
+  const conversationLogger = {
+    hasSink: () => true,
+    log: (event: any) => loggedEvents.push(event),
+  } as unknown as ConversationLogger;
+
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    providerContinuity,
+    generationGuard,
+  });
+
+  const token = generationGuard.capture();
+  const releaseSecond = createDeferred<void>();
+  let secondPullStarted = false;
+
+  const stream = {
+    [Symbol.asyncIterator]: async function* () {
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call',
+            callId: 'call-1',
+            name: 'shell',
+            arguments: JSON.stringify({ command: 'ls' }),
+          },
+        },
+      };
+
+      secondPullStarted = true;
+      await releaseSecond.promise;
+      yield {
+        type: 'run_item_stream_event',
+        item: {
+          rawItem: {
+            type: 'function_call_result',
+            callId: 'call-1',
+            name: 'shell',
+            output: 'file1.txt',
+          },
+        },
+      };
+    },
+    completed: Promise.resolve(null),
+  } as unknown as AgentStream;
+
+  const generator = processor.process(stream, {
+    gen: token,
+    source: 'continueRunStream',
+    preserveExistingToolArgs: false,
+  });
+
+  const first = await generator.next();
+  t.false(first.done);
+  t.true('type' in first.value);
+  t.is((first.value as ConversationEvent).type, 'tool_started');
+
+  const secondPromise = generator.next();
+  await Promise.resolve();
+  t.true(secondPullStarted);
+
+  generationGuard.invalidate();
+  releaseSecond.resolve();
+
+  const second = await secondPromise;
+  t.true(second.done);
+  const ledger = toolTracker.export();
+  t.is(ledger.length, 1);
+  t.is(ledger[0]?.callId, 'call-1');
+  t.is(ledger[0]?.status, 'started');
+  t.is(ledger[0]?.output, undefined);
+  t.deepEqual(ledger[0]?.historyItems, [
+    {
+      type: 'function_call',
+      callId: 'call-1',
+      name: 'shell',
+      arguments: JSON.stringify({ command: 'ls' }),
+    },
+  ]);
+  t.is(loggedEvents.length, 0);
 });
 
 test('SessionStreamProcessor.finalize() updates providerContinuity previousResponseId', async (t) => {

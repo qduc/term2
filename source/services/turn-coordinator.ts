@@ -6,12 +6,6 @@ import { ContinuationDriver } from './continuation-driver.js';
 import { InitialTurnRunner, type InitialTurnOutcome } from './initial-turn-runner.js';
 import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 
-export type SessionStatus = 'idle' | 'streaming' | 'awaiting_approval' | 'continuing';
-
-export class TurnState {
-  statusMachine = new TurnStatusMachine();
-}
-
 export interface TurnCoordinatorDeps {
   statusMachine: TurnStatusMachine;
   initialTurnRunner: InitialTurnRunner;
@@ -61,15 +55,8 @@ export class TurnCoordinator {
         res = await it.next();
       }
       runnerOutcome = res.value;
-      if (
-        runnerOutcome &&
-        (runnerOutcome.kind === 'response' ||
-          runnerOutcome.kind === 'approval_required' ||
-          runnerOutcome.kind === 'stale')
-      ) {
-        if (runnerOutcome.terminal) {
-          yield toTerminalEvent(runnerOutcome.terminal);
-        }
+      if (runnerOutcome && (runnerOutcome.kind === 'response' || runnerOutcome.kind === 'approval_required')) {
+        yield toTerminalEvent(runnerOutcome.terminal);
       }
     } finally {
       if (runnerOutcome && runnerOutcome.kind === 'stale') {
@@ -95,6 +82,7 @@ export class TurnCoordinator {
     this.deps.statusMachine.beginContinuation();
     let runnerCalled = false;
     let runnerOutcome: InitialTurnOutcome | undefined;
+    let continuationStale = false;
     try {
       const pending = this.deps.approvalFlow.getPending();
       const gen = pending?.token ?? 0;
@@ -120,6 +108,8 @@ export class TurnCoordinator {
             skipUserMessage: true,
             token: gen,
             retries: driveResult.retryCounts,
+            delayMs: driveResult.delayMs,
+            useStandardServiceTier: driveResult.useStandardServiceTier,
           },
         );
         let res = await it.next();
@@ -128,18 +118,11 @@ export class TurnCoordinator {
           res = await it.next();
         }
         runnerOutcome = res.value;
-        if (
-          runnerOutcome &&
-          (runnerOutcome.kind === 'response' ||
-            runnerOutcome.kind === 'approval_required' ||
-            runnerOutcome.kind === 'stale')
-        ) {
-          if (runnerOutcome.terminal) {
-            yield toTerminalEvent(runnerOutcome.terminal);
-          }
+        if (runnerOutcome && (runnerOutcome.kind === 'response' || runnerOutcome.kind === 'approval_required')) {
+          yield toTerminalEvent(runnerOutcome.terminal);
         }
       } else if (driveResult.kind === 'stale') {
-        // stale - do nothing
+        continuationStale = true;
       } else {
         yield toTerminalEvent(driveResult.result);
       }
@@ -152,7 +135,7 @@ export class TurnCoordinator {
         } else {
           this.deps.statusMachine.complete();
         }
-      } else {
+      } else if (!continuationStale) {
         this.deps.statusMachine.complete();
       }
     }

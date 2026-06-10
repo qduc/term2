@@ -2496,17 +2496,7 @@ test('run() ignores a stale completion after importState() bumps generation', as
   releaseGate();
   await staleRun;
 
-  t.deepEqual(
-    staleEvents.map((event) =>
-      event.type === 'text_delta' || event.type === 'final'
-        ? { type: event.type, text: event.type === 'text_delta' ? event.delta : event.finalText }
-        : { type: event.type },
-    ),
-    [
-      { type: 'text_delta', text: 'stale reply' },
-      { type: 'final', text: 'stale reply' },
-    ],
-  );
+  t.deepEqual(staleEvents, []);
   t.deepEqual(stateFacade.exportState().history, []);
 
   for await (const _ of session.run('fresh request')) {

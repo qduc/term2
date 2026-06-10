@@ -590,6 +590,7 @@ export const useConversation = ({
       conversationService,
       waitingForApproval,
       pendingApproval,
+      askUserAnswers,
       appendMessages,
       trimMessages,
       loggingService,

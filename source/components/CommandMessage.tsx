@@ -135,7 +135,7 @@ const CommandMessage: FC<Props> = ({
   const changeStatsElement = changeStats ? (
     <>
       {' '}
-      (<Text color={COLOR_SUCCESS}>+{changeStats.added}</Text>, <Text color={COLOR_ERROR}>-{changeStats.removed}</Text>)
+      (<Text color="green">+{changeStats.added}</Text> <Text color={COLOR_ERROR}>-{changeStats.removed}</Text>)
     </>
   ) : null;
 

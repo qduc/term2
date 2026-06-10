@@ -25,19 +25,30 @@ const questionItemSchema = z
       .max(8)
       .optional()
       .describe(
-        'Optional list of predefined choices. If provided, must have at least 2 options. The first option should be the recommended/default choice.',
+        'Predefined choices for the user to pick from. Omit for an open-ended free-text question. ' +
+          'When provided, must have between 2 and 8 options. The first option should be the recommended/default choice.',
       ),
     is_multi_select: z
       .boolean()
       .optional()
-      .describe('If true, the user can select multiple options instead of just one.'),
+      .describe(
+        'If true, the user can select multiple options instead of just one. ' +
+          'Only valid when `options` is also provided with at least 2 choices.',
+      ),
   })
   .refine((data) => !data.is_multi_select || (data.options !== undefined && data.options.length >= 2), {
     message: 'is_multi_select requires at least 2 options',
   });
 
 const askUserSchema = z.object({
-  questions: z.array(questionItemSchema).min(1).max(5).describe('A list of clarifying questions to ask the user.'),
+  questions: z
+    .array(questionItemSchema)
+    .min(1)
+    .max(5)
+    .describe(
+      'A list of clarifying questions to ask the user. Always wrap questions in this array, even for a single question. ' +
+        'Each item is either an open-ended question (no options) or a choice question (with options).',
+    ),
 });
 
 export type AskUserParams = z.infer<typeof askUserSchema>;
@@ -48,7 +59,8 @@ export const createAskUserToolDefinition = (
   name: TOOL_NAME_ASK_USER,
   description:
     'Ask the user clarifying questions when missing user decisions block correct progress. ' +
-    'Returns the answers selected/entered by the user.',
+    'Returns the answers selected/entered by the user. ' +
+    'Example: { questions: [{ question: "Which approach?", options: ["Option A", "Option B"] }, { question: "Any other notes?" }] }',
   parameters: askUserSchema,
   needsApproval: () => true,
   execute: async (_params, _context, details) => {

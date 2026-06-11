@@ -1,7 +1,6 @@
 export type PromptProfile = {
   id: string;
   basePromptFile: string;
-  fragmentFiles?: string[];
   matches: (options: { normalizedModel: string; liteMode: boolean; orchestratorMode?: boolean }) => boolean;
 };
 
@@ -24,7 +23,6 @@ export const PROMPT_PROFILES: PromptProfile[] = [
   {
     id: 'gpt-5.3-codex',
     basePromptFile: 'codex.md',
-    // fragmentFiles: ['fragments/gpt-5.3-codex.md'],
     matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5.3') && normalizedModel.includes('codex'),
   },
   {
@@ -35,20 +33,17 @@ export const PROMPT_PROFILES: PromptProfile[] = [
   {
     id: 'gpt-5.5',
     basePromptFile: 'gpt-5.5.md',
-    // fragmentFiles: ['fragments/gpt-5.5.md'],
     matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5.5'),
   },
   {
     id: 'gpt-5.4-small',
-    basePromptFile: 'gpt-5-modern.md',
-    fragmentFiles: ['fragments/gpt-5.4-small.md'],
+    basePromptFile: 'gpt-5.4-mini.md',
     matches: ({ normalizedModel }) =>
       normalizedModel.includes('gpt-5.4') && (normalizedModel.includes('mini') || normalizedModel.includes('nano')),
   },
   {
     id: 'gpt-5.4',
     basePromptFile: 'gpt-5-modern.md',
-    // fragmentFiles: ['fragments/gpt-5.4.md'],
     matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5.4'),
   },
   {

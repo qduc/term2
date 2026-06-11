@@ -1,6 +1,43 @@
 import test from 'ava';
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import { OpenAIResponsesModelWithPromptCacheKey, TimedOpenAIResponsesWSModel } from './openai.provider.js';
+import { getProvider } from './registry.js';
+
+const loggingService = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+  security() {},
+  setCorrelationId() {},
+  getCorrelationId() {
+    return null;
+  },
+} as any;
+
+test('OpenAI provider defaults to websocket and honors explicit HTTP transport', async (t) => {
+  const provider = getProvider('openai');
+  t.truthy(provider?.createRunner);
+
+  for (const [transport, expectedClass] of [
+    [undefined, TimedOpenAIResponsesWSModel],
+    ['http', OpenAIResponsesModelWithPromptCacheKey],
+  ] as const) {
+    const runner = provider!.createRunner!({
+      settingsService: {
+        get(key: string) {
+          if (key === 'agent.model') return 'gpt-4o';
+          if (key === 'agent.transport') return transport;
+          if (key === 'agent.retryAttempts') return 0;
+          return undefined;
+        },
+      } as any,
+      loggingService,
+    });
+    const model = await runner!.config.modelProvider!.getModel('gpt-4o');
+    t.true((model as any).wrappedModel instanceof expectedClass);
+  }
+});
 
 test.serial('OpenAIResponsesModelWithPromptCacheKey forwards prompt_cache_key from modelSettings', (t) => {
   const original = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest;

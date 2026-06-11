@@ -11,6 +11,7 @@ export const AgentSettingsSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   maxTurns: z.number().int().positive().default(100),
   retryAttempts: z.number().int().nonnegative().default(2),
+  transport: z.enum(['websocket', 'http']).default('websocket'),
   maxParallelToolCalls: z
     .number()
     .int()
@@ -305,6 +306,7 @@ export interface SettingsWithSources {
     temperature: SettingWithSource<number | undefined>;
     maxTurns: SettingWithSource<number>;
     retryAttempts: SettingWithSource<number>;
+    transport: SettingWithSource<'websocket' | 'http'>;
     maxParallelToolCalls: SettingWithSource<number>;
     provider: SettingWithSource<string>;
     openrouter: SettingWithSource<any>;
@@ -391,6 +393,7 @@ export const SETTING_KEYS = {
   AGENT_PROVIDER: 'agent.provider',
   AGENT_MAX_TURNS: 'agent.maxTurns',
   AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
+  AGENT_TRANSPORT: 'agent.transport',
   AGENT_MAX_PARALLEL_TOOL_CALLS: 'agent.maxParallelToolCalls',
   AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
   AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
@@ -459,6 +462,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_TEMPERATURE,
   SETTING_KEYS.AGENT_PROVIDER,
   SETTING_KEYS.AGENT_RETRY_ATTEMPTS,
+  SETTING_KEYS.AGENT_TRANSPORT,
   SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS,
   SETTING_KEYS.AGENT_MENTOR_MODEL,
   SETTING_KEYS.AGENT_MENTOR_PROVIDER,
@@ -543,6 +547,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     reasoningEffort: 'default',
     maxTurns: 100,
     retryAttempts: 2,
+    transport: 'websocket',
     maxParallelToolCalls: 3,
     provider: 'openai',
     openrouter: {

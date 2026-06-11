@@ -2,7 +2,6 @@ import test from 'ava';
 import { ModelBehaviorError } from '@openai/agents';
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
 import { OpenRouterError, OpenAICompatibleError } from '../providers/common/provider-errors.js';
-import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import {
   decideRecoverableModelRetry,
   decideRetry,
@@ -205,19 +204,6 @@ test('isTransientRetryableError: terminated errors are retryable', (t) => {
   t.true(isTransientRetryableError('terminated: other side closed'));
   t.true(isTransientRetryableError(new Error('terminated')));
   t.true(isTransientRetryableError(new Error('terminated: other side closed')));
-});
-
-test('isTransientRetryableError: ChainingTransportDowngradeError is retryable', (t) => {
-  t.true(
-    isTransientRetryableError(new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP')),
-  );
-  t.true(
-    isTransientRetryableError(
-      new ChainingTransportDowngradeError('Codex WS connection failed; cannot chain via HTTP', {
-        cause: new Error('WebSocket connection closed before opening'),
-      }),
-    ),
-  );
 });
 
 test('isTransientRetryableError: non-retryable errors return false', (t) => {

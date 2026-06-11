@@ -41,15 +41,11 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   addToolInterceptor(interceptor: ToolInterceptor): () => void;
 
   clearConversations?(): void;
-  forceTransportDowngrade?(error: unknown): boolean;
   getProvider?(): string;
-  getStreamMaxRetries?(): number | undefined;
-  onDowngrade?(callback: () => void): (() => void) | void;
+  supportsConversationChaining?(): boolean;
   setProvider?(provider: string): void;
   setReasoningEffort?(effort?: ReasoningEffortSetting): void;
   setRetryCallback?(callback: () => void): void;
   setSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
   setTemperature?(temperature?: number): void;
-  shouldRetryWithoutFlexServiceTier?(error: unknown): boolean;
-  useStandardServiceTierForNextRequest?(): void;
 }

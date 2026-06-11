@@ -16,6 +16,7 @@ const baseSettings = {
     provider: { value: 'openai', source: 'default' },
     maxTurns: { value: 20, source: 'default' },
     retryAttempts: { value: 2, source: 'default' },
+    transport: { value: 'websocket', source: 'default' },
     maxParallelToolCalls: { value: 3, source: 'default' },
   },
   shell: {

@@ -657,7 +657,7 @@ export class SubagentManager {
       agent,
       provider: providerId,
       maxTurns: definition.maxTurns,
-      retryAttempts: 2,
+      retryAttempts: this.#settings.get<number>('agent.retryAttempts') ?? 2,
     });
 
     const session = createConversationSession({

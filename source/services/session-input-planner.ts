@@ -116,7 +116,10 @@ export class SessionInputPlanner {
    */
   build(turn: UserTurn, options: { includeTurn: boolean; pendingModeNotice: string | null }): SessionInputPlan {
     const provider = this.#getProviderForGuard() ?? 'openai';
-    const supportsChaining = supportsConversationChaining(provider);
+    const dynamicSupportsChaining = getMethod<[], boolean>(this.#agentClient, 'supportsConversationChaining');
+    const supportsChaining = dynamicSupportsChaining
+      ? dynamicSupportsChaining.call(this.#agentClient)
+      : supportsConversationChaining(provider);
     const history = this.#toolTracker.getReconciledHistory();
     const effectiveTurn = options.includeTurn ? this.#turnWithModeNotice(turn, options.pendingModeNotice) : turn;
     const outgoingHistory = options.includeTurn ? [...history, this.#makeUserInputItem(effectiveTurn)] : history;

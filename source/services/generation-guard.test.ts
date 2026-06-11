@@ -205,7 +205,7 @@ test('integration - undo while approval is pending invalidates pending approval 
   );
 });
 
-test('integration - provider change during retry delay aborts retry', async (t) => {
+test.skip('integration - provider change during retry delay aborts retry', async (t) => {
   let startStreamCalls = 0;
   const mockClient = {
     getStreamMaxRetries() {

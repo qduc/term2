@@ -169,10 +169,6 @@ export const isTransientRetryableError = (error: unknown, logger?: Pick<ILogging
   }
 
   if (error && typeof error === 'object') {
-    if ((error as any).name === 'ChainingTransportDowngradeError') {
-      return true;
-    }
-
     const statusRaw = (error as any).status ?? (error as any).statusCode;
     const status = typeof statusRaw === 'number' ? statusRaw : parseInt(statusRaw, 10);
     if (Number.isInteger(status) && (status === 429 || status >= 500)) {

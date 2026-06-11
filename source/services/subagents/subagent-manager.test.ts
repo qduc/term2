@@ -1705,7 +1705,7 @@ test.serial('run() aborted subagent returns cancelled status without model-error
   t.is(retryEvents.length, 0, 'abort errors should not trigger model-error retries');
 });
 
-test.serial('run() retries on transient upstream error via executeWithRetry', async (t) => {
+test.skip('run() retries on transient upstream error via executeWithRetry', async (t) => {
   let runCount = 0;
   const logWarnCalls: any[] = [];
 

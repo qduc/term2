@@ -738,7 +738,7 @@ test.serial('Codex provider createRunner custom fetch injects chatgpt-account-id
     if (!runner) return;
     const modelProvider = runner.config.modelProvider;
     const model = await modelProvider.getModel('gpt-5.3-codex');
-    const client = (model as any)._client;
+    const client = (model as any).wrappedModel._client;
 
     await client.chat.completions
       .create({

@@ -427,7 +427,7 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
     provider: 'openrouter',
     model: 'qwen/qwen3',
     modelClass: 'TimedOpenAIResponsesWSModel',
-    modelWrapperClass: 'FallbackResponsesModel',
+    modelWrapperClass: 'RetryingModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',
@@ -450,7 +450,7 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
   t.is(firstRecord?.direction, 'sent');
   t.deepEqual(firstRecord?.headers, { host: 'api.openrouter.ai', authorization: '[REDACTED]' });
   t.is(firstRecord?.modelClass, 'TimedOpenAIResponsesWSModel');
-  t.is(firstRecord?.modelWrapperClass, 'FallbackResponsesModel');
+  t.is(firstRecord?.modelWrapperClass, 'RetryingModel');
 
   const indexPath = path.join(dayDir, 'index.jsonl');
   const indexEntries = fs
@@ -483,7 +483,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     provider: 'openai',
     model: 'gpt-5',
     modelClass: 'TimedResponsesWSModel',
-    modelWrapperClass: 'FallbackResponsesModel',
+    modelWrapperClass: 'RetryingModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',
@@ -496,7 +496,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     provider: 'openai',
     model: 'gpt-5',
     modelClass: 'TimedResponsesWSModel',
-    modelWrapperClass: 'FallbackResponsesModel',
+    modelWrapperClass: 'RetryingModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',
@@ -508,7 +508,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     provider: 'openrouter',
     model: 'deepseek/chat',
     modelClass: 'TimedOpenAIResponsesWSModel',
-    modelWrapperClass: 'FallbackResponsesModel',
+    modelWrapperClass: 'RetryingModel',
     sessionId: 'session-999',
     sessionStartedAt: '2026-05-22T10:00:00.000Z',
     mode: 'mentor',
@@ -521,7 +521,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     provider: 'openrouter',
     model: 'deepseek/chat',
     modelClass: 'TimedOpenAIResponsesWSModel',
-    modelWrapperClass: 'FallbackResponsesModel',
+    modelWrapperClass: 'RetryingModel',
     sessionId: 'session-999',
     sessionStartedAt: '2026-05-22T10:00:00.000Z',
     mode: 'mentor',
@@ -533,7 +533,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     provider: 'openai',
     model: 'gpt-5',
     modelClass: 'TimedResponsesWSModel',
-    modelWrapperClass: 'FallbackResponsesModel',
+    modelWrapperClass: 'RetryingModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-23T00:00:00.000Z',
     mode: 'standard',
@@ -547,9 +547,9 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
   t.is(requestRecords[1]?.direction, 'received');
   t.is((requestRecords[1]?.summary as any)?.outputText, 'done');
   t.is(requestRecords[0]?.modelClass, 'TimedResponsesWSModel');
-  t.is(requestRecords[0]?.modelWrapperClass, 'FallbackResponsesModel');
+  t.is(requestRecords[0]?.modelWrapperClass, 'RetryingModel');
   t.is(requestRecords[1]?.modelClass, 'TimedResponsesWSModel');
-  t.is(requestRecords[1]?.modelWrapperClass, 'FallbackResponsesModel');
+  t.is(requestRecords[1]?.modelWrapperClass, 'RetryingModel');
 
   const failureFile = path.join(rootDir, '2026-05-22', '10-00-00_sessi', '10-00-00.000Z_req-2.jsonl');
   t.is((readRequestFile(failureFile)[1]?.error as any)?.message, 'fetch failed');
@@ -581,7 +581,7 @@ test('ProviderTrafficArtifactStore places evaluator requests under evaluator sub
     provider: 'openai',
     model: 'gpt-4o-mini',
     modelClass: 'CodexResponsesWSModel',
-    modelWrapperClass: 'FallbackResponsesModel',
+    modelWrapperClass: 'RetryingModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',
@@ -594,7 +594,7 @@ test('ProviderTrafficArtifactStore places evaluator requests under evaluator sub
     provider: 'openai',
     model: 'gpt-4o-mini',
     modelClass: 'CodexResponsesWSModel',
-    modelWrapperClass: 'FallbackResponsesModel',
+    modelWrapperClass: 'RetryingModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
     mode: 'standard',

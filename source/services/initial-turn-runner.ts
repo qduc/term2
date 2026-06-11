@@ -23,12 +23,10 @@ import { TurnAttempt } from './turn-attempt.js';
 import type { RecoveryState, NextRunInstruction, RetryCounts } from './retry-contracts.js';
 import type { AgentStream } from './agent-stream.js';
 import { getMethod } from './interruption-info.js';
-import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import { buildConversationResult } from './conversation-result-builder.js';
 import { describeError } from '../utils/error-helpers.js';
 import { ShellAutoApprovalDecisionPolicy } from './continuation-driver.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
-import { getMaxTransientRetries } from './conversation-retry-policy.js';
 
 export type InitialTurnOutcome =
   | { kind: 'response'; terminal: ConversationTerminal }
@@ -95,11 +93,7 @@ export class InitialTurnRunner {
         }
       }
 
-      const maxTransientRetries = getMaxTransientRetries({
-        streamMaxRetries: getMethod<[], number | undefined>(this.deps.agentClient, 'getStreamMaxRetries')?.call(
-          this.deps.agentClient,
-        ),
-      });
+      const maxTransientRetries = 0;
 
       let token: number;
       if (options.abortedContext) {
@@ -262,45 +256,17 @@ export class InitialTurnRunner {
         let stream: AgentStream | null = null;
         let acc;
         try {
-          try {
-            if (currentResumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
-              stream = (await this.deps.agentClient.continueRunStream(currentResumeState, {
-                previousResponseId: currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
-                sessionId: this.deps.sessionId,
-              })) as AgentStream;
-            } else {
-              stream = (await this.deps.agentClient.startStream(attempt.streamInput!, {
-                previousResponseId:
-                  attempt.inputMode === 'delta' ? this.deps.providerContinuity.previousResponseId : null,
-                sessionId: this.deps.sessionId,
-              })) as AgentStream;
-            }
-          } catch (chainingError) {
-            if (chainingError instanceof ChainingTransportDowngradeError && this.deps.freshStartRetriesAllowed) {
-              this.deps.breakChaining();
-
-              this.deps.logger.warn('ChainingTransportDowngradeError caught, retrying with full history', {
-                eventType: 'retry.chaining_downgrade',
-                category: 'retry',
-                phase: 'retry',
-                retryType: 'chaining_downgrade',
-                sessionId: this.deps.sessionId,
-                traceId: this.deps.logger.getCorrelationId(),
-                errorMessage: chainingError instanceof Error ? chainingError.message : String(chainingError),
-              });
-
-              const fullHistoryRetryPlan = this.deps.inputPlanner.build(attempt.turn, {
-                includeTurn: false,
-                pendingModeNotice: this.deps.state.pendingModeNotice,
-              });
-              attempt.attachInput(fullHistoryRetryPlan);
-              stream = (await this.deps.agentClient.startStream(attempt.streamInput!, {
-                previousResponseId: null,
-                sessionId: this.deps.sessionId,
-              })) as AgentStream;
-            } else {
-              throw chainingError;
-            }
+          if (currentResumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
+            stream = (await this.deps.agentClient.continueRunStream(currentResumeState, {
+              previousResponseId: currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
+              sessionId: this.deps.sessionId,
+            })) as AgentStream;
+          } else {
+            stream = (await this.deps.agentClient.startStream(attempt.streamInput!, {
+              previousResponseId:
+                attempt.inputMode === 'delta' ? this.deps.providerContinuity.previousResponseId : null,
+              sessionId: this.deps.sessionId,
+            })) as AgentStream;
           }
 
           attempt.attachStream(stream);

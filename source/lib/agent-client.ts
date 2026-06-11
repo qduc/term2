@@ -10,14 +10,11 @@ import {
 } from '@openai/agents';
 import { buildAgent, type AgentFactoryDeps } from './agent-factory.js';
 import { getProvider } from '../providers/index.js';
-import { type FallbackState } from '../providers/fallback-responses-model.js';
-import type { ModelProvider } from '@openai/agents-core/model';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { createEditorImpl } from './editor-impl.js';
-import { isFlexServiceTierTimeout } from '../utils/flex-service-tier.js';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
 import type { ConversationEvent } from '../services/conversation-events.js';
 import { fetchModels, getModelDefaultReasoningLevel } from '../services/model-service.js';
@@ -28,14 +25,6 @@ type ChainedRunOptions = {
   sessionId?: string;
   toolResultCallIds?: readonly string[];
 };
-
-/**
- * Narrowed provider interface so we can access {@link FallbackState}
- * without casting through `any`.
- */
-interface ModelProviderWithFallback extends ModelProvider {
-  fallbackState?: FallbackState;
-}
 
 /**
  * Minimal adapter that isolates usage of @openai/agents.
@@ -69,58 +58,6 @@ export class AgentClient {
   #pendingClearSink = false;
   #askUserAnswers = new Map<string, string>();
   #lastChainedDeltaInputItems: number | null = null;
-
-  #onDowngradeCallback?: () => void;
-
-  /**
-   * Registers a callback that will be triggered when the provider transport downgrades to HTTP.
-   * If the current runner is already downgraded, the callback is invoked immediately.
-   */
-  onDowngrade(callback: () => void): void {
-    this.#onDowngradeCallback = callback;
-    if (this.#runner) {
-      this.#applyDowngradeCallbackToRunner(this.#runner);
-    }
-  }
-
-  #applyDowngradeCallbackToRunner(runner: Runner | null): void {
-    if (!runner) return;
-    const provider = runner.config?.modelProvider as ModelProviderWithFallback;
-    const fallbackState = provider?.fallbackState;
-    if (fallbackState) {
-      if (fallbackState.isDowngraded) {
-        this.#onDowngradeCallback?.();
-      } else {
-        fallbackState.onDowngrade = () => {
-          this.#onDowngradeCallback?.();
-        };
-      }
-    }
-  }
-
-  /**
-   * Returns the FallbackState from the current provider's model, if available.
-   * This allows the session to react when the WS transport degrades to HTTP.
-   */
-  getFallbackState(): FallbackState | null {
-    const runner = this.#runner;
-    if (!runner) return null;
-    const provider = runner.config?.modelProvider as ModelProviderWithFallback;
-    return provider?.fallbackState ?? null;
-  }
-
-  /**
-   * Force the current fallback-capable provider onto HTTP transport.
-   * Returns false when the active provider has no fallback transport or is already downgraded.
-   */
-  forceTransportDowngrade(error: unknown): boolean {
-    const fallbackState = this.getFallbackState();
-    if (!fallbackState || fallbackState.isDowngraded || typeof fallbackState.forceDowngrade !== 'function') {
-      return false;
-    }
-    fallbackState.forceDowngrade(error);
-    return fallbackState.isDowngraded;
-  }
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -243,6 +180,8 @@ export class AgentClient {
           'app.searchViaShell',
           'agent.model',
           'agent.provider',
+          'agent.transport',
+          'agent.retryAttempts',
           'agent.reasoningEffort',
           'agent.temperature',
           'agent.useFlexServiceTier',
@@ -263,6 +202,9 @@ export class AgentClient {
           'shell.useRtkCompression',
         ];
         if (rebuildKeys.includes(changedKey)) {
+          if (changedKey === 'agent.transport' || changedKey === 'agent.retryAttempts') {
+            this.#runner = null;
+          }
           this.#refreshAgent();
         }
       });
@@ -318,8 +260,15 @@ export class AgentClient {
     return this.#provider;
   }
 
-  getStreamMaxRetries(): number | undefined {
-    return this.#settings.get<number | undefined>('agent.streamMaxRetries' as any);
+  supportsConversationChaining(): boolean {
+    const providerSupportsChaining = getProvider(this.#provider)?.capabilities?.supportsConversationChaining ?? false;
+    if (
+      (this.#provider === 'openai' || this.#provider === 'codex') &&
+      this.#settings.get('agent.transport') === 'http'
+    ) {
+      return false;
+    }
+    return providerSupportsChaining;
   }
 
   setAskUserAnswer(callId: string, answer: string): void {
@@ -404,9 +353,7 @@ export class AgentClient {
 
   #getOrCreateRunner(providerId: string): Runner | null {
     if (providerId !== this.#provider) {
-      const runner = this.#createRunner(providerId);
-      this.#applyDowngradeCallbackToRunner(runner);
-      return runner;
+      return this.#createRunner(providerId);
     }
 
     if (this.#runner) {
@@ -414,22 +361,11 @@ export class AgentClient {
     }
 
     this.#runner = this.#createRunner(providerId);
-    this.#applyDowngradeCallbackToRunner(this.#runner);
     return this.#runner;
   }
 
   setRetryCallback(callback: () => void): void {
     this.#retryCallback = callback;
-  }
-
-  shouldRetryWithoutFlexServiceTier(error: unknown): boolean {
-    const useFlexServiceTier = this.#settings.get<boolean>('agent.useFlexServiceTier');
-    return (
-      useFlexServiceTier &&
-      this.#serviceTierOverrideForNextRequest !== 'standard' &&
-      (this.#provider === 'openai' || this.#provider === 'openrouter') &&
-      isFlexServiceTierTimeout(error)
-    );
   }
 
   useStandardServiceTierForNextRequest(): void {
@@ -562,8 +498,7 @@ export class AgentClient {
         turnCount: 0,
         maxTurns: this.#maxTurns,
       };
-      const supportsConversationChaining =
-        getProvider(this.#provider)?.capabilities?.supportsConversationChaining ?? false;
+      const supportsConversationChaining = this.supportsConversationChaining();
       const options: any = {
         stream: true,
         maxTurns: this.#maxTurns,
@@ -574,10 +509,7 @@ export class AgentClient {
           if (args.context) {
             args.context.turnCount = (args.context.turnCount ?? 0) + 1;
           }
-          // When WS has degraded to HTTP, server-managed chaining is unavailable;
-          // return unfiltered input so the full history reaches the model.
-          const currentFallback = this.getFallbackState();
-          const chainingActive = supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded;
+          const chainingActive = supportsConversationChaining && previousResponseId;
           return chainingActive
             ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
             : args.modelData;
@@ -585,9 +517,7 @@ export class AgentClient {
       };
       const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
-      // Only set previousResponseId when chaining is still active (not degraded).
-      const currentFallback = this.getFallbackState();
-      if (supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded) {
+      if (supportsConversationChaining && previousResponseId) {
         options.previousResponseId = previousResponseId;
       }
 
@@ -636,8 +566,7 @@ export class AgentClient {
       userContext.turnCount = 0;
     }
 
-    const supportsConversationChaining =
-      getProvider(this.#provider)?.capabilities?.supportsConversationChaining ?? false;
+    const supportsConversationChaining = this.supportsConversationChaining();
     const options: any = {
       signal,
       context: userContext,
@@ -646,8 +575,7 @@ export class AgentClient {
         if (args.context) {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
         }
-        const currentFallback = this.getFallbackState();
-        const chainingActive = supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded;
+        const chainingActive = supportsConversationChaining && previousResponseId;
         return chainingActive
           ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
           : args.modelData;
@@ -655,8 +583,7 @@ export class AgentClient {
     };
     const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
-    const currentFallback = this.getFallbackState();
-    if (supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded) {
+    if (supportsConversationChaining && previousResponseId) {
       options.previousResponseId = previousResponseId;
     }
 
@@ -688,8 +615,7 @@ export class AgentClient {
       userContext.turnCount = 0;
     }
 
-    const supportsConversationChaining =
-      getProvider(this.#provider)?.capabilities?.supportsConversationChaining ?? false;
+    const supportsConversationChaining = this.supportsConversationChaining();
     const options: any = {
       stream: true,
       maxTurns: this.#maxTurns,
@@ -700,8 +626,7 @@ export class AgentClient {
         if (args.context) {
           args.context.turnCount = (args.context.turnCount ?? 0) + 1;
         }
-        const currentFallback = this.getFallbackState();
-        const chainingActive = supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded;
+        const chainingActive = supportsConversationChaining && previousResponseId;
         return chainingActive
           ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
           : args.modelData;
@@ -709,8 +634,7 @@ export class AgentClient {
     };
     const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
 
-    const currentFallback = this.getFallbackState();
-    if (supportsConversationChaining && previousResponseId && !currentFallback?.isDowngraded) {
+    if (supportsConversationChaining && previousResponseId) {
       options.previousResponseId = previousResponseId;
     }
 

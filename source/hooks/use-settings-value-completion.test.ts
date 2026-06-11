@@ -170,3 +170,10 @@ test('buildSettingValueSuggestions returns enum suggestions for ui.displayMode',
   const values = result.map((r) => r.value);
   t.deepEqual(values, ['standard', 'concise']);
 });
+
+test('buildSettingValueSuggestions returns transport suggestions', (t) => {
+  t.deepEqual(
+    buildSettingValueSuggestions('agent.transport').map((suggestion) => suggestion.value),
+    ['websocket', 'http'],
+  );
+});

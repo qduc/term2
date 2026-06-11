@@ -1,12 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import { Runner, Model, ModelProvider } from '@openai/agents';
 import { OpenAIResponsesModel } from '@openai/agents-openai';
 import OpenAI from 'openai';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
-import { FallbackResponsesModel, type FallbackState } from './fallback-responses-model.js';
+import { RetryingModel } from './retrying-model.js';
 import { TimedResponsesWSModel } from './timed-responses-ws-model.js';
 import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
+import type { ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
 
 function forwardPromptCacheKey(request: any, requestData: Record<string, unknown>): Record<string, unknown> {
@@ -75,18 +77,76 @@ async function fetchOpenAIModels(
     .reverse() as Array<{ id: string; name?: string }>;
 }
 
-class FallbackOpenAIProvider implements ModelProvider {
-  readonly fallbackState: FallbackState = { isDowngraded: false };
-  private readonly models = new Map<string, FallbackResponsesModel>();
+export function writeProviderTrafficArtifact(
+  loggingService: Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId'> | undefined,
+  sessionContextService: ISessionContextService | undefined,
+  provider: string,
+  model: string,
+  modelClass: string,
+  modelWrapperClass: string,
+  event: 'request.started' | 'response.received' | 'response.failed',
+  meta?: Record<string, unknown>,
+): void {
+  if (!loggingService) return;
+
+  const trafficContext = sessionContextService?.getContext() ?? null;
+  const isEvaluator = trafficContext?.evaluator === true;
+  const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+
+  const baseMeta: Record<string, unknown> = {
+    requestId: meta?.requestId ?? randomUUID(),
+    traceId: trafficContext?.traceId ?? loggingService.getCorrelationId?.(),
+    sessionId: trafficContext?.sessionId,
+    sessionStartedAt: trafficContext?.sessionStartedAt,
+    firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+    mode: trafficContext?.mode,
+    provider,
+    model,
+    modelClass,
+    modelWrapperClass,
+  };
+
+  const eventType = event === 'response.failed' ? 'provider.response.failed' : `${eventPrefix}.${event}`;
+
+  if (event === 'request.started') {
+    loggingService.debug(`${provider} ws request start`, {
+      eventType,
+      category: 'provider',
+      phase: 'request_start',
+      direction: 'sent',
+      ...baseMeta,
+      ...meta,
+    });
+  } else if (event === 'response.received') {
+    loggingService.debug(`${provider} ws response received`, {
+      eventType,
+      category: 'provider',
+      phase: 'provider_response',
+      direction: 'received',
+      ...baseMeta,
+      ...meta,
+    });
+  } else if (event === 'response.failed') {
+    loggingService.error(`${provider} ws request failed`, {
+      eventType,
+      category: 'provider',
+      phase: 'provider_response',
+      ...baseMeta,
+      ...meta,
+    });
+  }
+}
+
+class OpenAIProvider implements ModelProvider {
+  private readonly models = new Map<string, RetryingModel>();
 
   constructor(
     private readonly openAIClient: OpenAI,
     private readonly loggingService: any,
-    private readonly sessionContextService?: any,
-    onRetry?: () => void,
-  ) {
-    this.fallbackState.onRetry = onRetry;
-  }
+    private readonly transport: 'websocket' | 'http',
+    private readonly retryAttempts: number,
+    private readonly onRetry?: () => void,
+  ) {}
 
   getModel(modelName?: string): Model {
     const model = modelName || 'gpt-4o';
@@ -95,30 +155,20 @@ class FallbackOpenAIProvider implements ModelProvider {
       return cached;
     }
 
-    const wsModel = new TimedOpenAIResponsesWSModel(this.openAIClient as any, model, {
-      ...DEFAULT_TIMED_WS_TIMEOUTS,
+    const selectedModel =
+      this.transport === 'http'
+        ? new OpenAIResponsesModelWithPromptCacheKey(this.openAIClient as any, model)
+        : new TimedOpenAIResponsesWSModel(this.openAIClient as any, model, {
+            ...DEFAULT_TIMED_WS_TIMEOUTS,
+          });
+    const retryingModel = new RetryingModel(selectedModel, {
+      retryAttempts: this.retryAttempts,
+      loggingService: this.loggingService,
+      onRetry: this.onRetry,
     });
-    const httpModel = new OpenAIResponsesModelWithPromptCacheKey(this.openAIClient as any, model);
 
-    const fallbackModel = new FallbackResponsesModel(
-      wsModel,
-      httpModel,
-      this.fallbackState,
-      (err) => {
-        this.loggingService.warn(
-          `OpenAI WebSocket connection failed for model ${model}, falling back to HTTP responses API`,
-          {
-            error: err instanceof Error ? err.message : String(err),
-          },
-        );
-      },
-      this.loggingService,
-      'openai',
-      this.sessionContextService,
-    );
-
-    this.models.set(model, fallbackModel);
-    return fallbackModel;
+    this.models.set(model, retryingModel);
+    return retryingModel;
   }
 
   async close(): Promise<void> {
@@ -147,7 +197,13 @@ registerProvider({
     });
 
     return new Runner({
-      modelProvider: new FallbackOpenAIProvider(openAIClient, loggingService, sessionContextService, onRetry),
+      modelProvider: new OpenAIProvider(
+        openAIClient,
+        loggingService,
+        settingsService.get('agent.transport') ?? 'websocket',
+        settingsService.get('agent.retryAttempts') ?? 2,
+        onRetry,
+      ),
     });
   },
   fetchModels: fetchOpenAIModels,

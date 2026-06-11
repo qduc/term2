@@ -70,6 +70,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.agent.retryAttempts.source,
     },
     {
+      key: SETTING_KEYS.AGENT_TRANSPORT,
+      value: settings.agent.transport.value,
+      source: settings.agent.transport.source,
+    },
+    {
       key: SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS,
       value: settings.agent.maxParallelToolCalls.value,
       source: settings.agent.maxParallelToolCalls.source,

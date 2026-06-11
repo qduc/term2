@@ -1,7 +1,9 @@
 import test from 'ava';
 
 import {
+  AgentSettingsSchema,
   CustomProviderSchema,
+  DEFAULT_SETTINGS,
   KNOWN_CUSTOM_PROVIDER_TYPES,
   isKnownCustomProviderType,
   SettingsSchema,
@@ -9,6 +11,13 @@ import {
   SETTING_KEYS,
   normalizeAppModes,
 } from './settings-schema.js';
+
+test('agent transport defaults to websocket and is runtime modifiable', (t) => {
+  t.is(DEFAULT_SETTINGS.agent.transport, 'websocket');
+  t.true(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_TRANSPORT));
+  t.is(AgentSettingsSchema.parse({}).transport, 'websocket');
+  t.throws(() => AgentSettingsSchema.parse({ transport: 'fallback' }));
+});
 
 test('CustomProviderSchema defaults provider type for legacy configs', (t) => {
   const parsed = CustomProviderSchema.parse({

@@ -1,7 +1,6 @@
 // @ts-nocheck - Complex mock patterns deferred to follow-up
 import test from 'ava';
 import { createConversationSession } from './conversation-session-factory.js';
-import { ChainingTransportDowngradeError } from '../providers/fallback-responses-model.js';
 import { MockStream } from './test-helpers/mock-stream.js';
 
 const mockLogger = {
@@ -254,53 +253,6 @@ test('queueModeNotice preserves prefix stability by modifying only the next user
   );
   t.true(noticeIdx >= 0);
   t.is((turn3Input[noticeIdx].rawItem ?? turn3Input[noticeIdx]).content, 'Plan Mode toggled OFF\n\nSecond question');
-});
-
-test('queueModeNotice is consumed after a retrying request and does not leak to the next turn', async (t) => {
-  const startCalls = [];
-  const successfulStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First reply' }]);
-  successfulStream.finalOutput = 'First reply';
-  successfulStream.lastResponseId = 'resp-notice-retry';
-
-  const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Second reply' }]);
-  secondStream.finalOutput = 'Second reply';
-  secondStream.lastResponseId = 'resp-notice-follow-up';
-
-  const mockClient = {
-    getProvider() {
-      return 'openai';
-    },
-    abort() {},
-    async startStream(text, options) {
-      startCalls.push({ text, options });
-      if (startCalls.length === 1) {
-        throw new ChainingTransportDowngradeError('transport downgrade during chained request');
-      }
-
-      return startCalls.length === 2 ? successfulStream : secondStream;
-    },
-  };
-
-  const bundle = createConversationSession({
-    sessionId: 'notice-retry-stability',
-    agentClient: mockClient,
-    deps: { logger: mockLogger, sessionContextService },
-  });
-  const { session, terminalAdapter, stateFacade } = bundle;
-
-  stateFacade.queueModeNotice('Plan mode toggled ON');
-
-  const firstTurn = await terminalAdapter.sendMessage('First question');
-  t.is(firstTurn.type, 'response');
-  t.is(startCalls.length, 2);
-  t.is(startCalls[0].text, 'Plan mode toggled ON\n\nFirst question');
-  t.true(Array.isArray(startCalls[1].text));
-
-  const secondTurn = await terminalAdapter.sendMessage('Second question');
-  t.is(secondTurn.type, 'response');
-  t.is(startCalls.length, 3);
-  t.true(Array.isArray(startCalls[2].text));
-  t.is(startCalls[2].text.at(-1).content, 'Second question');
 });
 
 test('aborted approval resolution restores cached tool arguments for command messages', async (t) => {

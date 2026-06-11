@@ -285,15 +285,6 @@ export function createConversationSessionComposition(
     continueAfterApproval: (opts) => turnCoordinator.continueAfterApproval(opts),
   });
 
-  // Subscribe to transport downgrade events; store unsubscribe handle for disposal.
-  let unsubscribeDowngrade: (() => void) | undefined;
-  if (typeof agentClient.onDowngrade === 'function') {
-    const result = agentClient.onDowngrade(() => breakChaining());
-    if (typeof result === 'function') {
-      unsubscribeDowngrade = result;
-    }
-  }
-
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;
@@ -305,7 +296,6 @@ export function createConversationSessionComposition(
       appState.statusMachine.abort();
     }
     providerContinuity.clear();
-    unsubscribeDowngrade?.();
   };
 
   return {

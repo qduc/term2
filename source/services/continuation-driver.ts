@@ -19,8 +19,6 @@ import { GenerationGuard } from './generation-guard.js';
 
 import { buildConversationResult } from './conversation-result-builder.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from './interruption-info.js';
-import { getMaxTransientRetries } from './conversation-retry-policy.js';
-import { getMethod } from './interruption-info.js';
 import { describeError } from '../utils/error-helpers.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 
@@ -403,11 +401,7 @@ export class ContinuationDriver {
 
           continue;
         } catch (error) {
-          const maxTransientRetries = getMaxTransientRetries({
-            streamMaxRetries: getMethod<[], number | undefined>(this.deps.agentClient, 'getStreamMaxRetries')?.call(
-              this.deps.agentClient,
-            ),
-          });
+          const maxTransientRetries = 0;
           const retryStream = lastStream;
 
           const classified = this.deps.retryClassifier.classify({

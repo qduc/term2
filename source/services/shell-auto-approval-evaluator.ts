@@ -1,6 +1,5 @@
 import type { AgentInputItem, JsonSchemaDefinition } from '@openai/agents';
 import type { LLMAdvisory } from '../contracts/conversation.js';
-import { executeWithRetry } from '../lib/retry-executor.js';
 import { classifyCommandDetailed, SafetyStatus } from '../utils/command-safety/index.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './service-interfaces.js';
 import {
@@ -22,7 +21,6 @@ const MAX_HISTORY_ITEMS = 8;
 const MAX_CONTEXT_CHARS = 3_000;
 const MAX_MESSAGE_CHARS = 500;
 const STRUCTURED_SUPPORT_CACHE_TTL_MS = 60 * 60 * 1_000;
-const SHELL_AUTO_APPROVAL_UPSTREAM_RETRY_ATTEMPTS = 1;
 
 type StructuredSupport = 'supported' | 'unsupported';
 
@@ -301,6 +299,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     random?: () => number;
   };
 }): Promise<Map<string, ShellAutoApprovalAdvisory>> {
+  void retryOptions;
   const out = new Map<string, ShellAutoApprovalAdvisory>();
   if (!settingsService) return out;
 
@@ -358,17 +357,7 @@ export async function evaluateShellAutoApprovalAdvisories({
     const runWithContext = async <T>(fn: () => Promise<T>): Promise<T> =>
       evaluatorContext ? await sessionContextService.runWithContext(evaluatorContext, fn) : await fn();
 
-    const runWithUpstreamRetry = async <T>(operation: () => Promise<T>): Promise<T> =>
-      executeWithRetry({
-        operation,
-        retryAttempts: SHELL_AUTO_APPROVAL_UPSTREAM_RETRY_ATTEMPTS,
-        provider: autoApproveProvider,
-        model: autoApproveModel,
-        traceId: logger.getCorrelationId?.(),
-        logger,
-        ...(retryOptions?.sleep ? { sleep: retryOptions.sleep } : {}),
-        ...(retryOptions?.random ? { random: retryOptions.random } : {}),
-      });
+    const runWithUpstreamRetry = async <T>(operation: () => Promise<T>): Promise<T> => operation();
 
     const tryPromptMode = async (): Promise<Map<string, ShellAutoApprovalAdvisory>> => {
       let responseText = await runWithContext(() => runWithUpstreamRetry(() => runPromptChat(prompt)));

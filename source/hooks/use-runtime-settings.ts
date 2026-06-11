@@ -58,6 +58,11 @@ export const useRuntimeSettings = ({
         return;
       }
 
+      if (key === 'agent.transport') {
+        setModel(settingsService.get<string>('agent.model'));
+        return;
+      }
+
       if (key === 'agent.mentorModel' || key === 'agent.mentorProvider' || key === 'agent.mentorReasoningEffort') {
         // Re-initialize the current model to refresh tools (in case mentor availability or config changes)
         const currentModel = settingsService.get<string>('agent.model');

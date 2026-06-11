@@ -166,6 +166,10 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   ],
   'agent.maxTurns': [{ value: '10' }, { value: '20' }, { value: '50' }],
   'agent.retryAttempts': [{ value: '1' }, { value: '2' }, { value: '3' }],
+  'agent.transport': [
+    { value: 'websocket', description: 'WebSocket transport with response chaining' },
+    { value: 'http', description: 'HTTP transport with full-history requests' },
+  ],
   'ssh.port': [{ value: '22', description: 'Default SSH port' }],
   'shell.autoApproveMode': [
     { value: 'off', description: 'Disabled' },

@@ -9,6 +9,7 @@ const SETTINGS_SOURCE_KEYS = {
     temperature: 'agent.temperature',
     maxTurns: 'agent.maxTurns',
     retryAttempts: 'agent.retryAttempts',
+    transport: 'agent.transport',
     maxParallelToolCalls: 'agent.maxParallelToolCalls',
     provider: 'agent.provider',
     openrouter: 'agent.openrouter',

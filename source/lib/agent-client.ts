@@ -1,24 +1,22 @@
 import {
   Agent,
-  run,
   type AgentInputItem,
-  Runner,
   type JsonSchemaDefinition,
   type RunState,
   type StreamedRunResult,
-  type RunResult,
 } from '@openai/agents';
-import { buildAgent, type AgentFactoryDeps } from './agent-factory.js';
-import { getProvider } from '../providers/index.js';
 import { type ModelSettingsReasoningEffort } from '@openai/agents-core/model';
-import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
-import { ExecutionContext } from '../services/execution-context.js';
-import { createEditorImpl } from './editor-impl.js';
-import { SubagentManager } from '../services/subagents/subagent-manager.js';
+import type { ExecutionContext } from '../services/execution-context.js';
+import { AskUserAnswerStore } from './ask-user-answer-store.js';
+import { AgentConfiguration } from './agent-configuration.js';
+
 import type { ConversationEvent } from '../services/conversation-events.js';
-import { fetchModels, getModelDefaultReasoningLevel } from '../services/model-service.js';
-import { filterChainedModelInput, type ChainedModelInputFilterOptions } from './chained-input-filter.js';
+import { SubagentBridge } from './subagent-bridge.js';
+import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
+import { RunnerManager } from './runner-manager.js';
+import { AgentRunOrchestrator } from './agent-run-orchestrator.js';
+import { AgentChatService } from './agent-chat-service.js';
 
 type ChainedRunOptions = {
   previousResponseId?: string | null;
@@ -31,33 +29,16 @@ type ChainedRunOptions = {
  * Swap this module to change the underlying agent provider without touching the UI.
  */
 export class AgentClient {
-  #agent: Agent;
-  #model!: string;
-  // Accept 'default' here to denote 'do not pass this param; use API default'
-  #reasoningEffort?: ModelSettingsReasoningEffort | 'default';
-  #temperature?: number;
-  #provider: string;
-  #maxTurns: number;
-  #retryAttempts: number;
-  #retryCallback: (() => void) | null = null;
-  #currentAbortController: AbortController | null = null;
-  #currentCorrelationId: string | null = null;
-  #runner: Runner | null = null;
-
-  #serviceTierOverrideForNextRequest: 'standard' | null = null;
-  #toolInterceptors: ((name: string, params: any, toolCallId?: string) => Promise<string | null>)[] = [];
+  #agentConfig: AgentConfiguration;
+  #runnerManager: RunnerManager;
+  #toolInterceptorRegistry: ToolInterceptorRegistry;
+  #runOrchestrator: AgentRunOrchestrator;
+  #chatService: AgentChatService;
   #logger: ILoggingService;
   #settings: ISettingsService;
   #sessionContextService: ISessionContextService;
-  #executionContext?: ExecutionContext;
-  #editor: ReturnType<typeof createEditorImpl>;
-  #subagentManager: SubagentManager | null = null;
-  #isTransientClient = false;
-  #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
-  #activeSubagentsCount = 0;
-  #pendingClearSink = false;
-  #askUserAnswers = new Map<string, string>();
-  #lastChainedDeltaInputItems: number | null = null;
+  #subagentBridge: SubagentBridge | null = null;
+  #askUserAnswerStore: AskUserAnswerStore;
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -65,18 +46,11 @@ export class AgentClient {
    * afterwards so events reach the UI's onEvent callback.
    */
   setSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void {
-    if (sink === null && this.#activeSubagentsCount > 0) {
-      this.#pendingClearSink = true;
-    } else {
-      this.#subagentEventSink = sink;
-      this.#pendingClearSink = false;
-    }
+    this.#subagentBridge?.setEventSink(sink);
   }
 
   #resetMentorState(): void {
-    if (this.#subagentManager) {
-      this.#subagentManager.resetMentorSession();
-    }
+    this.#subagentBridge?.clearSubagentCache();
   }
 
   constructor({
@@ -102,41 +76,69 @@ export class AgentClient {
     };
   }) {
     this.#logger = deps.logger;
+    this.#toolInterceptorRegistry = new ToolInterceptorRegistry({ logger: this.#logger });
     this.#settings = deps.settings;
     this.#sessionContextService = deps.sessionContextService;
-    this.#executionContext = deps.executionContext;
-    this.#editor = createEditorImpl({
-      loggingService: this.#logger,
-      settingsService: this.#settings,
-      executionContext: this.#executionContext,
+    this.#askUserAnswerStore = new AskUserAnswerStore();
+
+    // Create AgentConfiguration (handles editor, model, provider, reasoning, etc.)
+    this.#agentConfig = new AgentConfiguration(
+      { model, reasoningEffort, providerOverride, agentOverride },
+      {
+        logger: deps.logger,
+        settings: deps.settings,
+        sessionContextService: deps.sessionContextService,
+        executionContext: deps.executionContext,
+        toolInterceptorRegistry: this.#toolInterceptorRegistry,
+        askUserAnswerStore: this.#askUserAnswerStore,
+        getSubagentBridge: () => this.#subagentBridge,
+        onConfigChanged: (changedKey?: string) => {
+          // Runner invalidation for specific keys
+          if (changedKey === 'agent.transport' || changedKey === 'agent.retryAttempts') {
+            this.#runnerManager.invalidateRunner();
+          }
+          // Always clear subagent cache and reset mentor state
+          this.#subagentBridge?.clearCache();
+          this.#resetMentorState();
+        },
+      },
+    );
+
+    this.#runnerManager = new RunnerManager(
+      {
+        maxTurns: maxTurns ?? (agentOverride ? 1 : 20),
+        retryAttempts: retryAttempts ?? 2,
+      },
+      {
+        settings: deps.settings,
+        logger: deps.logger,
+        sessionContextService: deps.sessionContextService ?? this.#sessionContextService,
+        getProvider: () => this.#agentConfig.getProvider(),
+      },
+    );
+
+    this.#runOrchestrator = new AgentRunOrchestrator({
+      agentConfig: this.#agentConfig,
+      runnerManager: this.#runnerManager,
+      settings: deps.settings,
+      logger: deps.logger,
     });
-    this.#reasoningEffort = reasoningEffort;
-    this.#temperature = this.#settings.get<number | undefined>('agent.temperature');
-    if (agentOverride) {
-      this.#isTransientClient = true;
-      this.#agent = agentOverride;
-      this.#model = model ?? (agentOverride as any).model ?? '';
-      this.#maxTurns = maxTurns ?? 1;
-      this.#retryAttempts = retryAttempts ?? 2;
-    } else {
-      const buildResult = buildAgent({ model, reasoningEffort }, this.#buildFactoryDeps());
-      this.#agent = buildResult.agent;
-      this.#model = buildResult.resolvedModel;
-      this.#maxTurns = maxTurns ?? 20;
-      this.#retryAttempts = retryAttempts ?? 2;
-    }
-    this.#provider = providerOverride ?? this.#settings.get<string>('agent.provider') ?? 'openai';
-    this.#runner = null;
+
+    this.#chatService = new AgentChatService({
+      agentConfig: this.#agentConfig,
+      runnerManager: this.#runnerManager,
+      settings: deps.settings,
+      logger: deps.logger,
+    });
 
     if (!agentOverride) {
-      this.#subagentManager = new SubagentManager({
+      this.#subagentBridge = new SubagentBridge({
         logger: deps.logger,
         settings: deps.settings,
         executionContext: deps.executionContext,
         sessionContextService: this.#sessionContextService,
-        onEvent: (event) => this.#subagentEventSink?.(event),
-        agentClient: { chat: (message, options) => this.chat(message, options) },
-        // Factory lives here (not in SubagentManager) so each subagent gets a
+        chat: (message, options) => this.chat(message, options),
+        // Factory lives here (not in SubagentBridge) so each subagent gets a
         // lightweight transient client that shares logger/settings/executionContext
         // with the parent but skips agent-rebuild and SubagentManager initialisation.
         createClient: ({
@@ -167,534 +169,95 @@ export class AgentClient {
     }
 
     if (!agentOverride) {
-      // Subscribe to settings changes that affect agent definition (prompt,
-      // tools, model, provider, modes) and rebuild the agent automatically.
-      this.#settings.onChange?.((changedKey) => {
-        if (!changedKey) return;
-        // Keys that require a full agent rebuild:
-        const rebuildKeys = [
-          'app.liteMode',
-          'app.orchestratorMode',
-          'app.planMode',
-          'app.mentorMode',
-          'app.searchViaShell',
-          'agent.model',
-          'agent.provider',
-          'agent.transport',
-          'agent.retryAttempts',
-          'agent.reasoningEffort',
-          'agent.temperature',
-          'agent.useFlexServiceTier',
-          'agent.mentorModel',
-          'agent.mentorProvider',
-          'agent.mentorReasoningEffort',
-          'agent.subagentExplorerModel',
-          'agent.subagentWorkerModel',
-          'agent.subagentResearcherModel',
-          'agent.subagentExplorerProvider',
-          'agent.subagentWorkerProvider',
-          'agent.subagentResearcherProvider',
-          'agent.subagentExplorerReasoningEffort',
-          'agent.subagentWorkerReasoningEffort',
-          'agent.subagentResearcherReasoningEffort',
-          'logging.logLevel',
-          'logging.suppressConsoleOutput',
-          'shell.useRtkCompression',
-        ];
-        if (rebuildKeys.includes(changedKey)) {
-          if (changedKey === 'agent.transport' || changedKey === 'agent.retryAttempts') {
-            this.#runner = null;
-          }
-          this.#refreshAgent();
-        }
-      });
+      // Subscribe to settings changes via AgentConfiguration
+      this.#agentConfig.subscribeToSettings();
 
       this.#logger.debug('OpenAI Agent Client initialized', {
         model: model || this.#settings.get<string>('agent.model'),
         reasoningEffort: reasoningEffort ?? 'default',
-        temperature: this.#temperature,
-        maxTurns: this.#maxTurns,
-        retryAttempts: this.#retryAttempts,
+        temperature: this.#agentConfig.temperature,
+        maxTurns: this.#runnerManager.maxTurns,
+        retryAttempts: this.#runnerManager.retryAttempts,
       });
     }
   }
 
   setModel(model: string): void {
-    this.#subagentManager?.clearCache();
-    const buildResult = buildAgent({ model, reasoningEffort: this.#reasoningEffort }, this.#buildFactoryDeps());
-    this.#agent = buildResult.agent;
-    this.#model = buildResult.resolvedModel;
-    this.#resetMentorState();
+    this.#agentConfig.setModel(model);
+    this.#agentConfig.refreshAgent();
   }
 
   setReasoningEffort(effort?: ModelSettingsReasoningEffort | 'default'): void {
-    this.#reasoningEffort = effort;
-    this.#subagentManager?.clearCache();
-    const buildResult = buildAgent({ model: this.#model, reasoningEffort: effort }, this.#buildFactoryDeps());
-    this.#agent = buildResult.agent;
-    this.#model = buildResult.resolvedModel;
+    this.#agentConfig.setReasoningEffort(effort);
+    this.#agentConfig.refreshAgent();
   }
 
   setTemperature(temperature?: number): void {
-    this.#temperature = temperature;
-    this.#subagentManager?.clearCache();
-    const buildResult = buildAgent(
-      { model: this.#model, reasoningEffort: this.#reasoningEffort, temperature },
-      this.#buildFactoryDeps(),
-    );
-    this.#agent = buildResult.agent;
-    this.#model = buildResult.resolvedModel;
+    this.#agentConfig.setTemperature(temperature);
+    this.#agentConfig.refreshAgent();
   }
 
   setProvider(provider: string): void {
-    this.#subagentManager?.clearCache();
-    this.#provider = provider;
-    this.#settings.set('agent.provider', provider);
-    const buildResult = buildAgent(
-      { model: this.#model, reasoningEffort: this.#reasoningEffort },
-      this.#buildFactoryDeps(),
-    );
-    this.#agent = buildResult.agent;
-    this.#model = buildResult.resolvedModel;
-    this.#runner = null;
-    this.#resetMentorState();
+    this.#agentConfig.setProvider(provider); // persists to settings
+    this.#agentConfig.refreshAgent(); // triggers onConfigChanged + rebuild
+    this.#runnerManager.invalidateRunner();
   }
 
   getProvider(): string {
-    return this.#provider;
+    return this.#agentConfig.getProvider();
   }
 
   supportsConversationChaining(): boolean {
-    const providerSupportsChaining = getProvider(this.#provider)?.capabilities?.supportsConversationChaining ?? false;
-    if (
-      (this.#provider === 'openai' || this.#provider === 'codex') &&
-      this.#settings.get('agent.transport') === 'http'
-    ) {
-      return false;
-    }
-    return providerSupportsChaining;
+    return this.#runOrchestrator.supportsConversationChaining();
   }
 
   setAskUserAnswer(callId: string, answer: string): void {
-    this.#askUserAnswers.set(callId, answer);
+    this.#askUserAnswerStore.set(callId, answer);
   }
 
   getAskUserAnswer(callId?: string): string | undefined {
     if (!callId) return undefined;
-    const answer = this.#askUserAnswers.get(callId);
-    this.#askUserAnswers.delete(callId);
-    return answer;
+    return this.#askUserAnswerStore.consume(callId);
   }
 
   addToolInterceptor(
     interceptor: (name: string, params: any, toolCallId?: string) => Promise<string | null>,
   ): () => void {
-    this.#toolInterceptors.push(interceptor);
-    return () => {
-      this.#toolInterceptors = this.#toolInterceptors.filter((i) => i !== interceptor);
-    };
-  }
-
-  async #checkToolInterceptors(name: string, params: any, toolCallId?: string): Promise<string | null> {
-    for (const interceptor of this.#toolInterceptors) {
-      try {
-        const result = await interceptor(name, params, toolCallId);
-        if (result !== null) {
-          return result;
-        }
-      } catch (error) {
-        this.#logger.error('Tool interceptor threw an error', {
-          name,
-          params,
-          toolCallId,
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-        });
-        return `Tool execution intercepted but failed: ${error instanceof Error ? error.message : String(error)}`;
-      }
-    }
-    return null;
-  }
-
-  #buildFactoryDeps(): AgentFactoryDeps {
-    return {
-      settings: this.#settings,
-      logger: this.#logger,
-      executionContext: this.#executionContext,
-      editor: this.#editor,
-      providerId: this.#provider,
-      serviceTierOverrideForNextRequest: this.#serviceTierOverrideForNextRequest,
-      createMentor: this.#createMentor,
-      runSubagent: this.#runSubagent,
-      getAskUserAnswer: (callId?: string) => this.getAskUserAnswer(callId),
-      checkToolInterceptors: (name, params, toolCallId) => this.#checkToolInterceptors(name, params, toolCallId),
-    };
-  }
-
-  #getMaxParallelToolCalls(): number {
-    const rawValue = this.#settings.get<number | undefined>('agent.maxParallelToolCalls');
-    const numericValue = Number(rawValue);
-    if (!Number.isFinite(numericValue)) {
-      return 3;
-    }
-
-    return Math.max(1, Math.floor(numericValue));
-  }
-
-  #createRunner(providerId: string): Runner | null {
-    const providerDef = getProvider(providerId);
-    if (!providerDef?.createRunner) {
-      return null;
-    }
-
-    return providerDef.createRunner({
-      settingsService: this.#settings,
-      loggingService: this.#logger,
-      sessionContextService: this.#sessionContextService,
-      onRetry: () => this.#retryCallback?.(),
-    });
-  }
-
-  #getOrCreateRunner(providerId: string): Runner | null {
-    if (providerId !== this.#provider) {
-      return this.#createRunner(providerId);
-    }
-
-    if (this.#runner) {
-      return this.#runner;
-    }
-
-    this.#runner = this.#createRunner(providerId);
-    return this.#runner;
-  }
-
-  setRetryCallback(callback: () => void): void {
-    this.#retryCallback = callback;
+    return this.#toolInterceptorRegistry.add(interceptor);
   }
 
   useStandardServiceTierForNextRequest(): void {
-    this.#serviceTierOverrideForNextRequest = 'standard';
-    this.#refreshAgent();
+    this.#agentConfig.serviceTierOverrideForNextRequest = 'standard';
+    this.#agentConfig.refreshAgent();
   }
 
-  #refreshAgent(): void {
-    if (this.#isTransientClient) return;
-    this.#subagentManager?.clearCache();
-    const buildResult = buildAgent(
-      { model: this.#model, reasoningEffort: this.#reasoningEffort as any, temperature: this.#temperature },
-      this.#buildFactoryDeps(),
-    );
-    this.#agent = buildResult.agent;
-    this.#model = buildResult.resolvedModel;
-    // Refreshing core agent should not keep stale mentor state/instructions.
-    this.#resetMentorState();
+  setRetryCallback(callback: () => void): void {
+    this.#runnerManager.setRetryCallback(callback);
   }
 
   /**
    * Abort the current running stream/operation
    */
   abort(): void {
-    const traceIdBeforeClear = this.#currentCorrelationId ?? this.#logger.getCorrelationId?.();
-    if (this.#currentAbortController) {
-      this.#currentAbortController.abort();
-      this.#currentAbortController = null;
-    }
-    if (this.#currentCorrelationId) {
-      this.#logger.clearCorrelationId();
-      this.#currentCorrelationId = null;
-    }
-    this.#logger.debug('Agent operation aborted', {
-      eventType: 'stream.aborted',
-      category: 'stream',
-      phase: 'abort',
-      traceId: traceIdBeforeClear,
-    });
+    this.#runOrchestrator.abort();
   }
 
   clearConversations(): void {
-    const providerDef = getProvider(this.#provider);
-    if (providerDef?.clearConversations) {
-      providerDef.clearConversations();
-    }
-
-    this.#refreshAgent();
-    this.#lastChainedDeltaInputItems = null;
-
-    this.#logger.debug('Conversation and agent refreshed');
-  }
-
-  #filterAndGuardChainedModelInput(modelData: any, options: ChainedModelInputFilterOptions = {}): any {
-    const filtered = filterChainedModelInput(modelData, options);
-    const input = filtered?.input;
-    if (!Array.isArray(input)) {
-      return filtered;
-    }
-
-    const previousInputItems = this.#lastChainedDeltaInputItems;
-    const inputItems = input.length;
-    if (previousInputItems !== null && inputItems - previousInputItems >= 10 && inputItems >= previousInputItems * 3) {
-      this.#logger.warn('Chained delta input item count spiked', {
-        eventType: 'provider.chained_delta_input_spike',
-        category: 'provider',
-        phase: 'request_start',
-        traceId: this.#logger.getCorrelationId(),
-        provider: this.#provider,
-        model: this.#model,
-        previousInputItems,
-        inputItems,
-      });
-    }
-
-    this.#lastChainedDeltaInputItems = inputItems;
-    return filtered;
+    this.#runOrchestrator.clearConversations();
   }
 
   async startStream(
     userInput: string | AgentInputItem | AgentInputItem[],
-    { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
+    options: ChainedRunOptions = {},
   ): Promise<StreamedRunResult<any, any>> {
-    // Abort any previous operation
-    this.abort();
-
-    let agentRefreshed = false;
-    // Ensure Codex models are fetched/cached if reasoningEffort is default, so we can apply default_reasoning_level
-    if (this.#provider === 'codex' && this.#settings.get<string>('agent.reasoningEffort') === 'default') {
-      try {
-        await fetchModels({ settingsService: this.#settings, loggingService: this.#logger }, 'codex');
-        this.#refreshAgent();
-        agentRefreshed = true;
-      } catch (err) {
-        // ignore
-      }
-    }
-
-    // Refresh agent instructions for the first message of a session to ensure
-    // directory structure and AGENTS.md content are up to date.
-    const isFirstMessage =
-      !previousResponseId && (!Array.isArray(userInput) || (userInput.length > 0 && userInput.length <= 1));
-
-    if (isFirstMessage && !agentRefreshed) {
-      this.#refreshAgent();
-    }
-
-    // Create correlation ID for this stream
-    this.#currentCorrelationId = randomUUID();
-    this.#logger.setCorrelationId(this.#currentCorrelationId);
-
-    this.#currentAbortController = new AbortController();
-    const signal = this.#currentAbortController.signal;
-
-    this.#logger.debug('Agent stream started', {
-      eventType: 'provider.request.started',
-      category: 'provider',
-      phase: 'request_start',
-      traceId: this.#currentCorrelationId,
-      provider: this.#provider,
-      model: this.#model,
-      inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
-      inputLength: typeof userInput === 'string' ? userInput.length : undefined,
-      inputItems: Array.isArray(userInput) ? userInput.length : undefined,
-      messages: Array.isArray(userInput) ? userInput : undefined,
-      hasPreviousResponseId: !!previousResponseId,
-    });
-
-    try {
-      const userContext: any = {
-        turnCount: 0,
-        maxTurns: this.#maxTurns,
-      };
-      const supportsConversationChaining = this.supportsConversationChaining();
-      const options: any = {
-        stream: true,
-        maxTurns: this.#maxTurns,
-        signal,
-        context: userContext,
-        toolExecution: { maxFunctionToolConcurrency: this.#getMaxParallelToolCalls() },
-        callModelInputFilter: (args: any) => {
-          if (args.context) {
-            args.context.turnCount = (args.context.turnCount ?? 0) + 1;
-          }
-          const chainingActive = supportsConversationChaining && previousResponseId;
-          return chainingActive
-            ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
-            : args.modelData;
-        },
-      };
-      const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
-
-      if (supportsConversationChaining && previousResponseId) {
-        options.previousResponseId = previousResponseId;
-      }
-
-      const result = await this.#runAgent(agentForRun, userInput, options);
-      return result;
-    } catch (error: any) {
-      this.#logger.error('Agent stream failed', {
-        eventType: 'provider.response.failed',
-        category: 'provider',
-        phase: 'provider_response',
-        traceId: this.#currentCorrelationId,
-        provider: this.#provider,
-        model: this.#model,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        inputType: Array.isArray(userInput) ? 'array' : typeof userInput,
-        inputLength: typeof userInput === 'string' ? userInput.length : undefined,
-        inputItems: Array.isArray(userInput) ? userInput.length : undefined,
-      });
-      throw error;
-    }
-  }
-
-  async continueRun(
-    state: RunState<any, any>,
-    { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
-  ): Promise<RunResult<any, any>> {
-    this.abort();
-    this.#currentAbortController = new AbortController();
-    const signal = this.#currentAbortController.signal;
-
-    let userContext: any;
-    if (state && state._context) {
-      userContext = state._context.context;
-      if (!userContext) {
-        userContext = {};
-        state._context.context = userContext;
-      }
-    } else {
-      userContext = {
-        turnCount: 0,
-      };
-    }
-    userContext.maxTurns = this.#maxTurns;
-    if (typeof userContext.turnCount !== 'number') {
-      userContext.turnCount = 0;
-    }
-
-    const supportsConversationChaining = this.supportsConversationChaining();
-    const options: any = {
-      signal,
-      context: userContext,
-      toolExecution: { maxFunctionToolConcurrency: this.#getMaxParallelToolCalls() },
-      callModelInputFilter: (args: any) => {
-        if (args.context) {
-          args.context.turnCount = (args.context.turnCount ?? 0) + 1;
-        }
-        const chainingActive = supportsConversationChaining && previousResponseId;
-        return chainingActive
-          ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
-          : args.modelData;
-      },
-    };
-    const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
-
-    if (supportsConversationChaining && previousResponseId) {
-      options.previousResponseId = previousResponseId;
-    }
-
-    return this.#runAgent(agentForRun, state, options);
+    return this.#runOrchestrator.startStream(userInput, options);
   }
 
   async continueRunStream(
     state: RunState<any, any>,
-    { previousResponseId, sessionId, toolResultCallIds }: ChainedRunOptions = {},
+    options: ChainedRunOptions = {},
   ): Promise<StreamedRunResult<any, any>> {
-    this.abort();
-    this.#currentAbortController = new AbortController();
-    const signal = this.#currentAbortController.signal;
-
-    let userContext: any;
-    if (state && state._context) {
-      userContext = state._context.context;
-      if (!userContext) {
-        userContext = {};
-        state._context.context = userContext;
-      }
-    } else {
-      userContext = {
-        turnCount: 0,
-      };
-    }
-    userContext.maxTurns = this.#maxTurns;
-    if (typeof userContext.turnCount !== 'number') {
-      userContext.turnCount = 0;
-    }
-
-    const supportsConversationChaining = this.supportsConversationChaining();
-    const options: any = {
-      stream: true,
-      maxTurns: this.#maxTurns,
-      signal,
-      context: userContext,
-      toolExecution: { maxFunctionToolConcurrency: this.#getMaxParallelToolCalls() },
-      callModelInputFilter: (args: any) => {
-        if (args.context) {
-          args.context.turnCount = (args.context.turnCount ?? 0) + 1;
-        }
-        const chainingActive = supportsConversationChaining && previousResponseId;
-        return chainingActive
-          ? this.#filterAndGuardChainedModelInput(args.modelData, { toolResultCallIds })
-          : args.modelData;
-      },
-    };
-    const agentForRun = this.#getAgentForRun(this.#agent, { sessionId });
-
-    if (supportsConversationChaining && previousResponseId) {
-      options.previousResponseId = previousResponseId;
-    }
-
-    return this.#runAgent(agentForRun, state, options);
-  }
-
-  #runAgentWithProvider(
-    providerId: string,
-    runner: Runner | null,
-    agent: Agent<any, any>,
-    input: any,
-    options: any,
-  ): Promise<any> {
-    // The Agents SDK enables tracing by default and exports spans to OpenAI.
-    // When using non-OpenAI providers (e.g., OpenRouter), this export can fail noisily
-    // (e.g., 503 errors). Disable tracing per-run for any non-OpenAI provider.
-    const effectiveOptions: any = options ? { ...options } : {};
-    const supportsTracingControl = getProvider(providerId)?.capabilities?.supportsTracingControl ?? false;
-    if (!supportsTracingControl) {
-      effectiveOptions.tracingDisabled = true;
-    }
-
-    // Check if provider is configured but runner failed to initialize
-    if (!runner && providerId !== 'openai') {
-      const providerDef = getProvider(providerId);
-      const providerLabel = providerDef?.label || providerId;
-      throw new Error(
-        `${providerLabel} is configured but could not be initialized. ` +
-          `Please check that all required credentials and provider settings are set.`,
-      );
-    }
-
-    // Use runner if available (custom provider), otherwise use run() directly (OpenAI)
-    if (runner) {
-      return runner.run(agent, input, effectiveOptions);
-    }
-    return run(agent, input, effectiveOptions);
-  }
-
-  async #runAgent(agent: Agent, input: any, options: any): Promise<any> {
-    const shouldResetServiceTierOverride = this.#serviceTierOverrideForNextRequest === 'standard';
-    try {
-      return await this.#runAgentWithProvider(
-        this.#provider,
-        this.#getOrCreateRunner(this.#provider),
-        agent,
-        input,
-        options,
-      );
-    } finally {
-      if (shouldResetServiceTierOverride) {
-        this.#serviceTierOverrideForNextRequest = null;
-        this.#refreshAgent();
-      }
-    }
+    return this.#runOrchestrator.continueRunStream(state, options);
   }
 
   async chat(
@@ -706,75 +269,7 @@ export class AgentClient {
       instructions?: string;
     } = {},
   ): Promise<string> {
-    const tempProvider = options.provider || this.#provider;
-    this.#logger.debug('Agent chat request', {
-      messageLength: message.length,
-      model: options.model || this.#model,
-      provider: tempProvider,
-    });
-
-    const isDefaultSetting = this.#settings.get<string>('agent.reasoningEffort') === 'default';
-    if (tempProvider === 'codex' && isDefaultSetting) {
-      try {
-        await fetchModels({ settingsService: this.#settings, loggingService: this.#logger }, 'codex');
-        this.#refreshAgent();
-      } catch (err) {
-        // ignore
-      }
-    }
-
-    try {
-      // Create a temporary agent for this specific chat request if params differ
-      let agentForChat = this.#agent;
-      const tempModel = options.model || this.#model;
-      const tempEffort = options.reasoningEffort || this.#reasoningEffort;
-
-      if (options.model || options.reasoningEffort || options.instructions || options.provider) {
-        const modelSettings: any = {
-          retry: { maxRetries: 0 },
-        };
-
-        let effectiveEffort = tempEffort;
-        if (tempProvider === 'codex' && isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
-          const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', tempModel);
-          if (defaultReasoningLevel) {
-            effectiveEffort = defaultReasoningLevel as ModelSettingsReasoningEffort;
-          }
-        }
-
-        if (effectiveEffort && effectiveEffort !== 'default') {
-          modelSettings.reasoning = {
-            effort: effectiveEffort,
-            summary: 'auto',
-          };
-        }
-
-        // For simple chat, we generally don't need tools, but we keep the system instructions
-        agentForChat = new Agent({
-          name: 'Chat',
-          model: tempModel,
-          ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
-          instructions: options.instructions || 'You are a helpful assistant.',
-        });
-      }
-
-      // If provider is different from main provider, we need a separate runner
-      const runnerForChat = this.#getOrCreateRunner(tempProvider);
-
-      // We use a simplified run flow for chat
-      const result = await this.#runAgentWithProvider(tempProvider, runnerForChat, agentForChat, message, {
-        stream: false,
-        maxTurns: 1, // Chat is usually single turn
-      });
-
-      return this.#extractResponse(result);
-    } catch (error) {
-      this.#logger.error('Agent chat failed', {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      throw error; // Propagate error
-    }
+    return this.#chatService.chat(message, options);
   }
 
   async chatJson(
@@ -787,161 +282,8 @@ export class AgentClient {
       outputType: JsonSchemaDefinition;
     },
   ): Promise<unknown> {
-    const tempProvider = options.provider || this.#provider;
-    this.#logger.debug('Agent structured chat request', {
-      messageLength: message.length,
-      model: options.model || this.#model,
-      provider: tempProvider,
-    });
-
-    const isDefaultSetting = this.#settings.get<string>('agent.reasoningEffort') === 'default';
-    if (tempProvider === 'codex' && isDefaultSetting) {
-      try {
-        await fetchModels({ settingsService: this.#settings, loggingService: this.#logger }, 'codex');
-        this.#refreshAgent();
-      } catch (err) {
-        // ignore
-      }
-    }
-
-    try {
-      const tempModel = options.model || this.#model;
-      const tempEffort = options.reasoningEffort || this.#reasoningEffort;
-      const modelSettings: any = {
-        retry: { maxRetries: 0 },
-      };
-
-      let effectiveEffort = tempEffort;
-      if (tempProvider === 'codex' && isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
-        const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', tempModel);
-        if (defaultReasoningLevel) {
-          effectiveEffort = defaultReasoningLevel as ModelSettingsReasoningEffort;
-        }
-      }
-
-      if (effectiveEffort && effectiveEffort !== 'default') {
-        modelSettings.reasoning = {
-          effort: effectiveEffort,
-          summary: 'auto',
-        };
-      }
-
-      const agentForChat = new Agent({
-        name: 'Chat',
-        model: tempModel,
-        ...(Object.keys(modelSettings).length > 0 ? { modelSettings } : {}),
-        instructions: options.instructions || 'You are a helpful assistant.',
-        outputType: options.outputType,
-      });
-
-      const runnerForChat = this.#getOrCreateRunner(tempProvider);
-
-      const result = await this.#runAgentWithProvider(tempProvider, runnerForChat, agentForChat, message, {
-        stream: false,
-        maxTurns: 1,
-      });
-
-      return result.finalOutput ?? this.#extractResponse(result);
-    } catch (error) {
-      this.#logger.error('Agent structured chat failed', {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      throw error;
-    }
+    return this.#chatService.chatJson(message, options);
   }
-
-  #extractResponse(result: any): string {
-    if (result.finalOutput) {
-      return result.finalOutput;
-    }
-
-    // Fallback: extract from messages if finalOutput is missing
-    if (result.messages && Array.isArray(result.messages)) {
-      const lastMessage = result.messages[result.messages.length - 1];
-      if (lastMessage && lastMessage.content) {
-        if (typeof lastMessage.content === 'string') {
-          return lastMessage.content;
-        }
-        if (Array.isArray(lastMessage.content)) {
-          return lastMessage.content.map((part: any) => part.text || part.value || '').join('');
-        }
-      }
-    }
-
-    return '';
-  }
-
-  #getAgentForRun(agent: Agent, { sessionId }: { sessionId?: string } = {}): Agent {
-    const supportsPromptCacheKey = getProvider(this.#provider)?.capabilities?.supportsPromptCacheKey;
-    if (!supportsPromptCacheKey || !sessionId) {
-      return agent;
-    }
-
-    return agent.clone({
-      modelSettings: {
-        ...(agent.modelSettings || {}),
-        prompt_cache_key: sessionId,
-      } as any,
-    });
-  }
-
-  #createMentor = async (question: string): Promise<string> => {
-    if (!this.#subagentManager) {
-      throw new Error('Transient agent clients cannot spawn subagents.');
-    }
-    this.#activeSubagentsCount++;
-    try {
-      const result = await this.#subagentManager.run({ role: 'mentor', task: question, parentTool: 'ask_mentor' });
-      if (result.status === 'failed') {
-        throw new Error(result.error || 'Mentor consultation failed');
-      }
-      return result.finalText;
-    } catch (error) {
-      this.#logger.error('Mentor consultation failed', {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      throw error;
-    } finally {
-      this.#activeSubagentsCount--;
-      if (this.#activeSubagentsCount === 0 && this.#pendingClearSink) {
-        this.#subagentEventSink = null;
-        this.#pendingClearSink = false;
-      }
-    }
-  };
-
-  #runSubagent = async (
-    params: { role: string; task: string },
-    _context?: unknown,
-    details?: unknown,
-  ): Promise<any> => {
-    if (!this.#subagentManager) {
-      throw new Error('Transient agent clients cannot spawn subagents.');
-    }
-    // Forward any resumeState from the SDK (populated in the Agent.asTool
-    // path) to the subagent manager so it can restore the agent run state
-    // for nested approval continuation.
-    const detailsRecord = details as { resumeState?: string; signal?: AbortSignal; toolCall?: unknown } | undefined;
-    const request = {
-      ...params,
-      parentTool: 'run_subagent',
-      ...(detailsRecord?.resumeState ? { resumeState: detailsRecord.resumeState } : {}),
-      ...(detailsRecord?.signal ? { signal: detailsRecord.signal } : {}),
-    };
-
-    this.#activeSubagentsCount++;
-    try {
-      return await this.#subagentManager.runAsTool(request, _context, details);
-    } finally {
-      this.#activeSubagentsCount--;
-      if (this.#activeSubagentsCount === 0 && this.#pendingClearSink) {
-        this.#subagentEventSink = null;
-        this.#pendingClearSink = false;
-      }
-    }
-  };
 
   getSettings(): ISettingsService {
     return this.#settings;

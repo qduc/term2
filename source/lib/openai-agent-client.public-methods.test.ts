@@ -498,46 +498,6 @@ test.serial('startStream filters replayed history to delta input when chaining f
   t.is(filtered.instructions, 'system');
 });
 
-test.serial('continueRun filters replayed history to delta input when chaining from previousResponseId', async (t) => {
-  const settings = createMockSettings({
-    'agent.provider': 'mock-chaining-true',
-  });
-  const client = new AgentClient({
-    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
-  });
-
-  const state = {
-    _context: { context: { turnCount: 0 } },
-    _generatedItems: [
-      { rawItem: { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' } },
-      { rawItem: { type: 'function_call_output', callId: 'call-read', output: 'done' } },
-    ],
-  };
-
-  await client.continueRun(state as any, { previousResponseId: 'resp-prev' });
-
-  t.is(chainingRunnerCalls.length, 1);
-  const call = chainingRunnerCalls[0];
-  t.is(call.input, state);
-  t.is(call.options.previousResponseId, 'resp-prev');
-
-  const filtered = call.options.callModelInputFilter({
-    context: { turnCount: 0 },
-    modelData: {
-      input: [
-        { role: 'user', type: 'message', content: 'inspect file' },
-        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
-        { type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' },
-        { type: 'function_call_output', callId: 'call-read', output: 'done' },
-      ],
-      instructions: 'system',
-    },
-  });
-
-  t.deepEqual(filtered.input, [{ type: 'function_call_output', callId: 'call-read', output: 'done' }]);
-  t.is(filtered.instructions, 'system');
-});
-
 test.serial('continueRunStream keeps only expected approved tool outputs when chaining', async (t) => {
   const settings = createMockSettings({
     'agent.provider': 'mock-chaining-true',
@@ -635,6 +595,220 @@ test.serial('continueRunStream filters and keeps user message even with custom t
   });
 
   t.deepEqual(filtered.input, [{ role: 'user', type: 'custom_input_type', content: 'second' }]);
+});
+
+// ========== Characterization tests for stream lifecycle ==========
+
+test.serial('startStream with chaining and input filtering', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-true',
+  });
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  await client.startStream('Hello', { previousResponseId: 'prev-1' });
+
+  t.is(chainingRunnerCalls.length, 1);
+  t.is(chainingRunnerCalls[0].options.previousResponseId, 'prev-1');
+  t.is(typeof chainingRunnerCalls[0].options.callModelInputFilter, 'function');
+});
+
+test.serial('continueRunStream resuming from a RunState with chaining', async (t) => {
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-true',
+  });
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  const state = { _context: { context: { turnCount: 0 } }, _generatedItems: [] };
+
+  await client.continueRunStream(state as any, { previousResponseId: 'resp-prev' });
+
+  t.is(chainingRunnerCalls.length, 1);
+  t.is(chainingRunnerCalls[0].input, state);
+  t.is(chainingRunnerCalls[0].options.previousResponseId, 'resp-prev');
+  t.true(chainingRunnerCalls[0].options.stream);
+  t.is(typeof chainingRunnerCalls[0].options.callModelInputFilter, 'function');
+});
+
+test.serial('abort during an active startStream', async (t) => {
+  let capturedSignal: AbortSignal | undefined;
+  const testProviderId = 'mock-abort-active-stream';
+
+  registerProvider({
+    id: testProviderId,
+    label: 'Mock Abort Active Stream',
+    createRunner: () =>
+      ({
+        run: async (_agent: any, _input: any, options: any) => {
+          capturedSignal = options.signal;
+          // Wait until aborted before resolving
+          await new Promise<void>((resolve) => {
+            options.signal.addEventListener('abort', () => resolve());
+          });
+          return { status: 'completed', finalOutput: 'done', messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  let correlationId: string | undefined;
+  const logger: ILoggingService = {
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    security: () => {},
+    setCorrelationId: (id: string | undefined) => {
+      correlationId = id;
+    },
+    clearCorrelationId: () => {
+      correlationId = undefined;
+    },
+    getCorrelationId: () => correlationId,
+    log: () => {},
+  } as any;
+
+  const settings = createMockSettings({
+    'agent.provider': testProviderId,
+    'agent.model': 'mock-model',
+  });
+  const client = new AgentClient({
+    deps: { logger, settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  // Start stream - runner will wait until aborted
+  const streamPromise = client.startStream('Hello');
+
+  // capturedSignal is set synchronously before startStream awaits the runner
+  t.truthy(correlationId, 'correlation ID should be set when stream starts');
+  t.truthy(capturedSignal, 'abort signal should be captured');
+  t.false(capturedSignal!.aborted, 'signal should not be aborted yet');
+
+  // Abort
+  client.abort();
+
+  await streamPromise;
+
+  t.true(capturedSignal!.aborted, 'signal should be aborted after abort()');
+  t.falsy(correlationId, 'correlation ID should be cleared after abort');
+});
+
+test.serial('clearConversations resets chained delta state', async (t) => {
+  const warnings: any[] = [];
+  const logger = {
+    ...createMockLogger(),
+    warn: (message: string, meta: any) => warnings.push({ message, meta }),
+  };
+  const settings = createMockSettings({
+    'agent.provider': 'mock-chaining-true',
+    'agent.model': 'mock-model',
+  });
+  const client = new AgentClient({
+    deps: { logger, settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  // First stream with chaining - establishes #lastChainedDeltaInputItems
+  await client.startStream('Hello', { previousResponseId: 'prev-1' });
+  chainingRunnerCalls[0].options.callModelInputFilter({
+    context: { turnCount: 0 },
+    modelData: { input: [{ type: 'function_call_output', callId: 'call-1', output: 'one' }] },
+  });
+
+  // Clear conversations - should reset #lastChainedDeltaInputItems to null
+  client.clearConversations();
+
+  // Start another stream with chaining after clear
+  await client.startStream('World', { previousResponseId: 'prev-2' });
+  chainingRunnerCalls[1].options.callModelInputFilter({
+    context: { turnCount: 0 },
+    modelData: {
+      input: Array.from({ length: 23 }, (_, i) => ({
+        type: 'function_call_output',
+        callId: `call-${i}`,
+        output: `output-${i}`,
+      })),
+    },
+  });
+
+  // After clearConversations, #lastChainedDeltaInputItems is null,
+  // so a large jump should NOT trigger the spike warning
+  const spikeWarnings = warnings.filter((w) => w.meta?.eventType === 'provider.chained_delta_input_spike');
+  t.is(spikeWarnings.length, 0, 'should not warn about spike after clearConversations resets state');
+});
+
+test.serial('chat and chatJson with temp provider/reasoning-effort overrides', async (t) => {
+  const chatRunnerCalls: any[] = [];
+  registerProvider({
+    id: 'mock-chat-override-test',
+    label: 'Mock Chat Override Test',
+    createRunner: () =>
+      ({
+        run: async (agent: any, _input: any, _options: any) => {
+          chatRunnerCalls.push({ agent, input: _input, options: _options });
+          return { status: 'completed', finalOutput: 'mock chat response', messages: [] };
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'chat-override-model' }],
+  });
+
+  const settings = createMockSettings({
+    'agent.provider': 'mock-provider-public-methods',
+    'agent.model': 'default-model',
+  });
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  // Call chat with provider, model, and reasoningEffort override
+  const chatResult = await client.chat('Hello', {
+    provider: 'mock-chat-override-test',
+    model: 'chat-override-model',
+    reasoningEffort: 'high',
+  });
+
+  t.is(chatResult, 'mock chat response');
+  t.is(chatRunnerCalls.length, 1, 'chat should use the override provider');
+  t.is(chatRunnerCalls[0].agent.name, 'Chat');
+  t.is(chatRunnerCalls[0].agent.model, 'chat-override-model');
+  t.is(chatRunnerCalls[0].agent.modelSettings?.reasoning?.effort, 'high');
+  t.is(chatRunnerCalls[0].input, 'Hello');
+  t.false(chatRunnerCalls[0].options.stream, 'chat should not use streaming');
+
+  // The default provider should not have been used
+  t.is(runnerCalls.length, 0, 'default provider runner should not be called for chat with override');
+
+  // Now call chatJson with different reasoningEffort
+  const chatJsonResult = await client.chatJson('Hello structured', {
+    provider: 'mock-chat-override-test',
+    model: 'chat-override-model',
+    reasoningEffort: 'medium',
+    outputType: {
+      type: 'json_schema',
+      name: 'test_result',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: { result: { type: 'string' } },
+        required: ['result'],
+        additionalProperties: false,
+      },
+    },
+  });
+
+  t.is(chatJsonResult, 'mock chat response');
+  t.is(chatRunnerCalls.length, 2, 'chatJson should use the override provider');
+  t.is(chatRunnerCalls[1].agent.name, 'Chat');
+  t.is(chatRunnerCalls[1].agent.model, 'chat-override-model');
+  t.is(chatRunnerCalls[1].agent.modelSettings?.reasoning?.effort, 'medium');
+  t.is(chatRunnerCalls[1].input, 'Hello structured');
+  t.false(chatRunnerCalls[1].options.stream, 'chatJson should not use streaming');
+  t.truthy(chatRunnerCalls[1].agent.outputType, 'chatJson agent should have outputType');
+
+  // Default provider still not called
+  t.is(runnerCalls.length, 0, 'default provider runner should still not be called');
 });
 
 test.serial('codex startStream puts prompt_cache_key on agent modelSettings, not run options', async (t) => {

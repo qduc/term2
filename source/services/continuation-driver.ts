@@ -242,9 +242,15 @@ export class ContinuationDriver {
             );
 
             if (outcome.result.type === 'response') {
+              // Use the outcome's filtered commandMessages (excludes anything
+              // already emitted via command_message in this or any prior turn)
+              // instead of nextCumulativeMessages. Otherwise messages that were
+              // already shown in the UI during streaming get re-appended by
+              // applyServiceResult, causing the user to see the finished tool
+              // output printed again after the model's final answer.
               const result: ConversationTerminal = {
                 type: 'response',
-                commandMessages: nextCumulativeMessages,
+                commandMessages: outcome.result.commandMessages ?? [],
                 finalText: outcome.result.finalText,
                 ...(outcome.result.reasoningText ? { reasoningText: outcome.result.reasoningText } : {}),
                 ...(nextCumulativeUsage && Object.keys(nextCumulativeUsage).length > 0

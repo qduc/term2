@@ -210,10 +210,23 @@ export const useConversation = ({
 
       setMessages((prev) => {
         const annotatedCommands = result.commandMessages.map(annotateCommandMessage);
+        // Collect callIds of every command message already shown in the UI
+        // (streaming replaces the running message in place, so completed
+        // messages with the same callId are already in prev). Skipping them
+        // here prevents finished tool output from being re-printed below
+        // the model's final answer when the response carries cumulative
+        // command lists from previous turns.
+        const existingCommandCallIds = new Set<string>();
+        for (const msg of prev) {
+          if (isCommandMessage(msg) && msg.callId) {
+            existingCommandCallIds.add(msg.callId);
+          }
+        }
+        const newCommands = annotatedCommands.filter((msg) => !msg.callId || !existingCommandCallIds.has(msg.callId));
         // Remove stale running/pending messages that are about to be replaced
         // by completed ones (e.g. after a denied tool where a "running" message
         // was shown during streaming but the final result never cleaned it up).
-        const completedCallIds = new Set(annotatedCommands.filter((m) => m.callId).map((m) => m.callId));
+        const completedCallIds = new Set(newCommands.filter((m) => m.callId).map((m) => m.callId));
         const cleaned =
           completedCallIds.size > 0
             ? prev.filter((msg) => {
@@ -222,7 +235,7 @@ export const useConversation = ({
                 return !msg.callId || !completedCallIds.has(msg.callId);
               })
             : prev;
-        let next = [...cleaned, ...annotatedCommands];
+        let next = [...cleaned, ...newCommands];
 
         // Append finalText only when streaming never pushed it via text_delta/final events.
         // Providers that skip streaming (synchronous or non-interactive) may return text

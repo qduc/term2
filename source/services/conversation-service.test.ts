@@ -698,6 +698,81 @@ test('dedupes commands from initial stream when continuation history contains th
   t.deepEqual(finalResult.commandMessages, []);
 });
 
+test('continuation replays the just-emitted tool in newItems without re-emitting it in the final result', async (t) => {
+  // Regression: when the SDK continuation stream replays the tool that the
+  // current turn has already emitted via command_message (in stream.newItems
+  // and/or stream.history), the final response must not include that tool in
+  // commandMessages. Otherwise applyServiceResult appends it to the messages
+  // state and the user sees the finished tool output printed again after the
+  // model's final answer.
+  const commandPayload = 'exit 0\ncontent';
+  const rawItem = {
+    id: 'call-replay-1',
+    type: 'function_call_result',
+    name: 'shell',
+    arguments: JSON.stringify({ commands: 'sed -n "1,10p" file.txt' }),
+  };
+  const commandItem = {
+    type: 'tool_call_output_item',
+    name: 'shell',
+    output: commandPayload,
+    rawItem,
+  };
+  const interruption = {
+    name: 'shell',
+    agent: { name: 'CLI Agent' },
+    arguments: JSON.stringify({ commands: 'sed -n "1,10p" file.txt' }),
+  };
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = {
+    approveCalls: [] as any[],
+    approve(arg: any) {
+      this.approveCalls.push(arg);
+    },
+    reject() {},
+  };
+
+  const continuationEvents = [{ type: 'run_item_stream_event', item: commandItem }];
+  const continuationStream = new MockStream(continuationEvents);
+  continuationStream.finalOutput = 'Done';
+  continuationStream.newItems = [commandItem];
+  continuationStream.history = [commandItem];
+
+  const mockClient = {
+    async startStream() {
+      return initialStream;
+    },
+    async continueRunStream() {
+      return continuationStream;
+    },
+  };
+
+  const emittedCommands: any[] = [];
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const approvalResult = await service.sendMessage('run command', {
+    onCommandMessage(message) {
+      emittedCommands.push(message);
+    },
+  });
+  t.is(approvalResult.type, 'approval_required');
+
+  const finalResult = await service.handleApprovalDecision('y', undefined, {
+    onCommandMessage(message) {
+      emittedCommands.push(message);
+    },
+  });
+  t.is(finalResult.type, 'response');
+  t.is(emittedCommands.length, 1);
+  t.is(emittedCommands[0].id, 'call-replay-1-0');
+  t.deepEqual(finalResult.commandMessages, []);
+});
+
 test('resetWithNewId() clears conversation state', async (t) => {
   const streams = [new MockStream([]), new MockStream([])];
   streams[0].lastResponseId = 'resp-1';

@@ -394,7 +394,10 @@ function assistantText(raw: any): string | null {
  * completed successfully via write operations.
  */
 function extractFinalText(result: any): string {
-  if (typeof result.finalOutput === 'string' && result.finalOutput) {
+  // Skip SDK finalOutput accessor when the run was interrupted (e.g., tool
+  // approval) — accessing it before the run reaches the final output step
+  // logs a misleading SDK warning via console.warn.
+  if (!result?.interruptions?.length && typeof result.finalOutput === 'string' && result.finalOutput) {
     return result.finalOutput;
   }
 
@@ -723,7 +726,7 @@ export class SubagentManager {
 
     try {
       const tool = this.#getOrCreateRoleTool(role).tool as any;
-      const raw = await tool.execute({ role, task: request.task }, nestedContext, details);
+      const raw = await tool.invoke(nestedContext, JSON.stringify({ role, task: request.task }), details);
       const parsed = JSON.parse(String(raw)) as SubagentResult & { interrupted?: boolean };
       if (!parsed.interrupted) {
         this.#emit({ type: 'subagent_completed', result: parsed });

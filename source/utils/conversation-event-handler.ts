@@ -85,6 +85,7 @@ export interface ConversationEventHandlerDeps {
   createMessageId: () => string;
   trimMessages: (messages: Message[]) => Message[];
   annotateCommandMessage: (msg: CommandMessage) => CommandMessage;
+  getMessages?: () => Message[];
 }
 
 /**
@@ -107,10 +108,25 @@ export function createConversationEventHandler(
     createMessageId,
     trimMessages,
     annotateCommandMessage,
+    getMessages,
   } = deps;
 
   const activeRunningToolCallIds = new Set<string>();
   const pendingSubagentToolCalls = new Map<string, { role?: string; task?: string; [key: string]: unknown }>();
+  const activeSubagentIds = new Set<string>();
+
+  const isSubagentActive = (): boolean => {
+    const list = getMessages?.();
+    if (list) {
+      return list.some((msg) => msg.sender === 'subagent' && msg.status === 'running');
+    }
+    return activeSubagentIds.size > 0;
+  };
+
+  const isSubagentDelegationTool = (toolName: string | undefined): boolean => {
+    if (!toolName) return false;
+    return toolName === 'run_subagent' || toolName.startsWith('run_subagent_');
+  };
 
   const markCurrentReasoningFinalized = () => {
     if (!state.currentReasoningMessageId) {
@@ -279,6 +295,28 @@ export function createConversationEventHandler(
       }
 
       case 'tool_started': {
+        const { toolCallId, toolName, arguments: rawArgs } = event;
+
+        if (isSubagentDelegationTool(toolName)) {
+          // Flush reasoning state
+          flushReasoning();
+
+          // Flush any accumulated text before showing the tool call
+          flushBotText();
+          resetBotTextTracking();
+          botResponseUpdater.cancel();
+
+          const args = parseToolArguments(rawArgs);
+          if (toolCallId) {
+            pendingSubagentToolCalls.set(toolCallId, args as { role?: string; task?: string; [key: string]: unknown });
+          }
+          return;
+        }
+
+        if (isSubagentActive()) {
+          return;
+        }
+
         // Flush reasoning state
         flushReasoning();
 
@@ -288,8 +326,6 @@ export function createConversationEventHandler(
         botResponseUpdater.cancel();
 
         // Emit a "pending" command message when tool starts running
-        const { toolCallId, toolName, arguments: rawArgs } = event;
-
         // tool_started.arguments may be either an object or a JSON string
         const args = parseToolArguments(rawArgs);
         const command = formatToolCommand(toolName, args as Record<string, unknown>);
@@ -313,14 +349,6 @@ export function createConversationEventHandler(
           activeRunningToolCallIds.add(toolCallId);
         }
 
-        // run_subagent shows its own title via SubagentActivityMessage
-        if (toolName === 'run_subagent') {
-          if (toolCallId) {
-            pendingSubagentToolCalls.set(toolCallId, args as { role?: string; task?: string; [key: string]: unknown });
-          }
-          return;
-        }
-
         appendMessages([pendingMessage]);
         return;
       }
@@ -330,6 +358,17 @@ export function createConversationEventHandler(
         if (cmdMsg.callId) {
           activeRunningToolCallIds.delete(cmdMsg.callId);
         }
+
+        // run_subagent is displayed via SubagentActivityMessage; skip the
+        // command_message so we don't create a duplicate CommandMessage.
+        if (isSubagentDelegationTool(cmdMsg.toolName)) {
+          return;
+        }
+
+        if (isSubagentActive()) {
+          return;
+        }
+
         const annotated = annotateCommandMessage(cmdMsg);
 
         // Flush reasoning state
@@ -344,9 +383,7 @@ export function createConversationEventHandler(
         setMessages((prev) => {
           const pendingIndex = annotated.callId
             ? prev.findIndex(
-                (msg) =>
-                  (msg.sender === 'command' && msg.callId === annotated.callId && msg.status === 'running') ||
-                  (msg.sender === 'subagent' && msg.callId === annotated.callId),
+                (msg) => msg.sender === 'command' && msg.callId === annotated.callId && msg.status === 'running',
               )
             : prev.findIndex((msg) => msg.sender === 'command' && !msg.callId && msg.status === 'running');
 
@@ -368,6 +405,7 @@ export function createConversationEventHandler(
         if (event.parentTool === 'ask_mentor') {
           return;
         }
+        activeSubagentIds.add(event.agentId);
 
         let matchingCallId: string | undefined;
         for (const [callId, args] of pendingSubagentToolCalls.entries()) {
@@ -414,6 +452,7 @@ export function createConversationEventHandler(
       }
 
       case 'subagent_tool_started': {
+        activeSubagentIds.add(event.agentId);
         setMessages((prev) => {
           const index = prev.findIndex((msg) => isSubagentActivityMessage(msg) && msg.agentId === event.agentId);
           if (index !== -1) {
@@ -499,7 +538,6 @@ export function createConversationEventHandler(
 
             return {
               ...message,
-              status: 'running',
               role: message.role ?? event.role,
               tools: currentTools.slice(-3),
             };
@@ -532,6 +570,7 @@ export function createConversationEventHandler(
       }
 
       case 'subagent_completed': {
+        activeSubagentIds.delete(event.result.agentId);
         setMessages((prev) => {
           return trimMessages(
             prev.map((msg) => {

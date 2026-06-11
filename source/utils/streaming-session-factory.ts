@@ -18,6 +18,7 @@ export interface StreamingSessionFactoryDeps {
   setMessages: ConversationEventHandlerDeps['setMessages'];
   trimMessages: ConversationEventHandlerDeps['trimMessages'];
   annotateCommandMessage: ConversationEventHandlerDeps['annotateCommandMessage'];
+  getMessages?: ConversationEventHandlerDeps['getMessages'];
   loggingService: ILoggingService;
   setLastUsage: (usage: NormalizedUsage) => void;
   setCodexRateLimit?: (rateLimit: CodexRateLimitInfo) => void;
@@ -104,6 +105,7 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
       createMessageId,
       trimMessages: deps.trimMessages,
       annotateCommandMessage: deps.annotateCommandMessage,
+      getMessages: deps.getMessages,
     },
     streamingState,
   );

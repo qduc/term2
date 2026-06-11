@@ -9,6 +9,15 @@ const SEARCH_TOOL_NAMES = new Set<string>([TOOL_NAME_GREP, TOOL_NAME_FIND_FILES]
 
 const SEARCH_COMMANDS = ['grep', 'rg', 'find', 'fd', 'ag', 'ack', 'git grep'];
 
+export const stripRgErrorLines = (output: string | undefined): string => {
+  if (!output) return '';
+
+  return output
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('rg:'))
+    .join('\n');
+};
+
 export const isSearchLikeTool = (toolName: string | undefined, command: string): boolean => {
   if (toolName && SEARCH_TOOL_NAMES.has(toolName)) return true;
   if (toolName === 'shell' || !toolName) {
@@ -20,7 +29,7 @@ export const isSearchLikeTool = (toolName: string | undefined, command: string):
 
 export const parseGrepOutput = (output: string | undefined) => {
   if (!output) return null;
-  const lines = output.split('\n');
+  const lines = stripRgErrorLines(output).split('\n');
   const matchesByFile: Record<string, { lineNum: number; content: string }[]> = {};
   let note: string | null = null;
   let isAllMatches = true;
@@ -89,14 +98,17 @@ export const classifySearchKind = (toolName: string | undefined, command: string
 export const getMatchCount = (toolName: string | undefined, command: string, output: string | undefined): number => {
   if (!output) return 0;
 
+  const sanitizedOutput = stripRgErrorLines(output);
+  if (!sanitizedOutput.trim()) return 0;
+
   const searchKind = classifySearchKind(toolName, command);
   if (searchKind === 'grep') {
-    const parsed = parseGrepOutput(output);
+    const parsed = parseGrepOutput(sanitizedOutput);
     if (parsed) {
       return Object.values(parsed.matchesByFile).reduce((acc, matches) => acc + matches.length, 0);
     }
   } else if (searchKind === 'find_files') {
-    const parsed = parseFindFilesOutput(output);
+    const parsed = parseFindFilesOutput(sanitizedOutput);
     if (parsed) {
       return parsed.files.length;
     }
@@ -106,7 +118,7 @@ export const getMatchCount = (toolName: string | undefined, command: string, out
   // or the structured parsers cannot decode the output. These skip rules mirror the
   // dedicated parsers above, but they still intentionally overcount unfamiliar summaries.
   let count = 0;
-  for (let line of output.split('\n')) {
+  for (let line of sanitizedOutput.split('\n')) {
     line = line.trim();
     if (!line) continue;
     const lowerLine = line.toLowerCase();

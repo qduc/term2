@@ -15,6 +15,7 @@ import {
   parseSubagentOutput,
   parseWebFetchOutput,
   parseWebSearchOutput,
+  stripRgErrorLines,
 } from './command-message-helpers.js';
 import { COLOR_TOOL_OUTPUT } from './theme.js';
 import DiffView from './DiffView.js';
@@ -254,9 +255,12 @@ const CommandMessage: FC<Props> = ({
 
     if (success === false || failureReason) {
       const errorMsg = failureReason || denialReason || 'failed';
+      const displayErrorMsg = isSearchLikeTool(toolName, command)
+        ? stripRgErrorLines(errorMsg).trim() || 'failed'
+        : errorMsg;
       // Truncate error message like standard mode truncates output
       const truncatedError = (() => {
-        const lines = errorMsg.trimEnd().split('\n');
+        const lines = displayErrorMsg.trimEnd().split('\n');
         const maxLines = 3;
         if (lines.length > maxLines + 1) {
           const firstPart = lines.slice(0, maxLines).join('\n');
@@ -272,7 +276,7 @@ const CommandMessage: FC<Props> = ({
             {changeStatsElement}
           </Text>
           {matchCountElement}
-          <Text color={COLOR_ERROR}> Error: {truncatedError}</Text>
+          <Text color={COLOR_ERROR}>{truncatedError}</Text>
         </Box>
       );
     }

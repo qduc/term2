@@ -631,6 +631,26 @@ test('CommandMessage shows match count for shell rg command in concise mode', as
   t.true(output.includes('(4 matches)'), `Expected match count in output: ${output}`);
 });
 
+test('CommandMessage suppresses rg stderr and keeps the match count in concise mode', async (t) => {
+  const props = {
+    command: 'rg hello source/',
+    toolName: 'shell',
+    toolArgs: { command: 'rg hello source/' },
+    status: 'completed' as const,
+    success: false,
+    displayMode: 'concise' as const,
+    failureReason: 'rg: source/missing.ts: No such file or directory\nsource/a.ts:1:hello',
+    output: 'rg: source/missing.ts: No such file or directory\nsource/a.ts:1:hello',
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  t.true(output.includes('(1 match)'), `Expected match count in output: ${output}`);
+  t.false(output.includes('rg: source/missing.ts'), `Expected rg stderr to be suppressed: ${output}`);
+  t.true(output.includes('source/a.ts:1:hello'), `Expected remaining search output in error message: ${output}`);
+});
+
 test('CommandMessage shows match count for shell find command in concise mode', async (t) => {
   const props = {
     command: 'find . -name *.ts',

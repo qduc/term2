@@ -75,6 +75,24 @@ test('shell fallback skips rg-prefixed error lines', (t) => {
   t.is(getMatchCount(undefined, 'rg hello source/', output), 1);
 });
 
+test('getMatchCount ignores rg stderr when structured grep output is present', (t) => {
+  const output = 'rg: src/missing.ts: No such file or directory\nsrc/a.ts:1:hello\nsrc/b.ts:3:hello';
+
+  t.is(getMatchCount('grep', 'grep', output), 2);
+});
+
+test('parseGrepOutput ignores rg stderr lines and still parses matches', (t) => {
+  const output = 'rg: src/missing.ts: No such file or directory\nsrc/a.ts:1:hello\nsrc/b.ts:3:hello';
+
+  t.deepEqual(parseGrepOutput(output), {
+    matchesByFile: {
+      'src/a.ts': [{ lineNum: 1, content: 'hello' }],
+      'src/b.ts': [{ lineNum: 3, content: 'hello' }],
+    },
+    note: null,
+  });
+});
+
 test('shell fallback skips find-prefixed error lines', (t) => {
   const output = 'find: src/a.ts: Permission denied\nsrc/b.ts:1:hello';
 

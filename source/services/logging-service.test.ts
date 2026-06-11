@@ -176,7 +176,7 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
     mode: 'standard',
     provider: 'openrouter',
     model: 'moonshotai/kimi-k2.5',
-    modelClass: 'TimedOpenAIResponsesWSModel',
+    modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
     modelWrapperClass: 'FallbackResponsesModel',
     headers: { host: 'api.openrouter.ai', authorization: '[REDACTED]' },
     payload: {
@@ -196,7 +196,7 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
     mode: 'standard',
     provider: 'openrouter',
     model: 'moonshotai/kimi-k2.5',
-    modelClass: 'TimedOpenAIResponsesWSModel',
+    modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
     modelWrapperClass: 'FallbackResponsesModel',
     payload: { outputText: 'hi', toolCalls: [] },
     timestamp: '2026-05-22T09:14:36.000Z',
@@ -239,13 +239,13 @@ test.serial('automatically writes provider traffic artifacts for sent and receiv
   }
 
   t.is(sent.direction, 'sent');
-  t.is(sent.modelClass, 'TimedOpenAIResponsesWSModel');
+  t.is(sent.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
   t.is(sent.modelWrapperClass, 'FallbackResponsesModel');
   t.deepEqual(sent.headers, { host: 'api.openrouter.ai', authorization: '[REDACTED]' });
   t.deepEqual(sent.body.messages, [{ role: 'system' }, { role: 'user', content: 'hello' }]);
   t.deepEqual(sent.body.tools, ['read_file']);
   t.is(received.direction, 'received');
-  t.is(received.modelClass, 'TimedOpenAIResponsesWSModel');
+  t.is(received.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
   t.is(received.modelWrapperClass, 'FallbackResponsesModel');
   t.is(received.summary.outputText, 'hi');
 });

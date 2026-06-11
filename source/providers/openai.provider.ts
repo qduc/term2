@@ -1,13 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { Runner, Model, ModelProvider } from '@openai/agents';
-import { OpenAIResponsesModel } from '@openai/agents-openai';
+import { Runner, Model, ModelProvider, getCurrentTrace, withTrace } from '@openai/agents';
+import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import OpenAI from 'openai';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { RetryingModel } from './retrying-model.js';
-import { TimedResponsesWSModel } from './timed-responses-ws-model.js';
-import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
 import type { ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
 
@@ -33,13 +31,21 @@ export class OpenAIResponsesModelWithPromptCacheKey extends OpenAIResponsesModel
   }
 }
 
-export class TimedOpenAIResponsesWSModel extends TimedResponsesWSModel {
+export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesWSModel {
   _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const built = super._buildResponsesCreateRequest(request, stream);
     return {
       ...built,
       requestData: forwardPromptCacheKey(request, built.requestData),
     };
+  }
+
+  override async getResponse(request: any): Promise<any> {
+    const currentTrace = getCurrentTrace();
+    if (currentTrace) {
+      return super.getResponse(request);
+    }
+    return withTrace('openai-responses-ws-model-trace', () => super.getResponse(request));
   }
 }
 
@@ -158,9 +164,7 @@ class OpenAIProvider implements ModelProvider {
     const selectedModel =
       this.transport === 'http'
         ? new OpenAIResponsesModelWithPromptCacheKey(this.openAIClient as any, model)
-        : new TimedOpenAIResponsesWSModel(this.openAIClient as any, model, {
-            ...DEFAULT_TIMED_WS_TIMEOUTS,
-          });
+        : new OpenAIResponsesWSModelWithPromptCacheKey(this.openAIClient as any, model);
     const retryingModel = new RetryingModel(selectedModel, {
       retryAttempts: this.retryAttempts,
       loggingService: this.loggingService,

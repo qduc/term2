@@ -83,3 +83,32 @@ test('getStreamedResponse does not retry after an event commits', async (t) => {
   await t.throwsAsync(() => iterator.next(), { message: 'upstream unavailable' });
   t.is(calls, 1);
 });
+
+test('getResponse uses the larger upstream backoff schedule for retries', async (t) => {
+  const delays: number[] = [];
+  let calls = 0;
+  const randomValues = [0.4, 0.2, 0.5, 0.8];
+  let randomIndex = 0;
+  const underlying = {
+    async getResponse() {
+      calls++;
+      throw retryableError();
+    },
+    async *getStreamedResponse() {},
+  } as unknown as Model;
+  const model = new RetryingModel(underlying, {
+    retryAttempts: 2,
+    sleep: async (delayMs: number) => {
+      delays.push(delayMs);
+    },
+    random: () => {
+      const value = randomValues[randomIndex];
+      randomIndex += 1;
+      return value;
+    },
+  });
+
+  await t.throwsAsync(() => model.getResponse(request), { message: 'upstream unavailable' });
+  t.is(calls, 3);
+  t.deepEqual(delays, [3000, 24000]);
+});

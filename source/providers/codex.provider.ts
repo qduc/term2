@@ -4,7 +4,6 @@ import { getDefaultModel, ModelProvider, Model } from '@openai/agents-core';
 import OpenAI from 'openai';
 import { CodexResponsesModel, CodexResponsesWSModel } from './codex-responses-model.js';
 import { RetryingModel } from './retrying-model.js';
-import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -496,13 +495,7 @@ class CodexProvider implements ModelProvider {
     const selectedModel =
       this.transport === 'http'
         ? new CodexResponsesModel(this.openAIClient as any, resolvedModel, this.loggingService)
-        : new CodexResponsesWSModel(
-            this.openAIClient as any,
-            resolvedModel,
-            this.tokenManager,
-            this.loggingService,
-            DEFAULT_TIMED_WS_TIMEOUTS,
-          );
+        : new CodexResponsesWSModel(this.openAIClient as any, resolvedModel, this.tokenManager, this.loggingService);
     const retryingModel = new RetryingModel(selectedModel, {
       retryAttempts: this.retryAttempts,
       loggingService: this.loggingService,

@@ -426,7 +426,7 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
     timestamp: '2026-05-22T09:14:35.044Z',
     provider: 'openrouter',
     model: 'qwen/qwen3',
-    modelClass: 'TimedOpenAIResponsesWSModel',
+    modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
     modelWrapperClass: 'RetryingModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
@@ -449,7 +449,7 @@ test('ProviderTrafficArtifactStore writes per-day per-session request files and 
   const firstRecord = readRequestFile(requestFile)[0];
   t.is(firstRecord?.direction, 'sent');
   t.deepEqual(firstRecord?.headers, { host: 'api.openrouter.ai', authorization: '[REDACTED]' });
-  t.is(firstRecord?.modelClass, 'TimedOpenAIResponsesWSModel');
+  t.is(firstRecord?.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
   t.is(firstRecord?.modelWrapperClass, 'RetryingModel');
 
   const indexPath = path.join(dayDir, 'index.jsonl');
@@ -482,7 +482,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     timestamp: '2026-05-22T09:14:35.044Z',
     provider: 'openai',
     model: 'gpt-5',
-    modelClass: 'TimedResponsesWSModel',
+    modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
     modelWrapperClass: 'RetryingModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
@@ -495,7 +495,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     timestamp: '2026-05-22T09:14:36.000Z',
     provider: 'openai',
     model: 'gpt-5',
-    modelClass: 'TimedResponsesWSModel',
+    modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
     modelWrapperClass: 'RetryingModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-22T09:14:31.125Z',
@@ -507,7 +507,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     timestamp: '2026-05-22T10:00:00.000Z',
     provider: 'openrouter',
     model: 'deepseek/chat',
-    modelClass: 'TimedOpenAIResponsesWSModel',
+    modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
     modelWrapperClass: 'RetryingModel',
     sessionId: 'session-999',
     sessionStartedAt: '2026-05-22T10:00:00.000Z',
@@ -520,7 +520,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     timestamp: '2026-05-22T10:00:01.000Z',
     provider: 'openrouter',
     model: 'deepseek/chat',
-    modelClass: 'TimedOpenAIResponsesWSModel',
+    modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
     modelWrapperClass: 'RetryingModel',
     sessionId: 'session-999',
     sessionStartedAt: '2026-05-22T10:00:00.000Z',
@@ -532,7 +532,7 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
     timestamp: '2026-05-23T00:00:01.000Z',
     provider: 'openai',
     model: 'gpt-5',
-    modelClass: 'TimedResponsesWSModel',
+    modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
     modelWrapperClass: 'RetryingModel',
     sessionId: 'session-123',
     sessionStartedAt: '2026-05-23T00:00:00.000Z',
@@ -546,15 +546,15 @@ test('ProviderTrafficArtifactStore appends received line, upserts newest-first i
   t.is(requestRecords.length, 2);
   t.is(requestRecords[1]?.direction, 'received');
   t.is((requestRecords[1]?.summary as any)?.outputText, 'done');
-  t.is(requestRecords[0]?.modelClass, 'TimedResponsesWSModel');
+  t.is(requestRecords[0]?.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
   t.is(requestRecords[0]?.modelWrapperClass, 'RetryingModel');
-  t.is(requestRecords[1]?.modelClass, 'TimedResponsesWSModel');
+  t.is(requestRecords[1]?.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
   t.is(requestRecords[1]?.modelWrapperClass, 'RetryingModel');
 
   const failureFile = path.join(rootDir, '2026-05-22', '10-00-00_sessi', '10-00-00.000Z_req-2.jsonl');
   t.is((readRequestFile(failureFile)[1]?.error as any)?.message, 'fetch failed');
-  t.is(readRequestFile(failureFile)[0]?.modelClass, 'TimedOpenAIResponsesWSModel');
-  t.is(readRequestFile(failureFile)[1]?.modelClass, 'TimedOpenAIResponsesWSModel');
+  t.is(readRequestFile(failureFile)[0]?.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
+  t.is(readRequestFile(failureFile)[1]?.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
 
   const indexEntries = fs
     .readFileSync(path.join(rootDir, '2026-05-22', 'index.jsonl'), 'utf8')

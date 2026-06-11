@@ -1,6 +1,5 @@
-import { OpenAIResponsesModel } from '@openai/agents-openai';
-import { TimedResponsesWSModel } from './timed-responses-ws-model.js';
-import { DEFAULT_TIMED_WS_TIMEOUTS } from './timed-ws-timeouts.js';
+import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
+import { getCurrentTrace, withTrace } from '@openai/agents-core';
 
 type DiagnosticLogger = {
   warn?: (message: string, meta?: Record<string, unknown>) => void;
@@ -119,15 +118,22 @@ const summarizeReconstructedItems = (items: unknown[]): Record<string, unknown> 
 // `response.output` is empty or missing, swaps in the accumulated items so the
 // parent's existing conversion logic (`convertToOutputItem`) produces a normal
 // `response_done` event.
-export class CodexResponsesWSModel extends TimedResponsesWSModel {
+export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   constructor(
     client: any,
     model: string,
     private readonly tokenManager: any,
     private readonly diagnosticLogger?: DiagnosticLogger,
-    options: any = DEFAULT_TIMED_WS_TIMEOUTS,
   ) {
-    super(client, model, options);
+    super(client, model);
+  }
+
+  override async getResponse(request: any): Promise<any> {
+    const currentTrace = getCurrentTrace();
+    if (currentTrace) {
+      return super.getResponse(request);
+    }
+    return withTrace('codex-responses-ws-model-trace', () => super.getResponse(request));
   }
 
   override _buildResponsesCreateRequest(request: any, stream: boolean): any {
@@ -166,10 +172,13 @@ export class CodexResponsesWSModel extends TimedResponsesWSModel {
     };
 
     if (!stream) {
-      return fetchAndReconstructUnaryResponse(() => super._fetchResponse(updatedRequest, true), this.diagnosticLogger);
+      return fetchAndReconstructUnaryResponse(
+        () => super._fetchResponse(updatedRequest, true as false) as unknown as Promise<AsyncIterable<any>>,
+        this.diagnosticLogger,
+      );
     }
 
-    const response = await super._fetchResponse(updatedRequest, stream);
+    const response = (await super._fetchResponse(updatedRequest, stream as false)) as unknown as AsyncIterable<any>;
     return wrapCodexStream(response, this.diagnosticLogger);
   }
 }

@@ -1,6 +1,6 @@
 import test from 'ava';
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
-import { OpenAIResponsesModelWithPromptCacheKey, TimedOpenAIResponsesWSModel } from './openai.provider.js';
+import { OpenAIResponsesModelWithPromptCacheKey, OpenAIResponsesWSModelWithPromptCacheKey } from './openai.provider.js';
 import { getProvider } from './registry.js';
 
 const loggingService = {
@@ -20,7 +20,7 @@ test('OpenAI provider defaults to websocket and honors explicit HTTP transport',
   t.truthy(provider?.createRunner);
 
   for (const [transport, expectedClass] of [
-    [undefined, TimedOpenAIResponsesWSModel],
+    [undefined, OpenAIResponsesWSModelWithPromptCacheKey],
     ['http', OpenAIResponsesModelWithPromptCacheKey],
   ] as const) {
     const runner = provider!.createRunner!({
@@ -70,7 +70,7 @@ test.serial('OpenAIResponsesModelWithPromptCacheKey forwards prompt_cache_key fr
   }
 });
 
-test.serial('TimedOpenAIResponsesWSModel forwards prompt_cache_key from modelSettings', (t) => {
+test.serial('OpenAIResponsesWSModelWithPromptCacheKey forwards prompt_cache_key from modelSettings', (t) => {
   const original = (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest;
   (OpenAIResponsesWSModel.prototype as any)._buildResponsesCreateRequest = function () {
     return {
@@ -84,10 +84,7 @@ test.serial('TimedOpenAIResponsesWSModel forwards prompt_cache_key from modelSet
   };
 
   try {
-    const model = new TimedOpenAIResponsesWSModel({} as any, 'gpt-4o', {
-      connectTimeoutMs: 1,
-      idleTimeoutMs: 1,
-    });
+    const model = new OpenAIResponsesWSModelWithPromptCacheKey({} as any, 'gpt-4o');
     const built = (model as any)._buildResponsesCreateRequest(
       {
         modelSettings: {

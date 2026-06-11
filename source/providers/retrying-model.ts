@@ -76,7 +76,7 @@ export class RetryingModel implements Model {
 
   async #backoff(error: unknown, attemptNumber: number): Promise<void> {
     const delayMs = computeUpstreamRetryDelayMs({
-      attemptNumber,
+      attemptIndex: attemptNumber - 1,
       random: this.#random,
     });
     this.options.loggingService?.warn('Retrying model request after upstream failure', {

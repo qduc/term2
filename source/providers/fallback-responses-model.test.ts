@@ -503,7 +503,7 @@ test('FallbackResponsesModel logs unary WS request start, success, and failure e
         };
       },
     },
-    'TimedResponsesWSModel',
+    'OpenAIResponsesWSModelWithPromptCacheKey',
   );
   (wsModel as any)._buildResponsesCreateRequest = (_request: any, _stream: boolean) => {
     return {
@@ -558,7 +558,7 @@ test('FallbackResponsesModel logs unary WS request start, success, and failure e
   t.is(logs[0].meta.eventType, 'provider.request.started');
   t.is(logs[0].meta.provider, 'openai');
   t.is(logs[0].meta.model, 'gpt-4o');
-  t.is(logs[0].meta.modelClass, 'TimedResponsesWSModel');
+  t.is(logs[0].meta.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
   t.is(logs[0].meta.modelWrapperClass, 'FallbackResponsesModel');
   t.deepEqual(logs[0].meta.headers, {
     authorization: '[REDACTED]',
@@ -677,7 +677,7 @@ test('FallbackResponsesModel logs streaming WS request start and response comple
         } as any;
       } as any,
     },
-    'TimedResponsesWSModel',
+    'OpenAIResponsesWSModelWithPromptCacheKey',
   );
 
   const httpModel = makeMockModel({});
@@ -720,7 +720,7 @@ test('FallbackResponsesModel logs streaming WS request start and response comple
 
   t.is(logs.length, 2);
   t.is(logs[0].meta.eventType, 'provider.request.started');
-  t.is(logs[0].meta.modelClass, 'TimedResponsesWSModel');
+  t.is(logs[0].meta.modelClass, 'OpenAIResponsesWSModelWithPromptCacheKey');
   t.is(logs[0].meta.modelWrapperClass, 'FallbackResponsesModel');
   t.is(logs[1].meta.eventType, 'provider.response.received');
   t.is(logs[1].meta.text, 'Hello'); // parsed delta content

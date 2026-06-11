@@ -1,6 +1,7 @@
 export type PromptProfile = {
   id: string;
   basePromptFile: string;
+  fragmentFiles?: string[];
   matches: (options: { normalizedModel: string; liteMode: boolean; orchestratorMode?: boolean }) => boolean;
 };
 

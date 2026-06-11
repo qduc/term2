@@ -61,13 +61,7 @@ test('buildPromptSpec composes file fragments in stable order', (t) => {
     searchViaShell: true,
   });
 
-  t.deepEqual(spec.fragmentFiles, [
-    // 'fragments/gpt-5.4.md',
-    'fragments/gpt-5.4-small.md',
-    'worktree-hygiene.md',
-    'mentor-addon.md',
-    'plan-mode-info.md',
-  ]);
+  t.deepEqual(spec.fragmentFiles, ['worktree-hygiene.md', 'mentor-addon.md', 'plan-mode-info.md']);
 });
 
 test('buildPromptSpec always includes plan-mode-info in standard mode to keep system prompt cache-stable', (t) => {

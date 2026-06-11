@@ -205,39 +205,6 @@ test('integration - undo while approval is pending invalidates pending approval 
   );
 });
 
-test.skip('integration - provider change during retry delay aborts retry', async (t) => {
-  let startStreamCalls = 0;
-  const mockClient = {
-    getStreamMaxRetries() {
-      return 1;
-    },
-    async startStream() {
-      startStreamCalls++;
-      throw new Error('WebSocket connection closed before response completed (code=1006)');
-    },
-    setProvider(_provider: string) {},
-  };
-
-  const { session, composition } = setupSession(mockClient);
-
-  const iterator = session.run('hi')[Symbol.asyncIterator]();
-
-  // Get the retry event
-  const firstResult = await iterator.next();
-  t.is(firstResult.value.type, 'retry');
-  t.is(firstResult.value.retryType, 'upstream');
-
-  // Trigger provider change during the delay
-  composition.runtimeController.setProvider('another-provider');
-
-  // Resume iterator: it should detect the stale generation and abort
-  const secondResult = await iterator.next();
-  t.true(secondResult.done);
-
-  // Assert startStream was only called once
-  t.is(startStreamCalls, 1);
-});
-
 test('integration - model change during active stream work prevents mutation and aborts turn', async (t) => {
   let releaseGate: any;
   const gate = new Promise((resolve) => {

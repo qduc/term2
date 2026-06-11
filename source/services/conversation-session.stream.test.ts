@@ -73,6 +73,7 @@ test('run() warns when completed stream history already contains duplicated tool
     { type: 'function_call', callId: 'call-read', id: 'fc_2' },
     { type: 'function_call_result', callId: 'call-read', id: 'fcr_2', output: 'hidden again' },
   ];
+
   stream.newItems = stream.history.slice(1);
   stream.state = { _generatedItems: stream.newItems };
 
@@ -92,7 +93,6 @@ test('run() warns when completed stream history already contains duplicated tool
   for await (const _ev of session.run('hi')) {
     // consume stream
   }
-
   const warning = warnings.find((entry) => entry.meta?.eventType === 'conversation.stream_history.replayed_tools');
   t.truthy(warning);
   t.is(warning.meta.phase, 'post_stream');
@@ -101,103 +101,6 @@ test('run() warns when completed stream history already contains duplicated tool
   t.is(warning.meta.newItemsDuplicatePairs, 1);
   t.is(warning.meta.stateGeneratedItemsDuplicatePairs, 1);
   t.false('output' in warning.meta);
-});
-
-test.skip('run() falls back to standard service tier after flex timeout', async (t) => {
-  const timeoutError = new Error(
-    'data: {"error":{"code":504,"message":"The operation was aborted","metadata":{"error_type":"timeout"}}}',
-  );
-  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
-  successStream.finalOutput = 'Recovered';
-  const calls = [];
-
-  const mockClient = {
-    shouldRetryWithoutFlexServiceTier(error) {
-      return error === timeoutError;
-    },
-    useStandardServiceTierForNextRequest() {
-      calls.push('fallback');
-    },
-    async startStream(input) {
-      calls.push(input);
-      if (calls.length === 1) {
-        throw timeoutError;
-      }
-      return successStream;
-    },
-  };
-
-  const bundle = createConversationSession({
-    sessionId: 's1',
-    agentClient: mockClient,
-    deps: { logger: mockLogger, sessionContextService },
-  });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
-
-  const emitted = [];
-  for await (const ev of session.run('hi')) {
-    emitted.push(ev);
-  }
-
-  t.deepEqual(
-    emitted.map((event) => event.type),
-    ['retry', 'text_delta', 'final'],
-  );
-  t.is(emitted[0].retryType, 'flex_service_tier');
-  t.is(emitted[0].toolName, 'service_tier');
-  t.deepEqual(calls, ['hi', 'fallback', 'hi']);
-});
-
-test.skip('run() emits an ordered transient retry before stream creation', async (t) => {
-  const transientError = new Error("We're currently processing too many requests - please try again later.");
-  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
-  successStream.finalOutput = 'Recovered';
-  let calls = 0;
-
-  const mockClient = {
-    getStreamMaxRetries() {
-      return 1;
-    },
-    async startStream() {
-      calls++;
-      if (calls === 1) {
-        throw transientError;
-      }
-      return successStream;
-    },
-  };
-
-  const bundle = createConversationSession({
-    sessionId: 'pre-stream-transient-retry',
-    agentClient: mockClient,
-    deps: { logger: mockLogger, sessionContextService },
-  });
-
-  const emitted = [];
-  for await (const event of bundle.session.run('retry me')) {
-    emitted.push(event);
-  }
-
-  t.deepEqual(
-    emitted.map((event) =>
-      event.type === 'retry'
-        ? {
-            type: event.type,
-            toolName: event.toolName,
-            attempt: event.attempt,
-            maxRetries: event.maxRetries,
-            retryType: event.retryType,
-          }
-        : event.type === 'text_delta' || event.type === 'final'
-        ? { type: event.type, text: event.type === 'text_delta' ? event.delta : event.finalText }
-        : { type: event.type },
-    ),
-    [
-      { type: 'retry', toolName: 'turn', attempt: 1, maxRetries: 1, retryType: 'upstream' },
-      { type: 'text_delta', text: 'Recovered' },
-      { type: 'final', text: 'Recovered' },
-    ],
-  );
 });
 
 test('run() retries streamed recoverable errors without committing failed stream history', async (t) => {
@@ -292,172 +195,6 @@ test('run() does not retry recoverable errors from a fresh start when disabled',
   t.is(calls, 1);
   t.false(emitted.some((event) => event.type === 'retry'));
   t.truthy(emitted.find((event) => event.type === 'error'));
-});
-
-test.skip('run() retries streamed transient websocket close 1006 by replaying the turn', async (t) => {
-  class FailingStream extends MockStream {
-    async *[Symbol.asyncIterator]() {
-      yield { type: 'response.output_text.delta', delta: 'partial' };
-      throw new Error('WebSocket connection closed before response completed (code=1006)');
-    }
-  }
-
-  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
-  successStream.finalOutput = 'Recovered';
-  successStream.history = [
-    { role: 'user', type: 'message', content: 'retry me' },
-    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Recovered' }] },
-  ];
-
-  const calls = [];
-  const mockClient = {
-    getProvider() {
-      return 'openrouter';
-    },
-    async startStream(input) {
-      calls.push(input);
-      return calls.length === 1 ? new FailingStream() : successStream;
-    },
-  };
-
-  const bundle = createConversationSession({
-    sessionId: 's1',
-    agentClient: mockClient,
-    deps: { logger: mockLogger, sessionContextService },
-  });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
-
-  const emitted = [];
-  for await (const ev of session.run('retry me')) {
-    emitted.push(ev);
-  }
-
-  t.deepEqual(
-    emitted.map((event) =>
-      event.type === 'retry'
-        ? {
-            type: event.type,
-            toolName: event.toolName,
-            attempt: event.attempt,
-            maxRetries: event.maxRetries,
-            retryType: event.retryType,
-          }
-        : event.type === 'text_delta' || event.type === 'final'
-        ? { type: event.type, text: event.type === 'text_delta' ? event.delta : event.finalText }
-        : { type: event.type },
-    ),
-    [
-      { type: 'text_delta', text: 'partial' },
-      { type: 'retry', toolName: 'turn', attempt: 1, maxRetries: 5, retryType: 'upstream' },
-      { type: 'text_delta', text: 'Recovered' },
-      { type: 'final', text: 'Recovered' },
-    ],
-  );
-  t.is(emitted[1].retryType, 'upstream');
-  t.is(calls.length, 2);
-  t.is(calls[0].length, 1);
-  t.deepEqual(calls[1], [{ role: 'user', type: 'message', content: 'retry me' }]);
-});
-
-test.skip('run() retries non-chaining streamed transient errors from completed tool call history', async (t) => {
-  class FailingStream extends MockStream {
-    async *[Symbol.asyncIterator]() {
-      yield {
-        type: 'run_item_stream_event',
-        item: {
-          rawItem: {
-            type: 'function_call',
-            id: 'fc_1',
-            callId: 'call-read',
-            name: 'read_file',
-            arguments: '{}',
-          },
-        },
-      };
-      yield {
-        type: 'run_item_stream_event',
-        item: {
-          rawItem: {
-            type: 'function_call_result',
-            id: 'fcr_1',
-            callId: 'call-read',
-            name: 'read_file',
-            output: 'contents',
-          },
-        },
-      };
-      throw new Error('WebSocket connection closed before response completed (code=1006)');
-    }
-  }
-
-  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
-  successStream.finalOutput = 'Recovered';
-  successStream.lastResponseId = 'resp-recovered';
-  successStream.history = [
-    { role: 'user', type: 'message', content: 'inspect' },
-    { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
-    { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', name: 'read_file', output: 'contents' },
-    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Recovered' }] },
-  ];
-
-  const followUpStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Follow up' }]);
-  followUpStream.finalOutput = 'Follow up';
-  followUpStream.lastResponseId = 'resp-follow-up';
-  followUpStream.history = [
-    ...successStream.history,
-    { role: 'user', type: 'message', content: 'follow up' },
-    {
-      role: 'assistant',
-      type: 'message',
-      status: 'completed',
-      content: [{ type: 'output_text', text: 'Follow up' }],
-    },
-  ];
-
-  const calls = [];
-  const mockClient = {
-    getProvider() {
-      return 'openrouter';
-    },
-    async startStream(input) {
-      calls.push(input);
-      return calls.length === 1 ? new FailingStream() : successStream;
-    },
-  };
-
-  const bundle = createConversationSession({
-    sessionId: 's1',
-    agentClient: mockClient,
-    deps: { logger: mockLogger, sessionContextService },
-  });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
-
-  const emitted = [];
-  for await (const ev of session.run('inspect')) {
-    emitted.push(ev);
-  }
-
-  t.deepEqual(
-    emitted.map((event) => event.type),
-    ['tool_started', 'command_message', 'retry', 'text_delta', 'final'],
-  );
-  t.is(calls.length, 2);
-  t.deepEqual(
-    calls[1].map((item) => item.type),
-    ['message', 'function_call', 'function_call_result'],
-  );
-  t.deepEqual(
-    calls[1].filter((item) => item.role === 'user').map((item) => item.content),
-    ['inspect'],
-  );
-  t.deepEqual(
-    calls[1].filter((item) => item.callId === 'call-read').map((item) => item.type),
-    ['function_call', 'function_call_result'],
-  );
-
-  const state = stateFacade.exportState();
-  t.is(state.toolLedger.filter((entry) => entry.callId === 'call-read').length, 1);
-  t.is(state.toolLedger.find((entry) => entry.callId === 'call-read').status, 'completed');
 });
 
 test('run() exports completed tool pairs from a stream that later fails', async (t) => {
@@ -831,98 +568,6 @@ test('continue() streams events after approval decision', async (t) => {
   t.is(cont[2].finalText, 'Approved run');
 });
 
-test.skip('continue() retries on transient error during stream iteration', async (t) => {
-  const interruption = {
-    name: 'bash',
-    agent: { name: 'CLI Agent' },
-    arguments: JSON.stringify({ command: 'echo hi' }),
-    callId: 'call-retry',
-  };
-
-  const initialStream = new MockStream([]);
-  initialStream.interruptions = [interruption];
-  initialStream.lastResponseId = 'resp-initial';
-  initialStream.state = {
-    approve(arg) {},
-  };
-
-  const failingStream = {
-    lastResponseId: null,
-    interruptions: [],
-    state: {},
-    newItems: [],
-    history: [],
-    finalOutput: '',
-    async *[Symbol.asyncIterator]() {
-      throw new Error("We're currently processing too many requests — please try again later.");
-    },
-  };
-
-  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
-  successStream.finalOutput = 'Recovered';
-  successStream.lastResponseId = 'resp-recovered';
-
-  const followUpStream = new MockStream([{ type: 'response.output_text.delta', delta: 'After continue' }]);
-  followUpStream.finalOutput = 'After continue';
-  followUpStream.lastResponseId = 'resp-after-continue';
-
-  let continueCalls = 0;
-  let startCalls = 0;
-  const calls = [];
-  const mockClient = {
-    getProvider() {
-      return 'codex';
-    },
-    async startStream(input, opts) {
-      startCalls++;
-      calls.push({ input, opts });
-      return startCalls === 1 ? initialStream : followUpStream;
-    },
-    async continueRunStream(state, opts) {
-      continueCalls++;
-      calls.push({ state, opts });
-      return continueCalls === 1 ? failingStream : successStream;
-    },
-  };
-
-  const bundle = createConversationSession({
-    sessionId: 's1',
-    agentClient: mockClient,
-    deps: { logger: mockLogger, sessionContextService },
-  });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
-
-  // Trigger approval_required
-  const first = [];
-  for await (const ev of session.run('run command')) {
-    first.push(ev);
-  }
-  t.is(first[0].type, 'approval_required');
-
-  // Continue — first attempt fails, second succeeds via continueRunStream retry
-  const cont = [];
-  for await (const ev of session.continueAfterApproval({ answer: 'y' })) {
-    cont.push(ev);
-  }
-
-  t.is(continueCalls, 2);
-  t.is(startCalls, 1);
-  t.is(calls[1].opts.previousResponseId, 'resp-initial');
-  t.is(calls[2].opts.previousResponseId, 'resp-initial');
-  const types = cont.map((e) => e.type);
-  t.true(types.includes('retry'), 'should emit a retry event');
-  t.true(types.includes('final'), 'should emit a final event after retry');
-  t.is(cont[cont.length - 1].finalText, 'Recovered');
-
-  for await (const _ of session.run('after continue')) {
-  }
-
-  t.is(startCalls, 2);
-  t.is(typeof calls[3].input, 'string', 'successful retry should allow later turns to chain again');
-  t.is(calls[3].input, 'after continue');
-  t.is(calls[3].opts.previousResponseId, 'resp-recovered');
-});
-
 test('run() retries malformed tool-call interruption before surfacing approval', async (t) => {
   const malformedStream = new MockStream([]);
   malformedStream.interruptions = [
@@ -933,6 +578,7 @@ test('run() retries malformed tool-call interruption before surfacing approval',
       agent: { name: 'CLI Agent' },
     },
   ];
+
   malformedStream.state = { approve() {}, reject() {} };
 
   const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
@@ -1145,6 +791,7 @@ test('run() preserves assistant text prefix when SDK full-history reconstruction
       content: [{ type: 'output_text', text: 'I will inspect the files.' }],
     },
   ];
+
   firstStream.history = [
     { role: 'user', type: 'message', content: 'Investigate cache issue' },
     {
@@ -1195,7 +842,6 @@ test('run() preserves assistant text prefix when SDK full-history reconstruction
   for await (const _ of session.run('Continue after max turns')) {
     // consume events
   }
-
   const secondInput = calls[1];
   t.true(Array.isArray(secondInput));
   t.deepEqual(secondInput.slice(0, 3), [
@@ -1256,7 +902,6 @@ test('run() sends full history for openai-compatible providers', async (t) => {
   for await (const ev of session.run('First message')) {
     // consume events
   }
-
   // OpenAI-compatible provider should receive full history array
   t.true(Array.isArray(firstInput));
   t.is(firstInput.length, 1);
@@ -1266,7 +911,6 @@ test('run() sends full history for openai-compatible providers', async (t) => {
   for await (const ev of session.run('Second message')) {
     // consume events
   }
-
   t.true(Array.isArray(secondInput));
   t.true(secondInput.length >= 2, 'Second call should include conversation history');
 });
@@ -1321,7 +965,6 @@ test('run() chains follow-up turns for Codex provider over websocket', async (t)
   for await (const _ of session.run('Second message')) {
     // consume events
   }
-
   t.is(typeof calls[0].input, 'string', 'Codex should send only the first user message on turn 1');
   t.falsy(calls[0].opts.previousResponseId, 'Codex should not receive a previousResponseId on turn 1');
   t.is(typeof calls[1].input, 'string', 'Codex should send only the next user message on turn 2');
@@ -1710,7 +1353,6 @@ test('undoLastUserTurn() returns { text, imageCount: 0 } after a completed run',
   for await (const _ of session.run('hello')) {
     // consume
   }
-
   const result = stateFacade.undoLastUserTurn();
   t.deepEqual(result, { text: 'hello', imageCount: 0 });
 });
@@ -1759,6 +1401,7 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
         { role: 'user', type: 'message', content: 'msg2' },
         { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Reply2' }] },
       ];
+
       this.finalOutput = 'Reply2';
     }
 
@@ -1804,7 +1447,6 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
   for await (const _ of session.run('msg1')) {
     // consume
   }
-
   // (b) Begin msg2 in a background IIFE — it will block on the gate.
   const msg2Done = (async () => {
     const events = [];
@@ -1829,7 +1471,6 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
   for await (const _ of session.run('msg3')) {
     // consume
   }
-
   // The input to startStream for msg3 must contain msg1 but NOT msg2.
   t.true(Array.isArray(msg3Input), 'msg3 should receive history array');
   const contents = msg3Input.map((item) => item.content);
@@ -2025,6 +1666,7 @@ test('run() resyncs full history after resume before returning to chaining provi
         content: [{ type: 'output_text', text: 'Earlier reply' }],
       },
     ],
+
     previousResponseId: 'expired-response-id',
     toolLedger: [],
     updatedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
@@ -2065,6 +1707,7 @@ test('run() ignores a stale completion after importState() bumps generation', as
           content: [{ type: 'output_text', text: 'stale reply' }],
         },
       ];
+
       this.output = [
         {
           role: 'assistant',
@@ -2128,7 +1771,6 @@ test('run() ignores a stale completion after importState() bumps generation', as
   for await (const _ of session.run('fresh request')) {
     // consume
   }
-
   t.is(calls[1].input, 'fresh request');
   t.falsy(calls[1].opts.previousResponseId);
 });
@@ -2349,7 +1991,6 @@ test('run() omits droppedUserMessage when no user turn was added (skipUserMessag
   } catch {
     // expected
   }
-
   const errorEvent = emitted.find((e) => e.type === 'error');
   t.truthy(errorEvent);
   t.is(errorEvent.droppedUserMessage, undefined);
@@ -2391,7 +2032,6 @@ test('run() emits user_message_consumed_for_abort when an aborted approval is be
   } catch {
     // expected — downstream paths will fail in this minimal mock
   }
-
   const idx = emitted.findIndex((e) => e.type === 'user_message_consumed_for_abort');
   t.true(idx >= 0, 'must emit user_message_consumed_for_abort');
   // The store must not have a genuine user turn for this input.
@@ -2606,7 +2246,6 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
   for await (const _ of session.run('run echo hello')) {
     // consume
   }
-
   // Verify ledger has entries before undo.
   const stateBefore = stateFacade.exportState();
   t.true(stateBefore.toolLedger.length > 0, 'tool ledger should have entries before undo');
@@ -2622,7 +2261,6 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
   for await (const _ of session.run('run echo hello')) {
     // consume
   }
-
   t.true(Array.isArray(retryInput), 'retry should send full history');
   const callIds = retryInput.filter((item) => item.callId || item.call_id).map((item) => item.callId || item.call_id);
   t.false(callIds.includes(toolCallId), 'retried history must NOT contain old tool call IDs');
@@ -2771,296 +2409,4 @@ test('undoLastUserTurn() preserves earlier tool ledger entries that still belong
     .map((item) => item.callId || item.call_id);
   t.true(retryCallIds.includes(firstToolCallId), 'retry should keep earlier retained tool call IDs');
   t.false(retryCallIds.includes(secondToolCallId), 'retry must drop tool call IDs from the undone turn');
-});
-
-test.skip('run() retries chaining streamed transient errors by breaking chaining and replaying full history', async (t) => {
-  class FailingStream extends MockStream {
-    async *[Symbol.asyncIterator]() {
-      yield {
-        type: 'run_item_stream_event',
-        item: {
-          rawItem: {
-            type: 'function_call',
-            id: 'fc_1',
-            callId: 'call-read',
-            name: 'read_file',
-            arguments: '{}',
-          },
-        },
-      };
-      yield {
-        type: 'run_item_stream_event',
-        item: {
-          rawItem: {
-            type: 'function_call_result',
-            id: 'fcr_1',
-            callId: 'call-read',
-            name: 'read_file',
-            output: 'contents',
-          },
-        },
-      };
-      throw new Error('WebSocket connection closed before response completed (code=1006)');
-    }
-  }
-
-  const successStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
-  successStream.finalOutput = 'Recovered';
-  successStream.lastResponseId = 'resp-recovered';
-  successStream.history = [
-    { role: 'user', type: 'message', content: 'inspect' },
-    { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
-    { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', name: 'read_file', output: 'contents' },
-    { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Recovered' }] },
-  ];
-
-  const followUpStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Follow up' }]);
-  followUpStream.finalOutput = 'Follow up';
-  followUpStream.lastResponseId = 'resp-follow-up';
-  followUpStream.history = [
-    ...successStream.history,
-    { role: 'user', type: 'message', content: 'follow up' },
-    {
-      role: 'assistant',
-      type: 'message',
-      status: 'completed',
-      content: [{ type: 'output_text', text: 'Follow up' }],
-    },
-  ];
-
-  const calls = [];
-  const mockClient = {
-    getProvider() {
-      return 'openai';
-    },
-    async startStream(input, opts) {
-      calls.push({ input, opts });
-      return calls.length === 1 ? new FailingStream() : calls.length === 2 ? successStream : followUpStream;
-    },
-  };
-
-  const bundle = createConversationSession({
-    sessionId: 's1',
-    agentClient: mockClient,
-    deps: { logger: mockLogger, sessionContextService },
-  });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
-
-  const emitted = [];
-  for await (const ev of session.run('inspect')) {
-    emitted.push(ev);
-  }
-
-  t.deepEqual(
-    emitted.map((event) => event.type),
-    ['tool_started', 'command_message', 'retry', 'text_delta', 'final'],
-  );
-  t.is(calls.length, 2);
-
-  t.is(typeof calls[0].input, 'string');
-  t.is(calls[0].input, 'inspect');
-  t.falsy(calls[0].opts.previousResponseId);
-
-  t.true(Array.isArray(calls[1].input));
-  t.deepEqual(
-    calls[1].input.map((item) => item.type),
-    ['message', 'function_call', 'function_call_result'],
-  );
-
-  for await (const _ of session.run('follow up')) {
-  }
-
-  t.is(typeof calls[2].input, 'string', 'successful retry should allow later turns to chain again');
-  t.is(calls[2].input, 'follow up');
-  t.is(calls[2].opts.previousResponseId, 'resp-recovered');
-});
-
-test.skip('run() resumes streamed transient tool continuations with the failed response id', async (t) => {
-  const resumeState = { _generatedItems: [] };
-
-  class FailingStream extends MockStream {
-    constructor() {
-      super([]);
-      this.state = resumeState;
-      this.lastResponseId = 'resp-current-tool-call';
-    }
-
-    async *[Symbol.asyncIterator]() {
-      yield {
-        type: 'run_item_stream_event',
-        item: {
-          rawItem: {
-            type: 'function_call',
-            id: 'fc_1',
-            callId: 'call-read',
-            name: 'read_file',
-            arguments: '{}',
-          },
-        },
-      };
-      throw new Error('WebSocket connection closed before response completed (code=1006)');
-    }
-  }
-
-  const resumedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered' }]);
-  resumedStream.finalOutput = 'Recovered';
-  resumedStream.lastResponseId = 'resp-recovered';
-
-  const calls = [];
-  const mockClient = {
-    getProvider() {
-      return 'codex';
-    },
-    async startStream(input, opts) {
-      calls.push({ kind: 'start', input, opts });
-      return new FailingStream();
-    },
-    async continueRunStream(state, opts) {
-      calls.push({ kind: 'continue', state, opts });
-      return resumedStream;
-    },
-  };
-
-  const bundle = createConversationSession({
-    sessionId: 's1',
-    agentClient: mockClient,
-    deps: { logger: mockLogger, sessionContextService },
-  });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
-
-  const emitted = [];
-  for await (const ev of session.run('inspect')) {
-    emitted.push(ev);
-  }
-
-  t.is(calls.length, 2);
-  t.is(calls[1].kind, 'continue');
-  t.is(calls[1].state, resumeState);
-  t.is(calls[1].opts.previousResponseId, 'resp-current-tool-call');
-  t.deepEqual(
-    emitted.map((event) => event.type),
-    ['tool_started', 'retry', 'text_delta', 'final'],
-  );
-});
-
-test.skip('run() forces HTTP fallback after streamed WS retries are exhausted', async (t) => {
-  const originalSetTimeout = globalThis.setTimeout;
-  globalThis.setTimeout = (callback, _delay, ...args) => originalSetTimeout(callback, 0, ...args);
-  t.teardown(() => {
-    globalThis.setTimeout = originalSetTimeout;
-  });
-
-  class FailingStream extends MockStream {
-    async *[Symbol.asyncIterator]() {
-      yield { type: 'response.output_text.delta', delta: 'partial' };
-      throw new Error('WebSocket connection closed before response completed');
-    }
-  }
-
-  const firstStream = new MockStream([{ type: 'response.output_text.delta', delta: 'First response' }]);
-  firstStream.finalOutput = 'First response';
-  firstStream.lastResponseId = 'resp-first';
-  firstStream.history = [
-    { role: 'user', type: 'message', content: 'first' },
-    {
-      role: 'assistant',
-      type: 'message',
-      status: 'completed',
-      content: [{ type: 'output_text', text: 'First response' }],
-    },
-  ];
-
-  const fallbackStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Recovered over HTTP' }]);
-  fallbackStream.finalOutput = 'Recovered over HTTP';
-  fallbackStream.lastResponseId = 'resp-http';
-  fallbackStream.history = [
-    ...firstStream.history,
-    { role: 'user', type: 'message', content: 'second' },
-    {
-      role: 'assistant',
-      type: 'message',
-      status: 'completed',
-      content: [{ type: 'output_text', text: 'Recovered over HTTP' }],
-    },
-  ];
-
-  let downgraded = false;
-  const calls = [];
-  const mockClient = {
-    getProvider() {
-      return 'codex';
-    },
-    forceTransportDowngrade() {
-      downgraded = true;
-      return true;
-    },
-    async startStream(input, opts) {
-      calls.push({ input, opts, transport: downgraded ? 'http' : 'ws' });
-      if (calls.length === 1) {
-        return firstStream;
-      }
-      return downgraded ? fallbackStream : new FailingStream();
-    },
-  };
-
-  const bundle = createConversationSession({
-    sessionId: 's1',
-    agentClient: mockClient,
-    deps: { logger: mockLogger, sessionContextService },
-  });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
-
-  for await (const _ of session.run('first')) {
-    // establish a chained Codex response id
-  }
-
-  const emitted = [];
-  for await (const event of session.run('second')) {
-    emitted.push(event);
-  }
-
-  const secondTurnCalls = calls.slice(1);
-  t.is(secondTurnCalls.filter((call) => call.transport === 'ws').length, 6);
-  t.is(secondTurnCalls.filter((call) => call.transport === 'http').length, 1);
-
-  t.is(typeof secondTurnCalls[0].input, 'string');
-  t.is(secondTurnCalls[0].input, 'second');
-  t.is(secondTurnCalls[0].opts.previousResponseId, 'resp-first');
-
-  const httpCall = secondTurnCalls[secondTurnCalls.length - 1];
-  t.true(Array.isArray(httpCall.input), 'HTTP fallback must replay full history');
-  t.falsy(httpCall.opts.previousResponseId, 'HTTP fallback must not use Responses chaining');
-  t.deepEqual(
-    httpCall.input.filter((item) => item.role === 'user').map((item) => item.content),
-    ['first', 'second'],
-  );
-
-  t.deepEqual(
-    emitted.map((event) => event.type),
-    [
-      'text_delta',
-      'retry',
-      'text_delta',
-      'retry',
-      'text_delta',
-      'retry',
-      'text_delta',
-      'retry',
-      'text_delta',
-      'retry',
-      'text_delta',
-      'retry',
-      'text_delta',
-      'final',
-    ],
-  );
-  t.is(emitted.filter((event) => event.type === 'retry' && event.toolName === 'turn').length, 5);
-  t.is(emitted.filter((event) => event.type === 'retry' && event.toolName === 'transport').length, 1);
-
-  const state = stateFacade.exportState();
-  const assistantTexts = state.history
-    .filter((item) => item.role === 'assistant')
-    .flatMap((item) => item.content || [])
-    .map((part) => part.text);
-  t.deepEqual(assistantTexts, ['First response', 'Recovered over HTTP']);
 });

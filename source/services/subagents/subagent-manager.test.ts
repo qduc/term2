@@ -1239,6 +1239,7 @@ function ensurePostToolProviderRegistered() {
                 { rawItem: { type: 'function_call_result', name: 'grep' } },
                 { rawItem: { role: 'assistant', content: 'Final answer: it is in foo.ts.' } },
               ],
+
               messages: [],
             };
             return _options?.stream ? wrapResultAsAgentStream(result) : result;
@@ -1703,58 +1704,6 @@ test.serial('run() aborted subagent returns cancelled status without model-error
   t.is(result.status, 'cancelled');
   const retryEvents = events.filter((e) => e.type === 'retry');
   t.is(retryEvents.length, 0, 'abort errors should not trigger model-error retries');
-});
-
-test.skip('run() retries on transient upstream error via executeWithRetry', async (t) => {
-  let runCount = 0;
-  const logWarnCalls: any[] = [];
-
-  registerProvider({
-    id: 'mock-transient-retry-provider',
-    label: 'Mock Transient Retry Provider',
-    createRunner: () =>
-      ({
-        run: async () => {
-          runCount++;
-          if (runCount === 1) {
-            const err = new Error('rate limit') as any;
-            err.status = 429;
-            err.headers = { 'retry-after': '0' };
-            return wrapErrorAsAgentStream(err);
-          }
-          const result = {
-            status: 'completed',
-            finalOutput: 'Success after upstream retry',
-            history: [],
-            messages: [],
-          };
-          return wrapResultAsAgentStream(result);
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'mock-model' }],
-  });
-
-  const manager = new SubagentManager({
-    logger: {
-      ...createMockLogger(),
-      warn: (msg: string, meta?: Record<string, unknown>) => {
-        logWarnCalls.push({ msg, meta });
-      },
-    },
-    settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': 'mock-transient-retry-provider',
-      'agent.retryAttempts': 2,
-    }),
-    sessionContextService: createSessionContextService() as any,
-  });
-
-  const result = await manager.run({ role: 'explorer', task: 'find all files' });
-
-  t.is(result.status, 'completed');
-  t.is(runCount, 2, 'should have retried once after transient error');
-  const upstreamRetry = logWarnCalls.find((c) => c.meta?.eventType === 'retry.transient');
-  t.truthy(upstreamRetry, 'should log upstream retry');
 });
 
 test.serial(

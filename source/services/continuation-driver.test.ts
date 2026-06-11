@@ -100,10 +100,7 @@ const collectResult = async (
 const createHarness = ({
   agentClient,
   continuationStreams = [],
-}: {
-  agentClient?: ReturnType<typeof createMockAgentClient>;
-  continuationStreams?: MockStream[];
-} = {}) => {
+}: { agentClient?: ReturnType<typeof createMockAgentClient>; continuationStreams?: MockStream[] } = {}) => {
   const client = agentClient ?? createMockAgentClient();
   client.setContinueRunStreamResults(continuationStreams);
 
@@ -522,7 +519,6 @@ test('drive yields error event when continuation stream throws unrecoverable err
   } catch {
     // Expected
   }
-
   t.pass('Driver completed without hanging');
 });
 
@@ -553,172 +549,6 @@ test('stale approval continuation returns stale outcome', async (t) => {
   t.is(stateMock.approveCalls.length, 0);
   t.is(stateMock.rejectCalls.length, 0);
   t.deepEqual(toolTracker.export(), initialLedger);
-});
-
-test.skip('transient continuation retry with resumable stream resumes stream', async (t) => {
-  const client = createMockAgentClient();
-  const badStream = new MockStream();
-  badStream.state = { some: 'sdk-state' };
-  badStream[Symbol.asyncIterator] = async function* () {
-    throw makeTransientRetryAfterError();
-  };
-
-  const goodStream = new MockStream();
-  goodStream.finalOutput = 'Success after retry';
-
-  const originalSetTimeout = globalThis.setTimeout;
-  const observedDelays: number[] = [];
-  globalThis.setTimeout = ((handler: (...args: any[]) => void, timeout?: number, ...args: any[]) => {
-    observedDelays.push(Number(timeout));
-    return originalSetTimeout(() => handler(...args), 0);
-  }) as typeof setTimeout;
-  t.teardown(() => {
-    globalThis.setTimeout = originalSetTimeout;
-  });
-
-  const { driver, approvalState } = createHarness({
-    agentClient: client,
-    continuationStreams: [badStream, goodStream],
-  });
-  const stateMock = createApprovalStateMock();
-  approvalState.setPending({
-    state: stateMock as any,
-    interruption: createShellInterruption('ls'),
-    emittedCommandIds: new Set(),
-    toolCallArgumentsById: new Map(),
-    token: 1,
-  });
-
-  const { result, events } = await collectResult(
-    driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
-  );
-
-  t.is(result.kind, 'response');
-  if (result.kind === 'response') {
-    t.is(result.result.finalText, 'Success after retry');
-  }
-  t.deepEqual(observedDelays, [1000]);
-  const retryEvents = events.filter((e) => e.type === 'retry');
-  t.is(retryEvents.length, 1);
-  t.is(retryEvents[0].toolName, 'continuation');
-});
-
-test.skip('transient continuation retry without state preserves delay for fresh-start recovery', async (t) => {
-  const client = createMockAgentClient();
-  const badStream = new MockStream();
-  badStream.state = null;
-  badStream[Symbol.asyncIterator] = async function* () {
-    throw makeTransientRetryAfterError();
-  };
-
-  const { driver, approvalState } = createHarness({
-    agentClient: client,
-    continuationStreams: [badStream],
-  });
-  const stateMock = createApprovalStateMock();
-  approvalState.setPending({
-    state: stateMock as any,
-    interruption: createShellInterruption('ls'),
-    emittedCommandIds: new Set(),
-    toolCallArgumentsById: new Map(),
-    token: 1,
-  });
-
-  const { result, events } = await collectResult(
-    driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
-  );
-
-  t.is(result.kind, 'fresh_start_required');
-  if (result.kind === 'fresh_start_required') {
-    t.is(result.delayMs, 1000);
-  }
-  const retryEvents = events.filter((e) => e.type === 'retry');
-  t.is(retryEvents.length, 1);
-});
-
-test.skip('service tier fallback fresh-start recovery preserves one-shot standard service tier flag', async (t) => {
-  const client = createMockAgentClient();
-  client.shouldRetryWithoutFlexServiceTier = () => true;
-
-  const badStream = new MockStream();
-  badStream.state = null;
-  badStream[Symbol.asyncIterator] = async function* () {
-    throw new Error('Rate limit exceeded');
-  };
-
-  const { driver, approvalState } = createHarness({
-    agentClient: client,
-    continuationStreams: [badStream],
-  });
-
-  const stateMock = createApprovalStateMock();
-  approvalState.setPending({
-    state: stateMock as any,
-    interruption: createShellInterruption('ls'),
-    emittedCommandIds: new Set(),
-    toolCallArgumentsById: new Map(),
-    token: 1,
-  });
-
-  const { result } = await collectResult(
-    driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
-  );
-
-  t.is(result.kind, 'fresh_start_required');
-  if (result.kind === 'fresh_start_required') {
-    t.true(result.useStandardServiceTier ?? false);
-  }
-});
-
-test.skip('recovery of approved tool result before fresh start records result in ledger', async (t) => {
-  const client = createMockAgentClient();
-  const badStream = new MockStream();
-  badStream.state = null;
-  badStream[Symbol.asyncIterator] = async function* () {
-    throw new Error('Rate limit exceeded');
-  };
-
-  const { driver, approvalState, toolTracker } = createHarness({
-    agentClient: client,
-    continuationStreams: [badStream],
-  });
-
-  toolTracker.recordFunctionCall({
-    type: 'function_call',
-    callId: 'call-1',
-    name: 'shell',
-    arguments: JSON.stringify({ command: 'ls' }),
-  });
-
-  const stateMock = {
-    ...createApprovalStateMock(),
-    _generatedItems: [
-      {
-        role: 'tool',
-        type: 'function_call_output',
-        callId: 'call-1',
-        output: 'Tool output value',
-      },
-    ],
-  };
-
-  approvalState.setPending({
-    state: stateMock as any,
-    interruption: createShellInterruption('ls', 'call-1'),
-    emittedCommandIds: new Set(),
-    toolCallArgumentsById: new Map(),
-    token: 1,
-  });
-
-  const { result } = await collectResult(
-    driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
-  );
-
-  t.is(result.kind, 'fresh_start_required');
-  const entries = toolTracker.export();
-  const toolResultEntry = entries.find((e) => e.callId === 'call-1' && e.status === 'completed');
-  t.truthy(toolResultEntry);
-  t.is(toolResultEntry?.output, 'Tool output value');
 });
 
 test('multiple auto-approved interruptions followed by manual approval', async (t) => {

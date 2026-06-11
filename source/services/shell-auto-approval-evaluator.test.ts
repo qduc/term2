@@ -112,76 +112,6 @@ test('evaluates non-RED commands via chat and parses valid JSON results', async 
   t.is(chatCalls[0].options.reasoningEffort, 'none');
 });
 
-test.skip('retries transient upstream chat failures before succeeding', async (t) => {
-  const chatCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
-  let attempts = 0;
-  const transientError = Object.assign(new Error('temporary upstream failure'), { status: 503 });
-
-  const advisories = await evaluateShellAutoApprovalAdvisories({
-    commands: [{ id: 'call-safe', command: 'pwd' }],
-    history: [{ role: 'user', type: 'message', content: 'inspect location' }],
-    settingsService: createMockSettings('advisory') as any,
-    agentClient: {
-      chat: async (prompt: string, options: Record<string, unknown>) => {
-        attempts += 1;
-        chatCalls.push({ prompt, options });
-        if (attempts === 1) {
-          throw transientError;
-        }
-        return JSON.stringify({
-          results: [{ reasoning: 'Read-only current directory inspection is safe.', approved: true }],
-        });
-      },
-    } as any,
-    logger: createMockLogger() as any,
-    sessionContextService: createSessionContextService() as any,
-    retryOptions: { sleep: async () => {}, random: () => 0 } as any,
-  } as any);
-
-  t.is(attempts, 2);
-  t.is(chatCalls.length, 2);
-  t.deepEqual(advisories.get('call-safe'), {
-    model: 'test-auto-model',
-    reasoning: 'Read-only current directory inspection is safe.',
-    approved: true,
-    source: 'llm',
-  });
-});
-
-test.skip('retries transient upstream chatJson failures before succeeding', async (t) => {
-  let chatJsonCalls = 0;
-  const transientError = Object.assign(new Error('temporary upstream failure'), { status: 503 });
-
-  const advisories = await evaluateShellAutoApprovalAdvisories({
-    commands: [{ id: 'call-safe', command: 'pwd' }],
-    history: [{ role: 'user', type: 'message', content: 'inspect location' }],
-    settingsService: createMockSettings('advisory', 'structured-retry-provider') as any,
-    agentClient: {
-      chatJson: async () => {
-        chatJsonCalls += 1;
-        if (chatJsonCalls === 1) {
-          throw transientError;
-        }
-        return { results: [{ reasoning: 'Read-only current directory inspection is safe.', approved: true }] };
-      },
-      chat: async () => {
-        throw new Error('prompt fallback should not run');
-      },
-    } as any,
-    logger: createMockLogger() as any,
-    sessionContextService: createSessionContextService() as any,
-    retryOptions: { sleep: async () => {}, random: () => 0 } as any,
-  } as any);
-
-  t.is(chatJsonCalls, 2);
-  t.deepEqual(advisories.get('call-safe'), {
-    model: 'test-auto-model',
-    reasoning: 'Read-only current directory inspection is safe.',
-    approved: true,
-    source: 'llm',
-  });
-});
-
 test('uses structured chatJson when structured support is unknown', async (t) => {
   const chatJsonCalls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
   let chatCalls = 0;
@@ -371,6 +301,7 @@ test('denies all non-RED commands when original plus repair are invalid', async 
       { id: 'call-safe-1', command: 'ls source' },
       { id: 'call-safe-2', command: 'pwd' },
     ],
+
     history: [{ role: 'user', type: 'message', content: 'inspect repository' }],
     settingsService: createMockSettings('advisory', 'invalid-repair-provider') as any,
     agentClient: {
@@ -474,6 +405,7 @@ test('falls back to deny advisory for all commands when chat response shape is m
       { id: 'call-safe-1', command: 'ls source' },
       { id: 'call-safe-2', command: 'pwd' },
     ],
+
     history: [{ role: 'user', type: 'message', content: 'inspect repository' }],
     settingsService: createMockSettings('advisory') as any,
     agentClient: {
@@ -548,62 +480,4 @@ test('keeps RED commands system-rejected even if the LLM approves them', async (
   t.is(redAdvisory?.source, 'system');
   t.regex(redAdvisory?.reasoning ?? '', /Blocked by safety heuristics \(RED\):/);
   t.regex(redAdvisory?.reasoning ?? '', /Model advisory: The model incorrectly approved/);
-});
-
-test.skip('returns fail-closed advisories after upstream retry exhaustion when throwOnError is disabled', async (t) => {
-  const upstreamError = Object.assign(new Error('temporary upstream failure'), { status: 503 });
-  let attempts = 0;
-
-  const advisories = await evaluateShellAutoApprovalAdvisories({
-    commands: [{ id: 'call-safe', command: 'pwd' }],
-    history: [{ role: 'user', type: 'message', content: 'inspect repository' }],
-    settingsService: createMockSettings('advisory') as any,
-    agentClient: {
-      chat: async () => {
-        attempts += 1;
-        throw upstreamError;
-      },
-    } as any,
-    logger: createMockLogger() as any,
-    sessionContextService: createSessionContextService() as any,
-    retryOptions: { sleep: async () => {}, random: () => 0 } as any,
-  } as any);
-
-  t.is(attempts, 2);
-  t.deepEqual(advisories.get('call-safe'), {
-    model: 'test-auto-model',
-    reasoning: 'LLM evaluation encountered an error.',
-    approved: false,
-    source: 'llm',
-    isError: true,
-  });
-});
-
-test.skip('rethrows upstream errors after retry exhaustion when throwOnError is enabled', async (t) => {
-  const upstreamError = Object.assign(new Error('temporary upstream failure'), { status: 503 });
-  let attempts = 0;
-
-  const error = await t.throwsAsync(() =>
-    evaluateShellAutoApprovalAdvisories({
-      commands: [{ id: 'call-safe', command: 'pwd' }],
-      history: [{ role: 'user', type: 'message', content: 'inspect repository' }],
-      settingsService: createMockSettings('advisory') as any,
-      agentClient: {
-        chatJson: async () => {
-          attempts += 1;
-          throw upstreamError;
-        },
-        chat: async () => {
-          throw new Error('prompt fallback should not run');
-        },
-      } as any,
-      logger: createMockLogger() as any,
-      sessionContextService: createSessionContextService() as any,
-      throwOnError: true,
-      retryOptions: { sleep: async () => {}, random: () => 0 } as any,
-    } as any),
-  );
-
-  t.is(attempts, 2);
-  t.is(error, upstreamError);
 });

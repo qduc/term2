@@ -172,48 +172,6 @@ test('dispose() is idempotent — safe to call twice without throwing', (t) => {
   });
 });
 
-test.skip('dispose() unsubscribes the downgrade listener', (t) => {
-  let unsubscribeCalled = false;
-  const mockClient = makeMockClient({
-    onDowngrade(callback) {
-      return () => {
-        unsubscribeCalled = true;
-      };
-    },
-  });
-
-  const { dispose } = createConversationSession({
-    sessionId: 'downgrade-unsub',
-    agentClient: mockClient,
-    deps: { logger: makeLogger(), sessionContextService },
-  });
-
-  t.false(unsubscribeCalled);
-  dispose();
-  t.true(unsubscribeCalled);
-});
-
-test.skip('dispose() does not call unsubscribe a second time on second dispose()', (t) => {
-  let unsubscribeCallCount = 0;
-  const mockClient = makeMockClient({
-    onDowngrade(_callback) {
-      return () => {
-        unsubscribeCallCount++;
-      };
-    },
-  });
-
-  const { dispose } = createConversationSession({
-    sessionId: 'downgrade-once',
-    agentClient: mockClient,
-    deps: { logger: makeLogger(), sessionContextService },
-  });
-
-  dispose();
-  dispose();
-  t.is(unsubscribeCallCount, 1);
-});
-
 test('dispose() resets previousResponseId so next run starts fresh', (t) => {
   const { session, dispose } = createConversationSession({
     sessionId: 'prev-resp-id',

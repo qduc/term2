@@ -1,6 +1,5 @@
 import test from 'ava';
 import { ModelBehaviorError } from '@openai/agents';
-import { APIConnectionTimeoutError } from 'openai';
 import { OpenAICompatibleError } from '../providers/common/provider-errors.js';
 import type { ClassificationContext } from './retry-contracts.js';
 import { DefaultRetryClassifier } from './retry-classifier.js';
@@ -23,18 +22,6 @@ const baseContext = (overrides: Partial<ClassificationContext> = {}): Classifica
   ...overrides,
 });
 
-function asInstanceOf<T extends object>(prototype: object, props: Partial<T>): T {
-  return Object.assign(Object.create(prototype), props) as T;
-}
-
-test.skip('classify returns service_tier_fallback when agent client signals flex timeout', (t) => {
-  const classifier = makeClassifier({ shouldRetryWithoutFlexServiceTier: () => true });
-
-  const result = classifier.classify(baseContext());
-
-  t.deepEqual(result, { kind: 'service_tier_fallback' });
-});
-
 test('classify does not return service_tier_fallback when already attempted', (t) => {
   const classifier = makeClassifier({ shouldRetryWithoutFlexServiceTier: () => true });
 
@@ -45,37 +32,6 @@ test('classify does not return service_tier_fallback when already attempted', (t
   );
 
   t.not(result.kind, 'service_tier_fallback');
-});
-
-test.skip('classify returns transient for retryable upstream error with remaining attempts', (t) => {
-  const classifier = makeClassifier({}, () => 0);
-
-  const result = classifier.classify(
-    baseContext({
-      error: asInstanceOf<APIConnectionTimeoutError>(APIConnectionTimeoutError.prototype, { message: 'timeout' }),
-      retryCounts: { ...baseCounts(), transientRetryCount: 1 },
-    }),
-  );
-
-  t.is(result.kind, 'transient');
-  if (result.kind !== 'transient') return;
-  t.is(result.attempt, 2);
-  t.is(result.delayMs, 900);
-});
-
-test.skip('classify respects Retry-After header from upstream error', (t) => {
-  const classifier = makeClassifier();
-
-  const result = classifier.classify(
-    baseContext({
-      error: new OpenAICompatibleError('rate limited', 429, { 'Retry-After': '7' }),
-    }),
-  );
-
-  t.is(result.kind, 'transient');
-  if (result.kind !== 'transient') return;
-  t.is(result.attempt, 1);
-  t.is(result.delayMs, 7000);
 });
 
 test('classify does not call forceTransportDowngrade for non-retryable errors', (t) => {
@@ -174,19 +130,4 @@ test('classify returns unrecoverable when model retry count exceeds max', (t) =>
   );
 
   t.is(result.kind, 'unrecoverable');
-});
-
-test.skip('classify produces deterministic delay with fixed random', (t) => {
-  const classifier = makeClassifier({}, () => 0);
-
-  const result = classifier.classify(
-    baseContext({
-      error: asInstanceOf<APIConnectionTimeoutError>(APIConnectionTimeoutError.prototype, { message: 'timeout' }),
-      retryCounts: { ...baseCounts(), transientRetryCount: 0 },
-    }),
-  );
-
-  t.is(result.kind, 'transient');
-  if (result.kind !== 'transient') return;
-  t.is(result.delayMs, 450);
 });

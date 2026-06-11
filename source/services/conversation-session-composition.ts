@@ -205,6 +205,14 @@ export function createConversationSessionComposition(
   });
   const retryClassifier = new DefaultRetryClassifier(agentClient);
   const retryEventPresenter = new RetryEventPresenter();
+  const resolveRetryLimit = (): number => {
+    const configured = settingsService?.get<number>('agent.retryAttempts');
+    if (typeof configured === 'number' && Number.isInteger(configured) && configured >= 0) {
+      return configured;
+    }
+    const clientLimit = getMethod<[], number>(agentClient, 'getStreamMaxRetries')?.call(agentClient);
+    return typeof clientLimit === 'number' && Number.isInteger(clientLimit) && clientLimit >= 0 ? clientLimit : 2;
+  };
 
   const continuationDriver = new ContinuationDriver({
     agentClient,
@@ -223,6 +231,7 @@ export function createConversationSessionComposition(
     recoveryPolicy,
     recoveryExecutor,
     retryEventPresenter,
+    resolveRetryLimit,
   });
 
   const initialTurnRunner = new InitialTurnRunner({
@@ -246,6 +255,7 @@ export function createConversationSessionComposition(
     retryClassifier,
     retryEventPresenter,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
+    resolveRetryLimit,
   });
 
   const turnCoordinator = new TurnCoordinator({

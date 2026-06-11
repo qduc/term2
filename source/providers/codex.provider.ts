@@ -480,6 +480,7 @@ class CodexProvider implements ModelProvider {
     private readonly openAIClient: OpenAI,
     private readonly tokenManager: CodexTokenManager,
     private readonly loggingService: any,
+    private readonly sessionContextService: ISessionContextService | undefined,
     private readonly transport: 'websocket' | 'http',
     private readonly retryAttempts: number,
     private readonly onRetry?: () => void,
@@ -495,7 +496,14 @@ class CodexProvider implements ModelProvider {
     const selectedModel =
       this.transport === 'http'
         ? new CodexResponsesModel(this.openAIClient as any, resolvedModel, this.loggingService)
-        : new CodexResponsesWSModel(this.openAIClient as any, resolvedModel, this.tokenManager, this.loggingService);
+        : new CodexResponsesWSModel(
+            this.openAIClient as any,
+            resolvedModel,
+            this.tokenManager,
+            this.loggingService,
+            this.loggingService,
+            this.sessionContextService,
+          );
     const retryingModel = new RetryingModel(selectedModel, {
       retryAttempts: this.retryAttempts,
       loggingService: this.loggingService,

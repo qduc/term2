@@ -7,6 +7,10 @@ const GENERIC_ERROR_MESSAGES = new Set([
 ]);
 
 const getOwnErrorMessage = (error: unknown): string | null => {
+  if (isUndiciSocketCloseError(error)) {
+    return 'connection closed by server mid-response';
+  }
+
   if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
     return error.message.trim();
   }
@@ -56,8 +60,16 @@ const collectErrorMessages = (error: unknown, seen = new Set<unknown>()): string
 };
 
 export const describeError = (error: unknown): string => {
+  if (isUndiciSocketCloseError(error)) {
+    return 'connection closed by server mid-response';
+  }
+
   const messages = collectErrorMessages(error);
   if (messages.length === 0) {
+    if (typeof error === 'object' && error !== null) {
+      const name = (error as { name?: unknown }).name;
+      if (typeof name === 'string' && name) return name;
+    }
     return String(error);
   }
 
@@ -117,3 +129,4 @@ export const isAbortLikeError = (error: unknown): boolean => {
 
   return abortPatterns.some((pattern) => pattern.test(errorMessage));
 };
+import { isUndiciSocketCloseError } from '../services/retry-error-classification.js';

@@ -40,6 +40,24 @@ const getMessage = (error: unknown): string => {
   return '';
 };
 
+export function isPreviousResponseNotFoundError(error: unknown, seen = new Set<unknown>()): boolean {
+  if (!error || seen.has(error)) return false;
+  seen.add(error);
+
+  if (typeof error === 'string') {
+    return /["']?code["']?\s*:\s*["']previous_response_not_found["']/.test(error);
+  }
+  if (typeof error !== 'object') return false;
+
+  const value = error as Record<string, unknown>;
+  if (value.code === 'previous_response_not_found') return true;
+  if (isPreviousResponseNotFoundError(value.message, seen)) return true;
+  if (isPreviousResponseNotFoundError(value.body, seen)) return true;
+  if (isPreviousResponseNotFoundError(value.error, seen)) return true;
+  if (isPreviousResponseNotFoundError(value.cause, seen)) return true;
+  return false;
+}
+
 const logWebSocketCloseCode = (
   logger: Pick<ILoggingService, 'info'> | undefined,
   error: unknown,
@@ -56,6 +74,37 @@ const logWebSocketCloseCode = (
     // Logging should never affect retry classification.
   }
 };
+
+/**
+ * Undici's HTTP / WebSocket body parser throws a bare `new TypeError()`
+ * (empty message, no `code`, no `cause`) when the TLS socket closes
+ * mid-response-body. The only reliable signal is the stack: the private
+ * `#onSocketClose` frame in `node:internal/deps/undici/undici`. Detect
+ * that pattern explicitly so we can classify it as a transient transport
+ * error instead of an unrecoverable programmer-error TypeError.
+ *
+ * Intermediate layers (SDK wrappers, stream collectors) may re-wrap the
+ * original TypeError into a plain `Error` with `message: "TypeError"` and
+ * the original undici stack frames. We handle both the canonical bare
+ * TypeError form and the re-wrapped form by checking the stack pattern
+ * as the primary signal, with name/message guards to avoid false positives
+ * from unrelated errors that happen to have `onSocketClose` in their stack.
+ */
+export function isUndiciSocketCloseError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { name?: unknown; message?: unknown; stack?: unknown };
+  const stack = typeof err.stack === 'string' ? err.stack : '';
+  if (!stack.includes('onSocketClose') || !stack.includes('undici')) return false;
+
+  const name = typeof err.name === 'string' ? err.name : '';
+  const message = typeof err.message === 'string' ? err.message.trim() : '';
+
+  if (name === 'TypeError' && message.length === 0) return true;
+
+  if ((name === 'Error' || name === 'TypeError') && (message.length === 0 || message === 'TypeError')) return true;
+
+  return false;
+}
 
 export function isNetworkProtocolError(error: unknown): boolean {
   if (!error) return false;
@@ -105,6 +154,10 @@ export function isNetworkProtocolError(error: unknown): boolean {
     return true;
   }
 
+  if (isUndiciSocketCloseError(error)) {
+    return true;
+  }
+
   if ((error as any).cause && isNetworkProtocolError((error as any).cause)) {
     return true;
   }
@@ -132,7 +185,10 @@ export const isRetryableTransportError = (
   logger?: Pick<ILoggingService, 'info'>,
 ): RetryableTransportDecision => {
   const retryable =
-    isFirstFrameTimeoutError(error) || isRetryableAbnormalCloseError(error, logger) || isNetworkProtocolError(error);
+    isPreviousResponseNotFoundError(error) ||
+    isFirstFrameTimeoutError(error) ||
+    isRetryableAbnormalCloseError(error, logger) ||
+    isNetworkProtocolError(error);
   return {
     retryable,
     transportFallback: retryable && isNetworkProtocolError(error),
@@ -150,6 +206,10 @@ export const isTransientRetryableError = (error: unknown, logger?: Pick<ILogging
     error instanceof InternalServerError ||
     error instanceof RateLimitError
   ) {
+    return true;
+  }
+
+  if (isUndiciSocketCloseError(error)) {
     return true;
   }
 

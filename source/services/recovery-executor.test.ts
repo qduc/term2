@@ -135,7 +135,7 @@ test('retry_fresh with stream reconciles history and restores ledger', (t) => {
   t.is(deps.providerContinuity.previousResponseId, null);
 });
 
-test('retry_fresh without stream removes user message and clears continuity', (t) => {
+test('retry_fresh without stream preserves user message and clears continuity', (t) => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');
   deps.providerContinuity.update('resp-old');
@@ -148,7 +148,7 @@ test('retry_fresh without stream removes user message and clears continuity', (t
 
   t.is(result.kind, 'run');
   t.is(deps.providerContinuity.previousResponseId, null);
-  t.is(deps.conversationStore.getHistory().length, 0);
+  t.is(deps.conversationStore.getHistory().length, 1);
 });
 
 test('retry_fresh with useStandardServiceTier passes flag through', (t) => {

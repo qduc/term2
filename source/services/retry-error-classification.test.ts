@@ -208,4 +208,47 @@ test('isTransientRetryableError: stream parsing and JSON syntax errors are retry
   t.true(isTransientRetryableError(new SyntaxError('Unexpected end of JSON input')));
   t.true(isTransientRetryableError(new Error('Unexpected token < in JSON at position 0')));
   t.true(isTransientRetryableError(new SyntaxError('Expected double-quoted property name in JSON at position 39')));
+
+  // Undici throws a bare `new TypeError()` (empty message, no code) when the
+  // TLS socket closes mid-response-body. Stack originates in #onSocketClose.
+  const undiciSocketClose = new TypeError();
+  undiciSocketClose.stack = [
+    'TypeError',
+    '    at #onSocketClose (node:internal/deps/undici/undici:15450:20)',
+    '    at TLSSocket.onSocketClose (node:internal/deps/undici/undici:15153:72)',
+    '    at TLSSocket.emit (node:events:520:35)',
+  ].join('\n');
+  t.true(isNetworkProtocolError(undiciSocketClose));
+  t.true(isTransientRetryableError(undiciSocketClose));
+  t.deepEqual(isRetryableTransportError(undiciSocketClose), { retryable: true, transportFallback: true });
+
+  // Non-undici TypeError with empty message must NOT be flagged.
+  const plainTypeError = new TypeError();
+  plainTypeError.stack = 'TypeError\n    at userCode (file.ts:1:1)';
+  t.false(isNetworkProtocolError(plainTypeError));
+  t.false(isTransientRetryableError(plainTypeError));
+
+  // TypeError with a real message must NOT be flagged as a socket close.
+  const typedValueError = new TypeError('Cannot read properties of undefined');
+  t.false(isNetworkProtocolError(typedValueError));
+
+  // Re-wrapped undici socket close: plain Error with message "TypeError"
+  // and the original undici stack frames. Intermediate layers (SDK wrappers,
+  // stream collectors) may re-wrap the canonical bare TypeError into this form.
+  const rewrappedUndiciSocketClose = new Error('TypeError');
+  rewrappedUndiciSocketClose.stack = [
+    'Error: TypeError',
+    '    at #onSocketClose (node:internal/deps/undici/undici:15450:20)',
+    '    at TLSSocket.onSocketClose (node:internal/deps/undici/undici:15153:72)',
+    '    at TLSSocket.emit (node:events:520:35)',
+  ].join('\n');
+  t.true(isNetworkProtocolError(rewrappedUndiciSocketClose));
+  t.true(isTransientRetryableError(rewrappedUndiciSocketClose));
+  t.deepEqual(isRetryableTransportError(rewrappedUndiciSocketClose), { retryable: true, transportFallback: true });
+
+  // Plain Error with message "TypeError" but NO undici stack must NOT be flagged.
+  const plainErrorWithTypeError = new Error('TypeError');
+  plainErrorWithTypeError.stack = 'Error: TypeError\n    at userCode (file.ts:1:1)';
+  t.false(isNetworkProtocolError(plainErrorWithTypeError));
+  t.false(isTransientRetryableError(plainErrorWithTypeError));
 });

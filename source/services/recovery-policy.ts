@@ -4,7 +4,7 @@ export class DefaultConversationRecoveryPolicy {
   plan(context: RecoveryContext): RecoveryPlan {
     const { failure, stream, freshStartRetriesAllowed } = context;
 
-    if (!freshStartRetriesAllowed && !stream && failure.kind !== 'unrecoverable') {
+    if (!freshStartRetriesAllowed && failure.kind === 'transient') {
       return { kind: 'terminate', events: [] };
     }
 
@@ -13,14 +13,6 @@ export class DefaultConversationRecoveryPolicy {
         return { kind: 'retry_fresh', inputMode: 'delta', useStandardServiceTier: true };
 
       case 'transient': {
-        const isResuming = Boolean(stream?.state);
-        if (isResuming) {
-          return {
-            kind: 'resume_stream',
-            state: stream!.state,
-            previousResponseId: stream!.lastResponseId ?? null,
-          };
-        }
         return { kind: 'retry_fresh', inputMode: 'full_history' };
       }
 

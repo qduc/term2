@@ -445,6 +445,82 @@ test('CodexResponsesWSModel extends OpenAIResponsesWSModel', (t) => {
   t.true(model instanceof OpenAIResponsesWSModel);
 });
 
+test.serial('CodexResponsesWSModel emits traffic logs for websocket streamed responses', async (t) => {
+  const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+  const logs: Array<{ level: string; message: string; meta?: any }> = [];
+
+  (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_ws_traffic' } },
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: {
+          type: 'message',
+          id: 'msg_ws_traffic',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'Hello WS traffic!' }],
+        },
+      },
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp_ws_traffic',
+          output: [],
+          usage: { input_tokens: 3, output_tokens: 4, total_tokens: 7 },
+        },
+      },
+    ]);
+  };
+
+  const loggingService = {
+    debug: (message: string, meta?: any) => logs.push({ level: 'debug', message, meta }),
+    error: (message: string, meta?: any) => logs.push({ level: 'error', message, meta }),
+    getCorrelationId: () => 'trace-log-1',
+  };
+  const sessionContextService = {
+    getContext: () => ({
+      sessionId: 'sess_ws_1',
+      sessionStartedAt: '2025-01-01T00:00:00.000Z',
+      firstUserMessagePreview: 'hello ws',
+      mode: 'websocket',
+      traceId: 'trace-session-1',
+    }),
+    runWithContext: <T>(_context: any, fn: () => T) => fn(),
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      loggingService as any,
+      sessionContextService as any,
+    );
+    const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
+
+    const events = await collect(model.getStreamedResponse(request));
+
+    t.is(events[events.length - 1].type, 'response.completed');
+    t.is(logs.length, 2);
+    t.is(logs[0].meta.eventType, 'provider.request.started');
+    t.is(logs[1].meta.eventType, 'provider.response.received');
+    t.is(logs[0].meta.requestId, logs[1].meta.requestId);
+    t.is(logs[0].meta.sessionId, 'sess_ws_1');
+    t.is(logs[0].meta.headers.authorization, '[REDACTED]');
+    t.is(logs[1].meta.payload.transport, 'websocket');
+    t.is(logs[1].meta.payload.responseId, 'resp_ws_traffic');
+  } finally {
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+  }
+});
+
 test.serial('CodexResponsesModel.getResponse (unary) intercepts and runs as stream under the hood', async (t) => {
   const original = (OpenAIResponsesModel.prototype as any)._fetchResponse;
   let receivedStreamArg = false;

@@ -98,6 +98,7 @@ export interface ContinuationDriverDeps {
   recoveryPolicy: DefaultConversationRecoveryPolicy;
   recoveryExecutor: DefaultRecoveryExecutor;
   retryEventPresenter: RetryEventPresenter;
+  resolveRetryLimit: () => number;
 }
 
 // ── Prepared Continuation ─────────────────────────────────────────
@@ -401,7 +402,7 @@ export class ContinuationDriver {
 
           continue;
         } catch (error) {
-          const maxTransientRetries = 0;
+          const maxTransientRetries = this.deps.resolveRetryLimit();
           const retryStream = lastStream;
 
           const classified = this.deps.retryClassifier.classify({

@@ -197,3 +197,39 @@ test('describeError keeps specific top-level error without repeating the same ca
 
   t.is(describeError(error), 'socket hang up');
 });
+
+test('describeError surfaces undici onSocketClose as a connection drop', (t) => {
+  const undiciSocketClose = new TypeError();
+  undiciSocketClose.stack = [
+    'TypeError',
+    '    at #onSocketClose (node:internal/deps/undici/undici:15450:20)',
+    '    at TLSSocket.onSocketClose (node:internal/deps/undici/undici:15153:72)',
+    '    at TLSSocket.emit (node:events:520:35)',
+  ].join('\n');
+
+  const described = describeError(undiciSocketClose);
+  t.true(described.toLowerCase().includes('connection'));
+  t.false(described === 'TypeError');
+});
+
+test('describeError surfaces re-wrapped undici onSocketClose (Error with message "TypeError") as a connection drop', (t) => {
+  const rewrapped = new Error('TypeError');
+  rewrapped.stack = [
+    'Error: TypeError',
+    '    at #onSocketClose (node:internal/deps/undici/undici:15450:20)',
+    '    at TLSSocket.onSocketClose (node:internal/deps/undici/undici:15153:72)',
+    '    at TLSSocket.emit (node:events:520:35)',
+  ].join('\n');
+
+  const described = describeError(rewrapped);
+  t.true(described.toLowerCase().includes('connection'));
+  t.false(described === 'TypeError');
+});
+
+test('describeError does not misidentify plain Error with message "TypeError" as undici socket close', (t) => {
+  const plain = new Error('TypeError');
+  plain.stack = 'Error: TypeError\n    at userCode (file.ts:1:1)';
+
+  const described = describeError(plain);
+  t.is(described, 'TypeError');
+});

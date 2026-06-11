@@ -69,9 +69,6 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
         } else {
           this.deps.providerContinuity.clear();
           this.deps.toolTracker.restoreCompletedEntries(state.ledgerSnapshot);
-          if (state.addedUserMessage) {
-            this.deps.conversationStore.removeLastUserMessage();
-          }
         }
 
         const instruction: NextRunInstruction = {

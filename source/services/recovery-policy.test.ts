@@ -25,21 +25,15 @@ test('service_tier_fallback produces retry_fresh with delta input and useStandar
   t.deepEqual(result, { kind: 'retry_fresh', inputMode: 'delta', useStandardServiceTier: true });
 });
 
-test('transient failure with resumable stream produces resume_stream plan', (t) => {
-  const mockState = { _currentTurn: 'x' } as any;
-  const mockStream = { state: mockState, lastResponseId: 'resp-123' } as any;
-
+test('transient failure with resumable stream replays full history', (t) => {
   const result = policy.plan(
     baseRecoveryContext({
       failure: { kind: 'transient', attempt: 1, delayMs: 500 },
-      stream: mockStream,
+      stream: { state: {}, lastResponseId: 'resp-123' } as any,
     }),
   );
 
-  t.is(result.kind, 'resume_stream');
-  if (result.kind !== 'resume_stream') return;
-  t.is(result.state, mockState);
-  t.is(result.previousResponseId, 'resp-123');
+  t.deepEqual(result, { kind: 'retry_fresh', inputMode: 'full_history' });
 });
 
 test('transient failure without stream produces retry_fresh with full_history', (t) => {
@@ -103,7 +97,7 @@ test('fresh-start retries disabled converts non-unrecoverable failure without st
   t.deepEqual(result, { kind: 'terminate', events: [] });
 });
 
-test('fresh-start retries disabled still allows recovery when stream exists', (t) => {
+test('fresh-start retries disabled terminates transport recovery even when stream exists', (t) => {
   const result = policy.plan(
     baseRecoveryContext({
       failure: { kind: 'transient', attempt: 1, delayMs: 500 },
@@ -112,7 +106,7 @@ test('fresh-start retries disabled still allows recovery when stream exists', (t
     }),
   );
 
-  t.is(result.kind, 'resume_stream');
+  t.deepEqual(result, { kind: 'terminate', events: [] });
 });
 
 // ── nextRetryCounts ────────────────────────────────────────────

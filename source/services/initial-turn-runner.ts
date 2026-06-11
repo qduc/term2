@@ -55,6 +55,7 @@ export interface InitialTurnRunnerDeps {
   retryClassifier: DefaultRetryClassifier;
   retryEventPresenter: RetryEventPresenter;
   freshStartRetriesAllowed: boolean;
+  resolveRetryLimit: () => number;
 }
 
 export class InitialTurnRunner {
@@ -93,7 +94,7 @@ export class InitialTurnRunner {
         }
       }
 
-      const maxTransientRetries = 0;
+      const maxTransientRetries = this.deps.resolveRetryLimit();
 
       let token: number;
       if (options.abortedContext) {

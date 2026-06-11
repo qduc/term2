@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConversationService } from '../services/conversation-service.js';
-import { isAbortLikeError } from '../utils/error-helpers.js';
+import { describeError, isAbortLikeError } from '../utils/error-helpers.js';
 import { ASK_USER_DECLINE_RESULT } from '../tools/ask-user-constants.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { appendMessagesCapped } from '../utils/message-buffer.js';
@@ -343,7 +343,7 @@ export const useConversation = ({
           return;
         }
 
-        const rawErrorMessage = error instanceof Error ? error.message : String(error);
+        const rawErrorMessage = describeError(error);
         const errorMessage = enhanceApiKeyError(rawErrorMessage);
 
         // If the session dropped the user turn from the store as part of this

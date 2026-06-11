@@ -1,5 +1,11 @@
 import { OpenAIResponsesModel, OpenAIResponsesWSModel } from '@openai/agents-openai';
 import { getCurrentTrace, withTrace } from '@openai/agents-core';
+import { randomUUID } from 'node:crypto';
+import { describeError } from '../utils/error-helpers.js';
+import { sanitizeHeaders } from '../utils/header-sanitizer.js';
+import type { ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
+
+type TrafficLogger = Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId'>;
 
 type DiagnosticLogger = {
   warn?: (message: string, meta?: Record<string, unknown>) => void;
@@ -13,6 +19,9 @@ const TERMINAL_RESPONSE_EVENT_TYPES = new Set([
   'response.incomplete',
   'response.error',
 ]);
+
+const WS_RESPONSE_MODEL_CLASS = 'OpenAIResponsesWSModel';
+const WS_RESPONSE_WRAPPER_CLASS = 'CodexResponsesWSModel';
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -104,6 +113,35 @@ const summarizeReconstructedItems = (items: unknown[]): Record<string, unknown> 
   };
 };
 
+const summarizeWebsocketResponse = (response: unknown): Record<string, unknown> => {
+  const record = asRecord(response) ?? {};
+  const output = Array.isArray(record.output) ? record.output : [];
+  const outputTypes = output
+    .map((item) => stringValue(asRecord(item)?.type) ?? 'unknown')
+    .filter((type, index, array) => array.indexOf(type) === index);
+  const firstMessage = output.find((item) => stringValue(asRecord(item)?.type) === 'message');
+  const messageRecord = asRecord(firstMessage);
+  const content = Array.isArray(messageRecord?.content) ? messageRecord.content : [];
+  const text = content
+    .map((item) => asRecord(item))
+    .find((item) => stringValue(item?.type) === 'output_text' && typeof item?.text === 'string')?.text;
+
+  return {
+    transport: 'websocket',
+    status: stringValue(record.status) ?? 'completed',
+    responseId: stringValue(record.id),
+    outputCount: output.length,
+    outputTypes,
+    ...(text ? { text } : {}),
+    ...(record.usage ? { usage: record.usage } : {}),
+  };
+};
+
+const getTrafficEventPrefix = (sessionContextService?: ISessionContextService): 'provider' | 'evaluator' => {
+  const trafficContext = sessionContextService?.getContext() ?? null;
+  return trafficContext?.evaluator === true ? 'evaluator' : 'provider';
+};
+
 // Codex's `/backend-api/codex/responses` endpoint can ship terminal response
 // frames with either an empty `output` array or no `output` field at all, even
 // when the assistant message was already delivered via
@@ -124,8 +162,103 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     model: string,
     private readonly tokenManager: any,
     private readonly diagnosticLogger?: DiagnosticLogger,
+    private readonly trafficLogger?: TrafficLogger,
+    private readonly sessionContextService?: ISessionContextService,
   ) {
     super(client, model);
+  }
+
+  #buildTrafficMeta(requestId: string, requestData: Record<string, unknown>): Record<string, unknown> {
+    const trafficContext = this.sessionContextService?.getContext() ?? null;
+    const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
+
+    return {
+      requestId,
+      traceId: trafficContext?.traceId ?? this.trafficLogger?.getCorrelationId?.(),
+      sessionId: trafficContext?.sessionId,
+      sessionStartedAt: trafficContext?.sessionStartedAt,
+      firstUserMessagePreview: trafficContext?.firstUserMessagePreview,
+      mode: trafficContext?.mode,
+      provider: 'codex',
+      model,
+      modelClass: WS_RESPONSE_MODEL_CLASS,
+      modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
+    };
+  }
+
+  #modelNameFallback(): string {
+    return (this as any).model ?? 'unknown';
+  }
+
+  #logTrafficStarted(requestId: string, requestData: Record<string, unknown>, headers?: HeadersInit): void {
+    if (!this.trafficLogger) return;
+    const eventPrefix = getTrafficEventPrefix(this.sessionContextService);
+
+    this.trafficLogger.debug('Codex websocket request start', {
+      eventType: `${eventPrefix}.request.started`,
+      category: 'provider',
+      phase: 'request_start',
+      direction: 'sent',
+      ...this.#buildTrafficMeta(requestId, requestData),
+      payload: requestData,
+      ...(headers ? { headers: sanitizeHeaders(headers) } : {}),
+    });
+  }
+
+  #logTrafficReceived(requestId: string, requestData: Record<string, unknown>, response: unknown): void {
+    if (!this.trafficLogger) return;
+    const eventPrefix = getTrafficEventPrefix(this.sessionContextService);
+
+    this.trafficLogger.debug('Codex websocket response received', {
+      eventType: `${eventPrefix}.response.received`,
+      category: 'provider',
+      phase: 'provider_response',
+      direction: 'received',
+      ...this.#buildTrafficMeta(requestId, requestData),
+      payload: summarizeWebsocketResponse(response),
+    });
+  }
+
+  #logTrafficFailed(requestId: string, requestData: Record<string, unknown>, error: unknown): void {
+    if (!this.trafficLogger) return;
+
+    this.trafficLogger.error('Codex websocket request failed', {
+      eventType: 'provider.response.failed',
+      category: 'provider',
+      phase: 'provider_response',
+      ...this.#buildTrafficMeta(requestId, requestData),
+      error: describeError(error),
+    });
+  }
+
+  async #withTrafficLogging(
+    responseStream: AsyncIterable<any>,
+    requestId: string,
+    requestData: Record<string, unknown>,
+  ): Promise<AsyncIterable<any>> {
+    const self = this;
+
+    async function* wrapped(): AsyncIterable<any> {
+      try {
+        for await (const event of responseStream) {
+          if (
+            event &&
+            typeof event === 'object' &&
+            ((event as any).type === 'response.completed' || (event as any).type === 'response.incomplete') &&
+            (event as any).response
+          ) {
+            const response = (event as any).response;
+            self.#logTrafficReceived(requestId, requestData, response);
+          }
+          yield event;
+        }
+      } catch (error) {
+        self.#logTrafficFailed(requestId, requestData, error);
+        throw error;
+      }
+    }
+
+    return wrapped();
   }
 
   override async getResponse(request: any): Promise<any> {
@@ -146,6 +279,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   }
 
   protected override async _fetchResponse(request: any, stream: boolean): Promise<any> {
+    const requestId = randomUUID();
+    const builtRequest = (this as any)._buildResponsesCreateRequest(request, true);
+    const requestData = (asRecord(builtRequest?.requestData) ?? {}) as Record<string, unknown>;
+
     const accessToken = await this.tokenManager.getOrRefreshAccessToken();
     const accountId = this.tokenManager.getAccountId();
 
@@ -156,6 +293,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     if (accountId) {
       extraHeaders['chatgpt-account-id'] = accountId;
     }
+
+    this.#logTrafficStarted(requestId, requestData, extraHeaders);
 
     const updatedRequest = {
       ...request,
@@ -172,14 +311,26 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     };
 
     if (!stream) {
-      return fetchAndReconstructUnaryResponse(
-        () => super._fetchResponse(updatedRequest, true as false) as unknown as Promise<AsyncIterable<any>>,
-        this.diagnosticLogger,
-      );
+      try {
+        const response = await fetchAndReconstructUnaryResponse(
+          () => super._fetchResponse(updatedRequest, true as false) as unknown as Promise<AsyncIterable<any>>,
+          this.diagnosticLogger,
+        );
+        this.#logTrafficReceived(requestId, requestData, response);
+        return response;
+      } catch (error) {
+        this.#logTrafficFailed(requestId, requestData, error);
+        throw error;
+      }
     }
 
-    const response = (await super._fetchResponse(updatedRequest, stream as false)) as unknown as AsyncIterable<any>;
-    return wrapCodexStream(response, this.diagnosticLogger);
+    try {
+      const response = (await super._fetchResponse(updatedRequest, stream as false)) as unknown as AsyncIterable<any>;
+      return this.#withTrafficLogging(response, requestId, requestData);
+    } catch (error) {
+      this.#logTrafficFailed(requestId, requestData, error);
+      throw error;
+    }
   }
 }
 

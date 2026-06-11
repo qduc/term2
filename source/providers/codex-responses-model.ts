@@ -221,9 +221,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
   #logTrafficFailed(requestId: string, requestData: Record<string, unknown>, error: unknown): void {
     if (!this.trafficLogger) return;
+    const eventPrefix = getTrafficEventPrefix(this.sessionContextService);
 
     this.trafficLogger.error('Codex websocket request failed', {
-      eventType: 'provider.response.failed',
+      eventType: `${eventPrefix}.response.failed`,
       category: 'provider',
       phase: 'provider_response',
       ...this.#buildTrafficMeta(requestId, requestData),
@@ -326,7 +327,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
     try {
       const response = (await super._fetchResponse(updatedRequest, stream as false)) as unknown as AsyncIterable<any>;
-      return this.#withTrafficLogging(response, requestId, requestData);
+      const patched = wrapCodexStream(response, this.diagnosticLogger);
+      return this.#withTrafficLogging(patched, requestId, requestData);
     } catch (error) {
       this.#logTrafficFailed(requestId, requestData, error);
       throw error;
@@ -339,7 +341,7 @@ export class CodexResponsesModel extends OpenAIResponsesModel {
     super(client, model);
   }
 
-  _buildResponsesCreateRequest(request: any, stream: boolean): any {
+  override _buildResponsesCreateRequest(request: any, stream: boolean): any {
     const built = (OpenAIResponsesModel.prototype as any)._buildResponsesCreateRequest.call(this, request, stream);
 
     return {
@@ -348,7 +350,7 @@ export class CodexResponsesModel extends OpenAIResponsesModel {
     };
   }
 
-  async _fetchResponse(request: any, stream: boolean): Promise<any> {
+  protected override async _fetchResponse(request: any, stream: boolean): Promise<any> {
     if (!stream) {
       return fetchAndReconstructUnaryResponse(
         () => (OpenAIResponsesModel.prototype as any)._fetchResponse.call(this, request, true),
@@ -382,11 +384,11 @@ export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: Diag
   let accumulatedItems: any[] = [];
   for await (let event of source) {
     const type = event?.type;
-    if (type === 'response.error' && event.error) {
-      const errMsg = event.error.message || JSON.stringify(event.error);
+    if (type === 'response.error') {
+      const errMsg = event.error?.message || JSON.stringify(event.error ?? event);
       logger?.error?.('Codex stream received response.error event', {
         eventType: 'codex.response.stream_error_event',
-        error: event.error,
+        error: event.error ?? event,
       });
       throw new Error(`Codex provider stream error: ${errMsg}`);
     }

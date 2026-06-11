@@ -507,7 +507,7 @@ test.serial('CodexResponsesWSModel emits traffic logs for websocket streamed res
 
     const events = await collect(model.getStreamedResponse(request));
 
-    t.is(events[events.length - 1].type, 'response.completed');
+    t.is((events[events.length - 1] as any).event?.type, 'response.completed');
     t.is(logs.length, 2);
     t.is(logs[0].meta.eventType, 'provider.request.started');
     t.is(logs[1].meta.eventType, 'provider.response.received');
@@ -636,6 +636,18 @@ test('wrapCodexStream throws a detailed stream error when receiving response.err
 
   t.true(error instanceof Error);
   t.is(error.message, 'Codex provider stream error: Some specific API error description');
+});
+
+test('wrapCodexStream throws when receiving response.error event without error field', async (t) => {
+  const eventStream = wrapCodexStream(makeStream([{ type: 'response.error' }]));
+
+  const error = await t.throwsAsync(async () => {
+    for await (const _ of eventStream) {
+    }
+  });
+
+  t.true(error instanceof Error);
+  t.true(error.message.startsWith('Codex provider stream error:'));
 });
 
 test('wrapCodexStream throws a detailed provider error when receiving a failed response status', async (t) => {

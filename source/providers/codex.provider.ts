@@ -620,6 +620,7 @@ registerProvider({
         openAIClient,
         tokenManager,
         loggingService,
+        sessionContextService,
         settingsService.get('agent.transport') ?? 'websocket',
         settingsService.get('agent.retryAttempts') ?? 2,
         onRetry,

@@ -24,6 +24,18 @@ test('getMatchCount returns 0 for "No matches found." output', (t) => {
   t.is(getMatchCount('grep', 'grep', 'No matches found.'), 0);
 });
 
+test('getMatchCount returns 0 for grep tool when structured parser returns null (unparseable output)', (t) => {
+  // Output that parseGrepOutput cannot decode (no file:line:content pattern) should not
+  // fall through to the shell fallback and miscount as 1 match.
+  t.is(getMatchCount('grep', 'grep', 'Search failed: some rg error'), 0);
+  t.is(getMatchCount('grep', 'grep', 'some unexpected single line'), 0);
+});
+
+test('getMatchCount returns 0 for find_files tool when structured parser returns null', (t) => {
+  // Output that parseFindFilesOutput cannot decode should return 0, not fall through.
+  t.is(getMatchCount('find_files', 'find_files', 'Error: no such directory'), 0);
+});
+
 test('getMatchCount returns 0 for "No files found matching pattern: ..." output', (t) => {
   t.is(getMatchCount('find_files', 'find_files', 'No files found matching pattern: *.ts'), 0);
 });

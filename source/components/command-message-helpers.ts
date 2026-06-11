@@ -107,11 +107,17 @@ export const getMatchCount = (toolName: string | undefined, command: string, out
     if (parsed) {
       return Object.values(parsed.matchesByFile).reduce((acc, matches) => acc + matches.length, 0);
     }
+    // Structured parser returned null — the output isn't a parseable match list.
+    // Don't fall through to the shell counter; return 0 to avoid miscounting error
+    // messages or no-result strings as matches.
+    return 0;
   } else if (searchKind === 'find_files') {
     const parsed = parseFindFilesOutput(sanitizedOutput);
     if (parsed) {
       return parsed.files.length;
     }
+    // Same reasoning as above: unparseable output should yield 0.
+    return 0;
   }
 
   // Shell fallback: count visible result lines when the tool is a shell-routed search

@@ -198,7 +198,10 @@ export async function* processStreamEvents(
               ? ((addedSrc as Record<string, unknown>).output_index as number)
               : -1;
           const name = getString(addedItem, 'name');
-          if (idx >= 0 && name) streamingToolNamesByIndex.set(idx, name);
+          if (idx >= 0 && name) {
+            streamingToolNamesByIndex.set(idx, name);
+            streamingToolArgCharCounts.set(idx, 0);
+          }
         }
       }
 
@@ -209,6 +212,7 @@ export async function* processStreamEvents(
         const toolName = getString(startSrc, 'toolName');
         if (toolCallId && toolName) {
           streamingToolNamesByIndex.set(toolCallId, toolName);
+          streamingToolArgCharCounts.set(toolCallId, 0);
         }
       }
 
@@ -303,7 +307,10 @@ export async function* processStreamEvents(
                 if (fn) {
                   // Track tool name from any chunk (first chunk has it).
                   const name = getString(fn, 'name');
-                  if (name) streamingToolNamesByIndex.set(tc?.index ?? 0, name);
+                  if (name) {
+                    streamingToolNamesByIndex.set(tc?.index ?? 0, name);
+                    streamingToolArgCharCounts.set(tc?.index ?? 0, 0);
+                  }
                   if (typeof fn.arguments === 'string' && fn.arguments) {
                     const tcIndex = tc?.index ?? 0;
                     const prev = streamingToolArgCharCounts.get(tcIndex) ?? 0;

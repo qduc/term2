@@ -802,3 +802,179 @@ test('emits tool_call_streaming_delta for AI SDK tool-input start and delta even
   t.is(deltas[1].toolName, 'shell');
   t.is(deltas[1].argumentCharCount, 16); // full args length
 });
+
+test('tool_call_streaming_delta resets argument char count when a new tool call starts on the same index/id', async (t) => {
+  const stream = makeStream([
+    // Responses API - tool call 0 (shell)
+    {
+      data: {
+        type: 'model',
+        event: {
+          type: 'response.output_item.added',
+          output_index: 0,
+          output_item: { type: 'function_call', name: 'shell', id: 'call-1' },
+        },
+      },
+    },
+    {
+      data: {
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: '{"cmd":"ls"}',
+        },
+      },
+    },
+    // Responses API - tool call 0 again (grep)
+    {
+      data: {
+        type: 'model',
+        event: {
+          type: 'response.output_item.added',
+          output_index: 0,
+          output_item: { type: 'function_call', name: 'grep', id: 'call-2' },
+        },
+      },
+    },
+    {
+      data: {
+        type: 'model',
+        event: {
+          type: 'response.function_call_arguments.delta',
+          output_index: 0,
+          delta: '{"pattern":"foo"}',
+        },
+      },
+    },
+
+    // Chat Completions API - tool call 0 (shell)
+    {
+      data: {
+        type: 'chunk',
+        event: {
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ index: 0, id: 'call-3', function: { name: 'shell', arguments: '' } }],
+              },
+            },
+          ],
+        },
+      },
+    },
+    {
+      data: {
+        type: 'chunk',
+        event: {
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ index: 0, function: { arguments: '{"cmd"' } }],
+              },
+            },
+          ],
+        },
+      },
+    },
+    // Chat Completions API - tool call 0 again (grep)
+    {
+      data: {
+        type: 'chunk',
+        event: {
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ index: 0, id: 'call-4', function: { name: 'grep', arguments: '' } }],
+              },
+            },
+          ],
+        },
+      },
+    },
+    {
+      data: {
+        type: 'chunk',
+        event: {
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ index: 0, function: { arguments: '{"pat"' } }],
+              },
+            },
+          ],
+        },
+      },
+    },
+
+    // AI SDK - tool call 1 (shell)
+    {
+      data: {
+        type: 'model',
+        event: {
+          type: 'tool-input-start',
+          id: 'call-5',
+          toolName: 'shell',
+        },
+      },
+    },
+    {
+      data: {
+        type: 'model',
+        event: {
+          type: 'tool-input-delta',
+          id: 'call-5',
+          delta: '{"command',
+        },
+      },
+    },
+    // AI SDK - tool call 1 again (grep)
+    {
+      data: {
+        type: 'model',
+        event: {
+          type: 'tool-input-start',
+          id: 'call-5',
+          toolName: 'grep',
+        },
+      },
+    },
+    {
+      data: {
+        type: 'model',
+        event: {
+          type: 'tool-input-delta',
+          id: 'call-5',
+          delta: '{"pattern',
+        },
+      },
+    },
+  ]);
+
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+
+  const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
+  t.is(deltas.length, 6);
+
+  // Responses API verification
+  t.is(deltas[0].toolName, 'shell');
+  t.is(deltas[0].argumentCharCount, 12); // '{"cmd":"ls"}'.length
+  t.is(deltas[1].toolName, 'grep');
+  t.is(deltas[1].argumentCharCount, 17); // '{"pattern":"foo"}'.length (should be reset, not 29)
+
+  // Chat Completions API verification
+  t.is(deltas[2].toolName, 'shell');
+  t.is(deltas[2].argumentCharCount, 6); // '{"cmd"'.length
+  t.is(deltas[3].toolName, 'grep');
+  t.is(deltas[3].argumentCharCount, 6); // '{"pat"'.length (should be reset, not 12)
+
+  // AI SDK verification
+  t.is(deltas[4].toolName, 'shell');
+  t.is(deltas[4].argumentCharCount, 9); // '{"command'.length
+  t.is(deltas[5].toolName, 'grep');
+  t.is(deltas[5].argumentCharCount, 9); // '{"pattern'.length (should be reset, not 18)
+});

@@ -633,6 +633,7 @@ export const useConversation = ({
     setIsProcessing(false);
     setLastUsage(null);
     setLastCodexRateLimit(null);
+    setToolCallStreamingInfo(null);
     usageAccumulator?.reset();
     subagentUsageAccumulator?.reset();
   }, [conversationService, usageAccumulator, subagentUsageAccumulator, onClear]);
@@ -648,6 +649,7 @@ export const useConversation = ({
     approvedContextRef.current = null;
     setThinkingStartedAt(null);
     setIsProcessing(false);
+    setToolCallStreamingInfo(null);
   }, [conversationService]);
 
   const undoLastUserMessage = useCallback((): { text: string; images?: UserTurn['images'] } | null => {
@@ -678,6 +680,7 @@ export const useConversation = ({
     approvedContextRef.current = null;
     setThinkingStartedAt(null);
     setIsProcessing(false);
+    setToolCallStreamingInfo(null);
 
     return restored;
   }, [messages, conversationService]);
@@ -724,6 +727,7 @@ export const useConversation = ({
       approvedContextRef.current = null;
       setThinkingStartedAt(null);
       setIsProcessing(false);
+      setToolCallStreamingInfo(null);
 
       return restored;
     },

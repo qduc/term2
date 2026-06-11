@@ -1,6 +1,8 @@
 import type { NormalizedUsage } from '../../utils/token-usage.js';
 
-export type SubagentRole = 'explorer' | 'worker' | 'researcher' | 'mentor' | string;
+export const SUBAGENT_ROLES = ['explorer', 'worker', 'researcher', 'mentor'] as const;
+export type SupportedSubagentRole = (typeof SUBAGENT_ROLES)[number];
+export type SubagentRole = SupportedSubagentRole | string;
 
 export interface SubagentRequest {
   role: SubagentRole;

@@ -1,13 +1,21 @@
-import { Agent, run, tool as createTool, type Tool } from '@openai/agents';
+import { Agent, RunContext, Runner, run, tool as createTool, type Tool } from '@openai/agents';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
+import { z } from 'zod';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import { ExecutionContext } from '../execution-context.js';
 import { getProvider } from '../../providers/index.js';
 import { createConversationSession } from '../conversation-session-factory.js';
 import { SubagentSession } from './subagent-session.js';
-import type { SubagentRequest, SubagentResult, SubagentDefinition, SubagentRole } from './types.js';
+import type {
+  SubagentRequest,
+  SubagentResult,
+  SubagentDefinition,
+  SubagentRole,
+  SupportedSubagentRole,
+} from './types.js';
+import { SUBAGENT_ROLES } from './types.js';
 import type { ConversationEvent } from '../conversation-events.js';
 import type { CommandMessage, ToolDefinition } from '../../tools/types.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../conversation-retry-policy.js';
@@ -38,6 +46,22 @@ import { tryAcquireFileLock } from '../../tools/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../utils/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../shell-auto-approval-evaluator.js';
 import type { ISubagentClient, ISubagentClientFactory } from './subagent-client-types.js';
+
+type SubagentRunContext = {
+  agentId: string;
+  role: SupportedSubagentRole;
+  task: string;
+  filesChanged: string[];
+  toolCounts: Record<string, number>;
+  activeCommandMessages: Record<string, CommandMessage[]>;
+  turnCount: number;
+  maxTurns: number;
+};
+
+type CachedRoleTool = {
+  agent: Agent<SubagentRunContext>;
+  tool: Tool<SubagentRunContext>;
+};
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
 const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
@@ -217,8 +241,14 @@ function buildAgentTools(
     providerId: string;
     logger: ILoggingService;
     settings: ISettingsService;
-    onToolStart?: (toolName: string, params: unknown, commandMessages: CommandMessage[]) => void;
-    onToolComplete?: (toolName: string) => void;
+    onToolStart?: (
+      toolName: string,
+      params: unknown,
+      commandMessages: CommandMessage[],
+      context?: RunContext<unknown>,
+      details?: unknown,
+    ) => void;
+    onToolComplete?: (toolName: string, result: unknown, context?: RunContext<unknown>, details?: unknown) => void;
   },
 ): Tool[] {
   const providerDef = getProvider(options.providerId);
@@ -240,10 +270,16 @@ function buildAgentTools(
         parameters: useStrictSchema ? toOpenAIStrictToolSchema(definition.parameters) : definition.parameters,
         needsApproval: wrapNeedsApproval(definition),
         execute: async (params, _context, details) => {
-          options.onToolStart?.(definition.name, params, formatRunningCommandMessages(definition, params));
+          options.onToolStart?.(
+            definition.name,
+            params,
+            formatRunningCommandMessages(definition, params),
+            _context,
+            details,
+          );
           const maxOutputLength = options.settings.get<number | undefined>('shell.maxOutputChars');
           const result = await definition.execute(params, _context, details);
-          options.onToolComplete?.(definition.name);
+          options.onToolComplete?.(definition.name, result, _context, details);
           let trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
 
           // Inject warning when turns are approaching maxTurns
@@ -394,6 +430,23 @@ function aggregateToolUsage(toolCounts: Map<string, number>): Array<{ toolName: 
   return Array.from(toolCounts.entries()).map(([toolName, count]) => ({ toolName, count }));
 }
 
+function aggregateContextToolUsage(toolCounts: Record<string, number>): Array<{ toolName: string; count: number }> {
+  return Object.entries(toolCounts).map(([toolName, count]) => ({ toolName, count }));
+}
+
+function getSubagentRunContext(context: unknown): SubagentRunContext | undefined {
+  const candidate = (context as RunContext<SubagentRunContext> | undefined)?.context;
+  if (
+    candidate &&
+    typeof candidate === 'object' &&
+    typeof candidate.agentId === 'string' &&
+    Array.isArray(candidate.filesChanged)
+  ) {
+    return candidate;
+  }
+  return undefined;
+}
+
 /**
  * Check whether an error message or error-like object indicates an abort/cancel.
  * Centralises the detection logic that was previously duplicated between the
@@ -415,6 +468,7 @@ export class SubagentManager {
   #agentClient?: ISubagentClient;
   #createClient?: ISubagentClientFactory['createClient'];
   #mentorSession: SubagentSession;
+  #roleToolCache = new Map<SupportedSubagentRole, CachedRoleTool>();
 
   constructor(deps: {
     logger: ILoggingService;
@@ -445,6 +499,244 @@ export class SubagentManager {
 
   resetMentorSession(): void {
     this.#mentorSession.reset();
+  }
+
+  clearCache(): void {
+    this.#roleToolCache.clear();
+  }
+
+  getRoleAgentTool(role: SupportedSubagentRole): Tool<SubagentRunContext> {
+    return this.#getOrCreateRoleTool(role).tool;
+  }
+
+  getRoleAgent(role: SupportedSubagentRole): Agent<SubagentRunContext> {
+    return this.#getOrCreateRoleTool(role).agent;
+  }
+
+  #restoreRunContext(resumeState?: string): SubagentRunContext | undefined {
+    if (!resumeState) return undefined;
+    try {
+      const parsed = JSON.parse(resumeState);
+      const context = parsed?.context?.context;
+      if (
+        context &&
+        typeof context.agentId === 'string' &&
+        Array.isArray(context.filesChanged) &&
+        context.toolCounts &&
+        typeof context.toolCounts === 'object' &&
+        context.activeCommandMessages &&
+        typeof context.activeCommandMessages === 'object'
+      ) {
+        return context as SubagentRunContext;
+      }
+    } catch (error: any) {
+      this.#logger.warn('Failed to restore nested subagent bookkeeping context', {
+        error: error?.message || String(error),
+      });
+    }
+    return undefined;
+  }
+
+  #getOrCreateRoleTool(role: SupportedSubagentRole): CachedRoleTool {
+    const cached = this.#roleToolCache.get(role);
+    if (cached) return cached;
+
+    const definition = loadRoleDefinition(role, this.#settings);
+    const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.model, definition.canRunShell);
+    const toolDefinitions = this.#buildToolDefinitions(definition, [], '', searchViaShell, true);
+    const providerId = definition.provider;
+    const tools = buildAgentTools(toolDefinitions, {
+      providerId,
+      logger: this.#logger,
+      settings: this.#settings,
+      onToolStart: (name, params, commandMessages, context, details) => {
+        const runContext = getSubagentRunContext(context);
+        if (!runContext) return;
+        const callId = (details as any)?.toolCall?.callId ?? `subagent-tool-${randomUUID()}`;
+        runContext.toolCounts[name] = (runContext.toolCounts[name] ?? 0) + 1;
+        runContext.activeCommandMessages[callId] = commandMessages;
+        this.#emit({
+          type: 'subagent_tool_started',
+          agentId: runContext.agentId,
+          role: runContext.role,
+          toolName: name,
+          arguments: params,
+        });
+        for (const message of commandMessages) {
+          this.#emit({
+            type: 'subagent_command_message',
+            agentId: runContext.agentId,
+            role: runContext.role,
+            message,
+          });
+        }
+      },
+      onToolComplete: (_name, result, context, details) => {
+        const runContext = getSubagentRunContext(context);
+        if (!runContext) return;
+        const callId = (details as any)?.toolCall?.callId;
+        const messages = (callId && runContext.activeCommandMessages[callId]) ?? [];
+        for (const message of messages) {
+          this.#emit({
+            type: 'subagent_command_message',
+            agentId: runContext.agentId,
+            role: runContext.role,
+            message: {
+              ...message,
+              status: 'completed',
+              output: typeof result === 'string' ? result : JSON.stringify(result),
+              success: true,
+            },
+          });
+        }
+        if (callId) {
+          delete runContext.activeCommandMessages[callId];
+        }
+      },
+    });
+
+    const modelSettings: any = { retry: { maxRetries: 0 } };
+    if (definition.reasoningEffort && definition.reasoningEffort !== 'default') {
+      modelSettings.reasoning = { effort: definition.reasoningEffort, summary: 'auto' };
+    }
+
+    const envInfo = getEnvInfo(this.#settings, this.#executionContext);
+    const cwd = this.#executionContext?.getCwd() ?? process.cwd();
+    const agentsInstructions = this.#executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
+    const instructions = [
+      resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model))),
+      resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md')),
+      definition.instructions,
+      buildAvailableToolGuidance(toolDefinitions, searchViaShell),
+      `Environment: ${envInfo}${agentsInstructions}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const agent = new Agent<SubagentRunContext>({
+      name: definition.name,
+      model: definition.model,
+      modelSettings,
+      instructions,
+      tools,
+    });
+
+    const providerDef = getProvider(providerId);
+    const configuredRunner =
+      providerId === 'openai'
+        ? new Runner()
+        : providerDef?.createRunner?.({
+            settingsService: this.#settings,
+            loggingService: this.#logger,
+            sessionContextService: this.#sessionContextService,
+          });
+    const runConfig = (configuredRunner as Runner | undefined)?.config;
+    const parameters = z.object({
+      role: z.literal(role),
+      task: z.string(),
+    });
+    const tool = agent.asTool({
+      toolName: `run_subagent_${role}`,
+      toolDescription: `Run the ${role} subagent.`,
+      parameters,
+      inputBuilder: ({ params }) => params.task,
+      ...(runConfig ? { runConfig } : {}),
+      runOptions: {
+        maxTurns: definition.maxTurns,
+        callModelInputFilter: (args: any) => {
+          if (args.context?.context) {
+            args.context.context.turnCount = (args.context.context.turnCount ?? 0) + 1;
+          }
+          return args.modelData;
+        },
+      },
+      resumeState: { contextStrategy: 'merge' },
+      customOutputExtractor: (completedResult: any) => {
+        const runContext =
+          getSubagentRunContext(completedResult?.state?._context) ??
+          ({
+            agentId: randomUUID(),
+            role,
+            task: '',
+            filesChanged: [],
+            toolCounts: {},
+            activeCommandMessages: {},
+            turnCount: 0,
+            maxTurns: definition.maxTurns,
+          } satisfies SubagentRunContext);
+        const result: SubagentResult & { interrupted?: boolean } = {
+          agentId: runContext.agentId,
+          role,
+          status: 'completed',
+          finalText: extractFinalText(completedResult),
+          filesChanged: [...new Set(runContext.filesChanged)],
+          toolsUsed: aggregateContextToolUsage(runContext.toolCounts),
+          usage: normalizeAgentRunUsage(completedResult?.state?.usage) ?? extractUsage(completedResult),
+          ...(completedResult?.interruptions?.length ? { interrupted: true } : {}),
+        };
+        return JSON.stringify(result);
+      },
+    }) as Tool<SubagentRunContext>;
+
+    const created = { agent, tool };
+    this.#roleToolCache.set(role, created);
+    return created;
+  }
+
+  async runAsTool(request: SubagentRequest, context?: unknown, details?: unknown): Promise<SubagentResult> {
+    if (!SUBAGENT_ROLES.includes(request.role as SupportedSubagentRole)) {
+      throw new Error(`Unsupported subagent role: "${request.role}"`);
+    }
+    const role = request.role as SupportedSubagentRole;
+    const detailsRecord = details as
+      | { resumeState?: string; signal?: AbortSignal; toolCall?: { callId?: string } }
+      | undefined;
+    const restoredContext = this.#restoreRunContext(detailsRecord?.resumeState);
+    const agentId = restoredContext?.agentId ?? detailsRecord?.toolCall?.callId ?? randomUUID();
+    const runContext: SubagentRunContext = restoredContext ?? {
+      agentId,
+      role,
+      task: request.task,
+      filesChanged: [],
+      toolCounts: {},
+      activeCommandMessages: {},
+      turnCount: 0,
+      maxTurns: loadRoleDefinition(role, this.#settings).maxTurns,
+    };
+    runContext.task = request.task;
+
+    if (!detailsRecord?.resumeState) {
+      this.#emit({
+        type: 'subagent_started',
+        agentId,
+        role,
+        task: request.task,
+        parentTool: request.parentTool,
+      });
+    }
+
+    const nestedContext = new RunContext(runContext);
+    const parentContext = context as RunContext<unknown> | undefined;
+    if (parentContext && typeof (nestedContext as any)._mergeApprovals === 'function') {
+      (nestedContext as any)._mergeApprovals(parentContext.toJSON().approvals);
+    }
+
+    try {
+      const tool = this.#getOrCreateRoleTool(role).tool as any;
+      const raw = await tool.execute({ role, task: request.task }, nestedContext, details);
+      const parsed = JSON.parse(String(raw)) as SubagentResult & { interrupted?: boolean };
+      if (!parsed.interrupted) {
+        this.#emit({ type: 'subagent_completed', result: parsed });
+      }
+      return parsed;
+    } catch (error: any) {
+      this.#logger.error('Nested subagent tool failed', {
+        agentId,
+        role,
+        error: error?.message || String(error),
+      });
+      throw error;
+    }
   }
 
   async run(request: SubagentRequest): Promise<SubagentResult> {
@@ -776,6 +1068,7 @@ export class SubagentManager {
     filesChanged: string[],
     taskContext: string,
     searchViaShell: boolean,
+    nestedApprovals = false,
   ): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
@@ -816,7 +1109,11 @@ export class SubagentManager {
       });
 
       if (definition.canWrite) {
-        tools.push(this.#wrapShellTool(shellDef, cwd, filesChanged, taskContext));
+        tools.push(
+          nestedApprovals
+            ? this.#wrapNestedShellTool(shellDef, cwd)
+            : this.#wrapShellTool(shellDef, cwd, filesChanged, taskContext),
+        );
       } else {
         tools.push(this.#wrapReadOnlyShellTool(shellDef));
       }
@@ -835,6 +1132,7 @@ export class SubagentManager {
             cwd,
             filesChanged,
             (params: any) => this.#extractPathsFromApplyPatch(params),
+            nestedApprovals,
           ),
         );
       } else {
@@ -848,6 +1146,7 @@ export class SubagentManager {
             cwd,
             filesChanged,
             (params: any) => this.#extractPathsFromSearchReplace(params),
+            nestedApprovals,
           ),
           this.#wrapWriteTool(
             createCreateFileToolDefinition({
@@ -858,6 +1157,7 @@ export class SubagentManager {
             cwd,
             filesChanged,
             (params: any) => (params?.path ? [params.path] : []),
+            nestedApprovals,
           ),
         );
       }
@@ -1021,6 +1321,37 @@ export class SubagentManager {
     };
   }
 
+  #wrapNestedShellTool(definition: ToolDefinition, cwd: string): ToolDefinition {
+    const originalExecute = definition.execute.bind(definition);
+
+    return {
+      ...definition,
+      execute: async (params: any, context?: unknown, details?: unknown) => {
+        const command: string = typeof params?.command === 'string' ? params.command : '';
+        const extractedPaths = command ? this.#extractPathsFromCommand(command, cwd) : [];
+        for (const filePath of extractedPaths) {
+          if (!this.#isWithinWriteBoundary(filePath, cwd)) {
+            return `Error: command blocked - target path "${filePath}" is outside the allowed write boundary. Command: ${command}`;
+          }
+        }
+
+        const releaseWorkerLocks =
+          extractedPaths.length > 0 ? this.#tryAcquireWorkerWriteLocks(extractedPaths, cwd) : () => {};
+        if (!releaseWorkerLocks) {
+          return 'Error: command blocked - one or more target files are already being modified by another worker.';
+        }
+
+        try {
+          const result = await originalExecute(params, context, details);
+          getSubagentRunContext(context)?.filesChanged.push(...extractedPaths);
+          return result;
+        } finally {
+          releaseWorkerLocks();
+        }
+      },
+    };
+  }
+
   #wrapReadOnlyShellTool(definition: ToolDefinition): ToolDefinition {
     const originalExecute = definition.execute.bind(definition);
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
@@ -1089,8 +1420,10 @@ export class SubagentManager {
     cwd: string,
     filesChanged: string[],
     extractPaths: (params: any) => string[],
+    nestedApprovals = false,
   ): ToolDefinition {
     const originalExecute = definition.execute.bind(definition);
+    const originalNeedsApproval = definition.needsApproval.bind(definition);
 
     return {
       ...definition,
@@ -1098,8 +1431,16 @@ export class SubagentManager {
       // channel for a subagent running inside a blocked parent tool call), and
       // out-of-boundary writes are rejected deterministically by execute() below.
       // Either way no interactive approval is required, so this never returns true.
-      needsApproval: () => false,
-      execute: async (params: any, context?: unknown) => {
+      needsApproval: nestedApprovals
+        ? async (params: any, context?: unknown) => {
+            const paths = extractPaths(params);
+            if (paths.some((filePath) => !this.#isWithinWriteBoundary(filePath, cwd))) {
+              return false;
+            }
+            return originalNeedsApproval(params, context);
+          }
+        : () => false,
+      execute: async (params: any, context?: unknown, details?: unknown) => {
         const paths = extractPaths(params);
 
         for (const filePath of paths) {
@@ -1128,9 +1469,13 @@ export class SubagentManager {
         }
 
         try {
-          const result = await originalExecute(params, context);
+          const result = await originalExecute(params, context, details);
           for (const successfulPath of this.#extractSuccessfulWritePaths(result)) {
-            filesChanged.push(successfulPath);
+            if (nestedApprovals) {
+              getSubagentRunContext(context)?.filesChanged.push(successfulPath);
+            } else {
+              filesChanged.push(successfulPath);
+            }
           }
           return result;
         } finally {

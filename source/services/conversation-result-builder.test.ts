@@ -168,6 +168,28 @@ test('approval_required outcome when stream has interruptions', async (t) => {
   }
 });
 
+test('approval_required records nested subagent state when an agent tool is pending', async (t) => {
+  const deps = makeDeps('off');
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'nested-shell-call',
+        arguments: { command: 'touch nested.txt' },
+        agent: { name: 'Worker' },
+      },
+    ],
+    state: {
+      _pendingAgentToolRuns: new Map([['run_subagent:parent-call', '{"nested":true}']]),
+    },
+  });
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  t.is(outcome.kind, 'approval_required');
+  t.true(deps.approvalFlow.getPending()?.nestedSubagent);
+});
+
 test('approval_required outcome preserves usage from model turn', async (t) => {
   const stream = makeStream({
     interruptions: [

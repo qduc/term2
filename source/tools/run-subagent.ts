@@ -12,7 +12,9 @@ import {
 import type { SubagentResult } from '../services/subagents/types.js';
 
 const runSubagentSchema = z.object({
-  role: z.string().describe('The subagent role to use: "explorer", "worker", "researcher", or "mentor".'),
+  role: z
+    .enum(['explorer', 'worker', 'researcher', 'mentor'])
+    .describe('The subagent role to use: "explorer", "worker", "researcher", or "mentor".'),
   task: z
     .string()
     .describe(

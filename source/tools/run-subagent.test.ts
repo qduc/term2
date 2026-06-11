@@ -30,6 +30,15 @@ test('schema requires role and task', (t) => {
   t.false(tool.parameters.safeParse({ task: 'find files' }).success);
 });
 
+test('schema rejects unsupported roles', (t) => {
+  const tool = createRunSubagentToolDefinition(async () => makeResult());
+
+  for (const role of ['explorer', 'worker', 'researcher', 'mentor']) {
+    t.true(tool.parameters.safeParse({ role, task: 'do work' }).success);
+  }
+  t.false(tool.parameters.safeParse({ role: 'custom', task: 'do work' }).success);
+});
+
 test('execute returns plain-text SubagentResult', async (t) => {
   const expected = makeResult({ finalText: 'Answer here.' });
   const tool = createRunSubagentToolDefinition(async () => expected);

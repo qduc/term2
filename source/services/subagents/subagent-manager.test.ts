@@ -714,6 +714,65 @@ test.serial('run() result contains agentId and correct role', async (t) => {
   t.is(result.status, 'completed');
 });
 
+test.serial('getRoleAgentTool caches one internal agent tool per role', (t) => {
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-boundary-worker',
+    }),
+  });
+
+  const first = manager.getRoleAgentTool('worker');
+  const second = manager.getRoleAgentTool('worker');
+  const explorer = manager.getRoleAgentTool('explorer');
+
+  t.is(first, second);
+  t.not(first, explorer);
+  t.is(first.name, 'run_subagent_worker');
+});
+
+test.serial('clearCache rebuilds cached role agent tools', (t) => {
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-boundary-worker',
+    }),
+  });
+
+  const first = manager.getRoleAgentTool('worker');
+  manager.clearCache();
+  const rebuilt = manager.getRoleAgentTool('worker');
+
+  t.not(first, rebuilt);
+});
+
+test.serial('cached worker agent preserves native approval checks for nested tools', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join('/tmp', 'term2-test-nested-worker-approval-'));
+  t.teardown(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+  const manager = new SubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'mock-boundary-worker',
+    }),
+    executionContext: {
+      getCwd: () => tmpDir,
+      isRemote: () => false,
+      getSSHService: () => undefined,
+    } as unknown as ExecutionContext,
+  });
+
+  const worker = manager.getRoleAgent('worker');
+  const shell = getAgentTool(worker, 'shell');
+  const createFile = getAgentTool(worker, 'create_file');
+
+  t.true(await shell.needsApproval({}, { command: 'touch nested-approval.txt' }));
+  t.false(await createFile.needsApproval({}, { path: 'inside.txt', content: 'ok' }));
+  t.false(await createFile.needsApproval({}, { path: '../outside.txt', content: 'blocked' }));
+});
+
 // ========== Write boundary enforcement ==========
 
 let boundaryWorkerCalls: any[] = [];

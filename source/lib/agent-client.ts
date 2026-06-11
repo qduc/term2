@@ -220,6 +220,7 @@ export class AgentClient {
   }
 
   setModel(model: string): void {
+    this.#subagentManager?.clearCache();
     const buildResult = buildAgent({ model, reasoningEffort: this.#reasoningEffort }, this.#buildFactoryDeps());
     this.#agent = buildResult.agent;
     this.#model = buildResult.resolvedModel;
@@ -228,6 +229,7 @@ export class AgentClient {
 
   setReasoningEffort(effort?: ModelSettingsReasoningEffort | 'default'): void {
     this.#reasoningEffort = effort;
+    this.#subagentManager?.clearCache();
     const buildResult = buildAgent({ model: this.#model, reasoningEffort: effort }, this.#buildFactoryDeps());
     this.#agent = buildResult.agent;
     this.#model = buildResult.resolvedModel;
@@ -235,6 +237,7 @@ export class AgentClient {
 
   setTemperature(temperature?: number): void {
     this.#temperature = temperature;
+    this.#subagentManager?.clearCache();
     const buildResult = buildAgent(
       { model: this.#model, reasoningEffort: this.#reasoningEffort, temperature },
       this.#buildFactoryDeps(),
@@ -244,6 +247,7 @@ export class AgentClient {
   }
 
   setProvider(provider: string): void {
+    this.#subagentManager?.clearCache();
     this.#provider = provider;
     this.#settings.set('agent.provider', provider);
     const buildResult = buildAgent(
@@ -375,6 +379,7 @@ export class AgentClient {
 
   #refreshAgent(): void {
     if (this.#isTransientClient) return;
+    this.#subagentManager?.clearCache();
     const buildResult = buildAgent(
       { model: this.#model, reasoningEffort: this.#reasoningEffort as any, temperature: this.#temperature },
       this.#buildFactoryDeps(),
@@ -928,15 +933,7 @@ export class AgentClient {
 
     this.#activeSubagentsCount++;
     try {
-      const result = await this.#subagentManager.run(request);
-
-      // saveAgentToolRunResult is not exported as a public API from
-      // @openai/agents-core, so we cannot call it here. The nestedRunResult
-      // is preserved on the SubagentResult for use by the caller and will
-      // be propagated back through the conversation result builder when the
-      // run_subagent is registered via Agent.asTool (future work).
-
-      return result;
+      return await this.#subagentManager.runAsTool(request, _context, details);
     } finally {
       this.#activeSubagentsCount--;
       if (this.#activeSubagentsCount === 0 && this.#pendingClearSink) {

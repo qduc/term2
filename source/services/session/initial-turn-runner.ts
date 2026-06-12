@@ -9,7 +9,7 @@ import type { ContinuationDriver } from './continuation-driver.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import { TurnAttempt } from './turn-attempt.js';
 import { getMethod } from '../interruption-info.js';
-import { ShellAutoApprovalDecisionPolicy } from './continuation-driver.js';
+import { ShellAutoApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { InitialTurnRunOptions, TurnAttemptFactory } from './turn-attempt-factory.js';
 import type { InitialInputPreparer } from './initial-input-preparer.js';

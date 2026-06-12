@@ -1,65 +1,22 @@
-import type { RunState } from '@openai/agents';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import type { CommandMessage } from '../../tools/types.js';
-import { type NormalizedUsage } from '../../utils/ai/token-usage.js';
-import type { SessionToolTracker } from './session-tool-tracker.js';
-import type { ConversationStore } from '../conversation/conversation-store.js';
-import type { ConversationAgentClient } from '../conversation-agent-client.js';
-import type { SessionStreamProcessor, StreamHistorySource } from './session-stream-processor.js';
-import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
-import type { ProviderContinuity } from '../provider-continuity.js';
-import type { SessionInputPlanner } from './session-input-planner.js';
-import type { TurnItemAccumulator } from './turn-item-accumulator.js';
-import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
-import type { AgentStream } from '../agent-stream.js';
 import type { ConversationTerminal, LLMAdvisory } from '../../contracts/conversation.js';
 import type { AbortedApprovalContext } from '../approval/approval-state.js';
 import { GenerationGuard } from '../generation-guard.js';
-
-import { buildConversationResult } from '../conversation/conversation-result-builder.js';
-import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
+import type { ApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
+import { ShellAutoApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
+import type { ConversationStore } from '../conversation/conversation-store.js';
+import type { SessionInputPlanner } from './session-input-planner.js';
+import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
+import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import { describeError } from '../../utils/error-helpers.js';
-import type { PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
-
-import type { DefaultRetryClassifier } from '../retry/retry-classifier.js';
-import type { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
-import type { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
-import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
-import type { RecoveryInstructions, RetryCounts, RecoveryState } from '../retry/retry-contracts.js';
-import { extractCommandMessages } from '../../utils/streaming/extract-command-messages.js';
-
-// ── Approval Decision Policy ──────────────────────────────────────
-
-export interface ApprovalContext {
-  toolName: string;
-  argumentsText: string;
-  callId?: string;
-  llmAdvisory?: LLMAdvisory;
-}
-
-export interface ApprovalDecisionPolicy {
-  decide(context: ApprovalContext): Promise<'approve' | 'reject' | 'prompt'>;
-}
-
-export class ManualApprovalDecisionPolicy implements ApprovalDecisionPolicy {
-  async decide(): Promise<'prompt'> {
-    return 'prompt';
-  }
-}
-
-export class ShellAutoApprovalDecisionPolicy implements ApprovalDecisionPolicy {
-  constructor(private readonly shellAutoApproval: ShellAutoApprovalResolver) {}
-
-  async decide(context: ApprovalContext): Promise<'approve' | 'prompt'> {
-    if (context.toolName !== 'shell' && context.toolName !== 'bash') return 'prompt';
-    if (!context.llmAdvisory) return 'prompt';
-    if (this.shellAutoApproval.shouldAutoApprove(context.llmAdvisory)) return 'approve';
-    return 'prompt';
-  }
-}
-
-// ── Continuation Driver Types ──────────────────────────────────────
+import type { RetryCounts, RecoveryInstructions } from '../retry/retry-contracts.js';
+import { getToolInfoFromInterruption, getCallIdFromObject } from '../interruption-info.js';
+import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
+import type { ContinuationStreamCycle } from './continuation-stream-cycle.js';
+import type { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
+import { ContinuationState } from './continuation-state.js';
 
 export type ContinuationInit =
   | {
@@ -82,43 +39,17 @@ export type ContinuationDriveResult =
   | { kind: 'stale' };
 
 export interface ContinuationDriverDeps {
-  agentClient: ConversationAgentClient;
+  generationGuard: GenerationGuard;
   logger: ILoggingService;
   sessionId: string;
-  toolTracker: SessionToolTracker;
-  streamProcessor: SessionStreamProcessor;
-  approvalFlow: ApprovalFlowCoordinator;
-  providerContinuity: ProviderContinuity;
+  shellAutoApproval: ShellAutoApprovalResolver;
   inputPlanner: SessionInputPlanner;
   conversationStore: ConversationStore;
-  turnAccumulator: TurnItemAccumulator;
-  shellAutoApproval: ShellAutoApprovalResolver;
-  generationGuard: GenerationGuard;
-  retryClassifier: DefaultRetryClassifier;
-  recoveryPolicy: DefaultConversationRecoveryPolicy;
-  recoveryExecutor: DefaultRecoveryExecutor;
-  retryEventPresenter: RetryEventPresenter;
-  resolveRetryLimit: () => number;
+  approvalFlow: ApprovalFlowCoordinator;
+  planApplier: ContinuationPlanApplier;
+  streamCycle: ContinuationStreamCycle;
+  recoveryHandler: ContinuationRecoveryHandler;
 }
-
-// ── Prepared Continuation ─────────────────────────────────────────
-
-interface PreparedContinuation {
-  state: RunState<any, any>;
-  interruption: unknown;
-  toolCallArgumentsById: Map<string, unknown>;
-  previouslyEmittedCommandIds: Set<string>;
-  toolStartedEvent?: ConversationEvent;
-  removeInterceptor: () => void;
-  source: StreamHistorySource;
-  token?: import('../generation-guard.js').GenerationToken;
-  inputMode?: 'delta' | 'full_history';
-  cumulativeUsage?: NormalizedUsage;
-  cumulativeCommandMessages?: CommandMessage[];
-  cumulativeTurnItems?: PersistedAssistantTurnItem[];
-}
-
-// ── ContinuationDriver ────────────────────────────────────────────
 
 export class ContinuationDriver {
   constructor(private readonly deps: ContinuationDriverDeps) {}
@@ -133,356 +64,76 @@ export class ContinuationDriver {
       return { kind: 'stale' };
     }
 
-    const prepared = this.#prepareInit(init);
-
-    if (prepared.toolStartedEvent) {
-      const filtered = this.deps.toolTracker.dedupeToolStarted(prepared.toolStartedEvent);
-      if (filtered) yield filtered;
-    }
-
-    this.deps.toolTracker.clearArguments();
-    if (prepared.toolCallArgumentsById?.size) {
-      for (const [key, value] of prepared.toolCallArgumentsById.entries()) {
-        this.deps.toolTracker.argumentsById.set(key, value);
-      }
-    }
-
-    const approvedToolResultCallIds = [getCallIdFromObject(prepared.interruption)].filter(
-      (callId): callId is string => typeof callId === 'string' && callId.length > 0,
-    );
-
-    let ledgerSnapshot = this.deps.toolTracker.export();
-    let source: StreamHistorySource = prepared.source;
-    let previouslyEmittedIds = prepared.previouslyEmittedCommandIds;
-    let currentState = prepared.state;
-    let currentCallIds = approvedToolResultCallIds;
-
-    const token = prepared.token ?? init.generation;
-    let inputMode = prepared.inputMode ?? 'delta';
-
-    let cumulativeUsage = prepared.cumulativeUsage;
-    const cumulativeCommandMessages = prepared.cumulativeCommandMessages ? [...prepared.cumulativeCommandMessages] : [];
-
-    let retryCounts: RetryCounts = {
-      transientRetryCount: 0,
-      serviceTierFallbackCount: 0,
-      modelRetryCount: 0,
-      transportDowngradeCount: 0,
-    };
-    let lastStream: AgentStream | null = null;
-    let currentResumePreviousResponseId: string | null | undefined = undefined;
+    const prepared = this.deps.planApplier.prepareInit(init);
+    const state = new ContinuationState(init.generation);
+    state.initializeFrom(prepared);
 
     try {
+      yield* this.deps.planApplier.applyInitialSetup(prepared, state);
+
       while (true) {
-        if (!this.deps.generationGuard.isCurrent(token)) {
+        if (!this.deps.generationGuard.isCurrent(state.token)) {
           return { kind: 'stale' };
         }
 
         try {
           const previousInputForSurge =
-            inputMode === 'full_history' ? this.deps.conversationStore.getHistory() : undefined;
+            state.inputMode === 'full_history' ? this.deps.conversationStore.getHistory() : undefined;
 
-          const stream = (await this.deps.agentClient.continueRunStream(currentState, {
-            previousResponseId: currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
-            sessionId: this.deps.sessionId,
-            toolResultCallIds: currentCallIds,
-          })) as AgentStream;
-          lastStream = stream;
+          const cycleResult = yield* this.deps.streamCycle.execute(state);
 
-          const allEmittedIds = new Set([...previouslyEmittedIds]);
-
-          const acc = yield* this.deps.streamProcessor.process(stream, {
-            gen: token,
-            source,
-            preserveExistingToolArgs: true,
-            previouslyEmittedCommandIds: allEmittedIds,
-          });
-
-          const finalizeResult = this.deps.streamProcessor.finalize(stream, token, inputMode, source);
-          if (finalizeResult.kind === 'stale') {
+          if (cycleResult.kind === 'stale') {
             return { kind: 'stale' };
           }
 
-          const mergedEmittedIds = new Set([...allEmittedIds, ...acc.emittedCommandIds]);
+          const { outcome, nextCumulativeMessages, nextCumulativeUsage, nextCumulativeTurnItems, mergedEmittedIds } =
+            cycleResult;
 
-          const streamMessages = extractCommandMessages(stream.newItems || stream.history || []);
-          const filteredMessages = streamMessages.filter((msg) => !previouslyEmittedIds.has(msg.id));
-          const nextCumulativeMessages = [...cumulativeCommandMessages, ...filteredMessages];
-          const nextCumulativeUsage = acc.latestUsage ?? cumulativeUsage;
-          const nextCumulativeTurnItems = this.deps.turnAccumulator.getTurnItems();
-
-          const outcome = await buildConversationResult(
-            {
-              result: stream,
-              finalOutputOverride: acc.finalOutput || undefined,
-              reasoningOutputOverride: acc.reasoningOutput || undefined,
-              emittedCommandIds: mergedEmittedIds,
-              usage: acc.latestUsage,
-              toolCallArgumentsById: this.deps.toolTracker.argumentsById,
-              turnItems: nextCumulativeTurnItems,
-              token,
-              inputMode,
-              cumulativeUsage: nextCumulativeUsage,
-              cumulativeCommandMessages: nextCumulativeMessages,
-              cumulativeTurnItems: nextCumulativeTurnItems,
-            },
-            {
-              approvalFlow: this.deps.approvalFlow,
-              shellAutoApproval: this.deps.shellAutoApproval,
-              logger: this.deps.logger,
-              sessionId: this.deps.sessionId,
-            },
-          );
+          state.setCumulativeUsage(nextCumulativeUsage);
+          state.setCumulativeCommandMessages(nextCumulativeMessages);
+          state.setCumulativeTurnItems(nextCumulativeTurnItems);
 
           if (outcome.kind === 'response') {
-            this.deps.inputPlanner.recordSuccess(
-              inputMode === 'delta' ? stream : this.deps.conversationStore.getHistory(),
-              inputMode === 'delta' ? { kind: inputMode } : { kind: inputMode, previousInput: previousInputForSurge },
-            );
-
-            if (outcome.result.type === 'response') {
-              // Use the outcome's filtered commandMessages (excludes anything
-              // already emitted via command_message in this or any prior turn)
-              // instead of nextCumulativeMessages. Otherwise messages that were
-              // already shown in the UI during streaming get re-appended by
-              // applyServiceResult, causing the user to see the finished tool
-              // output printed again after the model's final answer.
-              const result: ConversationTerminal = {
-                type: 'response',
-                commandMessages: outcome.result.commandMessages ?? [],
-                finalText: outcome.result.finalText,
-                ...(outcome.result.reasoningText ? { reasoningText: outcome.result.reasoningText } : {}),
-                ...(nextCumulativeUsage && Object.keys(nextCumulativeUsage).length > 0
-                  ? { usage: nextCumulativeUsage }
-                  : {}),
-                turnItems: outcome.result.turnItems,
-              };
-              return { kind: 'response', result };
-            }
-
-            return { kind: 'response', result: outcome.result };
+            this.#recordSuccess(state, previousInputForSurge);
+            return { kind: 'response', result: this.#buildResponse(outcome.result, nextCumulativeUsage) };
           }
 
-          if (outcome.kind === 'auto_approve') {
-            this.deps.logger.debug('Shell command auto-approved by LLM', {
-              eventType: 'approval.auto_approved',
-              category: 'approval',
-              phase: 'approval',
-              sessionId: this.deps.sessionId,
-              traceId: this.deps.logger.getCorrelationId(),
-              callId: outcome.callId,
-              command: outcome.argumentsText,
-              model: outcome.advisory.model,
-              reasoning: outcome.advisory.reasoning,
-            });
-
-            cumulativeUsage = nextCumulativeUsage;
-            cumulativeCommandMessages.push(...filteredMessages);
-
-            const nextPlan = this.deps.approvalFlow.prepareContinuation('y', undefined);
-            if (!nextPlan) {
-              const approvalFallback = this.#buildApprovalRequiredFromAutoApprove(outcome, nextCumulativeUsage);
-              return { kind: 'approval_required', result: approvalFallback };
-            }
-
-            if (nextPlan.toolStartedEvent) {
-              const filtered = this.deps.toolTracker.dedupeToolStarted(nextPlan.toolStartedEvent);
-              if (filtered) yield filtered;
-            }
-
-            this.deps.toolTracker.clearArguments();
-            if (nextPlan.pendingApprovalContext.toolCallArgumentsById?.size) {
-              for (const [key, value] of nextPlan.pendingApprovalContext.toolCallArgumentsById.entries()) {
-                this.deps.toolTracker.argumentsById.set(key, value);
-              }
-            }
-
-            currentState = nextPlan.pendingApprovalContext.state;
-            currentCallIds = [getCallIdFromObject(nextPlan.pendingApprovalContext.interruption)].filter(
-              (callId): callId is string => typeof callId === 'string' && callId.length > 0,
-            );
-            source = 'continueRunStream';
-            previouslyEmittedIds = mergedEmittedIds;
-            ledgerSnapshot = this.deps.toolTracker.export();
-            inputMode = nextPlan.pendingApprovalContext.inputMode ?? inputMode;
-
-            continue;
-          }
-
-          const approvalContext: ApprovalContext = {
-            toolName: outcome.result.approval.toolName,
-            argumentsText: outcome.result.approval.argumentsText,
-            callId: outcome.result.approval.callId,
-            llmAdvisory: outcome.result.approval.llmAdvisory,
-          };
-
-          const decision = await activePolicy.decide(approvalContext);
-
-          if (decision === 'prompt') {
-            if (outcome.result.approval.callId) {
-              this.deps.toolTracker.recordFunctionCall({
-                type: 'function_call',
-                callId: outcome.result.approval.callId,
-                name: outcome.result.approval.toolName,
-                arguments: outcome.result.approval.argumentsText,
-              });
-            }
-            this.deps.logger.debug('Tool approval required', {
-              eventType: 'approval.required',
-              category: 'approval',
-              phase: 'approval',
-              sessionId: this.deps.sessionId,
-              traceId: this.deps.logger.getCorrelationId(),
-              toolName: outcome.result.approval.toolName,
-            });
-            this.deps.inputPlanner.recordSuccess(
-              inputMode === 'delta' ? stream : this.deps.conversationStore.getHistory(),
-              inputMode === 'delta' ? { kind: inputMode } : { kind: inputMode, previousInput: previousInputForSurge },
-            );
-
-            const resultWithUsage: ConversationTerminal = {
-              ...outcome.result,
-              ...(nextCumulativeUsage && Object.keys(nextCumulativeUsage).length > 0
-                ? { usage: nextCumulativeUsage }
-                : {}),
-            };
-            return { kind: 'approval_required', result: resultWithUsage };
-          }
-
-          cumulativeUsage = nextCumulativeUsage;
-          cumulativeCommandMessages.push(...filteredMessages);
-
-          if (decision === 'approve') {
-            this.deps.logger.debug('Shell command auto-approved by policy', {
-              eventType: 'approval.auto_approved',
-              category: 'approval',
-              phase: 'approval',
-              sessionId: this.deps.sessionId,
-              traceId: this.deps.logger.getCorrelationId(),
-              callId: approvalContext.callId,
-              command: approvalContext.argumentsText,
-            });
-          }
-
-          const answer = decision === 'approve' ? 'y' : 'n';
-          const nextPlan = this.deps.approvalFlow.prepareContinuation(answer, undefined);
-          if (!nextPlan) {
-            return { kind: 'approval_required', result: outcome.result };
-          }
-
-          if (answer !== 'y') {
-            const callId = getCallIdFromObject(nextPlan.pendingApprovalContext.interruption);
-            this.deps.toolTracker.recordAbortedApproval(
-              'Tool execution was not approved.',
-              'Tool execution was not approved.',
-              callId,
-            );
-          }
-
-          if (nextPlan.toolStartedEvent) {
-            const filtered = this.deps.toolTracker.dedupeToolStarted(nextPlan.toolStartedEvent);
-            if (filtered) yield filtered;
-          }
-
-          this.deps.toolTracker.clearArguments();
-          if (nextPlan.pendingApprovalContext.toolCallArgumentsById?.size) {
-            for (const [key, value] of nextPlan.pendingApprovalContext.toolCallArgumentsById.entries()) {
-              this.deps.toolTracker.argumentsById.set(key, value);
-            }
-          }
-
-          currentState = nextPlan.pendingApprovalContext.state;
-          currentCallIds = [getCallIdFromObject(nextPlan.pendingApprovalContext.interruption)].filter(
-            (callId): callId is string => typeof callId === 'string' && callId.length > 0,
+          const approvalResult = await this.#handleApprovalOutcome(
+            outcome,
+            state,
+            activePolicy,
+            nextCumulativeUsage,
+            previousInputForSurge,
           );
-          source = 'continueRunStream';
-          previouslyEmittedIds = mergedEmittedIds;
-          ledgerSnapshot = this.deps.toolTracker.export();
-          inputMode = nextPlan.pendingApprovalContext.inputMode ?? inputMode;
-
+          if (approvalResult.action === 'return') {
+            return approvalResult.result;
+          }
+          if (approvalResult.action === 'loop') {
+            yield* this.deps.planApplier.applyNextPlan(
+              approvalResult.nextPlan,
+              state,
+              mergedEmittedIds,
+              approvalResult.isApproved,
+            );
+          }
           continue;
         } catch (error) {
-          const maxTransientRetries = this.deps.resolveRetryLimit();
-          const retryStream = lastStream;
-
-          const classified = this.deps.retryClassifier.classify({
-            error,
-            retryCounts,
-            stream: retryStream,
-            maxTransientRetries,
-          });
-
-          if (classified.kind === 'unrecoverable') {
+          const recovery = yield* this.#handleRecovery(error, state);
+          if (recovery.kind === 'terminated') {
             throw error;
           }
-
-          const presentation = this.deps.retryEventPresenter.present({
-            failure: classified,
-            maxTransientRetries,
-            source: 'continuation',
-            error,
-          });
-
-          yield presentation.event;
-
-          this.deps.logger.warn(presentation.logMessage, {
-            ...presentation.logFields,
-            sessionId: this.deps.sessionId,
-            traceId: this.deps.logger.getCorrelationId(),
-          });
-
-          if (!this.deps.generationGuard.isCurrent(token)) {
+          if (recovery.kind === 'stale') {
             return { kind: 'stale' };
           }
-
-          const nextRetryCounts = this.deps.recoveryPolicy.nextRetryCounts(retryCounts, classified);
-          retryCounts = nextRetryCounts;
-
-          const plan = this.deps.recoveryPolicy.plan({
-            failure: classified,
-            gen: token,
-            stream: retryStream,
-            retryCounts,
-            freshStartRetriesAllowed: true,
-          });
-
-          const recoveryState: RecoveryState = {
-            ledgerSnapshot,
-            addedUserMessage: false,
-            stream: retryStream,
-            currentState,
-            toolResultCallIds: currentCallIds,
-          };
-          const transientDelayMs = classified.kind === 'transient' ? classified.delayMs : undefined;
-
-          const recoveryResult = this.deps.recoveryExecutor.apply({
-            plan,
-            state: recoveryState,
-            retryCounts,
-          });
-
-          if (recoveryResult.kind === 'terminated') {
-            throw error;
-          }
-
-          if (recoveryResult.instruction.resumeState) {
-            if (typeof transientDelayMs === 'number' && transientDelayMs > 0) {
-              await new Promise((resolve) => setTimeout(resolve, transientDelayMs));
-              if (!this.deps.generationGuard.isCurrent(token)) {
-                return { kind: 'stale' };
-              }
-            }
-            currentState = recoveryResult.instruction.resumeState;
-            currentCallIds = [];
-            currentResumePreviousResponseId = recoveryResult.instruction.resumePreviousResponseId;
-          } else {
+          if (recovery.kind === 'fresh_start') {
             return {
               kind: 'fresh_start_required',
-              retryCounts,
-              ...(typeof transientDelayMs === 'number' ? { delayMs: transientDelayMs } : {}),
-              ...(recoveryResult.useStandardServiceTier ? { useStandardServiceTier: true } : {}),
+              retryCounts: recovery.retryCounts,
+              ...(recovery.delayMs !== undefined ? { delayMs: recovery.delayMs } : {}),
+              ...(recovery.useStandardServiceTier ? { useStandardServiceTier: true } : {}),
             };
           }
+          // recovery.kind === 'resume' -> continue loop
         }
       }
     } catch (error) {
@@ -506,61 +157,129 @@ export class ContinuationDriver {
     }
   }
 
-  #prepareInit(init: ContinuationInit): PreparedContinuation {
-    if (init.kind === 'approval_decision') {
-      const plan = this.deps.approvalFlow.prepareContinuation(init.answer, init.rejectionReason);
-      if (!plan) {
-        throw new Error('No pending approval for continuation');
-      }
-
-      if (init.answer !== 'y') {
-        const callId = getCallIdFromObject(plan.pendingApprovalContext.interruption);
-        const output = init.rejectionReason
-          ? `Tool execution was not approved. User's reason: ${init.rejectionReason}`
-          : 'Tool execution was not approved.';
-        this.deps.toolTracker.recordAbortedApproval(output, output, callId);
-      }
-
-      return {
-        state: plan.pendingApprovalContext.state,
-        interruption: plan.pendingApprovalContext.interruption,
-        toolCallArgumentsById: plan.pendingApprovalContext.toolCallArgumentsById,
-        previouslyEmittedCommandIds: plan.pendingApprovalContext.emittedCommandIds,
-        toolStartedEvent: plan.toolStartedEvent,
-        removeInterceptor: plan.removeInterceptor,
-        source: 'continueRunStream',
-        token: plan.pendingApprovalContext.token,
-        inputMode: plan.pendingApprovalContext.inputMode,
-        cumulativeUsage: plan.pendingApprovalContext.cumulativeUsage,
-        cumulativeCommandMessages: plan.pendingApprovalContext.cumulativeCommandMessages,
-        cumulativeTurnItems: plan.pendingApprovalContext.cumulativeTurnItems,
-      };
+  async *#handleRecovery(
+    error: unknown,
+    state: ContinuationState,
+  ): AsyncGenerator<ConversationEvent, import('./continuation-recovery-handler.js').ContinuationRecoveryResult, void> {
+    const recoveryIterator = this.deps.recoveryHandler.handle({ error, state });
+    let recoveryNext = await recoveryIterator.next();
+    while (!recoveryNext.done) {
+      yield recoveryNext.value;
+      recoveryNext = await recoveryIterator.next();
     }
+    return recoveryNext.value;
+  }
 
-    const { abortedContext } = init;
-    const plan = this.deps.approvalFlow.prepareAbortResolution(abortedContext, init.userText);
-
+  #buildResponse(
+    result: Extract<ConversationTerminal, { type: 'response' }>,
+    usage?: NormalizedUsage,
+  ): ConversationTerminal {
     return {
-      state: abortedContext.state,
-      interruption: abortedContext.interruption,
-      toolCallArgumentsById: abortedContext.toolCallArgumentsById,
-      previouslyEmittedCommandIds: abortedContext.emittedCommandIds,
-      toolStartedEvent: undefined,
-      removeInterceptor: plan.removeInterceptor,
-      source: 'abortResolution',
-      token: abortedContext.token,
-      inputMode: abortedContext.inputMode,
-      cumulativeUsage: abortedContext.cumulativeUsage,
-      cumulativeCommandMessages: abortedContext.cumulativeCommandMessages,
-      cumulativeTurnItems: abortedContext.cumulativeTurnItems,
+      type: 'response',
+      commandMessages: result.commandMessages ?? [],
+      finalText: result.finalText,
+      ...(result.reasoningText ? { reasoningText: result.reasoningText } : {}),
+      ...(usage && Object.keys(usage).length > 0 ? { usage } : {}),
+      turnItems: result.turnItems,
     };
   }
 
+  async #handleApprovalOutcome(
+    outcome: any,
+    state: ContinuationState,
+    activePolicy: ApprovalDecisionPolicy,
+    nextCumulativeUsage?: NormalizedUsage,
+    previousInputForSurge?: unknown,
+  ): Promise<
+    | { action: 'return'; result: ContinuationDriveResult }
+    | { action: 'loop'; nextPlan: any; isApproved: boolean }
+    | { action: 'continue' }
+  > {
+    const { kind } = outcome;
+
+    if (kind === 'auto_approve') {
+      this.deps.logger.debug('Shell command auto-approved by LLM', {
+        eventType: 'approval.auto_approved',
+        category: 'approval',
+        phase: 'approval',
+        sessionId: this.deps.sessionId,
+        traceId: this.deps.logger.getCorrelationId(),
+        callId: outcome.callId,
+        command: outcome.argumentsText,
+        model: outcome.advisory.model,
+        reasoning: outcome.advisory.reasoning,
+      });
+
+      const nextPlan = this.deps.approvalFlow.prepareContinuation('y', undefined);
+      if (!nextPlan) {
+        const approvalFallback = this.#buildApprovalRequiredFromAutoApprove(outcome, nextCumulativeUsage);
+        return { action: 'return', result: { kind: 'approval_required', result: approvalFallback } };
+      }
+
+      return { action: 'loop', nextPlan, isApproved: true };
+    }
+
+    const approvalContext = {
+      toolName: outcome.result.approval.toolName,
+      argumentsText: outcome.result.approval.argumentsText,
+      callId: outcome.result.approval.callId,
+      llmAdvisory: outcome.result.approval.llmAdvisory,
+    };
+
+    const decision = await activePolicy.decide(approvalContext);
+
+    if (decision === 'prompt') {
+      this.deps.planApplier.recordPendingApproval(approvalContext);
+      if (outcome.result.approval.callId) {
+        this.deps.logger.debug('Tool approval required', {
+          eventType: 'approval.required',
+          category: 'approval',
+          phase: 'approval',
+          sessionId: this.deps.sessionId,
+          traceId: this.deps.logger.getCorrelationId(),
+          toolName: outcome.result.approval.toolName,
+        });
+      }
+      this.#recordSuccess(state, previousInputForSurge);
+      const resultWithUsage: ConversationTerminal = {
+        ...outcome.result,
+        ...(nextCumulativeUsage && Object.keys(nextCumulativeUsage).length > 0 ? { usage: nextCumulativeUsage } : {}),
+      };
+      return { action: 'return', result: { kind: 'approval_required', result: resultWithUsage } };
+    }
+
+    if (decision === 'approve') {
+      this.deps.logger.debug('Shell command auto-approved by policy', {
+        eventType: 'approval.auto_approved',
+        category: 'approval',
+        phase: 'approval',
+        sessionId: this.deps.sessionId,
+        traceId: this.deps.logger.getCorrelationId(),
+        callId: approvalContext.callId,
+        command: approvalContext.argumentsText,
+      });
+    }
+
+    const answer = decision === 'approve' ? 'y' : 'n';
+    const nextPlan = this.deps.approvalFlow.prepareContinuation(answer, undefined);
+    if (!nextPlan) {
+      return { action: 'return', result: { kind: 'approval_required', result: outcome.result } };
+    }
+
+    return { action: 'loop', nextPlan, isApproved: answer === 'y' };
+  }
+
+  #recordSuccess(state: ContinuationState, previousInputForSurge?: unknown): void {
+    this.deps.inputPlanner.recordSuccess(
+      state.inputMode === 'delta' ? (state.lastStream as any) : this.deps.conversationStore.getHistory(),
+      state.inputMode === 'delta'
+        ? { kind: state.inputMode }
+        : { kind: state.inputMode, previousInput: previousInputForSurge },
+    );
+  }
+
   #buildApprovalRequiredFromAutoApprove(
-    outcome: Extract<
-      import('../conversation/conversation-result-builder.js').BuildResultOutcome,
-      { kind: 'auto_approve' }
-    >,
+    outcome: { kind: 'auto_approve'; advisory: LLMAdvisory; callId: string | undefined; argumentsText: string },
     usage?: NormalizedUsage,
   ): ConversationTerminal {
     const pending = this.deps.approvalFlow.getPending();

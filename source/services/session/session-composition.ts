@@ -22,6 +22,9 @@ import { SessionManager } from './session-manager.js';
 import { SessionRuntimeController } from './session-runtime-controller.js';
 import { ConversationAdapter } from '../conversation/conversation-adapter.js';
 import { ContinuationDriver } from './continuation-driver.js';
+import { ContinuationPlanApplier } from './continuation-plan-applier.js';
+import { ContinuationStreamCycle } from './continuation-stream-cycle.js';
+import { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
 import { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
 import { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
 import { GenerationGuard } from '../generation-guard.js';
@@ -274,24 +277,48 @@ export function createConversationSessionComposition(
     sessionId: id,
   });
 
-  const continuationDriver = new ContinuationDriver({
-    agentClient,
+  const planApplier = new ContinuationPlanApplier({
+    approvalFlow,
+    toolTracker,
     logger,
     sessionId: id,
-    toolTracker,
+  });
+
+  const continuationStreamCycle = new ContinuationStreamCycle({
+    agentClient,
     streamProcessor,
-    approvalFlow,
-    providerContinuity,
-    inputPlanner,
     conversationStore,
     turnAccumulator,
+    toolTracker,
+    approvalFlow,
     shellAutoApproval,
+    logger,
+    sessionId: id,
+    providerContinuity,
+  });
+
+  const continuationRecoveryHandler = new ContinuationRecoveryHandler({
+    logger,
+    sessionId: id,
     generationGuard,
     retryClassifier,
     recoveryPolicy,
     recoveryExecutor,
     retryEventPresenter,
     resolveRetryLimit,
+  });
+
+  const continuationDriver = new ContinuationDriver({
+    generationGuard,
+    logger,
+    sessionId: id,
+    shellAutoApproval,
+    inputPlanner,
+    conversationStore,
+    approvalFlow,
+    planApplier,
+    streamCycle: continuationStreamCycle,
+    recoveryHandler: continuationRecoveryHandler,
   });
 
   const initialTurnRunner = new InitialTurnRunner({

@@ -42,6 +42,7 @@ type Props = {
   isApprovalRejection?: boolean;
   hadApproval?: boolean;
   displayMode?: 'standard' | 'concise';
+  textColor?: string;
 };
 
 const getConciseAskUserResponse = (output: string | undefined): string => {
@@ -72,6 +73,7 @@ const CommandMessage: FC<Props> = ({
   isApprovalRejection,
   hadApproval,
   displayMode = 'standard',
+  textColor,
 }) => {
   const isRunning = status === 'pending' || status === 'running';
   const [isVisible, setIsVisible] = useState(!isRunning);
@@ -286,20 +288,20 @@ const CommandMessage: FC<Props> = ({
       const responseText = getConciseAskUserResponse(output);
       return (
         <Box flexDirection="column">
-          <Text color={COLOR_SUCCESS}>
+          <Text color={textColor || COLOR_SUCCESS}>
             <Text color={'green'} bold>
               ✔
             </Text>{' '}
             {displayAction}
           </Text>
-          <Text color={COLOR_SUCCESS}> Response: {responseText}</Text>
+          <Text color={textColor || COLOR_SUCCESS}> Response: {responseText}</Text>
         </Box>
       );
     }
 
     return (
       <Box flexDirection="column">
-        <Text color={COLOR_SUCCESS}>
+        <Text color={textColor || COLOR_SUCCESS}>
           <Text color={'green'} bold>
             ✔
           </Text>{' '}

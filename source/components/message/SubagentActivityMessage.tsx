@@ -55,7 +55,7 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
       {tools.map((tool, index) => {
         if (tool && typeof tool === 'object') {
           return (
-            <Box key={index} paddingLeft={2}>
+            <Box key={index}>
               <CommandMessage
                 command={tool.command}
                 output={tool.output}
@@ -67,6 +67,7 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
                 isApprovalRejection={tool.isApprovalRejection}
                 hadApproval={tool.hadApproval}
                 displayMode="concise"
+                textColor="#64748b"
               />
             </Box>
           );

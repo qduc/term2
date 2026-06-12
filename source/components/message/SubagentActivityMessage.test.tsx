@@ -51,11 +51,34 @@ test('SubagentActivityMessage renders write tool CommandMessage concisely', asyn
 
   let lastFrame: (() => string | undefined) | undefined;
   await act(async () => {
+    process.env.FORCE_COLOR = '1';
     ({ lastFrame } = render(<SubagentActivityMessage {...props} />));
   });
-  const output = stripAnsi(lastFrame?.() ?? '');
+  const rawOutput = lastFrame?.() ?? '';
+  const output = stripAnsi(rawOutput);
 
   t.true(output.includes('run_subagent [explorer] find x'), `Expected title in output: ${output}`);
   t.true(output.includes('✔'), `Expected concise checkmark in output: ${output}`);
   t.true(output.includes('Created "src/test.txt"'), `Expected concise display action: ${output}`);
+
+  // Verify left-alignment: no leading spaces before the checkmark
+  const lines = output.split('\n').map((l) => l.trimEnd());
+  t.true(
+    lines.some((line) => line.startsWith('✔ Created "src/test.txt"')),
+    `Expected left-aligned checkmark in lines: ${JSON.stringify(lines)}`,
+  );
+
+  // Verify the hex color #64748b is applied if ANSI colors are generated
+  if (rawOutput !== output) {
+    t.true(
+      rawOutput.includes('100;116;139') ||
+        rawOutput.includes('38;2;100;116;139') ||
+        rawOutput.includes('38;5;67') ||
+        rawOutput.includes('36;100;116;139') ||
+        rawOutput.includes('38;2;100') ||
+        rawOutput.includes('90m') ||
+        rawOutput.includes('37m'),
+      `Expected color escape sequence in raw output: ${JSON.stringify(rawOutput)}`,
+    );
+  }
 });

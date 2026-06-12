@@ -1,12 +1,13 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
+import CommandMessage from './CommandMessage.js';
 
 type Props = {
   msg: {
     role?: string;
     task?: string;
     status?: string;
-    tools?: string[];
+    tools?: (string | any)[];
   };
 };
 
@@ -51,11 +52,31 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
         $ {title}
         {statusSuffix}
       </Text>
-      {tools.map((tool, index) => (
-        <Text key={`${tool}-${index}`} color="#64748b">
-          {truncate(tool, MAX_TOOL_LENGTH)}
-        </Text>
-      ))}
+      {tools.map((tool, index) => {
+        if (tool && typeof tool === 'object') {
+          return (
+            <Box key={index} paddingLeft={2}>
+              <CommandMessage
+                command={tool.command}
+                output={tool.output}
+                status={tool.status}
+                success={tool.success}
+                failureReason={tool.failureReason}
+                toolName={tool.toolName}
+                toolArgs={tool.toolArgs}
+                isApprovalRejection={tool.isApprovalRejection}
+                hadApproval={tool.hadApproval}
+                displayMode="concise"
+              />
+            </Box>
+          );
+        }
+        return (
+          <Text key={`${tool}-${index}`} color="#64748b">
+            {truncate(tool, MAX_TOOL_LENGTH)}
+          </Text>
+        );
+      })}
     </Box>
   );
 };

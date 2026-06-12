@@ -47,7 +47,7 @@ export interface SubagentActivityMessage {
   agentId: string;
   role: string;
   task: string;
-  tools: string[];
+  tools: (string | CommandMessage)[];
 }
 
 export type Message =

@@ -14,6 +14,7 @@ import type {
 } from '../../types/message.js';
 import { isCommandMessage, isSubagentActivityMessage } from '../../types/message.js';
 import { parseToolArguments, formatToolCommand, type StreamingState } from './conversation-utils.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 
 /**
  * Finds the last safe Markdown block boundary in the text after the search start index.
@@ -501,17 +502,29 @@ export function createConversationEventHandler(
             if (toolName) {
               for (let i = currentTools.length - 1; i >= 0; i--) {
                 const t = currentTools[i];
-                if (t === toolName || t.startsWith(`${toolName} `)) {
+                if (typeof t === 'string') {
+                  if (t === toolName || t.startsWith(`${toolName} `)) {
+                    toolIndex = i;
+                    break;
+                  }
+                } else if (t && typeof t === 'object' && t.toolName === toolName) {
                   toolIndex = i;
                   break;
                 }
               }
             }
 
+            const isWriteTool =
+              toolName === TOOL_NAME_CREATE_FILE ||
+              toolName === TOOL_NAME_SEARCH_REPLACE ||
+              toolName === TOOL_NAME_APPLY_PATCH;
+
+            const itemToAppend = isWriteTool ? event.message : finishedCommand;
+
             if (toolIndex !== -1) {
-              currentTools[toolIndex] = finishedCommand;
+              currentTools[toolIndex] = itemToAppend;
             } else {
-              currentTools.push(finishedCommand);
+              currentTools.push(itemToAppend);
             }
 
             return {

@@ -1590,6 +1590,44 @@ test('subagent_command_message: appends 0 matches for empty grep output', (t) =>
   t.deepEqual(messages[0].tools, ['grep "TODO" "src/" (0 matches)']);
 });
 
+test('subagent_command_message: stores CommandMessage object for write tools', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'investigate',
+  } as ConversationEvent);
+
+  const writeMsg = {
+    id: 'cmd-w1',
+    sender: 'command' as const,
+    status: 'completed' as const,
+    command: 'create_file "src/test.txt"',
+    toolName: 'create_file',
+    toolArgs: { path: 'src/test.txt', content: 'hello' },
+    success: true,
+  };
+
+  handler({
+    type: 'subagent_command_message',
+    agentId: 'agent-1',
+    role: 'explorer',
+    message: writeMsg,
+  } as any);
+
+  let messages = deps.calls.appendedMessages[0];
+  for (const update of deps.calls.setMessagesCalls) {
+    messages = update(messages);
+  }
+
+  t.is(messages[0].tools.length, 1);
+  t.deepEqual(messages[0].tools[0], writeMsg);
+});
+
 test('tool_started: renders parent tool call when a subagent is active', (t) => {
   const deps = createMockDeps();
   const state = createStreamingState();

@@ -8,7 +8,7 @@ import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.j
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import { ShellAutoApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
 import { decideTurnTransition } from './turn-transition.js';
-import type { TurnState, TurnOutcome } from './turn-transition.js';
+import type { StreamingTurnOutcome, TurnCommand, TurnState } from './turn-transition.js';
 import { fromInitialOutcome, fromDriveResult } from './turn-outcome-adapters.js';
 import type { InitialTurnRunOptions } from './turn-attempt-factory.js';
 
@@ -102,39 +102,31 @@ export class TurnCoordinator {
         rejectionReason,
         generation: gen,
       });
-      processed = true;
+      const turnOutcome = fromDriveResult(driveResult);
+      let transition = decideTurnTransition('continuing', turnOutcome);
 
-      let turnOutcome = fromDriveResult(driveResult);
+      if (transition.command.kind === 're_drive') {
+        this.deps.statusMachine.complete();
+        this.deps.statusMachine.beginTurn();
 
-      // Handle re_drive (fresh_start_required) — requires explicit status machine
-      // transitions before delegating to the initial turn runner.
-      if (turnOutcome.kind === 'fresh_start_required') {
-        this.deps.statusMachine.complete(); // continuing → idle
-        this.deps.statusMachine.beginTurn(); // idle → streaming
-
-        const reDriveOutcome = yield* this.#reDriveInitial(turnOutcome, gen);
-        turnOutcome = reDriveOutcome;
-
-        const transition = decideTurnTransition('streaming', turnOutcome);
-        finalState = transition.next;
-
-        if (transition.command.kind === 'emit_terminal') {
-          yield toTerminalEvent(transition.command.terminal);
-        }
-      } else {
-        // Handle simple outcomes (response, approval_required, stale)
-        const transition = decideTurnTransition('continuing', turnOutcome);
-        finalState = transition.next;
-
-        if (transition.command.kind === 'emit_terminal') {
-          yield toTerminalEvent(transition.command.terminal);
-        }
+        const reDriveOutcome = yield* this.#runInitialTurn(
+          { text: '' },
+          {
+            ...transition.command.options,
+            token: gen,
+          },
+        );
+        transition = decideTurnTransition('streaming', reDriveOutcome);
       }
+
+      finalState = transition.next;
+      processed = true;
+      yield* this.#executeTerminalCommand(transition.command);
     } finally {
       if (!processed) {
         // Error during continuation drive — reset status to idle
         this.deps.statusMachine.complete();
-      } else if (this.deps.statusMachine.is('continuing') || this.deps.statusMachine.is('awaiting_approval')) {
+      } else if (this.deps.statusMachine.is('continuing') || this.deps.statusMachine.is('streaming')) {
         // Only update status machine if external actions (e.g. abort during a
         // stale drive) haven't already changed the state.
         if (finalState === 'awaiting_approval') {
@@ -142,7 +134,7 @@ export class TurnCoordinator {
         } else if (finalState === 'idle') {
           this.deps.statusMachine.complete();
         }
-        // 'continuing' (stale) — leave status as-is
+        // An unchanged active state means the result was stale; leave it alone.
       }
       // If an external action already changed the status, do nothing
     }
@@ -164,79 +156,70 @@ export class TurnCoordinator {
   async *#runInitialTurn(
     input: string | UserTurn,
     options: InitialTurnRunOptions,
-  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
-    const it = this.deps.initialTurnRunner.run(input, options);
-    let res = await it.next();
-    while (!res.done) {
-      yield res.value;
-      res = await it.next();
-    }
-    const initialOutcome = res.value;
+  ): AsyncGenerator<ConversationEvent, StreamingTurnOutcome, void> {
+    let currentInput = input;
+    let currentOptions = options;
 
-    // Handle abort_resolution_required — delegate to ContinuationDriver
-    if (initialOutcome.kind === 'abort_resolution_required') {
-      const driveResult = yield* this.deps.continuationDriver.drive(
-        {
-          kind: 'abort_resolution',
-          abortedContext: initialOutcome.abortedContext,
-          userText: initialOutcome.userText,
-          generation: initialOutcome.generation,
-        },
-        new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
-      );
+    while (true) {
+      const it = this.deps.initialTurnRunner.run(currentInput, currentOptions);
+      let res = await it.next();
+      while (!res.done) {
+        yield res.value;
+        res = await it.next();
+      }
+      const initialOutcome = res.value;
+
+      let driveResult;
+      let generation: number;
+      if (initialOutcome.kind === 'abort_resolution_required') {
+        generation = initialOutcome.generation;
+        driveResult = yield* this.deps.continuationDriver.drive(
+          {
+            kind: 'abort_resolution',
+            abortedContext: initialOutcome.abortedContext,
+            userText: initialOutcome.userText,
+            generation,
+          },
+          new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
+        );
+      } else if (initialOutcome.kind === 'auto_approval_required') {
+        generation = initialOutcome.generation;
+        driveResult = yield* this.deps.continuationDriver.drive(
+          {
+            kind: 'approval_decision',
+            answer: 'y',
+            generation,
+          },
+          new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
+        );
+      } else {
+        return fromInitialOutcome(initialOutcome);
+      }
 
       const turnOutcome = fromDriveResult(driveResult);
-      if (turnOutcome.kind === 'fresh_start_required') {
-        return yield* this.#reDriveInitial(turnOutcome, initialOutcome.generation);
+      if (turnOutcome.kind !== 'fresh_start_required') {
+        return turnOutcome;
       }
-      return turnOutcome;
-    }
 
-    // Handle auto_approval_required — delegate to ContinuationDriver
-    if (initialOutcome.kind === 'auto_approval_required') {
-      const driveResult = yield* this.deps.continuationDriver.drive(
-        {
-          kind: 'approval_decision',
-          answer: 'y',
-          generation: initialOutcome.generation,
-        },
-        new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
-      );
-
-      const turnOutcome = fromDriveResult(driveResult);
-      if (turnOutcome.kind === 'fresh_start_required') {
-        return yield* this.#reDriveInitial(turnOutcome, initialOutcome.generation);
+      const transition = decideTurnTransition('continuing', turnOutcome);
+      if (transition.command.kind !== 're_drive') {
+        throw new Error(`Expected re_drive command, received ${transition.command.kind}`);
       }
-      return turnOutcome;
+      currentInput = { text: '' };
+      currentOptions = {
+        ...transition.command.options,
+        token: generation,
+      };
     }
-
-    // Direct outcomes (response, approval_required, stale, failed)
-    return fromInitialOutcome(initialOutcome);
   }
 
-  /**
-   * Re-drive via the initial turn runner after receiving a
-   * fresh_start_required outcome (e.g. from a failed continuation drive).
-   */
-  async *#reDriveInitial(
-    outcome: TurnOutcome & { kind: 'fresh_start_required' },
-    token: number,
-  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
-    const it = this.deps.initialTurnRunner.run(
-      { text: '' },
-      {
-        skipUserMessage: true,
-        token,
-        retries: outcome.retryCounts,
-        delayMs: outcome.delayMs,
-        useStandardServiceTier: outcome.useStandardServiceTier,
-      },
-    );
-    let res = await it.next();
-    while (!res.done) {
-      yield res.value;
-      res = await it.next();
+  async *#executeTerminalCommand(command: TurnCommand): AsyncGenerator<ConversationEvent, void, void> {
+    if (command.kind === 'emit_terminal') {
+      yield toTerminalEvent(command.terminal);
+      return;
     }
-    return fromInitialOutcome(res.value);
+    if (command.kind === 're_drive') {
+      throw new Error('re_drive must be executed before terminal command dispatch');
+    }
   }
 }

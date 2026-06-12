@@ -1324,6 +1324,10 @@ test('characterization - fresh start execution recovers from transient error wit
     t.is(result2.finalText, 'Recovered from transient error.');
   }
   t.is(startCallCount, 2, 'startStream should be called twice (initial + fresh start re-drive)');
+
+  const result3 = await terminalAdapter.sendMessage('next message');
+  t.is(result3.type, 'response');
+  t.is(startCallCount, 3, 'a new turn should start after fresh-start recovery completes');
 });
 
 test('characterization - approve-approve-response through handleApprovalDecision API', async (t) => {

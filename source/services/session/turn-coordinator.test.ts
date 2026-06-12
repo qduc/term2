@@ -24,8 +24,10 @@ const makeHarness = () => {
   } as any;
 
   let driveResults: any[] = [];
+  const continuationDriverCalls: any[] = [];
   const continuationDriver = {
-    drive: async function* (_init: any) {
+    drive: async function* (init: any) {
+      continuationDriverCalls.push(init);
       const result = driveResults.shift();
       if (result?.events) {
         for (const ev of result.events) {
@@ -68,6 +70,7 @@ const makeHarness = () => {
     initialTurnRunner,
     initialRunnerCalls,
     continuationDriver,
+    continuationDriverCalls,
     approvalFlow,
     getAbortCalled: () => abortCalled,
   };
@@ -266,6 +269,83 @@ test('fresh-start continuation forwards recovery instructions to the initial run
     delayMs: 125,
     useStandardServiceTier: true,
   });
+  t.is(statusMachine.current, 'idle');
+});
+
+test('fresh-start completion releases the turn for the next user message', async (t) => {
+  const { coordinator, statusMachine, continuationDriver, initialTurnRunner, approvalFlow } = makeHarness();
+  statusMachine.beginTurn();
+  statusMachine.requestApproval();
+  approvalFlow.setPending({ token: 7 });
+  continuationDriver.setNextResult({
+    kind: 'fresh_start_required',
+    retryCounts: {
+      transientRetryCount: 1,
+      serviceTierFallbackCount: 0,
+      modelRetryCount: 0,
+      transportDowngradeCount: 0,
+    },
+  });
+  initialTurnRunner.setNextResult({
+    kind: 'response',
+    terminal: { type: 'response', finalText: 'recovered' },
+  });
+
+  for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {
+  }
+
+  t.is(statusMachine.current, 'idle');
+
+  initialTurnRunner.setNextResult({
+    kind: 'response',
+    terminal: { type: 'response', finalText: 'next turn' },
+  });
+  await t.notThrowsAsync(async () => {
+    for await (const _ of coordinator.start('next message')) {
+    }
+  });
+});
+
+test('fresh-start auto-approval is driven before the recovered turn completes', async (t) => {
+  const { coordinator, statusMachine, continuationDriver, continuationDriverCalls, initialTurnRunner, approvalFlow } =
+    makeHarness();
+  statusMachine.beginTurn();
+  statusMachine.requestApproval();
+  approvalFlow.setPending({ token: 7 });
+  continuationDriver.setNextResult({
+    kind: 'fresh_start_required',
+    retryCounts: {
+      transientRetryCount: 1,
+      serviceTierFallbackCount: 0,
+      modelRetryCount: 0,
+      transportDowngradeCount: 0,
+    },
+  });
+  initialTurnRunner.setNextResult({
+    kind: 'auto_approval_required',
+    generation: 7,
+    callId: 'call-recovered',
+    command: 'echo recovered',
+  });
+  continuationDriver.setNextResult({
+    kind: 'response',
+    terminal: { type: 'response', finalText: 'recovered after approval' },
+  });
+
+  const events: any[] = [];
+  for await (const event of coordinator.continueAfterApproval({ answer: 'y' })) {
+    events.push(event);
+  }
+
+  t.is(continuationDriverCalls.length, 2);
+  t.deepEqual(continuationDriverCalls[1], {
+    kind: 'approval_decision',
+    answer: 'y',
+    generation: 7,
+  });
+  t.is(events.at(-1)?.type, 'final');
+  t.is(events.at(-1)?.finalText, 'recovered after approval');
+  t.is(statusMachine.current, 'idle');
 });
 
 test('Abort to idle with pending approval reconciliation', async (t) => {

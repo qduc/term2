@@ -150,10 +150,10 @@ test('streaming + fresh_start_required throws', (t) => {
     decideTurnTransition('streaming', {
       kind: 'fresh_start_required',
       retryCounts: defaultRetryCounts,
-    }),
+    } as any),
   );
 });
 
 test('continuing + failed throws', (t) => {
-  t.throws(() => decideTurnTransition('continuing', { kind: 'failed' }));
+  t.throws(() => decideTurnTransition('continuing', { kind: 'failed' } as any));
 });

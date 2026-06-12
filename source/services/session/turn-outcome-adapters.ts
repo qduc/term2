@@ -1,8 +1,13 @@
 import type { InitialTurnOutcome } from './initial-turn-runner.js';
 import type { ContinuationDriveResult } from './continuation-driver.js';
-import type { TurnOutcome } from './turn-transition.js';
+import type { ContinuingTurnOutcome, StreamingTurnOutcome } from './turn-transition.js';
 
 // ── Adapters ───────────────────────────────────────────────────
+
+export type DirectInitialTurnOutcome = Exclude<
+  InitialTurnOutcome,
+  { kind: 'abort_resolution_required' | 'auto_approval_required' }
+>;
 
 /**
  * Convert an InitialTurnOutcome (from initial-turn-runner.ts) to the
@@ -12,7 +17,7 @@ import type { TurnOutcome } from './turn-transition.js';
  * for `response` and `approval_required`, and the `failed` / `stale`
  * variants translate directly.
  */
-export function fromInitialOutcome(outcome: InitialTurnOutcome): TurnOutcome {
+export function fromInitialOutcome(outcome: DirectInitialTurnOutcome): StreamingTurnOutcome {
   switch (outcome.kind) {
     case 'response':
       return { kind: 'response', terminal: outcome.terminal };
@@ -24,12 +29,6 @@ export function fromInitialOutcome(outcome: InitialTurnOutcome): TurnOutcome {
       return { kind: 'failed' };
 
     case 'stale':
-      return { kind: 'stale' };
-
-    // These intermediate outcomes are handled by TurnCoordinator before reaching
-    // the transition core; map to stale as a safe fallback.
-    case 'abort_resolution_required':
-    case 'auto_approval_required':
       return { kind: 'stale' };
   }
 }
@@ -43,7 +42,7 @@ export function fromInitialOutcome(outcome: InitialTurnOutcome): TurnOutcome {
  * `fresh_start_required` spreads `RecoveryInstructions` fields
  * (`delayMs`, `useStandardServiceTier`) alongside `retryCounts`.
  */
-export function fromDriveResult(result: ContinuationDriveResult): TurnOutcome {
+export function fromDriveResult(result: ContinuationDriveResult): ContinuingTurnOutcome {
   switch (result.kind) {
     case 'response':
     case 'approval_required':

@@ -6,7 +6,7 @@ import React, { act, useEffect, useMemo, useRef } from 'react';
 import { render } from 'ink-testing-library';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
 import { useModelSelection } from './use-model-selection.js';
-import { createMockSettingsService } from '../services/settings-service.mock.js';
+import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import { Text } from 'ink';
 import { clearModelCache } from '../services/model-service.js';
 import { getProviderIds, registerProvider, unregisterProvider } from '../providers/index.js';

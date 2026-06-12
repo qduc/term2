@@ -5,9 +5,9 @@ import test from 'ava';
 import React, { useEffect, act } from 'react';
 import { render } from 'ink-testing-library';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
-import { SETTINGS_TRIGGER } from '../components/Input/triggers.js';
+import { SETTINGS_TRIGGER } from '../components/input/triggers.js';
 import { useSettingsCompletion, getSettingCategory } from './use-settings-completion.js';
-import { createMockSettingsService } from '../services/settings-service.mock.js';
+import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import { Text } from 'ink';
 
 const settingsService = createMockSettingsService({

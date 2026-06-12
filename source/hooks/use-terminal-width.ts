@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { calculateInputWidth } from '../components/Input/input-width.js';
+import { calculateInputWidth } from '../components/input/input-width.js';
 
 type Options = {
   waitingForRejectionReason: boolean;

@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { getTtyWriter as defaultGetTtyWriter, wrapForMultiplexer, type TtyWriter } from './tty-osc.js';
+import { getTtyWriter as defaultGetTtyWriter, wrapForMultiplexer, type TtyWriter } from './output/tty-osc.js';
 
 export interface ClipboardCommandCandidate {
   command: string;
@@ -12,7 +12,7 @@ export interface ClipboardRunResult {
 }
 
 // Re-export TtyWriter so callers that imported it from clipboard.ts continue to work
-export type { TtyWriter } from './tty-osc.js';
+export type { TtyWriter } from './output/tty-osc.js';
 
 export interface Osc52Options {
   env?: NodeJS.ProcessEnv;

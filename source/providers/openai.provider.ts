@@ -7,7 +7,7 @@ import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { RetryingModel } from './retrying-model.js';
 import type { ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
-import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
 
 function forwardPromptCacheKey(request: any, requestData: Record<string, unknown>): Record<string, unknown> {
   const promptCacheKey = request?.modelSettings?.prompt_cache_key;

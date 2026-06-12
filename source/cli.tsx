@@ -8,17 +8,17 @@ import App from './app.js';
 import { SSHInfo } from './hooks/use-shell-mode.js';
 import { getInkRenderOptions } from './utils/ink-render-options.js';
 import { AgentClient } from './lib/agent-client.js';
-import { ConversationService } from './services/conversation-service.js';
-import { SettingsService, buildEnvOverrides } from './services/settings-service.js';
-import { SessionContextService } from './services/session-context-service.js';
+import { ConversationService } from './services/conversation/conversation-service.js';
+import { SettingsService, buildEnvOverrides } from './services/settings/settings-service.js';
+import { SessionContextService } from './services/session/session-context-service.js';
 import { getAllProviders, getProviderIds } from './providers/index.js';
-import { LoggingService } from './services/logging-service.js';
+import { LoggingService } from './services/logging/logging-service.js';
 import { HistoryService } from './services/history-service.js';
 import { SSHService, SSHConfig } from './services/ssh-service.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { resolveSSHHost } from './utils/ssh-config-parser.js';
-import { createUsageAccumulator, formatSessionUsageBreakdown } from './utils/token-usage.js';
+import { createUsageAccumulator, formatSessionUsageBreakdown } from './utils/ai/token-usage.js';
 import {
   generateId,
   getResumeCommand,
@@ -30,12 +30,12 @@ import {
   deleteConversation,
   hasConversationContent,
   type RestoredState,
-} from './services/conversation-persistence.js';
+} from './services/conversation/conversation-persistence.js';
 import { formatResumeList } from './utils/resume-list.js';
-import { createConversationLogWriter, LockConflictError } from './services/conversation-log-writer.js';
-import { AGENT_AFFECTING_SETTINGS } from './services/conversation-log-events.js';
+import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
+import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
-import { normalizeAppModes } from './services/settings-schema.js';
+import { normalizeAppModes } from './services/settings/settings-schema.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -387,7 +387,7 @@ const settings = new SettingsService({
   env: buildEnvOverrides(),
   cli:
     Object.keys(cliOverrides).length > 0
-      ? (cliOverrides as Partial<import('./services/settings-schema.js').SettingsData>)
+      ? (cliOverrides as Partial<import('./services/settings/settings-schema.js').SettingsData>)
       : undefined,
   loggingService: logger,
 });
@@ -688,7 +688,7 @@ settings.onChange((key) => {
 });
 
 import { InputProvider } from './context/InputContext.js';
-import { patchStdoutForSynchronizedOutput } from './utils/synchronized-output.js';
+import { patchStdoutForSynchronizedOutput } from './utils/output/synchronized-output.js';
 
 // Enable DEC Mode 2026 synchronized output to prevent flickering in iTerm2.
 // This wraps every stdout.write() in begin/end markers so the terminal

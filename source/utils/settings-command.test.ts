@@ -1,8 +1,8 @@
 import test from 'ava';
 import { createSettingsCommand, formatSettingsSummary, parseSettingValue } from './settings-command.js';
 import { unregisterProvider, upsertProvider } from '../providers/index.js';
-import type { SettingsWithSources } from '../services/settings-schema.js';
-import type { SettingsService } from '../services/settings-service.js';
+import type { SettingsWithSources } from '../services/settings/settings-schema.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 
 const baseSettings = {
   agent: {

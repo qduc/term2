@@ -1,10 +1,10 @@
 import type { SlashCommand } from '../slash-commands.js';
-import { SETTINGS_RESET_TRIGGER, SETTINGS_TRIGGER } from '../components/Input/triggers.js';
-import type { SettingsService, SettingsWithSources } from '../services/settings-service.js';
-import { SETTING_KEYS } from '../services/settings-service.js';
+import { SETTINGS_RESET_TRIGGER, SETTINGS_TRIGGER } from '../components/input/triggers.js';
+import type { SettingsService, SettingsWithSources } from '../services/settings/settings-service.js';
+import { SETTING_KEYS } from '../services/settings/settings-service.js';
 import { getProvider } from '../providers/index.js';
-import { parseModelProviderArg } from './model-provider-arg.js';
-import { getModelSettingConfig } from './model-settings.js';
+import { parseModelProviderArg } from './ai/model-provider-arg.js';
+import { getModelSettingConfig } from './ai/model-settings.js';
 
 export function parseSettingValue(raw: string): any {
   const value = raw.trim();

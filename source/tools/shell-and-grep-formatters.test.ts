@@ -1,6 +1,6 @@
 import test from 'ava';
-import { formatShellCommandMessage } from './shell.js';
-import { formatGrepCommandMessage } from './grep.js';
+import { formatShellCommandMessage } from './system/shell.js';
+import { formatGrepCommandMessage } from './system/grep.js';
 
 test('formatShellCommandMessage: sets toolName to "shell"', (t) => {
   const item = {

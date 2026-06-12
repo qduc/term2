@@ -1,6 +1,6 @@
 import React, { Component, ReactNode } from 'react';
 import { Box, Text } from 'ink';
-import type { LoggingService } from '../services/logging-service.js';
+import type { LoggingService } from '../services/logging/logging-service.js';
 
 interface ErrorBoundaryProps {
   children: ReactNode;

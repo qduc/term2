@@ -1,8 +1,8 @@
 import type { SlashCommand } from '../slash-commands.js';
-import type { SettingsService } from '../services/settings-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 import { getProvider } from '../providers/index.js';
-import { parseModelProviderArg } from '../utils/model-provider-arg.js';
-import { MODEL_CMD_TRIGGER } from '../utils/model-settings.js';
+import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
+import { MODEL_CMD_TRIGGER } from '../utils/ai/model-settings.js';
 
 interface CreateModelSlashCommandDeps {
   settingsService: SettingsService;

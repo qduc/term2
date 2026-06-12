@@ -1,6 +1,6 @@
 import type { SlashCommand } from '../slash-commands.js';
 import type { Message } from '../types/message.js';
-import { getLastFinalAssistantText } from '../utils/message-utils.js';
+import { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
 
 interface CreateHandoffSlashCommandDeps {
   messages: Message[];

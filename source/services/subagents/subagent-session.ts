@@ -1,5 +1,5 @@
 import type { Agent, Runner } from '@openai/agents';
-import { ConversationStore } from '../conversation-store.js';
+import { ConversationStore } from '../conversation/conversation-store.js';
 
 /**
  * General-purpose subagent session. Replaces the private MentorSession shape.

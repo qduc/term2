@@ -1,5 +1,5 @@
 import type { SlashCommand } from '../slash-commands.js';
-import type { SettingsService } from '../services/settings-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 import { createSettingsCommand } from '../utils/settings-command.js';
 
 interface CreateGuardedSettingsCommandDeps {

@@ -1,7 +1,7 @@
 import chalk from 'chalk';
-import { getResumeCommand } from '../services/conversation-persistence.js';
+import { getResumeCommand } from '../services/conversation/conversation-persistence.js';
 
-import type { SavedAppMode } from '../services/conversation-persistence-types.js';
+import type { SavedAppMode } from '../services/conversation/conversation-persistence-types.js';
 
 interface ConversationListEntry {
   id: string;

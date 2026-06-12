@@ -1,7 +1,10 @@
 import type { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
 import type { ILoggingService } from '../services/service-interfaces.js';
-import { isNetworkProtocolError } from '../services/retry-error-classification.js';
-import { classifyUpstreamRetryableError, computeUpstreamRetryDelayMs } from '../services/upstream-retry-policy.js';
+import { isNetworkProtocolError } from '../services/retry/retry-error-classification.js';
+import {
+  classifyUpstreamRetryableError,
+  computeUpstreamRetryDelayMs,
+} from '../services/retry/upstream-retry-policy.js';
 
 type RetryingModelOptions = {
   retryAttempts: number;

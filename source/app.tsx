@@ -1,20 +1,20 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sendNotification } from './services/notification-service.js';
 import { useInputActions, useInputState } from './context/InputContext.js';
-import { parseModelProviderArg } from './utils/model-provider-arg.js';
+import { parseModelProviderArg } from './utils/ai/model-provider-arg.js';
 
 import { Box, useApp, useInput, useStdout } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
 import MessageList, {
   EMPTY_RESTORED_STATIC_MESSAGE_IDS,
   MESSAGE_HORIZONTAL_PADDING,
-} from './components/MessageList.js';
-import BottomArea from './components/BottomArea.js';
+} from './components/message/MessageList.js';
+import BottomArea from './components/layout/BottomArea.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
-import type { ConversationService } from './services/conversation-service.js';
-import type { SettingsService } from './services/settings-service.js';
+import type { ConversationService } from './services/conversation/conversation-service.js';
+import type { SettingsService } from './services/settings/settings-service.js';
 import type { HistoryService } from './services/history-service.js';
-import type { LoggingService } from './services/logging-service.js';
+import type { LoggingService } from './services/logging/logging-service.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { useSetting } from './hooks/use-setting.js';
 import { parseInput } from './utils/input-parser.js';
@@ -23,7 +23,7 @@ import { useShellMode, SSHInfo } from './hooks/use-shell-mode.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
 import type { Message } from './types/message.js';
-import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/token-usage.js';
+import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/ai/token-usage.js';
 import type { UndoItem } from './hooks/use-undo-selection.js';
 import { resolveSlashCommand } from './slash-commands.js';
 import { getSerializedInputBytes } from './services/large-uncached-input-guard.js';

@@ -3,8 +3,8 @@ import { useInputContext } from '../context/InputContext.js';
 import { fetchModels, filterModels, type ModelInfo } from '../services/model-service.js';
 import { getProviderIds, sortProvidersByOrder } from '../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
-import { parseModelProviderArg } from '../utils/model-provider-arg.js';
-import { MODEL_CMD_TRIGGER, getModelSettingConfigForInput, MODEL_SETTING_CONFIGS } from '../utils/model-settings.js';
+import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
+import { MODEL_CMD_TRIGGER, getModelSettingConfigForInput, MODEL_SETTING_CONFIGS } from '../utils/ai/model-settings.js';
 
 export const MODEL_TRIGGER = MODEL_SETTING_CONFIGS[0].trigger;
 export { MODEL_CMD_TRIGGER };

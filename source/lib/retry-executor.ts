@@ -1,4 +1,7 @@
-import { classifyUpstreamRetryableError, computeUpstreamRetryDelayMs } from '../services/upstream-retry-policy.js';
+import {
+  classifyUpstreamRetryableError,
+  computeUpstreamRetryDelayMs,
+} from '../services/retry/upstream-retry-policy.js';
 
 type RetryLogger = {
   warn(message: string, meta?: Record<string, unknown>): void;

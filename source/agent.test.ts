@@ -1,6 +1,6 @@
 import test from 'ava';
 import { getAgentDefinition } from './agent.js';
-import { createMockSettingsService } from './services/settings-service.mock.js';
+import { createMockSettingsService } from './services/settings/settings-service.mock.js';
 
 const mockLogger = {
   debug: () => {},

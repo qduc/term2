@@ -1,0 +1,1063 @@
+import { z } from 'zod';
+import { readFile, writeFile } from 'fs/promises';
+import path from 'path';
+import { resolveWorkspacePath } from '../utils.js';
+import type { ToolDefinition, CommandMessage, FormatCommandMessage } from '../types.js';
+import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
+import {
+  getOutputText,
+  safeJsonParse,
+  normalizeToolArguments,
+  createBaseMessage,
+  pickPatchOutputItemText,
+} from '../format-helpers.js';
+import { healSearchReplaceParams } from './edit-healing.js';
+import { ExecutionContext } from '../../services/execution-context.js';
+import { getApprovalPresentationCapability } from '../tool-capabilities.js';
+import { withFileLock } from './file-locks.js';
+
+/**
+ * Detect the predominant EOL style in file content.
+ * Returns '\r\n' if CRLF is dominant, otherwise '\n'.
+ */
+function detectEOL(content: string): string {
+  const crlfCount = (content.match(/\r\n/g) || []).length;
+  const lfCount = (content.match(/(?<!\r)\n/g) || []).length;
+  return crlfCount > lfCount ? '\r\n' : '\n';
+}
+
+/**
+ * Normalize line endings in search/replace content to match the target file's EOL style.
+ */
+function normalizeToEOL(content: string, eol: string): string {
+  // First normalize to LF, then convert to target EOL
+  return content.replace(/\r\n/g, '\n').replace(/\n/g, eol);
+}
+
+/**
+ * Remove leading filepath comments that models often add to code blocks.
+ * E.g., "// src/file.ts" or "# path/to/file.py" at the start.
+ */
+function removeLeadingFilepathComment(content: string, filePath: string): string {
+  const lines = content.split(/\r?\n/);
+  if (lines.length === 0) return content;
+
+  const firstLine = lines[0].trim();
+  const basename = path.basename(filePath);
+
+  // Check for common comment patterns with filepath
+  const patterns = [
+    /^\/\/\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*$/, // // path/to/file.ext
+    /^#\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*$/, // # path/to/file.ext
+    /^\/\*\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*\*\/\s*$/, // /* path/to/file.ext */
+    /^<!--\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*-->\s*$/, // <!-- path/to/file.ext -->
+  ];
+
+  // Check if first line matches a filepath comment pattern and contains the basename
+  const isFilepathComment = patterns.some((p) => p.test(firstLine)) && firstLine.includes(basename);
+
+  if (isFilepathComment) {
+    return lines.slice(1).join('\n');
+  }
+
+  return content;
+}
+
+/**
+ * Detect summarization markers in content that indicate truncated/omitted code.
+ */
+function detectSummarizationMarkers(content: string): string | null {
+  if (/Lines \d+-\d+ omitted/i.test(content)) {
+    return 'oldString contains "Lines X-Y omitted" marker - provide the actual content';
+  }
+  if (content.includes('{…}') || content.includes('{...}')) {
+    return 'oldString contains ellipsis marker {…} - provide the actual content';
+  }
+  if (content.includes('/*...*/') || content.includes('/* ... */')) {
+    return 'oldString contains /*...*/ marker - provide the actual content';
+  }
+  if (content.includes('// ...') || content.includes('//...')) {
+    return 'oldString contains // ... marker - provide the actual content';
+  }
+  if (content.includes('# ...') || content.includes('#...')) {
+    return 'oldString contains # ... marker - provide the actual content';
+  }
+  return null;
+}
+
+const searchReplaceOperationSchema = z.object({
+  search_content: z
+    .string()
+    .describe(
+      'The exact content to search for. Put <...> on its own line to match (and replace) everything between a head anchor and a tail anchor — lets you edit or delete a large block without reproducing it. The whole span between anchors is replaced, so use distinctive multi-line anchors (never a single generic line) to avoid deleting the wrong region. Omit the anchors from replace_content to delete them too.',
+    ),
+  replace_content: z.string().describe('The content to replace it with'),
+});
+
+const searchReplaceParametersSchema = z.object({
+  path: z.string().describe('The absolute or relative path to the file'),
+  replacements: z.array(searchReplaceOperationSchema).min(1).describe('The list of replacements to apply to the file'),
+});
+
+export type SearchReplaceOperation = z.infer<typeof searchReplaceOperationSchema>;
+export type SearchReplaceToolParams = z.infer<typeof searchReplaceParametersSchema>;
+
+export interface SearchReplaceFullOperation {
+  path: string;
+  search_content: string;
+  replace_content: string;
+}
+
+function getSearchReplaceOperations(params: SearchReplaceToolParams): SearchReplaceFullOperation[] {
+  return params.replacements.map((rep) => ({
+    path: params.path,
+    search_content: rep.search_content,
+    replace_content: rep.replace_content,
+  }));
+}
+
+/**
+ * Gap marker constant used to indicate omitted middle content in search strings.
+ * When the model uses <...> in search_content, the search is split into segments
+ * that are matched sequentially, skipping any content between them.
+ */
+const GAP_MARKER = '<...>';
+
+/**
+ * Check if search content contains gap markers.
+ */
+function containsGapMarker(content: string): boolean {
+  return content.includes(GAP_MARKER);
+}
+
+/**
+ * Information about exact matches found in content
+ */
+interface ExactMatchInfo {
+  type: 'exact';
+  count: number;
+}
+
+/**
+ * Information about relaxed matches found in content (with position details)
+ */
+interface RelaxedMatchInfo {
+  type: 'relaxed';
+  count: number;
+  matches: { startIndex: number; endIndex: number }[];
+}
+
+/**
+ * Information about whitespace-normalized matches found in content
+ */
+interface NormalizedMatchInfo {
+  type: 'normalized';
+  count: number;
+  matches: { startIndex: number; endIndex: number }[];
+}
+
+/**
+ * Information about gap matches found in content (head <...> tail pattern)
+ */
+interface GapMatchInfo {
+  type: 'gap';
+  count: number;
+  matches: { startIndex: number; endIndex: number }[];
+}
+
+/**
+ * Information indicating no matches were found
+ */
+interface NoMatchInfo {
+  type: 'none';
+  diagnostic?: string;
+}
+
+type MatchInfo = ExactMatchInfo | RelaxedMatchInfo | NormalizedMatchInfo | GapMatchInfo | NoMatchInfo;
+
+/**
+ * Cache for edit preparation to avoid redundant work.
+ */
+interface EditCache {
+  key: string;
+  matchInfo: MatchInfo;
+  content: string;
+  eol: string;
+}
+
+class SearchReplaceEditCache {
+  private lastEditCache: EditCache | null = null;
+
+  get(params: SearchReplaceFullOperation, content: string): EditCache | null {
+    const key = getEditCacheKey(params);
+    if (this.lastEditCache && this.lastEditCache.key === key && this.lastEditCache.content === content) {
+      return this.lastEditCache;
+    }
+    return null;
+  }
+
+  set(params: SearchReplaceFullOperation, matchInfo: MatchInfo, content: string, eol: string): void {
+    this.lastEditCache = {
+      key: getEditCacheKey(params),
+      matchInfo,
+      content,
+      eol,
+    };
+  }
+}
+
+function getEditCacheKey(params: SearchReplaceFullOperation): string {
+  return JSON.stringify({
+    path: params.path,
+    search_content: params.search_content,
+    replace_content: params.replace_content,
+  });
+}
+
+/**
+ * Parse file content into lines with position information
+ */
+function parseFileLines(content: string): { text: string; trimmed: string; start: number; end: number }[] {
+  const lineInfos: {
+    text: string;
+    trimmed: string;
+    start: number;
+    end: number;
+  }[] = [];
+  const regex = /([^\r\n]*)(\r?\n|$)/g;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index === regex.lastIndex) {
+      regex.lastIndex++;
+    }
+    const fullMatch = match[0];
+    if (fullMatch.length === 0 && match.index >= content.length) break;
+
+    const lineContent = match[1];
+    lineInfos.push({
+      text: lineContent,
+      trimmed: lineContent.trim(),
+      start: match.index,
+      end: match.index + fullMatch.length,
+    });
+
+    if (match.index + fullMatch.length === content.length) break;
+  }
+  return lineInfos;
+}
+
+/**
+ * Normalize whitespace by collapsing any whitespace run to a single space.
+ * Returns the normalized text and a map from normalized indices to original indices.
+ */
+function normalizeWhitespaceWithMap(content: string): {
+  normalized: string;
+  indexMap: number[];
+} {
+  let normalized = '';
+  const indexMap: number[] = [];
+  let inWhitespace = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    if (/\s/.test(char)) {
+      if (!inWhitespace && normalized.length > 0) {
+        normalized += ' ';
+        indexMap.push(i);
+      }
+      inWhitespace = true;
+      continue;
+    }
+    inWhitespace = false;
+    normalized += char;
+    indexMap.push(i);
+  }
+
+  if (normalized.endsWith(' ')) {
+    normalized = normalized.slice(0, -1);
+    indexMap.pop();
+  }
+
+  return { normalized, indexMap };
+}
+
+function normalizeWhitespace(content: string): string {
+  return normalizeWhitespaceWithMap(content).normalized;
+}
+
+/**
+ * Find a segment (multi-line string) within file lines using relaxed matching.
+ * Returns the line index range [startLineIdx, endLineIdx) or null if not found.
+ * Searches starting from `fromLineIdx`.
+ */
+function findSegmentInLines(
+  lineInfos: { text: string; trimmed: string; start: number; end: number }[],
+  segmentLines: string[],
+  fromLineIdx: number,
+): { startLineIdx: number; endLineIdx: number } | null {
+  for (let i = fromLineIdx; i <= lineInfos.length - segmentLines.length; i++) {
+    let isMatch = true;
+    for (let j = 0; j < segmentLines.length; j++) {
+      if (lineInfos[i + j].trimmed !== segmentLines[j]) {
+        isMatch = false;
+        break;
+      }
+    }
+    if (isMatch) {
+      return { startLineIdx: i, endLineIdx: i + segmentLines.length };
+    }
+  }
+  return null;
+}
+
+/**
+ * Find gap matches in content. Splits search content on GAP_MARKER,
+ * then matches each segment sequentially in the file content.
+ * The matched region spans from the start of the first segment to the end of the last.
+ */
+function findGapMatches(content: string, searchContent: string): GapMatchInfo | NoMatchInfo {
+  const segments = searchContent.split(GAP_MARKER);
+  // Filter out empty segments and trim each segment's lines
+  const segmentLineSets = segments.map((seg) =>
+    seg
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0),
+  );
+
+  // Validate: all segments must have at least one non-empty line
+  if (segmentLineSets.some((lines) => lines.length === 0)) {
+    return {
+      type: 'none',
+      diagnostic:
+        'Gap pattern has an empty segment — every part separated by <...> must contain at least one non-blank line.',
+    };
+  }
+
+  const lineInfos = parseFileLines(content);
+  const allMatches: { startIndex: number; endIndex: number }[] = [];
+
+  let headEverMatched = false;
+  let maxSegmentsMatched = 0; // best run: count of leading segments matched consecutively
+
+  // Try every possible starting position for the first segment
+  let searchFrom = 0;
+  while (searchFrom <= lineInfos.length - segmentLineSets[0].length) {
+    // Find the first segment
+    const firstMatch = findSegmentInLines(lineInfos, segmentLineSets[0], searchFrom);
+    if (!firstMatch) break;
+    headEverMatched = true;
+
+    // Try to match remaining segments sequentially after the first
+    let valid = true;
+    let segmentsMatched = 1;
+    let lastEndLineIdx = firstMatch.endLineIdx;
+    for (let s = 1; s < segmentLineSets.length; s++) {
+      const nextMatch = findSegmentInLines(lineInfos, segmentLineSets[s], lastEndLineIdx);
+      if (!nextMatch) {
+        valid = false;
+        break;
+      }
+      segmentsMatched++;
+      lastEndLineIdx = nextMatch.endLineIdx;
+    }
+    maxSegmentsMatched = Math.max(maxSegmentsMatched, segmentsMatched);
+
+    if (valid) {
+      allMatches.push({
+        startIndex: lineInfos[firstMatch.startLineIdx].start,
+        endIndex: lineInfos[lastEndLineIdx - 1].end,
+      });
+    }
+
+    // Continue searching from the next line after this match's start
+    searchFrom = firstMatch.startLineIdx + 1;
+  }
+
+  if (allMatches.length > 0) {
+    return { type: 'gap', count: allMatches.length, matches: allMatches };
+  }
+
+  if (!headEverMatched) {
+    return {
+      type: 'none',
+      diagnostic: `Gap pattern did not match: the head anchor (starting ${JSON.stringify(
+        segmentLineSets[0][0],
+      )}) was not found in the file. Recheck the first anchor's exact text.`,
+    };
+  }
+
+  const failedSegmentFirstLine = segmentLineSets[maxSegmentsMatched]?.[0] ?? '';
+  return {
+    type: 'none',
+    diagnostic: `Gap pattern did not match: the head anchor matched, but the next anchor (starting ${JSON.stringify(
+      failedSegmentFirstLine,
+    )}) was not found after it. Recheck that anchor's text and that anchors appear in order.`,
+  };
+}
+
+/**
+ * Find matches in content using exact matching first, then relaxed matching.
+ * Returns detailed match information including positions for replacement.
+ */
+function findMatchesInContent(content: string, searchContent: string): MatchInfo {
+  // 0. Check for gap markers first — delegate to gap matching
+  if (containsGapMarker(searchContent)) {
+    return findGapMatches(content, searchContent);
+  }
+
+  // 1. Try exact match first
+  let matchCount = 0;
+  let index = content.indexOf(searchContent);
+  while (index !== -1) {
+    matchCount++;
+    index = content.indexOf(searchContent, index + 1);
+  }
+
+  if (matchCount > 0) {
+    return { type: 'exact', count: matchCount };
+  }
+
+  // 2. Try relaxed match (whitespace-insensitive line matching)
+  const searchLines = searchContent.split(/\r?\n/).map((l) => l.trim());
+  const lineInfos = parseFileLines(content);
+
+  const matches: { startIndex: number; endIndex: number }[] = [];
+  for (let i = 0; i <= lineInfos.length - searchLines.length; i++) {
+    let isMatch = true;
+    for (let j = 0; j < searchLines.length; j++) {
+      if (lineInfos[i + j].trimmed !== searchLines[j]) {
+        isMatch = false;
+        break;
+      }
+    }
+    if (isMatch) {
+      matches.push({
+        startIndex: lineInfos[i].start,
+        endIndex: lineInfos[i + searchLines.length - 1].end,
+      });
+    }
+  }
+
+  if (matches.length > 0) {
+    return { type: 'relaxed', count: matches.length, matches };
+  }
+
+  // 3. Try normalized whitespace match (collapse whitespace differences)
+  const normalizedSearch = normalizeWhitespace(searchContent);
+  if (normalizedSearch.length > 0) {
+    const { normalized: normalizedContent, indexMap } = normalizeWhitespaceWithMap(content);
+    const normalizedMatches: { startIndex: number; endIndex: number }[] = [];
+    let normalizedIndex = normalizedContent.indexOf(normalizedSearch);
+    while (normalizedIndex !== -1) {
+      const beforeIndex = normalizedIndex - 1;
+      const afterIndex = normalizedIndex + normalizedSearch.length;
+      const beforeChar = beforeIndex >= 0 ? normalizedContent[beforeIndex] : '';
+      const afterChar = afterIndex < normalizedContent.length ? normalizedContent[afterIndex] : '';
+      const hasLeadingBoundary = beforeIndex < 0 || beforeChar === ' ';
+      const hasTrailingBoundary = afterIndex >= normalizedContent.length || afterChar === ' ';
+
+      if (!hasLeadingBoundary || !hasTrailingBoundary) {
+        normalizedIndex = normalizedContent.indexOf(normalizedSearch, normalizedIndex + 1);
+        continue;
+      }
+
+      const startIndex = indexMap[normalizedIndex];
+      const endIndex = indexMap[normalizedIndex + normalizedSearch.length - 1] + 1;
+      normalizedMatches.push({ startIndex, endIndex });
+      normalizedIndex = normalizedContent.indexOf(normalizedSearch, normalizedIndex + 1);
+    }
+
+    if (normalizedMatches.length > 0) {
+      return {
+        type: 'normalized',
+        count: normalizedMatches.length,
+        matches: normalizedMatches,
+      };
+    }
+  }
+
+  return { type: 'none' };
+}
+
+function prepareMatchContext(
+  operation: SearchReplaceFullOperation,
+  content: string,
+  editCache: SearchReplaceEditCache,
+): { eol: string; normalizedSearchContent: string; matchInfo: MatchInfo; fromCache: boolean } {
+  const cachedEdit = editCache.get(operation, content);
+  if (cachedEdit) {
+    const normalizedSearchContent = normalizeToEOL(
+      removeLeadingFilepathComment(operation.search_content, operation.path),
+      cachedEdit.eol,
+    );
+    return {
+      eol: cachedEdit.eol,
+      normalizedSearchContent,
+      matchInfo: cachedEdit.matchInfo,
+      fromCache: true,
+    };
+  }
+
+  const eol = detectEOL(content);
+  const normalizedSearchContent = normalizeToEOL(
+    removeLeadingFilepathComment(operation.search_content, operation.path),
+    eol,
+  );
+  const matchInfo = findMatchesInContent(content, normalizedSearchContent);
+  editCache.set(operation, matchInfo, content, eol);
+
+  return {
+    eol,
+    normalizedSearchContent,
+    matchInfo,
+    fromCache: false,
+  };
+}
+
+function evaluateApprovalForMatch(
+  matchInfo: MatchInfo,
+  insideCwd: boolean,
+  filePath: string,
+  loggingService: ILoggingService,
+): boolean {
+  if (matchInfo.type === 'none') {
+    loggingService.warn('search_replace validation: no match found - will fail in execute', {
+      path: filePath,
+    });
+    return false;
+  }
+
+  if (matchInfo.count > 1) {
+    loggingService.warn(`search_replace validation: multiple ${matchInfo.type} matches - will fail in execute`, {
+      path: filePath,
+      count: matchInfo.count,
+    });
+    return false;
+  }
+
+  if (matchInfo.type === 'exact') {
+    loggingService.debug('search_replace validation: exact match found', {
+      path: filePath,
+      count: matchInfo.count,
+    });
+    return insideCwd ? false : true;
+  }
+
+  if (matchInfo.type === 'gap') {
+    loggingService.debug('search_replace validation: gap match found', {
+      path: filePath,
+      count: matchInfo.count,
+    });
+    return insideCwd ? false : true;
+  }
+
+  if (matchInfo.type === 'relaxed') {
+    loggingService.debug('search_replace validation: relaxed match found', {
+      path: filePath,
+      count: matchInfo.count,
+    });
+    return insideCwd ? false : true;
+  }
+
+  if (matchInfo.type === 'normalized') {
+    loggingService.debug('search_replace validation: normalized match found', {
+      path: filePath,
+      count: matchInfo.count,
+    });
+    return insideCwd ? false : true;
+  }
+
+  return false;
+}
+
+interface ReplacementExecutionSuccess {
+  success: true;
+  newContent: string;
+  matchType: 'exact' | 'relaxed' | 'normalized' | 'gap';
+  replacedCount: number;
+}
+
+interface ReplacementExecutionFailure {
+  success: false;
+  error: string;
+}
+
+type ReplacementExecutionResult = ReplacementExecutionSuccess | ReplacementExecutionFailure;
+
+function replaceIndexedMatches(
+  content: string,
+  matches: { startIndex: number; endIndex: number }[],
+  replaceContent: string,
+): { newContent: string; replacedCount: number } {
+  const match = matches[0];
+  return {
+    newContent: content.substring(0, match.startIndex) + replaceContent + content.substring(match.endIndex),
+    replacedCount: 1,
+  };
+}
+
+function executeReplacement(
+  matchInfo: MatchInfo,
+  content: string,
+  eol: string,
+  options: {
+    normalizedSearchContent: string;
+    replaceContent: string;
+  },
+): ReplacementExecutionResult {
+  const normalizedReplaceContent = normalizeToEOL(options.replaceContent, eol);
+
+  if (matchInfo.type === 'none') {
+    return {
+      success: false,
+      error: 'Search content not found. Try splitting the changes into smaller search pattern.',
+    };
+  }
+
+  if (matchInfo.count > 1) {
+    return {
+      success: false,
+      error: `Found ${matchInfo.count} ${matchInfo.type} matches. Search content must match exactly once.`,
+    };
+  }
+
+  if (matchInfo.type === 'exact') {
+    const firstIndex = content.indexOf(options.normalizedSearchContent);
+    return {
+      success: true,
+      newContent:
+        content.substring(0, firstIndex) +
+        normalizedReplaceContent +
+        content.substring(firstIndex + options.normalizedSearchContent.length),
+      matchType: 'exact',
+      replacedCount: 1,
+    };
+  }
+
+  const replaced = replaceIndexedMatches(content, matchInfo.matches, normalizedReplaceContent);
+  return {
+    success: true,
+    newContent: replaced.newContent,
+    matchType: matchInfo.type,
+    replacedCount: replaced.replacedCount,
+  };
+}
+
+export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
+  const parsedOutput = safeJsonParse(getOutputText(item));
+  const replaceOutputItems = parsedOutput?.output ?? [];
+
+  function getFormattedOperationArgs(item: any, replaceIndex = 0) {
+    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+    const args = normalizeToolArguments(normalizedArgs) ?? {};
+    const replaceResult = replaceOutputItems[replaceIndex];
+    const filePath = args?.path ?? replaceResult?.path ?? 'unknown';
+    const replacements = args?.replacements ?? [];
+    const operationArgs = replacements[replaceIndex] ?? {};
+    const searchContent = operationArgs?.search_content ?? '';
+    const replaceContent = operationArgs?.replace_content ?? '';
+    return { filePath, searchContent, replaceContent };
+  }
+
+  // If JSON parsing failed or no output array, create error message
+  if (replaceOutputItems.length === 0) {
+    const { filePath, searchContent, replaceContent } = getFormattedOperationArgs(item, 0);
+    const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
+    const output = getOutputText(item) || 'No output';
+    const success = false;
+
+    return [
+      createBaseMessage(item, index, 0, false, {
+        command,
+        output,
+        success,
+        toolName: 'search_replace',
+        toolArgs: {
+          path: filePath,
+          search_content: searchContent,
+          replace_content: replaceContent,
+        },
+      }),
+    ];
+  }
+
+  // Search replace tool can have multiple operation outputs
+  const messages: CommandMessage[] = [];
+  for (const [replaceIndex, replaceResult] of replaceOutputItems.entries()) {
+    const { filePath, searchContent, replaceContent } = getFormattedOperationArgs(item, replaceIndex);
+
+    const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
+    const isHealed = replaceResult?.healed === true;
+    let output = pickPatchOutputItemText(replaceResult) || 'No output';
+    if (isHealed && !String(output).includes('healed')) {
+      output = `${output} (healed)`;
+    }
+    const success = replaceResult?.success ?? false;
+
+    messages.push(
+      createBaseMessage(item, index, replaceIndex, false, {
+        command,
+        output,
+        success,
+        toolName: 'search_replace',
+        toolArgs: {
+          path: filePath,
+          search_content: searchContent,
+          replace_content: replaceContent,
+        },
+      }),
+    );
+  }
+  return messages;
+};
+
+export function createSearchReplaceToolDefinition(deps: {
+  loggingService: ILoggingService;
+  settingsService: ISettingsService;
+  executionContext?: ExecutionContext;
+  editHealing?: typeof healSearchReplaceParams;
+}): ToolDefinition<SearchReplaceToolParams> {
+  const { loggingService, settingsService, executionContext, editHealing = healSearchReplaceParams } = deps;
+  const editCache = new SearchReplaceEditCache();
+
+  return {
+    name: 'search_replace',
+    description:
+      'Replace text in a file using exact or relaxed matching.\n' +
+      'Gap matching: put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span (both anchors plus everything between them) is what gets replaced, so a mis-placed anchor silently deletes a large region. Choose anchors that are distinctive and unambiguous — prefer a few lines of real, unique code; never anchor on a single generic line like "}", "return", or a blank line. Use this to edit or DELETE a large block without reproducing it. To delete the block including the anchors, omit them from replace_content; to delete only the middle, repeat the anchors in replace_content.\n' +
+      'Use this tool for precise edits where you know the content to be replaced.',
+    parameters: searchReplaceParametersSchema,
+    approvalPresentation: getApprovalPresentationCapability('search_replace'),
+    needsApproval: async (params) => {
+      try {
+        const operations = getSearchReplaceOperations(params);
+        const cwd = executionContext?.getCwd() || process.cwd();
+        if (operations.length > 1) {
+          const allInsideCwd = operations.every((operation) => {
+            try {
+              const targetPath = resolveWorkspacePath(operation.path, cwd);
+              return targetPath.startsWith(cwd + path.sep);
+            } catch {
+              return false;
+            }
+          });
+          return !allInsideCwd;
+        }
+
+        const operation = operations[0];
+        const { path: filePath, search_content, replace_content } = operation;
+        const targetPath = resolveWorkspacePath(filePath, cwd);
+        const workspaceRoot = cwd;
+        const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
+
+        const sshService = executionContext?.getSSHService();
+        const isRemote = executionContext?.isRemote() && !!sshService;
+
+        // Read file content
+        let content: string;
+        try {
+          if (isRemote && sshService) {
+            content = await sshService.readFile(targetPath);
+          } else {
+            content = await readFile(targetPath, 'utf8');
+          }
+        } catch (error: any) {
+          if (search_content === '' && error?.code === 'ENOENT') {
+            loggingService.debug('search_replace validation: creating new file because search_content is empty', {
+              path: filePath,
+            });
+            if (insideCwd) {
+              return false;
+            }
+            return true;
+          }
+          loggingService.error('search_replace needsApproval: file not found', {
+            path: filePath,
+            error: error?.message || String(error),
+          });
+          return true;
+        }
+
+        if (search_content === '') {
+          loggingService.warn('search_replace validation: empty search_content on existing file', {
+            path: filePath,
+          });
+          return true;
+        }
+
+        if (search_content === replace_content) {
+          loggingService.warn('search_replace validation: search_content and replace_content are identical', {
+            path: filePath,
+          });
+          // Auto-approve - execute will handle the error gracefully
+          return false;
+        }
+
+        // Check for summarization markers
+        const markerError = detectSummarizationMarkers(search_content);
+        if (markerError) {
+          loggingService.warn('search_replace validation: summarization marker detected', {
+            path: filePath,
+            error: markerError,
+          });
+          // Auto-approve - execute will handle the error gracefully
+          return false;
+        }
+
+        // Detect EOL, normalize search content, find matches, and cache result
+        const { matchInfo } = prepareMatchContext(operation, content, editCache);
+
+        return evaluateApprovalForMatch(matchInfo, insideCwd, filePath, loggingService);
+      } catch (error: any) {
+        loggingService.error('search_replace needsApproval error', {
+          error: error?.message || String(error),
+        });
+        return true;
+      }
+    },
+    execute: async (params) => {
+      const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
+      const cwd = executionContext?.getCwd() || process.cwd();
+      const sshService = executionContext?.getSSHService();
+      const isRemote = executionContext?.isRemote() && !!sshService;
+
+      const readFileFn = async (p: string) => {
+        if (isRemote && sshService) return sshService.readFile(p);
+        return readFile(p, 'utf8');
+      };
+
+      const writeFileFn = async (p: string, c: string) => {
+        if (isRemote && sshService) return sshService.writeFile(p, c);
+        return writeFile(p, c, 'utf8');
+      };
+
+      const fail = (error: string, extra?: Record<string, unknown>) => ({
+        output: { success: false, error, ...extra },
+      });
+
+      const applyToContent = async (operation: SearchReplaceFullOperation, content: string) => {
+        const { path: filePath, search_content, replace_content } = operation;
+
+        if (search_content === '') {
+          return fail(
+            'search_content must not be empty when editing an existing file. Provide search text or create a new file with an empty search.',
+          );
+        }
+
+        if (search_content === replace_content) {
+          return fail('search_content and replace_content are identical.');
+        }
+
+        const markerError = detectSummarizationMarkers(search_content);
+        if (markerError) {
+          return fail(markerError);
+        }
+
+        let usedHealing = false;
+        let healingAttempted = false;
+        let healingSucceeded = false;
+        let healedSearchLength = 0;
+        let matchTypeAfterHealing: MatchInfo['type'] = 'none';
+        let healingFailureReason: string | undefined;
+
+        let { eol, normalizedSearchContent, matchInfo } = prepareMatchContext(operation, content, editCache);
+
+        if (matchInfo.type === 'none') {
+          if (containsGapMarker(search_content)) {
+            return fail(
+              (matchInfo.diagnostic ?? 'Gap pattern did not match. Recheck the head and tail anchor lines.') +
+                ' Gap (<...>) edits are not auto-healed — fix the anchors and retry.',
+            );
+          }
+          const enableEditHealing = settingsService.get<boolean>('tools.enableEditHealing') ?? true;
+          if (enableEditHealing) {
+            healingAttempted = true;
+            const healingModel = settingsService.get<string>('tools.editHealingModel') ?? 'gpt-4o-mini';
+            const healingResult = await editHealing(
+              operation,
+              content,
+              healingModel,
+              process.env.OPENAI_API_KEY ?? '',
+              {
+                settingsService,
+                loggingService,
+              },
+            );
+
+            healedSearchLength = healingResult.params.search_content.length;
+            healingFailureReason = healingResult.failureReason;
+
+            if (healingResult.wasModified) {
+              normalizedSearchContent = normalizeToEOL(
+                removeLeadingFilepathComment(healingResult.params.search_content, filePath),
+                eol,
+              );
+              matchInfo = findMatchesInContent(content, normalizedSearchContent);
+              matchTypeAfterHealing = matchInfo.type;
+              if (matchInfo.type !== 'none') {
+                usedHealing = true;
+                healingSucceeded = true;
+              }
+            }
+
+            if (enableFileLogging) {
+              loggingService.debug('search_replace healing attempt', {
+                path: filePath,
+                healing_attempted: healingAttempted,
+                healing_succeeded: healingSucceeded,
+                original_search_length: search_content.length,
+                healed_search_length: healedSearchLength,
+                match_type_after_healing: matchTypeAfterHealing,
+                failure_reason: healingFailureReason,
+              });
+            }
+
+            if (!usedHealing) {
+              const reasonSuffix = healingFailureReason ? ` Reason: ${healingFailureReason}.` : '';
+              return fail(
+                `Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.`,
+                { healing_failure_reason: healingFailureReason },
+              );
+            }
+          }
+        }
+
+        const replacementResult = executeReplacement(matchInfo, content, eol, {
+          normalizedSearchContent,
+          replaceContent: replace_content,
+        });
+
+        if (!replacementResult.success) {
+          return fail(replacementResult.error);
+        }
+
+        if (enableFileLogging) {
+          loggingService.debug(`File updated (${replacementResult.matchType} match)`, {
+            path: filePath,
+            count: replacementResult.replacedCount,
+            healed: usedHealing,
+          });
+        }
+
+        const successMessage = usedHealing
+          ? `Updated ${filePath} (Search param has minor difference with actual file, auto healing was used. Reread the file to make sure the edit is correct)`
+          : `Updated ${filePath} (${replacementResult.replacedCount} ${replacementResult.matchType} match${
+              replacementResult.replacedCount > 1 ? 'es' : ''
+            })`;
+        return {
+          newContent: replacementResult.newContent,
+          output: {
+            success: true,
+            operation: 'search_replace',
+            path: filePath,
+            message: successMessage,
+            healed: usedHealing,
+          },
+        };
+      };
+
+      try {
+        const operations = getSearchReplaceOperations(params);
+        const indexedOperations = operations.map((operation, index) => ({
+          operation,
+          index,
+          targetPath: resolveWorkspacePath(operation.path, cwd),
+        }));
+        const groups = new Map<string, typeof indexedOperations>();
+        for (const indexedOperation of indexedOperations) {
+          groups.set(indexedOperation.targetPath, [
+            ...(groups.get(indexedOperation.targetPath) ?? []),
+            indexedOperation,
+          ]);
+        }
+
+        const output: Array<Record<string, unknown>> = new Array(operations.length);
+
+        for (const [targetPath, group] of groups) {
+          await withFileLock(targetPath, async () => {
+            let content = '';
+            let fileExists = true;
+
+            try {
+              content = await readFileFn(targetPath);
+            } catch (error: any) {
+              if (error?.code === 'ENOENT') {
+                fileExists = false;
+              } else {
+                throw error;
+              }
+            }
+
+            if (enableFileLogging) {
+              loggingService.debug(`File operation started: search_replace`, {
+                path: group[0].operation.path,
+                targetPath,
+                operationCount: group.length,
+              });
+            }
+
+            let nextContent = content;
+            let changed = false;
+
+            for (const { operation, index } of group) {
+              if (!fileExists) {
+                if (operation.search_content === '') {
+                  nextContent = operation.replace_content;
+                  fileExists = true;
+                  changed = true;
+                  output[index] = {
+                    success: true,
+                    operation: 'search_replace',
+                    path: operation.path,
+                    message: `Created ${operation.path} (new file)`,
+                  };
+                  continue;
+                }
+
+                output[index] = {
+                  success: false,
+                  error: `File not found: ${operation.path}`,
+                };
+                continue;
+              }
+
+              const result = await applyToContent(operation, nextContent);
+              output[index] = result.output;
+              if (!result.output.success) {
+                continue;
+              }
+              nextContent = (result as { newContent: string }).newContent;
+              changed = true;
+            }
+
+            if (changed) {
+              await writeFileFn(targetPath, nextContent);
+            }
+          });
+        }
+
+        return JSON.stringify({
+          output: output.filter(Boolean),
+        });
+      } catch (error: any) {
+        if (enableFileLogging) {
+          loggingService.error('File operation failed', {
+            type: 'search_replace',
+            path: params.path,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return JSON.stringify({
+          output: [
+            {
+              success: false,
+              error: error.message || String(error),
+            },
+          ],
+        });
+      }
+    },
+    formatCommandMessage: formatSearchReplaceCommandMessage,
+  };
+}

@@ -1,4 +1,4 @@
-import type { SettingsService } from '../services/settings-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 import { getAllProviders, upsertProvider, unregisterProvider } from './index.js';
 import { createOpenAICompatibleProviderDefinition } from './openai-compatible-lazy.js';
 

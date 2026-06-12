@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { scoreSubsequence } from '../utils/subsequence-filter.js';
 import { useInputContext } from '../context/InputContext.js';
-import type { SettingsService } from '../services/settings-service.js';
-import { SettingsSchema } from '../services/settings-schema.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
+import { SettingsSchema } from '../services/settings/settings-schema.js';
 import { useSelection } from './use-selection.js';
 
 export type SettingValueSuggestion = {

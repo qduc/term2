@@ -1,6 +1,6 @@
 import { MutableRefObject, useEffect, useRef } from 'react';
 import type { InputMode } from '../context/InputContext.js';
-import { determineActiveMenu } from '../components/Input/determine-active-menu.js';
+import { determineActiveMenu } from '../components/input/determine-active-menu.js';
 import type { SlashCommand } from '../slash-commands.js';
 import type { CompletionDismissal } from './use-escape-key.js';
 

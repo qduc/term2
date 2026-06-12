@@ -1,5 +1,5 @@
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
-import type { ConversationEvent } from '../services/conversation-events.js';
+import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
 import type { SubagentResult } from '../services/subagents/types.js';

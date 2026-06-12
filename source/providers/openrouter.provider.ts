@@ -5,7 +5,7 @@ import { AiSdkOpenRouterProvider } from './ai-sdk-openrouter.provider.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { addCacheControlToLastTwoMessages } from './common/openai-compatible-messages.js';
-import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
 
 function sanitizeOpenRouterReasoningDetails(messages: any[]): void {
   const requiresSignature = new Set(['google-gemini-v1', 'anthropic-claude-v1']);

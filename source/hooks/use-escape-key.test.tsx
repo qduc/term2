@@ -6,7 +6,7 @@ import React, { act, useEffect, useState } from 'react';
 import { render } from 'ink-testing-library';
 import { useEscapeKey } from './use-escape-key.js';
 import type { InputMode } from '../context/InputContext.js';
-import { SETTINGS_TRIGGER } from '../components/Input/triggers.js';
+import { SETTINGS_TRIGGER } from '../components/input/triggers.js';
 import { Box, Text, useInput, useStdin } from 'ink';
 
 const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as InputMode }) => {

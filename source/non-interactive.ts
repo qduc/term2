@@ -1,16 +1,19 @@
 import type { AgentClient } from './lib/agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './services/service-interfaces.js';
-import { createConversationSession } from './services/conversation-session-factory.js';
-import { SessionContextService } from './services/session-context-service.js';
-import type { ConversationEvent } from './services/conversation-events.js';
+import { createConversationSession } from './services/session/session-factory.js';
+import { SessionContextService } from './services/session/session-context-service.js';
+import type { ConversationEvent } from './services/conversation/conversation-events.js';
 import type { UserTurn } from './types/user-turn.js';
 import type { ConversationTerminal } from './contracts/conversation.js';
-import type { SendMessageOptions, HandleApprovalDecisionOptions } from './services/conversation-adapter.js';
+import type {
+  SendMessageOptions,
+  HandleApprovalDecisionOptions,
+} from './services/conversation/conversation-adapter.js';
 import type { SavedToolExecution } from './services/tool-execution-ledger.js';
 import { randomUUID } from 'node:crypto';
-import { classifyCommandDetailed } from './utils/command-safety/index.js';
-import { SafetyStatus } from './utils/command-safety/constants.js';
-import { evaluateShellAutoApprovalAdvisories } from './services/shell-auto-approval-evaluator.js';
+import { classifyCommandDetailed } from './utils/shell/command-safety/index.js';
+import { SafetyStatus } from './utils/shell/command-safety/constants.js';
+import { evaluateShellAutoApprovalAdvisories } from './services/approval/shell-auto-approval-evaluator.js';
 
 export interface NonInteractiveConfig {
   prompt: string;

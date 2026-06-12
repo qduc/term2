@@ -1,16 +1,19 @@
-import { createGrepToolDefinition } from './tools/grep.js';
-import { createReadFileToolDefinition } from './tools/read-file.js';
-import { createFindFilesToolDefinition } from './tools/find-files.js';
-import { createSearchReplaceToolDefinition } from './tools/search-replace.js';
-import { createApplyPatchToolDefinition } from './tools/apply-patch.js';
-import { createShellToolDefinition } from './tools/shell.js';
-import { createAskMentorToolDefinition } from './tools/ask-mentor.js';
-import { createAskUserToolDefinition } from './tools/ask-user.js';
-import { createRunSubagentToolDefinition } from './tools/run-subagent.js';
-import { createWebSearchToolDefinition } from './tools/web-search.js';
-import { createWebFetchToolDefinition } from './tools/web-fetch.js';
-import { createCreateFileToolDefinition } from './tools/create-file.js';
-import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './tools/code-context.js';
+import { createGrepToolDefinition } from './tools/system/grep.js';
+import { createReadFileToolDefinition } from './tools/file/read-file.js';
+import { createFindFilesToolDefinition } from './tools/file/find-files.js';
+import { createSearchReplaceToolDefinition } from './tools/file/search-replace.js';
+import { createApplyPatchToolDefinition } from './tools/file/apply-patch.js';
+import { createShellToolDefinition } from './tools/system/shell.js';
+import { createAskMentorToolDefinition } from './tools/agent/ask-mentor.js';
+import { createAskUserToolDefinition } from './tools/agent/ask-user.js';
+import { createRunSubagentToolDefinition } from './tools/agent/run-subagent.js';
+import { createWebSearchToolDefinition } from './tools/web/web-search.js';
+import { createWebFetchToolDefinition } from './tools/web/web-fetch.js';
+import { createCreateFileToolDefinition } from './tools/file/create-file.js';
+import {
+  createCodeContextSearchToolDefinition,
+  createReadCodeOutlineToolDefinition,
+} from './tools/system/code-context.js';
 import { registerToolFormatters } from './tools/command-message-formatters.js';
 import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
 import type { ToolDefinition } from './tools/types.js';

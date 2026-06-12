@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
-import type { ConversationService } from '../services/conversation-service.js';
-import type { SettingsService } from '../services/settings-service.js';
+import type { ConversationService } from '../services/conversation/conversation-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 import { ISSHService } from '../services/service-interfaces.js';
-import { executeShellCommand } from '../utils/execute-shell.js';
-import { trimOutput } from '../utils/output-trim.js';
-import { SHELL_CONTEXT_PREFIX } from '../services/conversation-store.js';
+import { executeShellCommand } from '../utils/shell/execute-shell.js';
+import { trimOutput } from '../utils/output/output-trim.js';
+import { SHELL_CONTEXT_PREFIX } from '../services/conversation/conversation-store.js';
 
 const SHELL_MAX_BUFFER = 1024 * 1024;
 

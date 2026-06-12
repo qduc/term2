@@ -1,14 +1,14 @@
 import test from 'ava';
-import { createFindFilesToolDefinition } from './find-files.js';
-import { createReadFileToolDefinition } from './read-file.js';
-import { createShellToolDefinition } from './shell.js';
-import { createGrepToolDefinition } from './grep.js';
+import { createFindFilesToolDefinition } from './file/find-files.js';
+import { createReadFileToolDefinition } from './file/read-file.js';
+import { createShellToolDefinition } from './system/shell.js';
+import { createGrepToolDefinition } from './system/grep.js';
 import { grepToolDefinition as searchToolDefinition } from './search.js';
-import { createWebFetchToolDefinition } from './web-fetch.js';
-import { createAskMentorToolDefinition } from './ask-mentor.js';
-import { createSearchReplaceToolDefinition } from './search-replace.js';
-import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './code-context.js';
-import { createMockSettingsService } from '../services/settings-service.mock.js';
+import { createWebFetchToolDefinition } from './web/web-fetch.js';
+import { createAskMentorToolDefinition } from './agent/ask-mentor.js';
+import { createSearchReplaceToolDefinition } from './file/search-replace.js';
+import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './system/code-context.js';
+import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 
 const loggingService: ILoggingService = {

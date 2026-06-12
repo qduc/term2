@@ -129,4 +129,4 @@ export const isAbortLikeError = (error: unknown): boolean => {
 
   return abortPatterns.some((pattern) => pattern.test(errorMessage));
 };
-import { isUndiciSocketCloseError } from '../services/retry-error-classification.js';
+import { isUndiciSocketCloseError } from '../services/retry/retry-error-classification.js';

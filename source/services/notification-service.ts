@@ -1,4 +1,4 @@
-import { getTtyWriter as defaultGetTtyWriter, writeOscSequence, type TtyWriter } from '../utils/tty-osc.js';
+import { getTtyWriter as defaultGetTtyWriter, writeOscSequence, type TtyWriter } from '../utils/output/tty-osc.js';
 
 /**
  * Best-effort terminal notification support.

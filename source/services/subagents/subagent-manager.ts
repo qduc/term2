@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import { ExecutionContext } from '../execution-context.js';
 import { getProvider } from '../../providers/index.js';
-import { createConversationSession } from '../conversation-session-factory.js';
+import { createConversationSession } from '../session/session-factory.js';
 import { SubagentSession } from './subagent-session.js';
 import type {
   SubagentRequest,
@@ -16,35 +16,35 @@ import type {
   SupportedSubagentRole,
 } from './types.js';
 import { SUBAGENT_ROLES } from './types.js';
-import type { ConversationEvent } from '../conversation-events.js';
+import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { CommandMessage, ToolDefinition } from '../../tools/types.js';
-import { MAX_SUBAGENT_MODEL_RETRIES } from '../conversation-retry-policy.js';
+import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import { wrapNeedsApproval } from '../../lib/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../lib/openai-strict-tool-schema.js';
 import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
-import { createReadFileToolDefinition } from '../../tools/read-file.js';
-import { createGrepToolDefinition } from '../../tools/grep.js';
-import { createFindFilesToolDefinition } from '../../tools/find-files.js';
+import { createReadFileToolDefinition } from '../../tools/file/read-file.js';
+import { createGrepToolDefinition } from '../../tools/system/grep.js';
+import { createFindFilesToolDefinition } from '../../tools/file/find-files.js';
 import {
   createReadCodeOutlineToolDefinition,
   createCodeContextSearchToolDefinition,
-} from '../../tools/code-context.js';
-import { createWebSearchToolDefinition } from '../../tools/web-search.js';
-import { createWebFetchToolDefinition } from '../../tools/web-fetch.js';
-import { createApplyPatchToolDefinition } from '../../tools/apply-patch.js';
-import { createSearchReplaceToolDefinition } from '../../tools/search-replace.js';
-import { createCreateFileToolDefinition } from '../../tools/create-file.js';
-import { createShellToolDefinition } from '../../tools/shell.js';
+} from '../../tools/system/code-context.js';
+import { createWebSearchToolDefinition } from '../../tools/web/web-search.js';
+import { createWebFetchToolDefinition } from '../../tools/web/web-fetch.js';
+import { createApplyPatchToolDefinition } from '../../tools/file/apply-patch.js';
+import { createSearchReplaceToolDefinition } from '../../tools/file/search-replace.js';
+import { createCreateFileToolDefinition } from '../../tools/file/create-file.js';
+import { createShellToolDefinition } from '../../tools/system/shell.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
-import { trimToolOutput } from '../../utils/trim-tool-output.js';
+import { trimToolOutput } from '../../utils/output/trim-tool-output.js';
 import { injectWarningIntoToolOutput } from '../../utils/inject-warning-into-tool-output.js';
-import { extractUsage, normalizeAgentRunUsage } from '../../utils/token-usage.js';
+import { extractUsage, normalizeAgentRunUsage } from '../../utils/ai/token-usage.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
-import { tryAcquireFileLock } from '../../tools/file-locks.js';
-import { classifyCommand, SafetyStatus } from '../../utils/command-safety/index.js';
-import { evaluateShellAutoApprovalAdvisories } from '../shell-auto-approval-evaluator.js';
+import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
+import { classifyCommand, SafetyStatus } from '../../utils/shell/command-safety/index.js';
+import { evaluateShellAutoApprovalAdvisories } from '../approval/shell-auto-approval-evaluator.js';
 import type { ISubagentClient, ISubagentClientFactory } from './subagent-client-types.js';
 
 type SubagentRunContext = {

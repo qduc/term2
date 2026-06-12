@@ -6,7 +6,7 @@ import { createEditorImpl } from './editor-impl.js';
 import { normalizeToolInput, toolErrorFunction, wrapNeedsApproval, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
-import { trimToolOutput } from '../utils/trim-tool-output.js';
+import { trimToolOutput } from '../utils/output/trim-tool-output.js';
 import { injectWarningIntoToolOutput } from '../utils/inject-warning-into-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 import {

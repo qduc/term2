@@ -7,8 +7,8 @@ import { createRetrySlashCommand } from '../commands/retry-command.js';
 import { createUndoSlashCommand } from '../commands/undo-command.js';
 import { createUsageSlashCommand } from '../commands/usage-command.js';
 import { useAppCommands } from './use-app-commands.js';
-import { getLastFinalAssistantText } from '../utils/message-utils.js';
-import { parseModelProviderArg } from '../utils/model-provider-arg.js';
+import { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
+import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
 
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();

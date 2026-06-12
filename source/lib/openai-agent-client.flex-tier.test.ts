@@ -2,8 +2,8 @@ import test from 'ava';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { SettingsService } from '../services/settings-service.js';
-import { SETTING_KEYS } from '../services/settings-service.js';
+import { SettingsService } from '../services/settings/settings-service.js';
+import { SETTING_KEYS } from '../services/settings/settings-service.js';
 
 const TEST_BASE_DIR = path.join(os.tmpdir(), `term2-test-settings-flex-${Math.random().toString(36).slice(2)}`);
 let testCounter = 0;

@@ -13,25 +13,25 @@ import { useModelSelection } from '../hooks/use-model-selection.js';
 import { useUndoSelection } from '../hooks/use-undo-selection.js';
 import { useProviderSelection } from '../hooks/use-provider-selection.js';
 import type { ProviderSelectionPhase } from '../hooks/use-provider-selection.js';
-import { PopupManager } from './Input/PopupManager.js';
+import { PopupManager } from './input/PopupManager.js';
 import type { SlashCommand } from '../slash-commands.js';
-import type { SettingsService } from '../services/settings-service.js';
-import type { LoggingService } from '../services/logging-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
+import type { LoggingService } from '../services/logging/logging-service.js';
 import type { HistoryService } from '../services/history-service.js';
 import { useInputHistory } from '../hooks/use-input-history.js';
 import { useTerminalWidth } from '../hooks/use-terminal-width.js';
-import { calculateInputWidth } from './Input/input-width.js';
+import { calculateInputWidth } from './input/input-width.js';
 import {
   computePathInsertion,
   computeSettingInsertion,
   computeSettingValueInsertion,
   computeModelInsertion,
-} from './Input/insertions.js';
-import { SETTINGS_TRIGGER } from './Input/triggers.js';
+} from './input/insertions.js';
+import { SETTINGS_TRIGGER } from './input/triggers.js';
 import { parseSettingValue } from '../utils/settings-command.js';
-import { getPopupNavigationCursor } from './Input/popup-key-navigation.js';
+import { getPopupNavigationCursor } from './input/popup-key-navigation.js';
 import { useModeHandlers } from '../hooks/use-mode-handlers.js';
-import { toPopupProps } from './Input/popup-props.js';
+import { toPopupProps } from './input/popup-props.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { UndoItem } from '../hooks/use-undo-selection.js';
 

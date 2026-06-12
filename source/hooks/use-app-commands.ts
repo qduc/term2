@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { SlashCommand } from '../slash-commands.js';
-import type { SettingsService } from '../services/settings-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 import { useModeHelpers, createModeToggleCommand } from '../commands/mode-commands.js';
 import { createCopySlashCommand } from '../commands/copy-command.js';
@@ -36,7 +36,7 @@ interface UseAppCommandsProps {
 }
 
 // Re-export for backward compat
-export { getLastFinalAssistantText } from '../utils/message-utils.js';
+export { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
 export { createCopySlashCommand } from '../commands/copy-command.js';
 export { createUsageSlashCommand } from '../commands/usage-command.js';
 export { createUndoSlashCommand } from '../commands/undo-command.js';

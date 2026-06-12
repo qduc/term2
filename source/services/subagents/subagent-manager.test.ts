@@ -6,7 +6,7 @@ import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { AgentClient } from '../../lib/agent-client.js';
 import { registerProvider } from '../../providers/registry.js';
 import { ExecutionContext } from '../execution-context.js';
-import { MAX_SUBAGENT_MODEL_RETRIES } from '../conversation-retry-policy.js';
+import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 
 const ROLE_MENTOR = 'mentor';

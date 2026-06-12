@@ -13,7 +13,7 @@ import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { injectHeaders, installationVersion } from './fetch/logging-middleware.js';
 import type { ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
-import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import envPaths from 'env-paths';

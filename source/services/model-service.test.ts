@@ -1,6 +1,6 @@
 import test from 'ava';
 import { fetchModels, clearModelCache, filterModels } from './model-service.js';
-import { createMockSettingsService } from './settings-service.mock.js';
+import { createMockSettingsService } from './settings/settings-service.mock.js';
 
 const originalApiKey = process.env.OPENAI_API_KEY;
 

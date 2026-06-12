@@ -1,7 +1,7 @@
 import type { SlashCommand } from '../slash-commands.js';
-import type { SettingsService } from '../services/settings-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 import { parseSettingValue } from '../utils/settings-command.js';
-import { EFFORT_TRIGGER } from '../components/Input/triggers.js';
+import { EFFORT_TRIGGER } from '../components/input/triggers.js';
 
 interface CreateEffortSlashCommandDeps {
   settingsService: SettingsService;

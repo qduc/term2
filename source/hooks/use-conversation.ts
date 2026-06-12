@@ -1,24 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ConversationService } from '../services/conversation-service.js';
+import type { ConversationService } from '../services/conversation/conversation-service.js';
 import { describeError, isAbortLikeError } from '../utils/error-helpers.js';
-import { ASK_USER_DECLINE_RESULT } from '../tools/ask-user-constants.js';
+import { ASK_USER_DECLINE_RESULT } from '../tools/agent/ask-user-constants.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
-import { appendMessagesCapped } from '../utils/message-buffer.js';
+import { appendMessagesCapped } from '../utils/conversation/message-buffer.js';
 import { createMessageId } from './message-id.js';
-import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation-utils.js';
-import { createStreamingSession } from '../utils/streaming-session-factory.js';
+import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation/conversation-utils.js';
+import { createStreamingSession } from '../utils/streaming/streaming-session-factory.js';
 import type { BotMessage, CommandMessage, Message, UserMessage } from '../types/message.js';
 import { isBotMessage, isCommandMessage, isUserMessage } from '../types/message.js';
-import type { NormalizedUsage, UsageAccumulator } from '../utils/token-usage.js';
-import type { CodexRateLimitInfo } from '../services/conversation-events.js';
+import type { NormalizedUsage, UsageAccumulator } from '../utils/ai/token-usage.js';
+import type { CodexRateLimitInfo } from '../services/conversation/conversation-events.js';
 import type { ConversationTerminal, PendingApproval, ReasoningEffortSetting } from '../contracts/conversation.js';
 import { useSetting } from './use-setting.js';
-import type { SettingsService } from '../services/settings-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 import {
   annotateApprovedCommandMessage,
   filterPendingCommandMessagesForApproval,
   type ApprovedToolContext,
-} from '../services/approval-presentation-policy.js';
+} from '../services/approval/approval-presentation-policy.js';
 import { formatUserTurnForDisplay, hasUserTurnContent, normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 
 export type {

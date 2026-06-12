@@ -1,8 +1,8 @@
 import test from 'ava';
 import { GenerationGuard } from './generation-guard.js';
-import { ConversationSession } from './conversation-session.js';
-import { createConversationSessionComposition } from './conversation-session-composition.js';
-import { TurnItemAccumulator } from './turn-item-accumulator.js';
+import { ConversationSession } from './session/conversation-session.js';
+import { createConversationSessionComposition } from './session/session-composition.js';
+import { TurnItemAccumulator } from './session/turn-item-accumulator.js';
 import { MockStream } from './test-helpers/mock-stream.js';
 
 test('capture returns a token and increments generation', (t) => {

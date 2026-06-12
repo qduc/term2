@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useInput } from 'ink';
 import type { InputMode } from '../context/InputContext.js';
 import type { MutableRefObject } from 'react';
-import { SETTINGS_TRIGGER } from '../components/Input/triggers.js';
+import { SETTINGS_TRIGGER } from '../components/input/triggers.js';
 
 export type CompletionDismissal = {
   type: 'path' | 'settings_value';

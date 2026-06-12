@@ -1,7 +1,7 @@
 import type { ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import type { CommandMessage } from '../tools/types.js';
-import type { NormalizedUsage } from '../utils/token-usage.js';
-import type { PersistedAssistantTurnItem } from '../services/conversation-persistence-types.js';
+import type { NormalizedUsage } from '../utils/ai/token-usage.js';
+import type { PersistedAssistantTurnItem } from '../services/conversation/conversation-persistence-types.js';
 
 export type ReasoningEffortSetting = ModelSettingsReasoningEffort | 'default';
 

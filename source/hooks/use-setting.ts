@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { SettingsService } from '../services/settings-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 
 /**
  * Hook to subscribe to a specific setting value.

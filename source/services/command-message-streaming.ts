@@ -1,6 +1,6 @@
 import type { CommandMessage } from '../tools/types.js';
-import type { ConversationEvent } from './conversation-events.js';
-import { extractCommandMessages } from '../utils/extract-command-messages.js';
+import type { ConversationEvent } from './conversation/conversation-events.js';
+import { extractCommandMessages } from '../utils/streaming/extract-command-messages.js';
 
 type ExtractCommandMessages = (items: any[]) => CommandMessage[];
 

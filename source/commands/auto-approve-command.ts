@@ -1,6 +1,6 @@
 import type { SlashCommand } from '../slash-commands.js';
-import type { SettingsService } from '../services/settings-service.js';
-import { AUTO_APPROVE_TRIGGER } from '../components/Input/triggers.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
+import { AUTO_APPROVE_TRIGGER } from '../components/input/triggers.js';
 
 interface CreateAutoApproveSlashCommandDeps {
   settingsService: SettingsService;

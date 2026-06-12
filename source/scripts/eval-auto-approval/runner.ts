@@ -1,13 +1,13 @@
 import meow from 'meow';
 import { loadDataset, filterDataset, Case } from './dataset.js';
-import { createMockSettingsService } from '../../services/settings-service.mock.js';
-import { LoggingService } from '../../services/logging-service.js';
-import { SessionContextService } from '../../services/session-context-service.js';
+import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
+import { LoggingService } from '../../services/logging/logging-service.js';
+import { SessionContextService } from '../../services/session/session-context-service.js';
 import { AgentClient } from '../../lib/agent-client.js';
 import {
   evaluateShellAutoApprovalAdvisories,
   SHELL_AUTO_APPROVAL_PROMPT_VERSION,
-} from '../../services/shell-auto-approval-evaluator.js';
+} from '../../services/approval/shell-auto-approval-evaluator.js';
 import { ResponseCache } from './cache.js';
 import {
   buildModelLeaderboard,

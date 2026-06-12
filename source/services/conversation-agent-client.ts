@@ -2,7 +2,7 @@ import type { AgentInputItem, RunState } from '@openai/agents';
 import type { JsonSchemaDefinition } from '@openai/agents';
 import type { ModelSettingsReasoningEffort } from '@openai/agents-core/model';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
-import type { ConversationEvent } from './conversation-events.js';
+import type { ConversationEvent } from './conversation/conversation-events.js';
 import type { AgentStream } from './agent-stream.js';
 
 export type AgentClientRunOptions = {

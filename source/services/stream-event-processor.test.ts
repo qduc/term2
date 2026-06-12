@@ -1,5 +1,5 @@
 import test from 'ava';
-import { LoggingService } from './logging-service.js';
+import { LoggingService } from './logging/logging-service.js';
 import {
   createStreamAccumulator,
   processStreamEvents,

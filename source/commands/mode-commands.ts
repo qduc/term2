@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import type { SlashCommand } from '../slash-commands.js';
-import type { SettingsService } from '../services/settings-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 
 /** All exclusive mode keys. */
 export const EXCLUSIVE_MODE_KEYS = ['app.liteMode', 'app.orchestratorMode', 'app.planMode', 'app.mentorMode'] as const;

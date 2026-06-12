@@ -11,7 +11,7 @@ import type { ExecutionContext } from '../services/execution-context.js';
 import { AskUserAnswerStore } from './ask-user-answer-store.js';
 import { AgentConfiguration } from './agent-configuration.js';
 
-import type { ConversationEvent } from '../services/conversation-events.js';
+import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 import { SubagentBridge } from './subagent-bridge.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import { RunnerManager } from './runner-manager.js';

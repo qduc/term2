@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { ILoggingService, ISessionContextService } from '../../services/service-interfaces.js';
-import { summarizeReceivedTraffic } from '../../services/provider-traffic.js';
+import { summarizeReceivedTraffic } from '../../services/logging/provider-traffic.js';
 import { describeError } from '../../utils/error-helpers.js';
 import { sanitizeHeaders } from '../../utils/header-sanitizer.js';
 import type { FetchMiddleware } from './compose.js';

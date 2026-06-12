@@ -2,7 +2,7 @@ import { Runner } from '@openai/agents';
 import { OpenAIProvider } from '@openai/agents-openai';
 import OpenAI from 'openai';
 import type { ISettingsService, ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
-import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session-context-service.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
 import type { ProviderDefinition, ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';

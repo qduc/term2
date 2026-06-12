@@ -8,7 +8,7 @@ import {
   getTrimConfig,
   DEFAULT_TRIM_CONFIG,
   type OutputTrimConfig,
-} from '../utils/output-trim.js';
+} from '../utils/output/output-trim.js';
 import type { ToolDefinition, FormatCommandMessage } from './types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage } from './format-helpers.js';
 

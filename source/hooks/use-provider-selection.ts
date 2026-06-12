@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useInputContext } from '../context/InputContext.js';
-import type { SettingsService } from '../services/settings-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
 import { useSelection } from './use-selection.js';
 import {
   type ProviderSelectionPhase,

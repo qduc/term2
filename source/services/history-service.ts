@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
-import { LoggingService } from './logging-service.js';
-import { SettingsService } from './settings-service.js';
+import { LoggingService } from './logging/logging-service.js';
+import { SettingsService } from './settings/settings-service.js';
 import { hasUserTurnContent, normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 
 const paths = envPaths('term2');

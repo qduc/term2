@@ -1,6 +1,6 @@
 import test from 'ava';
 import { SubagentBridge } from './subagent-bridge.js';
-import type { ConversationEvent } from '../services/conversation-events.js';
+import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

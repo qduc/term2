@@ -1,13 +1,17 @@
-import type { ConversationEvent, CodexRateLimitInfo, CodexRateLimitWindow } from './conversation-events.js';
+import type {
+  ConversationEvent,
+  CodexRateLimitInfo,
+  CodexRateLimitWindow,
+} from './conversation/conversation-events.js';
 import type { ILoggingService } from './service-interfaces.js';
-import { extractUsage, mergeUsage, normalizeAgentRunUsage, type NormalizedUsage } from '../utils/token-usage.js';
+import { extractUsage, mergeUsage, normalizeAgentRunUsage, type NormalizedUsage } from '../utils/ai/token-usage.js';
 import { extractReasoningDelta, extractTextDelta } from './stream-event-parsing.js';
 import { captureToolCallArguments, emitCommandMessagesFromItems } from './command-message-streaming.js';
-import { createInvalidToolCallDiagnostic } from './logging-contract.js';
+import { createInvalidToolCallDiagnostic } from './logging/logging-contract.js';
 import { asRecord, getString } from './interruption-info.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
 import type { AgentStream } from './agent-stream.js';
-import type { ToolCallStreamingDeltaEvent } from './conversation-events.js';
+import type { ToolCallStreamingDeltaEvent } from './conversation/conversation-events.js';
 
 function normalizeCodexRateLimitWindow(obj: unknown): CodexRateLimitWindow | undefined {
   if (!obj || typeof obj !== 'object') {

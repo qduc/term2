@@ -1,5 +1,5 @@
 import type { CommandMessage as BaseCommandMessage } from '../tools/types.js';
-import type { NormalizedUsage } from '../utils/token-usage.js';
+import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 
 export interface UserMessage {
   id: string;

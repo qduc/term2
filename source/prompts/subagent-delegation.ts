@@ -1,4 +1,4 @@
-import { getSubagentsRolesSection } from '../tools/run-subagent.js';
+import { getSubagentsRolesSection } from '../tools/agent/run-subagent.js';
 
 /**
  * Single source of truth for the agent-facing delegation guidance.

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import {
   extractProviderTrafficFromLogContent,
   writeProviderTrafficFiles,
-} from '../utils/provider-traffic-extractor.js';
+} from '../utils/ai/provider-traffic-extractor.js';
 
 async function main() {
   const [, , logFileArg, outputDirArg] = process.argv;

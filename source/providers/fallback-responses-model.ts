@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
 import { describeError } from '../utils/error-helpers.js';
-import { summarizeReceivedTraffic } from '../services/provider-traffic.js';
+import { summarizeReceivedTraffic } from '../services/logging/provider-traffic.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
-import { isRetryableTransportError } from '../services/retry-error-classification.js';
-import { computeUpstreamRetryDelayMs } from '../services/upstream-retry-policy.js';
+import { isRetryableTransportError } from '../services/retry/retry-error-classification.js';
+import { computeUpstreamRetryDelayMs } from '../services/retry/upstream-retry-policy.js';
 
-export { isNetworkProtocolError } from '../services/retry-error-classification.js';
+export { isNetworkProtocolError } from '../services/retry/retry-error-classification.js';
 
 export interface FallbackState {
   isDowngraded: boolean;

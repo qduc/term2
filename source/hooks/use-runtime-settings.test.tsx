@@ -6,7 +6,7 @@ import React, { useEffect } from 'react';
 import { render } from 'ink-testing-library';
 import { Text } from 'ink';
 import { useRuntimeSettings } from './use-runtime-settings.js';
-import { createMockSettingsService } from '../services/settings-service.mock.js';
+import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 
 const flushEffects = async () => {
   await Promise.resolve();

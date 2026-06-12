@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { InputMode } from '../context/InputContext.js';
-import { SETTINGS_TRIGGER } from '../components/Input/triggers.js';
+import { SETTINGS_TRIGGER } from '../components/input/triggers.js';
 import type { ProviderSelectionPhase } from './use-provider-selection.js';
 
 export type SubmitResult = 'handled' | 'fallthrough';

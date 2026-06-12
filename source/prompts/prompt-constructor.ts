@@ -4,7 +4,7 @@ import { getReasoningEfficiencyAddendum } from './reasoning-efficiency.js';
 import { getSearchViaShellAddendum } from './search-via-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 import { selectPromptProfile } from './prompt-profiles.js';
-import { ASK_USER_DECLINE_RESULT } from '../tools/ask-user-constants.js';
+import { ASK_USER_DECLINE_RESULT } from '../tools/agent/ask-user-constants.js';
 
 export type PromptConstructorOptions = {
   model: string;

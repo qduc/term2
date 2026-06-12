@@ -1,4 +1,4 @@
-import type { NormalizedUsage } from '../../utils/token-usage.js';
+import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 
 export const SUBAGENT_ROLES = ['explorer', 'worker', 'researcher', 'mentor'] as const;
 export type SupportedSubagentRole = (typeof SUBAGENT_ROLES)[number];

@@ -1,6 +1,6 @@
 import test from 'ava';
-import { findPathTrigger } from './Input/triggers.js';
-import { determineActiveMenu, type ActiveMenu } from './Input/determine-active-menu.js';
+import { findPathTrigger } from './input/triggers.js';
+import { determineActiveMenu, type ActiveMenu } from './input/determine-active-menu.js';
 import type { SlashCommand } from '../slash-commands.js';
 import {
   MODEL_TRIGGER,

@@ -18,7 +18,7 @@ const mockLogger = {
 };
 
 const createSessionContextService = () => {
-  let capturedContext = null;
+  let capturedContext: any = null;
   return {
     runWithContext: (context: any, fn: any) => {
       capturedContext = context;

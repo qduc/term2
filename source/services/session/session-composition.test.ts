@@ -1,4 +1,3 @@
-// @ts-nocheck - Complex mock patterns
 import test from 'ava';
 import { createConversationSession, createConversationSessionComposition } from './session-composition.js';
 

@@ -4,7 +4,7 @@ import { render } from 'ink-testing-library';
 import MessageList, { splitStaticHistory, shouldCommitMessageToStatic } from './MessageList.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 
-const countOccurrences = (text, pattern) => text.split(pattern).length - 1;
+const countOccurrences = (text: string, pattern: string) => text.split(pattern).length - 1;
 const stripAnsi = (text: string) => text.replaceAll(/\u001B\[[0-9;]*m/g, '');
 const firstTableBorder = (text: string) =>
   stripAnsi(text)

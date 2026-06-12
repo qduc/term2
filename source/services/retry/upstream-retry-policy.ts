@@ -65,7 +65,7 @@ const getHeaderValue = (source: unknown, name: string): string | undefined => {
   const wanted = name.toLowerCase();
   for (const key of Object.keys(headers)) {
     if (key.toLowerCase() === wanted) {
-      const value = headers[key];
+      const value = (headers as Record<string, unknown>)[key];
       return value == null ? undefined : String(value);
     }
   }

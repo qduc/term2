@@ -338,7 +338,7 @@ export function reconcileHistoryWithToolLedger(
       next.splice(
         insertionIndexForEntry(next, entry),
         0,
-        ...entry.historyItems!.map((item) => normalizeAbortedHistoryItem(item, entry.status === 'aborted')),
+        ...entry.historyItems!.map((item: unknown) => normalizeAbortedHistoryItem(item, entry.status === 'aborted')),
       );
       if (entry.status === 'completed') {
         addedCompletedPairs++;

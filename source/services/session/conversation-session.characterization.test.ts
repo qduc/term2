@@ -1,4 +1,3 @@
-// @ts-nocheck - Characterization tests for ConversationSession refactoring
 import test from 'ava';
 import { createConversationSession, createConversationSessionComposition } from './session-composition.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';

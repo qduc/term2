@@ -1,4 +1,3 @@
-// @ts-nocheck - Focused dependency-shape test with minimal collaborators
 import test from 'ava';
 import { ConversationAdapter } from './conversation-adapter.js';
 

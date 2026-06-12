@@ -8,6 +8,7 @@ import { registerProvider } from '../../providers/registry.js';
 import { ExecutionContext } from '../execution-context.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
+import type { ConversationEvent } from '../conversation/conversation-events.js';
 
 const ROLE_MENTOR = 'mentor';
 const ROLE_EXPLORER = 'explorer';
@@ -1212,7 +1213,7 @@ test.serial('run() emits started and completed events', async (t) => {
     logger: createMockLogger(),
     settings,
     sessionContextService: createSessionContextService() as any,
-    onEvent: (event) => events.push(event),
+    onEvent: (event: ConversationEvent) => events.push(event),
   });
 
   const result = await manager.run({ role: 'explorer', task: 'search the code' });
@@ -1235,7 +1236,7 @@ test.serial('run() emits a completed event even when the role is unknown', async
     logger: createMockLogger(),
     settings,
     sessionContextService: createSessionContextService() as any,
-    onEvent: (event) => events.push(event),
+    onEvent: (event: ConversationEvent) => events.push(event),
   });
 
   await manager.run({ role: 'definitely-not-a-role', task: 'x' });
@@ -1636,7 +1637,7 @@ test.serial(
         'agent.retryAttempts': 2,
       }),
       sessionContextService: createSessionContextService() as any,
-      onEvent: (event) => events.push(event),
+      onEvent: (event: ConversationEvent) => events.push(event),
     });
 
     const result = await manager.run({ role: 'explorer', task: 'find all files' });
@@ -1680,7 +1681,7 @@ test.serial('run() exhausts retries on repeated recoverable model errors and ret
       'agent.retryAttempts': 2,
     }),
     sessionContextService: createSessionContextService() as any,
-    onEvent: (event) => events.push(event),
+    onEvent: (event: ConversationEvent) => events.push(event),
   });
 
   const result = await manager.run({ role: 'explorer', task: 'find all files' });
@@ -1719,7 +1720,7 @@ test.serial('run() does not retry on non-recoverable ModelBehaviorError', async 
       'agent.retryAttempts': 2,
     }),
     sessionContextService: createSessionContextService() as any,
-    onEvent: (event) => events.push(event),
+    onEvent: (event: ConversationEvent) => events.push(event),
   });
 
   const result = await manager.run({ role: 'explorer', task: 'find all files' });
@@ -1755,7 +1756,7 @@ test.serial('run() aborted subagent returns cancelled status without model-error
       'agent.retryAttempts': 2,
     }),
     sessionContextService: createSessionContextService() as any,
-    onEvent: (event) => events.push(event),
+    onEvent: (event: ConversationEvent) => events.push(event),
   });
 
   const result = await manager.run({ role: 'explorer', task: 'find all files' });
@@ -1801,7 +1802,7 @@ test.serial(
         'agent.retryAttempts': 2,
       }),
       sessionContextService: createSessionContextService() as any,
-      onEvent: (event) => events.push(event),
+      onEvent: (event: ConversationEvent) => events.push(event),
     });
 
     const result = await manager.run({ role: 'explorer', task: 'search for something' });

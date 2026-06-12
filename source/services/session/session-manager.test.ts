@@ -1,4 +1,3 @@
-// @ts-nocheck - focused collaborator test with a tiny state stub
 import test from 'ava';
 import { SessionManager } from './session-manager.js';
 
@@ -33,7 +32,7 @@ test('getCurrentSnapshot reads previousResponseId from persisted state, not a st
     inputPlanner: {
       previewLargeUncachedInput: () => ({ kind: 'pass' }),
     },
-  });
+  } as any);
 
   const snapshot = manager.getCurrentSnapshot();
   t.is(snapshot.previousResponseId, 'resp-1');

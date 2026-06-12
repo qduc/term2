@@ -204,7 +204,7 @@ test.serial('execute: code_context_search related honors max_results', async (t)
       max_results: 1,
     });
 
-    const resultBlocks = result.split('\n\n').filter((part) => part.startsWith('src/'));
+    const resultBlocks = result.split('\n\n').filter((part: string) => part.startsWith('src/'));
     t.true(resultBlocks.length <= 1);
     t.true(result.includes('src/foo.test.ts') || result.includes('src/foo.spec.ts'));
   });

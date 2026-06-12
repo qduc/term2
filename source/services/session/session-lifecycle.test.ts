@@ -1,4 +1,3 @@
-// @ts-nocheck - focused state-collaboration test with simple spies
 import test from 'ava';
 import { SessionLifecycle } from './session-lifecycle.js';
 
@@ -48,7 +47,7 @@ const makeLifecycleHarness = () => {
   };
 
   const providerContinuity = {
-    previousResponseId: 'resp-123',
+    previousResponseId: 'resp-123' as string | null,
     update: (id: string | null) => {
       calls.providerContinuity.update++;
       providerContinuity.previousResponseId = id;
@@ -149,7 +148,7 @@ const makeLifecycleHarness = () => {
 
 test('resetSession clears approval state through approvalFlow and keeps persistence on providerContinuity', (t) => {
   const { calls, deps, providerContinuity } = makeLifecycleHarness();
-  const lifecycle = new SessionLifecycle(deps);
+  const lifecycle = new SessionLifecycle(deps as any);
 
   t.false('previousResponseId' in lifecycle);
   t.is(lifecycle.exportPersistedState().previousResponseId, 'resp-123');
@@ -171,7 +170,7 @@ test('resetSession clears approval state through approvalFlow and keeps persiste
 
 test('afterUndo routes approval cleanup through approvalFlow coordinator', (t) => {
   const { calls, deps } = makeLifecycleHarness();
-  const lifecycle = new SessionLifecycle(deps);
+  const lifecycle = new SessionLifecycle(deps as any);
 
   lifecycle.afterUndo();
 
@@ -187,7 +186,7 @@ test('afterUndo routes approval cleanup through approvalFlow coordinator', (t) =
 
 test('importPersistedState clears approval state through approvalFlow coordinator', (t) => {
   const { calls, deps, providerContinuity } = makeLifecycleHarness();
-  const lifecycle = new SessionLifecycle(deps);
+  const lifecycle = new SessionLifecycle(deps as any);
 
   lifecycle.importPersistedState({
     history: [],

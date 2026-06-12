@@ -1,4 +1,3 @@
-// @ts-nocheck - Complex mock patterns deferred to follow-up
 import test from 'ava';
 import { ConversationService } from './conversation-service.js';
 import { MockStream } from '../test-helpers/mock-stream.js';

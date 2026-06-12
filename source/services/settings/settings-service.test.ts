@@ -1,4 +1,3 @@
-// @ts-nocheck - Complex mock patterns deferred to follow-up
 import test from 'ava';
 import fs from 'node:fs';
 import path from 'node:path';

@@ -1,4 +1,3 @@
-// @ts-nocheck - ContinuationDriver tests use mock objects that don't satisfy RunState type
 import test from 'ava';
 import { ContinuationDriver } from './continuation-driver.js';
 import { ManualApprovalDecisionPolicy, ShellAutoApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
@@ -28,14 +27,6 @@ const collectResult = async (
   }
   return { events, result };
 };
-
-function createMockStream() {
-  return {
-    finalOutput: 'Done.',
-    newItems: [],
-    history: [],
-  };
-}
 
 function createDriver(deps: any) {
   return new ContinuationDriver({
@@ -157,7 +148,6 @@ test('drive yields error event when continuation stream throws unrecoverable err
 // ── continuation from rejection ───────────────────────────────
 
 test('continuation from rejection records aborted approval in tool tracker', async (t) => {
-  let recordedCallId: string | undefined;
   const driver = createDriver({
     planApplier: {
       prepareInit: (init: any) => ({
@@ -218,7 +208,7 @@ test('continuation from approval decision returns final response', async (t) => 
   t.is(result.kind, 'response');
   if (result.kind === 'response') {
     t.is(result.terminal.type, 'response');
-    t.is(result.terminal.finalText, 'Done.');
+    t.is((result.terminal as { finalText: string }).finalText, 'Done.');
   }
 });
 
@@ -350,7 +340,7 @@ test('drive returns approval_required when policy says prompt', async (t) => {
 
   t.is(result.kind, 'approval_required');
   if (result.kind === 'approval_required') {
-    t.is(result.terminal.approval.toolName, 'apply_patch');
+    t.is((result.terminal as { approval: { toolName: string } }).approval.toolName, 'apply_patch');
   }
   t.deepEqual(recordedApproval, {
     toolName: 'apply_patch',
@@ -515,8 +505,8 @@ test('multiple auto-approved interruptions followed by manual approval', async (
 
   t.is(result.kind, 'approval_required');
   if (result.kind === 'approval_required') {
-    t.is(result.terminal.approval.toolName, 'apply_patch');
-    t.is(result.terminal.approval.callId, 'call-3');
+    t.is((result.terminal as { approval: { toolName: string } }).approval.toolName, 'apply_patch');
+    t.is((result.terminal as { approval: { callId: string } }).approval.callId, 'call-3');
   }
   t.is(cycleCount, 3);
 });
@@ -599,7 +589,6 @@ test('recovery returns fresh_start_required', async (t) => {
 // ── rejection preserves event order and ledger state ─────────
 
 test('rejection preserves event order and ledger state', async (t) => {
-  let abortedCallId: string | undefined;
   const driver = createDriver({
     planApplier: {
       prepareInit: (init: any) => ({

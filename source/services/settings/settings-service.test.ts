@@ -16,7 +16,7 @@ const getTestSettingsDir = () => {
   return path.join(TEST_BASE_DIR, `test-${testCounter}`);
 };
 
-const getSettingsFilePath = (settingsDir) => path.join(settingsDir, 'settings.json');
+const getSettingsFilePath = (settingsDir: string) => path.join(settingsDir, 'settings.json');
 
 // AVA (and other runners) set environment variables that we use to detect a test environment.
 // Some tests need to validate the *non-test* behavior (i.e., persistence to disk).
@@ -165,7 +165,7 @@ test('CLI overrides take highest precedence', async (t) => {
       agent: {
         model: 'gpt-4o',
       },
-    },
+    } as any,
   });
 
   t.is(service.get('agent.model'), 'gpt-4o');
@@ -198,7 +198,7 @@ test('env overrides config file but not CLI', async (t) => {
       agent: {
         model: 'gpt-4-turbo',
       },
-    },
+    } as any,
   });
 
   t.is(service.get('agent.model'), 'gpt-4-turbo');
@@ -212,12 +212,12 @@ test('env overrides config file but not CLI', async (t) => {
       agent: {
         model: 'gpt-4-turbo',
       },
-    },
+    } as any,
     cli: {
       agent: {
         model: 'gpt-5.1',
       },
-    },
+    } as any,
   });
 
   t.is(service2.get('agent.model'), 'gpt-5.1');
@@ -475,7 +475,7 @@ test('getAll() returns all settings with sources', async (t) => {
       agent: {
         model: 'gpt-4o',
       },
-    },
+    } as any,
   });
 
   const all = service.getAll();
@@ -515,7 +515,7 @@ test('getAll() maps optional nested values and sources for agent.temperature and
 test('SettingsService initialization applies logging.logLevel to loggingService', async (t) => {
   const settingsDir = getTestSettingsDir();
   const mockLoggingService = {
-    setLogLevel: (level) => {
+    setLogLevel: (level: string) => {
       mockLoggingService._level = level;
     },
     getLogLevel: () => mockLoggingService._level || 'info',
@@ -525,10 +525,10 @@ test('SettingsService initialization applies logging.logLevel to loggingService'
   const service = new SettingsService({
     settingsDir,
     disableLogging: true,
-    loggingService: mockLoggingService,
+    loggingService: mockLoggingService as any,
     cli: {
       logging: { logLevel: 'debug' },
-    },
+    } as any,
   });
 
   t.is(service.get('logging.logLevel'), 'debug');
@@ -538,7 +538,7 @@ test('SettingsService initialization applies logging.logLevel to loggingService'
 test('SettingsService runtime set updates loggingService', async (t) => {
   const settingsDir = getTestSettingsDir();
   const mockLoggingService = {
-    setLogLevel: (level) => {
+    setLogLevel: (level: string) => {
       mockLoggingService._level = level;
     },
     getLogLevel: () => mockLoggingService._level || 'info',
@@ -548,7 +548,7 @@ test('SettingsService runtime set updates loggingService', async (t) => {
   const service = new SettingsService({
     settingsDir,
     disableLogging: true,
-    loggingService: mockLoggingService,
+    loggingService: mockLoggingService as any,
   });
 
   // Initially default
@@ -712,12 +712,12 @@ test('tracks setting sources correctly', async (t) => {
       agent: {
         reasoningEffort: 'medium',
       },
-    },
+    } as any,
     cli: {
       agent: {
         model: 'gpt-4o',
       },
-    },
+    } as any,
   });
 
   t.is(service.getSource('agent.model'), 'cli');
@@ -737,13 +737,13 @@ test('deep merges partial settings from multiple sources', async (t) => {
         model: 'cli-model',
         // reasoningEffort not set in CLI
       },
-    },
+    } as any,
     env: {
       shell: {
         timeout: 60000,
         // maxOutputLines not set in env
       },
-    },
+    } as any,
   });
 
   // CLI should override for agent.model
@@ -908,7 +908,7 @@ test.serial('does not update config file when no new settings are added', async 
     info: () => {},
     error: () => {},
     warn: () => {},
-    debug: (msg, meta) => {
+    debug: (msg: string, meta: any) => {
       if (msg.includes('Updated settings file') && meta?.settingsFile?.startsWith(settingsDir)) {
         updateLogged = true;
       }
@@ -923,7 +923,7 @@ test.serial('does not update config file when no new settings are added', async 
   new SettingsService({
     settingsDir,
     disableLogging: false,
-    loggingService: mockLogging,
+    loggingService: mockLogging as any,
   });
 
   t.false(updateLogged, 'Should not have logged an update to the settings file');
@@ -973,7 +973,7 @@ test.serial('does not update config file when format differs but content is same
     info: () => {},
     error: () => {},
     warn: () => {},
-    debug: (msg, meta) => {
+    debug: (msg: string, meta: any) => {
       if (msg.includes('Updated settings file') && meta?.settingsFile?.startsWith(settingsDir)) {
         updateLogged = true;
       }
@@ -988,7 +988,7 @@ test.serial('does not update config file when format differs but content is same
   new SettingsService({
     settingsDir,
     disableLogging: false,
-    loggingService: mockLogging,
+    loggingService: mockLogging as any,
   });
 
   t.false(updateLogged, 'Should not have logged an update to the settings file');
@@ -1074,7 +1074,7 @@ test.serial('sensitive settings are never saved to config file', async (t) => {
         app: {
           shellPath: '/bin/bash',
         },
-      },
+      } as any,
     });
 
     // Read the saved config file
@@ -1111,7 +1111,7 @@ test.serial('sensitive settings loaded from env are accessible at runtime', asyn
         app: {
           shellPath: '/bin/bash',
         },
-      },
+      } as any,
     });
 
     // Verify sensitive values ARE accessible at runtime

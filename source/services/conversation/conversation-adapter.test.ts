@@ -1,5 +1,9 @@
 import test from 'ava';
 import { ConversationAdapter } from './conversation-adapter.js';
+import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
+import type { ConversationLogger } from '../logging/conversation-logger.js';
+import type { ConversationStore } from './conversation-store.js';
+import type { FinalTerminal } from '../../contracts/conversation.js';
 
 const noop = () => {};
 
@@ -15,26 +19,26 @@ const logger = {
 };
 
 const sessionContextService = {
-  runWithContext: (_context, fn) => fn(),
+  runWithContext: (_context: any, fn: () => any) => fn(),
   getContext: () => null,
 };
 
 test('ConversationAdapter delegates turn execution through an explicit turnFlow dependency', async (t) => {
-  const calls = [];
+  const calls: Array<{ method: string; input?: any; options?: any }> = [];
   const turnFlow = {
-    async *start(input, options) {
+    async *start(input: string, options?: any) {
       calls.push({ method: 'start', input, options });
-      yield { type: 'final', finalText: 'started' };
+      yield { type: 'final' as const, finalText: 'started' };
     },
-    async *continueAfterApproval(options) {
+    async *continueAfterApproval(options: any) {
       calls.push({ method: 'continueAfterApproval', options });
-      yield { type: 'final', finalText: 'continued' };
+      yield { type: 'final' as const, finalText: 'continued' };
     },
   };
   const approvalFlow = {
     getPending: () => ({ interruption: {}, token: 1 }),
     getPendingInterruption: () => ({}),
-  };
+  } as unknown as ApprovalFlowCoordinator;
   const adapter = new ConversationAdapter({
     sessionId: 'session-1',
     startedAt: '2026-06-12T00:00:00.000Z',
@@ -42,11 +46,11 @@ test('ConversationAdapter delegates turn execution through an explicit turnFlow 
     sessionContextService,
     conversationStore: {
       listUserTurns: () => [],
-    },
+    } as unknown as ConversationStore,
     conversationLogger: {
       dispatchEventToLog: noop,
       log: noop,
-    },
+    } as unknown as ConversationLogger,
     approvalFlow,
     turnFlow,
   });
@@ -54,8 +58,8 @@ test('ConversationAdapter delegates turn execution through an explicit turnFlow 
   const initial = await adapter.sendMessage('hello');
   const continued = await adapter.handleApprovalDecision('y');
 
-  t.is(initial.finalText, 'started');
-  t.is(continued?.finalText, 'continued');
+  t.is((initial as FinalTerminal).finalText, 'started');
+  t.is((continued as FinalTerminal | null)?.finalText, 'continued');
   t.deepEqual(calls, [
     {
       method: 'start',

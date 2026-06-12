@@ -11,16 +11,16 @@ const createMockLogger = () => {
   return {
     events,
     logger: {
-      info: (_message, meta) => {
+      info: (_message: string, meta?: any) => {
         events.push({ level: 'info', meta });
       },
-      warn: (_message, meta) => {
+      warn: (_message: string, meta?: any) => {
         events.push({ level: 'warn', meta });
       },
-      error: (_message, meta) => {
+      error: (_message: string, meta?: any) => {
         events.push({ level: 'error', meta });
       },
-      debug: (_message, meta) => {
+      debug: (_message: string, meta?: any) => {
         events.push({ level: 'debug', meta });
       },
       security: () => {},
@@ -32,7 +32,7 @@ const createMockLogger = () => {
 };
 
 const sessionContextService = {
-  runWithContext: (_context, fn) => fn(),
+  runWithContext: (_context: any, fn: () => any) => fn(),
   getContext: () => null,
 };
 

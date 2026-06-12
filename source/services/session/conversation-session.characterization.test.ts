@@ -3,24 +3,26 @@ import { createConversationSession, createConversationSessionComposition } from 
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
+import type { ILoggingService, ISessionContextService } from '../service-interfaces.js';
+import type { ConversationAgentClient } from '../conversation-agent-client.js';
 
 // ── Shared mocks ───────────────────────────────────────────────────────────
 
-const mockLogger = {
+const mockLogger: ILoggingService = {
   info: () => {},
   warn: () => {},
   error: () => {},
   debug: () => {},
   security: () => {},
   setCorrelationId: () => {},
-  getCorrelationId: () => {},
+  getCorrelationId: () => undefined,
   clearCorrelationId: () => {},
 };
 
-const createSessionContextService = () => {
-  let capturedContext = null;
+const createSessionContextService = (): ISessionContextService => {
+  let capturedContext: import('../service-interfaces.js').SessionTrafficContext | null = null;
   return {
-    runWithContext: (context, fn) => {
+    runWithContext: <T>(context: import('../service-interfaces.js').SessionTrafficContext, fn: () => T): T => {
       capturedContext = context;
       return fn();
     },
@@ -31,22 +33,35 @@ const createSessionContextService = () => {
 // ── Helper: ApprovalState-like object for mock streams ────────────────────
 
 const createApprovalState = () => ({
-  approveCalls: [],
-  rejectCalls: [],
-  approve(interruption) {
+  approveCalls: [] as unknown[],
+  rejectCalls: [] as unknown[],
+  approve(interruption: unknown) {
     this.approveCalls.push(interruption);
   },
-  reject(interruption) {
+  reject(interruption: unknown) {
     this.rejectCalls.push(interruption);
   },
 });
 
-const createShellInterruption = ({ callId, command }) => ({
+const createShellInterruption = ({ callId, command }: { callId?: string; command: string }) => ({
   name: 'shell',
   agent: { name: 'CLI Agent' },
   arguments: JSON.stringify({ command }),
   ...(callId ? { callId } : {}),
 });
+
+// ── Helper: typed mock agent client ──────────────────────────────────────
+
+const createMockAgentClient = (overrides: Record<string, unknown> = {}): ConversationAgentClient =>
+  ({
+    startStream: async () => new MockStream([]),
+    continueRunStream: async () => new MockStream([]),
+    abort: () => {},
+    setModel: () => {},
+    addToolInterceptor: () => () => {},
+    chat: async () => '',
+    ...overrides,
+  } as unknown as ConversationAgentClient);
 
 // ══════════════════════════════════════════════════════════════════════════
 // 1. sendMessage wraps events with log dispatch and clears
@@ -54,29 +69,29 @@ const createShellInterruption = ({ callId, command }) => ({
 // ══════════════════════════════════════════════════════════════════════════
 
 test('sendMessage installs setSubagentEventSink with a function then clears it to null', async (t) => {
-  const sinkCalls = [];
+  const sinkCalls: unknown[] = [];
 
   const stream = new MockStream([]);
   stream.finalOutput = 'Hello';
   stream.lastResponseId = 'resp-sink-test';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'sink-test',
     agentClient: mockClient,
     subagentEventSinkHost: {
-      setSubagentEventSink(sink) {
+      setSubagentEventSink(sink: unknown) {
         sinkCalls.push(typeof sink === 'function' ? 'function' : sink);
       },
     },
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
-  const { session, terminalAdapter } = bundle;
+  const { terminalAdapter } = bundle;
 
   await terminalAdapter.sendMessage('hello');
 
@@ -89,17 +104,17 @@ test('sendMessage installs setSubagentEventSink with a function then clears it t
 });
 
 test('sendMessage dispatches events through conversationLogger before onEvent callback', async (t) => {
-  const eventLog = [];
+  const eventLog: any[] = [];
 
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Hello' }]);
   stream.finalOutput = 'Hello';
   stream.lastResponseId = 'resp-log-dispatch';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'log-dispatch',
@@ -127,14 +142,14 @@ test('sendMessage dispatches events through conversationLogger before onEvent ca
 // ══════════════════════════════════════════════════════════════════════════
 
 test('handleApprovalDecision returns null when no approval is pending', async (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-no-pending';
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'no-pending',
@@ -149,14 +164,14 @@ test('handleApprovalDecision returns null when no approval is pending', async (t
 });
 
 test('handleApprovalDecision returns null for rejection when no approval is pending', async (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-reject-no-pending';
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'reject-no-pending',
@@ -175,7 +190,7 @@ test('handleApprovalDecision returns null for rejection when no approval is pend
 // ══════════════════════════════════════════════════════════════════════════
 
 test('handleApprovalDecision forwards approvalAnswer to agentClient.setAskUserAnswer', async (t) => {
-  const askUserCalls = [];
+  const askUserCalls: any[] = [];
 
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [createShellInterruption({ callId: 'call-ask-user-test', command: 'echo test' })];
@@ -185,20 +200,20 @@ test('handleApprovalDecision forwards approvalAnswer to agentClient.setAskUserAn
   finalStream.finalOutput = 'Answer forwarded.';
   finalStream.lastResponseId = 'resp-ask-user';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return interruptedStream;
     },
     async continueRunStream() {
       return finalStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'ask-user-test',
     agentClient: mockClient,
     askUserAnswerSink: {
-      setAskUserAnswer(callId, answer) {
+      setAskUserAnswer(callId: string, answer: string) {
         askUserCalls.push({ callId, answer });
       },
     },
@@ -213,13 +228,13 @@ test('handleApprovalDecision forwards approvalAnswer to agentClient.setAskUserAn
     approvalAnswer: 'Use option B',
   });
 
-  t.is(finalResult.type, 'response');
-  t.is(finalResult.finalText, 'Answer forwarded.');
+  t.is(finalResult?.type, 'response');
+  t.is((finalResult as { type: 'response'; finalText: string }).finalText, 'Answer forwarded.');
   t.deepEqual(askUserCalls, [{ callId: 'call-ask-user-test', answer: 'Use option B' }]);
 });
 
 test('handleApprovalDecision does not call setAskUserAnswer when answer is not y', async (t) => {
-  const askUserCalls = [];
+  const askUserCalls: any[] = [];
 
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [createShellInterruption({ callId: 'call-reject', command: 'echo reject' })];
@@ -229,20 +244,20 @@ test('handleApprovalDecision does not call setAskUserAnswer when answer is not y
   rejectionFinal.finalOutput = 'Rejected.';
   rejectionFinal.lastResponseId = 'resp-rejected';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return interruptedStream;
     },
     async continueRunStream() {
       return rejectionFinal;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'reject-no-ask',
     agentClient: mockClient,
     askUserAnswerSink: {
-      setAskUserAnswer(callId, answer) {
+      setAskUserAnswer(callId: string, answer: string) {
         askUserCalls.push({ callId, answer });
       },
     },
@@ -258,12 +273,12 @@ test('handleApprovalDecision does not call setAskUserAnswer when answer is not y
   });
 
   // Rejection returns a response from the continuation runner
-  t.is(rejectionResult.type, 'response');
+  t.is(rejectionResult?.type, 'response');
   t.false(askUserCalls.length > 0, 'setAskUserAnswer should NOT be called on rejection');
 });
 
 test('handleApprovalDecision does not call setAskUserAnswer when approvalAnswer is not provided', async (t) => {
-  const askUserCalls = [];
+  const askUserCalls: any[] = [];
 
   const interruptedStream = new MockStream([]);
   interruptedStream.interruptions = [createShellInterruption({ callId: 'call-no-answer', command: 'echo no answer' })];
@@ -273,20 +288,20 @@ test('handleApprovalDecision does not call setAskUserAnswer when approvalAnswer 
   noAnswerFinal.finalOutput = 'Done.';
   noAnswerFinal.lastResponseId = 'resp-no-answer';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return interruptedStream;
     },
     async continueRunStream() {
       return noAnswerFinal;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'no-answer-test',
     agentClient: mockClient,
     askUserAnswerSink: {
-      setAskUserAnswer(callId, answer) {
+      setAskUserAnswer(callId: string, answer: string) {
         askUserCalls.push({ callId, answer });
       },
     },
@@ -299,7 +314,7 @@ test('handleApprovalDecision does not call setAskUserAnswer when approvalAnswer 
 
   // No approvalAnswer provided; handleApprovalDecision still calls continueAfterApproval
   const result = await terminalAdapter.handleApprovalDecision('y');
-  t.is(result.type, 'response');
+  t.is(result?.type, 'response');
   t.false(askUserCalls.length > 0, 'setAskUserAnswer should NOT be called without approvalAnswer');
 });
 
@@ -309,7 +324,7 @@ test('handleApprovalDecision does not call setAskUserAnswer when approvalAnswer 
 // ══════════════════════════════════════════════════════════════════════════
 
 test('abort with no pending approval does not throw and produces no change in snapshot toolLedger', async (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     abort() {},
     async startStream() {
       const stream = new MockStream([]);
@@ -317,7 +332,7 @@ test('abort with no pending approval does not throw and produces no change in sn
       stream.lastResponseId = 'resp-abort-empty';
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'abort-empty',
@@ -339,12 +354,12 @@ test('abort with pending approval records aborted entry in tool ledger', async (
   interruptedStream.interruptions = [createShellInterruption({ callId: 'call-abort-1', command: 'echo abort me' })];
   interruptedStream.state = createApprovalState();
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     abort() {},
     async startStream() {
       return interruptedStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'abort-pending',
@@ -371,14 +386,14 @@ test('abort with pending approval records aborted entry in tool ledger', async (
 // ══════════════════════════════════════════════════════════════════════════
 
 test('getCurrentSnapshot returns expected shape with history, previousResponseId, and toolLedger', async (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-snapshot';
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'snapshot-test',
@@ -395,7 +410,7 @@ test('getCurrentSnapshot returns expected shape with history, previousResponseId
 });
 
 test('getCurrentSnapshot includes provider from agentClient.getProvider when available', async (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
@@ -405,7 +420,7 @@ test('getCurrentSnapshot includes provider from agentClient.getProvider when ava
     getProvider() {
       return 'test-provider';
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'provider-test',
@@ -419,14 +434,14 @@ test('getCurrentSnapshot includes provider from agentClient.getProvider when ava
 });
 
 test('getCurrentSnapshot includes model from settingsService when available', async (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-model';
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'model-test',
@@ -449,19 +464,19 @@ test('getCurrentSnapshot includes model from settingsService when available', as
 // ══════════════════════════════════════════════════════════════════════════
 
 test('setModel calls afterProviderChanged then agentClient.setModel', async (t) => {
-  const calls = [];
+  const calls: any[] = [];
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-set-model';
       return stream;
     },
-    setModel(model) {
+    setModel(model: string) {
       calls.push({ method: 'setModel', model });
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'set-model',
@@ -478,19 +493,19 @@ test('setModel calls afterProviderChanged then agentClient.setModel', async (t) 
 });
 
 test('setProvider calls afterProviderChanged then agentClient.setProvider', async (t) => {
-  const calls = [];
+  const calls: any[] = [];
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-set-provider';
       return stream;
     },
-    setProvider(provider) {
+    setProvider(provider: string) {
       calls.push({ method: 'setProvider', provider });
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'set-provider',
@@ -507,19 +522,19 @@ test('setProvider calls afterProviderChanged then agentClient.setProvider', asyn
 });
 
 test('setProvider is idempotent via switchProvider alias', async (t) => {
-  const calls = [];
+  const calls: any[] = [];
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-switch';
       return stream;
     },
-    setProvider(provider) {
+    setProvider(provider: string) {
       calls.push({ method: 'setProvider', provider });
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'switch-provider',
@@ -535,19 +550,19 @@ test('setProvider is idempotent via switchProvider alias', async (t) => {
 });
 
 test('setTemperature calls afterProviderChanged then agentClient.setTemperature', async (t) => {
-  const calls = [];
+  const calls: any[] = [];
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-set-temp';
       return stream;
     },
-    setTemperature(temp) {
+    setTemperature(temp: number) {
       calls.push({ method: 'setTemperature', temp });
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'set-temp',
@@ -564,19 +579,19 @@ test('setTemperature calls afterProviderChanged then agentClient.setTemperature'
 });
 
 test('setTemperature with undefined is passed through to agentClient', async (t) => {
-  const calls = [];
+  const calls: any[] = [];
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-set-temp-undefined';
       return stream;
     },
-    setTemperature(temp) {
+    setTemperature(temp: number) {
       calls.push({ method: 'setTemperature', temp });
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'set-temp-undef',
@@ -592,19 +607,19 @@ test('setTemperature with undefined is passed through to agentClient', async (t)
 });
 
 test('setReasoningEffort calls afterProviderChanged then agentClient.setReasoningEffort', async (t) => {
-  const calls = [];
+  const calls: any[] = [];
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-set-reasoning';
       return stream;
     },
-    setReasoningEffort(effort) {
+    setReasoningEffort(effort: string) {
       calls.push({ method: 'setReasoningEffort', effort });
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'set-reasoning',
@@ -622,14 +637,14 @@ test('setReasoningEffort calls afterProviderChanged then agentClient.setReasonin
 
 test('setReasoningEffort is a no-op when agentClient lacks setReasoningEffort', async (t) => {
   // An agentClient without the optional setReasoningEffort method
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       const stream = new MockStream([]);
       stream.finalOutput = 'Done.';
       stream.lastResponseId = 'resp-no-reasoning';
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'no-reasoning',
@@ -665,7 +680,7 @@ test('auto-approve: cumulative usage from continuation supersedes first-turn usa
     usage: { inputTokens: 300, outputTokens: 50, totalTokens: 350 },
   };
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return initialStream;
     },
@@ -677,7 +692,7 @@ test('auto-approve: cumulative usage from continuation supersedes first-turn usa
         results: [{ id: 'call-usage-1', reasoning: 'Listing files is read-only and safe.', approved: true }],
       });
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'auto-usage-test',
@@ -716,7 +731,7 @@ test('auto-approve: finalText comes from auto-approved continuation', async (t) 
   finalStream.finalOutput = 'Hello from continuation.';
   finalStream.lastResponseId = 'resp-text-final';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return initialStream;
     },
@@ -728,7 +743,7 @@ test('auto-approve: finalText comes from auto-approved continuation', async (t) 
         results: [{ id: 'call-text-1', reasoning: 'Safe command.', approved: true }],
       });
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'auto-text-test',
@@ -764,7 +779,7 @@ test('auto-approve: command messages from continuation are preserved in final re
   finalStream.finalOutput = 'Done.';
   finalStream.lastResponseId = 'resp-cmd-final';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return initialStream;
     },
@@ -776,7 +791,7 @@ test('auto-approve: command messages from continuation are preserved in final re
         results: [{ id: 'call-cmd-1', reasoning: 'Safe.', approved: true }],
       });
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'auto-cmd-test',
@@ -813,7 +828,7 @@ test('auto-approve: two auto-approved commands continue until approval_required 
   continuationStream.interruptions = [second];
   continuationStream.state = createApprovalState();
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return initialStream;
     },
@@ -828,7 +843,7 @@ test('auto-approve: two auto-approved commands continue until approval_required 
         ],
       });
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'auto-batch-test',
@@ -862,10 +877,10 @@ test('auto-approve: two auto-approved commands continue until approval_required 
 // ══════════════════════════════════════════════════════════════════════════
 
 test('sendMessage runs inside sessionContextService.runWithContext with session context fields', async (t) => {
-  const contextLog = [];
+  const contextLog: any[] = [];
 
   const sessionContextService = {
-    runWithContext(context, fn) {
+    runWithContext(context: any, fn: () => any) {
       contextLog.push(context);
       return fn();
     },
@@ -881,11 +896,11 @@ test('sendMessage runs inside sessionContextService.runWithContext with session 
   stream.finalOutput = 'Traced.';
   stream.lastResponseId = 'resp-traffic';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'traffic-test',
@@ -907,10 +922,10 @@ test('sendMessage runs inside sessionContextService.runWithContext with session 
 });
 
 test('sendMessage sets firstUserMessagePreview to first turn text even on subsequent messages', async (t) => {
-  const contextLog = [];
+  const contextLog: any[] = [];
 
   const sessionContextService = {
-    runWithContext(context, fn) {
+    runWithContext(context: any, fn: () => any) {
       contextLog.push(context);
       return fn();
     },
@@ -922,7 +937,7 @@ test('sendMessage sets firstUserMessagePreview to first turn text even on subseq
     getCorrelationId: () => 'trace-second',
   };
 
-  const makeStream = (text) => {
+  const makeStream = (text: string) => {
     const s = new MockStream([]);
     s.finalOutput = `Reply: ${text}`;
     s.lastResponseId = `resp-${text}`;
@@ -930,12 +945,12 @@ test('sendMessage sets firstUserMessagePreview to first turn text even on subseq
   };
 
   let callCount = 0;
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       callCount++;
       return makeStream(`call-${callCount}`);
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'traffic-preview',
@@ -972,14 +987,14 @@ test('approval then approval emits each terminal boundary in order', async (t) =
   continuationStream.interruptions = [second];
   continuationStream.state = createApprovalState();
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return initialStream;
     },
     async continueRunStream() {
       return continuationStream;
     },
-  };
+  });
 
   const { turnCoordinator: session } = createConversationSession({
     sessionId: 'approval-then-approval',
@@ -987,7 +1002,7 @@ test('approval then approval emits each terminal boundary in order', async (t) =
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
 
-  const events = [];
+  const events: any[] = [];
   for await (const event of session.start('run both commands')) {
     events.push(event);
   }
@@ -1022,14 +1037,14 @@ test('approval then rejection emits no tool_started event for the rejected tool'
   const rejectedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Rejected.' }]);
   rejectedStream.finalOutput = 'Rejected.';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return initialStream;
     },
     async continueRunStream() {
       return rejectedStream;
     },
-  };
+  });
 
   const { turnCoordinator: session } = createConversationSession({
     sessionId: 'approval-then-rejection',
@@ -1037,7 +1052,7 @@ test('approval then rejection emits no tool_started event for the rejected tool'
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
 
-  const events = [];
+  const events: any[] = [];
   for await (const event of session.start('run a command')) {
     events.push(event);
   }
@@ -1083,7 +1098,7 @@ test('multiple sequential interruptions preserve approval and tool-start orderin
   finalStream.finalOutput = 'All done.';
   let continuationIndex = 0;
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return streams[0];
     },
@@ -1091,7 +1106,7 @@ test('multiple sequential interruptions preserve approval and tool-start orderin
       continuationIndex++;
       return continuationIndex < streams.length ? streams[continuationIndex] : finalStream;
     },
-  };
+  });
 
   const { turnCoordinator: session } = createConversationSession({
     sessionId: 'sequential-interruptions',
@@ -1099,7 +1114,7 @@ test('multiple sequential interruptions preserve approval and tool-start orderin
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
 
-  const events = [];
+  const events: any[] = [];
   for await (const event of session.start('run three commands')) {
     events.push(event);
   }
@@ -1141,7 +1156,7 @@ test('aborted approval resolved by new user input emits the abort marker before 
   const resolvedStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Changed course.' }]);
   resolvedStream.finalOutput = 'Changed course.';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     abort() {},
     async startStream() {
       return initialStream;
@@ -1149,7 +1164,7 @@ test('aborted approval resolved by new user input emits the abort marker before 
     async continueRunStream() {
       return resolvedStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'aborted-approval-resolution',
@@ -1157,7 +1172,7 @@ test('aborted approval resolved by new user input emits the abort marker before 
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
 
-  const events = [];
+  const events: any[] = [];
   for await (const event of bundle.turnCoordinator.start('run pending command')) {
     events.push(event);
   }
@@ -1186,11 +1201,11 @@ test('characterization - undo while an approval is pending invalidates pending a
   interruptedStream.interruptions = [interruption];
   interruptedStream.state = createApprovalState();
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return interruptedStream;
     },
-  };
+  });
 
   const composition = createConversationSessionComposition({
     sessionId: 'undo-pending-test',
@@ -1233,11 +1248,11 @@ test('characterization - reset while an approval is pending invalidates pending 
   interruptedStream.interruptions = [interruption];
   interruptedStream.state = createApprovalState();
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return interruptedStream;
     },
-  };
+  });
 
   const composition = createConversationSessionComposition({
     sessionId: 'reset-pending-test',
@@ -1287,7 +1302,7 @@ test('characterization - fresh start execution recovers from transient error wit
 
   let startCallCount = 0;
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       startCallCount++;
       if (startCallCount === 1) {
@@ -1298,10 +1313,10 @@ test('characterization - fresh start execution recovers from transient error wit
     },
     async continueRunStream() {
       const error = new Error('Connection refused');
-      error.code = 'ECONNREFUSED';
+      (error as any).code = 'ECONNREFUSED';
       throw error;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'fresh-start-exec',
@@ -1346,7 +1361,7 @@ test('characterization - approve-approve-response through handleApprovalDecision
 
   let continueCalls = 0;
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return initialStream;
     },
@@ -1357,7 +1372,7 @@ test('characterization - approve-approve-response through handleApprovalDecision
       }
       return finalStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'appr-appr-resp',
@@ -1366,21 +1381,21 @@ test('characterization - approve-approve-response through handleApprovalDecision
   });
   const { terminalAdapter } = bundle;
 
-  const events = [];
+  const events: any[] = [];
 
   // First sendMessage -> approval_required (tool 1)
   const r1 = await terminalAdapter.sendMessage('run commands', {
     onEvent: (e) => events.push(e),
   });
   t.is(r1.type, 'approval_required');
-  t.is(r1.approval.callId, 'call-aa1');
+  t.is((r1 as { type: 'approval_required'; approval: { callId: string } }).approval.callId, 'call-aa1');
 
   // First handleApprovalDecision -> approval_required (tool 2)
   const r2 = await terminalAdapter.handleApprovalDecision('y', undefined, {
     onEvent: (e) => events.push(e),
   });
   t.is(r2?.type, 'approval_required');
-  t.is(r2?.approval.callId, 'call-aa2');
+  t.is((r2 as { type: 'approval_required'; approval: { callId: string } })?.approval.callId, 'call-aa2');
 
   // Second handleApprovalDecision -> response
   const r3 = await terminalAdapter.handleApprovalDecision('y', undefined, {
@@ -1420,7 +1435,7 @@ test('characterization - reject then approve sequence through handleApprovalDeci
   let startCallCount = 0;
   let continueCallCount = 0;
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       startCallCount++;
       if (startCallCount === 1) return firstStream;
@@ -1431,7 +1446,7 @@ test('characterization - reject then approve sequence through handleApprovalDeci
       if (continueCallCount === 1) return rejectionResponse;
       return approvalResponse;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'reject-approve',
@@ -1447,12 +1462,12 @@ test('characterization - reject then approve sequence through handleApprovalDeci
   // Turn 1: reject -> response
   const r2 = await terminalAdapter.handleApprovalDecision('n', 'Not needed');
   t.is(r2?.type, 'response');
-  t.truthy(r2?.finalText);
+  t.truthy((r2 as { type: 'response'; finalText?: string })?.finalText);
 
   // Verify rejection was recorded in the approval state
   t.is(approvalState.approveCalls.length, 0, 'No approvals should have been recorded');
   t.is(approvalState.rejectCalls.length, 1, 'One rejection should be recorded');
-  t.is(approvalState.rejectCalls[0].callId, 'call-rej1', 'Rejected call should match');
+  t.is((approvalState.rejectCalls[0] as { callId: string }).callId, 'call-rej1', 'Rejected call should match');
 
   // Turn 2: new sendMessage -> approval_required (subsequent tool needs approval after rejection)
   const r3 = await terminalAdapter.sendMessage('run command 2');
@@ -1474,12 +1489,12 @@ test('characterization - abort during pending approval clears state and prevents
   stream.interruptions = [interruption];
   stream.state = approvalState;
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
     abort() {},
-  };
+  });
 
   const composition = createConversationSessionComposition({
     sessionId: 'abort-chain-test',

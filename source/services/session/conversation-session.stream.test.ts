@@ -1,22 +1,52 @@
 import test from 'ava';
 import { ModelBehaviorError } from '@openai/agents';
+import type { RunState } from '@openai/agents';
 import { createConversationSession } from './session-composition.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
+import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
+import type { ConversationAgentClient } from '../conversation-agent-client.js';
+import type {
+  ConversationEvent,
+  TextDeltaEvent,
+  FinalResponseEvent,
+  ToolRecoveryEvent,
+  ApprovalRequiredEvent,
+  ToolStartedEvent,
+  UsageUpdateEvent,
+  RetryEvent,
+} from '../conversation/conversation-events.js';
+const createMockAgentClient = (overrides: Record<string, unknown> = {}): ConversationAgentClient =>
+  ({
+    startStream: async () => new MockStream([]),
+    continueRunStream: async () => new MockStream([]),
+    abort: () => {},
+    setModel: () => {},
+    addToolInterceptor: () => () => {},
+    chat: async () => '',
+    ...overrides,
+  } as unknown as ConversationAgentClient);
 
-const mockLogger = {
+const mockLogger: ILoggingService = {
   info: () => {},
   warn: () => {},
   error: () => {},
   debug: () => {},
   security: () => {},
   setCorrelationId: () => {},
-  getCorrelationId: () => {},
+  getCorrelationId: () => undefined,
   clearCorrelationId: () => {},
 };
 
-const sessionContextService = {
+const sessionContextService: ISessionContextService = {
   runWithContext: (_context, fn) => fn(),
   getContext: () => null,
+};
+
+type ClientCall = { input: unknown; opts?: unknown; provider?: string };
+
+const createMockSettingsService = (entries: [string, unknown][] = []): ISettingsService => {
+  const settings = new Map(entries);
+  return { get: <T>(key: string): T => settings.get(key) as T, set: () => {} };
 };
 
 test('run() streams ConversationEvents (text_delta → final) in order', async (t) => {
@@ -29,40 +59,40 @@ test('run() streams ConversationEvents (text_delta → final) in order', async (
   stream.finalOutput = 'Hello world';
   stream.lastResponseId = 'resp-1';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of turnCoordinator.start('hi')) {
     emitted.push(ev);
   }
 
   t.deepEqual(
-    emitted.map((e) => e.type),
+    emitted.map((e: ConversationEvent) => e.type),
     ['text_delta', 'text_delta', 'final'],
   );
-  t.is(emitted[0].delta, 'Hello');
-  t.is(emitted[0].fullText, 'Hello');
-  t.is(emitted[1].delta, ' world');
-  t.is(emitted[1].fullText, 'Hello world');
-  t.is(emitted[2].finalText, 'Hello world');
+  t.is((emitted[0] as TextDeltaEvent).delta, 'Hello');
+  t.is((emitted[0] as TextDeltaEvent).fullText, 'Hello');
+  t.is((emitted[1] as TextDeltaEvent).delta, ' world');
+  t.is((emitted[1] as TextDeltaEvent).fullText, 'Hello world');
+  t.is((emitted[2] as FinalResponseEvent).finalText, 'Hello world');
 });
 
 test('run() warns when completed stream history already contains duplicated tool pairs', async (t) => {
-  const warnings = [];
+  const warnings: { message: string; meta?: Record<string, unknown> }[] = [];
   const logger = {
     ...mockLogger,
-    warn: (message, meta) => warnings.push({ message, meta }),
+    warn: (message: string, meta?: Record<string, unknown>) => warnings.push({ message, meta }),
   };
   const stream = new MockStream([]);
   stream.history = [
@@ -76,37 +106,40 @@ test('run() warns when completed stream history already contains duplicated tool
   stream.newItems = stream.history.slice(1);
   stream.state = { _generatedItems: stream.newItems };
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
   for await (const _ev of turnCoordinator.start('hi')) {
     // consume stream
   }
-  const warning = warnings.find((entry) => entry.meta?.eventType === 'conversation.stream_history.replayed_tools');
+  const warning = warnings.find(
+    (entry: { message: string; meta?: Record<string, unknown> }) =>
+      entry.meta?.eventType === 'conversation.stream_history.replayed_tools',
+  );
   t.truthy(warning);
-  t.is(warning.meta.phase, 'post_stream');
-  t.is(warning.meta.source, 'startStream');
-  t.is(warning.meta.historyDuplicatePairs, 1);
-  t.is(warning.meta.newItemsDuplicatePairs, 1);
-  t.is(warning.meta.stateGeneratedItemsDuplicatePairs, 1);
-  t.false('output' in warning.meta);
+  t.is(warning!.meta!.phase as string, 'post_stream');
+  t.is(warning!.meta!.source as string, 'startStream');
+  t.is((warning!.meta! as Record<string, unknown>).historyDuplicatePairs, 1);
+  t.is((warning!.meta! as Record<string, unknown>).newItemsDuplicatePairs, 1);
+  t.is((warning!.meta! as Record<string, unknown>).stateGeneratedItemsDuplicatePairs, 1);
+  t.false('output' in (warning!.meta! as Record<string, unknown>));
 });
 
 test('run() retries streamed recoverable errors without committing failed stream history', async (t) => {
   class FailingStream extends MockStream {
     constructor() {
       super([]);
-      this.history = [
+      (this as unknown as Record<string, unknown>).history = [
         { role: 'user', type: 'message', content: 'retry me' },
         { type: 'function_call', callId: 'failed-call', name: 'fake_tool', arguments: '{}' },
         {
@@ -131,16 +164,16 @@ test('run() retries streamed recoverable errors without committing failed stream
     { role: 'assistant', type: 'message', status: 'completed', content: [{ type: 'output_text', text: 'Recovered' }] },
   ];
 
-  const calls = [];
-  const mockClient = {
+  const calls: unknown[] = [];
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openrouter';
     },
-    async startStream(input) {
+    async startStream(input: unknown) {
       calls.push(input);
       return calls.length === 1 ? new FailingStream() : successStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
@@ -148,25 +181,25 @@ test('run() retries streamed recoverable errors without committing failed stream
     deps: { logger: mockLogger, sessionContextService },
     retryOptions: { allowFreshStartRetries: false },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of turnCoordinator.start('retry me')) {
     emitted.push(ev);
   }
 
   t.deepEqual(
-    emitted.map((event) => event.type),
+    emitted.map((event: ConversationEvent) => event.type),
     ['text_delta', 'retry', 'text_delta', 'final'],
   );
   t.is(calls.length, 2);
-  t.is(calls[0].length, 1);
-  t.deepEqual(calls[1], [{ role: 'user', type: 'message', content: 'retry me' }]);
+  t.is((calls[0] as unknown[]).length, 1);
+  t.deepEqual(calls[1] as unknown as unknown, [{ role: 'user', type: 'message', content: 'retry me' }]);
 });
 
 test('run() does not retry recoverable errors from a fresh start when disabled', async (t) => {
   let calls = 0;
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openrouter';
     },
@@ -174,7 +207,7 @@ test('run() does not retry recoverable errors from a fresh start when disabled',
       calls++;
       throw new ModelBehaviorError('Tool fake_tool not found in agent Terminal Assistant.');
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
@@ -182,9 +215,9 @@ test('run() does not retry recoverable errors from a fresh start when disabled',
     deps: { logger: mockLogger, sessionContextService },
     retryOptions: { allowFreshStartRetries: false },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   await t.throwsAsync(async () => {
     for await (const ev of turnCoordinator.start('retry me')) {
       emitted.push(ev);
@@ -192,12 +225,16 @@ test('run() does not retry recoverable errors from a fresh start when disabled',
   });
 
   t.is(calls, 1);
-  t.false(emitted.some((event) => event.type === 'retry'));
-  t.truthy(emitted.find((event) => event.type === 'error'));
+  t.false(emitted.some((event: ConversationEvent) => event.type === 'retry'));
+  t.truthy(emitted.find((event: ConversationEvent) => event.type === 'error'));
 });
 
 test('run() exports completed tool pairs from a stream that later fails', async (t) => {
   class FailingStream extends MockStream {
+    constructor() {
+      super([]);
+    }
+
     async *[Symbol.asyncIterator]() {
       yield {
         type: 'run_item_stream_event',
@@ -239,21 +276,21 @@ test('run() exports completed tool pairs from a stream that later fails', async 
     }
   }
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openrouter';
     },
     async startStream() {
       return new FailingStream();
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
   await t.throwsAsync(async () => {
     for await (const _ev of turnCoordinator.start('inspect')) {
@@ -261,21 +298,27 @@ test('run() exports completed tool pairs from a stream that later fails', async 
     }
   });
 
-  const state = stateFacade.exportState();
+  const state = stateFacade!.exportState();
   // Reconciled history: user message + completed call/result pair.
   // The aborted second call has no result yet, so it is not pushed into history.
   t.is(state.history.length, 3);
   t.is(state.toolLedger.length, 2);
-  t.is(state.toolLedger[0].status, 'completed');
-  t.is(state.toolLedger[1].status, 'aborted');
+  t.is((state.toolLedger[0] as unknown as Record<string, unknown>).status, 'completed');
+  t.is((state.toolLedger[1] as unknown as Record<string, unknown>).status, 'aborted');
   t.deepEqual(
-    state.toolLedger[0].historyItems.map((item) => item.callId),
+    (state.toolLedger[0] as { historyItems: { callId: string }[] }).historyItems.map(
+      (item: { callId: string }) => item.callId,
+    ),
     ['call-read', 'call-read'],
   );
 });
 
 test('run() emits tool_recovery before error when a streamed turn fails after tool activity', async (t) => {
   class FailingStream extends MockStream {
+    constructor() {
+      super([]);
+    }
+
     async *[Symbol.asyncIterator]() {
       yield {
         type: 'run_item_stream_event',
@@ -317,39 +360,42 @@ test('run() emits tool_recovery before error when a streamed turn fails after to
     }
   }
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openrouter';
     },
     async startStream() {
       return new FailingStream();
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   await t.throwsAsync(async () => {
     for await (const ev of turnCoordinator.start('inspect')) {
       emitted.push(ev);
     }
   });
 
-  const recovery = emitted.find((event) => event.type === 'tool_recovery');
+  const recovery = emitted.find((event: ConversationEvent) => event.type === 'tool_recovery') as
+    | ToolRecoveryEvent
+    | undefined;
   t.truthy(recovery);
-  t.deepEqual(recovery.recoveredCallIds, ['call-read']);
-  t.deepEqual(recovery.droppedCallIds, ['call-write']);
-  t.true(recovery.message.includes('Recovered 1 completed'));
+  t.deepEqual(recovery!.recoveredCallIds, ['call-read']);
+  t.deepEqual(recovery!.droppedCallIds, ['call-write']);
+  t.true(recovery!.message.includes('Recovered 1 completed'));
   t.true(
-    emitted.findIndex((event) => event.type === 'tool_recovery') < emitted.findIndex((event) => event.type === 'error'),
+    emitted.findIndex((event: ConversationEvent) => event.type === 'tool_recovery') <
+      emitted.findIndex((event: ConversationEvent) => event.type === 'error'),
   );
   t.deepEqual(
-    emitted.map((event) => event.type),
+    emitted.map((event: ConversationEvent) => event.type),
     ['tool_started', 'command_message', 'tool_started', 'tool_recovery', 'error'],
   );
 
@@ -357,7 +403,11 @@ test('run() emits tool_recovery before error when a streamed turn fails after to
   // captured by the ledger must be reconciled into canonical history so the
   // next turn does not send two consecutive user messages with no tool record.
   const state = stateFacade.exportState();
-  const types = state.history.map((item) => item.rawItem?.type ?? item.type);
+  const types = state.history.map(
+    (item: unknown) =>
+      (((item as Record<string, unknown>).rawItem as Record<string, unknown> | undefined)?.type as string) ??
+      ((item as Record<string, unknown>).type as string),
+  );
   t.true(types.includes('function_call'));
   t.true(types.includes('function_call_result') || types.includes('function_call_output'));
 });
@@ -365,10 +415,10 @@ test('run() emits tool_recovery before error when a streamed turn fails after to
 test('importState() reconciles completed ledger pairs into canonical history', (t) => {
   const bundle = createConversationSession({
     sessionId: 's1',
-    agentClient: {},
+    agentClient: createMockAgentClient(),
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { stateFacade } = bundle;
 
   stateFacade.importState({
     previousResponseId: null,
@@ -400,8 +450,8 @@ test('importState() reconciles completed ledger pairs into canonical history', (
 
   const state = stateFacade.exportState();
   t.is(state.history.length, 3);
-  t.is(state.history[1].callId, 'call-read');
-  t.is(state.history[2].callId, 'call-read');
+  t.is((state.history[1] as Record<string, unknown>).callId, 'call-read');
+  t.is((state.history[2] as Record<string, unknown>).callId, 'call-read');
 });
 
 test('run() allows a follow-up after a long non-chaining run expands full history', async (t) => {
@@ -416,23 +466,23 @@ test('run() allows a follow-up after a long non-chaining run expands full histor
   const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'second' }]);
   secondStream.finalOutput = 'second';
 
-  const calls = [];
-  const mockClient = {
+  const calls: unknown[] = [];
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'opencode';
     },
-    async startStream(input) {
+    async startStream(input: unknown) {
       calls.push(input);
       return calls.length === 1 ? firstStream : secondStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
   stateFacade.importState({
     previousResponseId: null,
@@ -450,10 +500,10 @@ test('run() allows a follow-up after a long non-chaining run expands full histor
   }
 
   t.is(calls.length, 2);
-  t.is(calls[0].length, 2);
-  t.true(calls[1].length > 212);
+  t.is((calls[0] as unknown[]).length, 2);
+  t.true((calls[1] as unknown[]).length > 212);
   t.deepEqual(
-    second.map((event) => event.type),
+    second.map((event: ConversationEvent) => event.type),
     ['text_delta', 'final'],
   );
 });
@@ -470,23 +520,23 @@ test('sendMessage() allows a follow-up after a long non-chaining run expands ful
   const secondStream = new MockStream([{ type: 'response.output_text.delta', delta: 'next' }]);
   secondStream.finalOutput = 'next';
 
-  const calls = [];
-  const mockClient = {
+  const calls: unknown[] = [];
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'opencode';
     },
-    async startStream(input) {
+    async startStream(input: unknown) {
       calls.push(input);
       return calls.length === 1 ? firstStream : secondStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { terminalAdapter, stateFacade } = bundle;
 
   stateFacade.importState({
     previousResponseId: null,
@@ -496,9 +546,9 @@ test('sendMessage() allows a follow-up after a long non-chaining run expands ful
   await terminalAdapter.sendMessage('first');
   const second = await terminalAdapter.sendMessage('second');
 
-  t.is(second.type, 'response');
+  t.is((second as unknown as Record<string, unknown>).type, 'response');
   t.is(calls.length, 2);
-  t.true(calls[1].length > 212);
+  t.true((calls[1] as unknown[]).length > 212);
 });
 
 test('continue() streams events after approval decision', async (t) => {
@@ -511,44 +561,46 @@ test('continue() streams events after approval decision', async (t) => {
 
   const initialStream = new MockStream([]);
   initialStream.interruptions = [interruption];
+  const approveCalls: unknown[] = [];
+  const rejectCalls: unknown[] = [];
   initialStream.state = {
-    approveCalls: [],
-    rejectCalls: [],
-    approve(arg) {
-      this.approveCalls.push(arg);
+    approveCalls,
+    rejectCalls,
+    approve(arg: unknown) {
+      approveCalls.push(arg);
     },
-    reject(arg) {
-      this.rejectCalls.push(arg);
+    reject(arg: unknown) {
+      rejectCalls.push(arg);
     },
   };
 
   const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved run' }]);
   continuationStream.finalOutput = 'Approved run';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return initialStream;
     },
-    async continueRunStream(state) {
+    async continueRunStream(state: unknown) {
       t.is(state, initialStream.state);
       return continuationStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
   const first = [];
   for await (const ev of turnCoordinator.start('run command')) {
     first.push(ev);
   }
   t.is(first.length, 1);
-  t.is(first[0].type, 'approval_required');
-  t.is(first[0].approval.callId, 'call-xyz');
+  t.is((first[0] as ConversationEvent).type, 'approval_required');
+  t.is((first[0] as ApprovalRequiredEvent).approval.callId, 'call-xyz');
 
   const cont = [];
   for await (const ev of turnCoordinator.continueAfterApproval({ answer: 'y' })) {
@@ -559,12 +611,12 @@ test('continue() streams events after approval decision', async (t) => {
     cont.map((e) => e.type),
     ['tool_started', 'text_delta', 'final'],
   );
-  t.is(cont[0].type, 'tool_started');
-  t.is(cont[0].toolCallId, 'call-xyz');
-  t.is(cont[0].toolName, 'bash');
+  t.is((cont[0] as ConversationEvent).type, 'tool_started');
+  t.is((cont[0] as ToolStartedEvent).toolCallId, 'call-xyz');
+  t.is((cont[0] as ToolStartedEvent).toolName, 'bash');
 
-  t.is(cont[1].delta, 'Approved run');
-  t.is(cont[2].finalText, 'Approved run');
+  t.is((cont[1] as TextDeltaEvent).delta, 'Approved run');
+  t.is((cont[2] as FinalResponseEvent).finalText, 'Approved run');
 });
 
 test('run() retries malformed tool-call interruption before surfacing approval', async (t) => {
@@ -585,7 +637,7 @@ test('run() retries malformed tool-call interruption before surfacing approval',
   successStream.lastResponseId = 'resp-recovered';
 
   let startCalls = 0;
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openai';
     },
@@ -593,27 +645,27 @@ test('run() retries malformed tool-call interruption before surfacing approval',
       startCalls++;
       return startCalls === 1 ? malformedStream : successStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of turnCoordinator.start('run command')) {
     emitted.push(ev);
   }
 
   t.is(startCalls, 2);
   t.deepEqual(
-    emitted.map((event) => event.type),
+    emitted.map((event: ConversationEvent) => event.type),
     ['retry', 'text_delta', 'final'],
   );
-  t.is(emitted[0].retryType, 'parsing_error');
-  t.is(emitted[emitted.length - 1].finalText, 'Recovered');
+  t.is((emitted[0] as RetryEvent).retryType, 'parsing_error');
+  t.is((emitted[emitted.length - 1] as FinalResponseEvent).finalText, 'Recovered');
 });
 
 test('sendMessage() preserves callId on approval_required terminal result', async (t) => {
@@ -631,21 +683,25 @@ test('sendMessage() preserves callId on approval_required terminal result', asyn
     reject() {},
   };
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { terminalAdapter } = bundle;
 
   const result = await terminalAdapter.sendMessage('run command');
   t.is(result.type, 'approval_required');
+  if (result.type !== 'approval_required') {
+    t.fail('expected approval_required');
+    return;
+  }
   t.is(result.approval.callId, 'call-preserve-1');
 });
 
@@ -666,10 +722,11 @@ test('handleApprovalDecision() preserves callId on subsequent approval_required 
 
   const initialStream = new MockStream([]);
   initialStream.interruptions = [firstInterruption];
+  const approveCalls: unknown[] = [];
   initialStream.state = {
-    approveCalls: [],
-    approve(arg) {
-      this.approveCalls.push(arg);
+    approveCalls,
+    approve(arg: unknown) {
+      approveCalls.push(arg);
     },
     reject() {},
   };
@@ -677,54 +734,59 @@ test('handleApprovalDecision() preserves callId on subsequent approval_required 
   const continuationStream = new MockStream([]);
   continuationStream.interruptions = [secondInterruption];
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return initialStream;
     },
     async continueRunStream() {
       return continuationStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { terminalAdapter } = bundle;
 
   const first = await terminalAdapter.sendMessage('run command');
   t.is(first.type, 'approval_required');
+  if (first.type !== 'approval_required') {
+    t.fail('expected approval_required');
+    return;
+  }
   t.is(first.approval.callId, 'call-first');
 
   const second = await terminalAdapter.handleApprovalDecision('y');
   t.truthy(second);
-  t.is(second?.type, 'approval_required');
-  if (second?.type === 'approval_required') {
-    t.is(second.approval.callId, 'call-second');
+  if (second?.type !== 'approval_required') {
+    t.fail('expected approval_required');
+    return;
   }
+  t.is(second.approval.callId, 'call-second');
 });
 
 test('run() sends text for OpenAI provider (server-side state)', async (t) => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
   stream.finalOutput = 'Response';
 
-  let receivedInput;
-  const mockClient = {
-    async startStream(input) {
+  let receivedInput: unknown;
+  const mockClient = createMockAgentClient({
+    async startStream(input: unknown) {
       receivedInput = input;
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of turnCoordinator.start('Hello')) {
     emitted.push(ev);
   }
@@ -732,7 +794,7 @@ test('run() sends text for OpenAI provider (server-side state)', async (t) => {
   // OpenAI should receive just the text string (no getProvider means default 'openai')
   t.is(typeof receivedInput, 'string');
   t.is(receivedInput, 'Hello');
-  t.is(emitted[emitted.length - 1].type, 'final');
+  t.is((emitted[emitted.length - 1] as ConversationEvent).type, 'final');
 });
 
 test('run() sends full history for non-OpenAI providers (client-side state)', async (t) => {
@@ -747,35 +809,35 @@ test('run() sends full history for non-OpenAI providers (client-side state)', as
     },
   ];
 
-  let receivedInput;
-  const mockClient = {
-    async startStream(input) {
+  let receivedInput: unknown;
+  const mockClient = createMockAgentClient({
+    async startStream(input: unknown) {
       receivedInput = input;
       return stream;
     },
     getProvider() {
       return 'openrouter'; // Non-OpenAI provider
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of turnCoordinator.start('Hello')) {
     emitted.push(ev);
   }
 
   // Non-OpenAI providers should receive full history array
   t.true(Array.isArray(receivedInput));
-  t.is(receivedInput.length, 1); // Initial user message
-  t.is(receivedInput[0].role, 'user');
-  t.is(receivedInput[0].content, 'Hello');
-  t.is(emitted[emitted.length - 1].type, 'final');
+  t.is((receivedInput as unknown[]).length, 1); // Initial user message
+  t.is((receivedInput as Record<string, unknown>[])[0].role, 'user');
+  t.is((receivedInput as Record<string, unknown>[])[0].content, 'Hello');
+  t.is((emitted[emitted.length - 1] as ConversationEvent).type, 'final');
 });
 
 test('run() preserves assistant text prefix when SDK full-history reconstruction strips it', async (t) => {
@@ -817,23 +879,23 @@ test('run() preserves assistant text prefix when SDK full-history reconstruction
     },
   ];
 
-  const calls = [];
-  const mockClient = {
-    async startStream(input) {
+  const calls: unknown[] = [];
+  const mockClient = createMockAgentClient({
+    async startStream(input: unknown) {
       calls.push(input);
       return calls.length === 1 ? firstStream : secondStream;
     },
     getProvider() {
       return 'openrouter';
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
   for await (const _ of turnCoordinator.start('Investigate cache issue')) {
     // consume events
@@ -841,7 +903,7 @@ test('run() preserves assistant text prefix when SDK full-history reconstruction
   for await (const _ of turnCoordinator.start('Continue after max turns')) {
     // consume events
   }
-  const secondInput = calls[1];
+  const secondInput = calls[1] as unknown[];
   t.true(Array.isArray(secondInput));
   t.deepEqual(secondInput.slice(0, 3), [
     { role: 'user', type: 'message', content: 'Investigate cache issue' },
@@ -873,10 +935,10 @@ test('run() sends full history for openai-compatible providers', async (t) => {
     },
   ];
 
-  let firstInput, secondInput;
+  let firstInput: unknown, secondInput: unknown;
   let callCount = 0;
-  const mockClient = {
-    async startStream(input) {
+  const mockClient = createMockAgentClient({
+    async startStream(input: unknown) {
       callCount++;
       if (callCount === 1) {
         firstInput = input;
@@ -888,30 +950,30 @@ test('run() sends full history for openai-compatible providers', async (t) => {
     getProvider() {
       return 'deepseek'; // Custom openai-compatible provider
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
   // First message
-  for await (const ev of turnCoordinator.start('First message')) {
+  for await (const _ of turnCoordinator.start('First message')) {
     // consume events
   }
   // OpenAI-compatible provider should receive full history array
   t.true(Array.isArray(firstInput));
-  t.is(firstInput.length, 1);
-  t.is(firstInput[0].content, 'First message');
+  t.is((firstInput as unknown[]).length, 1);
+  t.is((firstInput as Record<string, unknown>[])[0].content, 'First message');
 
   // Second message should contain both previous and new message
-  for await (const ev of turnCoordinator.start('Second message')) {
+  for await (const _ of turnCoordinator.start('Second message')) {
     // consume events
   }
   t.true(Array.isArray(secondInput));
-  t.true(secondInput.length >= 2, 'Second call should include conversation history');
+  t.true((secondInput as unknown[]).length >= 2, 'Second call should include conversation history');
 });
 
 test('run() chains follow-up turns for Codex provider over websocket', async (t) => {
@@ -940,23 +1002,23 @@ test('run() chains follow-up turns for Codex provider over websocket', async (t)
     },
   ];
 
-  const calls = [];
-  const mockClient = {
-    async startStream(input, opts) {
+  const calls: ClientCall[] = [];
+  const mockClient = createMockAgentClient({
+    async startStream(input: unknown, opts?: unknown) {
       calls.push({ input, opts });
       return calls.length === 1 ? firstStream : secondStream;
     },
     getProvider() {
       return 'codex';
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
   for await (const _ of turnCoordinator.start('First message')) {
     // consume events
@@ -964,11 +1026,13 @@ test('run() chains follow-up turns for Codex provider over websocket', async (t)
   for await (const _ of turnCoordinator.start('Second message')) {
     // consume events
   }
-  t.is(typeof calls[0].input, 'string', 'Codex should send only the first user message on turn 1');
-  t.falsy(calls[0].opts.previousResponseId, 'Codex should not receive a previousResponseId on turn 1');
-  t.is(typeof calls[1].input, 'string', 'Codex should send only the next user message on turn 2');
-  t.is(calls[1].input, 'Second message');
-  t.is(calls[1].opts.previousResponseId, 'resp-codex-1', 'Codex should chain follow-up turns from turn 1');
+  const firstCodexCall = calls[0] as { input: unknown; opts: Record<string, unknown> };
+  t.is(typeof firstCodexCall.input, 'string', 'Codex should send only the first user message on turn 1');
+  t.falsy(firstCodexCall.opts.previousResponseId, 'Codex should not receive a previousResponseId on turn 1');
+  const secondCodexCall = calls[1] as { input: unknown; opts: Record<string, unknown> };
+  t.is(typeof secondCodexCall.input, 'string', 'Codex should send only the next user message on turn 2');
+  t.is(secondCodexCall.input, 'Second message');
+  t.is(secondCodexCall.opts.previousResponseId, 'resp-codex-1', 'Codex should chain follow-up turns from turn 1');
 });
 
 test('sendMessage() returns usage from final event', async (t) => {
@@ -978,23 +1042,23 @@ test('sendMessage() returns usage from final event', async (t) => {
     usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
   });
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { terminalAdapter } = bundle;
 
   const result = await terminalAdapter.sendMessage('Hello');
 
-  t.is(result.type, 'response');
-  t.deepEqual(result.usage, {
+  t.is((result as unknown as Record<string, unknown>).type, 'response');
+  t.deepEqual((result as unknown as Record<string, unknown>).usage, {
     prompt_tokens: 11,
     completion_tokens: 7,
     total_tokens: 18,
@@ -1022,28 +1086,28 @@ test('handleApprovalDecision() returns usage from final event', async (t) => {
     usage: { inputTokens: 21, outputTokens: 9, totalTokens: 30 },
   });
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return initialStream;
     },
     async continueRunStream() {
       return continuationStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { terminalAdapter } = bundle;
 
   const approvalResult = await terminalAdapter.sendMessage('run command');
-  t.is(approvalResult.type, 'approval_required');
+  t.is((approvalResult as unknown as Record<string, unknown>).type, 'approval_required');
 
   const finalResult = await terminalAdapter.handleApprovalDecision('y');
-  t.is(finalResult.type, 'response');
-  t.deepEqual(finalResult.usage, {
+  t.is((finalResult as unknown as Record<string, unknown>).type, 'response');
+  t.deepEqual((finalResult as unknown as Record<string, unknown>).usage, {
     prompt_tokens: 21,
     completion_tokens: 9,
     total_tokens: 30,
@@ -1057,31 +1121,33 @@ test('sendMessage() logs usage handoff at DEBUG level', async (t) => {
     usage: { inputTokens: 4, outputTokens: 6, totalTokens: 10 },
   });
 
-  const debugLogs = [];
+  const debugLogs: { message: string; meta?: unknown }[] = [];
   const logger = {
     ...mockLogger,
-    debug: (message, meta) => {
+    debug: (message: string, meta?: unknown) => {
       debugLogs.push({ message, meta });
     },
   };
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { terminalAdapter } = bundle;
 
   await terminalAdapter.sendMessage('Hello');
 
   const hasUsageReturnLog = debugLogs.some(
-    (log) => log.message === 'sendMessage returning response' && log.meta?.hasUsage === true,
+    (log) =>
+      log.message === 'sendMessage returning response' &&
+      (log.meta as Record<string, unknown> | undefined)?.hasUsage === true,
   );
   t.true(hasUsageReturnLog);
 });
@@ -1091,56 +1157,61 @@ test('logs diagnostics when usage is missing in stream completion', async (t) =>
   stream.finalOutput = 'Response';
   stream.completed = Promise.resolve({ foo: 'bar' });
 
-  const debugLogs = [];
+  const debugLogs: { message: string; meta?: unknown }[] = [];
   const logger = {
     ...mockLogger,
-    debug: (message, meta) => {
+    debug: (message: string, meta?: unknown) => {
       debugLogs.push({ message, meta });
     },
   };
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { terminalAdapter } = bundle;
 
   await terminalAdapter.sendMessage('Hello');
 
   const missingUsageLog = debugLogs.find((log) => log.message === 'No usage found in stream completion');
   t.truthy(missingUsageLog);
-  t.true(Array.isArray(missingUsageLog.meta?.completedResultKeys), 'completedResultKeys should be present');
+  t.true(
+    Array.isArray((missingUsageLog as { message: string; meta?: Record<string, unknown> }).meta?.completedResultKeys),
+    'completedResultKeys should be present',
+  );
 });
 
 test('sendMessage() extracts usage from stream.rawResponses when completed is void', async (t) => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Response' }]);
   stream.finalOutput = 'Response';
   stream.completed = Promise.resolve(undefined);
-  stream.rawResponses = [{ usage: { inputTokens: 13, outputTokens: 8, totalTokens: 21 } }];
+  (stream as unknown as Record<string, unknown>).rawResponses = [
+    { usage: { inputTokens: 13, outputTokens: 8, totalTokens: 21 } },
+  ];
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { terminalAdapter } = bundle;
 
   const result = await terminalAdapter.sendMessage('Hello');
-  t.is(result.type, 'response');
-  t.deepEqual(result.usage, {
+  t.is((result as unknown as Record<string, unknown>).type, 'response');
+  t.deepEqual((result as unknown as Record<string, unknown>).usage, {
     prompt_tokens: 13,
     completion_tokens: 8,
     total_tokens: 21,
@@ -1165,26 +1236,27 @@ test('sendMessage() preserves cache usage from streaming events when final usage
     },
   ];
 
-  const stream = new MockStream(events, {
+  const stream = new MockStream(events);
+  stream.completed = Promise.resolve({
     usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
   });
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { terminalAdapter } = bundle;
 
   const result = await terminalAdapter.sendMessage('Hello');
-  t.is(result.type, 'response');
-  t.deepEqual(result.usage, {
+  t.is((result as unknown as Record<string, unknown>).type, 'response');
+  t.deepEqual((result as unknown as Record<string, unknown>).usage, {
     prompt_tokens: 100,
     completion_tokens: 20,
     total_tokens: 120,
@@ -1211,29 +1283,29 @@ test('run() emits usage_update when usage is nested in event.data (raw_model_str
   const stream = new MockStream(events);
   stream.finalOutput = 'Hello';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of turnCoordinator.start('hi')) {
     emitted.push(ev);
   }
 
-  const usageEvents = emitted.filter((e) => e.type === 'usage_update');
+  const usageEvents = emitted.filter((e: ConversationEvent) => e.type === 'usage_update');
   t.true(usageEvents.length >= 1, 'Should emit at least one usage_update event');
-  t.is(usageEvents[0].usage.prompt_tokens, 50);
-  t.is(usageEvents[0].usage.completion_tokens, 25);
-  t.is(usageEvents[0].usage.total_tokens, 75);
+  t.is((usageEvents[0] as UsageUpdateEvent).usage.prompt_tokens, 50);
+  t.is((usageEvents[0] as UsageUpdateEvent).usage.completion_tokens, 25);
+  t.is((usageEvents[0] as UsageUpdateEvent).usage.total_tokens, 75);
 });
 
 test('run() emits usage_update when raw model stream usage is nested in event.data.event', async (t) => {
@@ -1260,29 +1332,29 @@ test('run() emits usage_update when raw model stream usage is nested in event.da
   const stream = new MockStream(events);
   stream.finalOutput = 'Hello';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of turnCoordinator.start('hi')) {
     emitted.push(ev);
   }
 
-  const usageEvents = emitted.filter((e) => e.type === 'usage_update');
+  const usageEvents = emitted.filter((e: ConversationEvent) => e.type === 'usage_update');
   t.true(usageEvents.length >= 1, 'Should emit at least one usage_update event');
-  t.is(usageEvents[0].usage.prompt_tokens, 8);
-  t.is(usageEvents[0].usage.completion_tokens, 3);
-  t.is(usageEvents[0].usage.total_tokens, 11);
+  t.is((usageEvents[0] as UsageUpdateEvent).usage.prompt_tokens, 8);
+  t.is((usageEvents[0] as UsageUpdateEvent).usage.completion_tokens, 3);
+  t.is((usageEvents[0] as UsageUpdateEvent).usage.total_tokens, 11);
 });
 
 test('run() emits usage_update when usage is at top level of event', async (t) => {
@@ -1300,29 +1372,29 @@ test('run() emits usage_update when usage is at top level of event', async (t) =
   const stream = new MockStream(events);
   stream.finalOutput = 'Hello';
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of turnCoordinator.start('hi')) {
     emitted.push(ev);
   }
 
-  const usageEvents = emitted.filter((e) => e.type === 'usage_update');
+  const usageEvents = emitted.filter((e: ConversationEvent) => e.type === 'usage_update');
   t.true(usageEvents.length >= 1, 'Should emit at least one usage_update event');
-  t.is(usageEvents[0].usage.prompt_tokens, 100);
-  t.is(usageEvents[0].usage.completion_tokens, 50);
-  t.is(usageEvents[0].usage.total_tokens, 150);
+  t.is((usageEvents[0] as UsageUpdateEvent).usage.prompt_tokens, 100);
+  t.is((usageEvents[0] as UsageUpdateEvent).usage.completion_tokens, 50);
+  t.is((usageEvents[0] as UsageUpdateEvent).usage.total_tokens, 150);
 });
 
 test('undoLastUserTurn() returns { text, imageCount: 0 } after a completed run', async (t) => {
@@ -1333,21 +1405,21 @@ test('undoLastUserTurn() returns { text, imageCount: 0 } after a completed run',
     { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Reply' }] },
   ];
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
     getProvider() {
       return 'openrouter';
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
   for await (const _ of turnCoordinator.start('hello')) {
     // consume
@@ -1357,18 +1429,18 @@ test('undoLastUserTurn() returns { text, imageCount: 0 } after a completed run',
 });
 
 test('undoLastUserTurn() returns null when no genuine user turn exists', async (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return new MockStream([]);
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { stateFacade } = bundle;
 
   const result = stateFacade.undoLastUserTurn();
   t.is(result, null);
@@ -1392,16 +1464,16 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
 
   class GatedStream {
     constructor() {
-      this.lastResponseId = 'resp_gated';
-      this.interruptions = [];
-      this.state = {};
-      this.newItems = [];
-      this.history = [
+      (this as unknown as Record<string, unknown>).lastResponseId = 'resp_gated';
+      (this as unknown as Record<string, unknown>).interruptions = [];
+      (this as unknown as Record<string, unknown>).state = {};
+      (this as unknown as Record<string, unknown>).newItems = [];
+      (this as unknown as Record<string, unknown>).history = [
         { role: 'user', type: 'message', content: 'msg2' },
         { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Reply2' }] },
       ];
 
-      this.finalOutput = 'Reply2';
+      (this as unknown as Record<string, unknown>).finalOutput = 'Reply2';
     }
 
     async *[Symbol.asyncIterator]() {
@@ -1411,7 +1483,7 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
   }
 
   // Turn 3: capture the input so we can assert the history array.
-  let msg3Input;
+  let msg3Input: unknown;
   const stream3 = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply3' }]);
   stream3.finalOutput = 'Reply3';
   stream3.history = [
@@ -1422,8 +1494,8 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
   ];
 
   let callCount = 0;
-  const mockClient = {
-    async startStream(input) {
+  const mockClient = createMockAgentClient({
+    async startStream(input: unknown) {
       callCount++;
       if (callCount === 1) return stream1;
       if (callCount === 2) return new GatedStream();
@@ -1433,14 +1505,14 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
     getProvider() {
       return 'openrouter';
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
   // (a) Run msg1 to completion — store now has msg1 + Reply1.
   for await (const _ of turnCoordinator.start('msg1')) {
@@ -1463,7 +1535,7 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
   t.deepEqual(undone, { text: 'msg2', imageCount: 0 });
 
   // (d) Resolve the gate so the gated run completes (but its store write should be skipped).
-  gateResolve();
+  (gateResolve as unknown as () => void)();
   await msg2Done;
 
   // (e) Issue msg3 and capture the input passed to startStream.
@@ -1472,27 +1544,27 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
   }
   // The input to startStream for msg3 must contain msg1 but NOT msg2.
   t.true(Array.isArray(msg3Input), 'msg3 should receive history array');
-  const contents = msg3Input.map((item) => item.content);
+  const contents = (msg3Input as Record<string, unknown>[]).map((item: Record<string, unknown>) => item.content);
   t.true(contents.includes('msg1'), 'history should contain msg1');
   t.false(contents.includes('msg2'), 'history must NOT contain msg2 (generation guard worked)');
 });
 
 test('run() throws AbortError when the stream is cancelled/aborted', async (t) => {
   const stream = new MockStream([]);
-  stream.cancelled = true;
+  (stream as unknown as Record<string, unknown>).cancelled = true;
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
   await t.throwsAsync(
     async () => {
@@ -1559,38 +1631,40 @@ test('run() sends full history after undo on a chaining provider (Responses API)
     },
   ];
 
-  const calls = [];
+  const calls: ClientCall[] = [];
   let callCount = 0;
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openai';
     },
-    async startStream(input, opts) {
+    async startStream(input: unknown, opts?: unknown) {
       callCount++;
       calls.push({ input, opts });
       if (callCount === 1) return firstStream;
       if (callCount === 2) return secondStream;
       return afterUndoStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
   // Turn 1: chaining provider sends just the text string
   for await (const _ of turnCoordinator.start('First message')) {
   }
-  t.is(typeof calls[0].input, 'string', 'Turn 1: chaining sends just the text');
-  t.falsy(calls[0].opts.previousResponseId);
+  const firstChainCall = calls[0] as { input: unknown; opts: Record<string, unknown> };
+  t.is(typeof firstChainCall.input, 'string', 'Turn 1: chaining sends just the text');
+  t.falsy(firstChainCall.opts.previousResponseId);
 
   // Turn 2: chaining provider uses previousResponseId from turn 1
   for await (const _ of turnCoordinator.start('Second message')) {
   }
-  t.is(typeof calls[1].input, 'string', 'Turn 2: chaining sends just the text');
+  const secondChainCall = calls[1] as { input: unknown; opts: Record<string, unknown> };
+  t.is(typeof secondChainCall.input, 'string', 'Turn 2: chaining sends just the text');
 
   // Undo: removes second user turn, nullifies previousResponseId
   stateFacade.undoLastUserTurn();
@@ -1598,7 +1672,7 @@ test('run() sends full history after undo on a chaining provider (Responses API)
   // Turn 3 (after undo): must send full history, NOT just the latest message
   for await (const _ of turnCoordinator.start('Retry message')) {
   }
-  const thirdCall = calls[2];
+  const thirdCall = calls[2] as { input: unknown[]; opts: Record<string, unknown> };
   t.true(Array.isArray(thirdCall.input), 'Turn after undo must send full history array');
   t.true(thirdCall.input.length >= 2, 'Full history includes prior turns');
   t.falsy(thirdCall.opts.previousResponseId, 'No previousResponseId after undo');
@@ -1637,24 +1711,24 @@ test('run() resyncs full history after resume before returning to chaining provi
     },
   ];
 
-  const calls = [];
+  const calls: unknown[] = [];
   const streams = [firstResumedStream, chainedStream];
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openai';
     },
-    async startStream(input, opts) {
+    async startStream(input: unknown, opts?: unknown) {
       calls.push({ input, opts });
       return streams.shift();
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 'resumed-session',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
   stateFacade.importState({
     history: [
       { role: 'user', type: 'message', content: 'Earlier message' },
@@ -1673,31 +1747,33 @@ test('run() resyncs full history after resume before returning to chaining provi
 
   for await (const _ of turnCoordinator.start('Resume follow-up')) {
   }
-  t.true(Array.isArray(calls[0].input), 'First resumed turn must resend full history');
-  t.falsy(calls[0].opts.previousResponseId, 'First resumed turn must not use persisted previousResponseId');
+  const firstResumeCall = calls[0] as { input: { content: unknown }[]; opts: Record<string, unknown> };
+  t.true(Array.isArray(firstResumeCall.input), 'First resumed turn must resend full history');
+  t.falsy(firstResumeCall.opts.previousResponseId, 'First resumed turn must not use persisted previousResponseId');
   t.deepEqual(
-    calls[0].input.map((item) => item.content),
+    firstResumeCall.input.map((item) => item.content),
     ['Earlier message', [{ type: 'output_text', text: 'Earlier reply' }], 'Resume follow-up'],
   );
 
   for await (const _ of turnCoordinator.start('Second follow-up')) {
   }
-  t.is(calls[1].input, 'Second follow-up', 'Second resumed turn should return to delta chaining');
-  t.is(calls[1].opts.previousResponseId, 'resp-resynced');
+  const secondResumeCall = calls[1] as { input: unknown; opts: Record<string, unknown> };
+  t.is(secondResumeCall.input, 'Second follow-up', 'Second resumed turn should return to delta chaining');
+  t.is(secondResumeCall.opts.previousResponseId, 'resp-resynced');
 });
 
 test('run() ignores a stale completion after importState() bumps generation', async (t) => {
-  let releaseGate;
-  const gate = new Promise((resolve) => {
+  let releaseGate: () => void;
+  const gate = new Promise<void>((resolve) => {
     releaseGate = resolve;
   });
 
   class GatedStream extends MockStream {
     constructor() {
       super([]);
-      this.lastResponseId = 'resp-stale';
-      this.finalOutput = 'stale reply';
-      this.history = [
+      (this as unknown as Record<string, unknown>).lastResponseId = 'resp-stale';
+      (this as unknown as Record<string, unknown>).finalOutput = 'stale reply';
+      (this as unknown as Record<string, unknown>).history = [
         { role: 'user', type: 'message', content: 'stale request' },
         {
           role: 'assistant',
@@ -1727,25 +1803,25 @@ test('run() ignores a stale completion after importState() bumps generation', as
   freshStream.finalOutput = 'fresh reply';
   freshStream.lastResponseId = 'resp-fresh';
 
-  const calls = [];
-  const mockClient = {
+  const calls: ClientCall[] = [];
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openai';
     },
-    async startStream(input, opts) {
+    async startStream(input: unknown, opts?: unknown) {
       calls.push({ input, opts });
       return calls.length === 1 ? new GatedStream() : freshStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
-  const staleEvents = [];
+  const staleEvents: ConversationEvent[] = [];
   const staleRun = (async () => {
     for await (const event of turnCoordinator.start('stale request')) {
       staleEvents.push(event);
@@ -1761,7 +1837,7 @@ test('run() ignores a stale completion after importState() bumps generation', as
     updatedAt: new Date().toISOString(),
   });
 
-  releaseGate();
+  releaseGate!();
   await staleRun;
 
   t.deepEqual(staleEvents, []);
@@ -1770,31 +1846,32 @@ test('run() ignores a stale completion after importState() bumps generation', as
   for await (const _ of turnCoordinator.start('fresh request')) {
     // consume
   }
-  t.is(calls[1].input, 'fresh request');
-  t.falsy(calls[1].opts.previousResponseId);
+  const freshCall = calls[1] as { input: unknown; opts: Record<string, unknown> };
+  t.is(freshCall.input, 'fresh request');
+  t.falsy(freshCall.opts.previousResponseId);
 });
 
 test('run() with image attachment does not throw when supportsChaining is true', async (t) => {
   const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'Reply' }]);
   stream.finalOutput = 'Reply';
 
-  let receivedInput;
-  const mockClient = {
-    async startStream(input) {
+  let receivedInput: unknown;
+  const mockClient = createMockAgentClient({
+    async startStream(input: unknown) {
       receivedInput = input;
       return stream;
     },
     getProvider() {
       return 'openai';
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
   const turn = {
     text: 'describe this image',
@@ -1809,7 +1886,7 @@ test('run() with image attachment does not throw when supportsChaining is true',
     ],
   };
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of turnCoordinator.start(turn)) {
     emitted.push(ev);
   }
@@ -1818,35 +1895,32 @@ test('run() with image attachment does not throw when supportsChaining is true',
   // it should send the input wrapped in an array, not as a single object, to avoid
   // "originalInput is not iterable" when agents SDK processes it.
   t.true(Array.isArray(receivedInput), 'Input should be wrapped in an array');
-  t.is(receivedInput.length, 1);
-  t.is(receivedInput[0].role, 'user');
-  t.is(receivedInput[0].content[0].type, 'input_text');
-  t.is(receivedInput[0].content[1].type, 'input_image');
+  t.is((receivedInput as unknown[]).length, 1);
+  const firstReceived = (receivedInput as Record<string, unknown>[])[0];
+  t.is(firstReceived.role, 'user');
+  const receivedContent = firstReceived.content as { type: string }[];
+  t.is(receivedContent[0].type, 'input_text');
+  t.is(receivedContent[1].type, 'input_image');
 });
 
 test('previewLargeUncachedInput() does not mutate history or consume pending mode notice', (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'codex';
     },
-  };
-  const settings = new Map([
+  });
+  const settingsService = createMockSettingsService([
     ['agent.model', 'gpt-5'],
     ['agent.provider', 'codex'],
     ['agent.reasoningEffort', 'medium'],
     ['app.planMode', true],
   ]);
-  const settingsService = {
-    get(key) {
-      return settings.get(key);
-    },
-  };
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, settingsService, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { stateFacade } = bundle;
 
   stateFacade.queueModeNotice('Plan mode enabled');
   const before = stateFacade.exportState();
@@ -1858,27 +1932,22 @@ test('previewLargeUncachedInput() does not mutate history or consume pending mod
 });
 
 test('previewLargeUncachedInput() estimates from outgoing input instead of accepting accumulated session usage overrides', (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'codex';
     },
-  };
-  const settings = new Map([
+  });
+  const settingsService = createMockSettingsService([
     ['agent.model', 'gpt-5'],
     ['agent.provider', 'codex'],
     ['agent.reasoningEffort', 'medium'],
   ]);
-  const settingsService = {
-    get(key) {
-      return settings.get(key);
-    },
-  };
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, settingsService, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { stateFacade } = bundle;
 
   const large = 'x'.repeat(64_000 * 4);
   const decision = stateFacade.previewLargeUncachedInput(large, 1_000);
@@ -1895,30 +1964,25 @@ test('sendMessage() records successful large guard state after provider request 
     { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'ok' }] },
   ];
 
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'codex';
     },
     async startStream() {
       return firstStream;
     },
-  };
-  const settings = new Map([
+  });
+  const settingsService = createMockSettingsService([
     ['agent.model', 'gpt-5'],
     ['agent.provider', 'codex'],
     ['agent.reasoningEffort', 'medium'],
   ]);
-  const settingsService = {
-    get(key) {
-      return settings.get(key);
-    },
-  };
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, settingsService, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { terminalAdapter, stateFacade } = bundle;
 
   const large = 'x'.repeat(64_000 * 4);
   t.is(stateFacade.previewLargeUncachedInput(large, 1_000).action, 'allow');
@@ -1931,20 +1995,20 @@ test('sendMessage() records successful large guard state after provider request 
 });
 
 test('run() yields an error event carrying droppedUserMessage when startStream fails pre-stream', async (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       throw new Error('upstream 500');
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   let thrown = null;
   try {
     for await (const ev of turnCoordinator.start('hello')) {
@@ -1957,11 +2021,15 @@ test('run() yields an error event carrying droppedUserMessage when startStream f
   // The run wraps the throw inside the catch and re-throws after yielding the
   // error event, but consumer-cleanup may swallow the re-throw — what matters
   // is that the error event carried the drop signal.
-  const errorEvent = emitted.find((e) => e.type === 'error');
+  const errorEvent = emitted.find((e: ConversationEvent) => e.type === 'error');
   t.truthy(errorEvent, 'should emit an error event');
+  if (!errorEvent) {
+    t.fail('expected an error event');
+    return;
+  }
   t.truthy(errorEvent.droppedUserMessage, 'error event should carry droppedUserMessage');
-  t.is(errorEvent.droppedUserMessage.text, 'hello');
-  t.is(errorEvent.droppedUserMessage.imageCount, 0);
+  t.is(errorEvent.droppedUserMessage!.text, 'hello');
+  t.is(errorEvent.droppedUserMessage!.imageCount, 0);
 
   // And the store should have rolled back the user turn so /undo state is clean.
   t.is(stateFacade.listUserTurns().length, 0);
@@ -1969,20 +2037,20 @@ test('run() yields an error event carrying droppedUserMessage when startStream f
 });
 
 test('run() omits droppedUserMessage when no user turn was added (skipUserMessage)', async (t) => {
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       throw new Error('upstream 500');
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator } = bundle;
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   try {
     for await (const ev of turnCoordinator.start('hello', { skipUserMessage: true })) {
       emitted.push(ev);
@@ -1990,8 +2058,12 @@ test('run() omits droppedUserMessage when no user turn was added (skipUserMessag
   } catch {
     // expected
   }
-  const errorEvent = emitted.find((e) => e.type === 'error');
+  const errorEvent = emitted.find((e: ConversationEvent) => e.type === 'error');
   t.truthy(errorEvent);
+  if (!errorEvent) {
+    t.fail('expected an error event');
+    return;
+  }
   t.is(errorEvent.droppedUserMessage, undefined);
 });
 
@@ -1999,31 +2071,31 @@ test('run() emits user_message_consumed_for_abort when an aborted approval is be
   // Plant an aborted approval context directly via approvalState so the
   // session's consumeAborted() picks it up. The downstream fake-execution
   // path will throw (no real interruption), but we only care about event order.
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     async startStream() {
       throw new Error('not used');
     },
     async continueRunStream() {
       throw new Error('continue not implemented in test');
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade, approvalState } = bundle;
 
   approvalState.setPending({
-    state: {},
+    state: {} as RunState<any, any>,
     interruption: { type: 'tool_approval_item', rawItem: { name: 'noop', callId: 'c1' } },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
   });
   approvalState.abortPending();
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   try {
     for await (const ev of turnCoordinator.start('follow up text')) {
       emitted.push(ev);
@@ -2031,7 +2103,7 @@ test('run() emits user_message_consumed_for_abort when an aborted approval is be
   } catch {
     // expected — downstream paths will fail in this minimal mock
   }
-  const idx = emitted.findIndex((e) => e.type === 'user_message_consumed_for_abort');
+  const idx = emitted.findIndex((e: ConversationEvent) => e.type === 'user_message_consumed_for_abort');
   t.true(idx >= 0, 'must emit user_message_consumed_for_abort');
   // The store must not have a genuine user turn for this input.
   t.is(stateFacade.listUserTurns().length, 0);
@@ -2046,24 +2118,24 @@ test('switchProvider() clears provider continuity but preserves transcript histo
   secondStream.finalOutput = 'Second reply';
   secondStream.lastResponseId = 'resp-openrouter-1';
 
-  const calls = [];
+  const calls: ClientCall[] = [];
   let provider = 'openai';
   let clearConversationsCalls = 0;
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return provider;
     },
-    setProvider(nextProvider) {
+    setProvider(nextProvider: string) {
       provider = nextProvider;
     },
     clearConversations() {
       clearConversationsCalls++;
     },
-    async startStream(input, opts) {
+    async startStream(input: unknown, opts?: unknown) {
       calls.push({ input, opts, provider });
       return calls.length === 1 ? firstStream : secondStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
@@ -2076,7 +2148,7 @@ test('switchProvider() clears provider continuity but preserves transcript histo
   }
 
   approvalState.setPending({
-    state: {},
+    state: {} as RunState<any, any>,
     interruption: { type: 'tool_approval_item', rawItem: { name: 'noop', callId: 'c1' } },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
@@ -2091,7 +2163,7 @@ test('switchProvider() clears provider continuity but preserves transcript histo
     'pending approval should be cleared on provider switch',
   );
 
-  const emitted = [];
+  const emitted: ConversationEvent[] = [];
   for await (const ev of turnCoordinator.start('Second message')) {
     emitted.push(ev);
   }
@@ -2099,11 +2171,11 @@ test('switchProvider() clears provider continuity but preserves transcript histo
   t.is(clearConversationsCalls, 1);
   t.is(provider, 'openrouter');
   t.false(
-    emitted.some((event) => event.type === 'user_message_consumed_for_abort'),
+    emitted.some((event: ConversationEvent) => event.type === 'user_message_consumed_for_abort'),
     'aborted approval state should be cleared on provider switch',
   );
 
-  const secondCall = calls[1];
+  const secondCall = calls[1] as { input: unknown[]; opts: Record<string, unknown> };
   t.true(Array.isArray(secondCall.input), 'provider switch should force full-history replay on the next turn');
   t.true(secondCall.input.length >= 2, 'replayed history should include the earlier user turn');
   t.falsy(secondCall.opts.previousResponseId, 'provider switch must discard previousResponseId from the old provider');
@@ -2122,28 +2194,28 @@ test('setModel() clears provider continuity and forces full-history replay on th
   secondStream.finalOutput = 'Second reply';
   secondStream.lastResponseId = 'resp-model-2';
 
-  const calls = [];
-  const models = [];
-  const mockClient = {
+  const calls: ClientCall[] = [];
+  const models: string[] = [];
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openai';
     },
-    setModel(model) {
+    setModel(model: string) {
       models.push(model);
     },
     clearConversations() {},
-    async startStream(input, opts) {
+    async startStream(input: unknown, opts?: unknown) {
       calls.push({ input, opts });
       return calls.length === 1 ? firstStream : secondStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, runtimeController } = bundle;
 
   for await (const _ of turnCoordinator.start('First message')) {
   }
@@ -2154,8 +2226,9 @@ test('setModel() clears provider continuity and forces full-history replay on th
   }
 
   t.deepEqual(models, ['gpt-next']);
-  t.true(Array.isArray(calls[1].input), 'model change should force a full-history replay');
-  t.falsy(calls[1].opts.previousResponseId, 'model change must discard previousResponseId');
+  const secondCall = calls[1] as { input: unknown[]; opts: Record<string, unknown> };
+  t.true(Array.isArray(secondCall.input), 'model change should force a full-history replay');
+  t.falsy(secondCall.opts.previousResponseId, 'model change must discard previousResponseId');
 });
 
 test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injected on retry', async (t) => {
@@ -2209,7 +2282,7 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
   ];
 
   // Turn 2 (after undo + retry): capture what input the model receives.
-  let retryInput;
+  let retryInput: unknown;
   const stream2 = new MockStream([{ type: 'response.output_text.delta', delta: 'Retried' }]);
   stream2.finalOutput = 'Retried';
   stream2.history = [
@@ -2222,24 +2295,24 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
   ];
 
   let callCount = 0;
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openrouter';
     },
-    async startStream(input) {
+    async startStream(input: unknown) {
       callCount++;
       if (callCount === 1) return stream1;
       retryInput = input;
       return stream2;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
   // Run turn 1 to completion — tool ledger now has the tool call entry.
   for await (const _ of turnCoordinator.start('run echo hello')) {
@@ -2261,7 +2334,9 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
     // consume
   }
   t.true(Array.isArray(retryInput), 'retry should send full history');
-  const callIds = retryInput.filter((item) => item.callId || item.call_id).map((item) => item.callId || item.call_id);
+  const callIds = (retryInput as Record<string, unknown>[])
+    .filter((item: Record<string, unknown>) => item.callId || item.call_id)
+    .map((item: Record<string, unknown>) => item.callId || item.call_id);
   t.false(callIds.includes(toolCallId), 'retried history must NOT contain old tool call IDs');
 });
 
@@ -2339,7 +2414,7 @@ test('undoLastUserTurn() preserves earlier tool ledger entries that still belong
     },
   ];
 
-  let retryInput;
+  let retryInput: unknown;
   const retryStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Retry done' }]);
   retryStream.finalOutput = 'Retry done';
   retryStream.lastResponseId = 'resp-retry';
@@ -2363,26 +2438,26 @@ test('undoLastUserTurn() preserves earlier tool ledger entries that still belong
   ];
 
   let callCount = 0;
-  const mockClient = {
+  const mockClient = createMockAgentClient({
     getProvider() {
       return 'openai';
     },
     clearConversations() {},
-    async startStream(input) {
+    async startStream(input: unknown) {
       callCount++;
       if (callCount === 1) return stream1;
       if (callCount === 2) return stream2;
       retryInput = input;
       return retryStream;
     },
-  };
+  });
 
   const bundle = createConversationSession({
     sessionId: 's1',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
   for await (const _ of turnCoordinator.start('first tool turn')) {
   }
@@ -2403,7 +2478,7 @@ test('undoLastUserTurn() preserves earlier tool ledger entries that still belong
   }
 
   t.true(Array.isArray(retryInput), 'retry should send full history');
-  const retryCallIds = retryInput
+  const retryCallIds = (retryInput as Record<string, unknown>[])
     .filter((item) => item.callId || item.call_id)
     .map((item) => item.callId || item.call_id);
   t.true(retryCallIds.includes(firstToolCallId), 'retry should keep earlier retained tool call IDs');

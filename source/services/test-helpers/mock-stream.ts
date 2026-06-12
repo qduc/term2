@@ -1,12 +1,13 @@
 export class MockStream<TEvent = unknown> implements AsyncIterable<TEvent> {
   events: TEvent[];
-  completed: Promise<void>;
+  completed: Promise<unknown>;
   lastResponseId: string;
   interruptions: unknown[];
   state: Record<string, unknown>;
   newItems: unknown[];
   history: unknown[];
   finalOutput: string;
+  output: unknown[];
 
   constructor(events: TEvent[]) {
     this.events = events;
@@ -17,6 +18,7 @@ export class MockStream<TEvent = unknown> implements AsyncIterable<TEvent> {
     this.newItems = [];
     this.history = [];
     this.finalOutput = '';
+    this.output = [];
   }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<TEvent, void, unknown> {

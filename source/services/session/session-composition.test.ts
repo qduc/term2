@@ -1,5 +1,6 @@
 import test from 'ava';
 import { createConversationSession, createConversationSessionComposition } from './session-composition.js';
+import type { ConversationAgentClient } from '../conversation-agent-client.js';
 
 const noop = () => {};
 
@@ -15,39 +16,44 @@ const makeLogger = () => ({
 });
 
 const sessionContextService = {
-  runWithContext: (_ctx, fn) => fn(),
+  runWithContext: (_ctx: any, fn: () => any) => fn(),
   getContext: () => null,
 };
 
-const makeMockClient = (overrides = {}) => ({
-  async startStream(_input, _opts) {
-    return {
-      interruptions: [],
-      state: null,
-      history: [],
-      newItems: [],
-      finalOutput: 'ok',
-      lastResponseId: null,
-      [Symbol.asyncIterator]() {
-        let done = false;
-        return {
-          next() {
-            if (!done) {
-              done = true;
-              return Promise.resolve({
-                done: false,
-                value: { type: 'response.output_text.delta', delta: 'ok' },
-              });
-            }
-            return Promise.resolve({ done: true, value: undefined });
-          },
-        };
-      },
-    };
-  },
-  abort: noop,
-  ...overrides,
-});
+const makeMockClient = (overrides = {}) =>
+  ({
+    async startStream(_input: any, _opts: any) {
+      return {
+        interruptions: [],
+        state: null,
+        history: [],
+        newItems: [],
+        finalOutput: 'ok',
+        lastResponseId: null,
+        [Symbol.asyncIterator]() {
+          let done = false;
+          return {
+            next() {
+              if (!done) {
+                done = true;
+                return Promise.resolve({
+                  done: false,
+                  value: { type: 'response.output_text.delta', delta: 'ok' },
+                });
+              }
+              return Promise.resolve({ done: true, value: undefined });
+            },
+          };
+        },
+      };
+    },
+    abort: noop,
+    continueRunStream: noop as any,
+    setModel: noop as any,
+    addToolInterceptor: noop as any,
+    chat: noop as any,
+    ...overrides,
+  } as unknown as ConversationAgentClient);
 
 // ── Factory return shape ───────────────────────────────────────────
 
@@ -116,7 +122,7 @@ test('createConversationSessionComposition composes a plain appState object with
       getTurnItems: () => [],
       getPendingTurnItems: () => [],
       getPersistedTurnState: () => [],
-    },
+    } as any,
   });
   t.is(Object.getPrototypeOf(appState), Object.prototype);
   t.is(appState.statusMachine.current, 'idle');

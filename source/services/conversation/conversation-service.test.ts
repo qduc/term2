@@ -1,5 +1,8 @@
 import test from 'ava';
 import { ConversationService } from './conversation-service.js';
+import type { ConversationAgentClient } from '../conversation-agent-client.js';
+import type { AgentStream } from '../agent-stream.js';
+import type { ConversationTerminal, FinalTerminal, ApprovalRequiredTerminal } from '../../contracts/conversation.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 import {
   clearApprovalRejectionMarkers,
@@ -15,14 +18,40 @@ const mockLogger = {
   debug: () => {},
   security: () => {},
   setCorrelationId: () => {},
-  getCorrelationId: () => {},
+  getCorrelationId: (): string | undefined => undefined,
   clearCorrelationId: () => {},
 };
 
 const sessionContextService = {
-  runWithContext: (_context, fn) => fn(),
+  runWithContext: <T>(_context: unknown, fn: () => T): T => fn(),
   getContext: () => null,
 };
+
+/**
+ * Creates a partial ConversationAgentClient with safe no-op defaults.
+ * Pass only the methods the test actually exercises.
+ */
+function partialClient(methods: Record<string, unknown> = {}): ConversationAgentClient {
+  return {
+    chat: async () => '',
+    abort: () => {},
+    setModel: () => {},
+    addToolInterceptor: () => () => {},
+    startStream: async () => new MockStream([]) as unknown as AgentStream,
+    continueRunStream: async () => new MockStream([]) as unknown as AgentStream,
+    ...methods,
+  } as ConversationAgentClient;
+}
+
+function asFinal(result: ConversationTerminal): FinalTerminal {
+  if (result.type !== 'response') throw new Error('Expected FinalTerminal');
+  return result;
+}
+
+function asApproval(result: ConversationTerminal): ApprovalRequiredTerminal {
+  if (result.type !== 'approval_required') throw new Error('Expected ApprovalRequiredTerminal');
+  return result;
+}
 
 test.before(() => {
   registerToolFormatters([{ name: 'shell', formatCommandMessage: formatShellCommandMessage }]);
@@ -40,13 +69,13 @@ test('emits live text chunks for response.output_text.delta events', async (t) =
     { type: 'response.output_text.delta', delta: ' world' },
   ];
 
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       return new MockStream(events);
     },
-  };
+  });
 
-  const chunks = [];
+  const chunks: any[] = [];
   const service = new ConversationService({
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
@@ -62,7 +91,7 @@ test('emits live text chunks for response.output_text.delta events', async (t) =
     { full: 'Hello world', chunk: ' world' },
   ]);
   t.is(result.type, 'response');
-  t.is(result.finalText, 'Hello world');
+  t.is(asFinal(result).finalText, 'Hello world');
 });
 
 test('emits ConversationEvents (text_delta → final) in order', async (t) => {
@@ -71,13 +100,13 @@ test('emits ConversationEvents (text_delta → final) in order', async (t) => {
     { type: 'response.output_text.delta', delta: ' world' },
   ];
 
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       return new MockStream(events);
     },
-  };
+  });
 
-  const emitted = [];
+  const emitted: any[] = [];
   const service = new ConversationService({
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
@@ -89,7 +118,7 @@ test('emits ConversationEvents (text_delta → final) in order', async (t) => {
   });
 
   t.is(result.type, 'response');
-  t.is(result.finalText, 'Hello world');
+  t.is(asFinal(result).finalText, 'Hello world');
   t.deepEqual(
     emitted.map((e) => e.type),
     ['text_delta', 'text_delta', 'final'],
@@ -107,13 +136,13 @@ test('emits approval_required ConversationEvent for interruptions', async (t) =>
   const initialStream = new MockStream([]);
   initialStream.interruptions = [interruption];
 
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       return initialStream;
     },
-  };
+  });
 
-  const emitted = [];
+  const emitted: any[] = [];
   const service = new ConversationService({
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
@@ -125,7 +154,7 @@ test('emits approval_required ConversationEvent for interruptions', async (t) =>
   });
 
   t.is(result.type, 'approval_required');
-  t.is(result.approval.callId, 'call-xyz');
+  t.is(asApproval(result).approval.callId, 'call-xyz');
   t.is(emitted.length, 1);
   t.is(emitted[0].type, 'approval_required');
   t.is(emitted[0].approval.toolName, 'bash');
@@ -144,13 +173,13 @@ test('compacts whitespace-heavy JSON arguments for approvals', async (t) => {
   const initialStream = new MockStream([]);
   initialStream.interruptions = [interruption];
 
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       return initialStream;
     },
-  };
+  });
 
-  const emitted = [];
+  const emitted: any[] = [];
   const service = new ConversationService({
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
@@ -180,11 +209,11 @@ test('emits events when resolving aborted approval on next message', async (t) =
   initialStream.state = {
     approveCalls: [],
     rejectCalls: [],
-    approve(arg) {
-      this.approveCalls.push(arg);
+    approve(arg: unknown) {
+      (this as any).approveCalls.push(arg);
     },
-    reject(arg) {
-      this.rejectCalls.push(arg);
+    reject(arg: unknown) {
+      (this as any).rejectCalls.push(arg);
     },
   };
 
@@ -192,7 +221,7 @@ test('emits events when resolving aborted approval on next message', async (t) =
   continuationStream.finalOutput = 'After abort';
 
   let interceptorCount = 0;
-  const mockClient = {
+  const mockClient = partialClient({
     abort() {},
     addToolInterceptor() {
       interceptorCount++;
@@ -203,7 +232,7 @@ test('emits events when resolving aborted approval on next message', async (t) =
     async startStream() {
       return initialStream;
     },
-    async continueRunStream(state, options) {
+    async continueRunStream(state: any, options: any) {
       t.is(state, initialStream.state);
       t.deepEqual(options, {
         previousResponseId: 'resp_test',
@@ -212,14 +241,14 @@ test('emits events when resolving aborted approval on next message', async (t) =
       });
       return continuationStream;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
 
-  const approvalEvents = [];
+  const approvalEvents: any[] = [];
   const approvalResult = await service.sendMessage('run command', {
     onEvent(event) {
       approvalEvents.push(event);
@@ -230,7 +259,7 @@ test('emits events when resolving aborted approval on next message', async (t) =
 
   service.abort();
 
-  const resolvedEvents = [];
+  const resolvedEvents: any[] = [];
   const resolvedResult = await service.sendMessage('new input', {
     onEvent(event) {
       resolvedEvents.push(event);
@@ -238,7 +267,7 @@ test('emits events when resolving aborted approval on next message', async (t) =
   });
 
   t.is(resolvedResult.type, 'response');
-  t.is(resolvedResult.finalText, 'After abort');
+  t.is(asFinal(resolvedResult).finalText, 'After abort');
   t.true(resolvedEvents.some((e) => e.type === 'text_delta'));
   t.true(resolvedEvents.some((e) => e.type === 'final'));
   t.is(interceptorCount, 0);
@@ -270,7 +299,7 @@ test('reject with reason and abort+new input yield the same history', async (t) 
     },
   ];
 
-  const runFlow = async (mode) => {
+  const runFlow = async (mode: string) => {
     const interruption = {
       name: 'shell',
       agent: { name: 'CLI Agent' },
@@ -283,11 +312,11 @@ test('reject with reason and abort+new input yield the same history', async (t) 
     initialStream.state = {
       approveCalls: [],
       rejectCalls: [],
-      approve(arg) {
-        this.approveCalls.push(arg);
+      approve(arg: unknown) {
+        (this as any).approveCalls.push(arg);
       },
-      reject(arg) {
-        this.rejectCalls.push(arg);
+      reject(arg: unknown) {
+        (this as any).rejectCalls.push(arg);
       },
     };
     initialStream.history = baseHistory;
@@ -299,8 +328,8 @@ test('reject with reason and abort+new input yield the same history', async (t) 
     const nextStream = new MockStream([]);
     nextStream.finalOutput = 'Next';
 
-    const startCalls = [];
-    const mockClient = {
+    const startCalls: any[] = [];
+    const mockClient = partialClient({
       getProvider() {
         return 'openrouter';
       },
@@ -308,7 +337,7 @@ test('reject with reason and abort+new input yield the same history', async (t) 
         return () => {};
       },
       abort() {},
-      async startStream(input, options) {
+      async startStream(input: any, options: any) {
         startCalls.push({ input, options });
         if (startCalls.length === 1) return initialStream;
         return nextStream;
@@ -316,7 +345,7 @@ test('reject with reason and abort+new input yield the same history', async (t) 
       async continueRunStream() {
         return continuationStream;
       },
-    };
+    });
 
     const service = new ConversationService({
       agentClient: mockClient,
@@ -352,14 +381,14 @@ test('passes previous response ids into subsequent runs', async (t) => {
   streams[1].lastResponseId = 'resp-2';
   streams[1].finalOutput = 'Second run done.';
 
-  const startCalls = [];
-  const mockClient = {
-    async startStream(text, options) {
+  const startCalls: any[] = [];
+  const mockClient = partialClient({
+    async startStream(text: any, options: any) {
       const index = startCalls.length;
       startCalls.push({ text, options });
       return streams[index];
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -373,7 +402,7 @@ test('passes previous response ids into subsequent runs', async (t) => {
     { text: 'second', options: { previousResponseId: 'resp-1', sessionId: 'default' } },
   ]);
   t.is(secondResult.type, 'response');
-  t.is(secondResult.finalText, 'Second run done.');
+  t.is(asFinal(secondResult).finalText, 'Second run done.');
 });
 
 test('emits approval interruptions and resumes after approval', async (t) => {
@@ -388,22 +417,22 @@ test('emits approval interruptions and resumes after approval', async (t) => {
   initialStream.state = {
     approveCalls: [],
     rejectCalls: [],
-    approve(arg) {
-      this.approveCalls.push(arg);
+    approve(arg: unknown) {
+      (this as any).approveCalls.push(arg);
     },
-    reject(arg) {
-      this.rejectCalls.push(arg);
+    reject(arg: unknown) {
+      (this as any).rejectCalls.push(arg);
     },
   };
 
   const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved run' }]);
   continuationStream.finalOutput = 'Approved run';
 
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       return initialStream;
     },
-    async continueRunStream(state, options) {
+    async continueRunStream(state: any, options: any) {
       t.is(state, initialStream.state);
       t.deepEqual(options, {
         previousResponseId: 'resp_test',
@@ -412,7 +441,7 @@ test('emits approval interruptions and resumes after approval', async (t) => {
       });
       return continuationStream;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -420,13 +449,13 @@ test('emits approval interruptions and resumes after approval', async (t) => {
   });
   const approvalResult = await service.sendMessage('run command');
   t.is(approvalResult.type, 'approval_required');
-  t.is(approvalResult.approval.toolName, 'bash');
-  t.is(approvalResult.approval.argumentsText, 'echo hi');
+  t.is(asApproval(approvalResult).approval.toolName, 'bash');
+  t.is(asApproval(approvalResult).approval.argumentsText, 'echo hi');
 
   const finalResult = await service.handleApprovalDecision('y');
   t.truthy(finalResult);
-  t.is(finalResult.type, 'response');
-  t.is(finalResult.finalText, 'Approved run');
+  t.is(finalResult!.type, 'response');
+  t.is(asFinal(finalResult!).finalText, 'Approved run');
   t.deepEqual(initialStream.state.approveCalls, [interruption]);
   t.deepEqual(initialStream.state.rejectCalls, []);
 });
@@ -449,12 +478,12 @@ test('dedupes command messages emitted live from run events', async (t) => {
   const stream = new MockStream(events);
   stream.newItems = [commandItem];
 
-  const emitted = [];
-  const mockClient = {
+  const emitted: any[] = [];
+  const mockClient = partialClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -480,7 +509,7 @@ test('dedupes command messages emitted live from run events', async (t) => {
       toolName: 'shell',
     },
   ]);
-  t.deepEqual(result.commandMessages, []);
+  t.deepEqual(asFinal(result).commandMessages, []);
 });
 
 test('attaches cached shell args when output uses call_id', async (t) => {
@@ -512,12 +541,12 @@ test('attaches cached shell args when output uses call_id', async (t) => {
   const stream = new MockStream(events);
   stream.newItems = [functionCallItem, outputItem];
 
-  const emitted = [];
-  const mockClient = {
+  const emitted: any[] = [];
+  const mockClient = partialClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -543,7 +572,7 @@ test('attaches cached shell args when output uses call_id', async (t) => {
       toolName: 'shell',
     },
   ]);
-  t.deepEqual(result.commandMessages, []);
+  t.deepEqual(asFinal(result).commandMessages, []);
 });
 
 test('preserves approval rejection command messages', async (t) => {
@@ -575,12 +604,12 @@ test('preserves approval rejection command messages', async (t) => {
   const stream = new MockStream(events);
   stream.newItems = [commandItem];
 
-  const emitted = [];
-  const mockClient = {
+  const emitted: any[] = [];
+  const mockClient = partialClient({
     async startStream() {
       return stream;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -596,7 +625,7 @@ test('preserves approval rejection command messages', async (t) => {
   t.true(emitted[0].isApprovalRejection);
   t.is(emitted[0].command, 'should-not-show');
   t.is(emitted[0].output, rejectionPayload);
-  t.deepEqual(result.commandMessages, []);
+  t.deepEqual(asFinal(result).commandMessages, []);
 });
 
 test('dedupes commands from initial stream when continuation history contains them', async (t) => {
@@ -646,8 +675,8 @@ test('dedupes commands from initial stream when continuation history contains th
   initialStream.interruptions = [interruption];
   initialStream.state = {
     approveCalls: [],
-    approve(arg) {
-      this.approveCalls.push(arg);
+    approve(arg: unknown) {
+      (this as any).approveCalls.push(arg);
     },
     reject() {},
   };
@@ -659,16 +688,16 @@ test('dedupes commands from initial stream when continuation history contains th
   // Simulate that the continuation stream's history contains both commands
   continuationStream.history = [lsCommandItem, sedCommandItem];
 
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       return initialStream;
     },
     async continueRunStream() {
       return continuationStream;
     },
-  };
+  });
 
-  const emittedCommands = [];
+  const emittedCommands: any[] = [];
   const service = new ConversationService({
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
@@ -692,12 +721,12 @@ test('dedupes commands from initial stream when continuation history contains th
     },
   });
 
-  t.is(finalResult.type, 'response');
+  t.is(finalResult!.type, 'response');
   // Only 'sed' should be emitted during continuation
   t.is(emittedCommands.length, 2);
   t.is(emittedCommands[1].id, 'call-sed-456-0');
   // Final result should have no additional commands since both were emitted live
-  t.deepEqual(finalResult.commandMessages, []);
+  t.deepEqual(asFinal(finalResult!).commandMessages, []);
 });
 
 test('continuation replays the just-emitted tool in newItems without re-emitting it in the final result', async (t) => {
@@ -731,7 +760,7 @@ test('continuation replays the just-emitted tool in newItems without re-emitting
   initialStream.state = {
     approveCalls: [] as any[],
     approve(arg: any) {
-      this.approveCalls.push(arg);
+      (this as any).approveCalls.push(arg);
     },
     reject() {},
   };
@@ -742,14 +771,14 @@ test('continuation replays the just-emitted tool in newItems without re-emitting
   continuationStream.newItems = [commandItem];
   continuationStream.history = [commandItem];
 
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       return initialStream;
     },
     async continueRunStream() {
       return continuationStream;
     },
-  };
+  });
 
   const emittedCommands: any[] = [];
   const service = new ConversationService({
@@ -769,23 +798,23 @@ test('continuation replays the just-emitted tool in newItems without re-emitting
       emittedCommands.push(message);
     },
   });
-  t.is(finalResult.type, 'response');
+  t.is(finalResult!.type, 'response');
   t.is(emittedCommands.length, 1);
   t.is(emittedCommands[0].id, 'call-replay-1-0');
-  t.deepEqual(finalResult.commandMessages, []);
+  t.deepEqual(asFinal(finalResult!).commandMessages, []);
 });
 
 test('resetWithNewId() clears conversation state', async (t) => {
   const streams = [new MockStream([]), new MockStream([])];
   streams[0].lastResponseId = 'resp-1';
 
-  const startCalls = [];
-  const mockClient = {
-    async startStream(text, options) {
+  const startCalls: any[] = [];
+  const mockClient = partialClient({
+    async startStream(text: any, options: any) {
       startCalls.push({ text, options });
       return streams[startCalls.length - 1];
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -802,7 +831,7 @@ test('resetWithNewId() clears conversation state', async (t) => {
 
 test('resetWithNewId() updates sessionId', (t) => {
   const service = new ConversationService({
-    agentClient: {},
+    agentClient: partialClient(),
     sessionId: 'old-id',
     deps: { logger: mockLogger, sessionContextService },
   });
@@ -814,14 +843,14 @@ test('resetWithNewId() updates sessionId', (t) => {
 
 test('resetWithNewId() clears provider conversations when supported', async (t) => {
   let clearCalls = 0;
-  const mockClient = {
+  const mockClient = partialClient({
     clearConversations() {
       clearCalls++;
     },
     async startStream() {
       return new MockStream([]);
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -835,12 +864,12 @@ test('resetWithNewId() clears provider conversations when supported', async (t) 
 });
 
 test('setModel() delegates to agent client', (t) => {
-  let setModelCalledWith = null;
-  const mockClient = {
-    setModel(model) {
+  let setModelCalledWith: any = null;
+  const mockClient = partialClient({
+    setModel(model: string) {
       setModelCalledWith = model;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -852,12 +881,12 @@ test('setModel() delegates to agent client', (t) => {
 });
 
 test('setTemperature() delegates to agent client when supported', (t) => {
-  let setTemperatureCalledWith = null;
-  const mockClient = {
-    setTemperature(value) {
+  let setTemperatureCalledWith: any = null;
+  const mockClient = partialClient({
+    setTemperature(value: number) {
       setTemperatureCalledWith = value;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -870,7 +899,7 @@ test('setTemperature() delegates to agent client when supported', (t) => {
 
 test('abort() delegates to agent client and clears pending approval', async (t) => {
   let abortCalled = false;
-  const mockClient = {
+  const mockClient = partialClient({
     abort() {
       abortCalled = true;
     },
@@ -885,7 +914,7 @@ test('abort() delegates to agent client and clears pending approval', async (t) 
       ];
       return stream;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -918,12 +947,12 @@ test('abort() preserves the aborted tool turn in exported state and snapshot', a
   };
 
   const service = new ConversationService({
-    agentClient: {
+    agentClient: partialClient({
       abort() {},
       async startStream() {
         return initialStream;
       },
-    },
+    }),
     deps: { logger: mockLogger, sessionContextService },
   });
 
@@ -937,12 +966,12 @@ test('abort() preserves the aborted tool turn in exported state and snapshot', a
 
   for (const state of [exported, snapshot]) {
     t.deepEqual(
-      state.history.map((item) => item.type),
+      state.history.map((item: any) => item.type),
       ['message', 'function_call', 'tool_call_output_item'],
     );
-    t.is(state.history[1].callId, 'call-abort');
-    t.is(state.history[2].callId, 'call-abort');
-    t.is(state.history[2].output, 'Tool execution was not approved.');
+    t.is((state.history[1] as any).callId, 'call-abort');
+    t.is((state.history[2] as any).callId, 'call-abort');
+    t.is((state.history[2] as any).output, 'Tool execution was not approved.');
   }
 });
 
@@ -964,19 +993,19 @@ test('switchProvider() after abort reuses the preserved tool turn in the next fu
   const followupStream = new MockStream([]);
   followupStream.finalOutput = 'Next';
 
-  const startCalls = [];
-  const mockClient = {
+  const startCalls: any[] = [];
+  const mockClient = partialClient({
     getProvider() {
       return 'openrouter';
     },
     abort() {},
     setProvider() {},
     clearConversations() {},
-    async startStream(input) {
+    async startStream(input: any) {
       startCalls.push(input);
       return startCalls.length === 1 ? initialStream : followupStream;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -994,7 +1023,7 @@ test('switchProvider() after abort reuses the preserved tool turn in the next fu
 
   t.is(startCalls.length, 2);
   t.deepEqual(
-    startCalls[1].map((item) => item.type),
+    startCalls[1].map((item: any) => item.type),
     ['message', 'function_call', 'tool_call_output_item', 'message'],
   );
   t.is(startCalls[1][1].callId, 'call-abort');
@@ -1015,24 +1044,22 @@ test('handleApprovalDecision() rejects interruption when answer is n', async (t)
   initialStream.state = {
     approveCalls: [],
     rejectCalls: [],
-    approve(arg) {
-      this.approveCalls.push(arg);
+    approve(arg: unknown) {
+      (this as any).approveCalls.push(arg);
     },
-    reject(arg) {
-      this.rejectCalls.push(arg);
+    reject(arg: unknown) {
+      (this as any).rejectCalls.push(arg);
     },
   };
 
   const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'Rejected run' }]);
   continuationStream.finalOutput = 'Rejected run';
 
-  let interceptorFn = null;
-  let interceptorRemoved = false;
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       return initialStream;
     },
-    async continueRunStream(state, options) {
+    async continueRunStream(_state: any, options: any) {
       t.deepEqual(options, {
         previousResponseId: 'resp_test',
         sessionId: 'default',
@@ -1040,13 +1067,10 @@ test('handleApprovalDecision() rejects interruption when answer is n', async (t)
       });
       return continuationStream;
     },
-    addToolInterceptor(fn) {
-      interceptorFn = fn;
-      return () => {
-        interceptorRemoved = true;
-      };
+    addToolInterceptor(_fn: any) {
+      return () => {};
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -1056,14 +1080,14 @@ test('handleApprovalDecision() rejects interruption when answer is n', async (t)
 
   const finalResult = await service.handleApprovalDecision('n');
 
-  t.is(finalResult.type, 'response');
+  t.is(finalResult!.type, 'response');
   t.deepEqual(initialStream.state.approveCalls, []);
   t.deepEqual(initialStream.state.rejectCalls, [interruption]);
 });
 
 test('handleApprovalDecision() returns null when no pending approval', async (t) => {
   const service = new ConversationService({
-    agentClient: {},
+    agentClient: partialClient(),
     deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.handleApprovalDecision('y');
@@ -1097,13 +1121,13 @@ test('emits live reasoning chunks', async (t) => {
     },
   ];
 
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       return new MockStream(events);
     },
-  };
+  });
 
-  const chunks = [];
+  const chunks: any[] = [];
   const service = new ConversationService({
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
@@ -1119,7 +1143,7 @@ test('emits live reasoning chunks', async (t) => {
     { full: 'Thinking... Still thinking.', chunk: ' Still thinking.' },
   ]);
   t.is(result.type, 'response');
-  t.is(result.reasoningText, 'Thinking... Still thinking.');
+  t.is(asFinal(result).reasoningText, 'Thinking... Still thinking.');
 });
 
 test('retries on tool hallucination error (ModelBehaviorError)', async (t) => {
@@ -1127,7 +1151,7 @@ test('retries on tool hallucination error (ModelBehaviorError)', async (t) => {
   const { ModelBehaviorError } = await import('@openai/agents');
 
   let callCount = 0;
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       callCount++;
       if (callCount === 1) {
@@ -1144,7 +1168,7 @@ test('retries on tool hallucination error (ModelBehaviorError)', async (t) => {
       stream.finalOutput = 'Retried successfully';
       return stream;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -1155,20 +1179,20 @@ test('retries on tool hallucination error (ModelBehaviorError)', async (t) => {
   // Should have retried and succeeded on second attempt
   t.is(callCount, 2);
   t.is(result.type, 'response');
-  t.is(result.finalText, 'Retried successfully');
+  t.is(asFinal(result).finalText, 'Retried successfully');
 });
 
 test('stops retrying after max hallucination retries', async (t) => {
   const { ModelBehaviorError } = await import('@openai/agents');
 
   let callCount = 0;
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       callCount++;
       // Always throw hallucination error
       throw new ModelBehaviorError('Tool fake_tool not found in agent Test Agent.');
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -1178,10 +1202,10 @@ test('stops retrying after max hallucination retries', async (t) => {
   try {
     await service.sendMessage('test message');
     t.fail('Should have thrown error after max retries');
-  } catch (error) {
+  } catch (error: unknown) {
     // collectTerminalResult re-throws the error event message as a plain Error,
     // so the original ModelBehaviorError is not preserved.
-    t.is(error.message, 'Tool fake_tool not found in agent Test Agent.');
+    t.is((error as Error).message, 'Tool fake_tool not found in agent Test Agent.');
     // Should have tried: initial + 2 retries = 3 total attempts
     t.is(callCount, 3);
   }
@@ -1191,13 +1215,13 @@ test('does not retry on non-hallucination ModelBehaviorError', async (t) => {
   const { ModelBehaviorError } = await import('@openai/agents');
 
   let callCount = 0;
-  const mockClient = {
+  const mockClient = partialClient({
     async startStream() {
       callCount++;
       // Throw a different kind of ModelBehaviorError
       throw new ModelBehaviorError('Model violated safety guidelines');
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,
@@ -1207,22 +1231,22 @@ test('does not retry on non-hallucination ModelBehaviorError', async (t) => {
   try {
     await service.sendMessage('test message');
     t.fail('Should have thrown error');
-  } catch (error) {
+  } catch (error: unknown) {
     // collectTerminalResult re-throws the error event message as a plain Error,
     // so the original ModelBehaviorError is not preserved.
-    t.is(error.message, 'Model violated safety guidelines');
+    t.is((error as Error).message, 'Model violated safety guidelines');
     // Should NOT retry - only 1 call
     t.is(callCount, 1);
   }
 });
 
 test('failed user turn is dropped from history after non-retryable provider error', async (t) => {
-  const startCalls = [];
-  const mockClient = {
+  const startCalls: any[] = [];
+  const mockClient = partialClient({
     getProvider() {
       return 'openrouter';
     },
-    async startStream(input) {
+    async startStream(input: any) {
       startCalls.push(input);
       if (startCalls.length === 1) {
         throw new Error('400 Error from provider: bad request');
@@ -1237,7 +1261,7 @@ test('failed user turn is dropped from history after non-retryable provider erro
       stream.finalOutput = 'ok';
       return stream;
     },
-  };
+  });
 
   const service = new ConversationService({
     agentClient: mockClient,

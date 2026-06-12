@@ -22,7 +22,11 @@ export type InitialInputPreparerDeps = {
 export class InitialInputPreparer {
   constructor(private readonly deps: InitialInputPreparerDeps) {}
 
-  prepare(attempt: TurnAttempt, skipUserMessage: boolean): InitialInputPreparationResult {
+  prepare(
+    attempt: TurnAttempt,
+    skipUserMessage: boolean,
+    options?: { bypassInputSurgeGuard?: boolean },
+  ): InitialInputPreparationResult {
     if (!skipUserMessage && !attempt.addedUserMessage) {
       this.deps.conversationStore.addUserTurn(attempt.turn);
       attempt.markUserMessageAdded();
@@ -35,7 +39,7 @@ export class InitialInputPreparer {
     attempt.attachInput(plan);
 
     const surgeDecision = this.deps.inputPlanner.inspectForSurge(attempt.streamInput, attempt.inputMode!);
-    if (surgeDecision.action === 'block') {
+    if (surgeDecision.action === 'block' && !options?.bypassInputSurgeGuard) {
       let droppedUserMessage: { text: string; imageCount: number } | undefined;
       if (attempt.addedUserMessage && this.deps.generationGuard.isCurrent(attempt.token)) {
         this.deps.conversationStore.removeLastUserMessage();

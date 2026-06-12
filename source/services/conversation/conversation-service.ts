@@ -6,6 +6,7 @@ import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { SendMessageOptions, HandleApprovalDecisionOptions } from './conversation-adapter.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
+import type { InputSurgeDecision } from '../input-surge-guard.js';
 import { createConversationSession, type ConversationSessionBundle } from '../session/session-composition.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
@@ -128,6 +129,10 @@ export class ConversationService {
 
   previewLargeUncachedInput(input: string | UserTurn, now?: number): LargeUncachedInputDecision {
     return this.#bundle.stateFacade.previewLargeUncachedInput(input, now);
+  }
+
+  previewInputSurge(input: string | UserTurn): InputSurgeDecision {
+    return this.#bundle.stateFacade.previewInputSurge(input);
   }
 
   handleApprovalDecision(

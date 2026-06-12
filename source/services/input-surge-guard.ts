@@ -25,6 +25,7 @@ export type InputSurgeInputKind = 'delta' | 'full_history';
 
 export interface InputSurgeInspectOptions {
   kind?: InputSurgeInputKind;
+  preview?: boolean;
 }
 
 export interface InputSurgeRecordOptions extends InputSurgeInspectOptions {
@@ -179,7 +180,9 @@ export class InputSurgeGuard {
     const stats = collectInputSurgeStats(input);
     const pendingBlock = this.#pendingBlocks.get(kind);
     if (pendingBlock) {
-      this.#pendingBlocks.delete(kind);
+      if (!options.preview) {
+        this.#pendingBlocks.delete(kind);
+      }
       return {
         action: 'block',
         reason: pendingBlock.reason,

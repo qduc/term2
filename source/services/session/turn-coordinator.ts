@@ -32,6 +32,7 @@ export class TurnCoordinator {
       signal?: AbortSignal;
       resumeState?: any;
       resumePreviousResponseId?: string | null;
+      bypassInputSurgeGuard?: boolean;
     } = {},
   ): AsyncIterable<ConversationEvent> {
     if (!this.deps.statusMachine.is('idle')) {
@@ -55,6 +56,7 @@ export class TurnCoordinator {
         retries: options.retries,
         maxModelRetries: options.maxModelRetries,
         signal: options.signal,
+        bypassInputSurgeGuard: options.bypassInputSurgeGuard,
       });
       processed = true;
 

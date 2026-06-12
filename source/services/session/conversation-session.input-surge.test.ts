@@ -332,3 +332,25 @@ test.serial(
     t.is(followUpResult.finalText, 'recovered-final');
   },
 );
+
+test('InputSurgeGuard blocks by default but bypasses when bypassInputSurgeGuard is true', async (t) => {
+  const { bundle } = createSessionHarness({
+    startStreams: [createTerminalStream(5, 'attempt-1')],
+    continuationStreams: [],
+  });
+
+  seedInputSurgeBaseline(bundle, 10);
+
+  // Send a very large history to trigger message surge count jump (from 10 to 200)
+  (bundle as any).conversationStore.replaceHistory(makeHistoryItems(200, 'large'));
+
+  // The first send should fail with input_surge_guard block
+  const error = await t.throwsAsync(bundle.terminalAdapter.sendMessage('trigger surge'));
+  t.regex(error.message, /Request blocked to prevent runaway context growth/);
+
+  // The second send with bypassInputSurgeGuard: true should succeed
+  const result = expectResponse(
+    await bundle.terminalAdapter.sendMessage('trigger surge', { bypassInputSurgeGuard: true }),
+  );
+  t.is(result.finalText, 'attempt-1-final');
+});

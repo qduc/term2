@@ -125,7 +125,7 @@ export class InitialTurnRunner {
           };
         }
 
-        const preparation = this.deps.inputPreparer.prepare(attempt, skipUser);
+        const preparation = this.deps.inputPreparer.prepare(attempt, skipUser, options);
         if (preparation.kind === 'blocked') {
           yield preparation.event;
           return { kind: 'failed' };

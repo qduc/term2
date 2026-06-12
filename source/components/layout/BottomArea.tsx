@@ -5,6 +5,7 @@ import InputBox from '../InputBox.js';
 import StatusBar from './StatusBar.js';
 import HandoffConfirmationPrompt from '../prompt/HandoffConfirmationPrompt.js';
 import LargeUncachedConfirmationPrompt from '../prompt/LargeUncachedConfirmationPrompt.js';
+import InputSurgeConfirmationPrompt from '../prompt/InputSurgeConfirmationPrompt.js';
 import type { HandoffState } from '../../app.js';
 import type { SlashCommand } from '../../slash-commands.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
@@ -52,6 +53,10 @@ export type BottomAreaProps = {
   pendingLargeUncachedTokens?: number;
   onLargeUncachedApprove?: () => void;
   onLargeUncachedDecline?: () => void;
+  pendingSurgeTurn?: UserTurn | null;
+  pendingSurgeReason?: string;
+  onSurgeApprove?: () => void;
+  onSurgeDecline?: () => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
 };
 
@@ -90,6 +95,10 @@ const BottomArea: FC<BottomAreaProps> = ({
   pendingLargeUncachedTokens = 0,
   onLargeUncachedApprove,
   onLargeUncachedDecline,
+  pendingSurgeTurn,
+  pendingSurgeReason = '',
+  onSurgeApprove,
+  onSurgeDecline,
   onSlashTabComplete,
 }) => {
   const [dotCount, setDotCount] = useState(1);
@@ -126,10 +135,12 @@ const BottomArea: FC<BottomAreaProps> = ({
   }, [thinkingStartedAt]);
 
   const showHandoffConfirm = handoffState?.stage === 'confirm_model';
+  const showSurgePrompt = Boolean(pendingSurgeTurn);
   const showLargeUncachedPrompt = Boolean(pendingLargeUncachedTurn);
   const showApprovalPrompt =
     !showHandoffConfirm &&
     !showLargeUncachedPrompt &&
+    !showSurgePrompt &&
     waitingForApproval &&
     !isProcessing &&
     !waitingForRejectionReason &&
@@ -137,6 +148,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   const showInput =
     !showHandoffConfirm &&
     !showLargeUncachedPrompt &&
+    !showSurgePrompt &&
     ((!isProcessing && !waitingForApproval) || waitingForRejectionReason || waitingForAskUserAnswer);
 
   return (
@@ -147,6 +159,12 @@ const BottomArea: FC<BottomAreaProps> = ({
             onConfirm={onHandoffConfirm || (() => {})}
             onDecline={onHandoffDecline || (() => {})}
             onCancel={onHandoffCancel || (() => {})}
+          />
+        ) : showSurgePrompt ? (
+          <InputSurgeConfirmationPrompt
+            reason={pendingSurgeReason}
+            onConfirm={onSurgeApprove || (() => {})}
+            onDecline={onSurgeDecline || (() => {})}
           />
         ) : showLargeUncachedPrompt ? (
           <LargeUncachedConfirmationPrompt
@@ -172,7 +190,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                 {toolCallStreamingInfo.argumentCharCount} chars){'.'.repeat(dotCount)}
               </Text>
             )}
-            {isProcessing && thinkingStartedAt != null && (
+            {isProcessing && !toolCallStreamingInfo && thinkingStartedAt != null && (
               <Text color="#64748b">Thinking... {thinkingElapsedSeconds}s</Text>
             )}
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
@@ -214,7 +232,9 @@ const BottomArea: FC<BottomAreaProps> = ({
         lastUsage={lastUsage}
         lastCodexRateLimit={lastCodexRateLimit}
         largeUncachedWarning={largeUncachedWarning}
-        hasPendingConfirmation={pendingLargeUncachedTurn !== null && pendingLargeUncachedTokens > 0}
+        hasPendingConfirmation={
+          (pendingLargeUncachedTurn !== null && pendingLargeUncachedTokens > 0) || pendingSurgeTurn !== null
+        }
         pendingLargeUncachedTokens={pendingLargeUncachedTokens}
       />
     </Box>

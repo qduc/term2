@@ -132,6 +132,8 @@ const App: FC<AppProps> = ({
   const [handoffState, setHandoffState] = useState<HandoffState | null>(null);
   const [pendingLargeUncachedTurn, setPendingLargeUncachedTurn] = useState<UserTurn | null>(null);
   const [pendingLargeUncachedTokens, setPendingLargeUncachedTokens] = useState<number>(0);
+  const [pendingSurgeTurn, setPendingSurgeTurn] = useState<UserTurn | null>(null);
+  const [pendingSurgeReason, setPendingSurgeReason] = useState<string>('');
   const undoMenuRef = useRef<{ open: (items: UndoItem[]) => void } | null>(null);
   const providersMenuRef = useRef<{ open: () => void } | null>(null);
   const [messageListEpoch, setMessageListEpoch] = useState(0);
@@ -401,6 +403,26 @@ const App: FC<AppProps> = ({
     queueMicrotask(() => setInput(turn.text || ''));
   }, [pendingLargeUncachedTurn, setInput]);
 
+  const handleSurgeApprove = useCallback(async () => {
+    const turn = pendingSurgeTurn;
+    if (!turn) return;
+    setPendingSurgeTurn(null);
+    setPendingSurgeReason('');
+    setImages([]);
+    historyService.addMessage(turn);
+    setInput('');
+    await sendUserMessage(turn, { bypassInputSurgeGuard: true });
+  }, [pendingSurgeTurn, historyService, sendUserMessage, setImages, setInput]);
+
+  const handleSurgeDecline = useCallback(() => {
+    const turn = pendingSurgeTurn;
+    if (!turn) return;
+    setPendingSurgeTurn(null);
+    setPendingSurgeReason('');
+    // Restore the text to the input box
+    queueMicrotask(() => setInput(turn.text || ''));
+  }, [pendingSurgeTurn, setInput]);
+
   const handleHandoff = useCallback((capturedText: string) => {
     setHandoffState({ capturedText, stage: 'entering_message' });
   }, []);
@@ -600,8 +622,21 @@ const App: FC<AppProps> = ({
       case 'message':
         // Regular message, send to AI agent
         {
-          const preview = conversationService.previewLargeUncachedInput(turn, Date.now());
+          const surgePreview = conversationService.previewInputSurge(turn);
+          if (surgePreview.action === 'block') {
+            setPendingSurgeTurn(turn);
+            setPendingSurgeReason(surgePreview.reason || 'Input surge detected');
+            loggingService.debug('Input surge warning shown', {
+              eventType: 'input_surge_warning_shown',
+              category: 'provider',
+              reason: surgePreview.reason,
+              stats: surgePreview.stats,
+              previousStats: surgePreview.previousStats,
+            });
+            return;
+          }
 
+          const preview = conversationService.previewLargeUncachedInput(turn, Date.now());
           if (preview.action === 'warn') {
             setPendingLargeUncachedTurn(turn);
             setPendingLargeUncachedTokens(estimateLastTurnTokens(turn));
@@ -623,8 +658,21 @@ const App: FC<AppProps> = ({
 
     // Fallback: unknown slash command, send as message
     {
-      const preview = conversationService.previewLargeUncachedInput(turn, Date.now());
+      const surgePreview = conversationService.previewInputSurge(turn);
+      if (surgePreview.action === 'block') {
+        setPendingSurgeTurn(turn);
+        setPendingSurgeReason(surgePreview.reason || 'Input surge detected');
+        loggingService.debug('Input surge warning shown', {
+          eventType: 'input_surge_warning_shown',
+          category: 'provider',
+          reason: surgePreview.reason,
+          stats: surgePreview.stats,
+          previousStats: surgePreview.previousStats,
+        });
+        return;
+      }
 
+      const preview = conversationService.previewLargeUncachedInput(turn, Date.now());
       if (preview.action === 'warn') {
         setPendingLargeUncachedTurn(turn);
         setPendingLargeUncachedTokens(estimateLastTurnTokens(turn));
@@ -694,6 +742,10 @@ const App: FC<AppProps> = ({
             pendingLargeUncachedTokens={pendingLargeUncachedTokens}
             onLargeUncachedApprove={handleLargeUncachedApprove}
             onLargeUncachedDecline={handleLargeUncachedDecline}
+            pendingSurgeTurn={pendingSurgeTurn}
+            pendingSurgeReason={pendingSurgeReason}
+            onSurgeApprove={handleSurgeApprove}
+            onSurgeDecline={handleSurgeDecline}
             onSlashTabComplete={(command) => {
               if (command.name === 'undo') {
                 const userMessages = getUserMessages().map((m) => ({ uiIndex: m.uiIndex, text: m.text }));

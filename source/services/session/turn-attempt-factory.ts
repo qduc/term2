@@ -21,6 +21,7 @@ export type InitialTurnRunOptions = {
   signal?: AbortSignal;
   delayMs?: number;
   useStandardServiceTier?: boolean;
+  bypassInputSurgeGuard?: boolean;
 };
 
 export type TurnAttemptFactoryDeps = {

@@ -120,6 +120,12 @@ export class SessionManager {
     });
   }
 
+  previewInputSurge(input: string | UserTurn) {
+    return this.#inputPlanner.previewInputSurge(input, {
+      pendingModeNotice: this.#state.pendingModeNotice,
+    });
+  }
+
   // ── Private helpers ───────────────────────────────────────────────
 
   #afterUndo(count: number): void {

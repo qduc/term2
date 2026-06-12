@@ -17,6 +17,7 @@ export type SendMessageOptions = {
   onCommandMessage?: (message: CommandMessage) => void;
   onEvent?: (event: ConversationEvent) => void;
   hallucinationRetryCount?: number;
+  bypassInputSurgeGuard?: boolean;
 };
 
 export type HandleApprovalDecisionOptions = {
@@ -98,7 +99,14 @@ export class ConversationAdapter {
 
   async sendMessage(
     input: string | UserTurn,
-    { onTextChunk, onReasoningChunk, onCommandMessage, onEvent, hallucinationRetryCount = 0 }: SendMessageOptions = {},
+    {
+      onTextChunk,
+      onReasoningChunk,
+      onCommandMessage,
+      onEvent,
+      hallucinationRetryCount = 0,
+      bypassInputSurgeGuard,
+    }: SendMessageOptions = {},
   ): Promise<ConversationTerminal> {
     const turn = normalizeUserTurn(input);
     return this.#withTrafficContext(turn.text, async () => {
@@ -109,7 +117,11 @@ export class ConversationAdapter {
       this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
       let result: ConversationTerminal;
       try {
-        result = await collectTerminalResult(this.#turnFlow.start(input, { retries: { hallucinationRetryCount } }), {
+        const startOptions: any = { retries: { hallucinationRetryCount } };
+        if (bypassInputSurgeGuard !== undefined) {
+          startOptions.bypassInputSurgeGuard = bypassInputSurgeGuard;
+        }
+        result = await collectTerminalResult(this.#turnFlow.start(input, startOptions), {
           onTextChunk,
           onReasoningChunk,
           onCommandMessage,

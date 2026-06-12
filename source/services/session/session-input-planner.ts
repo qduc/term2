@@ -61,6 +61,20 @@ export class SessionInputPlanner {
   }
 
   /**
+   * Preview what the input surge guard would decide for the given input.
+   *
+   * Does not mutate any state or consume the pending mode notice.
+   */
+  previewInputSurge(input: string | UserTurn, context?: { pendingModeNotice?: string | null }): InputSurgeDecision {
+    const turn = normalizeUserTurn(input);
+    const { streamInput, inputSurgeKind } = this.build(turn, {
+      includeTurn: true,
+      pendingModeNotice: context?.pendingModeNotice ?? null,
+    });
+    return this.#inputSurgeGuard.inspect(streamInput, { kind: inputSurgeKind, preview: true });
+  }
+
+  /**
    * Record a successful input delivery for both surge and uncached-input guards.
    */
   recordSuccess(input: unknown, options: { kind: 'delta' | 'full_history'; previousInput?: unknown }): void {

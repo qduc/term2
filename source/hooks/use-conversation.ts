@@ -264,7 +264,7 @@ export const useConversation = ({
   );
 
   const sendUserMessage = useCallback(
-    async (input: string | UserTurn) => {
+    async (input: string | UserTurn, options?: { bypassInputSurgeGuard?: boolean }) => {
       const turn = normalizeUserTurn(input);
       if (!hasUserTurnContent(turn)) {
         return;
@@ -317,6 +317,7 @@ export const useConversation = ({
       try {
         const result = await conversationService.sendMessage(turn, {
           onEvent: createOnEventWithSubagentTracking(wrappedOnEvent),
+          bypassInputSurgeGuard: options?.bypassInputSurgeGuard,
         });
 
         applyConversationEvent({ type: 'final', finalText: '' } as any);

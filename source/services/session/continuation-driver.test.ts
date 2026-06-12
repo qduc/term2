@@ -395,6 +395,38 @@ test('continuation from approval emits deduplicated tool_started event', async (
   }
 });
 
+test('continuation from nested approval emits one subagent_tool_started and no parent tool_started', async (t) => {
+  const continuationStream = new MockStream();
+  continuationStream.finalOutput = 'Done.';
+
+  const { driver, approvalState } = createHarness({
+    continuationStreams: [continuationStream],
+  });
+
+  const stateMock = createApprovalStateMock();
+  approvalState.setPending({
+    state: stateMock as any,
+    interruption: createShellInterruption('ls', 'nested-tool-1'),
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+    owner: { kind: 'subagent', agentId: 'worker-1', role: 'worker' },
+  });
+
+  const { events } = await collectResult(
+    driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }, new ManualApprovalDecisionPolicy()),
+  );
+
+  t.is(events.filter((event) => event.type === 'tool_started').length, 0);
+  const nestedStarts = events.filter((event) => event.type === 'subagent_tool_started');
+  t.is(nestedStarts.length, 1);
+  t.like(nestedStarts[0], {
+    agentId: 'worker-1',
+    role: 'worker',
+    toolCallId: 'nested-tool-1',
+    toolName: 'shell',
+  });
+});
+
 test('tool_started is not emitted for rejection', async (t) => {
   const continuationStream = new MockStream();
   continuationStream.finalOutput = 'Done.';

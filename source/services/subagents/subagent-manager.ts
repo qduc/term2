@@ -562,6 +562,7 @@ export class SubagentManager {
           type: 'subagent_tool_started',
           agentId: runContext.agentId,
           role: runContext.role,
+          toolCallId: callId,
           toolName: name,
           arguments: params,
         });
@@ -987,6 +988,7 @@ export class SubagentManager {
                 type: 'subagent_tool_started',
                 agentId,
                 role: request.role,
+                toolCallId: event.toolCallId,
                 toolName: event.toolName,
                 arguments: event.arguments,
               });

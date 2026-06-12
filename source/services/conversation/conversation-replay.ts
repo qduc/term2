@@ -486,6 +486,26 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       } as unknown as SavedMessage);
       return;
     }
+    case 'subagent_tool_started': {
+      const existing = state.messages.find(
+        (message) => message.sender === 'subagent' && (message as any).agentId === event.agentId,
+      );
+      if (existing) {
+        existing.status = 'running';
+        (existing as any).role = (existing as any).role ?? event.role;
+      } else {
+        state.messages.push({
+          id: `subagent-${event.agentId}`,
+          sender: 'subagent',
+          status: 'running',
+          agentId: event.agentId,
+          role: event.role,
+          task: '',
+          tools: [],
+        } as unknown as SavedMessage);
+      }
+      return;
+    }
     case 'subagent_completed': {
       const agentId = event.result.agentId;
       state.messages = state.messages.map((msg) => {

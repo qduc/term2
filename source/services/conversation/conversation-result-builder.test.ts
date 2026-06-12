@@ -168,7 +168,7 @@ test('approval_required outcome when stream has interruptions', async (t) => {
   }
 });
 
-test('approval_required records nested subagent state when an agent tool is pending', async (t) => {
+test('approval_required records the matching nested subagent owner', async (t) => {
   const deps = makeDeps('off');
   const stream = makeStream({
     interruptions: [
@@ -180,14 +180,86 @@ test('approval_required records nested subagent state when an agent tool is pend
       },
     ],
     state: {
-      _pendingAgentToolRuns: new Map([['run_subagent:parent-call', '{"nested":true}']]),
+      _pendingAgentToolRuns: new Map([
+        [
+          'run_subagent:parent-call',
+          JSON.stringify({
+            context: { context: { agentId: 'worker-1', role: 'worker' } },
+            currentStep: {
+              type: 'next_step_interruption',
+              data: { interruptions: [{ callId: 'nested-shell-call' }] },
+            },
+          }),
+        ],
+      ]),
     },
   });
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
 
   t.is(outcome.kind, 'approval_required');
-  t.true(deps.approvalFlow.getPending()?.nestedSubagent);
+  t.deepEqual(deps.approvalFlow.getPending()?.owner, {
+    kind: 'subagent',
+    agentId: 'worker-1',
+    role: 'worker',
+  });
+});
+
+test('approval_required matches the correct owner when multiple subagents are pending', async (t) => {
+  const deps = makeDeps('off');
+  const nestedState = (agentId: string, role: string, callId: string) =>
+    JSON.stringify({
+      context: { context: { agentId, role } },
+      currentStep: {
+        type: 'next_step_interruption',
+        data: { interruptions: [{ callId }] },
+      },
+    });
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'target-call',
+        arguments: { command: 'pwd' },
+        agent: { name: 'Worker' },
+      },
+    ],
+    state: {
+      _pendingAgentToolRuns: new Map([
+        ['run_subagent:first', nestedState('worker-1', 'worker', 'other-call')],
+        ['run_subagent:second', nestedState('explorer-1', 'explorer', 'target-call')],
+      ]),
+    },
+  });
+
+  await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  t.deepEqual(deps.approvalFlow.getPending()?.owner, {
+    kind: 'subagent',
+    agentId: 'explorer-1',
+    role: 'explorer',
+  });
+});
+
+test('approval_required defaults to parent owner for malformed nested state', async (t) => {
+  const deps = makeDeps('off');
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'shell',
+        callId: 'parent-call',
+        arguments: { command: 'pwd' },
+        agent: { name: 'CLI Agent' },
+      },
+    ],
+    state: {
+      _pendingAgentToolRuns: new Map([['run_subagent:broken', '{invalid-json']]),
+    },
+  });
+
+  await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  t.deepEqual(deps.approvalFlow.getPending()?.owner, { kind: 'parent' });
 });
 
 test('approval_required outcome preserves usage from model turn', async (t) => {

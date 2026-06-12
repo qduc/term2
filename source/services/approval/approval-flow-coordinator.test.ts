@@ -140,6 +140,38 @@ test('prepareContinuation answer=y normalizes JSON string tool_started arguments
   }
 });
 
+test('prepareContinuation answer=y emits subagent_tool_started for subagent ownership', (t) => {
+  const state: any = { approve: () => undefined };
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state,
+    interruption: { name: 'shell', callId: 'nested-c1', arguments: JSON.stringify({ command: 'npm test' }) },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+    owner: { kind: 'subagent', agentId: 'worker-1', role: 'worker' },
+  });
+
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+
+  const plan = coord.prepareContinuation('y', undefined);
+  t.deepEqual(plan?.toolStartedEvent, {
+    type: 'subagent_tool_started',
+    agentId: 'worker-1',
+    role: 'worker',
+    toolCallId: 'nested-c1',
+    toolName: 'shell',
+    arguments: { command: 'npm test' },
+  });
+});
+
 test('prepareContinuation rejection calls state.reject with the correct rejection message', (t) => {
   let approved = false;
   let rejectedInterruption: any = null;
@@ -195,7 +227,7 @@ test('prepareContinuation rejection for nested subagent calls state.reject with 
     interruption,
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
-    nestedSubagent: true,
+    owner: { kind: 'subagent', agentId: 'worker-1', role: 'worker' },
   });
 
   const { client } = makeMockAgentClient();
@@ -227,7 +259,7 @@ test('prepareContinuation rejection: nested subagent where state.reject is undef
     interruption: { name: 'shell', callId: 'nested-c1', arguments: { command: 'ls' } },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
-    nestedSubagent: true,
+    owner: { kind: 'subagent', agentId: 'worker-1', role: 'worker' },
   });
 
   const { client } = makeMockAgentClient();
@@ -260,6 +292,7 @@ test('prepareAbortResolution calls state.reject with the correct rejection messa
     interruption: { name: 'shell', callId: 'c1', arguments: { command: 'ls' } },
     emittedCommandIds: new Set<string>(),
     toolCallArgumentsById: new Map(),
+    owner: { kind: 'parent' as const },
   };
 
   const { client } = makeMockAgentClient();

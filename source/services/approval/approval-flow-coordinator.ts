@@ -134,12 +134,23 @@ export class ApprovalFlowCoordinator {
         });
       }
 
-      toolStartedEvent = {
-        type: 'tool_started',
-        toolCallId: callId ?? String(Date.now()),
-        toolName,
-        arguments: parseResult.arguments,
-      };
+      const toolCallId = callId ?? String(Date.now());
+      toolStartedEvent =
+        pendingApprovalContext.owner.kind === 'subagent'
+          ? {
+              type: 'subagent_tool_started',
+              agentId: pendingApprovalContext.owner.agentId,
+              role: pendingApprovalContext.owner.role,
+              toolCallId,
+              toolName,
+              arguments: parseResult.arguments,
+            }
+          : {
+              type: 'tool_started',
+              toolCallId,
+              toolName,
+              arguments: parseResult.arguments,
+            };
 
       state.approve(interruption as any);
     } else {

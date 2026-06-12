@@ -22,6 +22,7 @@ export class SessionToolTracker {
   private toolCallArgumentsById = new Map<string, unknown>();
   private emittedInvalidToolCallPackets = new Set<string>();
   private emittedToolStartedCallIds = new Set<string>();
+  private emittedSubagentToolStartedIds = new Set<string>();
 
   constructor(private conversationStore: ConversationStore) {}
 
@@ -190,6 +191,14 @@ export class SessionToolTracker {
    * Deduplicate tool_started events.
    */
   dedupeToolStarted(event: ConversationEvent): ConversationEvent | null {
+    if (event.type === 'subagent_tool_started') {
+      const key = `${event.agentId}:${event.toolCallId}`;
+      if (this.emittedSubagentToolStartedIds.has(key)) {
+        return null;
+      }
+      this.emittedSubagentToolStartedIds.add(key);
+      return event;
+    }
     if (event.type !== 'tool_started') {
       return event;
     }

@@ -170,6 +170,14 @@ test('dispatchEventToLog logs event-specific records', (t) => {
     task: 'inspect',
   });
   conversationLogger.dispatchEventToLog({
+    type: 'subagent_tool_started',
+    agentId: 'agent-1',
+    role: 'worker',
+    toolCallId: 'nested-call-1',
+    toolName: 'shell',
+    arguments: { command: 'pwd' },
+  });
+  conversationLogger.dispatchEventToLog({
     type: 'subagent_completed',
     result: {
       agentId: 'agent-1',
@@ -206,6 +214,14 @@ test('dispatchEventToLog logs event-specific records', (t) => {
       approval: { toolName: 'shell', argumentsText: 'echo hi', agentName: 'assistant', callId: 'call-1' },
     },
     { type: 'subagent_started', agentId: 'agent-1', role: 'worker', task: 'inspect' },
+    {
+      type: 'subagent_tool_started',
+      agentId: 'agent-1',
+      role: 'worker',
+      toolCallId: 'nested-call-1',
+      toolName: 'shell',
+      arguments: { command: 'pwd' },
+    },
     {
       type: 'subagent_completed',
       result: {

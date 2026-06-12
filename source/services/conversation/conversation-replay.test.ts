@@ -256,6 +256,26 @@ test('replayEvents: subagent_started + subagent_completed cleans up activity mes
   t.truthy(restored.subagentUsage);
 });
 
+test('replayEvents: subagent_tool_started restores scoped activity without a parent in-flight tool', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'subagent_started', agentId: 'a1', role: 'worker', task: 'inspect' }),
+    env({
+      type: 'subagent_tool_started',
+      agentId: 'a1',
+      role: 'worker',
+      toolCallId: 'nested-call-1',
+      toolName: 'shell',
+      arguments: { command: 'pwd' },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  t.is(restored.toolLedger.length, 0);
+  t.true(restored.messages.some((message: any) => message.sender === 'subagent' && message.agentId === 'a1'));
+});
+
 test('replayEvents: unknown event type is ignored gracefully', (t) => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),

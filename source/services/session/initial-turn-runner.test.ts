@@ -208,6 +208,7 @@ test('stale finalization returns no terminal and does not mutate approval state'
     interruption: { name: 'shell', arguments: '{}', callId: 'pending-call' },
     emittedCommandIds: new Set<string>(),
     toolCallArgumentsById: new Map<string, unknown>(),
+    owner: { kind: 'parent' as const },
     token,
   };
   composition.approvalState.setPending(pending);

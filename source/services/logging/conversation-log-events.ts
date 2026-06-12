@@ -93,6 +93,15 @@ export interface SubagentStartedLogEvent {
   task: string;
 }
 
+export interface SubagentToolStartedLogEvent {
+  type: 'subagent_tool_started';
+  agentId: string;
+  role: string;
+  toolCallId: string;
+  toolName: string;
+  arguments?: unknown;
+}
+
 export interface SubagentCompletedLogEvent {
   type: 'subagent_completed';
   result: SubagentResult;
@@ -137,6 +146,7 @@ export type LogEvent =
   | ApprovalRequiredLogEvent
   | ApprovalResolvedLogEvent
   | SubagentStartedLogEvent
+  | SubagentToolStartedLogEvent
   | SubagentCompletedLogEvent
   | ErrorLogEvent
   | AssistantTurnEvent

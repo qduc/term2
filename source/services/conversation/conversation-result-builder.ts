@@ -16,6 +16,7 @@ import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
+import { resolveToolOwner } from '../approval/tool-owner.js';
 
 export type ConversationResult = ConversationTerminal;
 
@@ -63,21 +64,6 @@ const resolveFinalText = (streamedText: string | undefined, completedText: strin
   return streamedText ?? completedText ?? 'Done.';
 };
 
-const hasPendingNestedAgentToolRun = (state: unknown, logger?: ILoggingService): boolean => {
-  if (state == null) {
-    return false;
-  }
-  const stateRecord = state as Record<string, unknown>;
-  if (!('_pendingAgentToolRuns' in stateRecord)) {
-    logger?.warn(
-      'SDK field _pendingAgentToolRuns is absent from agent state — the SDK may have renamed or restructured this field. Nested subagent detection will default to false. Update the integration if the SDK was upgraded.',
-    );
-    return false;
-  }
-  const pendingAgentToolRuns = stateRecord._pendingAgentToolRuns;
-  return pendingAgentToolRuns instanceof Map && pendingAgentToolRuns.size > 0;
-};
-
 export async function buildConversationResult(
   input: ResultBuilderInput,
   deps: ResultBuilderDeps,
@@ -113,7 +99,7 @@ export async function buildConversationResult(
       interruption,
       emittedCommandIds: emittedCommandIds ?? new Set(),
       toolCallArgumentsById: new Map(toolCallArgumentsById),
-      nestedSubagent: hasPendingNestedAgentToolRun(result.state, logger),
+      owner: resolveToolOwner(result.state, interruption, logger),
       token: input.token,
       inputMode: input.inputMode,
       cumulativeUsage: input.cumulativeUsage,

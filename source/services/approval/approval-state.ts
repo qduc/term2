@@ -3,6 +3,7 @@ import { type GenerationToken } from '../generation-guard.js';
 import { type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { type CommandMessage } from '../../tools/types.js';
 import { type PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
+import { PARENT_TOOL_OWNER, type ToolOwner } from './tool-owner.js';
 
 export type PendingApprovalContext = {
   state: RunState<any, any>;
@@ -10,8 +11,7 @@ export type PendingApprovalContext = {
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
   removeInterceptor?: () => void;
-  /** Nested agent-tool approvals must resume through SDK state, not parent tool interceptors. */
-  nestedSubagent?: boolean;
+  owner: ToolOwner;
   token?: GenerationToken;
   inputMode?: 'delta' | 'full_history';
   cumulativeUsage?: NormalizedUsage;
@@ -25,7 +25,7 @@ export type AbortedApprovalContext = {
   emittedCommandIds: Set<string>;
   toolCallArgumentsById: Map<string, unknown>;
   removeInterceptor?: () => void;
-  nestedSubagent?: boolean;
+  owner: ToolOwner;
   token?: GenerationToken;
   inputMode?: 'delta' | 'full_history';
   cumulativeUsage?: NormalizedUsage;
@@ -41,8 +41,9 @@ export class ApprovalState {
     return this.pending;
   }
 
-  setPending(context: PendingApprovalContext): void {
-    this.pending = context;
+  setPending(context: Omit<PendingApprovalContext, 'owner'> & { owner?: ToolOwner }): void {
+    context.owner ??= PARENT_TOOL_OWNER;
+    this.pending = context as PendingApprovalContext;
   }
 
   clearPending(): void {
@@ -71,7 +72,7 @@ export class ApprovalState {
       emittedCommandIds: this.pending.emittedCommandIds,
       toolCallArgumentsById: this.pending.toolCallArgumentsById,
       removeInterceptor: this.pending.removeInterceptor,
-      nestedSubagent: this.pending.nestedSubagent,
+      owner: this.pending.owner,
       token: this.pending.token,
       inputMode: this.pending.inputMode,
       cumulativeUsage: this.pending.cumulativeUsage,

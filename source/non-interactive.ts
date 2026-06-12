@@ -59,6 +59,8 @@ const formatEventForStderr = (event: ConversationEvent): string | null => {
   switch (event.type) {
     case 'tool_started':
       return `tool_started ${event.toolName} ${safePreview(event.arguments)}\n`;
+    case 'subagent_tool_started':
+      return `subagent_tool_started ${event.role} ${event.toolName} ${safePreview(event.arguments)}\n`;
     case 'command_message':
       return `command_message ${event.message.status} ${event.message.command}\n`;
     case 'approval_required':

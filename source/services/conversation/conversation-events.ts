@@ -151,6 +151,7 @@ export interface SubagentToolStartedEvent {
   type: 'subagent_tool_started';
   agentId: string;
   role: string;
+  toolCallId: string;
   toolName: string;
   arguments?: unknown;
   commandMessages?: CommandMessage[];

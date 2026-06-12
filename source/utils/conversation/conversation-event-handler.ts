@@ -85,7 +85,6 @@ export interface ConversationEventHandlerDeps {
   createMessageId: () => string;
   trimMessages: (messages: Message[]) => Message[];
   annotateCommandMessage: (msg: CommandMessage) => CommandMessage;
-  getMessages?: () => Message[];
 }
 
 /**
@@ -108,20 +107,10 @@ export function createConversationEventHandler(
     createMessageId,
     trimMessages,
     annotateCommandMessage,
-    getMessages,
   } = deps;
 
   const activeRunningToolCallIds = new Set<string>();
   const pendingSubagentToolCalls = new Map<string, { role?: string; task?: string; [key: string]: unknown }>();
-  const activeSubagentIds = new Set<string>();
-
-  const isSubagentActive = (): boolean => {
-    const list = getMessages?.();
-    if (list) {
-      return list.some((msg) => msg.sender === 'subagent' && msg.status === 'running');
-    }
-    return activeSubagentIds.size > 0;
-  };
 
   const isSubagentDelegationTool = (toolName: string | undefined): boolean => {
     if (!toolName) return false;
@@ -313,10 +302,6 @@ export function createConversationEventHandler(
           return;
         }
 
-        if (isSubagentActive()) {
-          return;
-        }
-
         // Flush reasoning state
         flushReasoning();
 
@@ -365,10 +350,6 @@ export function createConversationEventHandler(
           return;
         }
 
-        if (isSubagentActive()) {
-          return;
-        }
-
         const annotated = annotateCommandMessage(cmdMsg);
 
         // Flush reasoning state
@@ -405,8 +386,6 @@ export function createConversationEventHandler(
         if (event.parentTool === 'ask_mentor') {
           return;
         }
-        activeSubagentIds.add(event.agentId);
-
         let matchingCallId: string | undefined;
         for (const [callId, args] of pendingSubagentToolCalls.entries()) {
           if (args && args.role === event.role && args.task === event.task) {
@@ -452,7 +431,6 @@ export function createConversationEventHandler(
       }
 
       case 'subagent_tool_started': {
-        activeSubagentIds.add(event.agentId);
         setMessages((prev) => {
           const index = prev.findIndex((msg) => isSubagentActivityMessage(msg) && msg.agentId === event.agentId);
           if (index !== -1) {
@@ -570,7 +548,6 @@ export function createConversationEventHandler(
       }
 
       case 'subagent_completed': {
-        activeSubagentIds.delete(event.result.agentId);
         setMessages((prev) => {
           return trimMessages(
             prev.map((msg) => {

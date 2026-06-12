@@ -109,6 +109,16 @@ export class ConversationLogger {
           task: event.task,
         });
         return;
+      case 'subagent_tool_started':
+        this.log({
+          type: 'subagent_tool_started',
+          agentId: event.agentId,
+          role: event.role,
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          arguments: event.arguments,
+        });
+        return;
       case 'subagent_completed':
         this.log({ type: 'subagent_completed', result: event.result });
         return;

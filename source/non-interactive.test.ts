@@ -177,7 +177,7 @@ test('with autoApprove=false: rejects on approval_required with explanation', as
   t.is(stdout.getOutput(), '\n');
 });
 
-test('writes tool_started and command_message summaries to stderr only', async (t) => {
+test('writes parent and subagent tool summaries to stderr only', async (t) => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
 
@@ -188,6 +188,14 @@ test('writes tool_started and command_message summaries to stderr only', async (
         toolCallId: 'call-1',
         toolName: 'bash',
         arguments: { command: 'ls' },
+      });
+      onEvent?.({
+        type: 'subagent_tool_started',
+        agentId: 'worker-1',
+        role: 'worker',
+        toolCallId: 'nested-call-1',
+        toolName: 'bash',
+        arguments: { command: 'pwd' },
       });
       onEvent?.({
         type: 'command_message',
@@ -220,6 +228,7 @@ test('writes tool_started and command_message summaries to stderr only', async (
 
   const err = stderr.getOutput();
   t.true(err.includes('tool_started'));
+  t.true(err.includes('subagent_tool_started worker'));
   t.true(err.includes('bash'));
   t.true(err.includes('command_message'));
   t.true(err.includes('ls'));

@@ -19,7 +19,6 @@ interface MockDeps extends ConversationEventHandlerDeps {
   createMessageId: () => string;
   trimMessages: (messages: any[]) => any[];
   annotateCommandMessage: (msg: any) => any;
-  getMessages?: () => any[];
 }
 
 function createMockDeps(): MockDeps & {
@@ -1591,24 +1590,17 @@ test('subagent_command_message: appends 0 matches for empty grep output', (t) =>
   t.deepEqual(messages[0].tools, ['grep "TODO" "src/" (0 matches)']);
 });
 
-test('tool_started: skips standard tool call message when subagent is active (via getMessages)', (t) => {
+test('tool_started: renders parent tool call when a subagent is active', (t) => {
   const deps = createMockDeps();
-  const messages = [
-    {
-      id: 'subagent-agent-1',
-      sender: 'subagent',
-      status: 'running',
-      agentId: 'agent-1',
-      role: 'explorer',
-      task: 'find x',
-      tools: [],
-    },
-  ];
-  deps.getMessages = () => messages;
-
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
 
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'find x',
+  } as any);
   handler({
     type: 'tool_started',
     toolCallId: 'call-shell-1',
@@ -1616,11 +1608,11 @@ test('tool_started: skips standard tool call message when subagent is active (vi
     arguments: { command: 'pwd' },
   } as any);
 
-  t.is(deps.calls.appendedMessages.length, 0);
-  t.is(deps.calls.setMessagesCalls.length, 0);
+  t.is(deps.calls.appendedMessages.length, 2);
+  t.is(deps.calls.appendedMessages[1][0].callId, 'call-shell-1');
 });
 
-test('tool_started: skips standard tool call message when subagent is active (via local state)', (t) => {
+test('tool_started: renders parent tool call after local subagent activity', (t) => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1639,29 +1631,22 @@ test('tool_started: skips standard tool call message when subagent is active (vi
     arguments: { command: 'pwd' },
   } as any);
 
-  // Appends subagent_started message, but skips tool_started
-  t.is(deps.calls.appendedMessages.length, 1);
+  t.is(deps.calls.appendedMessages.length, 2);
   t.is(deps.calls.appendedMessages[0][0].sender, 'subagent');
+  t.is(deps.calls.appendedMessages[1][0].callId, 'call-shell-1');
 });
 
-test('command_message: skips standard tool complete message when subagent is active (via getMessages)', (t) => {
+test('command_message: renders parent tool completion when subagent is active', (t) => {
   const deps = createMockDeps();
-  const messages = [
-    {
-      id: 'subagent-agent-1',
-      sender: 'subagent',
-      status: 'running',
-      agentId: 'agent-1',
-      role: 'explorer',
-      task: 'find x',
-      tools: [],
-    },
-  ];
-  deps.getMessages = () => messages;
-
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
 
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'find x',
+  } as any);
   handler({
     type: 'command_message',
     message: {
@@ -1675,24 +1660,11 @@ test('command_message: skips standard tool complete message when subagent is act
     },
   } as any);
 
-  t.is(deps.calls.setMessagesCalls.length, 0);
+  t.is(deps.calls.setMessagesCalls.length, 1);
 });
 
-test('tool_started: does not skip subagent delegation tools even when a subagent is active', (t) => {
+test('tool_started: links subagent delegation tools to subagent activity', (t) => {
   const deps = createMockDeps();
-  const messages = [
-    {
-      id: 'subagent-agent-1',
-      sender: 'subagent',
-      status: 'running',
-      agentId: 'agent-1',
-      role: 'explorer',
-      task: 'find x',
-      tools: [],
-    },
-  ];
-  deps.getMessages = () => messages;
-
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
 

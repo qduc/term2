@@ -811,14 +811,7 @@ export class SubagentManager {
     const definition = loadRoleDefinition('mentor', this.#settings);
 
     const baseInstructions = mentorMode
-      ? 'You are a senior architect acting as a peer reviewer. You have no codebase access—you rely on what the user reports.\n\n' +
-        'Your role is adversarial review, not rubber-stamping:\n' +
-        '- Challenge assumptions, even when reasoning sounds solid\n' +
-        '- Probe for gaps: what did they not check? What could go wrong?\n' +
-        '- Suggest alternatives they may have dismissed too quickly\n' +
-        '- Ask for evidence when confidence seems misplaced\n\n' +
-        'When satisfied, give clear approval with specific next steps. When not, say exactly what needs more investigation.\n\n' +
-        "Be concise. Push back hard, but don't block unnecessarily."
+      ? resolvePrompt(path.join(PROMPTS_DIR, 'mentor-mode.md'))
       : definition.instructions;
 
     const envInfo = getEnvInfo(this.#settings, this.#executionContext);

@@ -209,7 +209,7 @@ const expectResponse = (result: ConversationTerminal | null): ResponseResult => 
   return result;
 };
 
-test('handleApprovalDecision updates the InputSurgeGuard baseline when approval triggers store growth', async (t) => {
+test('handleApprovalDecision keeps normal follow-up input allowed after store growth', async (t) => {
   const { bundle } = createSessionHarness({
     startStreams: [createInterruptedStream(), createTerminalStream(5, 'follow-up')],
     continuationStreams: [createTerminalStream(800, 'approved')],
@@ -227,9 +227,9 @@ test('handleApprovalDecision updates the InputSurgeGuard baseline when approval 
   t.is(followUpResult.finalText, 'follow-up-final');
 });
 
-test('handleApprovalDecision preserves the next-turn pending block for a very large appended tool result', async (t) => {
+test('handleApprovalDecision allows the next turn after a very large appended tool result', async (t) => {
   const { bundle } = createSessionHarness({
-    startStreams: [createInterruptedStream()],
+    startStreams: [createInterruptedStream(), createTerminalStream(3, 'follow-up')],
     continuationStreams: [createTerminalStreamWithLargeToolResult(120_000, 2, 'approved')],
   });
 
@@ -241,11 +241,11 @@ test('handleApprovalDecision preserves the next-turn pending block for a very la
   const approvedResult = expectResponse(await bundle.terminalAdapter.handleApprovalDecision('y'));
   t.is(approvedResult.finalText, 'approved-final');
 
-  const followUpError = await t.throwsAsync(bundle.terminalAdapter.sendMessage('next turn after huge tool result'));
-  t.regex(followUpError.message, /New tool result added/);
+  const followUpResult = expectResponse(await bundle.terminalAdapter.sendMessage('next turn after huge tool result'));
+  t.is(followUpResult.finalText, 'follow-up-final');
 });
 
-test('abort-resolution updates the InputSurgeGuard baseline when a new message resumes a pending approval', async (t) => {
+test('abort-resolution keeps normal follow-up input allowed after store growth', async (t) => {
   const { bundle } = createSessionHarness({
     startStreams: [createInterruptedStream(), createTerminalStream(6, 'follow-up')],
     continuationStreams: [createTerminalStream(800, 'abort-resolved')],
@@ -267,9 +267,9 @@ test('abort-resolution updates the InputSurgeGuard baseline when a new message r
   t.is(followUpResult.finalText, 'follow-up-final');
 });
 
-test('abort-resolution preserves the next-turn pending block for a very large appended tool result', async (t) => {
+test('abort-resolution allows the next turn after a very large appended tool result', async (t) => {
   const { bundle } = createSessionHarness({
-    startStreams: [createInterruptedStream()],
+    startStreams: [createInterruptedStream(), createTerminalStream(3, 'follow-up')],
     continuationStreams: [createTerminalStreamWithLargeToolResult(120_000, 2, 'start a tool run that will be aborted')],
   });
 
@@ -285,53 +285,50 @@ test('abort-resolution preserves the next-turn pending block for a very large ap
   );
   t.is(resolvedResult.finalText, 'start a tool run that will be aborted-final');
 
-  const followUpError = await t.throwsAsync(
-    bundle.terminalAdapter.sendMessage('next turn after aborted huge tool result'),
+  const followUpResult = expectResponse(
+    await bundle.terminalAdapter.sendMessage('next turn after aborted huge tool result'),
   );
-  t.regex(followUpError.message, /New tool result added/);
+  t.is(followUpResult.finalText, 'follow-up-final');
 });
 
-test.serial(
-  'MaxTurnsExceededError catch updates the InputSurgeGuard baseline after tool-led history reconciliation',
-  async (t) => {
-    // TODO: This path is covered by the production fix, but the synthetic stream
-    // harness here does not reliably reproduce the SDK's max-turn reconciliation
-    // behavior without additional integration scaffolding.
-    const recoveredToolHistory = [
-      { role: 'assistant', type: 'function_call', callId: 'call-reconcile', name: 'apply_patch', arguments: '{}' },
-      {
-        role: 'assistant',
-        type: 'function_call_result',
-        callId: 'call-reconcile',
-        output: 'ok',
-      },
-      ...makeHistoryItems(198, 'reconciled'),
-    ];
+test.serial('MaxTurnsExceededError recovery keeps reconciled tool history allowed', async (t) => {
+  // TODO: This path is covered by the production fix, but the synthetic stream
+  // harness here does not reliably reproduce the SDK's max-turn reconciliation
+  // behavior without additional integration scaffolding.
+  const recoveredToolHistory = [
+    { role: 'assistant', type: 'function_call', callId: 'call-reconcile', name: 'apply_patch', arguments: '{}' },
+    {
+      role: 'assistant',
+      type: 'function_call_result',
+      callId: 'call-reconcile',
+      output: 'ok',
+    },
+    ...makeHistoryItems(198, 'reconciled'),
+  ];
 
-    const { bundle } = createSessionHarness({
-      startStreams: [createErrorStream(new Error('Max turns (100) exceeded')), createTerminalStream(5, 'recovered')],
-      continuationStreams: [],
-    });
+  const { bundle } = createSessionHarness({
+    startStreams: [createErrorStream(new Error('Max turns (100) exceeded')), createTerminalStream(5, 'recovered')],
+    continuationStreams: [],
+  });
 
-    seedInputSurgeBaseline(bundle, 201);
-    bundle.toolTracker.import([
-      {
-        turnId: 'turn-1',
-        callId: 'call-reconcile',
-        toolName: 'apply_patch',
-        status: 'completed',
-        startedAt: new Date().toISOString(),
-        completedAt: new Date().toISOString(),
-        historyItems: recoveredToolHistory,
-      },
-    ]);
+  seedInputSurgeBaseline(bundle, 201);
+  bundle.toolTracker.import([
+    {
+      turnId: 'turn-1',
+      callId: 'call-reconcile',
+      toolName: 'apply_patch',
+      status: 'completed',
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      historyItems: recoveredToolHistory,
+    },
+  ]);
 
-    await t.throwsAsync(bundle.terminalAdapter.sendMessage('run until the SDK max-turns limit is reached'));
+  await t.throwsAsync(bundle.terminalAdapter.sendMessage('run until the SDK max-turns limit is reached'));
 
-    const followUpResult = expectResponse(await bundle.terminalAdapter.sendMessage('next turn after reconciliation'));
-    t.is(followUpResult.finalText, 'recovered-final');
-  },
-);
+  const followUpResult = expectResponse(await bundle.terminalAdapter.sendMessage('next turn after reconciliation'));
+  t.is(followUpResult.finalText, 'recovered-final');
+});
 
 test('InputSurgeGuard blocks by default but bypasses when bypassInputSurgeGuard is true', async (t) => {
   const { bundle } = createSessionHarness({
@@ -339,12 +336,20 @@ test('InputSurgeGuard blocks by default but bypasses when bypassInputSurgeGuard 
     continuationStreams: [],
   });
 
-  seedInputSurgeBaseline(bundle, 10);
+  const duplicatePair = (callId: string) => [
+    { type: 'function_call', callId, name: 'shell', arguments: '{}' },
+    { type: 'function_call_result', callId, name: 'shell', output: 'ok' },
+  ];
+  (bundle as any).conversationStore.replaceHistory([
+    ...duplicatePair('call-1'),
+    ...duplicatePair('call-2'),
+    ...duplicatePair('call-3'),
+    ...duplicatePair('call-1'),
+    ...duplicatePair('call-2'),
+    ...duplicatePair('call-3'),
+  ]);
 
-  // Send a very large history to trigger message surge count jump (from 10 to 200)
-  (bundle as any).conversationStore.replaceHistory(makeHistoryItems(200, 'large'));
-
-  // The first send should fail with input_surge_guard block
+  // Duplicate tool call IDs still block by default.
   const error = await t.throwsAsync(bundle.terminalAdapter.sendMessage('trigger surge'));
   t.regex(error.message, /Request blocked to prevent runaway context growth/);
 

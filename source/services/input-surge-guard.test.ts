@@ -24,24 +24,22 @@ test('collectInputSurgeStats counts messages and duplicated tool-call signatures
   });
 });
 
-test('InputSurgeGuard blocks abrupt message-count growth from last successful input', (t) => {
+test('InputSurgeGuard allows abrupt message-count growth from last successful input', (t) => {
   const guard = new InputSurgeGuard();
   guard.recordSuccessfulInput(Array.from({ length: 65 }, (_, index) => ({ role: 'user', content: `m${index}` })));
 
   const decision = guard.inspect(Array.from({ length: 863 }, (_, index) => ({ role: 'user', content: `m${index}` })));
 
-  t.is(decision.action, 'block');
-  t.true(decision.reason?.includes('65 to 863'));
+  t.is(decision.action, 'allow');
 });
 
-test('InputSurgeGuard blocks abrupt serialized byte growth from last successful input', (t) => {
+test('InputSurgeGuard allows abrupt serialized byte growth from last successful input', (t) => {
   const guard = new InputSurgeGuard();
   guard.recordSuccessfulInput([{ role: 'user', type: 'message', content: 'small' }]);
 
   const decision = guard.inspect([{ type: 'function_call_result', callId: 'call-1', output: 'x'.repeat(150_000) }]);
 
-  t.is(decision.action, 'block');
-  t.true(decision.reason?.includes('input size jumped'));
+  t.is(decision.action, 'allow');
 });
 
 test('InputSurgeGuard allows large absolute growth below the minimum surge threshold', (t) => {
@@ -53,7 +51,7 @@ test('InputSurgeGuard allows large absolute growth below the minimum surge thres
   t.is(decision.action, 'allow');
 });
 
-test('InputSurgeGuard blocks replayed tool-call signatures even without a baseline', (t) => {
+test('InputSurgeGuard blocks replayed tool-call signatures', (t) => {
   const guard = new InputSurgeGuard();
   const input: unknown[] = [];
 
@@ -69,7 +67,7 @@ test('InputSurgeGuard blocks replayed tool-call signatures even without a baseli
   t.true(decision.reason?.includes('replayed tool-call history'));
 });
 
-test('InputSurgeGuard compares growth baselines only within the same input kind', (t) => {
+test('InputSurgeGuard ignores recorded input from other input kinds', (t) => {
   const guard = new InputSurgeGuard();
   guard.recordSuccessfulInput([{ role: 'user', type: 'message', content: 'small delta' }], { kind: 'delta' });
 
@@ -118,7 +116,7 @@ test('collectDuplicateToolCallResultPairs reports duplicated call/result pairs w
   });
 });
 
-test('InputSurgeGuard blocks a large tool result appended after a successful full-history request', (t) => {
+test('InputSurgeGuard allows a large tool result appended after a successful full-history request', (t) => {
   const guard = new InputSurgeGuard();
   const requestHistory = [{ role: 'user', type: 'message', content: 'inspect files' }];
   const postRunHistory = [
@@ -133,25 +131,18 @@ test('InputSurgeGuard blocks a large tool result appended after a successful ful
     kind: 'full_history',
   });
 
-  t.is(decision.action, 'block');
-  t.true(decision.reason?.includes('tool result'));
+  t.is(decision.action, 'allow');
 });
 
-test('InputSurgeGuard does not update baseline for blocked input', (t) => {
+test('InputSurgeGuard recordSuccessfulInput does not create a size-growth block', (t) => {
   const guard = new InputSurgeGuard();
   guard.recordSuccessfulInput(Array.from({ length: 65 }, (_, index) => ({ role: 'user', content: `m${index}` })));
 
-  const blocked = Array.from({ length: 863 }, (_, index) => ({ role: 'user', content: `m${index}` }));
-  t.is(guard.inspect(blocked).action, 'block');
-
-  const stillComparedToOriginal = guard.inspect(
-    Array.from({ length: 200 }, (_, index) => ({ role: 'user', content: `m${index}` })),
-  );
-  t.is(stillComparedToOriginal.action, 'block');
-  t.is(stillComparedToOriginal.previousStats?.messageCount, 65);
+  const largeInput = Array.from({ length: 863 }, (_, index) => ({ role: 'user', content: `m${index}` }));
+  t.is(guard.inspect(largeInput).action, 'allow');
 });
 
-test('InputSurgeGuard pending block fires once then clears', (t) => {
+test('InputSurgeGuard does not defer a block after recording a large tool result', (t) => {
   const guard = new InputSurgeGuard();
   const requestHistory = [{ role: 'user', type: 'message', content: 'first query' }];
   const postRunHistory = [
@@ -160,20 +151,15 @@ test('InputSurgeGuard pending block fires once then clears', (t) => {
     { type: 'function_call_result', callId: 'call-large', output: 'x'.repeat(150_000) },
   ];
 
-  // Record the successful input with a large appended tool result — this sets a pending block.
   guard.recordSuccessfulInput(postRunHistory, { kind: 'full_history', previousInput: requestHistory });
 
-  // First inspect after the large tool result: pending block fires.
   const firstDecision = guard.inspect([...postRunHistory, { role: 'user', content: 'follow up' }], {
     kind: 'full_history',
   });
-  t.is(firstDecision.action, 'block');
-  t.true(firstDecision.reason?.includes('tool result'));
+  t.is(firstDecision.action, 'allow');
 
-  // Second inspect with same kind: pending block is gone, so only a real surge would block.
   const secondDecision = guard.inspect([...postRunHistory, { role: 'user', content: 'another follow up' }], {
     kind: 'full_history',
   });
-  // The history is now ~4 messages, well within normal growth — so it should be allowed.
   t.is(secondDecision.action, 'allow');
 });

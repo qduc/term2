@@ -123,6 +123,21 @@ export class ConversationLogger {
         this.log({ type: 'subagent_completed', result: event.result });
         return;
       case 'error':
+        this.turnAccumulator.flushReasoningItem();
+        this.turnAccumulator.flushAssistantTextItem();
+        if (this.turnAccumulator.getTurnItems().length > 0) {
+          const turnState = this.getAssistantTurnState();
+          this.log({
+            type: 'assistant_turn',
+            turn: { items: [...this.turnAccumulator.getTurnItems()] },
+            ...(this.turnAccumulator.getDisplayUsage() ? { displayUsage: this.turnAccumulator.getDisplayUsage() } : {}),
+            state: {
+              ...turnState,
+              previousResponseId: null,
+            },
+          });
+          this.turnAccumulator.resetPersistedTurnState();
+        }
         this.log({
           type: 'error',
           message: event.message,

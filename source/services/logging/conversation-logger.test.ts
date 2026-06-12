@@ -124,6 +124,79 @@ test('dispatchEventToLog accumulates turn items and logs the final assistant tur
   ]);
 });
 
+test('dispatchEventToLog checkpoints accumulated turn items before logging an error', (t) => {
+  const { logger } = makeLoggingService();
+  const sinkEvents: any[] = [];
+  const turnAccumulator = new TurnItemAccumulator();
+  const conversationLogger = new ConversationLogger({
+    turnAccumulator,
+    logger,
+    getAssistantTurnState: () => ({
+      previousResponseId: 'resp-stale',
+      model: 'gpt-5',
+      provider: 'openai',
+    }),
+  });
+
+  conversationLogger.setLogSink((event) => sinkEvents.push(event));
+
+  conversationLogger.dispatchEventToLog({ type: 'reasoning_delta', delta: 'inspect' });
+  conversationLogger.dispatchEventToLog({
+    type: 'tool_started',
+    toolCallId: 'call-1',
+    toolName: 'shell',
+    arguments: { command: 'pwd' },
+  });
+  conversationLogger.dispatchEventToLog({
+    type: 'command_message',
+    message: {
+      id: 'msg-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'pwd',
+      output: '/workspace',
+      callId: 'call-1',
+      toolName: 'shell',
+    },
+  });
+  conversationLogger.dispatchEventToLog({ type: 'text_delta', delta: 'continuing' });
+  conversationLogger.dispatchEventToLog({
+    type: 'error',
+    message: 'network timed out',
+    kind: 'network',
+  });
+
+  t.deepEqual(sinkEvents, [
+    { type: 'tool_started', toolCallId: 'call-1', toolName: 'shell', arguments: { command: 'pwd' } },
+    {
+      type: 'command_message',
+      message: {
+        id: 'msg-1',
+        sender: 'command',
+        status: 'completed',
+        command: 'pwd',
+        output: '/workspace',
+        callId: 'call-1',
+        toolName: 'shell',
+      },
+    },
+    {
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'reasoning', text: 'inspect' },
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: { command: 'pwd' } },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: '/workspace' },
+          { type: 'assistant_text', text: 'continuing' },
+        ],
+      },
+      state: { previousResponseId: null, model: 'gpt-5', provider: 'openai' },
+    },
+    { type: 'error', message: 'network timed out', kind: 'network' },
+  ]);
+  t.deepEqual(turnAccumulator.getTurnItems(), []);
+});
+
 test('dispatchEventToLog logs event-specific records', (t) => {
   const { logger } = makeLoggingService();
   const sinkEvents: any[] = [];
@@ -233,6 +306,16 @@ test('dispatchEventToLog logs event-specific records', (t) => {
         toolsUsed: [],
       },
     },
+    {
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: { command: 'echo hi' } },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'hi' },
+        ],
+      },
+      state: { previousResponseId: null },
+    },
     { type: 'error', message: 'something failed', kind: 'runtime', stack: 'stack-trace' },
   ]);
   conversationLogger.dispatchEventToLog({
@@ -243,11 +326,7 @@ test('dispatchEventToLog logs event-specific records', (t) => {
   t.deepEqual(sinkEvents.at(-1), {
     type: 'assistant_turn',
     turn: {
-      items: [
-        { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: { command: 'echo hi' } },
-        { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: 'hi' },
-        { type: 'assistant_text', text: 'done' },
-      ],
+      items: [{ type: 'assistant_text', text: 'done' }],
     },
     state: { previousResponseId: null },
   });

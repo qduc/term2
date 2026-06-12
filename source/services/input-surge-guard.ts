@@ -6,10 +6,6 @@ export interface InputSurgeStats {
 }
 
 export interface InputSurgeGuardConfig {
-  maxMessageGrowthRatio: number;
-  minMessageGrowthForRatioBlock: number;
-  maxSerializedByteGrowthRatio: number;
-  minSerializedByteGrowthForRatioBlock: number;
   maxDuplicateToolCallSignatureCount: number;
   minDuplicateToolCallSignaturesForBlock: number;
 }
@@ -33,10 +29,6 @@ export interface InputSurgeRecordOptions extends InputSurgeInspectOptions {
 }
 
 export const DEFAULT_INPUT_SURGE_GUARD_CONFIG: InputSurgeGuardConfig = {
-  maxMessageGrowthRatio: 3,
-  minMessageGrowthForRatioBlock: 100,
-  maxSerializedByteGrowthRatio: 5,
-  minSerializedByteGrowthForRatioBlock: 100_000,
   maxDuplicateToolCallSignatureCount: 4,
   minDuplicateToolCallSignaturesForBlock: 20,
 };
@@ -140,58 +132,17 @@ export const collectDuplicateToolCallResultPairs = (input: unknown): { pairs: nu
   return { pairs, maxCopies };
 };
 
-const getAppendedItems = (previousInput: unknown, input: unknown): unknown[] => {
-  const items = Array.isArray(input) ? input : [input];
-  if (!Array.isArray(previousInput) || !Array.isArray(input) || input.length < previousInput.length) {
-    return items;
-  }
-
-  return input.slice(previousInput.length);
-};
-
-const getLargestToolResultBytes = (items: unknown[]): number => {
-  let largest = 0;
-  for (const item of items) {
-    const record = toolCallRecord(item);
-    if (record?.type !== 'function_call_result') {
-      continue;
-    }
-    largest = Math.max(largest, serializedBytes(item));
-  }
-  return largest;
-};
-
 export class InputSurgeGuard {
-  #lastSuccessfulStats = new Map<InputSurgeInputKind, InputSurgeStats>();
-  #pendingBlocks = new Map<InputSurgeInputKind, { reason: string; previousStats?: InputSurgeStats }>();
   #config: InputSurgeGuardConfig;
 
   constructor(config: Partial<InputSurgeGuardConfig> = {}) {
     this.#config = { ...DEFAULT_INPUT_SURGE_GUARD_CONFIG, ...config };
   }
 
-  reset(): void {
-    this.#lastSuccessfulStats.clear();
-    this.#pendingBlocks.clear();
-  }
+  reset(): void {}
 
-  inspect(input: unknown, options: InputSurgeInspectOptions = {}): InputSurgeDecision {
-    const kind = options.kind ?? 'full_history';
+  inspect(input: unknown, _options: InputSurgeInspectOptions = {}): InputSurgeDecision {
     const stats = collectInputSurgeStats(input);
-    const pendingBlock = this.#pendingBlocks.get(kind);
-    if (pendingBlock) {
-      if (!options.preview) {
-        this.#pendingBlocks.delete(kind);
-      }
-      return {
-        action: 'block',
-        reason: pendingBlock.reason,
-        stats,
-        previousStats: pendingBlock.previousStats,
-      };
-    }
-
-    const previousStats = this.#lastSuccessfulStats.get(kind);
 
     const duplicatePairs = collectDuplicateToolCallResultPairs(input);
     if (duplicatePairs.pairs >= 3 && duplicatePairs.maxCopies >= 2) {
@@ -199,34 +150,6 @@ export class InputSurgeGuard {
         action: 'block',
         reason: `Detected replayed tool call/result pairs: ${duplicatePairs.pairs} duplicated pairs, max repetition ${duplicatePairs.maxCopies}.`,
         stats,
-        previousStats,
-      };
-    }
-
-    if (
-      previousStats &&
-      stats.messageCount - previousStats.messageCount >= this.#config.minMessageGrowthForRatioBlock &&
-      stats.messageCount > previousStats.messageCount * this.#config.maxMessageGrowthRatio
-    ) {
-      return {
-        action: 'block',
-        reason: `Outgoing message count jumped from ${previousStats.messageCount} to ${stats.messageCount}.`,
-        stats,
-        previousStats,
-      };
-    }
-
-    if (
-      previousStats &&
-      stats.totalSerializedBytes - previousStats.totalSerializedBytes >=
-        this.#config.minSerializedByteGrowthForRatioBlock &&
-      stats.totalSerializedBytes > previousStats.totalSerializedBytes * this.#config.maxSerializedByteGrowthRatio
-    ) {
-      return {
-        action: 'block',
-        reason: `Outgoing input size jumped from ${previousStats.totalSerializedBytes} to ${stats.totalSerializedBytes} bytes.`,
-        stats,
-        previousStats,
       };
     }
 
@@ -238,27 +161,11 @@ export class InputSurgeGuard {
         action: 'block',
         reason: `Detected replayed tool-call history: ${stats.duplicateToolCallSignatures} duplicated tool-call signatures, max repetition ${stats.maxDuplicateToolCallSignatureCount}.`,
         stats,
-        previousStats,
       };
     }
 
-    return { action: 'allow', stats, previousStats };
+    return { action: 'allow', stats };
   }
 
-  recordSuccessfulInput(input: unknown, options: InputSurgeRecordOptions = {}): void {
-    const kind = options.kind ?? 'full_history';
-    const stats = collectInputSurgeStats(input);
-
-    if (options.previousInput !== undefined) {
-      const largestAppendedToolResult = getLargestToolResultBytes(getAppendedItems(options.previousInput, input));
-      if (largestAppendedToolResult >= this.#config.minSerializedByteGrowthForRatioBlock) {
-        this.#pendingBlocks.set(kind, {
-          reason: `New tool result added ${largestAppendedToolResult} serialized bytes to outgoing history.`,
-          previousStats: collectInputSurgeStats(options.previousInput),
-        });
-      }
-    }
-
-    this.#lastSuccessfulStats.set(kind, stats);
-  }
+  recordSuccessfulInput(_input: unknown, _options: InputSurgeRecordOptions = {}): void {}
 }

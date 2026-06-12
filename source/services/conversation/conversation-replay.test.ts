@@ -134,6 +134,33 @@ test('replayEvents: v3 assistant_turn restores state without cumulative snapshot
   t.is(restored.messages[2].usage, undefined);
 });
 
+test('replayEvents: timed-out partial assistant turn preserves tool history for the next message', (t) => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'continue the task' } }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          { type: 'tool_call', callId: 'call-1', toolName: 'shell', arguments: { command: 'pwd' } },
+          { type: 'tool_result', callId: 'call-1', toolName: 'shell', status: 'completed', output: '/repo' },
+        ],
+      },
+      state: { previousResponseId: null },
+    }),
+    env({ type: 'error', message: 'network timed out', kind: 'network' }),
+  ]);
+
+  t.deepEqual(restored.history, [
+    { role: 'user', type: 'message', content: 'continue the task' },
+    { type: 'function_call', callId: 'call-1', name: 'shell', arguments: { command: 'pwd' } },
+    { type: 'function_call_result', callId: 'call-1', name: 'shell', output: '/repo' },
+  ]);
+  t.is(restored.previousResponseId, null);
+  t.false(restored.replayWarnings.some((warning) => warning.includes('interrupted')));
+  t.true(restored.messages.some((message) => message.sender === 'bot' && message.text === 'Error: network timed out'));
+});
+
 test('replayEvents: v3 assistant_turn preserves coarse tool_result ledger and avoids duplicates', (t) => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import { ExecutionContext } from '../execution-context.js';
 import { getProvider } from '../../providers/index.js';
-import { createConversationSession } from '../session/session-factory.js';
+import { createConversationSession } from '../session/session-composition.js';
 import { SubagentSession } from './subagent-session.js';
 import type {
   SubagentRequest,

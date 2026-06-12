@@ -1,9 +1,8 @@
 // @ts-nocheck - Characterization tests for ConversationSession refactoring
 import test from 'ava';
-import { createConversationSession } from './session-factory.js';
+import { createConversationSession, createConversationSessionComposition } from './session-composition.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
-import { createConversationSessionComposition } from './session-composition.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 
 // ── Shared mocks ───────────────────────────────────────────────────────────

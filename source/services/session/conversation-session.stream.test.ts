@@ -1,7 +1,7 @@
 // @ts-nocheck - Complex mock patterns deferred to follow-up
 import test from 'ava';
 import { ModelBehaviorError } from '@openai/agents';
-import { createConversationSession } from './session-factory.js';
+import { createConversationSession } from './session-composition.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 
 const mockLogger = {

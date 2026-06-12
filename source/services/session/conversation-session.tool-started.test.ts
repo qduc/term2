@@ -1,7 +1,7 @@
 import test from 'ava';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { LogEvent } from '../logging/conversation-log-events.js';
-import { createConversationSession } from './session-factory.js';
+import { createConversationSession } from './session-composition.js';
 
 const createMockLogger = () => {
   const events: Array<{

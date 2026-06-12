@@ -6,7 +6,7 @@ import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { SendMessageOptions, HandleApprovalDecisionOptions } from './conversation-adapter.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
-import { createConversationSession, type ConversationSessionBundle } from '../session/session-factory.js';
+import { createConversationSession, type ConversationSessionBundle } from '../session/session-composition.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';

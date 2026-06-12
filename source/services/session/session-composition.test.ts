@@ -1,7 +1,6 @@
 // @ts-nocheck - Complex mock patterns
 import test from 'ava';
-import { createConversationSession } from './session-factory.js';
-import { createConversationSessionComposition } from './session-composition.js';
+import { createConversationSession, createConversationSessionComposition } from './session-composition.js';
 
 const noop = () => {};
 
@@ -60,6 +59,10 @@ test('createConversationSession returns bundle with correct sessionId', (t) => {
     deps: { logger: makeLogger(), sessionContextService },
   });
   t.is(sessionId, 'test-123');
+});
+
+test('createConversationSession is the public name for the session composition root', (t) => {
+  t.is(createConversationSession, createConversationSessionComposition);
 });
 
 test('createConversationSession returns bundle with correct sessionStartedAt when provided', (t) => {

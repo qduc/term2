@@ -1,7 +1,7 @@
 import test, { type ExecutionContext, type Macro } from 'ava';
 import { type ConversationEvent } from '../conversation/conversation-events.js';
 import { type ConversationTerminal } from '../../contracts/conversation.js';
-import { createConversationSession } from './session-factory.js';
+import { createConversationSession } from './session-composition.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 
 type ApprovalRequiredResult = Extract<ConversationTerminal, { type: 'approval_required' }>;

@@ -1,6 +1,6 @@
 import type { AgentClient } from './lib/agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from './services/service-interfaces.js';
-import { createConversationSession } from './services/session/session-factory.js';
+import { createConversationSession } from './services/session/session-composition.js';
 import { SessionContextService } from './services/session/session-context-service.js';
 import type { ConversationEvent } from './services/conversation/conversation-events.js';
 import type { UserTurn } from './types/user-turn.js';

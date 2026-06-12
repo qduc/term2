@@ -37,6 +37,14 @@ import { InitialInputPreparer } from './initial-input-preparer.js';
 import { InitialStreamCycle } from './initial-stream-cycle.js';
 import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 
+const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
+  value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
+
+const asSubagentEventSinkHost = (value: unknown): SubagentEventSinkHost | null =>
+  value && typeof (value as SubagentEventSinkHost).setSubagentEventSink === 'function'
+    ? (value as SubagentEventSinkHost)
+    : null;
+
 // ── Public types ──────────────────────────────────────────────────
 
 export type ConversationSessionRetryOptions = {
@@ -50,6 +58,7 @@ export type ConversationSessionRetryOptions = {
 /** All collaborator instances created by the composition factory. */
 export type ConversationSessionComposition = {
   sessionId: string;
+  sessionStartedAt: string;
   conversationStore: ConversationStore;
   approvalState: ApprovalState;
   toolTracker: SessionToolTracker;
@@ -101,8 +110,25 @@ export type CreateConversationSessionCompositionOptions = {
     sessionContextService: ISessionContextService;
   };
   retryOptions?: ConversationSessionRetryOptions;
-  turnAccumulator: TurnItemAccumulator;
+  turnAccumulator?: TurnItemAccumulator;
 };
+
+export type CreateConversationSessionOptions = Omit<CreateConversationSessionCompositionOptions, 'turnAccumulator'>;
+export type ConversationSessionBundle = Pick<
+  ConversationSessionComposition,
+  | 'sessionId'
+  | 'sessionStartedAt'
+  | 'turnCoordinator'
+  | 'terminalAdapter'
+  | 'stateFacade'
+  | 'runtimeController'
+  | 'conversationLogger'
+  | 'approvalState'
+  | 'shellAutoApproval'
+  | 'toolTracker'
+  | 'inputPlanner'
+  | 'dispose'
+>;
 
 // ── Composition factory ───────────────────────────────────────────
 
@@ -121,6 +147,9 @@ export function createConversationSessionComposition(
   } = options;
   const { logger, settingsService, sessionContextService } = deps;
   const startedAt = sessionStartedAt ?? new Date().toISOString();
+  const resolvedTurnAccumulator = turnAccumulator ?? new TurnItemAccumulator();
+  const resolvedAskUserAnswerSink = askUserAnswerSink ?? asAskUserAnswerSink(agentClient);
+  const resolvedSubagentEventSinkHost = subagentEventSinkHost ?? asSubagentEventSinkHost(agentClient);
 
   const generationGuard = new GenerationGuard();
 
@@ -161,7 +190,7 @@ export function createConversationSessionComposition(
   });
 
   const conversationLogger = new ConversationLogger({
-    turnAccumulator,
+    turnAccumulator: resolvedTurnAccumulator,
     logger,
     getAssistantTurnState: () => {
       const fn = getMethod<[], string>(agentClient, 'getProvider');
@@ -190,7 +219,7 @@ export function createConversationSessionComposition(
     approvalFlow,
     toolTracker,
     shellAutoApproval,
-    turnAccumulator,
+    turnAccumulator: resolvedTurnAccumulator,
     conversationStore,
     agentClient,
     logger,
@@ -263,7 +292,7 @@ export function createConversationSessionComposition(
     shellAutoApproval,
     streamProcessor,
     toolTracker,
-    turnAccumulator,
+    turnAccumulator: resolvedTurnAccumulator,
   });
   const recoveryHandler = new InitialTurnRecoveryHandler({
     conversationStore,
@@ -289,7 +318,7 @@ export function createConversationSessionComposition(
     agentClient,
     streamProcessor,
     conversationStore,
-    turnAccumulator,
+    turnAccumulator: resolvedTurnAccumulator,
     toolTracker,
     approvalFlow,
     shellAutoApproval,
@@ -326,7 +355,7 @@ export function createConversationSessionComposition(
     agentClient,
     logger,
     sessionId: id,
-    turnAccumulator,
+    turnAccumulator: resolvedTurnAccumulator,
     toolTracker,
     shellAutoApproval,
     generationGuard,
@@ -363,16 +392,15 @@ export function createConversationSessionComposition(
   const terminalAdapter = new ConversationAdapter({
     sessionId: id,
     startedAt,
-    askUserAnswerSink,
-    subagentEventSinkHost,
+    askUserAnswerSink: resolvedAskUserAnswerSink,
+    subagentEventSinkHost: resolvedSubagentEventSinkHost,
     logger,
     settingsService,
     sessionContextService,
     conversationStore,
     conversationLogger,
     approvalFlow,
-    run: (input, opts) => turnCoordinator.start(input, opts),
-    continueAfterApproval: (opts) => turnCoordinator.continueAfterApproval(opts),
+    turnFlow: turnCoordinator,
   });
 
   let disposed = false;
@@ -390,6 +418,7 @@ export function createConversationSessionComposition(
 
   return {
     sessionId: id,
+    sessionStartedAt: startedAt,
     conversationStore,
     approvalState,
     toolTracker,
@@ -413,8 +442,11 @@ export function createConversationSessionComposition(
     recoveryExecutor,
     retryClassifier,
     retryEventPresenter,
-    turnAccumulator,
+    turnAccumulator: resolvedTurnAccumulator,
     initialTurnRunner,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
   };
 }
+
+export const createConversationSession: (options: CreateConversationSessionOptions) => ConversationSessionBundle =
+  createConversationSessionComposition;

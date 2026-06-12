@@ -1,5 +1,5 @@
 import test from 'ava';
-import { createConversationSession } from './session-factory.js';
+import { createConversationSession } from './session-composition.js';
 import { LoggingService } from '../logging/logging-service.js';
 
 const logger = new LoggingService({ disableLogging: true });

@@ -6,7 +6,7 @@ import path from 'node:path';
 import * as persistenceModule from './conversation-persistence.js';
 import { createConversationLogWriter, LockConflictError } from '../logging/conversation-log-writer.js';
 import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events.js';
-import { createConversationSession } from '../session/session-factory.js';
+import { createConversationSession } from '../session/session-composition.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 
 const createSessionContextService = () => ({

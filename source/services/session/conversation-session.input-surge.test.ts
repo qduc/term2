@@ -1,6 +1,6 @@
 import test from 'ava';
 import { type ConversationTerminal } from '../../contracts/conversation.js';
-import { createConversationSession } from './session-factory.js';
+import { createConversationSession } from './session-composition.js';
 
 type ApprovalRequiredResult = Extract<ConversationTerminal, { type: 'approval_required' }>;
 type ResponseResult = Extract<ConversationTerminal, { type: 'response' }>;

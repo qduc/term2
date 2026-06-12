@@ -9,6 +9,7 @@ import type { ConversationLogger } from '../logging/conversation-logger.js';
 import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
 import type { ConversationStore } from './conversation-store.js';
+import type { TurnCoordinator } from '../session/turn-coordinator.js';
 
 export type SendMessageOptions = {
   onTextChunk?: (fullText: string, chunk: string) => void;
@@ -26,6 +27,8 @@ export type HandleApprovalDecisionOptions = {
   approvalAnswer?: string;
 };
 
+export type TurnFlow = Pick<TurnCoordinator, 'start' | 'continueAfterApproval'>;
+
 export class ConversationAdapter {
   #sessionId: string;
   #startedAt: string;
@@ -37,11 +40,7 @@ export class ConversationAdapter {
   #conversationStore: ConversationStore;
   #conversationLogger: ConversationLogger;
   #approvalFlow: ApprovalFlowCoordinator;
-  #run: (
-    input: string | UserTurn,
-    options?: { retries?: { hallucinationRetryCount?: number } },
-  ) => AsyncIterable<ConversationEvent>;
-  #continueAfterApproval: (options: { answer: string; rejectionReason?: string }) => AsyncIterable<ConversationEvent>;
+  #turnFlow: TurnFlow;
 
   constructor(deps: {
     sessionId: string;
@@ -54,11 +53,7 @@ export class ConversationAdapter {
     conversationStore: ConversationStore;
     conversationLogger: ConversationLogger;
     approvalFlow: ApprovalFlowCoordinator;
-    run: (
-      input: string | UserTurn,
-      options?: { retries?: { hallucinationRetryCount?: number } },
-    ) => AsyncIterable<ConversationEvent>;
-    continueAfterApproval: (options: { answer: string; rejectionReason?: string }) => AsyncIterable<ConversationEvent>;
+    turnFlow: TurnFlow;
   }) {
     this.#sessionId = deps.sessionId;
     this.#startedAt = deps.startedAt;
@@ -70,8 +65,7 @@ export class ConversationAdapter {
     this.#conversationStore = deps.conversationStore;
     this.#conversationLogger = deps.conversationLogger;
     this.#approvalFlow = deps.approvalFlow;
-    this.#run = deps.run;
-    this.#continueAfterApproval = deps.continueAfterApproval;
+    this.#turnFlow = deps.turnFlow;
   }
 
   #getFirstUserMessagePreview(currentTurn?: string): string {
@@ -115,7 +109,7 @@ export class ConversationAdapter {
       this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
       let result: ConversationTerminal;
       try {
-        result = await collectTerminalResult(this.#run(input, { retries: { hallucinationRetryCount } }), {
+        result = await collectTerminalResult(this.#turnFlow.start(input, { retries: { hallucinationRetryCount } }), {
           onTextChunk,
           onReasoningChunk,
           onCommandMessage,
@@ -175,7 +169,7 @@ export class ConversationAdapter {
       this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
       let result: ConversationTerminal | null;
       try {
-        result = await collectTerminalResult(this.#continueAfterApproval({ answer, rejectionReason }), {
+        result = await collectTerminalResult(this.#turnFlow.continueAfterApproval({ answer, rejectionReason }), {
           onTextChunk,
           onReasoningChunk,
           onCommandMessage,

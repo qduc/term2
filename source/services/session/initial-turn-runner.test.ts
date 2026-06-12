@@ -2,7 +2,6 @@ import test from 'ava';
 import { createConversationSessionComposition } from './session-composition.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
-import { InitialTurnRunner, type InitialTurnRunnerDeps } from './initial-turn-runner.js';
 import { TurnAttempt } from './turn-attempt.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { AbortedApprovalContext } from '../approval/approval-state.js';
@@ -38,13 +37,7 @@ function setupRunner(mockClient: any, retryOptions?: any) {
     retryOptions,
   });
 
-  const runner = new InitialTurnRunner({
-    ...composition,
-    agentClient: mockClient,
-    logger: mockLogger,
-    sessionId: 'test-session',
-  } as unknown as InitialTurnRunnerDeps);
-  return { runner, composition };
+  return { runner: composition.initialTurnRunner, composition };
 }
 
 const defaultRetryCounts: RetryCounts = {

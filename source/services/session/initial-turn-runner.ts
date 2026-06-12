@@ -1,32 +1,20 @@
-import { type RunState } from '@openai/agents';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ConversationTerminal } from '../../contracts/conversation.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
-import type { ConversationStore } from '../conversation/conversation-store.js';
-import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
-import type { AbortedApprovalContext } from '../approval/approval-state.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
-import type { SessionInputPlanner } from './session-input-planner.js';
-import type { SessionLifecycle } from './session-lifecycle.js';
-import type { SessionStreamProcessor } from './session-stream-processor.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { TurnItemAccumulator } from './turn-item-accumulator.js';
-import type { ProviderContinuity } from '../provider-continuity.js';
 import type { ContinuationDriver } from './continuation-driver.js';
-import type { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
-import type { DefaultRecoveryExecutor } from '../retry/recovery-executor.js';
 import type { GenerationGuard } from '../generation-guard.js';
-import type { DefaultRetryClassifier } from '../retry/retry-classifier.js';
-import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import { TurnAttempt } from './turn-attempt.js';
-import type { RecoveryState, NextRunInstruction, RetryCounts } from '../retry/retry-contracts.js';
-import type { AgentStream } from '../agent-stream.js';
 import { getMethod } from '../interruption-info.js';
-import { buildConversationResult } from '../conversation/conversation-result-builder.js';
-import { describeError } from '../../utils/error-helpers.js';
 import { ShellAutoApprovalDecisionPolicy } from './continuation-driver.js';
-import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
+import type { UserTurn } from '../../types/user-turn.js';
+import type { InitialTurnRunOptions, TurnAttemptFactory } from './turn-attempt-factory.js';
+import type { InitialInputPreparer } from './initial-input-preparer.js';
+import type { InitialStreamCycle } from './initial-stream-cycle.js';
+import type { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 
 export type InitialTurnOutcome =
   | { kind: 'response'; terminal: ConversationTerminal }
@@ -40,22 +28,13 @@ export interface InitialTurnRunnerDeps {
   sessionId: string;
   turnAccumulator: TurnItemAccumulator;
   toolTracker: SessionToolTracker;
-  conversationStore: ConversationStore;
-  approvalFlow: ApprovalFlowCoordinator;
   shellAutoApproval: ShellAutoApprovalResolver;
-  inputPlanner: SessionInputPlanner;
-  state: SessionLifecycle;
-  streamProcessor: SessionStreamProcessor;
-  providerContinuity: ProviderContinuity;
-  breakChaining: () => void;
   continuationDriver: ContinuationDriver;
-  recoveryPolicy: DefaultConversationRecoveryPolicy;
-  recoveryExecutor: DefaultRecoveryExecutor;
   generationGuard: GenerationGuard;
-  retryClassifier: DefaultRetryClassifier;
-  retryEventPresenter: RetryEventPresenter;
-  freshStartRetriesAllowed: boolean;
-  resolveRetryLimit: () => number;
+  attemptFactory: TurnAttemptFactory;
+  inputPreparer: InitialInputPreparer;
+  streamCycle: InitialStreamCycle;
+  recoveryHandler: InitialTurnRecoveryHandler;
 }
 
 export class InitialTurnRunner {
@@ -63,71 +42,17 @@ export class InitialTurnRunner {
 
   async *run(
     attemptOrInput: TurnAttempt | string | UserTurn,
-    options: {
-      skipUserMessage?: boolean;
-      resumeState?: RunState<any, any>;
-      resumePreviousResponseId?: string | null;
-      abortedContext?: AbortedApprovalContext | null;
-      token?: number;
-      retries?: any;
-      maxModelRetries?: number;
-      signal?: AbortSignal;
-      delayMs?: number;
-      useStandardServiceTier?: boolean;
-    } = {},
+    options: InitialTurnRunOptions = {},
   ): AsyncGenerator<ConversationEvent, InitialTurnOutcome, void> {
     let attempt: TurnAttempt;
     if (attemptOrInput instanceof TurnAttempt) {
       attempt = attemptOrInput;
     } else {
-      const normalized = normalizeUserTurn(attemptOrInput);
-      let turn: UserTurn = this.deps.state.pendingModeNotice?.trim()
-        ? { ...normalized, text: `${this.deps.state.pendingModeNotice}\n\n${normalized.text}` }
-        : normalized;
-
-      if (!turn.text && options.skipUserMessage) {
-        try {
-          const lastText = this.deps.conversationStore.getLastUserMessage();
-          turn = { ...turn, text: lastText };
-        } catch {
-          // ignore
-        }
+      const creation = this.deps.attemptFactory.create(attemptOrInput, options);
+      if (creation.kind === 'stale') {
+        return { kind: 'stale' };
       }
-
-      const maxTransientRetries = this.deps.resolveRetryLimit();
-
-      let token: number;
-      if (options.abortedContext) {
-        const tokenVal = options.abortedContext.token ?? 0;
-        if (this.deps.generationGuard.isCurrent(tokenVal)) {
-          token = tokenVal;
-        } else {
-          return { kind: 'stale' };
-        }
-      } else {
-        token = options.token ?? this.deps.generationGuard.capture();
-      }
-
-      const rawRetries = options.retries ?? {};
-      const retryCounts: RetryCounts = {
-        transientRetryCount: rawRetries.transientRetryCount ?? rawRetries.transientRetryCount ?? 0,
-        serviceTierFallbackCount: rawRetries.serviceTierFallbackCount ?? rawRetries.flexServiceTierFallbackCount ?? 0,
-        modelRetryCount: rawRetries.modelRetryCount ?? rawRetries.hallucinationRetryCount ?? 0,
-        transportDowngradeCount: rawRetries.transportDowngradeCount ?? rawRetries.transportFallbackRetryCount ?? 0,
-      };
-
-      attempt = new TurnAttempt({
-        turn,
-        token,
-        initialRetryCounts: retryCounts,
-        initialLedgerSnapshot: this.deps.toolTracker.export(),
-        maxTransientRetries,
-        maxModelRetries: options.maxModelRetries,
-        signal: options.signal,
-        onAbort: () => {
-          this.deps.agentClient.abort();
-        },
-      });
+      attempt = creation.attempt;
     }
 
     let skipUser = options.skipUserMessage ?? false;
@@ -209,122 +134,25 @@ export class InitialTurnRunner {
           continue;
         }
 
-        // 3. User message insertion
-        const shouldAddUserMessage = !skipUser;
-        if (shouldAddUserMessage && !attempt.addedUserMessage) {
-          this.deps.conversationStore.addUserTurn(attempt.turn);
-          attempt.markUserMessageAdded();
-        }
-
-        // 4. Build input plan and run surge check
-        const plan = this.deps.inputPlanner.build(attempt.turn, {
-          includeTurn: false,
-          pendingModeNotice: this.deps.state.pendingModeNotice,
-        });
-        attempt.attachInput(plan);
-        const surgeDecision = this.deps.inputPlanner.inspectForSurge(attempt.streamInput, attempt.inputMode!);
-        if (surgeDecision.action === 'block') {
-          let droppedUserMessage: { text: string; imageCount: number } | undefined;
-          if (attempt.addedUserMessage && this.deps.generationGuard.isCurrent(attempt.token)) {
-            this.deps.conversationStore.removeLastUserMessage();
-            droppedUserMessage = { text: attempt.turn.text, imageCount: attempt.turn.images?.length ?? 0 };
-          }
-
-          this.deps.logger.warn('Input surge guard blocked provider request', {
-            eventType: 'input_surge.blocked',
-            category: 'provider',
-            phase: 'request_start',
-            sessionId: this.deps.sessionId,
-            traceId: this.deps.logger.getCorrelationId(),
-            reason: surgeDecision.reason,
-            stats: surgeDecision.stats,
-            previousStats: surgeDecision.previousStats,
-          });
-
-          yield {
-            type: 'error',
-            kind: 'input_surge_guard',
-            message: `${surgeDecision.reason} Request blocked to prevent runaway context growth. Try /undo or /clear, or compact the conversation history.`,
-            ...(droppedUserMessage ? { droppedUserMessage } : {}),
-          };
+        const preparation = this.deps.inputPreparer.prepare(attempt, skipUser);
+        if (preparation.kind === 'blocked') {
+          yield preparation.event;
           return { kind: 'failed' };
         }
 
-        if (this.deps.state.pendingModeNotice) {
-          this.deps.state.pendingModeNotice = null;
-        }
-
-        let stream: AgentStream | null = null;
-        let acc;
         try {
-          if (currentResumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
-            stream = (await this.deps.agentClient.continueRunStream(currentResumeState, {
-              previousResponseId: currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
-              sessionId: this.deps.sessionId,
-            })) as AgentStream;
-          } else {
-            stream = (await this.deps.agentClient.startStream(attempt.streamInput!, {
-              previousResponseId:
-                attempt.inputMode === 'delta' ? this.deps.providerContinuity.previousResponseId : null,
-              sessionId: this.deps.sessionId,
-            })) as AgentStream;
-          }
-
-          attempt.attachStream(stream);
-
-          acc = yield* this.deps.streamProcessor.process(stream, {
-            gen: attempt.token,
-            source: 'startStream',
-            preserveExistingToolArgs: false,
+          const cycleResult = yield* this.deps.streamCycle.execute(attempt, {
+            resumeState: currentResumeState,
+            resumePreviousResponseId: currentResumePreviousResponseId,
           });
-
-          const finalizeResult = this.deps.streamProcessor.finalize(
-            stream,
-            attempt.token,
-            attempt.inputMode!,
-            'startStream',
-          );
-          if (finalizeResult.kind === 'stale') {
+          if (cycleResult.kind === 'stale') {
             return { kind: 'stale' };
           }
-
-          // 6. Build outcome
-          const outcome = await buildConversationResult(
-            {
-              result: stream,
-              finalOutputOverride: acc.finalOutput || undefined,
-              reasoningOutputOverride: acc.reasoningOutput || undefined,
-              emittedCommandIds: acc.emittedCommandIds,
-              usage: acc.latestUsage,
-              toolCallArgumentsById: this.deps.toolTracker.argumentsById,
-              turnItems: this.deps.turnAccumulator.getTurnItems(),
-              token: attempt.token,
-              inputMode: attempt.inputMode!,
-            },
-            {
-              approvalFlow: this.deps.approvalFlow,
-              shellAutoApproval: this.deps.shellAutoApproval,
-              logger: this.deps.logger,
-              sessionId: this.deps.sessionId,
-            },
-          );
+          const { outcome } = cycleResult;
 
           if (outcome.kind === 'response') {
-            this.deps.inputPlanner.recordSuccess(
-              attempt.inputMode === 'delta' ? attempt.streamInput! : this.deps.conversationStore.getHistory(),
-              attempt.inputMode === 'delta'
-                ? { kind: attempt.inputMode }
-                : { kind: attempt.inputMode!, previousInput: attempt.streamInput! },
-            );
             return { kind: 'response', terminal: outcome.result };
           }
-
-          this.deps.inputPlanner.recordSuccess(
-            attempt.inputMode === 'delta' ? attempt.streamInput! : this.deps.conversationStore.getHistory(),
-            attempt.inputMode === 'delta'
-              ? { kind: attempt.inputMode }
-              : { kind: attempt.inputMode!, previousInput: attempt.streamInput! },
-          );
 
           if (outcome.kind === 'auto_approve') {
             this.deps.logger.debug('Shell command auto-approved by LLM', {
@@ -381,10 +209,10 @@ export class InitialTurnRunner {
           });
           return { kind: 'approval_required', terminal: outcome.result };
         } catch (error) {
-          const handled = yield* this.#handleRetryDecision({
+          const handled = yield* this.deps.recoveryHandler.handle({
             error,
             attempt,
-            stream,
+            stream: attempt.stream,
           });
 
           if (handled.kind === 'run') {
@@ -411,166 +239,5 @@ export class InitialTurnRunner {
     } finally {
       attempt.close();
     }
-  }
-
-  async *#handleRetryDecision(ctx: {
-    error: unknown;
-    attempt: TurnAttempt;
-    stream: AgentStream | null;
-  }): AsyncGenerator<
-    ConversationEvent,
-    | { kind: 'run'; instruction: NextRunInstruction; delayMs?: number; useStandardServiceTier?: boolean }
-    | { kind: 'terminated' }
-    | { kind: 'stale' },
-    void
-  > {
-    const { error, attempt, stream } = ctx;
-
-    if (!this.deps.generationGuard.isCurrent(attempt.token)) {
-      return { kind: 'stale' };
-    }
-
-    let classified = this.deps.retryClassifier.classify({
-      error,
-      retryCounts: attempt.retryCounts,
-      stream,
-      maxTransientRetries: attempt.maxTransientRetries,
-      maxModelRetries: attempt.maxModelRetries,
-    });
-
-    if (!this.deps.freshStartRetriesAllowed && !stream && classified.kind !== 'unrecoverable') {
-      this.deps.logger.warn('Retry requires fresh start but fresh-start retries are disabled for this session', {
-        eventType: 'retry.fresh_start_blocked',
-        category: 'retry',
-        phase: 'retry',
-        sessionId: this.deps.sessionId,
-        traceId: this.deps.logger.getCorrelationId(),
-        retryKind: classified.kind,
-        errorMessage: error instanceof Error ? error.message : String(error),
-      });
-      classified = { kind: 'unrecoverable' };
-    }
-
-    if (classified.kind === 'unrecoverable') {
-      const droppedUserMessage =
-        attempt.addedUserMessage && !stream
-          ? { text: attempt.turn.text, imageCount: attempt.turn.images?.length ?? 0 }
-          : undefined;
-      const plan = this.deps.recoveryPolicy.plan({
-        failure: classified,
-        gen: attempt.token,
-        stream,
-        retryCounts: attempt.retryCounts,
-        maxModelRetries: attempt.maxModelRetries,
-        freshStartRetriesAllowed: this.deps.freshStartRetriesAllowed,
-      });
-      const recoveryResult = this.deps.recoveryExecutor.apply({
-        plan,
-        state: {
-          ledgerSnapshot: attempt.initialLedgerSnapshot,
-          addedUserMessage: attempt.addedUserMessage,
-          stream,
-        },
-        retryCounts: attempt.retryCounts,
-        maxModelRetries: attempt.maxModelRetries,
-      });
-
-      this.deps.inputPlanner.recordSuccess(this.deps.conversationStore.getHistory(), {
-        kind: 'full_history',
-        previousInput: attempt.streamInput,
-      });
-      for (const event of recoveryResult.events) {
-        yield event;
-      }
-      yield {
-        type: 'error',
-        message: describeError(error),
-        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
-        ...(droppedUserMessage ? { droppedUserMessage } : {}),
-      };
-      this.deps.logger.error('Conversation stream error', {
-        eventType: 'stream.failed',
-        category: 'stream',
-        phase: 'abort',
-        sessionId: this.deps.sessionId,
-        traceId: this.deps.logger.getCorrelationId(),
-        errorMessage: describeError(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      return { kind: 'terminated' };
-    }
-
-    const presentation = this.deps.retryEventPresenter.present({
-      failure: classified,
-      maxTransientRetries: attempt.maxTransientRetries,
-      maxModelRetries: attempt.maxModelRetries,
-      source: 'initial',
-      error,
-    });
-
-    yield presentation.event;
-
-    this.deps.logger.warn(presentation.logMessage, {
-      ...presentation.logFields,
-      sessionId: this.deps.sessionId,
-      traceId: this.deps.logger.getCorrelationId(),
-    });
-
-    if (!this.deps.generationGuard.isCurrent(attempt.token)) {
-      return { kind: 'stale' };
-    }
-
-    const nextRetryCounts = this.deps.recoveryPolicy.nextRetryCounts(attempt.retryCounts, classified);
-    attempt.advanceRetry(nextRetryCounts);
-
-    const plan = this.deps.recoveryPolicy.plan({
-      failure: classified,
-      gen: attempt.token,
-      stream,
-      retryCounts: attempt.retryCounts,
-      maxModelRetries: attempt.maxModelRetries,
-      freshStartRetriesAllowed: this.deps.freshStartRetriesAllowed,
-    });
-
-    const recoveryState: RecoveryState = {
-      ledgerSnapshot: attempt.initialLedgerSnapshot,
-      addedUserMessage: attempt.addedUserMessage,
-      stream,
-    };
-
-    const result = this.deps.recoveryExecutor.apply({
-      plan,
-      state: recoveryState,
-      retryCounts: attempt.retryCounts,
-      maxModelRetries: attempt.maxModelRetries,
-    });
-
-    if (result.kind === 'terminated') {
-      for (const event of result.events) {
-        yield event;
-      }
-      yield {
-        type: 'error',
-        message: describeError(error),
-        ...(error instanceof Error && error.stack ? { stack: error.stack } : {}),
-      };
-      this.deps.logger.error('Conversation stream error', {
-        eventType: 'stream.failed',
-        category: 'stream',
-        phase: 'abort',
-        sessionId: this.deps.sessionId,
-        traceId: this.deps.logger.getCorrelationId(),
-        errorMessage: describeError(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      return { kind: 'terminated' };
-    }
-
-    return {
-      kind: 'run',
-      instruction: result.instruction,
-      delayMs: classified.kind === 'transient' ? classified.delayMs : undefined,
-      useStandardServiceTier: result.useStandardServiceTier,
-    };
   }
 }

@@ -29,6 +29,10 @@ import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import { InitialTurnRunner } from './initial-turn-runner.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
+import { TurnAttemptFactory } from './turn-attempt-factory.js';
+import { InitialInputPreparer } from './initial-input-preparer.js';
+import { InitialStreamCycle } from './initial-stream-cycle.js';
+import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 
 // ── Public types ──────────────────────────────────────────────────
 
@@ -228,6 +232,47 @@ export function createConversationSessionComposition(
     const clientLimit = getMethod<[], number>(agentClient, 'getStreamMaxRetries')?.call(agentClient);
     return typeof clientLimit === 'number' && Number.isInteger(clientLimit) && clientLimit >= 0 ? clientLimit : 2;
   };
+  const attemptFactory = new TurnAttemptFactory({
+    agentClient,
+    conversationStore,
+    generationGuard,
+    toolTracker,
+    state,
+    resolveRetryLimit,
+  });
+  const inputPreparer = new InitialInputPreparer({
+    conversationStore,
+    generationGuard,
+    inputPlanner,
+    logger,
+    sessionId: id,
+    state,
+  });
+  const streamCycle = new InitialStreamCycle({
+    agentClient,
+    approvalFlow,
+    conversationStore,
+    inputPlanner,
+    logger,
+    providerContinuity,
+    sessionId: id,
+    shellAutoApproval,
+    streamProcessor,
+    toolTracker,
+    turnAccumulator,
+  });
+  const recoveryHandler = new InitialTurnRecoveryHandler({
+    conversationStore,
+    freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
+    generationGuard,
+    inputPlanner,
+    logger,
+    recoveryExecutor,
+    recoveryPolicy,
+    retryClassifier,
+    retryEventPresenter,
+    sessionId: id,
+  });
 
   const continuationDriver = new ContinuationDriver({
     agentClient,
@@ -255,22 +300,13 @@ export function createConversationSessionComposition(
     sessionId: id,
     turnAccumulator,
     toolTracker,
-    conversationStore,
-    approvalFlow,
     shellAutoApproval,
-    inputPlanner,
-    state,
-    streamProcessor,
-    providerContinuity,
-    breakChaining,
     continuationDriver,
-    recoveryPolicy,
-    recoveryExecutor,
     generationGuard,
-    retryClassifier,
-    retryEventPresenter,
-    freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
-    resolveRetryLimit,
+    attemptFactory,
+    inputPreparer,
+    streamCycle,
+    recoveryHandler,
   });
 
   const turnCoordinator = new TurnCoordinator({

@@ -674,3 +674,282 @@ test('wrapCodexStream throws a detailed provider error when receiving a failed r
   t.true(error instanceof Error);
   t.is(error.message, 'Codex provider error: Model context length exceeded');
 });
+
+function createSleepRecorder() {
+  const delays: number[] = [];
+  return {
+    delays,
+    sleep: async (delayMs: number) => {
+      delays.push(delayMs);
+    },
+  };
+}
+
+const DEFAULT_STREAM_MAX_RETRIES = 5;
+
+test.serial(
+  'CodexResponsesWSModel injects Codex previous response id and trims replayed tool-continuation input',
+  async (t) => {
+    const seenRequests: any[] = [];
+    const toolOutput = {
+      type: 'function_call_result',
+      callId: 'call-read',
+      output: 'done',
+    };
+
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      return makeStream([
+        {
+          type: 'response.completed',
+          response: {
+            id: seenRequests.length === 1 ? 'resp-1' : 'resp-2',
+            output: [],
+            usage: {},
+          },
+        } as any,
+      ]);
+    };
+
+    const mockClient = {
+      baseURL: 'https://api.openai.com',
+      apiKey: 'test-key',
+      _options: {},
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
+
+    try {
+      const model = new CodexResponsesWSModel(
+        mockClient as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        undefined,
+        {
+          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        },
+      );
+
+      for await (const _event of model.getStreamedResponse({
+        input: [{ role: 'user', type: 'message', content: 'inspect' }],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+      }
+
+      t.is(seenRequests.length, 2);
+      t.is(seenRequests[0].modelSettings.providerData?.generate, false);
+      t.deepEqual(seenRequests[0].input, []);
+      t.is(seenRequests[1].previousResponseId, 'resp-1');
+      t.deepEqual(seenRequests[1].input, [{ role: 'user', type: 'message', content: 'inspect' }]);
+
+      for await (const _event of model.getStreamedResponse({
+        input: [
+          { role: 'user', type: 'message', content: 'inspect' },
+          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'I will inspect it.' }] },
+          { type: 'function_call', call_id: 'call-read', name: 'read_file', arguments: '{}' },
+          toolOutput,
+        ],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+      }
+
+      t.is(seenRequests.length, 3);
+      t.is(seenRequests[2].previousResponseId, 'resp-2');
+      t.deepEqual(seenRequests[2].input, [toolOutput]);
+
+      const latestUser = { role: 'user', type: 'message', content: 'summarize' };
+      for await (const _event of model.getStreamedResponse({
+        previousResponseId: 'resp-explicit',
+        input: [
+          { role: 'user', type: 'message', content: 'inspect' },
+          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'Done.' }] },
+          latestUser,
+        ],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+      }
+
+      t.is(seenRequests.length, 4);
+      t.is(seenRequests[3].previousResponseId, 'resp-explicit');
+      t.deepEqual(seenRequests[3].input, [latestUser]);
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);
+
+test.serial(
+  'CodexResponsesWSModel retries safe Codex warm-up failures before chaining the delta request',
+  async (t) => {
+    const seenRequests: any[] = [];
+    const sleep = createSleepRecorder();
+    const safeWarmupError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
+      code: 'connection_closed_before_opening',
+    });
+
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      if (seenRequests.length === 1) {
+        throw safeWarmupError;
+      }
+      return makeStream([
+        {
+          type: 'response.completed',
+          response: {
+            id: seenRequests.length === 2 ? 'resp-warmup' : 'resp-main',
+            output: [],
+            usage: {},
+          },
+        } as any,
+      ]);
+    };
+
+    const mockClient = {
+      baseURL: 'https://api.openai.com',
+      apiKey: 'test-key',
+      _options: {},
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
+
+    try {
+      const model = new CodexResponsesWSModel(
+        mockClient as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        undefined,
+        {
+          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        },
+        { sleep: sleep.sleep },
+      );
+
+      (model as any).getRetryAdvice = async ({ error }: any) =>
+        error === safeWarmupError ? { suggested: true, replaySafety: 'safe' } : { suggested: false };
+
+      const latestUser = { role: 'user', type: 'message', content: 'next' };
+      await model.getResponse({
+        input: [
+          { role: 'user', type: 'message', content: 'first' },
+          { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
+          latestUser,
+        ],
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any);
+
+      t.is(seenRequests.length, 3);
+      t.is(sleep.delays.length, 1);
+      t.true(sleep.delays[0] > 0);
+      t.is(seenRequests[0].modelSettings.providerData?.generate, false);
+      t.is(seenRequests[1].modelSettings.providerData?.generate, false);
+      t.deepEqual(seenRequests[0].input, seenRequests[1].input);
+      t.is(seenRequests[2].previousResponseId, 'resp-warmup');
+      t.deepEqual(seenRequests[2].input, [latestUser]);
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);
+
+test.serial(
+  'CodexResponsesWSModel falls back to full history without previous response id when safe Codex warm-up retries are exhausted',
+  async (t) => {
+    const seenRequests: any[] = [];
+    const sleep = createSleepRecorder();
+    const safeWarmupError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
+      code: 'connection_closed_before_opening',
+    });
+
+    const originalFetch = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function (request: any) {
+      seenRequests.push(request);
+      if (seenRequests.length <= DEFAULT_STREAM_MAX_RETRIES + 1) {
+        throw safeWarmupError;
+      }
+      return makeStream([
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp-main',
+            output: [],
+            usage: {},
+          },
+        } as any,
+      ]);
+    };
+
+    const mockClient = {
+      baseURL: 'https://api.openai.com',
+      apiKey: 'test-key',
+      _options: {},
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
+
+    try {
+      const model = new CodexResponsesWSModel(
+        mockClient as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        undefined,
+        {
+          getContext: () => ({ sessionId: 'session-1', traceId: 'trace-1' } as any),
+          runWithContext: <T>(_context: any, fn: () => T) => fn(),
+        },
+        { sleep: sleep.sleep },
+      );
+
+      (model as any).getRetryAdvice = async ({ error }: any) =>
+        error === safeWarmupError ? { suggested: true, replaySafety: 'safe' } : { suggested: false };
+
+      const fullInput = [
+        { role: 'user', type: 'message', content: 'first' },
+        { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'first response' }] },
+        { role: 'user', type: 'message', content: 'next' },
+      ];
+      for await (const _event of model.getStreamedResponse({
+        input: fullInput,
+        modelSettings: {},
+        tools: [],
+        handoffs: [],
+      } as any)) {
+      }
+
+      const expectedTotalAttempts = DEFAULT_STREAM_MAX_RETRIES + 2;
+      t.is(seenRequests.length, expectedTotalAttempts);
+      t.is(sleep.delays.length, DEFAULT_STREAM_MAX_RETRIES);
+      t.true(sleep.delays.every((delayMs) => delayMs > 0));
+      t.true(
+        seenRequests
+          .slice(0, expectedTotalAttempts - 1)
+          .every((request) => request.modelSettings.providerData?.generate === false),
+      );
+      t.deepEqual(seenRequests[expectedTotalAttempts - 1].input, fullInput);
+      t.is(seenRequests[expectedTotalAttempts - 1].previousResponseId, undefined);
+      t.is(seenRequests[expectedTotalAttempts - 1].modelSettings.providerData?.generate, undefined);
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = originalFetch;
+    }
+  },
+);

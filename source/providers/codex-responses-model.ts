@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { describeError } from '../utils/error-helpers.js';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import type { ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
+import { computeUpstreamRetryDelayMs } from '../services/retry/upstream-retry-policy.js';
 
 type TrafficLogger = Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId'>;
 
@@ -156,7 +157,97 @@ const getTrafficEventPrefix = (sessionContextService?: ISessionContextService): 
 // `response.output` is empty or missing, swaps in the accumulated items so the
 // parent's existing conversion logic (`convertToOutputItem`) produces a normal
 // `response_done` event.
+const CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES = new Set([
+  'function_call_output',
+  'function_call_result',
+  'function_call_output_result',
+  'tool_call_output',
+  'tool_call_result',
+  'tool_call_output_item',
+  'local_shell_call_output',
+  'shell_call_output',
+  'computer_call_output',
+  'computer_call_result',
+  'apply_patch_call_output',
+]);
+
+const isUserInputMessage = (item: unknown): boolean => asRecord(item)?.role === 'user';
+
+const isToolResultItem = (item: unknown): boolean => {
+  const type = asRecord(item)?.type;
+  return typeof type === 'string' && CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES.has(type);
+};
+
+const findServerManagedDeltaStart = (input: unknown[]): number => {
+  let trailingToolResultStart = input.length;
+  while (trailingToolResultStart > 0 && isToolResultItem(input[trailingToolResultStart - 1])) {
+    trailingToolResultStart--;
+  }
+  if (trailingToolResultStart < input.length) {
+    return trailingToolResultStart;
+  }
+
+  for (let index = input.length - 1; index >= 0; index--) {
+    if (isUserInputMessage(input[index])) {
+      return index;
+    }
+  }
+
+  return 0;
+};
+
+const filterServerManagedInput = (input: unknown): unknown => {
+  if (!Array.isArray(input) || input.length <= 1) {
+    return input;
+  }
+
+  const deltaStart = findServerManagedDeltaStart(input);
+  return deltaStart > 0 ? input.slice(deltaStart) : input;
+};
+
+const getResponseIdFromResponse = (response: unknown): string | undefined => {
+  const record = asRecord(response);
+  const responseId = record?.responseId ?? record?.id;
+  return typeof responseId === 'string' && responseId.length > 0 ? responseId : undefined;
+};
+
+const getResponseIdFromStreamEvent = (event: unknown): string | undefined => {
+  const record = asRecord(event);
+  if (record?.type !== 'response_done') {
+    return undefined;
+  }
+
+  return getResponseIdFromResponse(record.response) ?? getResponseIdFromResponse(record);
+};
+
+const hasGenerateFalse = (request: any): boolean =>
+  (request.modelSettings?.providerData as Record<string, unknown> | undefined)?.generate === false;
+
+const withProviderData = (request: any, providerData: Record<string, unknown>): any => ({
+  ...request,
+  modelSettings: {
+    ...request.modelSettings,
+    providerData: {
+      ...request.modelSettings?.providerData,
+      ...providerData,
+    },
+  },
+});
+
+type PreparedCodexRequest = {
+  request: any;
+  warmupRequest?: any;
+};
+
+type WarmupKind = 'unary' | 'stream';
+
+const DEFAULT_STREAM_MAX_RETRIES = 5;
+
 export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
+  private readonly codexPreviousResponseIds = new Map<string, string>();
+  private readonly warmupSleep: (delayMs: number) => Promise<void>;
+  private readonly warmupRandom: () => number;
+
   constructor(
     client: any,
     model: string,
@@ -164,8 +255,19 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     private readonly diagnosticLogger?: DiagnosticLogger,
     private readonly trafficLogger?: TrafficLogger,
     private readonly sessionContextService?: ISessionContextService,
+    warmupRetryDependencies?: {
+      sleep?: (delayMs: number) => Promise<void>;
+      random?: () => number;
+    },
   ) {
     super(client, model);
+    this.warmupSleep =
+      warmupRetryDependencies?.sleep ??
+      ((delayMs: number) =>
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, delayMs);
+        }));
+    this.warmupRandom = warmupRetryDependencies?.random ?? Math.random;
   }
 
   #buildTrafficMeta(requestId: string, requestData: Record<string, unknown>): Record<string, unknown> {
@@ -262,12 +364,221 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     return wrapped();
   }
 
+  async #shouldRetryCodexWarmup(request: any, error: unknown, kind: WarmupKind, attempt: number): Promise<boolean> {
+    const retryAdvice =
+      typeof (this as any).getRetryAdvice === 'function'
+        ? await (this as any).getRetryAdvice({ request, error, stream: kind === 'stream', attempt })
+        : undefined;
+
+    return retryAdvice?.suggested === true && retryAdvice?.replaySafety === 'safe';
+  }
+
+  async #sleepBeforeCodexWarmupRetry(attempt: number): Promise<void> {
+    const delayMs = computeUpstreamRetryDelayMs({ attemptNumber: attempt, random: this.warmupRandom });
+    await this.warmupSleep(delayMs);
+  }
+
+  async #warmupCodexUnary(request: any | undefined): Promise<string | undefined> {
+    if (!request) {
+      return undefined;
+    }
+
+    const maxAttempts = DEFAULT_STREAM_MAX_RETRIES + 1;
+    let attempt = 1;
+    while (attempt <= maxAttempts) {
+      try {
+        const response = await super.getResponse(request);
+        const responseId = getResponseIdFromResponse(response);
+        this.#rememberCodexResponseId(responseId);
+        return responseId;
+      } catch (error) {
+        const canSafelyRetry = await this.#shouldRetryCodexWarmup(request, error, 'unary', attempt);
+        if (!canSafelyRetry) {
+          throw error;
+        }
+        if (attempt >= maxAttempts) {
+          return undefined;
+        }
+        await this.#sleepBeforeCodexWarmupRetry(attempt);
+        attempt++;
+      }
+    }
+
+    return undefined;
+  }
+
+  async #warmupCodexStream(request: any | undefined): Promise<string | undefined> {
+    if (!request) {
+      return undefined;
+    }
+
+    const maxAttempts = DEFAULT_STREAM_MAX_RETRIES + 1;
+    let attempt = 1;
+    while (attempt <= maxAttempts) {
+      try {
+        let responseId: string | undefined;
+        for await (const event of super.getStreamedResponse(request)) {
+          responseId = getResponseIdFromStreamEvent(event) ?? responseId;
+        }
+        this.#rememberCodexResponseId(responseId);
+        return responseId;
+      } catch (error) {
+        const canSafelyRetry = await this.#shouldRetryCodexWarmup(request, error, 'stream', attempt);
+        if (!canSafelyRetry) {
+          throw error;
+        }
+        if (attempt >= maxAttempts) {
+          return undefined;
+        }
+        await this.#sleepBeforeCodexWarmupRetry(attempt);
+        attempt++;
+      }
+    }
+
+    return undefined;
+  }
+
+  #prepareCodexServerHistoryRequest(request: any): any {
+    const explicitPreviousResponseId =
+      typeof request.previousResponseId === 'string' && request.previousResponseId.length > 0
+        ? request.previousResponseId
+        : undefined;
+    const input = request.input;
+    const previousResponseId = explicitPreviousResponseId ?? this.#getRememberedCodexResponseIdForRequest(request);
+
+    if (!previousResponseId) {
+      return request;
+    }
+
+    const filteredInput = filterServerManagedInput(input);
+    if (request.previousResponseId === previousResponseId && filteredInput === input) {
+      return request;
+    }
+
+    return {
+      ...request,
+      previousResponseId,
+      input: filteredInput,
+    };
+  }
+
+  #getRememberedCodexResponseIdForRequest(request: any): string | undefined {
+    const key = this.#getCodexServerHistoryKey();
+    if (!key || hasGenerateFalse(request)) {
+      return undefined;
+    }
+
+    const input = request.input;
+    const isInternalToolContinuation =
+      Array.isArray(input) &&
+      input.length > 1 &&
+      input.some(isUserInputMessage) &&
+      isToolResultItem(input[input.length - 1]);
+    return isInternalToolContinuation ? this.codexPreviousResponseIds.get(key) : undefined;
+  }
+
+  #prepareCodexServerHistoryRequests(request: any): PreparedCodexRequest {
+    const key = this.#getCodexServerHistoryKey();
+    if (!key || hasGenerateFalse(request)) {
+      return { request };
+    }
+
+    const preparedRequest = this.#prepareCodexServerHistoryRequest(request);
+    if (preparedRequest.previousResponseId) {
+      return { request: preparedRequest };
+    }
+
+    const input = request.input;
+    if (!Array.isArray(input) || input.length === 0) {
+      return { request };
+    }
+
+    const deltaStart = findServerManagedDeltaStart(input);
+    const warmupInput = deltaStart > 0 ? input.slice(0, deltaStart) : [];
+    const deltaInput = deltaStart > 0 ? input.slice(deltaStart) : input;
+    return {
+      warmupRequest: withProviderData(
+        {
+          ...request,
+          input: warmupInput,
+        },
+        { generate: false },
+      ),
+      request: {
+        ...request,
+        input: deltaInput,
+      },
+    };
+  }
+
+  #withCodexPreviousResponseId(request: any, previousResponseId: string | undefined): any {
+    if (!previousResponseId) {
+      return request;
+    }
+
+    return this.#prepareCodexServerHistoryRequest({
+      ...request,
+      previousResponseId,
+    });
+  }
+
+  #rememberCodexResponseId(responseId: string | undefined): void {
+    if (!responseId) {
+      return;
+    }
+
+    const key = this.#getCodexServerHistoryKey();
+    if (key) {
+      this.codexPreviousResponseIds.set(key, responseId);
+    }
+  }
+
+  #getCodexServerHistoryKey(): string | null {
+    const trafficContext = this.sessionContextService?.getContext() ?? null;
+    return trafficContext?.sessionId ?? trafficContext?.traceId ?? null;
+  }
+
+  #getEffectiveCodexRequestAfterWarmup(
+    originalRequest: any,
+    preparedRequest: PreparedCodexRequest,
+    warmupResponseId: string | undefined,
+  ): any {
+    if (!preparedRequest.warmupRequest) {
+      return preparedRequest.request;
+    }
+
+    return warmupResponseId
+      ? this.#withCodexPreviousResponseId(preparedRequest.request, warmupResponseId)
+      : originalRequest;
+  }
+
   override async getResponse(request: any): Promise<any> {
+    const run = async () => {
+      const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
+      const warmupResponseId = await this.#warmupCodexUnary(preparedRequest.warmupRequest);
+      const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
+
+      const response = await super.getResponse(effectiveRequest);
+      this.#rememberCodexResponseId(getResponseIdFromResponse(response));
+      return response;
+    };
+
     const currentTrace = getCurrentTrace();
     if (currentTrace) {
-      return super.getResponse(request);
+      return run();
     }
-    return withTrace('codex-responses-ws-model-trace', () => super.getResponse(request));
+    return withTrace('codex-responses-ws-model-trace', run);
+  }
+
+  override async *getStreamedResponse(request: any): AsyncIterable<any> {
+    const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
+    const warmupResponseId = await this.#warmupCodexStream(preparedRequest.warmupRequest);
+    const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
+
+    for await (const event of super.getStreamedResponse(effectiveRequest)) {
+      this.#rememberCodexResponseId(getResponseIdFromStreamEvent(event));
+      yield event;
+    }
   }
 
   override _buildResponsesCreateRequest(request: any, stream: boolean): any {

@@ -67,14 +67,16 @@ test('sendMessage installs setSubagentEventSink with a function then clears it t
     async startStream() {
       return stream;
     },
-    setSubagentEventSink(sink) {
-      sinkCalls.push(typeof sink === 'function' ? 'function' : sink);
-    },
   };
 
   const bundle = createConversationSession({
     sessionId: 'sink-test',
     agentClient: mockClient,
+    subagentEventSinkHost: {
+      setSubagentEventSink(sink) {
+        sinkCalls.push(typeof sink === 'function' ? 'function' : sink);
+      },
+    },
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
   const { session, terminalAdapter } = bundle;
@@ -100,12 +102,14 @@ test('sendMessage dispatches events through conversationLogger before onEvent ca
     async startStream() {
       return stream;
     },
-    setSubagentEventSink() {},
   };
 
   const bundle = createConversationSession({
     sessionId: 'log-dispatch',
     agentClient: mockClient,
+    subagentEventSinkHost: {
+      setSubagentEventSink() {},
+    },
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
   const { terminalAdapter } = bundle;
@@ -191,14 +195,16 @@ test('handleApprovalDecision forwards approvalAnswer to agentClient.setAskUserAn
     async continueRunStream() {
       return finalStream;
     },
-    setAskUserAnswer(callId, answer) {
-      askUserCalls.push({ callId, answer });
-    },
   };
 
   const bundle = createConversationSession({
     sessionId: 'ask-user-test',
     agentClient: mockClient,
+    askUserAnswerSink: {
+      setAskUserAnswer(callId, answer) {
+        askUserCalls.push({ callId, answer });
+      },
+    },
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
   const { terminalAdapter } = bundle;
@@ -233,14 +239,16 @@ test('handleApprovalDecision does not call setAskUserAnswer when answer is not y
     async continueRunStream() {
       return rejectionFinal;
     },
-    setAskUserAnswer(callId, answer) {
-      askUserCalls.push({ callId, answer });
-    },
   };
 
   const bundle = createConversationSession({
     sessionId: 'reject-no-ask',
     agentClient: mockClient,
+    askUserAnswerSink: {
+      setAskUserAnswer(callId, answer) {
+        askUserCalls.push({ callId, answer });
+      },
+    },
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
   const { terminalAdapter } = bundle;
@@ -275,14 +283,16 @@ test('handleApprovalDecision does not call setAskUserAnswer when approvalAnswer 
     async continueRunStream() {
       return noAnswerFinal;
     },
-    setAskUserAnswer(callId, answer) {
-      askUserCalls.push({ callId, answer });
-    },
   };
 
   const bundle = createConversationSession({
     sessionId: 'no-answer-test',
     agentClient: mockClient,
+    askUserAnswerSink: {
+      setAskUserAnswer(callId, answer) {
+        askUserCalls.push({ callId, answer });
+      },
+    },
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
   const { terminalAdapter } = bundle;

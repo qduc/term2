@@ -3,11 +3,11 @@ import type { ConversationEvent } from './conversation-events.js';
 import type { CommandMessage } from '../tools/types.js';
 import type { ConversationTerminal } from '../contracts/conversation.js';
 import { collectTerminalResult } from './terminal-result-collector.js';
-import { getMethod, getCallIdFromObject } from './interruption-info.js';
+import { getCallIdFromObject } from './interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
 import type { ConversationLogger } from './conversation-logger.js';
 import type { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
-import type { ConversationAgentClient } from './conversation-agent-client.js';
+import type { AskUserAnswerSink, SubagentEventSinkHost } from './conversation-agent-client.js';
 import type { ConversationStore } from './conversation-store.js';
 
 export type ConversationResult = ConversationTerminal;
@@ -31,7 +31,8 @@ export type HandleApprovalDecisionOptions = {
 export class ConversationAdapter {
   #sessionId: string;
   #startedAt: string;
-  #agentClient: ConversationAgentClient;
+  #askUserAnswerSink: AskUserAnswerSink | null;
+  #subagentEventSinkHost: SubagentEventSinkHost | null;
   #logger: ILoggingService;
   #settingsService?: ISettingsService;
   #sessionContextService: ISessionContextService;
@@ -47,7 +48,8 @@ export class ConversationAdapter {
   constructor(deps: {
     sessionId: string;
     startedAt: string;
-    agentClient: ConversationAgentClient;
+    askUserAnswerSink?: AskUserAnswerSink | null;
+    subagentEventSinkHost?: SubagentEventSinkHost | null;
     logger: ILoggingService;
     settingsService?: ISettingsService;
     sessionContextService: ISessionContextService;
@@ -62,7 +64,8 @@ export class ConversationAdapter {
   }) {
     this.#sessionId = deps.sessionId;
     this.#startedAt = deps.startedAt;
-    this.#agentClient = deps.agentClient;
+    this.#askUserAnswerSink = deps.askUserAnswerSink ?? null;
+    this.#subagentEventSinkHost = deps.subagentEventSinkHost ?? null;
     this.#logger = deps.logger;
     this.#settingsService = deps.settingsService;
     this.#sessionContextService = deps.sessionContextService;
@@ -111,10 +114,7 @@ export class ConversationAdapter {
         this.#conversationLogger.dispatchEventToLog(event);
         onEvent?.(event);
       };
-      getMethod<[((event: ConversationEvent) => void) | null], void>(this.#agentClient, 'setSubagentEventSink')?.call(
-        this.#agentClient,
-        wrappedOnEvent,
-      );
+      this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
       let result: ConversationResult;
       try {
         result = await collectTerminalResult(this.#run(input, { retries: { hallucinationRetryCount } }), {
@@ -132,10 +132,7 @@ export class ConversationAdapter {
           },
         });
       } finally {
-        getMethod<[((event: ConversationEvent) => void) | null], void>(this.#agentClient, 'setSubagentEventSink')?.call(
-          this.#agentClient,
-          null,
-        );
+        this.#subagentEventSinkHost?.setSubagentEventSink(null);
       }
 
       if (result.type === 'response') {
@@ -163,7 +160,7 @@ export class ConversationAdapter {
       const pending = this.#approvalFlow.getPending();
       const callId = pending ? getCallIdFromObject(pending.interruption) : undefined;
       if (callId) {
-        this.#agentClient.setAskUserAnswer(callId, approvalAnswer);
+        this.#askUserAnswerSink?.setAskUserAnswer(callId, approvalAnswer);
       }
     }
 
@@ -177,10 +174,7 @@ export class ConversationAdapter {
         this.#conversationLogger.dispatchEventToLog(event);
         onEvent?.(event);
       };
-      getMethod<[((event: ConversationEvent) => void) | null], void>(this.#agentClient, 'setSubagentEventSink')?.call(
-        this.#agentClient,
-        wrappedOnEvent,
-      );
+      this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
       let result: ConversationResult | null;
       try {
         result = await collectTerminalResult(this.#continueAfterApproval({ answer, rejectionReason }), {
@@ -198,10 +192,7 @@ export class ConversationAdapter {
           },
         });
       } finally {
-        getMethod<[((event: ConversationEvent) => void) | null], void>(this.#agentClient, 'setSubagentEventSink')?.call(
-          this.#agentClient,
-          null,
-        );
+        this.#subagentEventSinkHost?.setSubagentEventSink(null);
       }
 
       if (result && result.type === 'response') {

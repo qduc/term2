@@ -8,7 +8,7 @@ import { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from './conversation-logger.js';
 import type { AssistantTurnState } from './conversation-log-events.js';
-import type { ConversationAgentClient } from './conversation-agent-client.js';
+import type { AskUserAnswerSink, ConversationAgentClient, SubagentEventSinkHost } from './conversation-agent-client.js';
 import { SessionInputPlanner } from './session-input-planner.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { ProviderContinuity } from './provider-continuity.js';
@@ -81,6 +81,8 @@ export type CreateConversationSessionCompositionOptions = {
   /** ISO timestamp; defaults to now. */
   sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
+  askUserAnswerSink?: AskUserAnswerSink | null;
+  subagentEventSinkHost?: SubagentEventSinkHost | null;
   deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;
@@ -95,7 +97,16 @@ export type CreateConversationSessionCompositionOptions = {
 export function createConversationSessionComposition(
   options: CreateConversationSessionCompositionOptions,
 ): ConversationSessionComposition {
-  const { sessionId: id, sessionStartedAt, agentClient, deps, retryOptions, turnAccumulator } = options;
+  const {
+    sessionId: id,
+    sessionStartedAt,
+    agentClient,
+    askUserAnswerSink,
+    subagentEventSinkHost,
+    deps,
+    retryOptions,
+    turnAccumulator,
+  } = options;
   const { logger, settingsService, sessionContextService } = deps;
   const startedAt = sessionStartedAt ?? new Date().toISOString();
 
@@ -284,7 +295,8 @@ export function createConversationSessionComposition(
   const terminalAdapter = new ConversationAdapter({
     sessionId: id,
     startedAt,
-    agentClient,
+    askUserAnswerSink,
+    subagentEventSinkHost,
     logger,
     settingsService,
     sessionContextService,

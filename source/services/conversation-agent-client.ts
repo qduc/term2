@@ -29,6 +29,14 @@ export interface ShellAutoApprovalAgentClient {
   chatJson?(message: string, options: AgentClientChatJsonOptions): Promise<unknown>;
 }
 
+export interface AskUserAnswerSink {
+  setAskUserAnswer(callId: string, answer: string): void;
+}
+
+export interface SubagentEventSinkHost {
+  setSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void;
+}
+
 export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   startStream(
     userInput: string | AgentInputItem | AgentInputItem[],
@@ -37,7 +45,6 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   continueRunStream(state: RunState<any, any>, options?: AgentClientRunOptions): Promise<AgentStream>;
   abort(): void;
   setModel(model: string): void;
-  setAskUserAnswer(callId: string, answer: string): void;
   addToolInterceptor(interceptor: ToolInterceptor): () => void;
 
   clearConversations?(): void;
@@ -46,6 +53,5 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   setProvider?(provider: string): void;
   setReasoningEffort?(effort?: ReasoningEffortSetting): void;
   setRetryCallback?(callback: () => void): void;
-  setSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
   setTemperature?(temperature?: number): void;
 }

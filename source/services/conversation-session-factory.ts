@@ -1,6 +1,6 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from './service-interfaces.js';
 import { TurnItemAccumulator } from './turn-item-accumulator.js';
-import type { ConversationAgentClient } from './conversation-agent-client.js';
+import type { AskUserAnswerSink, ConversationAgentClient, SubagentEventSinkHost } from './conversation-agent-client.js';
 import {
   createConversationSessionComposition,
   type ConversationSessionRetryOptions,
@@ -15,6 +15,14 @@ import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import { ConversationSession } from './conversation-session.js';
 
+const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
+  value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
+
+const asSubagentEventSinkHost = (value: unknown): SubagentEventSinkHost | null =>
+  value && typeof (value as SubagentEventSinkHost).setSubagentEventSink === 'function'
+    ? (value as SubagentEventSinkHost)
+    : null;
+
 // ── Options for the top-level session factory ─────────────────────
 
 export type CreateConversationSessionOptions = {
@@ -22,6 +30,8 @@ export type CreateConversationSessionOptions = {
   /** ISO timestamp; defaults to now. */
   sessionStartedAt?: string;
   agentClient: ConversationAgentClient;
+  askUserAnswerSink?: AskUserAnswerSink | null;
+  subagentEventSinkHost?: SubagentEventSinkHost | null;
   deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;
@@ -53,7 +63,15 @@ export type ConversationSessionBundle = {
  * their respective profiles.
  */
 export function createConversationSession(options: CreateConversationSessionOptions): ConversationSessionBundle {
-  const { sessionId, sessionStartedAt, agentClient, deps, retryOptions } = options;
+  const {
+    sessionId,
+    sessionStartedAt,
+    agentClient,
+    askUserAnswerSink = null,
+    subagentEventSinkHost = null,
+    deps,
+    retryOptions,
+  } = options;
   const startedAt = sessionStartedAt ?? new Date().toISOString();
 
   const turnAccumulator = new TurnItemAccumulator();
@@ -62,6 +80,8 @@ export function createConversationSession(options: CreateConversationSessionOpti
     sessionId,
     sessionStartedAt: startedAt,
     agentClient,
+    askUserAnswerSink: askUserAnswerSink ?? asAskUserAnswerSink(agentClient),
+    subagentEventSinkHost: subagentEventSinkHost ?? asSubagentEventSinkHost(agentClient),
     deps,
     retryOptions,
     turnAccumulator,

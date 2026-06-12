@@ -2,6 +2,7 @@ import { SubagentManager } from '../services/subagents/subagent-manager.js';
 import type { ConversationEvent } from '../services/conversation-events.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
+import type { SubagentResult } from '../services/subagents/types.js';
 
 export interface SubagentBridgeDeps {
   logger: ILoggingService;
@@ -105,7 +106,11 @@ export class SubagentBridge {
     }
   };
 
-  runSubagent = async (params: { role: string; task: string }, _context?: unknown, details?: unknown): Promise<any> => {
+  runSubagent = async (
+    params: { role: string; task: string },
+    _context?: unknown,
+    details?: unknown,
+  ): Promise<SubagentResult> => {
     if (!this.#subagentManager) {
       throw new Error('Transient agent clients cannot spawn subagents.');
     }

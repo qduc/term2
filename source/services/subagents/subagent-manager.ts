@@ -956,7 +956,7 @@ export class SubagentManager {
       retryAttempts: this.#settings.get<number>('agent.retryAttempts') ?? 2,
     });
 
-    const session = createConversationSession({
+    const turnCoordinator = createConversationSession({
       sessionId: `subagent-${agentId}`,
       agentClient: subClient,
       deps: {
@@ -967,7 +967,7 @@ export class SubagentManager {
       retryOptions: {
         allowFreshStartRetries: false,
       },
-    }).session;
+    }).turnCoordinator;
 
     const userTurn = { text: request.task, images: [] as any[] };
     let finalText = '';
@@ -977,7 +977,7 @@ export class SubagentManager {
     let loopProcessedError = false;
 
     try {
-      for await (const event of session.run(userTurn, {
+      for await (const event of turnCoordinator.start(userTurn, {
         signal: request.signal,
         maxModelRetries: MAX_SUBAGENT_MODEL_RETRIES,
       })) {

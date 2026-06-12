@@ -1,6 +1,6 @@
 import type { ConversationEvent } from './conversation-events.js';
 import { ModelBehaviorError } from '@openai/agents';
-import type { ConversationTerminal, LLMAdvisory } from '../../contracts/conversation.js';
+import type { ApprovalRequiredTerminal, ConversationTerminal, LLMAdvisory } from '../../contracts/conversation.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { extractUsage } from '../../utils/ai/token-usage.js';
@@ -18,11 +18,9 @@ import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
 import { resolveToolOwner } from '../approval/tool-owner.js';
 
-export type ConversationResult = ConversationTerminal;
-
 export type BuildResultOutcome =
-  | { kind: 'response'; result: Extract<ConversationResult, { type: 'response' }> }
-  | { kind: 'approval_required'; result: Extract<ConversationResult, { type: 'approval_required' }> }
+  | { kind: 'response'; result: Extract<ConversationTerminal, { type: 'response' }> }
+  | { kind: 'approval_required'; result: Extract<ConversationTerminal, { type: 'approval_required' }> }
   | {
       kind: 'auto_approve';
       advisory: LLMAdvisory;
@@ -50,6 +48,29 @@ export interface ResultBuilderInput {
   cumulativeUsage?: NormalizedUsage;
   cumulativeCommandMessages?: CommandMessage[];
   cumulativeTurnItems?: PersistedAssistantTurnItem[];
+}
+
+export function createApprovalRequiredTerminal(options: {
+  agentName: string;
+  toolName: string;
+  argumentsText: string;
+  rawInterruption?: unknown;
+  callId?: string;
+  llmAdvisory?: LLMAdvisory;
+  usage?: NormalizedUsage;
+}): ApprovalRequiredTerminal {
+  return {
+    type: 'approval_required',
+    approval: {
+      agentName: options.agentName,
+      toolName: options.toolName,
+      argumentsText: options.argumentsText,
+      rawInterruption: options.rawInterruption,
+      ...(options.callId ? { callId: options.callId } : {}),
+      ...(options.llmAdvisory ? { llmAdvisory: options.llmAdvisory } : {}),
+    },
+    ...(options.usage ? { usage: options.usage } : {}),
+  };
 }
 
 const resolveFinalText = (streamedText: string | undefined, completedText: string | undefined): string => {
@@ -139,18 +160,15 @@ export async function buildConversationResult(
 
     return {
       kind: 'approval_required',
-      result: {
-        type: 'approval_required',
-        approval: {
-          agentName: getString(agent, 'name') ?? 'Agent',
-          toolName: toolName ?? 'Unknown Tool',
-          argumentsText,
-          rawInterruption: interruption,
-          ...(callId ? { callId: String(callId) } : {}),
-          llmAdvisory,
-        },
+      result: createApprovalRequiredTerminal({
+        agentName: getString(agent, 'name') ?? 'Agent',
+        toolName: toolName ?? 'Unknown Tool',
+        argumentsText,
+        rawInterruption: interruption,
+        callId: callId ? String(callId) : undefined,
+        llmAdvisory,
         usage: usage ?? extractUsage(result),
-      },
+      }),
     };
   }
 
@@ -184,7 +202,7 @@ export async function buildConversationResult(
   };
 }
 
-export const toTerminalEvent = (result: ConversationResult): ConversationEvent => {
+export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent => {
   if (result.type === 'approval_required') {
     return {
       type: 'approval_required',

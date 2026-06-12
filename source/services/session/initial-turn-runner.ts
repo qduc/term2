@@ -5,22 +5,33 @@ import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { TurnItemAccumulator } from './turn-item-accumulator.js';
-import type { ContinuationDriver } from './continuation-driver.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import { TurnAttempt } from './turn-attempt.js';
 import { getMethod } from '../interruption-info.js';
-import { ShellAutoApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { InitialTurnRunOptions, TurnAttemptFactory } from './turn-attempt-factory.js';
 import type { InitialInputPreparer } from './initial-input-preparer.js';
 import type { InitialStreamCycle } from './initial-stream-cycle.js';
 import type { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
+import type { AbortedApprovalContext } from '../approval/approval-state.js';
 
 export type InitialTurnOutcome =
   | { kind: 'response'; terminal: ConversationTerminal }
   | { kind: 'approval_required'; terminal: ConversationTerminal }
   | { kind: 'failed' }
-  | { kind: 'stale' };
+  | { kind: 'stale' }
+  | {
+      kind: 'abort_resolution_required';
+      abortedContext: AbortedApprovalContext;
+      userText: string;
+      generation: number;
+    }
+  | {
+      kind: 'auto_approval_required';
+      generation: number;
+      callId?: string;
+      command?: string;
+    };
 
 export interface InitialTurnRunnerDeps {
   agentClient: ConversationAgentClient;
@@ -29,7 +40,6 @@ export interface InitialTurnRunnerDeps {
   turnAccumulator: TurnItemAccumulator;
   toolTracker: SessionToolTracker;
   shellAutoApproval: ShellAutoApprovalResolver;
-  continuationDriver: ContinuationDriver;
   generationGuard: GenerationGuard;
   attemptFactory: TurnAttemptFactory;
   inputPreparer: InitialInputPreparer;
@@ -106,32 +116,13 @@ export class InitialTurnRunner {
             message: attempt.turn.text,
           });
 
-          const driveResult = yield* this.deps.continuationDriver.drive(
-            {
-              kind: 'abort_resolution',
-              abortedContext: currentAbortedContext,
-              userText: attempt.turn.text,
-              generation: attempt.token,
-            },
-            new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
-          );
-
-          if (driveResult.kind === 'approval_required') {
-            return { kind: 'approval_required', terminal: driveResult.result };
-          }
-          if (driveResult.kind === 'stale') {
-            return { kind: 'stale' };
-          }
-          if (driveResult.kind === 'response') {
-            return { kind: 'response', terminal: driveResult.result };
-          }
-
-          // If fresh_start_required, we move to a fresh run in the loop
-          currentAbortedContext = null;
-          skipUser = true;
-          currentResumeState = undefined;
-          currentResumePreviousResponseId = undefined;
-          continue;
+          // Return outcome instead of calling ContinuationDriver
+          return {
+            kind: 'abort_resolution_required',
+            abortedContext: currentAbortedContext,
+            userText: attempt.turn.text,
+            generation: attempt.token,
+          };
         }
 
         const preparation = this.deps.inputPreparer.prepare(attempt, skipUser);
@@ -167,28 +158,13 @@ export class InitialTurnRunner {
               reasoning: outcome.advisory.reasoning,
             });
 
-            const driveResult = yield* this.deps.continuationDriver.drive(
-              { kind: 'approval_decision', answer: 'y', generation: attempt.token },
-              new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
-            );
-
-            if (driveResult.kind === 'approval_required') {
-              return { kind: 'approval_required', terminal: driveResult.result };
-            }
-            if (driveResult.kind === 'stale') {
-              return { kind: 'stale' };
-            }
-            if (driveResult.kind === 'response') {
-              return { kind: 'response', terminal: driveResult.result };
-            }
-
-            // Auto-approved fresh start
-            attempt.advanceRetry(driveResult.retryCounts);
-            skipUser = true;
-            currentResumeState = undefined;
-            currentResumePreviousResponseId = undefined;
-            currentAbortedContext = null;
-            continue;
+            // Return outcome instead of calling ContinuationDriver
+            return {
+              kind: 'auto_approval_required',
+              generation: attempt.token,
+              callId: outcome.callId,
+              command: outcome.argumentsText,
+            };
           }
 
           if (outcome.result.approval.callId) {

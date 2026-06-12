@@ -41,10 +41,10 @@ test('run() streams ConversationEvents (text_delta → final) in order', async (
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
-  for await (const ev of session.run('hi')) {
+  for await (const ev of turnCoordinator.start('hi')) {
     emitted.push(ev);
   }
 
@@ -88,9 +88,9 @@ test('run() warns when completed stream history already contains duplicated tool
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  for await (const _ev of session.run('hi')) {
+  for await (const _ev of turnCoordinator.start('hi')) {
     // consume stream
   }
   const warning = warnings.find((entry) => entry.meta?.eventType === 'conversation.stream_history.replayed_tools');
@@ -149,10 +149,10 @@ test('run() retries streamed recoverable errors without committing failed stream
     deps: { logger: mockLogger, sessionContextService },
     retryOptions: { allowFreshStartRetries: false },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
-  for await (const ev of session.run('retry me')) {
+  for await (const ev of turnCoordinator.start('retry me')) {
     emitted.push(ev);
   }
 
@@ -183,11 +183,11 @@ test('run() does not retry recoverable errors from a fresh start when disabled',
     deps: { logger: mockLogger, sessionContextService },
     retryOptions: { allowFreshStartRetries: false },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   await t.throwsAsync(async () => {
-    for await (const ev of session.run('retry me')) {
+    for await (const ev of turnCoordinator.start('retry me')) {
       emitted.push(ev);
     }
   });
@@ -254,10 +254,10 @@ test('run() exports completed tool pairs from a stream that later fails', async 
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   await t.throwsAsync(async () => {
-    for await (const _ev of session.run('inspect')) {
+    for await (const _ev of turnCoordinator.start('inspect')) {
       // consume stream
     }
   });
@@ -332,11 +332,11 @@ test('run() emits tool_recovery before error when a streamed turn fails after to
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   await t.throwsAsync(async () => {
-    for await (const ev of session.run('inspect')) {
+    for await (const ev of turnCoordinator.start('inspect')) {
       emitted.push(ev);
     }
   });
@@ -369,7 +369,7 @@ test('importState() reconciles completed ledger pairs into canonical history', (
     agentClient: {},
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   stateFacade.importState({
     previousResponseId: null,
@@ -433,7 +433,7 @@ test('run() allows a follow-up after a long non-chaining run expands full histor
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   stateFacade.importState({
     previousResponseId: null,
@@ -441,12 +441,12 @@ test('run() allows a follow-up after a long non-chaining run expands full histor
   });
 
   const first = [];
-  for await (const ev of session.run('first')) {
+  for await (const ev of turnCoordinator.start('first')) {
     first.push(ev);
   }
 
   const second = [];
-  for await (const ev of session.run('second')) {
+  for await (const ev of turnCoordinator.start('second')) {
     second.push(ev);
   }
 
@@ -487,7 +487,7 @@ test('sendMessage() allows a follow-up after a long non-chaining run expands ful
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   stateFacade.importState({
     previousResponseId: null,
@@ -541,10 +541,10 @@ test('continue() streams events after approval decision', async (t) => {
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const first = [];
-  for await (const ev of session.run('run command')) {
+  for await (const ev of turnCoordinator.start('run command')) {
     first.push(ev);
   }
   t.is(first.length, 1);
@@ -552,7 +552,7 @@ test('continue() streams events after approval decision', async (t) => {
   t.is(first[0].approval.callId, 'call-xyz');
 
   const cont = [];
-  for await (const ev of session.continueAfterApproval({ answer: 'y' })) {
+  for await (const ev of turnCoordinator.continueAfterApproval({ answer: 'y' })) {
     cont.push(ev);
   }
 
@@ -601,10 +601,10 @@ test('run() retries malformed tool-call interruption before surfacing approval',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
-  for await (const ev of session.run('run command')) {
+  for await (const ev of turnCoordinator.start('run command')) {
     emitted.push(ev);
   }
 
@@ -643,7 +643,7 @@ test('sendMessage() preserves callId on approval_required terminal result', asyn
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const result = await terminalAdapter.sendMessage('run command');
   t.is(result.type, 'approval_required');
@@ -692,7 +692,7 @@ test('handleApprovalDecision() preserves callId on subsequent approval_required 
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const first = await terminalAdapter.sendMessage('run command');
   t.is(first.type, 'approval_required');
@@ -723,10 +723,10 @@ test('run() sends text for OpenAI provider (server-side state)', async (t) => {
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
-  for await (const ev of session.run('Hello')) {
+  for await (const ev of turnCoordinator.start('Hello')) {
     emitted.push(ev);
   }
 
@@ -764,10 +764,10 @@ test('run() sends full history for non-OpenAI providers (client-side state)', as
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
-  for await (const ev of session.run('Hello')) {
+  for await (const ev of turnCoordinator.start('Hello')) {
     emitted.push(ev);
   }
 
@@ -834,12 +834,12 @@ test('run() preserves assistant text prefix when SDK full-history reconstruction
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  for await (const _ of session.run('Investigate cache issue')) {
+  for await (const _ of turnCoordinator.start('Investigate cache issue')) {
     // consume events
   }
-  for await (const _ of session.run('Continue after max turns')) {
+  for await (const _ of turnCoordinator.start('Continue after max turns')) {
     // consume events
   }
   const secondInput = calls[1];
@@ -896,10 +896,10 @@ test('run() sends full history for openai-compatible providers', async (t) => {
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   // First message
-  for await (const ev of session.run('First message')) {
+  for await (const ev of turnCoordinator.start('First message')) {
     // consume events
   }
   // OpenAI-compatible provider should receive full history array
@@ -908,7 +908,7 @@ test('run() sends full history for openai-compatible providers', async (t) => {
   t.is(firstInput[0].content, 'First message');
 
   // Second message should contain both previous and new message
-  for await (const ev of session.run('Second message')) {
+  for await (const ev of turnCoordinator.start('Second message')) {
     // consume events
   }
   t.true(Array.isArray(secondInput));
@@ -957,12 +957,12 @@ test('run() chains follow-up turns for Codex provider over websocket', async (t)
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  for await (const _ of session.run('First message')) {
+  for await (const _ of turnCoordinator.start('First message')) {
     // consume events
   }
-  for await (const _ of session.run('Second message')) {
+  for await (const _ of turnCoordinator.start('Second message')) {
     // consume events
   }
   t.is(typeof calls[0].input, 'string', 'Codex should send only the first user message on turn 1');
@@ -990,7 +990,7 @@ test('sendMessage() returns usage from final event', async (t) => {
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const result = await terminalAdapter.sendMessage('Hello');
 
@@ -1037,7 +1037,7 @@ test('handleApprovalDecision() returns usage from final event', async (t) => {
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const approvalResult = await terminalAdapter.sendMessage('run command');
   t.is(approvalResult.type, 'approval_required');
@@ -1077,7 +1077,7 @@ test('sendMessage() logs usage handoff at DEBUG level', async (t) => {
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   await terminalAdapter.sendMessage('Hello');
 
@@ -1111,7 +1111,7 @@ test('logs diagnostics when usage is missing in stream completion', async (t) =>
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   await terminalAdapter.sendMessage('Hello');
 
@@ -1137,7 +1137,7 @@ test('sendMessage() extracts usage from stream.rawResponses when completed is vo
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const result = await terminalAdapter.sendMessage('Hello');
   t.is(result.type, 'response');
@@ -1181,7 +1181,7 @@ test('sendMessage() preserves cache usage from streaming events when final usage
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const result = await terminalAdapter.sendMessage('Hello');
   t.is(result.type, 'response');
@@ -1223,10 +1223,10 @@ test('run() emits usage_update when usage is nested in event.data (raw_model_str
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
-  for await (const ev of session.run('hi')) {
+  for await (const ev of turnCoordinator.start('hi')) {
     emitted.push(ev);
   }
 
@@ -1272,10 +1272,10 @@ test('run() emits usage_update when raw model stream usage is nested in event.da
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
-  for await (const ev of session.run('hi')) {
+  for await (const ev of turnCoordinator.start('hi')) {
     emitted.push(ev);
   }
 
@@ -1312,10 +1312,10 @@ test('run() emits usage_update when usage is at top level of event', async (t) =
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
-  for await (const ev of session.run('hi')) {
+  for await (const ev of turnCoordinator.start('hi')) {
     emitted.push(ev);
   }
 
@@ -1348,9 +1348,9 @@ test('undoLastUserTurn() returns { text, imageCount: 0 } after a completed run',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  for await (const _ of session.run('hello')) {
+  for await (const _ of turnCoordinator.start('hello')) {
     // consume
   }
   const result = stateFacade.undoLastUserTurn();
@@ -1369,7 +1369,7 @@ test('undoLastUserTurn() returns null when no genuine user turn exists', async (
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const result = stateFacade.undoLastUserTurn();
   t.is(result, null);
@@ -1441,16 +1441,16 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   // (a) Run msg1 to completion — store now has msg1 + Reply1.
-  for await (const _ of session.run('msg1')) {
+  for await (const _ of turnCoordinator.start('msg1')) {
     // consume
   }
   // (b) Begin msg2 in a background IIFE — it will block on the gate.
   const msg2Done = (async () => {
     const events = [];
-    for await (const ev of session.run('msg2')) {
+    for await (const ev of turnCoordinator.start('msg2')) {
       events.push(ev);
     }
     return events;
@@ -1468,7 +1468,7 @@ test('generation guard: gated run store write is skipped after undoLastUserTurn'
   await msg2Done;
 
   // (e) Issue msg3 and capture the input passed to startStream.
-  for await (const _ of session.run('msg3')) {
+  for await (const _ of turnCoordinator.start('msg3')) {
     // consume
   }
   // The input to startStream for msg3 must contain msg1 but NOT msg2.
@@ -1493,11 +1493,11 @@ test('run() throws AbortError when the stream is cancelled/aborted', async (t) =
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   await t.throwsAsync(
     async () => {
-      for await (const _ of session.run('hi')) {
+      for await (const _ of turnCoordinator.start('hi')) {
         void _;
       }
     },
@@ -1580,16 +1580,16 @@ test('run() sends full history after undo on a chaining provider (Responses API)
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   // Turn 1: chaining provider sends just the text string
-  for await (const _ of session.run('First message')) {
+  for await (const _ of turnCoordinator.start('First message')) {
   }
   t.is(typeof calls[0].input, 'string', 'Turn 1: chaining sends just the text');
   t.falsy(calls[0].opts.previousResponseId);
 
   // Turn 2: chaining provider uses previousResponseId from turn 1
-  for await (const _ of session.run('Second message')) {
+  for await (const _ of turnCoordinator.start('Second message')) {
   }
   t.is(typeof calls[1].input, 'string', 'Turn 2: chaining sends just the text');
 
@@ -1597,7 +1597,7 @@ test('run() sends full history after undo on a chaining provider (Responses API)
   stateFacade.undoLastUserTurn();
 
   // Turn 3 (after undo): must send full history, NOT just the latest message
-  for await (const _ of session.run('Retry message')) {
+  for await (const _ of turnCoordinator.start('Retry message')) {
   }
   const thirdCall = calls[2];
   t.true(Array.isArray(thirdCall.input), 'Turn after undo must send full history array');
@@ -1655,7 +1655,7 @@ test('run() resyncs full history after resume before returning to chaining provi
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
   stateFacade.importState({
     history: [
       { role: 'user', type: 'message', content: 'Earlier message' },
@@ -1672,7 +1672,7 @@ test('run() resyncs full history after resume before returning to chaining provi
     updatedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
   });
 
-  for await (const _ of session.run('Resume follow-up')) {
+  for await (const _ of turnCoordinator.start('Resume follow-up')) {
   }
   t.true(Array.isArray(calls[0].input), 'First resumed turn must resend full history');
   t.falsy(calls[0].opts.previousResponseId, 'First resumed turn must not use persisted previousResponseId');
@@ -1681,7 +1681,7 @@ test('run() resyncs full history after resume before returning to chaining provi
     ['Earlier message', [{ type: 'output_text', text: 'Earlier reply' }], 'Resume follow-up'],
   );
 
-  for await (const _ of session.run('Second follow-up')) {
+  for await (const _ of turnCoordinator.start('Second follow-up')) {
   }
   t.is(calls[1].input, 'Second follow-up', 'Second resumed turn should return to delta chaining');
   t.is(calls[1].opts.previousResponseId, 'resp-resynced');
@@ -1744,11 +1744,11 @@ test('run() ignores a stale completion after importState() bumps generation', as
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const staleEvents = [];
   const staleRun = (async () => {
-    for await (const event of session.run('stale request')) {
+    for await (const event of turnCoordinator.start('stale request')) {
       staleEvents.push(event);
     }
   })();
@@ -1768,7 +1768,7 @@ test('run() ignores a stale completion after importState() bumps generation', as
   t.deepEqual(staleEvents, []);
   t.deepEqual(stateFacade.exportState().history, []);
 
-  for await (const _ of session.run('fresh request')) {
+  for await (const _ of turnCoordinator.start('fresh request')) {
     // consume
   }
   t.is(calls[1].input, 'fresh request');
@@ -1795,7 +1795,7 @@ test('run() with image attachment does not throw when supportsChaining is true',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const turn = {
     text: 'describe this image',
@@ -1811,7 +1811,7 @@ test('run() with image attachment does not throw when supportsChaining is true',
   };
 
   const emitted = [];
-  for await (const ev of session.run(turn)) {
+  for await (const ev of turnCoordinator.start(turn)) {
     emitted.push(ev);
   }
 
@@ -1847,7 +1847,7 @@ test('previewLargeUncachedInput() does not mutate history or consume pending mod
     agentClient: mockClient,
     deps: { logger: mockLogger, settingsService, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   stateFacade.queueModeNotice('Plan mode enabled');
   const before = stateFacade.exportState();
@@ -1879,7 +1879,7 @@ test('previewLargeUncachedInput() estimates from outgoing input instead of accep
     agentClient: mockClient,
     deps: { logger: mockLogger, settingsService, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const large = 'x'.repeat(64_000 * 4);
   const decision = stateFacade.previewLargeUncachedInput(large, 1_000);
@@ -1919,7 +1919,7 @@ test('sendMessage() records successful large guard state after provider request 
     agentClient: mockClient,
     deps: { logger: mockLogger, settingsService, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const large = 'x'.repeat(64_000 * 4);
   t.is(stateFacade.previewLargeUncachedInput(large, 1_000).action, 'allow');
@@ -1943,12 +1943,12 @@ test('run() yields an error event carrying droppedUserMessage when startStream f
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   let thrown = null;
   try {
-    for await (const ev of session.run('hello')) {
+    for await (const ev of turnCoordinator.start('hello')) {
       emitted.push(ev);
     }
   } catch (e) {
@@ -1981,11 +1981,11 @@ test('run() omits droppedUserMessage when no user turn was added (skipUserMessag
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   const emitted = [];
   try {
-    for await (const ev of session.run('hello', { skipUserMessage: true })) {
+    for await (const ev of turnCoordinator.start('hello', { skipUserMessage: true })) {
       emitted.push(ev);
     }
   } catch {
@@ -2014,7 +2014,7 @@ test('run() emits user_message_consumed_for_abort when an aborted approval is be
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   approvalState.setPending({
     state: {},
@@ -2026,7 +2026,7 @@ test('run() emits user_message_consumed_for_abort when an aborted approval is be
 
   const emitted = [];
   try {
-    for await (const ev of session.run('follow up text')) {
+    for await (const ev of turnCoordinator.start('follow up text')) {
       emitted.push(ev);
     }
   } catch {
@@ -2071,9 +2071,9 @@ test('switchProvider() clears provider continuity but preserves transcript histo
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  for await (const _ of session.run('First message')) {
+  for await (const _ of turnCoordinator.start('First message')) {
   }
 
   approvalState.setPending({
@@ -2093,7 +2093,7 @@ test('switchProvider() clears provider continuity but preserves transcript histo
   );
 
   const emitted = [];
-  for await (const ev of session.run('Second message')) {
+  for await (const ev of turnCoordinator.start('Second message')) {
     emitted.push(ev);
   }
 
@@ -2144,14 +2144,14 @@ test('setModel() clears provider continuity and forces full-history replay on th
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  for await (const _ of session.run('First message')) {
+  for await (const _ of turnCoordinator.start('First message')) {
   }
 
   runtimeController.setModel('gpt-next');
 
-  for await (const _ of session.run('Second message')) {
+  for await (const _ of turnCoordinator.start('Second message')) {
   }
 
   t.deepEqual(models, ['gpt-next']);
@@ -2240,10 +2240,10 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
   // Run turn 1 to completion — tool ledger now has the tool call entry.
-  for await (const _ of session.run('run echo hello')) {
+  for await (const _ of turnCoordinator.start('run echo hello')) {
     // consume
   }
   // Verify ledger has entries before undo.
@@ -2258,7 +2258,7 @@ test('undoLastUserTurn() clears tool ledger so stale tool calls are not re-injec
   t.is(stateAfter.toolLedger.length, 0, 'tool ledger must be empty after undo');
 
   // Retry the same message — the model must NOT see the old tool call/result pair.
-  for await (const _ of session.run('run echo hello')) {
+  for await (const _ of turnCoordinator.start('run echo hello')) {
     // consume
   }
   t.true(Array.isArray(retryInput), 'retry should send full history');
@@ -2383,12 +2383,12 @@ test('undoLastUserTurn() preserves earlier tool ledger entries that still belong
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade, runtimeController, approvalState } = bundle;
 
-  for await (const _ of session.run('first tool turn')) {
+  for await (const _ of turnCoordinator.start('first tool turn')) {
   }
 
-  for await (const _ of session.run('second tool turn')) {
+  for await (const _ of turnCoordinator.start('second tool turn')) {
   }
 
   stateFacade.undoLastUserTurn();
@@ -2400,7 +2400,7 @@ test('undoLastUserTurn() preserves earlier tool ledger entries that still belong
     'undo should retain tool ledger entries for still-retained earlier turns',
   );
 
-  for await (const _ of session.run('retry second turn')) {
+  for await (const _ of turnCoordinator.start('retry second turn')) {
   }
 
   t.true(Array.isArray(retryInput), 'retry should send full history');

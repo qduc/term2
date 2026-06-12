@@ -10,8 +10,6 @@ import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordina
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
 import type { ConversationStore } from './conversation-store.js';
 
-export type ConversationResult = ConversationTerminal;
-
 export type SendMessageOptions = {
   onTextChunk?: (fullText: string, chunk: string) => void;
   onReasoningChunk?: (fullText: string, chunk: string) => void;
@@ -107,7 +105,7 @@ export class ConversationAdapter {
   async sendMessage(
     input: string | UserTurn,
     { onTextChunk, onReasoningChunk, onCommandMessage, onEvent, hallucinationRetryCount = 0 }: SendMessageOptions = {},
-  ): Promise<ConversationResult> {
+  ): Promise<ConversationTerminal> {
     const turn = normalizeUserTurn(input);
     return this.#withTrafficContext(turn.text, async () => {
       const wrappedOnEvent = (event: ConversationEvent) => {
@@ -115,7 +113,7 @@ export class ConversationAdapter {
         onEvent?.(event);
       };
       this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
-      let result: ConversationResult;
+      let result: ConversationTerminal;
       try {
         result = await collectTerminalResult(this.#run(input, { retries: { hallucinationRetryCount } }), {
           onTextChunk,
@@ -151,7 +149,7 @@ export class ConversationAdapter {
     answer: string,
     rejectionReason?: string,
     { onTextChunk, onReasoningChunk, onCommandMessage, onEvent, approvalAnswer }: HandleApprovalDecisionOptions = {},
-  ): Promise<ConversationResult | null> {
+  ): Promise<ConversationTerminal | null> {
     if (!this.#approvalFlow.getPending()) {
       return null;
     }
@@ -175,7 +173,7 @@ export class ConversationAdapter {
         onEvent?.(event);
       };
       this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
-      let result: ConversationResult | null;
+      let result: ConversationTerminal | null;
       try {
         result = await collectTerminalResult(this.#continueAfterApproval({ answer, rejectionReason }), {
           onTextChunk,

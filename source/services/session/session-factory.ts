@@ -14,7 +14,7 @@ import type { ApprovalState } from '../approval/approval-state.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
-import { ConversationSession } from './conversation-session.js';
+import type { TurnCoordinator } from './turn-coordinator.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -43,7 +43,9 @@ export type CreateConversationSessionOptions = {
 
 /** Resources returned to callers (ConversationService, non-interactive, etc.). */
 export type ConversationSessionBundle = {
-  session: ConversationSession;
+  sessionId: string;
+  sessionStartedAt: string;
+  turnCoordinator: TurnCoordinator;
   terminalAdapter: ConversationAdapter;
   stateFacade: SessionManager;
   runtimeController: SessionRuntimeController;
@@ -88,13 +90,10 @@ export function createConversationSession(options: CreateConversationSessionOpti
     turnAccumulator,
   });
 
-  const session = new ConversationSession(sessionId, {
-    startedAt,
-    composition,
-  });
-
   return {
-    session,
+    sessionId,
+    sessionStartedAt: startedAt,
+    turnCoordinator: composition.turnCoordinator,
     terminalAdapter: composition.terminalAdapter,
     stateFacade: composition.stateFacade,
     runtimeController: composition.runtimeController,

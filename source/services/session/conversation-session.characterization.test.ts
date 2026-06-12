@@ -1,6 +1,5 @@
 // @ts-nocheck - Characterization tests for ConversationSession refactoring
 import test from 'ava';
-import { ConversationSession } from './conversation-session.js';
 import { createConversationSession } from './session-factory.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
@@ -327,10 +326,10 @@ test('abort with no pending approval does not throw and produces no change in sn
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
-  const { session, stateFacade } = bundle;
+  const { turnCoordinator, stateFacade } = bundle;
 
   // No approval pending; abort should be a no-op
-  session.abort();
+  turnCoordinator.abort();
 
   // The tool ledger should still be empty
   const snapshot = stateFacade.getCurrentSnapshot();
@@ -354,12 +353,12 @@ test('abort with pending approval records aborted entry in tool ledger', async (
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
-  const { session, terminalAdapter, stateFacade } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade } = bundle;
 
   await terminalAdapter.sendMessage('run command');
 
   // Now abort
-  session.abort();
+  turnCoordinator.abort();
 
   // Verify the tool ledger has an aborted entry
   const snapshot = stateFacade.getCurrentSnapshot();
@@ -984,14 +983,14 @@ test('approval then approval emits each terminal boundary in order', async (t) =
     },
   };
 
-  const { session } = createConversationSession({
+  const { turnCoordinator: session } = createConversationSession({
     sessionId: 'approval-then-approval',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
 
   const events = [];
-  for await (const event of session.run('run both commands')) {
+  for await (const event of session.start('run both commands')) {
     events.push(event);
   }
   for await (const event of session.continueAfterApproval({ answer: 'y' })) {
@@ -1034,14 +1033,14 @@ test('approval then rejection emits no tool_started event for the rejected tool'
     },
   };
 
-  const { session } = createConversationSession({
+  const { turnCoordinator: session } = createConversationSession({
     sessionId: 'approval-then-rejection',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
 
   const events = [];
-  for await (const event of session.run('run a command')) {
+  for await (const event of session.start('run a command')) {
     events.push(event);
   }
   for await (const event of session.continueAfterApproval({
@@ -1096,14 +1095,14 @@ test('multiple sequential interruptions preserve approval and tool-start orderin
     },
   };
 
-  const { session } = createConversationSession({
+  const { turnCoordinator: session } = createConversationSession({
     sessionId: 'sequential-interruptions',
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
   });
 
   const events = [];
-  for await (const event of session.run('run three commands')) {
+  for await (const event of session.start('run three commands')) {
     events.push(event);
   }
   for (let index = 0; index < 3; index++) {
@@ -1161,11 +1160,11 @@ test('aborted approval resolved by new user input emits the abort marker before 
   });
 
   const events = [];
-  for await (const event of bundle.session.run('run pending command')) {
+  for await (const event of bundle.turnCoordinator.start('run pending command')) {
     events.push(event);
   }
-  bundle.session.abort();
-  for await (const event of bundle.session.run('do something else')) {
+  bundle.turnCoordinator.abort();
+  for await (const event of bundle.turnCoordinator.start('do something else')) {
     events.push(event);
   }
 
@@ -1201,13 +1200,9 @@ test('characterization - undo while an approval is pending invalidates pending a
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
     turnAccumulator: new TurnItemAccumulator(),
   });
-  const session = new ConversationSession('undo-pending-test', {
-    startedAt: new Date().toISOString(),
-    composition,
-  });
 
   const emitted = [];
-  for await (const event of session.run('trigger tool call')) {
+  for await (const event of composition.turnCoordinator.start('trigger tool call')) {
     emitted.push(event);
   }
 
@@ -1227,7 +1222,7 @@ test('characterization - undo while an approval is pending invalidates pending a
   // Verify continuation is not allowed (throws error)
   await t.throwsAsync(
     async () => {
-      for await (const _ of session.continueAfterApproval({ answer: 'y' })) {
+      for await (const _ of composition.turnCoordinator.continueAfterApproval({ answer: 'y' })) {
       }
     },
     { message: 'No pending approval to continue.' },
@@ -1252,13 +1247,9 @@ test('characterization - reset while an approval is pending invalidates pending 
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
     turnAccumulator: new TurnItemAccumulator(),
   });
-  const session = new ConversationSession('reset-pending-test', {
-    startedAt: new Date().toISOString(),
-    composition,
-  });
 
   const emitted = [];
-  for await (const event of session.run('trigger tool call')) {
+  for await (const event of composition.turnCoordinator.start('trigger tool call')) {
     emitted.push(event);
   }
 
@@ -1274,9 +1265,247 @@ test('characterization - reset while an approval is pending invalidates pending 
   // Verify continuation throws 'No pending approval to continue.' because status machine is reset to idle
   await t.throwsAsync(
     async () => {
-      for await (const _ of session.continueAfterApproval({ answer: 'y' })) {
+      for await (const _ of composition.turnCoordinator.continueAfterApproval({ answer: 'y' })) {
       }
     },
     { message: 'No pending approval to continue.' },
   );
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Service-boundary characterization: critical gap coverage
+// ══════════════════════════════════════════════════════════════════════════
+
+test('characterization - fresh start execution recovers from transient error with successful re-drive', async (t) => {
+  const interruption = createShellInterruption({ callId: 'call-fresh-start', command: 'echo recover' });
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [interruption];
+  initialStream.state = createApprovalState();
+
+  const freshStream = new MockStream([]);
+  freshStream.finalOutput = 'Recovered from transient error.';
+  freshStream.lastResponseId = 'resp-fresh-start';
+
+  let startCallCount = 0;
+
+  const mockClient = {
+    async startStream() {
+      startCallCount++;
+      if (startCallCount === 1) {
+        return initialStream;
+      }
+      // Second call is the fresh-start re-drive
+      return freshStream;
+    },
+    async continueRunStream() {
+      const error = new Error('Connection refused');
+      error.code = 'ECONNREFUSED';
+      throw error;
+    },
+  };
+
+  const bundle = createConversationSession({
+    sessionId: 'fresh-start-exec',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+  });
+  const { terminalAdapter } = bundle;
+
+  // First sendMessage -> approval_required
+  const result1 = await terminalAdapter.sendMessage('run command');
+  t.is(result1.type, 'approval_required');
+
+  // handleApprovalDecision -> continuation throws -> fresh start re-drive -> response
+  const result2 = await terminalAdapter.handleApprovalDecision('y');
+
+  t.is(result2?.type, 'response');
+  if (result2?.type === 'response') {
+    t.is(result2.finalText, 'Recovered from transient error.');
+  }
+  t.is(startCallCount, 2, 'startStream should be called twice (initial + fresh start re-drive)');
+});
+
+test('characterization - approve-approve-response through handleApprovalDecision API', async (t) => {
+  const first = createShellInterruption({ callId: 'call-aa1', command: 'echo first' });
+  const second = createShellInterruption({ callId: 'call-aa2', command: 'echo second' });
+
+  const initialStream = new MockStream([]);
+  initialStream.interruptions = [first];
+  initialStream.state = createApprovalState();
+
+  const continuationStream = new MockStream([]);
+  continuationStream.interruptions = [second];
+  continuationStream.state = createApprovalState();
+
+  const finalStream = new MockStream([]);
+  finalStream.finalOutput = 'All done.';
+  finalStream.lastResponseId = 'resp-aa2';
+
+  let continueCalls = 0;
+
+  const mockClient = {
+    async startStream() {
+      return initialStream;
+    },
+    async continueRunStream() {
+      continueCalls++;
+      if (continueCalls === 1) {
+        return continuationStream;
+      }
+      return finalStream;
+    },
+  };
+
+  const bundle = createConversationSession({
+    sessionId: 'appr-appr-resp',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+  });
+  const { terminalAdapter } = bundle;
+
+  const events = [];
+
+  // First sendMessage -> approval_required (tool 1)
+  const r1 = await terminalAdapter.sendMessage('run commands', {
+    onEvent: (e) => events.push(e),
+  });
+  t.is(r1.type, 'approval_required');
+  t.is(r1.approval.callId, 'call-aa1');
+
+  // First handleApprovalDecision -> approval_required (tool 2)
+  const r2 = await terminalAdapter.handleApprovalDecision('y', undefined, {
+    onEvent: (e) => events.push(e),
+  });
+  t.is(r2?.type, 'approval_required');
+  t.is(r2?.approval.callId, 'call-aa2');
+
+  // Second handleApprovalDecision -> response
+  const r3 = await terminalAdapter.handleApprovalDecision('y', undefined, {
+    onEvent: (e) => events.push(e),
+  });
+  t.is(r3?.type, 'response');
+  if (r3?.type === 'response') {
+    t.is(r3.finalText, 'All done.');
+  }
+
+  // Verify tool_started events for both tools
+  const toolStarted = events.filter((e) => e.type === 'tool_started');
+  t.is(toolStarted.length, 2, 'Should have exactly 2 tool_started events');
+  t.is(toolStarted[0].toolCallId, 'call-aa1');
+  t.is(toolStarted[1].toolCallId, 'call-aa2');
+});
+
+test('characterization - reject then approve sequence through handleApprovalDecision API', async (t) => {
+  const firstTool = createShellInterruption({ callId: 'call-rej1', command: 'echo rejectable' });
+  const secondTool = createShellInterruption({ callId: 'call-appr1', command: 'echo approvable' });
+  const approvalState = createApprovalState();
+
+  const firstStream = new MockStream([]);
+  firstStream.interruptions = [firstTool];
+  firstStream.state = approvalState;
+
+  const rejectionResponse = new MockStream([{ type: 'response.output_text.delta', delta: 'Rejected.' }]);
+  rejectionResponse.finalOutput = 'Rejected.';
+
+  const secondStream = new MockStream([]);
+  secondStream.interruptions = [secondTool];
+  secondStream.state = createApprovalState();
+
+  const approvalResponse = new MockStream([{ type: 'response.output_text.delta', delta: 'Approved.' }]);
+  approvalResponse.finalOutput = 'Approved.';
+
+  let startCallCount = 0;
+  let continueCallCount = 0;
+
+  const mockClient = {
+    async startStream() {
+      startCallCount++;
+      if (startCallCount === 1) return firstStream;
+      return secondStream;
+    },
+    async continueRunStream() {
+      continueCallCount++;
+      if (continueCallCount === 1) return rejectionResponse;
+      return approvalResponse;
+    },
+  };
+
+  const bundle = createConversationSession({
+    sessionId: 'reject-approve',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+  });
+  const { terminalAdapter } = bundle;
+
+  // Turn 1: sendMessage -> approval_required
+  const r1 = await terminalAdapter.sendMessage('run command 1');
+  t.is(r1.type, 'approval_required');
+
+  // Turn 1: reject -> response
+  const r2 = await terminalAdapter.handleApprovalDecision('n', 'Not needed');
+  t.is(r2?.type, 'response');
+  t.truthy(r2?.finalText);
+
+  // Verify rejection was recorded in the approval state
+  t.is(approvalState.approveCalls.length, 0, 'No approvals should have been recorded');
+  t.is(approvalState.rejectCalls.length, 1, 'One rejection should be recorded');
+  t.is(approvalState.rejectCalls[0].callId, 'call-rej1', 'Rejected call should match');
+
+  // Turn 2: new sendMessage -> approval_required (subsequent tool needs approval after rejection)
+  const r3 = await terminalAdapter.sendMessage('run command 2');
+  t.is(r3.type, 'approval_required');
+
+  // Turn 2: approve -> response (subsequent approval works correctly after rejection)
+  const r4 = await terminalAdapter.handleApprovalDecision('y');
+  t.is(r4?.type, 'response');
+  if (r4?.type === 'response') {
+    t.is(r4.finalText, 'Approved.');
+  }
+});
+
+test('characterization - abort during pending approval clears state and prevents continuation', async (t) => {
+  const interruption = createShellInterruption({ callId: 'call-abort-chain', command: 'echo pending' });
+  const approvalState = createApprovalState();
+
+  const stream = new MockStream([]);
+  stream.interruptions = [interruption];
+  stream.state = approvalState;
+
+  const mockClient = {
+    async startStream() {
+      return stream;
+    },
+    abort() {},
+  };
+
+  const composition = createConversationSessionComposition({
+    sessionId: 'abort-chain-test',
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
+    turnAccumulator: new TurnItemAccumulator(),
+  });
+
+  const emitted = [];
+  for await (const event of composition.turnCoordinator.start('run command')) {
+    emitted.push(event);
+  }
+  t.is(emitted.length, 1);
+  t.is(emitted[0].type, 'approval_required');
+  t.truthy(composition.approvalState.getPending(), 'Should have pending approval before abort');
+
+  // Abort while approval is pending
+  composition.turnCoordinator.abort();
+
+  // Status should return to idle
+  t.is(composition.appState.statusMachine.current, 'idle', 'Status machine should be idle after abort');
+
+  // No pending approval after abort
+  t.is(composition.approvalState.getPending(), null, 'No pending approval after abort');
+
+  // Tool ledger should have aborted entry
+  const ledger = composition.toolTracker.ledger.export();
+  const abortedEntries = ledger.filter((entry) => entry.status === 'aborted');
+  t.true(abortedEntries.length >= 1, 'Tool ledger should have at least one aborted entry');
+  t.is(abortedEntries[0].callId, 'call-abort-chain', 'Aborted entry should match the interrupted call');
 });

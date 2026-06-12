@@ -1,6 +1,5 @@
 import test from 'ava';
 import { GenerationGuard } from './generation-guard.js';
-import { ConversationSession } from './session/conversation-session.js';
 import { createConversationSessionComposition } from './session/session-composition.js';
 import { TurnItemAccumulator } from './session/turn-item-accumulator.js';
 import { MockStream } from './test-helpers/mock-stream.js';
@@ -111,11 +110,7 @@ function setupSession(mockClient: any) {
     deps: { logger: mockLogger, sessionContextService: createSessionContextService() },
     turnAccumulator: new TurnItemAccumulator(),
   });
-  const session = new ConversationSession('test-session', {
-    startedAt: new Date().toISOString(),
-    composition,
-  });
-  return { session, composition };
+  return { turnCoordinator: composition.turnCoordinator, composition };
 }
 
 test('integration - undo during active stream work prevents mutation and aborts turn', async (t) => {
@@ -144,10 +139,10 @@ test('integration - undo during active stream work prevents mutation and aborts 
     },
   };
 
-  const { session, composition } = setupSession(mockClient);
+  const { turnCoordinator, composition } = setupSession(mockClient);
 
   const runPromise = (async () => {
-    for await (const _ of session.run('hello')) {
+    for await (const _ of turnCoordinator.start('hello')) {
     }
   })();
 
@@ -178,10 +173,10 @@ test('integration - undo while approval is pending invalidates pending approval 
     },
   };
 
-  const { session, composition } = setupSession(mockClient);
+  const { turnCoordinator, composition } = setupSession(mockClient);
 
   const emitted: any[] = [];
-  for await (const event of session.run('trigger tool call')) {
+  for await (const event of turnCoordinator.start('trigger tool call')) {
     emitted.push(event);
   }
 
@@ -198,7 +193,7 @@ test('integration - undo while approval is pending invalidates pending approval 
   // Attempting to continue should fail
   await t.throwsAsync(
     async () => {
-      for await (const _ of session.continueAfterApproval({ answer: 'y' })) {
+      for await (const _ of turnCoordinator.continueAfterApproval({ answer: 'y' })) {
       }
     },
     { message: 'No pending approval to continue.' },
@@ -232,10 +227,10 @@ test('integration - model change during active stream work prevents mutation and
     },
   };
 
-  const { session, composition } = setupSession(mockClient);
+  const { turnCoordinator, composition } = setupSession(mockClient);
 
   const runPromise = (async () => {
-    for await (const _ of session.run('hello')) {
+    for await (const _ of turnCoordinator.start('hello')) {
     }
   })();
 
@@ -280,10 +275,10 @@ test('integration - import during active stream work prevents mutation and abort
     },
   };
 
-  const { session, composition } = setupSession(mockClient);
+  const { turnCoordinator, composition } = setupSession(mockClient);
 
   const runPromise = (async () => {
-    for await (const _ of session.run('hello')) {
+    for await (const _ of turnCoordinator.start('hello')) {
     }
   })();
 
@@ -333,10 +328,10 @@ test('integration - session clear/reset during active stream work prevents mutat
     },
   };
 
-  const { session, composition } = setupSession(mockClient);
+  const { turnCoordinator, composition } = setupSession(mockClient);
 
   const runPromise = (async () => {
-    for await (const _ of session.run('hello')) {
+    for await (const _ of turnCoordinator.start('hello')) {
     }
   })();
 
@@ -382,10 +377,10 @@ test('integration - disposal during active stream work prevents mutation and abo
     },
   };
 
-  const { session, composition } = setupSession(mockClient);
+  const { turnCoordinator, composition } = setupSession(mockClient);
 
   const runPromise = (async () => {
-    for await (const _ of session.run('hello')) {
+    for await (const _ of turnCoordinator.start('hello')) {
     }
   })();
 
@@ -425,11 +420,11 @@ test('integration - aborted-approval input with current token executes resolutio
     },
   };
 
-  const { session, composition } = setupSession(mockClient);
+  const { turnCoordinator, composition } = setupSession(mockClient);
 
   // Run a command that triggers approval requirement
   const events1: any[] = [];
-  for await (const ev of session.run('run command')) {
+  for await (const ev of turnCoordinator.start('run command')) {
     events1.push(ev);
   }
   t.is(composition.appState.statusMachine.current, 'awaiting_approval');
@@ -439,13 +434,13 @@ test('integration - aborted-approval input with current token executes resolutio
   t.truthy(pending);
   t.truthy(pending!.token);
 
-  // Abort it correctly via session.abort()
-  session.abort();
+  // Abort it correctly via turnCoordinator.abort()
+  turnCoordinator.abort();
   t.is(composition.appState.statusMachine.current, 'idle');
 
   // Send resolution user input with the current token (which is in the aborted context)
   const events2: any[] = [];
-  for await (const ev of session.run('resolution message')) {
+  for await (const ev of turnCoordinator.start('resolution message')) {
     events2.push(ev);
   }
 
@@ -469,22 +464,22 @@ test('integration - aborted-approval input with stale token is discarded without
     },
   };
 
-  const { session, composition } = setupSession(mockClient);
+  const { turnCoordinator, composition } = setupSession(mockClient);
 
   // Run a command that triggers approval requirement
-  for await (const _ of session.run('run command')) {
+  for await (const _ of turnCoordinator.start('run command')) {
   }
   t.is(composition.appState.statusMachine.current, 'awaiting_approval');
 
-  // Abort it correctly via session.abort()
-  session.abort();
+  // Abort it correctly via turnCoordinator.abort()
+  turnCoordinator.abort();
 
   // Invalidate generation directly
   composition.generationGuard.invalidate();
 
   // Send new input
   const events: any[] = [];
-  for await (const ev of session.run('resolution message')) {
+  for await (const ev of turnCoordinator.start('resolution message')) {
     events.push(ev);
   }
 

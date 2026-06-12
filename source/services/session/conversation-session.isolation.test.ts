@@ -317,15 +317,15 @@ test('aborted approval resolution restores cached tool arguments for command mes
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  const { session, terminalAdapter, stateFacade } = bundle;
+  const { turnCoordinator, terminalAdapter, stateFacade } = bundle;
 
   const approvalResult = await terminalAdapter.sendMessage('run the approved shell command');
   t.is(approvalResult.type, 'approval_required');
 
-  session.abort();
+  turnCoordinator.abort();
 
   const emitted = [];
-  for await (const event of session.run('resume the aborted approval')) {
+  for await (const event of turnCoordinator.start('resume the aborted approval')) {
     emitted.push(event);
   }
 

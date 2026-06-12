@@ -1,9 +1,9 @@
 import test from 'ava';
-import { type ConversationResult } from './conversation-session.js';
+import { type ConversationTerminal } from '../../contracts/conversation.js';
 import { createConversationSession } from './session-factory.js';
 
-type ApprovalRequiredResult = Extract<ConversationResult, { type: 'approval_required' }>;
-type ResponseResult = Extract<ConversationResult, { type: 'response' }>;
+type ApprovalRequiredResult = Extract<ConversationTerminal, { type: 'approval_required' }>;
+type ResponseResult = Extract<ConversationTerminal, { type: 'response' }>;
 
 const createLogger = () => ({
   info: () => {},
@@ -178,14 +178,14 @@ const createSessionHarness = ({
     },
   });
 
-  return { session: bundle.session, bundle };
+  return { bundle };
 };
 
 const seedInputSurgeBaseline = (bundle: any, count = 65) => {
   bundle.inputPlanner.seedInputSurgeBaseline(makeHistoryItems(count, 'seed'), 'full_history');
 };
 
-const expectApprovalRequired = (result: ConversationResult | null): ApprovalRequiredResult => {
+const expectApprovalRequired = (result: ConversationTerminal | null): ApprovalRequiredResult => {
   if (!result) {
     throw new Error('Expected approval_required, got null');
   }
@@ -197,7 +197,7 @@ const expectApprovalRequired = (result: ConversationResult | null): ApprovalRequ
   return result;
 };
 
-const expectResponse = (result: ConversationResult | null): ResponseResult => {
+const expectResponse = (result: ConversationTerminal | null): ResponseResult => {
   if (!result) {
     throw new Error('Expected response, got null');
   }
@@ -256,7 +256,7 @@ test('abort-resolution updates the InputSurgeGuard baseline when a new message r
   const firstResult = expectApprovalRequired(await bundle.terminalAdapter.sendMessage('start a tool run'));
   t.truthy(firstResult.approval.callId);
 
-  bundle.session.abort();
+  bundle.turnCoordinator.abort();
 
   const resolvedResult = expectResponse(
     await bundle.terminalAdapter.sendMessage('replace the pending approval with new input'),
@@ -278,7 +278,7 @@ test('abort-resolution preserves the next-turn pending block for a very large ap
   );
   t.truthy(firstResult.approval.callId);
 
-  bundle.session.abort();
+  bundle.turnCoordinator.abort();
 
   const resolvedResult = expectResponse(
     await bundle.terminalAdapter.sendMessage('replace the pending approval with new input'),

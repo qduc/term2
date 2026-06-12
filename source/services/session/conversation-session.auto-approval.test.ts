@@ -1,11 +1,11 @@
 import test, { type ExecutionContext, type Macro } from 'ava';
 import { type ConversationEvent } from '../conversation/conversation-events.js';
-import { type ConversationResult } from './conversation-session.js';
+import { type ConversationTerminal } from '../../contracts/conversation.js';
 import { createConversationSession } from './session-factory.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
 
-type ApprovalRequiredResult = Extract<ConversationResult, { type: 'approval_required' }>;
-type ResponseResult = Extract<ConversationResult, { type: 'response' }>;
+type ApprovalRequiredResult = Extract<ConversationTerminal, { type: 'approval_required' }>;
+type ResponseResult = Extract<ConversationTerminal, { type: 'response' }>;
 
 const createMockLogger = () => ({
   info: () => {},
@@ -105,7 +105,7 @@ const createFinalStream = (finalOutput = 'Done.') => {
   return stream;
 };
 
-const getApprovalResult = (t: ExecutionContext, result: ConversationResult | null): ApprovalRequiredResult => {
+const getApprovalResult = (t: ExecutionContext, result: ConversationTerminal | null): ApprovalRequiredResult => {
   t.truthy(result);
   t.is(result?.type, 'approval_required');
   if (!result || result.type !== 'approval_required') {
@@ -115,7 +115,7 @@ const getApprovalResult = (t: ExecutionContext, result: ConversationResult | nul
   return result;
 };
 
-const getResponseResult = (t: ExecutionContext, result: ConversationResult | null): ResponseResult => {
+const getResponseResult = (t: ExecutionContext, result: ConversationTerminal | null): ResponseResult => {
   t.truthy(result);
   t.is(result?.type, 'response');
   if (!result || result.type !== 'response') {
@@ -186,7 +186,7 @@ const createSessionHarness = ({
     },
   });
 
-  return { session: bundle.session, bundle, chatCalls, askUserAnswerCalls };
+  return { bundle, chatCalls, askUserAnswerCalls };
 };
 
 const malformedResponseMacro: Macro<
@@ -672,7 +672,7 @@ test('auto mode: approved continuation emits tool_started before streamed output
   });
 
   const events: ConversationEvent[] = [];
-  for await (const event of bundle.session.run('list the source files')) {
+  for await (const event of bundle.turnCoordinator.start('list the source files')) {
     events.push(event);
   }
 

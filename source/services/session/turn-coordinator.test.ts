@@ -32,7 +32,7 @@ const makeHarness = () => {
           yield ev;
         }
       }
-      return result?.outcome ?? { kind: 'response', result: { type: 'response', finalText: 'done' } };
+      return result?.outcome ?? { kind: 'response', terminal: { type: 'response', finalText: 'done' } };
     },
     setNextResult: (outcome: any, events: any[] = []) => {
       driveResults.push({ outcome, events });
@@ -59,6 +59,7 @@ const makeHarness = () => {
     initialTurnRunner,
     continuationDriver,
     approvalFlow,
+    shellAutoApproval: {} as any,
   });
 
   return {
@@ -110,7 +111,7 @@ test('awaiting_approval -> continuing -> awaiting_approval', async (t) => {
 
   continuationDriver.setNextResult({
     kind: 'approval_required',
-    result: { type: 'approval_required', approval: { toolName: 'shell', argumentsText: 'ls' } },
+    terminal: { type: 'approval_required', approval: { toolName: 'shell', argumentsText: 'ls' } },
   });
 
   t.is(statusMachine.current, 'awaiting_approval');
@@ -152,7 +153,7 @@ test('Auto-approved manual continuations leave status continuing', async (t) => 
   continuationDriver.drive = async function* () {
     checkedStatusInLoop = statusMachine.current;
     yield { type: 'text_delta', delta: 'Running...' };
-    return { kind: 'response', result: { type: 'response', finalText: 'done' } };
+    return { kind: 'response', terminal: { type: 'response', finalText: 'done' } };
   };
 
   for await (const _ of coordinator.continueAfterApproval({ answer: 'y' })) {

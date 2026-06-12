@@ -1,5 +1,5 @@
 import type { ConversationEvent, FinalResponseEvent } from '../conversation/conversation-events.js';
-import type { ConversationResult } from './conversation-session.js';
+import type { ConversationTerminal } from '../../contracts/conversation.js';
 import type { CommandMessage } from '../../tools/types.js';
 import { type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
@@ -23,7 +23,7 @@ export async function collectTerminalResult(
     getRawInterruption?: () => unknown;
     onFinalEvent?: (event: FinalResponseEvent) => void;
   } = {},
-): Promise<ConversationResult> {
+): Promise<ConversationTerminal> {
   let finalText = '';
   let reasoningText = '';
   const commandMessages: CommandMessage[] = [];

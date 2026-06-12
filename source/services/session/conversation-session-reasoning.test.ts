@@ -53,14 +53,14 @@ test('ConversationSession extracts reasoning_content from stream', async (t) => 
     }),
   };
 
-  const session = createConversationSession({
+  const turnCoordinator = createConversationSession({
     sessionId: 'test-session',
     agentClient: mockAgentClient,
     deps: { logger, sessionContextService: createSessionContextService() as any },
-  } as any).session;
+  } as any).turnCoordinator;
 
   const events: any[] = [];
-  for await (const event of session.run('hi')) {
+  for await (const event of turnCoordinator.start('hi')) {
     events.push(event);
   }
 

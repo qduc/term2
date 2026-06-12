@@ -13,6 +13,7 @@ import { describeError } from '../../utils/error-helpers.js';
 import type { RetryCounts, RecoveryInstructions } from '../retry/retry-contracts.js';
 import { getToolInfoFromInterruption, getCallIdFromObject } from '../interruption-info.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import { createApprovalRequiredTerminal } from '../conversation/conversation-result-builder.js';
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import type { ContinuationStreamCycle } from './continuation-stream-cycle.js';
 import type { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
@@ -33,8 +34,8 @@ export type ContinuationInit =
     };
 
 export type ContinuationDriveResult =
-  | { kind: 'approval_required'; result: ConversationTerminal }
-  | { kind: 'response'; result: ConversationTerminal }
+  | { kind: 'approval_required'; terminal: ConversationTerminal }
+  | { kind: 'response'; terminal: ConversationTerminal }
   | ({ kind: 'fresh_start_required'; retryCounts: RetryCounts } & RecoveryInstructions)
   | { kind: 'stale' };
 
@@ -95,7 +96,7 @@ export class ContinuationDriver {
 
           if (outcome.kind === 'response') {
             this.#recordSuccess(state, previousInputForSurge);
-            return { kind: 'response', result: this.#buildResponse(outcome.result, nextCumulativeUsage) };
+            return { kind: 'response', terminal: this.#buildResponse(outcome.result, nextCumulativeUsage) };
           }
 
           const approvalResult = await this.#handleApprovalOutcome(
@@ -212,8 +213,8 @@ export class ContinuationDriver {
 
       const nextPlan = this.deps.approvalFlow.prepareContinuation('y', undefined);
       if (!nextPlan) {
-        const approvalFallback = this.#buildApprovalRequiredFromAutoApprove(outcome, nextCumulativeUsage);
-        return { action: 'return', result: { kind: 'approval_required', result: approvalFallback } };
+        const approvalFallback = this.#createApprovalRequiredFromAutoApprove(outcome, nextCumulativeUsage);
+        return { action: 'return', result: { kind: 'approval_required', terminal: approvalFallback } };
       }
 
       return { action: 'loop', nextPlan, isApproved: true };
@@ -245,7 +246,7 @@ export class ContinuationDriver {
         ...outcome.result,
         ...(nextCumulativeUsage && Object.keys(nextCumulativeUsage).length > 0 ? { usage: nextCumulativeUsage } : {}),
       };
-      return { action: 'return', result: { kind: 'approval_required', result: resultWithUsage } };
+      return { action: 'return', result: { kind: 'approval_required', terminal: resultWithUsage } };
     }
 
     if (decision === 'approve') {
@@ -263,7 +264,7 @@ export class ContinuationDriver {
     const answer = decision === 'approve' ? 'y' : 'n';
     const nextPlan = this.deps.approvalFlow.prepareContinuation(answer, undefined);
     if (!nextPlan) {
-      return { action: 'return', result: { kind: 'approval_required', result: outcome.result } };
+      return { action: 'return', result: { kind: 'approval_required', terminal: outcome.result } };
     }
 
     return { action: 'loop', nextPlan, isApproved: answer === 'y' };
@@ -278,7 +279,7 @@ export class ContinuationDriver {
     );
   }
 
-  #buildApprovalRequiredFromAutoApprove(
+  #createApprovalRequiredFromAutoApprove(
     outcome: { kind: 'auto_approve'; advisory: LLMAdvisory; callId: string | undefined; argumentsText: string },
     usage?: NormalizedUsage,
   ): ConversationTerminal {
@@ -292,31 +293,25 @@ export class ContinuationDriver {
       const agentName = agent && typeof agent === 'object' ? (agent as Record<string, unknown>).name : 'Agent';
       const callId = getCallIdFromObject(pending.interruption);
 
-      return {
-        type: 'approval_required',
-        approval: {
-          agentName: typeof agentName === 'string' ? agentName : 'Agent',
-          toolName: toolName ?? 'Unknown Tool',
-          argumentsText,
-          rawInterruption: pending.interruption,
-          ...(callId ? { callId: String(callId) } : {}),
-          llmAdvisory: outcome.advisory,
-        },
+      return createApprovalRequiredTerminal({
+        agentName: typeof agentName === 'string' ? agentName : 'Agent',
+        toolName: toolName ?? 'Unknown Tool',
+        argumentsText,
+        rawInterruption: pending.interruption,
+        callId: callId ? String(callId) : undefined,
+        llmAdvisory: outcome.advisory,
         usage,
-      };
+      });
     }
 
-    return {
-      type: 'approval_required',
-      approval: {
-        agentName: 'Agent',
-        toolName: 'Unknown Tool',
-        argumentsText: outcome.argumentsText,
-        rawInterruption: undefined,
-        ...(outcome.callId ? { callId: outcome.callId } : {}),
-        llmAdvisory: outcome.advisory,
-      },
+    return createApprovalRequiredTerminal({
+      agentName: 'Agent',
+      toolName: 'Unknown Tool',
+      argumentsText: outcome.argumentsText,
+      rawInterruption: undefined,
+      callId: outcome.callId,
+      llmAdvisory: outcome.advisory,
       usage,
-    };
+    });
   }
 }

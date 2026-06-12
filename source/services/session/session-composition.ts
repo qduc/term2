@@ -49,6 +49,7 @@ export type ConversationSessionRetryOptions = {
 
 /** All collaborator instances created by the composition factory. */
 export type ConversationSessionComposition = {
+  sessionId: string;
   conversationStore: ConversationStore;
   approvalState: ApprovalState;
   toolTracker: SessionToolTracker;
@@ -328,7 +329,6 @@ export function createConversationSessionComposition(
     turnAccumulator,
     toolTracker,
     shellAutoApproval,
-    continuationDriver,
     generationGuard,
     attemptFactory,
     inputPreparer,
@@ -341,6 +341,7 @@ export function createConversationSessionComposition(
     initialTurnRunner,
     continuationDriver,
     approvalFlow,
+    shellAutoApproval,
   });
 
   const stateFacade = new SessionManager({
@@ -388,6 +389,7 @@ export function createConversationSessionComposition(
   };
 
   return {
+    sessionId: id,
     conversationStore,
     approvalState,
     toolTracker,

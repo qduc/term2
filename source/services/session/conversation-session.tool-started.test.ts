@@ -91,10 +91,10 @@ test('run() emits tool_started with parsed arguments when function_call argument
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
-  const { session } = bundle;
+  const { turnCoordinator } = bundle;
 
   const emitted: ConversationEvent[] = [];
-  for await (const ev of session.run('hi')) {
+  for await (const ev of turnCoordinator.start('hi')) {
     emitted.push(ev);
   }
 
@@ -144,9 +144,9 @@ test('run() emits one diagnostic packet when tool arguments contain malformed JS
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
-  const { session } = bundle;
+  const { turnCoordinator } = bundle;
 
-  for await (const _ev of session.run('hi')) {
+  for await (const _ev of turnCoordinator.start('hi')) {
     // consume stream
   }
 
@@ -272,10 +272,10 @@ test('run() emits one tool_started for duplicate function_call events with the s
     agentClient: mockClient,
     deps: { logger, sessionContextService },
   });
-  const { session } = bundle;
+  const { turnCoordinator } = bundle;
 
   const emitted: ConversationEvent[] = [];
-  for await (const ev of session.run('hi')) {
+  for await (const ev of turnCoordinator.start('hi')) {
     emitted.push(ev);
   }
 

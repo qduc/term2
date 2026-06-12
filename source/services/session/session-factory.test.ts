@@ -53,36 +53,36 @@ const makeMockClient = (overrides = {}) => ({
 
 // ── Factory return shape ───────────────────────────────────────────
 
-test('createConversationSession returns session with correct id', (t) => {
-  const { session } = createConversationSession({
+test('createConversationSession returns bundle with correct sessionId', (t) => {
+  const { sessionId } = createConversationSession({
     sessionId: 'test-123',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  t.is(session.id, 'test-123');
+  t.is(sessionId, 'test-123');
 });
 
-test('createConversationSession returns session with correct startedAt when provided', (t) => {
+test('createConversationSession returns bundle with correct sessionStartedAt when provided', (t) => {
   const ts = '2024-01-01T00:00:00.000Z';
-  const { session } = createConversationSession({
+  const { sessionStartedAt } = createConversationSession({
     sessionId: 'test-ts',
     sessionStartedAt: ts,
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
-  t.is(session.startedAt, ts);
+  t.is(sessionStartedAt, ts);
 });
 
-test('createConversationSession returns session with auto startedAt when not provided', (t) => {
+test('createConversationSession returns bundle with auto sessionStartedAt when not provided', (t) => {
   const before = new Date().toISOString();
-  const { session } = createConversationSession({
+  const { sessionStartedAt } = createConversationSession({
     sessionId: 'auto-ts',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
   const after = new Date().toISOString();
-  t.true(session.startedAt >= before);
-  t.true(session.startedAt <= after);
+  t.true(sessionStartedAt >= before);
+  t.true(sessionStartedAt <= after);
 });
 
 test('createConversationSession returns a terminalAdapter with sendMessage', (t) => {
@@ -173,21 +173,19 @@ test('dispose() is idempotent — safe to call twice without throwing', (t) => {
 });
 
 test('dispose() resets previousResponseId so next run starts fresh', (t) => {
-  const { session, dispose } = createConversationSession({
+  const { dispose } = createConversationSession({
     sessionId: 'prev-resp-id',
     agentClient: makeMockClient(),
     deps: { logger: makeLogger(), sessionContextService },
   });
 
-  // Manually set a previousResponseId on the session state to simulate a completed run
-  // Access via session's internal state via exportState (which reads from state)
-  // We'll just check that dispose doesn't throw and that abort() was called
+  // We'll just check that dispose doesn't throw
   t.notThrows(() => dispose());
 });
 
 // ── No callback into partially-constructed session ────────────────
 
-test('session.abort() does not require ConversationSession to hold a back-reference', (t) => {
+test('turnCoordinator.abort() does not throw', (t) => {
   const abortCalled = { value: false };
   const mockClient = makeMockClient({
     abort: () => {
@@ -195,14 +193,14 @@ test('session.abort() does not require ConversationSession to hold a back-refere
     },
   });
 
-  const { session } = createConversationSession({
+  const { turnCoordinator } = createConversationSession({
     sessionId: 'abort-test',
     agentClient: mockClient,
     deps: { logger: makeLogger(), sessionContextService },
   });
 
   // Should not throw
-  t.notThrows(() => session.abort());
+  t.notThrows(() => turnCoordinator.abort());
 });
 
 // ── Non-interactive path ──────────────────────────────────────────

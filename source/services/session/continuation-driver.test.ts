@@ -217,8 +217,8 @@ test('continuation from approval decision returns final response', async (t) => 
 
   t.is(result.kind, 'response');
   if (result.kind === 'response') {
-    t.is(result.result.type, 'response');
-    t.is(result.result.finalText, 'Done.');
+    t.is(result.terminal.type, 'response');
+    t.is(result.terminal.finalText, 'Done.');
   }
 });
 
@@ -350,7 +350,7 @@ test('drive returns approval_required when policy says prompt', async (t) => {
 
   t.is(result.kind, 'approval_required');
   if (result.kind === 'approval_required') {
-    t.is(result.result.approval.toolName, 'apply_patch');
+    t.is(result.terminal.approval.toolName, 'apply_patch');
   }
   t.deepEqual(recordedApproval, {
     toolName: 'apply_patch',
@@ -515,8 +515,8 @@ test('multiple auto-approved interruptions followed by manual approval', async (
 
   t.is(result.kind, 'approval_required');
   if (result.kind === 'approval_required') {
-    t.is(result.result.approval.toolName, 'apply_patch');
-    t.is(result.result.approval.callId, 'call-3');
+    t.is(result.terminal.approval.toolName, 'apply_patch');
+    t.is(result.terminal.approval.callId, 'call-3');
   }
   t.is(cycleCount, 3);
 });

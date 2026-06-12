@@ -290,15 +290,9 @@ test('aborted-approval input reusing the current token', async (t) => {
     callId: 'call-1',
   };
 
-  const continuationStream = new MockStream([{ type: 'response.output_text.delta', delta: 'resolved' }]);
-  continuationStream.finalOutput = 'resolved';
-
   const mockClient = {
     getProvider() {
       return 'openai';
-    },
-    async continueRunStream() {
-      return continuationStream;
     },
   };
 
@@ -337,11 +331,14 @@ test('aborted-approval input reusing the current token', async (t) => {
   })();
 
   const outcome = await runPromise;
-  if (outcome.kind === 'response' && outcome.terminal.type === 'response') {
-    t.is(outcome.terminal.finalText, 'resolved');
-  } else {
-    t.fail('Expected response outcome with FinalTerminal');
+  t.is(outcome.kind, 'abort_resolution_required');
+  if (outcome.kind === 'abort_resolution_required') {
+    t.is(outcome.abortedContext, abortedContext);
+    t.is(outcome.userText, 'resolved text');
+    t.is(outcome.generation, token);
   }
+  t.is(events.length, 1);
+  t.is(events[0].type, 'user_message_consumed_for_abort');
 });
 
 test('stale aborted-approval context produces no mutation', async (t) => {

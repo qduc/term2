@@ -46,7 +46,7 @@ export class ConversationService {
   }
 
   get sessionId(): string {
-    return this.#bundle.session.id;
+    return this.#bundle.sessionId;
   }
 
   resetWithNewId(newId: string): void {
@@ -119,7 +119,7 @@ export class ConversationService {
   }
 
   abort(): void {
-    this.#bundle.session.abort();
+    this.#bundle.turnCoordinator.abort();
   }
 
   sendMessage(input: string | UserTurn, options?: SendMessageOptions): Promise<ConversationTerminal> {

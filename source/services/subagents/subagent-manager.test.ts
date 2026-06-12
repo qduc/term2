@@ -2052,7 +2052,7 @@ test.serial('mentor subagent is NOT affected by prompt profiles', async (t) => {
   t.false(mentorAgent.instructions.includes('nested Codex-family subagent'));
   t.false(mentorAgent.instructions.includes('## Available Tool Guidance'));
   t.false(mentorAgent.instructions.includes('## Worktree Hygiene'));
-  t.true(mentorAgent.instructions.includes('You are a helpful mentor assistant.'));
+  t.true(mentorAgent.instructions.includes('You are a senior architect'));
 });
 
 test.serial('subagent tool definitions conditional registration for search tools', async (t) => {

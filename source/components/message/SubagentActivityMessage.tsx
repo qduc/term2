@@ -1,6 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import CommandMessage from './CommandMessage.js';
+import { COLOR_MUTED } from '../theme.js';
 
 type Props = {
   msg: {
@@ -31,6 +32,32 @@ const buildTitle = (role: string | undefined, task: string | undefined): string 
       .trim() || '';
   const taskPreview = truncate(firstParagraph, MAX_TASK_LENGTH);
   return ['run_subagent', roleLabel, taskPreview].filter(Boolean).join(' ');
+};
+
+const formatSubagentStringTool = (tool: string, activityStatus?: string): string => {
+  let statusChar = '✔';
+  let cleaned = tool;
+
+  if (tool.endsWith(' (Success)')) {
+    statusChar = '✔';
+    cleaned = tool.slice(0, -' (Success)'.length);
+  } else if (tool.endsWith(' (Failed)')) {
+    statusChar = '✖';
+    cleaned = tool.slice(0, -' (Failed)'.length);
+  } else if (/\s+\(Failed:.*\)$/.test(tool)) {
+    statusChar = '✖';
+    cleaned = tool.replace(/\s+\(Failed:.*\)$/, '');
+  } else if (tool.endsWith(' (Cancelled)')) {
+    statusChar = '✖';
+    cleaned = tool.slice(0, -' (Cancelled)'.length);
+  } else if (/\s+\(\d+\s+matches?\)$/.test(tool)) {
+    statusChar = '✔';
+    cleaned = tool.replace(/\s+\(\d+\s+matches?\)$/, '');
+  } else {
+    statusChar = activityStatus === 'running' ? '▶' : '✔';
+  }
+
+  return `${statusChar} ${cleaned}`;
 };
 
 const SubagentActivityMessage: FC<Props> = ({ msg }) => {
@@ -68,13 +95,14 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
                 hadApproval={tool.hadApproval}
                 displayMode="concise"
                 textColor="#64748b"
+                isSubagent={true}
               />
             </Box>
           );
         }
         return (
-          <Text key={`${tool}-${index}`} color="#64748b">
-            {truncate(tool, MAX_TOOL_LENGTH)}
+          <Text key={`${tool}-${index}`} color={COLOR_MUTED}>
+            {truncate(formatSubagentStringTool(tool as string, msg.status), MAX_TOOL_LENGTH)}
           </Text>
         );
       })}

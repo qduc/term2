@@ -17,7 +17,7 @@ import {
   parseWebSearchOutput,
   stripRgErrorLines,
 } from './command-message-helpers.js';
-import { COLOR_TOOL_OUTPUT } from '../theme.js';
+import { COLOR_TOOL_OUTPUT, COLOR_MUTED as THEME_COLOR_MUTED } from '../theme.js';
 import DiffView from '../layout/DiffView.js';
 
 // --- Command Message Theme Colors ---
@@ -43,6 +43,7 @@ type Props = {
   hadApproval?: boolean;
   displayMode?: 'standard' | 'concise';
   textColor?: string;
+  isSubagent?: boolean;
 };
 
 const getConciseAskUserResponse = (output: string | undefined): string => {
@@ -74,6 +75,7 @@ const CommandMessage: FC<Props> = ({
   hadApproval,
   displayMode = 'standard',
   textColor,
+  isSubagent = false,
 }) => {
   const isRunning = status === 'pending' || status === 'running';
   const [isVisible, setIsVisible] = useState(!isRunning);
@@ -171,7 +173,7 @@ const CommandMessage: FC<Props> = ({
     return () => clearTimeout(timer);
   }, [isRunning]);
 
-  if (!isVisible) {
+  if (!isVisible && !isSubagent) {
     return null;
   }
 
@@ -231,6 +233,19 @@ const CommandMessage: FC<Props> = ({
           );
       }
     })();
+
+    if (isSubagent) {
+      const isFailed = status === 'failed' || isApprovalRejection || success === false || Boolean(failureReason);
+      const statusChar = isFailed ? '✖' : isRunning ? '▶' : '✔';
+      const actionText = isFailed ? command : displayAction;
+      return (
+        <Box>
+          <Text wrap="truncate" color={THEME_COLOR_MUTED}>
+            {statusChar} {actionText}
+          </Text>
+        </Box>
+      );
+    }
 
     if (isApprovalRejection) {
       return (

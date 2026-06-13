@@ -993,3 +993,115 @@ test('CommandMessage renders ask_user declined answer in second line in concise 
   t.true(lines[0]!.includes('Asked user "What is your favorite color?"'), `Expected question on line 1: ${lines[0]}`);
   t.true(lines[1]!.includes('Response: User declined to answer.'), `Expected response on line 2: ${lines[1]}`);
 });
+
+test('CommandMessage renders in a single, muted line when isSubagent is true', async (t) => {
+  const props = {
+    command: 'create_file "src/test.txt"',
+    toolName: 'create_file',
+    toolArgs: { path: 'src/test.txt', content: 'hello' },
+    status: 'completed' as const,
+    success: true,
+    displayMode: 'concise' as const,
+    isSubagent: true,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  t.is(lines.length, 1, `Expected exactly 1 line, got: ${output}`);
+  t.true(lines[0]!.includes('✔'), `Expected checkmark: ${lines[0]}`);
+  t.true(lines[0]!.includes('Created "src/test.txt"'), `Expected action text: ${lines[0]}`);
+});
+
+test('CommandMessage renders failed command in a single, muted line when isSubagent is true', async (t) => {
+  const props = {
+    command: 'create_file "src/test.txt"',
+    toolName: 'create_file',
+    toolArgs: { path: 'src/test.txt', content: 'hello' },
+    status: 'failed' as const,
+    success: false,
+    failureReason: 'Permission denied',
+    displayMode: 'concise' as const,
+    isSubagent: true,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  t.is(lines.length, 1, `Expected exactly 1 line, got: ${output}`);
+  t.true(lines[0]!.includes('✖'), `Expected cross: ${lines[0]}`);
+  // Raw command text for failures instead of friendly verb
+  t.true(lines[0]!.includes('create_file "src/test.txt"'), `Expected raw command: ${lines[0]}`);
+});
+
+test('CommandMessage renders running command with ▶ when isSubagent is true', async (t) => {
+  const props = {
+    command: 'shell ls -la',
+    toolName: 'shell',
+    status: 'running' as const,
+    displayMode: 'concise' as const,
+    isSubagent: true,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  t.is(lines.length, 1, `Expected exactly 1 line, got: ${output}`);
+  t.true(lines[0]!.includes('▶'), `Expected arrow: ${lines[0]}`);
+});
+
+test('CommandMessage renders pending command with ▶ when isSubagent is true', async (t) => {
+  const props = {
+    command: 'shell ls -la',
+    toolName: 'shell',
+    status: 'pending' as const,
+    displayMode: 'concise' as const,
+    isSubagent: true,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  t.is(lines.length, 1, `Expected exactly 1 line, got: ${output}`);
+  t.true(lines[0]!.includes('▶'), `Expected arrow: ${lines[0]}`);
+});
+
+test('CommandMessage renders failed status without success/failureReason as ✖ when isSubagent is true', async (t) => {
+  const props = {
+    command: 'create_file "src/test.txt"',
+    toolName: 'create_file',
+    toolArgs: { path: 'src/test.txt', content: 'hello' },
+    status: 'failed' as const,
+    displayMode: 'concise' as const,
+    isSubagent: true,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  t.is(lines.length, 1, `Expected exactly 1 line, got: ${output}`);
+  t.true(lines[0]!.includes('✖'), `Expected cross: ${lines[0]}`);
+});
+
+test('CommandMessage renders approval rejection with ✖ when isSubagent is true', async (t) => {
+  const props = {
+    command: 'shell rm -rf /',
+    toolName: 'shell',
+    status: 'completed' as const,
+    displayMode: 'concise' as const,
+    isApprovalRejection: true,
+    isSubagent: true,
+  };
+
+  const { lastFrame } = render(<CommandMessage {...props} />);
+  const output = stripAnsi(lastFrame() ?? '');
+
+  const lines = output.trim().split('\n');
+  t.is(lines.length, 1, `Expected exactly 1 line, got: ${output}`);
+  t.true(lines[0]!.includes('✖'), `Expected cross: ${lines[0]}`);
+});

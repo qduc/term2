@@ -171,7 +171,7 @@ export function isNetworkProtocolError(error: unknown, seen = new Set<unknown>()
   const unexpectedServerResponseMatch = message.match(/unexpected server response:\s*(\d{3})/);
   if (unexpectedServerResponseMatch) {
     const status = Number(unexpectedServerResponseMatch[1]);
-    if (status !== 502 && status !== 503 && status !== 504) {
+    if (status !== 502 && status !== 503 && status !== 504 && status !== 520) {
       return false;
     }
   }
@@ -188,6 +188,14 @@ export function isNetworkProtocolError(error: unknown, seen = new Set<unknown>()
     }
   }
 
+  if (error && typeof error === 'object') {
+    const statusRaw = (error as any).status ?? (error as any).statusCode;
+    const status = typeof statusRaw === 'number' ? statusRaw : parseInt(statusRaw, 10);
+    if (status === 520) {
+      return true;
+    }
+  }
+
   // 3. String message patterns (including restored generic and WebSocket ones)
   if (
     message.includes('websocket connection closed') ||
@@ -198,12 +206,14 @@ export function isNetworkProtocolError(error: unknown, seen = new Set<unknown>()
     message.includes('timed out before opening') ||
     message.includes('websocket connection timed out') ||
     message.includes('pong timeout') ||
-    message.includes('unexpected server response:') || // 502/503/504 passed above
+    message.includes('unexpected server response:') || // 502/503/504/520 passed above
     message.includes('connection timed out') ||
     message.includes('socket hang up') ||
     message.includes('failed to open') ||
     message.includes('connection error') ||
-    message.includes('connection failed')
+    message.includes('connection failed') ||
+    message.includes('520 status code') ||
+    message.includes('status code 520')
   ) {
     return true;
   }

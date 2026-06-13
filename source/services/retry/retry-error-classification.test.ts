@@ -376,3 +376,30 @@ test('isNetworkProtocolError and isTransientRetryableError findings regression t
   t.true(isNetworkProtocolError(connError));
   t.true(isTransientRetryableError(connError));
 });
+
+test('isNetworkProtocolError and isTransientRetryableError handle 520 status code and Cloudflare 520 errors', (t) => {
+  // Error object with message "520 status code (no body)"
+  const errNoBody = new Error('520 status code (no body)');
+  t.true(isNetworkProtocolError(errNoBody));
+  t.true(isTransientRetryableError(errNoBody));
+
+  // Error object with status property = 520
+  const errStatus = Object.assign(new Error('Cloudflare error'), { status: 520 });
+  t.true(isNetworkProtocolError(errStatus));
+  t.true(isTransientRetryableError(errStatus));
+
+  // Error object with statusCode property = 520
+  const errStatusCode = Object.assign(new Error('Cloudflare error'), { statusCode: 520 });
+  t.true(isNetworkProtocolError(errStatusCode));
+  t.true(isTransientRetryableError(errStatusCode));
+
+  // Error message with "unexpected server response: 520"
+  const errUnexpected520 = new Error('unexpected server response: 520');
+  t.true(isNetworkProtocolError(errUnexpected520));
+  t.true(isTransientRetryableError(errUnexpected520));
+
+  // String error
+  const stringErr = 'Error: 520 status code (no body)';
+  t.true(isNetworkProtocolError(stringErr));
+  t.true(isTransientRetryableError(stringErr));
+});

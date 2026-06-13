@@ -1,6 +1,6 @@
 import { shouldPreferPatchEditingModel } from '../lib/tool-selection-policy.js';
 import type { ExecutionContext } from '../services/execution-context.js';
-import { getReasoningEfficiencyAddendum } from './reasoning-efficiency.js';
+// import { getReasoningEfficiencyAddendum } from './reasoning-efficiency.js';
 import { getSearchViaShellAddendum } from './search-via-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 import { selectPromptProfile } from './prompt-profiles.js';
@@ -24,7 +24,7 @@ export type PromptSpec = {
   inlineSections: string[];
 };
 
-const GPT_OVER_THINKING_MODEL_KEYS = ['kimi', 'deepseek', 'glm', 'qwen', 'minimax', 'mimo'];
+// const GPT_OVER_THINKING_MODEL_KEYS = ['kimi', 'deepseek', 'glm', 'qwen', 'minimax', 'mimo'];
 
 export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   const {
@@ -37,7 +37,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     runSubagentEnabled,
     executionContext,
   } = options;
-  const normalizedModel = model.trim().toLowerCase();
+  // const normalizedModel = model.trim().toLowerCase();
   const profile = selectPromptProfile({ model, liteMode, orchestratorMode });
   const fragmentFiles = [...(profile.fragmentFiles ?? [])];
   const inlineSections: string[] = [];
@@ -68,9 +68,9 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     fragmentFiles.push('plan-mode-info.md');
   }
 
-  if (GPT_OVER_THINKING_MODEL_KEYS.some((key) => normalizedModel.includes(key))) {
-    inlineSections.push(getReasoningEfficiencyAddendum());
-  }
+  // if (GPT_OVER_THINKING_MODEL_KEYS.some((key) => normalizedModel.includes(key))) {
+  //   inlineSections.push(getReasoningEfficiencyAddendum());
+  // }
 
   inlineSections.push(getAskUserAddendum());
 

@@ -8,7 +8,7 @@ import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { GenerationToken } from '../generation-guard.js';
 import type { PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
-import { getCallIdFromObject } from '../interruption-info.js';
+import { getCallIdFromObject, getMethod } from '../interruption-info.js';
 
 export interface PreparedContinuation {
   state: RunState<any, any>;
@@ -61,7 +61,7 @@ export class ContinuationState {
 
   initializeFrom(prepared: PreparedContinuation): void {
     this.currentState = prepared.state;
-    this.currentCallIds = getStringCallId(prepared.interruption);
+    this.currentCallIds = getContinuationCallIds(prepared.state, prepared.interruption);
     this.source = prepared.source;
     this.previouslyEmittedIds = prepared.previouslyEmittedCommandIds;
     this.inputMode = prepared.inputMode ?? 'delta';
@@ -79,7 +79,7 @@ export class ContinuationState {
     ledgerSnapshot: SavedToolExecution[],
   ): void {
     this.currentState = nextState;
-    this.currentCallIds = getStringCallId(nextInterruption);
+    this.currentCallIds = getContinuationCallIds(nextState, nextInterruption);
     this.source = 'continueRunStream';
     this.previouslyEmittedIds = mergedEmittedIds;
     this.ledgerSnapshot = ledgerSnapshot;
@@ -115,7 +115,24 @@ export class ContinuationState {
   }
 }
 
-function getStringCallId(interruption: unknown): string[] {
-  const callId = getCallIdFromObject(interruption);
-  return typeof callId === 'string' && callId.length > 0 ? [callId] : [];
+function getContinuationCallIds(state: unknown, interruption: unknown): string[] {
+  const callIds = new Set<string>();
+  const addCallId = (candidate: unknown) => {
+    const callId = getCallIdFromObject(candidate);
+    if (callId) {
+      callIds.add(callId);
+    }
+  };
+
+  addCallId(interruption);
+
+  const getInterruptions = getMethod<[], unknown>(state, 'getInterruptions');
+  const siblings = getInterruptions?.();
+  if (Array.isArray(siblings)) {
+    for (const sibling of siblings) {
+      addCallId(sibling);
+    }
+  }
+
+  return [...callIds];
 }

@@ -48,6 +48,24 @@ test('initializeFrom populates all fields from prepared continuation', (t) => {
   t.deepEqual(state.cumulativeTurnItems, prepared.cumulativeTurnItems);
 });
 
+test('initializeFrom includes sibling interruption call IDs from the run state', (t) => {
+  const state = new ContinuationState(5);
+  const prepared = {
+    state: {
+      getInterruptions: () => [{ callId: 'call-1' }, { rawItem: { callId: 'call-2' } }],
+    } as any,
+    interruption: { callId: 'call-1' },
+    toolCallArgumentsById: new Map(),
+    previouslyEmittedCommandIds: new Set<string>(),
+    removeInterceptor: () => {},
+    source: 'continueRunStream' as const,
+  };
+
+  state.initializeFrom(prepared);
+
+  t.deepEqual(state.currentCallIds, ['call-1', 'call-2']);
+});
+
 test('initializeFrom falls back to constructor token when prepared token is missing', (t) => {
   const state = new ContinuationState(5);
   const prepared = {
@@ -87,6 +105,26 @@ test('advanceFromPlan updates state for next iteration', (t) => {
   t.deepEqual(state.previouslyEmittedIds, mergedIds);
   t.is(state.inputMode, 'delta');
   t.deepEqual(state.ledgerSnapshot, snapshot);
+});
+
+test('advanceFromPlan includes sibling interruption call IDs from the next run state', (t) => {
+  const state = new ContinuationState(1);
+  state.initializeFrom({
+    state: { id: 'run-1' } as any,
+    interruption: { callId: 'call-1' },
+    toolCallArgumentsById: new Map(),
+    previouslyEmittedCommandIds: new Set<string>(),
+    removeInterceptor: () => {},
+    source: 'continueRunStream' as const,
+  });
+
+  const nextState = {
+    getInterruptions: () => [{ callId: 'call-2' }, { call_id: 'call-3' }],
+  } as any;
+
+  state.advanceFromPlan(nextState, { callId: 'call-2' }, 'delta', new Set(), []);
+
+  t.deepEqual(state.currentCallIds, ['call-2', 'call-3']);
 });
 
 test('advanceFromPlan preserves inputMode when nextInputMode is undefined', (t) => {

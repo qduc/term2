@@ -252,3 +252,127 @@ test('isTransientRetryableError: stream parsing and JSON syntax errors are retry
   t.false(isNetworkProtocolError(plainErrorWithTypeError));
   t.false(isTransientRetryableError(plainErrorWithTypeError));
 });
+
+test('isNetworkProtocolError and isTransientRetryableError recursive cause-chain walking and undici timeouts', (t) => {
+  // - TypeError("fetch failed", { cause: { code: "UND_ERR_CONNECT_TIMEOUT" } }) → retryable
+  const connectTimeout = new TypeError('fetch failed');
+  (connectTimeout as any).cause = { code: 'UND_ERR_CONNECT_TIMEOUT' };
+  t.true(isNetworkProtocolError(connectTimeout));
+  t.true(isTransientRetryableError(connectTimeout));
+  t.deepEqual(isRetryableTransportError(connectTimeout), { retryable: true, transportFallback: true });
+
+  // - TypeError("fetch failed", { cause: { code: "UND_ERR_HEADERS_TIMEOUT" } }) → retryable
+  const headersTimeout = new TypeError('fetch failed');
+  (headersTimeout as any).cause = { code: 'UND_ERR_HEADERS_TIMEOUT' };
+  t.true(isNetworkProtocolError(headersTimeout));
+  t.true(isTransientRetryableError(headersTimeout));
+
+  // - TypeError("fetch failed", { cause: { code: "UND_ERR_BODY_TIMEOUT" } }) → retryable
+  const bodyTimeout = new TypeError('fetch failed');
+  (bodyTimeout as any).cause = { code: 'UND_ERR_BODY_TIMEOUT' };
+  t.true(isNetworkProtocolError(bodyTimeout));
+  t.true(isTransientRetryableError(bodyTimeout));
+
+  // - TypeError("fetch failed", { cause: { code: "ETIMEDOUT" } }) → retryable
+  const sysTimeout = new TypeError('fetch failed');
+  (sysTimeout as any).cause = { code: 'ETIMEDOUT' };
+  t.true(isNetworkProtocolError(sysTimeout));
+  t.true(isTransientRetryableError(sysTimeout));
+
+  // - TypeError("fetch failed", { cause: new Error("DEPTH_ZERO_SELF_SIGNED_CERT") }) → NOT retryable
+  const certError = new TypeError('fetch failed');
+  (certError as any).cause = new Error('DEPTH_ZERO_SELF_SIGNED_CERT');
+  t.false(isNetworkProtocolError(certError));
+  t.false(isTransientRetryableError(certError));
+
+  // - Plain TypeError("fetch failed") without cause → NOT retryable
+  const plainFetchFailed = new TypeError('fetch failed');
+  t.false(isNetworkProtocolError(plainFetchFailed));
+  t.false(isTransientRetryableError(plainFetchFailed));
+
+  // - AggregateError([{ code: "ETIMEDOUT" }]) → retryable
+  const aggregateError = new Error('Multiple failures');
+  (aggregateError as any).errors = [{ code: 'ETIMEDOUT' }];
+  t.true(isNetworkProtocolError(aggregateError));
+  t.true(isTransientRetryableError(aggregateError));
+
+  // - Cyclic .cause → does not hang
+  const cyclicError = new Error('Cyclic error');
+  (cyclicError as any).cause = cyclicError;
+  t.false(isNetworkProtocolError(cyclicError));
+  t.false(isTransientRetryableError(cyclicError));
+
+  // - 3-level deep cause chain → correctly classified
+  const deepError = new Error('Outer');
+  const midError = new Error('Mid');
+  const innerError = new Error('Inner');
+  (innerError as any).code = 'ECONNREFUSED';
+  (midError as any).cause = innerError;
+  (deepError as any).cause = midError;
+  t.true(isNetworkProtocolError(deepError));
+  t.true(isTransientRetryableError(deepError));
+
+  // Verify consistency of isTransientRetryableError and isRetryableTransportError
+  const cases = [
+    connectTimeout,
+    headersTimeout,
+    bodyTimeout,
+    sysTimeout,
+    certError,
+    plainFetchFailed,
+    aggregateError,
+    cyclicError,
+    deepError,
+  ];
+  for (const c of cases) {
+    t.is(isTransientRetryableError(c), isRetryableTransportError(c).retryable);
+  }
+});
+
+test('isNetworkProtocolError and isTransientRetryableError findings regression tests', (t) => {
+  // P1: Status/authentication rejection precedence
+  const authRejectionError = new Error('unexpected server response: 401');
+  (authRejectionError as any).cause = { code: 'ETIMEDOUT' };
+  t.false(isNetworkProtocolError(authRejectionError));
+  t.false(isTransientRetryableError(authRejectionError));
+
+  // P1: Wrapped WebSocket messages, InvalidStateError, and undici stack signals in cause
+  const wrappedWsError = new Error('Wrapper');
+  (wrappedWsError as any).cause = new Error('Responses websocket connection closed before opening.');
+  t.true(isNetworkProtocolError(wrappedWsError));
+  t.true(isTransientRetryableError(wrappedWsError));
+
+  const wrappedInvalidState = new Error('Wrapper');
+  (wrappedInvalidState as any).cause = { name: 'InvalidStateError', message: 'Socket is closing' };
+  t.true(isNetworkProtocolError(wrappedInvalidState));
+  t.true(isTransientRetryableError(wrappedInvalidState));
+
+  const undiciSocketClose = new TypeError();
+  undiciSocketClose.stack = [
+    'TypeError',
+    '    at #onSocketClose (node:internal/deps/undici/undici:15450:20)',
+    '    at TLSSocket.onSocketClose (node:internal/deps/undici/undici:15153:72)',
+    '    at TLSSocket.emit (node:events:520:35)',
+  ].join('\n');
+  const wrappedUndici = new Error('Wrapper');
+  (wrappedUndici as any).cause = undiciSocketClose;
+  t.true(isNetworkProtocolError(wrappedUndici));
+  t.true(isTransientRetryableError(wrappedUndici));
+
+  // P2: Restored message signals
+  const socketHangup = new Error('socket hang up');
+  t.true(isNetworkProtocolError(socketHangup));
+  t.true(isTransientRetryableError(socketHangup));
+
+  const connFailed = new Error('connection failed');
+  t.true(isNetworkProtocolError(connFailed));
+  t.true(isTransientRetryableError(connFailed));
+
+  const failedToOpen = new Error('failed to open');
+  t.true(isNetworkProtocolError(failedToOpen));
+  t.true(isTransientRetryableError(failedToOpen));
+
+  const connError = new Error('connection error');
+  t.true(isNetworkProtocolError(connError));
+  t.true(isTransientRetryableError(connError));
+});

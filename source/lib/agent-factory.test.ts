@@ -197,6 +197,19 @@ test.serial('buildAgent sets flex service tier when enabled', (t) => {
   t.is(result.agent.modelSettings?.providerData?.service_tier, 'flex');
 });
 
+test.serial('buildAgent leaves parallel tool calls enabled by provider policy for Codex', (t) => {
+  const { deps } = createDeps({
+    providerId: 'codex',
+    settingsValues: {
+      'agent.model': 'gpt-5.4-mini',
+    },
+  });
+
+  const result = buildAgent({ model: 'gpt-5.4-mini' }, deps);
+
+  t.false('parallelToolCalls' in (result.agent.modelSettings ?? {}));
+});
+
 test.serial('buildAgent omits flex service tier when serviceTierOverrideForNextRequest is standard', (t) => {
   const { deps } = createDeps({
     providerId: 'openai',

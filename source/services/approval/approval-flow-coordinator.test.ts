@@ -312,3 +312,32 @@ test('prepareAbortResolution calls state.reject with the correct rejection messa
   });
   t.is(typeof plan.removeInterceptor, 'function');
 });
+
+test('retargetPendingInterruption preserves batch context', (t) => {
+  const approvalState = new ApprovalState();
+  const state = { _pendingAgentToolRuns: new Map() } as any;
+  approvalState.setPending({
+    state,
+    interruption: { name: 'shell', callId: 'call-1', arguments: { command: 'pwd' } },
+    emittedCommandIds: new Set(['message-1']),
+    toolCallArgumentsById: new Map([['call-1', { command: 'pwd' }]]),
+    inputMode: 'delta',
+  });
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+  });
+  const nextInterruption = { name: 'shell', callId: 'call-2', arguments: { command: 'ls' } };
+
+  const pending = coord.retargetPendingInterruption(nextInterruption);
+
+  t.is(pending?.interruption, nextInterruption);
+  t.is(pending?.state, state);
+  t.deepEqual(pending?.emittedCommandIds, new Set(['message-1']));
+  t.deepEqual(pending?.toolCallArgumentsById, new Map([['call-1', { command: 'pwd' }]]));
+});

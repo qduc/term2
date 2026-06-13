@@ -11,7 +11,13 @@ import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordina
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import { describeError } from '../../utils/error-helpers.js';
 import type { RetryCounts, RecoveryInstructions } from '../retry/retry-contracts.js';
-import { getToolInfoFromInterruption, getCallIdFromObject } from '../interruption-info.js';
+import {
+  asRecord,
+  getCallIdFromObject,
+  getMethod,
+  getString,
+  getToolInfoFromInterruption,
+} from '../interruption-info.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { createApprovalRequiredTerminal } from '../conversation/conversation-result-builder.js';
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
@@ -78,6 +84,11 @@ export class ContinuationDriver {
         }
 
         try {
+          const batchDecision = yield* this.#stagePendingParallelApprovals(state, activePolicy);
+          if (batchDecision.kind === 'approval_required') {
+            return { kind: 'approval_required', terminal: batchDecision.terminal };
+          }
+
           const previousInputForSurge =
             state.inputMode === 'full_history' ? this.deps.conversationStore.getHistory() : undefined;
 
@@ -156,6 +167,76 @@ export class ContinuationDriver {
     } finally {
       prepared.removeInterceptor();
     }
+  }
+
+  async *#stagePendingParallelApprovals(
+    state: ContinuationState,
+    activePolicy: ApprovalDecisionPolicy,
+  ): AsyncGenerator<
+    ConversationEvent,
+    { kind: 'ready' } | { kind: 'approval_required'; terminal: ConversationTerminal },
+    void
+  > {
+    const getInterruptions = getMethod<[], unknown>(state.currentState, 'getInterruptions');
+    const siblings = getInterruptions?.();
+    if (!Array.isArray(siblings) || siblings.length <= 1) {
+      return { kind: 'ready' };
+    }
+
+    const runContext = asRecord(asRecord(state.currentState)?._context);
+    const isToolApproved = getMethod<[{ toolName: string; callId: string }], boolean | undefined>(
+      runContext,
+      'isToolApproved',
+    );
+    if (!isToolApproved) {
+      return { kind: 'ready' };
+    }
+
+    for (const interruption of siblings) {
+      const callId = getCallIdFromObject(interruption);
+      const { toolName, argumentsText } = getToolInfoFromInterruption(interruption);
+      if (!callId || isToolApproved({ toolName, callId }) !== undefined) {
+        continue;
+      }
+
+      const llmAdvisory =
+        toolName === 'shell' || toolName === 'bash'
+          ? await this.deps.shellAutoApproval.resolveAdvisoryForInterruption({
+              interruption,
+              siblings,
+            })
+          : undefined;
+      const approvalContext = { toolName, argumentsText, callId, llmAdvisory };
+      const decision = await activePolicy.decide(approvalContext);
+
+      this.deps.approvalFlow.retargetPendingInterruption(interruption);
+      if (decision === 'prompt') {
+        this.deps.planApplier.recordPendingApproval(approvalContext);
+        const interruptionRecord = asRecord(interruption);
+        const agent = asRecord(interruptionRecord?.agent);
+        return {
+          kind: 'approval_required',
+          terminal: createApprovalRequiredTerminal({
+            agentName: getString(agent, 'name') ?? 'Agent',
+            toolName,
+            argumentsText,
+            rawInterruption: interruption,
+            callId,
+            llmAdvisory,
+            usage: state.cumulativeUsage,
+          }),
+        };
+      }
+
+      const answer = decision === 'approve' ? 'y' : 'n';
+      const nextPlan = this.deps.approvalFlow.prepareContinuation(answer, undefined);
+      if (!nextPlan) {
+        throw new Error('Parallel approval batch lost its pending approval context');
+      }
+      yield* this.deps.planApplier.applyNextPlan(nextPlan, state, state.previouslyEmittedIds, decision === 'approve');
+    }
+
+    return { kind: 'ready' };
   }
 
   async *#handleRecovery(

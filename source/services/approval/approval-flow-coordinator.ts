@@ -8,6 +8,7 @@ import { createInvalidToolCallDiagnostic } from '../logging/logging-contract.js'
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { SessionToolTracker } from '../session/session-tool-tracker.js';
 import { GenerationGuard } from '../generation-guard.js';
+import { resolveToolOwner } from './tool-owner.js';
 
 const noop = () => undefined;
 
@@ -191,5 +192,19 @@ export class ApprovalFlowCoordinator {
 
   getPendingInterruption(): unknown {
     return this.deps.approvalState.getPending()?.interruption;
+  }
+
+  retargetPendingInterruption(interruption: unknown): PendingApprovalContext | null {
+    const pending = this.deps.approvalState.getPending();
+    if (!pending) {
+      return null;
+    }
+
+    this.deps.approvalState.setPending({
+      ...pending,
+      interruption,
+      owner: resolveToolOwner(pending.state, interruption, this.deps.logger),
+    });
+    return this.deps.approvalState.getPending();
   }
 }

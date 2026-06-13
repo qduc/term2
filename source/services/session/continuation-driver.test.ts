@@ -511,6 +511,153 @@ test('multiple auto-approved interruptions followed by manual approval', async (
   t.is(cycleCount, 3);
 });
 
+test('parallel approval batch is fully decided before the continuation stream resumes', async (t) => {
+  const interruptions = [
+    { name: 'shell', callId: 'call-1', arguments: { command: 'pwd' } },
+    { name: 'shell', callId: 'call-2', arguments: { command: 'ls' } },
+    { name: 'shell', callId: 'call-3', arguments: { command: 'git status --short' } },
+  ];
+  const decisions = new Map<string, boolean | undefined>([['call-1', true]]);
+  const runState = {
+    getInterruptions: () => interruptions,
+    _context: {
+      isToolApproved: ({ callId }: { callId: string }) => decisions.get(callId),
+    },
+  };
+  let pending = { state: runState, interruption: interruptions[0] } as any;
+  let streamExecutions = 0;
+
+  const driver = createDriver({
+    shellAutoApproval: {
+      resolveAdvisoryForInterruption: async () => ({
+        model: 'mock-model',
+        reasoning: 'safe',
+        approved: true,
+        source: 'llm',
+      }),
+      shouldAutoApprove: () => true,
+    } as any,
+    approvalFlow: {
+      getPending: () => pending,
+      retargetPendingInterruption: (interruption: any) => {
+        pending = { ...pending, interruption };
+        return pending;
+      },
+      prepareContinuation: () => {
+        decisions.set(pending.interruption.callId, true);
+        return {
+          pendingApprovalContext: pending,
+          removeInterceptor: () => {},
+        };
+      },
+    } as any,
+    planApplier: {
+      prepareInit: (init: any) => ({
+        state: runState,
+        interruption: interruptions[0],
+        toolCallArgumentsById: new Map(),
+        previouslyEmittedCommandIds: new Set(),
+        removeInterceptor: () => {},
+        source: 'continueRunStream',
+        token: init.generation,
+        inputMode: 'delta',
+      }),
+      applyInitialSetup: async function* () {},
+      applyNextPlan: async function* () {},
+      recordPendingApproval: () => {},
+    } as any,
+    streamCycle: {
+      async *execute() {
+        streamExecutions++;
+        return {
+          kind: 'completed',
+          outcome: { kind: 'response', result: { type: 'response', finalText: 'Done.', commandMessages: [] } },
+          nextCumulativeMessages: [],
+          nextCumulativeTurnItems: [],
+          mergedEmittedIds: new Set(),
+        };
+      },
+    } as any,
+  });
+
+  const { result } = await collectResult(driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }));
+
+  t.is(result.kind, 'response');
+  t.deepEqual(
+    decisions,
+    new Map<string, boolean | undefined>([
+      ['call-1', true],
+      ['call-2', true],
+      ['call-3', true],
+    ]),
+  );
+  t.is(streamExecutions, 1);
+});
+
+test('parallel approval batch prompts for unresolved siblings without resuming the stream', async (t) => {
+  const interruptions = [
+    { name: 'shell', callId: 'call-1', arguments: { command: 'pwd' } },
+    { name: 'shell', callId: 'call-2', arguments: { command: 'git log --all' } },
+  ];
+  const decisions = new Map<string, boolean | undefined>([['call-1', true]]);
+  const runState = {
+    getInterruptions: () => interruptions,
+    _context: {
+      isToolApproved: ({ callId }: { callId: string }) => decisions.get(callId),
+    },
+  };
+  let pending = { state: runState, interruption: interruptions[0] } as any;
+  let streamExecutions = 0;
+
+  const driver = createDriver({
+    shellAutoApproval: {
+      resolveAdvisoryForInterruption: async () => ({
+        model: 'mock-model',
+        reasoning: 'needs review',
+        approved: false,
+        source: 'llm',
+      }),
+      shouldAutoApprove: () => false,
+    } as any,
+    approvalFlow: {
+      getPending: () => pending,
+      retargetPendingInterruption: (interruption: any) => {
+        pending = { ...pending, interruption };
+        return pending;
+      },
+    } as any,
+    planApplier: {
+      prepareInit: (init: any) => ({
+        state: runState,
+        interruption: interruptions[0],
+        toolCallArgumentsById: new Map(),
+        previouslyEmittedCommandIds: new Set(),
+        removeInterceptor: () => {},
+        source: 'continueRunStream',
+        token: init.generation,
+        inputMode: 'delta',
+      }),
+      applyInitialSetup: async function* () {},
+      recordPendingApproval: () => {},
+    } as any,
+    streamCycle: {
+      async *execute() {
+        streamExecutions++;
+        throw new Error('stream should not resume while a sibling decision is pending');
+      },
+    } as any,
+  });
+
+  const { result } = await collectResult(driver.drive({ kind: 'approval_decision', answer: 'y', generation: 1 }));
+
+  t.is(result.kind, 'approval_required');
+  if (result.kind === 'approval_required') {
+    t.is((result.terminal as any).approval.callId, 'call-2');
+  }
+  t.is(pending.interruption, interruptions[1]);
+  t.is(streamExecutions, 0);
+});
+
 // ── abort resolution ──────────────────────────────────────────
 
 test('continuation from abort resolution drives stream and returns result', async (t) => {

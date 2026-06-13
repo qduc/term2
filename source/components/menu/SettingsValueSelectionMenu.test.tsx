@@ -18,14 +18,15 @@ test('SettingsValueSelectionMenu renders empty state', (t) => {
   t.true(lastFrame()?.includes('zzz'));
 });
 
-test('SettingsValueSelectionMenu shows key and suggestion count', (t) => {
+test('SettingsValueSelectionMenu shows suggestions list', (t) => {
   const { lastFrame } = render(
     <SettingsValueSelectionMenu settingKey="agent.reasoningEffort" items={suggestions} selectedIndex={0} query="" />,
   );
   const output = lastFrame() ?? '';
-  t.true(output.includes('agent.reasoningEffort'));
-  // Count is not shown in the new design
-  // t.true(output.includes('3 suggestion'));
+  t.true(output.includes('low'));
+  t.true(output.includes('Lower reasoning cost'));
+  t.true(output.includes('medium'));
+  t.true(output.includes('high'));
 });
 
 test('SettingsValueSelectionMenu marks the selected value', (t) => {
@@ -51,7 +52,7 @@ test('SettingsValueSelectionMenu shows numeric hint when applicable (empty state
   t.true(output.includes('This setting accepts numeric values'));
 });
 
-test('SettingsValueSelectionMenu shows numeric hint in header', (t) => {
+test('SettingsValueSelectionMenu renders footer', (t) => {
   const { lastFrame } = render(
     <SettingsValueSelectionMenu
       settingKey="agent.temperature"
@@ -62,5 +63,6 @@ test('SettingsValueSelectionMenu shows numeric hint in header', (t) => {
     />,
   );
   const output = lastFrame() ?? '';
-  t.true(output.includes('Select or type custom value'));
+  t.true(output.includes('confirm'));
+  t.true(output.includes('cancel'));
 });

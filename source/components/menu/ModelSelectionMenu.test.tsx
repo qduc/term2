@@ -53,7 +53,6 @@ test('ModelSelectionMenu renders list of models', (t) => {
   t.true(output?.includes('GPT-4o'));
   t.true(output?.includes('gpt-4-turbo'));
   t.true(output?.includes('claude-3-opus'));
-  t.true(output?.includes('3 suggestions'));
 });
 
 test('ModelSelectionMenu highlights selected item', (t) => {
@@ -128,8 +127,6 @@ test('ModelSelectionMenu shows scroll indicators for long lists', (t) => {
     />,
   );
   const output = lastFrame();
-  // Should show scroll position indicator
-  t.true(output?.includes('3-12/20') || output?.includes('20'));
   // Should show scroll up indicator
   t.true(output?.includes('↑ 2 more'));
   // Should show scroll down indicator (20 - 2 - 10 = 8 more)

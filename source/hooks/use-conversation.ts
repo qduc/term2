@@ -1,17 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { ConversationService } from '../services/conversation/conversation-service.js';
 import { describeError, isAbortLikeError } from '../utils/error-helpers.js';
 import { ASK_USER_DECLINE_RESULT } from '../tools/agent/ask-user-constants.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
-import { appendMessagesCapped } from '../utils/conversation/message-buffer.js';
 import { createMessageId } from './message-id.js';
+import {
+  countUndoableUserTurnsFrom,
+  findLastUndoableUserMessage,
+  mergeCommandMessages,
+} from '../utils/conversation/message-utils.js';
+import { useConversationMessages } from './use-conversation-messages.js';
+import { useConversationSettings } from './use-conversation-settings.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation/conversation-utils.js';
 import { createStreamingSession } from '../utils/streaming/streaming-session-factory.js';
 import type { BotMessage, CommandMessage, Message, UserMessage } from '../types/message.js';
-import { isBotMessage, isCommandMessage, isUserMessage } from '../types/message.js';
+import { isBotMessage, isUserMessage } from '../types/message.js';
 import type { NormalizedUsage, UsageAccumulator } from '../utils/ai/token-usage.js';
-import type { CodexRateLimitInfo } from '../services/conversation/conversation-events.js';
-import type { ConversationTerminal, PendingApproval, ReasoningEffortSetting } from '../contracts/conversation.js';
+import type { ConversationTerminal } from '../contracts/conversation.js';
 import { useSetting } from './use-setting.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import {
@@ -20,6 +25,7 @@ import {
   type ApprovedToolContext,
 } from '../services/approval/approval-presentation-policy.js';
 import { formatUserTurnForDisplay, hasUserTurnContent, normalizeUserTurn, type UserTurn } from '../types/user-turn.js';
+import { conversationUIReducer, createInitialUIState } from './conversation-ui-reducer.js';
 
 export type {
   BotMessage,
@@ -96,40 +102,40 @@ export const useConversation = ({
   /** Optional notifier to fire desktop notifications on approval/completion events. */
   notifier?: ConversationNotifier;
 }) => {
-  const [messages, setMessages] = useState<Message[]>(() =>
-    appendMessagesCapped([], initialMessages, MAX_MESSAGE_COUNT),
+  const { messages, setMessages, trimMessages, appendMessages, addSystemMessage, addShellMessage, getUserMessages } =
+    useConversationMessages({
+      initialMessages,
+      maxMessageCount: MAX_MESSAGE_COUNT,
+    });
+
+  const { setModel, setReasoningEffort, setTemperature } = useConversationSettings({
+    conversationService,
+  });
+
+  const [uiState, dispatch] = useReducer(conversationUIReducer, initialMessages, (init) =>
+    createInitialUIState(getInitialLastUsage(init)),
   );
-  const [waitingForApproval, setWaitingForApproval] = useState<boolean>(false);
-  const [waitingForRejectionReason, setWaitingForRejectionReason] = useState<boolean>(false);
-  const [waitingForAskUserAnswer, setWaitingForAskUserAnswer] = useState<boolean>(false);
-  const [askUserAnswers, setAskUserAnswers] = useState<(string | string[])[]>([]);
-  const [currentAskUserQuestionIndex, setCurrentAskUserQuestionIndex] = useState<number>(0);
-  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
-  const [toolCallStreamingInfo, setToolCallStreamingInfo] = useState<{
-    toolName?: string;
-    argumentCharCount: number;
-  } | null>(null);
-  const [lastUsage, setLastUsage] = useState<NormalizedUsage | null>(() => getInitialLastUsage(initialMessages));
-  const [lastCodexRateLimit, setLastCodexRateLimit] = useState<CodexRateLimitInfo | null>(null);
-  const setCodexRateLimit = setLastCodexRateLimit;
+  // Destructure for convenient access — keeps downstream code unchanged.
+  const {
+    isProcessing,
+    thinkingStartedAt,
+    toolCallStreamingInfo,
+    waitingForApproval,
+    waitingForRejectionReason,
+    waitingForAskUserAnswer,
+    askUserAnswers,
+    currentAskUserQuestionIndex,
+    pendingApproval,
+    lastUsage,
+    lastCodexRateLimit,
+  } = uiState;
   const approvedContextRef = useRef<ApprovedToolContext | null>(null);
-  const trimMessages = useCallback((list: Message[]) => appendMessagesCapped(list, [], MAX_MESSAGE_COUNT), []);
 
   const provider = useSetting<string>(settingsService || dummySettingsService, 'agent.provider') ?? 'openai';
 
   useEffect(() => {
-    setLastCodexRateLimit(null);
+    dispatch({ type: 'rate_limit/cleared' });
   }, [provider]);
-
-  const appendMessages = useCallback(
-    (additions: Message[]) => {
-      if (!additions.length) return;
-      setMessages((prev) => trimMessages([...prev, ...additions]));
-    },
-    [trimMessages],
-  );
 
   const annotateCommandMessage = useCallback((cmdMsg: CommandMessage): CommandMessage => {
     const approvedMessage = annotateApprovedCommandMessage(cmdMsg, approvedContextRef.current);
@@ -151,18 +157,18 @@ export const useConversation = ({
       return (event: any) => {
         const eventType = typeof event?.type === 'string' ? event.type : undefined;
         if (eventType === 'reasoning_delta') {
-          setThinkingStartedAt((prev) => prev ?? Date.now());
+          dispatch({ type: 'streaming/thinking_started', timestamp: Date.now() });
         } else if (eventType && clearsThinkingIndicator(eventType)) {
-          setThinkingStartedAt(null);
+          dispatch({ type: 'streaming/thinking_cleared' });
         }
 
         if (eventType === 'tool_call_streaming_delta') {
-          setToolCallStreamingInfo({
-            toolName: event.toolName,
-            argumentCharCount: event.argumentCharCount,
+          dispatch({
+            type: 'streaming/tool_info',
+            info: { toolName: event.toolName, argumentCharCount: event.argumentCharCount },
           });
         } else if (eventType === 'tool_started' || eventType === 'text_delta' || eventType === 'final') {
-          setToolCallStreamingInfo(null);
+          dispatch({ type: 'streaming/tool_info', info: null });
         }
 
         baseOnEvent(event);
@@ -187,21 +193,14 @@ export const useConversation = ({
           // `response` result will carry the full run-cumulative usage once
           // the run completes, so accumulating here would double-count the
           // pre-approval turns. Only update the live footer.
-          setLastUsage(latestStreamedUsage ?? result.usage);
+          dispatch({ type: 'usage/updated', usage: latestStreamedUsage ?? result.usage });
         }
         // Don't also show the transient pending/running command message.
         setMessages((prev) => trimMessages(filterPendingCommandMessagesForApproval(prev, result.approval)));
-        setPendingApproval({
-          ...result.approval,
-          llmAdvisory: (result.approval as any).llmAdvisory,
+        dispatch({
+          type: 'approval/requested',
+          approval: { ...result.approval, llmAdvisory: (result.approval as any).llmAdvisory },
         });
-        // Set waiting state AFTER adding approval message to ensure proper render order
-        setWaitingForApproval(true);
-        setWaitingForAskUserAnswer(false);
-        if (result.approval.toolName === 'ask_user') {
-          setCurrentAskUserQuestionIndex(0);
-          setAskUserAnswers([]);
-        }
         notifier?.approvalNeeded();
         return;
       }
@@ -210,32 +209,7 @@ export const useConversation = ({
 
       setMessages((prev) => {
         const annotatedCommands = result.commandMessages.map(annotateCommandMessage);
-        // Collect callIds of every command message already shown in the UI
-        // (streaming replaces the running message in place, so completed
-        // messages with the same callId are already in prev). Skipping them
-        // here prevents finished tool output from being re-printed below
-        // the model's final answer when the response carries cumulative
-        // command lists from previous turns.
-        const existingCommandCallIds = new Set<string>();
-        for (const msg of prev) {
-          if (isCommandMessage(msg) && msg.callId) {
-            existingCommandCallIds.add(msg.callId);
-          }
-        }
-        const newCommands = annotatedCommands.filter((msg) => !msg.callId || !existingCommandCallIds.has(msg.callId));
-        // Remove stale running/pending messages that are about to be replaced
-        // by completed ones (e.g. after a denied tool where a "running" message
-        // was shown during streaming but the final result never cleaned it up).
-        const completedCallIds = new Set(newCommands.filter((m) => m.callId).map((m) => m.callId));
-        const cleaned =
-          completedCallIds.size > 0
-            ? prev.filter((msg) => {
-                if (!isCommandMessage(msg)) return true;
-                if (msg.status !== 'running' && msg.status !== 'pending') return true;
-                return !msg.callId || !completedCallIds.has(msg.callId);
-              })
-            : prev;
-        let next = [...cleaned, ...newCommands];
+        let next = mergeCommandMessages(prev, annotatedCommands);
 
         // Append finalText only when streaming never pushed it via text_delta/final events.
         // Providers that skip streaming (synchronous or non-interactive) may return text
@@ -252,15 +226,32 @@ export const useConversation = ({
 
         return trimMessages(next);
       });
-      setWaitingForApproval(false);
-      setPendingApproval(null);
+      dispatch({ type: 'approval/resolved' });
       notifier?.turnComplete();
       if (result.usage) {
         usageAccumulator?.add(result.usage);
-        setLastUsage(latestStreamedUsage ?? result.usage);
+        dispatch({ type: 'usage/updated', usage: latestStreamedUsage ?? result.usage });
       }
     },
     [annotateCommandMessage, trimMessages, usageAccumulator, notifier],
+  );
+
+  const createTurnSession = useCallback(
+    (label: string) =>
+      createStreamingSession(
+        {
+          appendMessages,
+          setMessages,
+          trimMessages,
+          annotateCommandMessage,
+          loggingService,
+          setLastUsage: (usage) => dispatch({ type: 'usage/updated', usage }),
+          setCodexRateLimit: (rateLimit) => dispatch({ type: 'rate_limit/updated', rateLimit }),
+          reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
+        },
+        label,
+      ),
+    [appendMessages, setMessages, trimMessages, annotateCommandMessage, loggingService],
   );
 
   const sendUserMessage = useCallback(
@@ -277,23 +268,10 @@ export const useConversation = ({
       };
       appendMessages([userMessage]);
       logWriter?.append({ type: 'user_message', message: userMessage });
-      setIsProcessing(true);
-      setThinkingStartedAt(null);
-      setToolCallStreamingInfo(null);
+      dispatch({ type: 'turn/started' });
 
-      const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = createStreamingSession(
-        {
-          appendMessages,
-          setMessages,
-          trimMessages,
-          annotateCommandMessage,
-          loggingService,
-          setLastUsage,
-          setCodexRateLimit,
-          reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
-        },
-        'sendUserMessage',
-      );
+      const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
+        createTurnSession('sendUserMessage');
 
       const wrappedOnEvent = (event: any) => {
         if (event?.type === 'user_message_consumed_for_abort') {
@@ -367,14 +345,16 @@ export const useConversation = ({
 
         if (isMaxTurnsError(errorMessage)) {
           // Create an approval prompt for max turns continuation
-          setPendingApproval({
-            agentName: 'System',
-            toolName: 'max_turns_exceeded',
-            argumentsText: errorMessage,
-            rawInterruption: null,
-            isMaxTurnsPrompt: true,
+          dispatch({
+            type: 'approval/requested',
+            approval: {
+              agentName: 'System',
+              toolName: 'max_turns_exceeded',
+              argumentsText: errorMessage,
+              rawInterruption: null,
+              isMaxTurnsPrompt: true,
+            },
           });
-          setWaitingForApproval(true);
         } else {
           // For other errors, just show the error message
           const botErrorMessage: BotMessage = {
@@ -385,16 +365,14 @@ export const useConversation = ({
           };
           appendMessages([botErrorMessage]);
           // Reset approval state on error to allow user to continue
-          setWaitingForApproval(false);
-          setPendingApproval(null);
+          dispatch({ type: 'approval/resolved' });
         }
       } finally {
         loggingService.debug('sendUserMessage finally block - resetting state');
         // flushLog();
         reasoningUpdater.flush();
         botResponseUpdater.cancel();
-        setThinkingStartedAt(null);
-        setIsProcessing(false);
+        dispatch({ type: 'turn/completed' });
         // Don't reset waitingForApproval here - it's set by applyServiceResult
         // and should only be cleared by handleApprovalDecision or stopProcessing
       }
@@ -446,13 +424,13 @@ export const useConversation = ({
 
         if (nextAnswers.length < questions.length) {
           // More questions to answer!
-          setAskUserAnswers(nextAnswers);
-          setCurrentAskUserQuestionIndex(nextAnswers.length);
-          setWaitingForAskUserAnswer(false);
+          dispatch({ type: 'ask_user/answer_submitted', answer: parsedAns });
+          dispatch({ type: 'ask_user/advance_to_next', nextIndex: nextAnswers.length });
           return;
         }
 
-        // All questions answered, set approvalAnswer to the JSON string of all answers
+        // All questions answered — dispatch final answer to complete the ask_user sequence
+        dispatch({ type: 'ask_user/answer_submitted', answer: parsedAns });
         approvalAnswer = JSON.stringify(nextAnswers);
       }
 
@@ -463,38 +441,20 @@ export const useConversation = ({
         };
       }
 
-      setPendingApproval(null);
-      setWaitingForApproval(false);
-      setWaitingForAskUserAnswer(false);
-      setAskUserAnswers([]);
-      setCurrentAskUserQuestionIndex(0);
+      dispatch({ type: 'approval/resolved' });
 
       // Handle "n" answer for max turns - return to input
       if (isMaxTurnsPrompt && answer === 'n') {
-        setThinkingStartedAt(null);
-        setIsProcessing(false);
+        dispatch({ type: 'turn/completed' });
         return;
       }
 
       // Handle "y" answer for max turns - continue execution automatically
       if (isMaxTurnsPrompt && answer === 'y') {
-        setIsProcessing(true);
-        setThinkingStartedAt(null);
-        setToolCallStreamingInfo(null);
+        dispatch({ type: 'turn/started' });
 
-        const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = createStreamingSession(
-          {
-            appendMessages,
-            setMessages,
-            trimMessages,
-            annotateCommandMessage,
-            loggingService,
-            setLastUsage,
-            setCodexRateLimit,
-            reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
-          },
-          'maxTurnsContinuation',
-        );
+        const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
+          createTurnSession('maxTurnsContinuation');
 
         try {
           // Send a continuation message to resume work
@@ -526,35 +486,19 @@ export const useConversation = ({
             text: `Error: ${errorMessage}`,
           };
           appendMessages([botErrorMessage]);
-          setWaitingForApproval(false);
-          setWaitingForAskUserAnswer(false);
-          setPendingApproval(null);
+          dispatch({ type: 'approval/resolved' });
         } finally {
           // flushLog();
           reasoningUpdater.flush();
           botResponseUpdater.cancel();
-          setThinkingStartedAt(null);
-          setIsProcessing(false);
+          dispatch({ type: 'turn/completed' });
         }
         return;
       }
 
-      setIsProcessing(true);
-      setThinkingStartedAt(null);
-      setToolCallStreamingInfo(null);
-      const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } = createStreamingSession(
-        {
-          appendMessages,
-          setMessages,
-          trimMessages,
-          annotateCommandMessage,
-          loggingService,
-          setLastUsage,
-          setCodexRateLimit,
-          reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
-        },
-        'approvalDecision',
-      );
+      dispatch({ type: 'turn/started' });
+      const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
+        createTurnSession('approvalDecision');
 
       try {
         const result = await conversationService.handleApprovalDecision(answer, rejectionReason, {
@@ -585,15 +529,12 @@ export const useConversation = ({
         };
         appendMessages([botErrorMessage]);
         // Reset approval state on error to allow user to continue
-        setWaitingForApproval(false);
-        setWaitingForAskUserAnswer(false);
-        setPendingApproval(null);
+        dispatch({ type: 'approval/resolved' });
       } finally {
         loggingService.debug('handleApprovalDecision finally block - resetting state');
         reasoningUpdater.flush();
         botResponseUpdater.cancel();
-        setThinkingStartedAt(null);
-        setIsProcessing(false);
+        dispatch({ type: 'turn/completed' });
         // Don't reset approval state here - if the result is another approval_required,
         // applyServiceResult will set waitingForApproval=true, but this finally block
         // would immediately clear it, causing the input box to reappear
@@ -613,7 +554,7 @@ export const useConversation = ({
   );
 
   const onTypeAnswer = useCallback(() => {
-    setWaitingForAskUserAnswer(true);
+    dispatch({ type: 'ask_user/set_waiting' });
   }, []);
 
   const clearConversation = useCallback(async () => {
@@ -623,45 +564,20 @@ export const useConversation = ({
       conversationService.resetWithNewId(crypto.randomUUID());
     }
     setMessages([]);
-    setWaitingForApproval(false);
-    setWaitingForRejectionReason(false);
-    setWaitingForAskUserAnswer(false);
-    setAskUserAnswers([]);
-    setCurrentAskUserQuestionIndex(0);
-    setPendingApproval(null);
     approvedContextRef.current = null;
-    setThinkingStartedAt(null);
-    setIsProcessing(false);
-    setLastUsage(null);
-    setLastCodexRateLimit(null);
-    setToolCallStreamingInfo(null);
+    dispatch({ type: 'reset_all' });
     usageAccumulator?.reset();
     subagentUsageAccumulator?.reset();
   }, [conversationService, usageAccumulator, subagentUsageAccumulator, onClear]);
 
   const stopProcessing = useCallback(() => {
     conversationService.abort();
-    setWaitingForApproval(false);
-    setWaitingForRejectionReason(false);
-    setWaitingForAskUserAnswer(false);
-    setAskUserAnswers([]);
-    setCurrentAskUserQuestionIndex(0);
-    setPendingApproval(null);
     approvedContextRef.current = null;
-    setThinkingStartedAt(null);
-    setIsProcessing(false);
-    setToolCallStreamingInfo(null);
+    dispatch({ type: 'reset_transient' });
   }, [conversationService]);
 
   const undoLastUserMessage = useCallback((): { text: string; images?: UserTurn['images'] } | null => {
-    let lastUserIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (isUserMessage(m) && !m.consumedForAbort) {
-        lastUserIndex = i;
-        break;
-      }
-    }
+    const lastUserIndex = findLastUndoableUserMessage(messages);
     if (lastUserIndex === -1) {
       return null;
     }
@@ -672,42 +588,17 @@ export const useConversation = ({
     const removed = conversationService.undoLastUserTurn();
     const restored = removed ?? { text: uiText };
     setMessages((prev) => prev.slice(0, lastUserIndex));
-    setWaitingForApproval(false);
-    setWaitingForRejectionReason(false);
-    setWaitingForAskUserAnswer(false);
-    setAskUserAnswers([]);
-    setCurrentAskUserQuestionIndex(0);
-    setPendingApproval(null);
     approvedContextRef.current = null;
-    setThinkingStartedAt(null);
-    setIsProcessing(false);
-    setToolCallStreamingInfo(null);
+    dispatch({ type: 'reset_transient' });
 
     return restored;
   }, [messages, conversationService]);
-
-  const getUserMessages = useCallback((): { uiIndex: number; text: string }[] => {
-    const result: { uiIndex: number; text: string }[] = [];
-    for (let i = 0; i < messages.length; i++) {
-      const m = messages[i];
-      if (isUserMessage(m) && !m.consumedForAbort) {
-        result.push({ uiIndex: i, text: m.text });
-      }
-    }
-    return result;
-  }, [messages]);
 
   const undoToUserMessage = useCallback(
     (uiIndex: number): string | null => {
       // Count how many genuine user turns (excluding abort-consumed messages) are
       // at or after this index — that's what the store needs to roll back.
-      let undoCount = 0;
-      for (let i = uiIndex; i < messages.length; i++) {
-        const m = messages[i];
-        if (isUserMessage(m) && !m.consumedForAbort) {
-          undoCount++;
-        }
-      }
+      const undoCount = countUndoableUserTurnsFrom(messages, uiIndex);
 
       if (undoCount === 0) return null;
 
@@ -719,82 +610,22 @@ export const useConversation = ({
       const restored = removed?.text ?? uiText;
 
       setMessages((prev) => prev.slice(0, uiIndex));
-      setWaitingForApproval(false);
-      setWaitingForRejectionReason(false);
-      setWaitingForAskUserAnswer(false);
-      setAskUserAnswers([]);
-      setCurrentAskUserQuestionIndex(0);
-      setPendingApproval(null);
       approvedContextRef.current = null;
-      setThinkingStartedAt(null);
-      setIsProcessing(false);
-      setToolCallStreamingInfo(null);
+      dispatch({ type: 'reset_transient' });
 
       return restored;
     },
     [messages, conversationService],
   );
 
-  const setModel = useCallback(
-    (model: string) => {
-      conversationService.setModel(model);
-    },
-    [conversationService],
-  );
+  // Compatibility wrappers for app.tsx — these dispatch domain actions.
+  const setWaitingForRejectionReason = useCallback((value: boolean) => {
+    dispatch({ type: value ? 'rejection/set_waiting' : 'rejection/cleared' });
+  }, []);
 
-  const setReasoningEffort = useCallback(
-    (effort: ReasoningEffortSetting) => {
-      conversationService.setReasoningEffort(effort);
-    },
-    [conversationService],
-  );
-
-  const setTemperature = useCallback(
-    (temperature?: number) => {
-      conversationService.setTemperature(temperature);
-    },
-    [conversationService],
-  );
-
-  const addSystemMessage = useCallback(
-    (text: string) => {
-      appendMessages([
-        {
-          id: createMessageId(),
-          sender: 'system',
-          text,
-        },
-      ]);
-    },
-    [appendMessages],
-  );
-
-  const addShellMessage = useCallback(
-    (command: string, output: string, exitCode: number | null, timedOut: boolean) => {
-      const success = !timedOut && exitCode === 0;
-      const failureReason = timedOut
-        ? 'timeout'
-        : exitCode == null
-        ? 'error'
-        : exitCode !== 0
-        ? `exit ${exitCode}`
-        : undefined;
-
-      appendMessages([
-        {
-          id: createMessageId(),
-          sender: 'command',
-          status: success ? 'completed' : 'failed',
-          command,
-          output,
-          success,
-          failureReason,
-          toolName: 'shell',
-        },
-      ]);
-    },
-    [appendMessages],
-  );
+  const setWaitingForAskUserAnswer = useCallback((value: boolean) => {
+    dispatch({ type: value ? 'ask_user/set_waiting' : 'ask_user/clear_waiting' });
+  }, []);
 
   const getSubagentUsage = useCallback(() => subagentUsageAccumulator?.get() ?? null, [subagentUsageAccumulator]);
 

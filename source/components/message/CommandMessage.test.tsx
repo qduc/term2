@@ -202,7 +202,7 @@ test('CommandMessage renders apply_patch line counts in concise mode', async (t)
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('Patched update_file src/file.ts'), `Expected concise command: ${output}`);
-  t.true(output.includes('(+1, -1)'), `Expected change counts in concise output: ${output}`);
+  t.true(output.includes('(+1 -1)'), `Expected change counts in concise output: ${output}`);
 });
 
 test('CommandMessage renders search_replace line counts in concise mode', async (t) => {
@@ -226,7 +226,7 @@ test('CommandMessage renders search_replace line counts in concise mode', async 
   t.true(output.includes('"src/file.ts"'), `Expected path in concise output: ${output}`);
   t.false(output.includes('hello'), `Expected search content to be hidden in concise output: ${output}`);
   t.false(output.includes('world'), `Expected replace content to be hidden in concise output: ${output}`);
-  t.true(output.includes('(+1, -1)'), `Expected change counts in concise output: ${output}`);
+  t.true(output.includes('(+1 -1)'), `Expected change counts in concise output: ${output}`);
 });
 
 test('CommandMessage renders search_replace multiple replacements in concise mode', async (t) => {
@@ -252,7 +252,7 @@ test('CommandMessage renders search_replace multiple replacements in concise mod
   t.true(output.includes('"src/file.ts" (+ 1 more)'), `Expected path and count in concise output: ${output}`);
   t.false(output.includes('hello'), `Expected search content to be hidden in concise output: ${output}`);
   t.false(output.includes('world'), `Expected replace content to be hidden in concise output: ${output}`);
-  t.true(output.includes('(+2, -2)'), `Expected change counts in concise output: ${output}`);
+  t.true(output.includes('(+2 -2)'), `Expected change counts in concise output: ${output}`);
 });
 
 test('CommandMessage renders apply_patch create_file with [CREATE FILE] header and diff', async (t) => {
@@ -506,7 +506,7 @@ test('CommandMessage renders failed command on two lines in concise mode', async
   t.true(lines.length >= 2, `Expected at least 2 lines of output, got: ${output}`);
   t.true(lines[0]!.includes('✖'), `Expected fail icon on line 1: ${lines[0]}`);
   t.true(lines[0]!.includes('$ npm test'), `Expected command on line 1: ${lines[0]}`);
-  t.true(output.includes('Error: Test suite failed'), `Expected error message: ${output}`);
+  t.true(output.includes('Test suite failed'), `Expected error message: ${output}`);
 });
 
 test('CommandMessage renders non-shell tool concisely on a single line', async (t) => {

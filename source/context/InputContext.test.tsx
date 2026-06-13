@@ -1,11 +1,23 @@
 import test from 'ava';
 import React, { useEffect } from 'react';
+import { Text } from 'ink';
 import { render } from 'ink-testing-library';
 import { InputProvider, useInputContext } from './InputContext.js';
 
-// Test component that uses the hook and throws if outside provider
+// Helper to flush asynchronous React/Ink updates
+const flushReactUpdates = async (iterations = 5) => {
+  for (let i = 0; i < iterations; i++) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+};
+
+let thrownError: Error | null = null;
 const TestComponentOutsideProvider = () => {
-  useInputContext();
+  try {
+    useInputContext();
+  } catch (err: any) {
+    thrownError = err;
+  }
   return null;
 };
 
@@ -21,11 +33,15 @@ const TestComponentInsideProvider = ({ onMount }: { onMount: (ctx: any) => void 
 };
 
 test('useInputContext throws error when used outside InputProvider', (t) => {
-  const { lastFrame } = render(<TestComponentOutsideProvider />);
-  const output = lastFrame();
-  // Ink displays the error in the terminal
-  t.truthy(output);
-  t.true(output!.includes('useInputContext must be used within an InputProvider'));
+  // Suppress console.error for React hook warnings/errors
+  const originalError = console.error;
+  console.error = () => {};
+
+  render(<TestComponentOutsideProvider />);
+  t.truthy(thrownError);
+  t.is(thrownError!.message, 'useInputContext must be used within an InputProvider');
+
+  console.error = originalError;
 });
 
 test('InputProvider provides context with default values', (t) => {
@@ -68,7 +84,7 @@ test('InputProvider provides all required setter functions', (t) => {
   t.is(typeof capturedContext.setTriggerIndex, 'function');
 });
 
-test('setInput updates input value', (t) => {
+test('setInput updates input value', async (t) => {
   const TestUpdater = () => {
     const { input, setInput } = useInputContext();
 
@@ -76,7 +92,7 @@ test('setInput updates input value', (t) => {
       setInput('hello world');
     }, [setInput]);
 
-    return <>{input || 'EMPTY'}</>;
+    return <Text>{input || 'EMPTY'}</Text>;
   };
 
   const { lastFrame } = render(
@@ -85,13 +101,14 @@ test('setInput updates input value', (t) => {
     </InputProvider>,
   );
 
+  await flushReactUpdates(5);
+
   const output = lastFrame();
   t.truthy(output);
-  // The component may not re-render immediately in tests, so we just verify it rendered
-  t.pass();
+  t.true(output!.includes('hello world'));
 });
 
-test('setInput accepts empty strings', (t) => {
+test('setInput accepts empty strings', async (t) => {
   const TestUpdater = () => {
     const { input, setInput } = useInputContext();
 
@@ -99,7 +116,7 @@ test('setInput accepts empty strings', (t) => {
       setInput('');
     }, [setInput]);
 
-    return <>{input || 'EMPTY'}</>;
+    return <Text>{input || 'EMPTY'}</Text>;
   };
 
   const { lastFrame } = render(
@@ -108,18 +125,20 @@ test('setInput accepts empty strings', (t) => {
     </InputProvider>,
   );
 
+  await flushReactUpdates(5);
+
   t.true(lastFrame()!.includes('EMPTY'));
 });
 
-test('setInput accepts strings with special characters', (t) => {
+test('setInput accepts strings with special characters', async (t) => {
   const TestUpdater = () => {
-    const { setInput } = useInputContext();
+    const { input, setInput } = useInputContext();
 
     useEffect(() => {
       setInput('/settings @path/to/file.ts');
     }, [setInput]);
 
-    return null;
+    return <Text>{input || 'EMPTY'}</Text>;
   };
 
   const { lastFrame } = render(
@@ -128,13 +147,15 @@ test('setInput accepts strings with special characters', (t) => {
     </InputProvider>,
   );
 
+  await flushReactUpdates(5);
+
   t.truthy(lastFrame());
-  t.pass();
+  t.true(lastFrame()!.includes('/settings @path/to/file.ts'));
 });
 
-test('setMode accepts all mode values', (t) => {
+test('setMode accepts all mode values', async (t) => {
   const TestUpdater = () => {
-    const { setMode } = useInputContext();
+    const { mode, setMode } = useInputContext();
 
     useEffect(() => {
       setMode('slash_commands');
@@ -143,7 +164,7 @@ test('setMode accepts all mode values', (t) => {
       setMode('text');
     }, [setMode]);
 
-    return null;
+    return <Text>{mode || 'EMPTY'}</Text>;
   };
 
   const { lastFrame } = render(
@@ -152,11 +173,13 @@ test('setMode accepts all mode values', (t) => {
     </InputProvider>,
   );
 
+  await flushReactUpdates(5);
+
   t.truthy(lastFrame());
-  t.pass();
+  t.true(lastFrame()!.includes('text'));
 });
 
-test('setCursorOffset accepts positive values', (t) => {
+test('setCursorOffset accepts positive values', async (t) => {
   const TestUpdater = () => {
     const { cursorOffset, setCursorOffset } = useInputContext();
 
@@ -164,7 +187,7 @@ test('setCursorOffset accepts positive values', (t) => {
       setCursorOffset(42);
     }, [setCursorOffset]);
 
-    return <>{cursorOffset}</>;
+    return <Text>{cursorOffset.toString()}</Text>;
   };
 
   const { lastFrame } = render(
@@ -173,10 +196,12 @@ test('setCursorOffset accepts positive values', (t) => {
     </InputProvider>,
   );
 
+  await flushReactUpdates(5);
+
   t.true(lastFrame()!.includes('42'));
 });
 
-test('setCursorOffset accepts zero', (t) => {
+test('setCursorOffset accepts zero', async (t) => {
   const TestUpdater = () => {
     const { cursorOffset, setCursorOffset } = useInputContext();
 
@@ -184,7 +209,7 @@ test('setCursorOffset accepts zero', (t) => {
       setCursorOffset(0);
     }, [setCursorOffset]);
 
-    return <>{cursorOffset}</>;
+    return <Text>{cursorOffset.toString()}</Text>;
   };
 
   const { lastFrame } = render(
@@ -193,10 +218,12 @@ test('setCursorOffset accepts zero', (t) => {
     </InputProvider>,
   );
 
+  await flushReactUpdates(5);
+
   t.true(lastFrame()!.includes('0'));
 });
 
-test('setTriggerIndex accepts null value', (t) => {
+test('setTriggerIndex accepts null value', async (t) => {
   const TestUpdater = () => {
     const { triggerIndex, setTriggerIndex } = useInputContext();
 
@@ -204,7 +231,7 @@ test('setTriggerIndex accepts null value', (t) => {
       setTriggerIndex(null);
     }, [setTriggerIndex]);
 
-    return <>{triggerIndex === null ? 'NULL' : triggerIndex}</>;
+    return <Text>{triggerIndex === null ? 'NULL' : triggerIndex.toString()}</Text>;
   };
 
   const { lastFrame } = render(
@@ -213,10 +240,12 @@ test('setTriggerIndex accepts null value', (t) => {
     </InputProvider>,
   );
 
+  await flushReactUpdates(5);
+
   t.true(lastFrame()!.includes('NULL'));
 });
 
-test('setTriggerIndex accepts index values', (t) => {
+test('setTriggerIndex accepts index values', async (t) => {
   const TestUpdater = () => {
     const { triggerIndex, setTriggerIndex } = useInputContext();
 
@@ -224,7 +253,7 @@ test('setTriggerIndex accepts index values', (t) => {
       setTriggerIndex(10);
     }, [setTriggerIndex]);
 
-    return <>{triggerIndex === null ? 'NULL' : triggerIndex}</>;
+    return <Text>{triggerIndex === null ? 'NULL' : triggerIndex.toString()}</Text>;
   };
 
   const { lastFrame } = render(
@@ -233,18 +262,20 @@ test('setTriggerIndex accepts index values', (t) => {
     </InputProvider>,
   );
 
+  await flushReactUpdates(5);
+
   t.true(lastFrame()!.includes('10'));
 });
 
 test('Multiple components can use the context', (t) => {
   const Component1 = () => {
     const { input } = useInputContext();
-    return <>{input || 'C1'}</>;
+    return <Text>{input || 'C1'}</Text>;
   };
 
   const Component2 = () => {
     const { mode } = useInputContext();
-    return <>{mode || 'C2'}</>;
+    return <Text>{mode || 'C2'}</Text>;
   };
 
   const { lastFrame } = render(

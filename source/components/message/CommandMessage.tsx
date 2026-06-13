@@ -269,7 +269,7 @@ const CommandMessage: FC<Props> = ({
           const lastLine = lines[lines.length - 1];
           return `${firstPart}\n... (${lines.length - maxLines - 1} more lines)\n${lastLine}`;
         }
-        return errorMsg;
+        return displayErrorMsg;
       })();
       return (
         <Box flexDirection="column">

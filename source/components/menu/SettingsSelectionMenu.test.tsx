@@ -39,7 +39,7 @@ test('SettingsSelectionMenu renders empty state (does not disappear)', (t) => {
   t.true(lastFrame()?.includes('abc'));
 });
 
-test('SettingsSelectionMenu shows query and suggestion count', (t) => {
+test('SettingsSelectionMenu renders settings list and their current values', (t) => {
   const { lastFrame } = render(
     React.createElement(SettingsSelectionMenu, {
       items,
@@ -51,9 +51,9 @@ test('SettingsSelectionMenu shows query and suggestion count', (t) => {
     }),
   );
   const output = lastFrame() ?? '';
-  t.true(output.includes('ag'));
-  t.true(output.includes('Searching all sections'));
-  t.true(output.includes('2 items'));
+  t.true(output.includes('agent.model'));
+  t.true(output.includes('gpt-5'));
+  t.true(output.includes('shell.timeout'));
 });
 
 test('SettingsSelectionMenu shows category headers', (t) => {

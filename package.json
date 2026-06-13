@@ -108,6 +108,10 @@
       "DISABLE_LOGGING": "1"
     },
     "typescript": {
+      "extensions": [
+        "ts",
+        "tsx"
+      ],
       "rewritePaths": {
         "source/": "dist/"
       },

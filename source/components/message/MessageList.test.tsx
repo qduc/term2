@@ -132,6 +132,49 @@ test('MessageList moves a message from active to static without duplicating it',
   t.is(countOccurrences(output, 'npm test'), 1);
 });
 
+test('MessageList preserves order when a live markdown message becomes a static prefix and live suffix', (t) => {
+  const renderer = render(
+    <MessageList
+      messages={[
+        {
+          id: 'live-bot',
+          sender: 'bot',
+          status: 'streaming',
+          text: 'Earlier paragraph.\n\n---\n\n### The boundary\n\nThe dividing line is still streaming',
+        },
+      ]}
+    />,
+  );
+
+  renderer.rerender(
+    <MessageList
+      messages={[
+        {
+          id: 'live-bot',
+          sender: 'bot',
+          status: 'finalized',
+          text: 'Earlier paragraph.\n\n---\n\n### The boundary\n\n',
+        },
+        {
+          id: 'live-tail',
+          sender: 'bot',
+          status: 'streaming',
+          text: 'The dividing line is still streaming',
+        },
+      ]}
+    />,
+  );
+
+  const output = stripAnsi(renderer.lastFrame() ?? '');
+  const headingIndex = output.indexOf('### The boundary');
+  const paragraphIndex = output.indexOf('The dividing line is still streaming');
+
+  t.true(headingIndex >= 0);
+  t.true(paragraphIndex > headingIndex);
+  t.is(countOccurrences(output, '### The boundary'), 1);
+  t.is(countOccurrences(output, 'The dividing line is still streaming'), 1);
+});
+
 test('MessageList moves a completed command before active reasoning directly into static history', (t) => {
   const renderer = render(
     <MessageList

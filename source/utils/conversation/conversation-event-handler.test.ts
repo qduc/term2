@@ -1,9 +1,5 @@
 import test from 'ava';
-import {
-  createConversationEventHandler,
-  findLastSafeBoundary,
-  type ConversationEventHandlerDeps,
-} from './conversation-event-handler.js';
+import { createConversationEventHandler, type ConversationEventHandlerDeps } from './conversation-event-handler.js';
 import { createStreamingState } from './conversation-utils.js';
 import type { ConversationEvent } from '../../services/conversation/conversation-events.js';
 
@@ -76,39 +72,6 @@ function createMockDeps(): MockDeps & {
 }
 
 // =============================================================================
-// findLastSafeBoundary tests
-// =============================================================================
-
-test('findLastSafeBoundary: splits on paragraph boundary', (t) => {
-  const text = 'Paragraph 1\n\nParagraph 2';
-  t.is(findLastSafeBoundary(text, 0), 13);
-});
-
-test('findLastSafeBoundary: ignores paragraph boundaries inside code blocks', (t) => {
-  const text = '```javascript\nconst a = 1;\n\nconst b = 2;\n```\nMore text';
-  const expectedBoundary = text.indexOf('```\nMore text') + 4; // after \n```\n
-  t.is(findLastSafeBoundary(text, 0), expectedBoundary);
-});
-
-test('findLastSafeBoundary: splits at closing code blocks', (t) => {
-  const text = 'Here is code:\n```javascript\ncode\n```\nTail';
-  const expectedBoundary = text.indexOf('```\nTail') + 4;
-  t.is(findLastSafeBoundary(text, 0), expectedBoundary);
-});
-
-test('findLastSafeBoundary: splits before headings', (t) => {
-  const text = 'Paragraph 1\n# Heading 1';
-  const expectedBoundary = text.indexOf('#'); // Split right before #
-  t.is(findLastSafeBoundary(text, 0), expectedBoundary);
-});
-
-test('findLastSafeBoundary: splits on thematic breaks', (t) => {
-  const text = 'Paragraph 1\n---\nParagraph 2';
-  const expectedBoundary = text.indexOf('Paragraph 2'); // after \n---\n
-  t.is(findLastSafeBoundary(text, 0), expectedBoundary);
-});
-
-// =============================================================================
 // text_delta tests
 // =============================================================================
 
@@ -122,8 +85,10 @@ test('text_delta: avoids splitting inside a code block and splits after it close
     delta: 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\nTail',
   } as ConversationEvent);
 
-  t.is(deps.calls.appendedMessages.length, 1);
-  t.is(deps.calls.appendedMessages[0][0].text, 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\n');
+  t.is(deps.calls.setMessagesCalls.length, 1);
+  const next = deps.calls.setMessagesCalls[0]([]);
+  t.is(next[0].text, 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\n');
+  t.is(next[1].text, 'Tail');
   t.is(state.accumulatedText, 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\nTail');
   t.is(state.flushedTextLength, 'Here is code:\n```javascript\nconst a = 1;\n\nconst b = 2;\n```\n'.length);
 });
@@ -166,18 +131,82 @@ test('text_delta: finalizes stable paragraphs and streams only the unfinished ta
     delta: 'First paragraph.\n\nSecond paragraph.\n\nCurrent tail',
   } as ConversationEvent);
 
-  t.is(deps.calls.appendedMessages.length, 1);
-  t.deepEqual(deps.calls.appendedMessages[0], [
+  t.is(deps.calls.setMessagesCalls.length, 1);
+  t.deepEqual(deps.calls.setMessagesCalls[0]([]), [
     {
       id: 'msg-0',
       sender: 'bot',
       status: 'finalized',
       text: 'First paragraph.\n\nSecond paragraph.\n\n',
     },
+    {
+      id: 'msg-1',
+      sender: 'bot',
+      status: 'streaming',
+      text: 'Current tail',
+    },
   ]);
   t.is(state.flushedTextLength, 'First paragraph.\n\nSecond paragraph.\n\n'.length);
-  t.deepEqual(deps.calls.botResponsePushes, ['Current tail']);
   t.true(deps.calls.botResponseCancelled);
+  t.is(state.currentBotMessageId, 'msg-1');
+});
+
+test('text_delta: atomically commits a heading before its unfinished paragraph', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+  const text = 'Earlier paragraph.\n\n---\n\n### The boundary\n\nThe dividing line is still streaming';
+
+  handler({ type: 'text_delta', delta: text } as ConversationEvent);
+
+  t.deepEqual(deps.calls.setMessagesCalls[0]([]), [
+    {
+      id: 'msg-0',
+      sender: 'bot',
+      status: 'finalized',
+      text: 'Earlier paragraph.\n\n---\n\n### The boundary\n\n',
+    },
+    {
+      id: 'msg-1',
+      sender: 'bot',
+      status: 'streaming',
+      text: 'The dividing line is still streaming',
+    },
+  ]);
+});
+
+test('text_delta: atomically replaces the live message with a finalized prefix and live suffix', (t) => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  state.currentBotMessageId = 'active-bot';
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'text_delta',
+    delta: 'First paragraph.\n\nCurrent tail',
+  } as ConversationEvent);
+
+  t.is(deps.calls.setMessagesCalls.length, 1);
+  t.deepEqual(
+    deps.calls.setMessagesCalls[0]([
+      { id: 'active-bot', sender: 'bot', status: 'streaming', text: 'First paragraph.' },
+    ]),
+    [
+      {
+        id: 'active-bot',
+        sender: 'bot',
+        status: 'finalized',
+        text: 'First paragraph.\n\n',
+      },
+      {
+        id: 'msg-0',
+        sender: 'bot',
+        status: 'streaming',
+        text: 'Current tail',
+      },
+    ],
+  );
+  t.is(state.currentBotMessageId, 'msg-0');
 });
 
 test('text_delta: does not finalize until a paragraph boundary exists', (t) => {
@@ -225,14 +254,19 @@ test('text_delta: finalizes an existing live bot message in place before streami
       status: 'finalized',
       text: 'Old tail now complete.\n\n',
     },
+    {
+      id: 'msg-0',
+      sender: 'bot',
+      status: 'streaming',
+      text: 'New tail',
+    },
   ]);
-  t.true(state.currentBotMessageId === null);
+  t.is(state.currentBotMessageId, 'msg-0');
   t.is(state.flushedTextLength, 'Old tail now complete.\n\n'.length);
-  t.deepEqual(deps.calls.botResponsePushes, ['New tail']);
   t.true(deps.calls.botResponseCancelled);
 });
 
-test('text_delta: cancels pending live bot update when paragraph boundary leaves no tail', (t) => {
+test('text_delta: keeps the final paragraph mutable when only trailing whitespace follows it', (t) => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.currentBotMessageId = 'active-bot';
@@ -243,26 +277,9 @@ test('text_delta: cancels pending live bot update when paragraph boundary leaves
     delta: 'Finished paragraph.\n\n',
   } as ConversationEvent);
 
-  t.is(deps.calls.setMessagesCalls.length, 1);
-  const next = deps.calls.setMessagesCalls[0]([
-    {
-      id: 'active-bot',
-      sender: 'bot',
-      status: 'streaming',
-      text: 'Finished paragraph.',
-    },
-  ]);
-
-  t.deepEqual(next, [
-    {
-      id: 'active-bot',
-      sender: 'bot',
-      status: 'finalized',
-      text: 'Finished paragraph.\n\n',
-    },
-  ]);
-  t.deepEqual(deps.calls.botResponsePushes, []);
-  t.true(deps.calls.botResponseCancelled);
+  t.is(deps.calls.setMessagesCalls.length, 0);
+  t.deepEqual(deps.calls.botResponsePushes, ['Finished paragraph.\n\n']);
+  t.false(deps.calls.botResponseCancelled);
 });
 
 // =============================================================================
@@ -395,7 +412,7 @@ test('reasoning_delta: finalizes an existing live reasoning message in place bef
   t.true(deps.calls.reasoningCancelled);
 });
 
-test('reasoning_delta: cancels pending live reasoning update when paragraph boundary leaves no tail', (t) => {
+test('reasoning_delta: keeps the final paragraph mutable when only trailing whitespace follows it', (t) => {
   const deps = createMockDeps();
   const state = createStreamingState();
   state.currentReasoningMessageId = 'active-reasoning';
@@ -407,27 +424,11 @@ test('reasoning_delta: cancels pending live reasoning update when paragraph boun
     fullText: 'Finished reasoning paragraph.\n\n',
   } as ConversationEvent);
 
-  t.is(deps.calls.setMessagesCalls.length, 1);
-  const next = deps.calls.setMessagesCalls[0]([
-    {
-      id: 'active-reasoning',
-      sender: 'reasoning',
-      text: 'Finished reasoning paragraph.',
-    },
-  ]);
-
-  t.deepEqual(next, [
-    {
-      id: 'active-reasoning',
-      sender: 'reasoning',
-      status: 'finalized',
-      text: 'Finished reasoning paragraph.\n\n',
-    },
-  ]);
-  t.true(deps.calls.reasoningCancelled);
-  t.deepEqual(deps.calls.reasoningPushes, []);
-  t.is(state.accumulatedReasoningText, '');
-  t.true(state.currentReasoningMessageId === null);
+  t.is(deps.calls.setMessagesCalls.length, 0);
+  t.false(deps.calls.reasoningCancelled);
+  t.deepEqual(deps.calls.reasoningPushes, ['Finished reasoning paragraph.\n\n']);
+  t.is(state.accumulatedReasoningText, 'Finished reasoning paragraph.\n\n');
+  t.is(state.currentReasoningMessageId, 'active-reasoning');
 });
 
 // =============================================================================
@@ -1111,13 +1112,13 @@ test('final: appends missing final text after already flushed streamed text', (t
   handler({ type: 'final', finalText: 'Intro\n\n## Missing Header\n\nBody' } as ConversationEvent);
 
   t.is(state.accumulatedText, 'Intro\n\n## Missing Header\n\nBody');
-  t.is(deps.calls.appendedMessages.length, 2);
-  t.deepEqual(deps.calls.appendedMessages[1], [
+  t.is(deps.calls.appendedMessages.length, 1);
+  t.deepEqual(deps.calls.appendedMessages[0], [
     {
-      id: 'msg-1',
+      id: 'msg-0',
       sender: 'bot',
       status: 'finalized',
-      text: '## Missing Header\n\nBody',
+      text: 'Intro\n\n## Missing Header\n\nBody',
     },
   ]);
 });
@@ -1191,10 +1192,10 @@ test('final: flushes over-accumulated streamed content when finalText is shorter
 });
 
 // =============================================================================
-// Bug: whitespace-only content before a paragraph boundary is permanently dropped
+// Whitespace preservation
 // =============================================================================
 
-test('text_delta: whitespace-only content before first paragraph boundary is silently dropped', (t) => {
+test('text_delta: preserves whitespace before the first block', (t) => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -1202,17 +1203,13 @@ test('text_delta: whitespace-only content before first paragraph boundary is sil
   // Response begins with whitespace before the paragraph boundary
   handler({ type: 'text_delta', delta: '   \n\nActual content' } as ConversationEvent);
 
-  // flushedTextLength is NOT advanced — whitespace content is kept in the unflushed window
   t.is(state.flushedTextLength, 0);
   t.is(deps.calls.appendedMessages.length, 0);
 
-  // The live updater only received 'Actual content' — the leading spaces are gone
-  t.deepEqual(deps.calls.botResponsePushes, ['Actual content']);
+  t.deepEqual(deps.calls.botResponsePushes, ['   \n\nActual content']);
 
-  // After final, only 'Actual content' is written; the three leading spaces are permanently lost
   handler({ type: 'final', finalText: '   \n\nActual content' } as any);
   t.is(deps.calls.appendedMessages.length, 1);
-  // Fails: actual is 'Actual content' — '   ' is not recoverable
   t.is(deps.calls.appendedMessages[0][0].text, '   \n\nActual content');
 });
 

@@ -4,14 +4,12 @@ import { describeError, isAbortLikeError } from '../utils/error-helpers.js';
 import { ASK_USER_DECLINE_RESULT } from '../tools/agent/ask-user-constants.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { createMessageId } from './message-id.js';
-import {
-  countUndoableUserTurnsFrom,
-  findLastUndoableUserMessage,
-  mergeCommandMessages,
-} from '../utils/conversation/message-utils.js';
+import { countUndoableUserTurnsFrom, findLastUndoableUserMessage } from '../utils/conversation/message-utils.js';
+import { clearStreamingBotMessage, computeNextMessages } from '../utils/conversation/apply-conversation-result.js';
 import { useConversationMessages } from './use-conversation-messages.js';
 import { useConversationSettings } from './use-conversation-settings.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../utils/conversation/conversation-utils.js';
+import type { StreamingState } from '../utils/conversation/conversation-utils.js';
 import { createStreamingSession } from '../utils/streaming/streaming-session-factory.js';
 import type { BotMessage, CommandMessage, Message, UserMessage } from '../types/message.js';
 import { isBotMessage, isUserMessage } from '../types/message.js';
@@ -181,7 +179,11 @@ export const useConversation = ({
   );
 
   const applyServiceResult = useCallback(
-    (result: ConversationTerminal | null, textWasFlushed: boolean, latestStreamedUsage?: NormalizedUsage | null) => {
+    (
+      result: ConversationTerminal | null,
+      streamingState: StreamingState,
+      latestStreamedUsage?: NormalizedUsage | null,
+    ) => {
       if (!result) {
         return;
       }
@@ -205,27 +207,25 @@ export const useConversation = ({
         return;
       }
 
-      const finalText = result.finalText;
-
-      setMessages((prev) => {
-        const annotatedCommands = result.commandMessages.map(annotateCommandMessage);
-        let next = mergeCommandMessages(prev, annotatedCommands);
-
-        // Append finalText only when streaming never pushed it via text_delta/final events.
-        // Providers that skip streaming (synchronous or non-interactive) may return text
-        // solely in result.finalText without emitting any text_delta events.
-        if (finalText?.trim() && !textWasFlushed) {
-          const botMessage: Message = {
-            id: createMessageId(),
-            sender: 'bot',
-            status: 'finalized',
-            text: finalText,
-          };
-          next = [...next, botMessage];
-        }
-
-        return trimMessages(next);
-      });
+      // Apply the response result via the pure helper. The helper finalizes
+      // the live streaming bot message in place when one exists, instead of
+      // appending a duplicate finalized copy. This prevents the assistant's
+      // reply from rendering twice when streaming text never crossed a safe
+      // markdown boundary.
+      setMessages(
+        (prev) =>
+          computeNextMessages({
+            prev,
+            result,
+            streamingState,
+            createMessageId,
+            trimMessages,
+            annotateCommandMessage,
+          }).next,
+      );
+      if (result.type === 'response' && streamingState.currentBotMessageId !== null) {
+        clearStreamingBotMessage(streamingState);
+      }
       dispatch({ type: 'approval/resolved' });
       notifier?.turnComplete();
       if (result.usage) {
@@ -299,7 +299,10 @@ export const useConversation = ({
         });
 
         applyConversationEvent({ type: 'final', finalText: '' } as any);
-        applyServiceResult(result, streamingState.textWasFlushed, streamingState.latestUsage);
+        // Flush any throttled bot update so the streaming message reflects the
+        // last delta before we decide whether to finalize it in place.
+        botResponseUpdater.flush();
+        applyServiceResult(result, streamingState, streamingState.latestUsage);
       } catch (error) {
         loggingService.error('Error in sendUserMessage', {
           error: error instanceof Error ? error.message : String(error),
@@ -464,7 +467,7 @@ export const useConversation = ({
           });
 
           applyConversationEvent({ type: 'final', finalText: '' } as any);
-          applyServiceResult(result, streamingState.textWasFlushed, streamingState.latestUsage);
+          applyServiceResult(result, streamingState, streamingState.latestUsage);
         } catch (error) {
           loggingService.error('Error in continuation after max turns', {
             error: error instanceof Error ? error.message : String(error),
@@ -506,7 +509,10 @@ export const useConversation = ({
           approvalAnswer,
         });
         applyConversationEvent({ type: 'final', finalText: '' } as any);
-        applyServiceResult(result, streamingState.textWasFlushed, streamingState.latestUsage);
+        // Flush any throttled bot update so the streaming message reflects the
+        // last delta before we decide whether to finalize it in place.
+        botResponseUpdater.flush();
+        applyServiceResult(result, streamingState, streamingState.latestUsage);
       } catch (error) {
         loggingService.error('Error in handleApprovalDecision', {
           error: error instanceof Error ? error.message : String(error),

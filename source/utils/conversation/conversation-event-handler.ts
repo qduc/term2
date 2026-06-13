@@ -15,51 +15,7 @@ import type {
 import { isCommandMessage, isSubagentActivityMessage } from '../../types/message.js';
 import { parseToolArguments, formatToolCommand, type StreamingState } from './conversation-utils.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
-
-/**
- * Finds the last safe Markdown block boundary in the text after the search start index.
- * A safe boundary occurs at paragraph endings, closed code blocks, headings, or thematic breaks,
- * while strictly avoiding breaking inside an open code block.
- */
-export function findLastSafeBoundary(fullText: string, searchStartIndex: number): number {
-  const boundaryRegex = /\n\n|\n```(?:\n|$)|\n(?:---|[*]{3})(?:\n|$)|\n#{1,6} /g;
-  boundaryRegex.lastIndex = searchStartIndex;
-
-  let match;
-  let lastSafeIndex = -1;
-
-  while ((match = boundaryRegex.exec(fullText)) !== null) {
-    const isCodeBlock = match[0].startsWith('\n```');
-
-    let codeBlockCount = 0;
-    const codeBlockRegex = /(?:^|\n)```/g;
-    let cbMatch;
-    while ((cbMatch = codeBlockRegex.exec(fullText)) !== null) {
-      if (cbMatch.index < match.index) {
-        codeBlockCount++;
-      } else {
-        break;
-      }
-    }
-    const insideCodeBlock = codeBlockCount % 2 !== 0;
-
-    if (isCodeBlock) {
-      if (insideCodeBlock) {
-        lastSafeIndex = match.index + match[0].length;
-      }
-    } else {
-      if (!insideCodeBlock) {
-        if (match[0].startsWith('\n#')) {
-          lastSafeIndex = match.index + 1;
-        } else {
-          lastSafeIndex = match.index + match[0].length;
-        }
-      }
-    }
-  }
-
-  return lastSafeIndex;
-}
+import { findMarkdownCommitOffset } from './markdown-commit-frontier.js';
 
 function countOutputLines(output: string | undefined): number {
   if (!output) return 0;
@@ -199,48 +155,63 @@ export function createConversationEventHandler(
     state.currentBotMessageId = null;
   };
 
+  const commitBotTextPrefix = (commitOffset: number) => {
+    const committedText = state.accumulatedText.slice(state.flushedTextLength, commitOffset);
+    const liveText = state.accumulatedText.slice(commitOffset);
+    const previousLiveMessageId = state.currentBotMessageId;
+    const finalizedMessageId = previousLiveMessageId ?? createMessageId();
+    const nextLiveMessageId = liveText.trim() ? createMessageId() : null;
+
+    botResponseUpdater.cancel();
+    state.flushedTextLength = commitOffset;
+    state.textWasFlushed = true;
+    state.currentBotMessageId = nextLiveMessageId;
+
+    setMessages((prev) => {
+      const finalizedMessage: BotMessage = {
+        id: finalizedMessageId,
+        sender: 'bot',
+        status: 'finalized',
+        text: committedText,
+      };
+      const next = prev.slice();
+      const liveIndex =
+        previousLiveMessageId === null ? -1 : next.findIndex((message) => message.id === previousLiveMessageId);
+
+      if (liveIndex === -1) {
+        next.push(finalizedMessage);
+      } else {
+        const current = next[liveIndex];
+        next[liveIndex] = current.sender === 'bot' ? { ...current, ...finalizedMessage } : finalizedMessage;
+      }
+
+      if (nextLiveMessageId !== null) {
+        const streamingMessage: BotMessage = {
+          id: nextLiveMessageId,
+          sender: 'bot',
+          status: 'streaming',
+          text: liveText,
+        };
+        next.splice(liveIndex === -1 ? next.length : liveIndex + 1, 0, streamingMessage);
+      }
+
+      return trimMessages(next);
+    });
+  };
+
   return (event: ConversationEvent) => {
     switch (event.type) {
       case 'text_delta': {
         state.accumulatedText += event.delta;
-
-        let newBotText = state.accumulatedText.slice(state.flushedTextLength);
-
-        const lastBoundaryIndex = findLastSafeBoundary(state.accumulatedText, state.flushedTextLength);
-        if (lastBoundaryIndex !== -1) {
-          const finalizedText = state.accumulatedText.slice(state.flushedTextLength, lastBoundaryIndex);
-          newBotText = state.accumulatedText.slice(lastBoundaryIndex);
-
-          if (finalizedText.trim()) {
-            botResponseUpdater.cancel();
-            if (state.currentBotMessageId) {
-              const botMessageId = state.currentBotMessageId;
-              state.currentBotMessageId = null;
-              setMessages((prev) => {
-                const index = prev.findIndex((m) => m.id === botMessageId);
-                if (index === -1) return prev;
-                const current = prev[index];
-                if (current.sender !== 'bot') return prev;
-                const next = prev.slice();
-                next[index] = { ...current, status: 'finalized', text: finalizedText };
-                return trimMessages(next);
-              });
-            } else {
-              const finalizedMessage: BotMessage = {
-                id: createMessageId(),
-                sender: 'bot',
-                status: 'finalized',
-                text: finalizedText,
-              };
-              appendMessages([finalizedMessage]);
-            }
-            state.textWasFlushed = true;
-            state.flushedTextLength += finalizedText.length;
-          }
+        const commitOffset = findMarkdownCommitOffset(state.accumulatedText, state.flushedTextLength);
+        if (commitOffset > state.flushedTextLength) {
+          commitBotTextPrefix(commitOffset);
+          return;
         }
 
-        if (!newBotText.trim()) return;
-        botResponseUpdater.push(newBotText);
+        const liveText = state.accumulatedText.slice(state.flushedTextLength);
+        if (!liveText.trim()) return;
+        botResponseUpdater.push(liveText);
         return;
       }
 
@@ -254,8 +225,8 @@ export function createConversationEventHandler(
         // Only show reasoning text after what was already flushed
         let newReasoningText = fullReasoningText.slice(state.flushedReasoningLength);
 
-        const lastBoundaryIndex = findLastSafeBoundary(fullReasoningText, state.flushedReasoningLength);
-        if (lastBoundaryIndex !== -1) {
+        const lastBoundaryIndex = findMarkdownCommitOffset(fullReasoningText, state.flushedReasoningLength);
+        if (lastBoundaryIndex > state.flushedReasoningLength) {
           const finalizedText = fullReasoningText.slice(state.flushedReasoningLength, lastBoundaryIndex);
           newReasoningText = fullReasoningText.slice(lastBoundaryIndex);
 

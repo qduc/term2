@@ -26,6 +26,17 @@ export type CachedRoleTool = {
   tool: Tool<SubagentRunContext>;
 };
 
+const AGENT_TOOL_ERROR_PREFIX = 'An error occurred while running the tool. Please try again. Error:';
+
+function parseNestedSubagentResult(raw: unknown): SubagentResult & { interrupted?: boolean } {
+  const output = String(raw);
+  if (output.startsWith(AGENT_TOOL_ERROR_PREFIX)) {
+    const message = output.slice(AGENT_TOOL_ERROR_PREFIX.length).trim();
+    throw new Error(message || 'Nested subagent tool failed');
+  }
+  return JSON.parse(output) as SubagentResult & { interrupted?: boolean };
+}
+
 export class NestedSubagentRunner {
   #logger: ILoggingService;
   #settings: ISettingsService;
@@ -281,7 +292,7 @@ export class NestedSubagentRunner {
     try {
       const tool = this.#getOrCreateRoleTool(role).tool as any;
       const raw = await tool.invoke(nestedContext, JSON.stringify({ role, task: request.task }), details);
-      const parsed = JSON.parse(String(raw)) as SubagentResult & { interrupted?: boolean };
+      const parsed = parseNestedSubagentResult(raw);
       if (!parsed.interrupted) {
         safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: parsed });
       }

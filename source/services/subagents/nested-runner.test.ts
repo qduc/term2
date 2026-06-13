@@ -263,6 +263,44 @@ test.serial('NestedSubagentRunner.runAsTool executes and emits events', async (t
   t.true(events.some((e) => e.type === 'subagent_completed'));
 });
 
+test.serial('NestedSubagentRunner.runAsTool surfaces Agent.asTool runtime failures', async (t) => {
+  const settings = createMockSettings({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+  });
+  const logger = createMockLogger();
+  const sessionContextService = createSessionContextService() as any;
+  const toolPolicy = new SubagentToolPolicy({
+    settings,
+    logger,
+    sessionContextService,
+  });
+  const toolFactory = new SubagentToolFactory({
+    settings,
+    logger,
+    toolPolicy,
+  });
+  const runner = new NestedSubagentRunner({
+    logger,
+    settings,
+    sessionContextService,
+    toolFactory,
+    roleToolCache: new Map(),
+  });
+  const tool = runner.getRoleAgentTool('explorer');
+  (tool as any).invoke = async () =>
+    'An error occurred while running the tool. Please try again. Error: TypeError: fetch failed';
+
+  const error = await t.throwsAsync(() =>
+    runner.runAsTool({
+      role: 'explorer',
+      task: 'inspect a file',
+    }),
+  );
+
+  t.is(error?.message, 'TypeError: fetch failed');
+});
+
 test.serial('NestedSubagentRunner.runAsTool restores context from resumeState', async (t) => {
   const settings = createMockSettings({
     'agent.model': 'gpt-4o',
@@ -527,7 +565,7 @@ test.serial('NestedSubagentRunner rejects malformed real Agent.asTool resume sta
       runner.runAsTool({ role: 'explorer', task: 'resume malformed state' }, undefined, {
         resumeState: '{"context":{"context":{"agentId":"restored"}}}',
       }),
-    { message: /not valid JSON/i },
+    { message: /Run state is missing schema version/i },
   );
 });
 

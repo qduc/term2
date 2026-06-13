@@ -1334,3 +1334,103 @@ test.serial('needsApproval handles gap match', async (t) => {
     t.false(result);
   });
 });
+
+test.serial('execute matches literal <...> when not on a standalone line', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'literal-inline.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, "export const GAP_MARKER = '<...>';\n");
+
+    const result = await tool.execute({
+      path: filePath,
+      replacements: [
+        {
+          search_content: "export const GAP_MARKER = '<...>';",
+          replace_content: 'export const GAP_MARKER = "___";',
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'export const GAP_MARKER = "___";\n');
+  });
+});
+
+test.serial('execute performs gap match when input has literal \\n sequences', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'unescape-gap.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'class MyClass {\n  myMethod() {\n    return 42;\n  }\n}\n');
+
+    const result = await tool.execute({
+      path: filePath,
+      replacements: [
+        {
+          search_content: 'class MyClass {\\n<...>\\n  myMethod() {\\n    return 42;\\n  }\\n}',
+          replace_content: 'class MyClass {\n  myMethod() { return 100; }\n}\n',
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'class MyClass {\n  myMethod() { return 100; }\n}\n');
+  });
+});
+
+test.serial('execute gap match preserves blank lines inside anchors', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'blank-lines-anchor.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'const a = 1;\n\nconst b = 2;\n// gap here\nconst c = 3;\n\nconst d = 4;\n');
+
+    const result = await tool.execute({
+      path: filePath,
+      replacements: [
+        {
+          search_content: 'const a = 1;\n\nconst b = 2;\n<...>\nconst c = 3;\n\nconst d = 4;',
+          replace_content: 'const replaced = true;\n',
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'const replaced = true;\n');
+  });
+});
+
+test.serial('execute gap match works with normalized whitespace within lines', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'whitespace-norm-gap.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'if (condition)  {\n  doSomething();\n  doOtherThing();\n  return  true;\n}\n');
+
+    const result = await tool.execute({
+      path: filePath,
+      replacements: [
+        {
+          search_content: 'if (condition) {\n<...>\nreturn true;\n}',
+          replace_content: 'if (condition) {\n  return false;\n}\n',
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'if (condition) {\n  return false;\n}\n');
+  });
+});

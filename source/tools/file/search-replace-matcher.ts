@@ -155,13 +155,36 @@ function normalizeWhitespace(content: string): string {
   return normalizeWhitespaceWithMap(content).normalized;
 }
 
+function normalizeLineWhitespace(line: string): string {
+  return line.replace(/\s+/g, ' ').trim();
+}
+
+function trimBlankBoundaryLines(lines: string[]): string[] {
+  let start = 0;
+  let end = lines.length;
+
+  while (start < end && lines[start] === '') start++;
+  while (end > start && lines[end - 1] === '') end--;
+
+  return lines.slice(start, end);
+}
+
+export function containsGapMarkerLine(content: string): boolean {
+  return /^\s*<\.\.\.>\s*$/m.test(content);
+}
+
 function findSegmentInLines(
   lineInfos: LineInfo[],
   segmentLines: string[],
   fromLineIdx: number,
 ): { startLineIdx: number; endLineIdx: number } | null {
   for (let i = fromLineIdx; i <= lineInfos.length - segmentLines.length; i++) {
-    if (segmentLines.every((line, offset) => lineInfos[i + offset].trimmed === line)) {
+    if (
+      segmentLines.every((line, offset) => {
+        const target = lineInfos[i + offset].trimmed;
+        return target === line || normalizeLineWhitespace(target) === normalizeLineWhitespace(line);
+      })
+    ) {
       return { startLineIdx: i, endLineIdx: i + segmentLines.length };
     }
   }
@@ -169,12 +192,9 @@ function findSegmentInLines(
 }
 
 function findGapMatches(content: string, searchContent: string): MatchInfo {
-  const segmentLineSets = searchContent.split(GAP_MARKER).map((segment) =>
-    segment
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean),
-  );
+  const segmentLineSets = searchContent
+    .split(/^\s*<\.\.\.>\s*$/gm)
+    .map((segment) => trimBlankBoundaryLines(segment.split(/\r?\n/).map((line) => line.trim())));
   if (segmentLineSets.some((lines) => lines.length === 0)) {
     return {
       type: 'none',
@@ -328,7 +348,10 @@ function unescapeSearchContent(content: string): string {
 }
 
 export function findMatchesInContent(content: string, searchContent: string): MatchInfo {
-  if (searchContent.includes(GAP_MARKER)) return findGapMatches(content, searchContent);
+  const unescapedSearch = unescapeSearchContent(searchContent);
+  if (containsGapMarkerLine(unescapedSearch)) {
+    return findGapMatches(content, unescapedSearch);
+  }
 
   const exactMatches = findExactMatches(content, searchContent);
   if (exactMatches.length > 0) return { type: 'exact', count: exactMatches.length };
@@ -344,7 +367,6 @@ export function findMatchesInContent(content: string, searchContent: string): Ma
     return { type: 'normalized', count: normalizedMatches.length, matches: normalizedMatches };
   }
 
-  const unescapedSearch = unescapeSearchContent(searchContent);
   if (unescapedSearch !== searchContent) {
     const escapedMatches = findExactMatches(content, unescapedSearch);
     if (escapedMatches.length > 0) {

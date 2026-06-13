@@ -553,6 +553,173 @@ test.serial('execute performs normalized whitespace match across line breaks', a
   });
 });
 
+test.serial('execute matches escaped newline sequences in search content', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'escaped.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'hello\nworld\nafter');
+
+    const result = await tool.execute({
+      path: filePath,
+      replacements: [
+        {
+          search_content: 'hello\\nworld',
+          replace_content: 'replaced',
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'replaced\nafter');
+  });
+});
+
+test.serial('execute trims whitespace around the whole search string as a fallback', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'boundary-whitespace.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'before\nconst value = 1;\nafter');
+
+    const result = await tool.execute({
+      path: filePath,
+      replacements: [
+        {
+          search_content: '\n  const value = 1;  \n',
+          replace_content: 'const value = 2;',
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'before\nconst value = 2;\nafter');
+  });
+});
+
+test.serial(
+  'execute recovers a unique multiline block with matching anchors and a minor middle difference',
+  async (t) => {
+    await withTempDir(async (dir) => {
+      const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+      const filePath = 'anchor-context.ts';
+      const absPath = path.join(dir, filePath);
+      await fs.writeFile(
+        absPath,
+        [
+          'function calculate() {',
+          '  const subtotal = getSubtotal();',
+          '  const tax = subtotal * 0.2;',
+          '  return subtotal + tax;',
+          '}',
+        ].join('\n'),
+      );
+
+      const result = await tool.execute({
+        path: filePath,
+        replacements: [
+          {
+            search_content: [
+              'function calculate() {',
+              '  const subtotal = getSubtotal();',
+              '  const tax = subtotal * 0.18;',
+              '  return subtotal + tax;',
+              '}',
+            ].join('\n'),
+            replace_content: 'function calculate() {\n  return getSubtotal() * 1.2;\n}',
+          },
+        ],
+      });
+
+      const parsed = JSON.parse(result);
+      t.true(parsed.output[0].success);
+
+      const updated = await fs.readFile(absPath, 'utf8');
+      t.is(updated, 'function calculate() {\n  return getSubtotal() * 1.2;\n}');
+    });
+  },
+);
+
+test.serial('needsApproval requires approval for anchor recovery outside the workspace', async (t) => {
+  await withTempDir(async () => {
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-search-replace-outside-'));
+    const filePath = path.join(outsideDir, 'anchor-context.ts');
+    try {
+      await fs.writeFile(
+        filePath,
+        [
+          'function calculate() {',
+          '  const subtotal = getSubtotal();',
+          '  const tax = subtotal * 0.2;',
+          '  return subtotal + tax;',
+          '}',
+        ].join('\n'),
+      );
+      const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+
+      const result = await tool.needsApproval({
+        path: filePath,
+        replacements: [
+          {
+            search_content: [
+              'function calculate() {',
+              '  const subtotal = getSubtotal();',
+              '  const tax = subtotal * 0.18;',
+              '  return subtotal + tax;',
+              '}',
+            ].join('\n'),
+            replace_content: 'function calculate() {\n  return getSubtotal() * 1.2;\n}',
+          },
+        ],
+      });
+
+      t.true(result);
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test.serial(
+  'execute rejects anchor recovery when the selected span is much larger than the search string',
+  async (t) => {
+    await withTempDir(async (dir) => {
+      const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+      const filePath = 'oversized-anchor.ts';
+      const absPath = path.join(dir, filePath);
+      const originalContent = [
+        'function calculate() {',
+        ...Array.from({ length: 40 }, (_, index) => `  const value${index} = ${index};`),
+        '  return total;',
+        '}',
+      ].join('\n');
+      await fs.writeFile(absPath, originalContent);
+
+      const result = await tool.execute({
+        path: filePath,
+        replacements: [
+          {
+            search_content: ['function calculate() {', '  const subtotal = 1;', '  return total;', '}'].join('\n'),
+            replace_content: 'function calculate() {\n  return 0;\n}',
+          },
+        ],
+      });
+
+      const parsed = JSON.parse(result);
+      t.false(parsed.output[0].success);
+
+      const unchanged = await fs.readFile(absPath, 'utf8');
+      t.is(unchanged, originalContent);
+    });
+  },
+);
+
 test.serial('execute rejects multiple normalized matches', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));

@@ -15,53 +15,14 @@ import { healSearchReplaceParams } from './edit-healing.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import { getApprovalPresentationCapability } from '../tool-capabilities.js';
 import { withFileLock } from './file-locks.js';
-
-/**
- * Detect the predominant EOL style in file content.
- * Returns '\r\n' if CRLF is dominant, otherwise '\n'.
- */
-function detectEOL(content: string): string {
-  const crlfCount = (content.match(/\r\n/g) || []).length;
-  const lfCount = (content.match(/(?<!\r)\n/g) || []).length;
-  return crlfCount > lfCount ? '\r\n' : '\n';
-}
-
-/**
- * Normalize line endings in search/replace content to match the target file's EOL style.
- */
-function normalizeToEOL(content: string, eol: string): string {
-  // First normalize to LF, then convert to target EOL
-  return content.replace(/\r\n/g, '\n').replace(/\n/g, eol);
-}
-
-/**
- * Remove leading filepath comments that models often add to code blocks.
- * E.g., "// src/file.ts" or "# path/to/file.py" at the start.
- */
-function removeLeadingFilepathComment(content: string, filePath: string): string {
-  const lines = content.split(/\r?\n/);
-  if (lines.length === 0) return content;
-
-  const firstLine = lines[0].trim();
-  const basename = path.basename(filePath);
-
-  // Check for common comment patterns with filepath
-  const patterns = [
-    /^\/\/\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*$/, // // path/to/file.ext
-    /^#\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*$/, // # path/to/file.ext
-    /^\/\*\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*\*\/\s*$/, // /* path/to/file.ext */
-    /^<!--\s*.*[\\/]?[\w.-]+\.[a-zA-Z]+\s*-->\s*$/, // <!-- path/to/file.ext -->
-  ];
-
-  // Check if first line matches a filepath comment pattern and contains the basename
-  const isFilepathComment = patterns.some((p) => p.test(firstLine)) && firstLine.includes(basename);
-
-  if (isFilepathComment) {
-    return lines.slice(1).join('\n');
-  }
-
-  return content;
-}
+import {
+  findMatchesInContent,
+  normalizeSearchContent,
+  normalizeToEOL,
+  prepareMatchContext,
+  SearchReplaceEditCache,
+  type MatchInfo,
+} from './search-replace-matcher.js';
 
 /**
  * Detect summarization markers in content that indicate truncated/omitted code.
@@ -116,403 +77,8 @@ function getSearchReplaceOperations(params: SearchReplaceToolParams): SearchRepl
   }));
 }
 
-/**
- * Gap marker constant used to indicate omitted middle content in search strings.
- * When the model uses <...> in search_content, the search is split into segments
- * that are matched sequentially, skipping any content between them.
- */
-const GAP_MARKER = '<...>';
-
-/**
- * Check if search content contains gap markers.
- */
 function containsGapMarker(content: string): boolean {
-  return content.includes(GAP_MARKER);
-}
-
-/**
- * Information about exact matches found in content
- */
-interface ExactMatchInfo {
-  type: 'exact';
-  count: number;
-}
-
-/**
- * Information about relaxed matches found in content (with position details)
- */
-interface RelaxedMatchInfo {
-  type: 'relaxed';
-  count: number;
-  matches: { startIndex: number; endIndex: number }[];
-}
-
-/**
- * Information about whitespace-normalized matches found in content
- */
-interface NormalizedMatchInfo {
-  type: 'normalized';
-  count: number;
-  matches: { startIndex: number; endIndex: number }[];
-}
-
-/**
- * Information about gap matches found in content (head <...> tail pattern)
- */
-interface GapMatchInfo {
-  type: 'gap';
-  count: number;
-  matches: { startIndex: number; endIndex: number }[];
-}
-
-/**
- * Information indicating no matches were found
- */
-interface NoMatchInfo {
-  type: 'none';
-  diagnostic?: string;
-}
-
-type MatchInfo = ExactMatchInfo | RelaxedMatchInfo | NormalizedMatchInfo | GapMatchInfo | NoMatchInfo;
-
-/**
- * Cache for edit preparation to avoid redundant work.
- */
-interface EditCache {
-  key: string;
-  matchInfo: MatchInfo;
-  content: string;
-  eol: string;
-}
-
-class SearchReplaceEditCache {
-  private lastEditCache: EditCache | null = null;
-
-  get(params: SearchReplaceFullOperation, content: string): EditCache | null {
-    const key = getEditCacheKey(params);
-    if (this.lastEditCache && this.lastEditCache.key === key && this.lastEditCache.content === content) {
-      return this.lastEditCache;
-    }
-    return null;
-  }
-
-  set(params: SearchReplaceFullOperation, matchInfo: MatchInfo, content: string, eol: string): void {
-    this.lastEditCache = {
-      key: getEditCacheKey(params),
-      matchInfo,
-      content,
-      eol,
-    };
-  }
-}
-
-function getEditCacheKey(params: SearchReplaceFullOperation): string {
-  return JSON.stringify({
-    path: params.path,
-    search_content: params.search_content,
-    replace_content: params.replace_content,
-  });
-}
-
-/**
- * Parse file content into lines with position information
- */
-function parseFileLines(content: string): { text: string; trimmed: string; start: number; end: number }[] {
-  const lineInfos: {
-    text: string;
-    trimmed: string;
-    start: number;
-    end: number;
-  }[] = [];
-  const regex = /([^\r\n]*)(\r?\n|$)/g;
-  let match;
-  while ((match = regex.exec(content)) !== null) {
-    if (match.index === regex.lastIndex) {
-      regex.lastIndex++;
-    }
-    const fullMatch = match[0];
-    if (fullMatch.length === 0 && match.index >= content.length) break;
-
-    const lineContent = match[1];
-    lineInfos.push({
-      text: lineContent,
-      trimmed: lineContent.trim(),
-      start: match.index,
-      end: match.index + fullMatch.length,
-    });
-
-    if (match.index + fullMatch.length === content.length) break;
-  }
-  return lineInfos;
-}
-
-/**
- * Normalize whitespace by collapsing any whitespace run to a single space.
- * Returns the normalized text and a map from normalized indices to original indices.
- */
-function normalizeWhitespaceWithMap(content: string): {
-  normalized: string;
-  indexMap: number[];
-} {
-  let normalized = '';
-  const indexMap: number[] = [];
-  let inWhitespace = false;
-
-  for (let i = 0; i < content.length; i++) {
-    const char = content[i];
-    if (/\s/.test(char)) {
-      if (!inWhitespace && normalized.length > 0) {
-        normalized += ' ';
-        indexMap.push(i);
-      }
-      inWhitespace = true;
-      continue;
-    }
-    inWhitespace = false;
-    normalized += char;
-    indexMap.push(i);
-  }
-
-  if (normalized.endsWith(' ')) {
-    normalized = normalized.slice(0, -1);
-    indexMap.pop();
-  }
-
-  return { normalized, indexMap };
-}
-
-function normalizeWhitespace(content: string): string {
-  return normalizeWhitespaceWithMap(content).normalized;
-}
-
-/**
- * Find a segment (multi-line string) within file lines using relaxed matching.
- * Returns the line index range [startLineIdx, endLineIdx) or null if not found.
- * Searches starting from `fromLineIdx`.
- */
-function findSegmentInLines(
-  lineInfos: { text: string; trimmed: string; start: number; end: number }[],
-  segmentLines: string[],
-  fromLineIdx: number,
-): { startLineIdx: number; endLineIdx: number } | null {
-  for (let i = fromLineIdx; i <= lineInfos.length - segmentLines.length; i++) {
-    let isMatch = true;
-    for (let j = 0; j < segmentLines.length; j++) {
-      if (lineInfos[i + j].trimmed !== segmentLines[j]) {
-        isMatch = false;
-        break;
-      }
-    }
-    if (isMatch) {
-      return { startLineIdx: i, endLineIdx: i + segmentLines.length };
-    }
-  }
-  return null;
-}
-
-/**
- * Find gap matches in content. Splits search content on GAP_MARKER,
- * then matches each segment sequentially in the file content.
- * The matched region spans from the start of the first segment to the end of the last.
- */
-function findGapMatches(content: string, searchContent: string): GapMatchInfo | NoMatchInfo {
-  const segments = searchContent.split(GAP_MARKER);
-  // Filter out empty segments and trim each segment's lines
-  const segmentLineSets = segments.map((seg) =>
-    seg
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0),
-  );
-
-  // Validate: all segments must have at least one non-empty line
-  if (segmentLineSets.some((lines) => lines.length === 0)) {
-    return {
-      type: 'none',
-      diagnostic:
-        'Gap pattern has an empty segment — every part separated by <...> must contain at least one non-blank line.',
-    };
-  }
-
-  const lineInfos = parseFileLines(content);
-  const allMatches: { startIndex: number; endIndex: number }[] = [];
-
-  let headEverMatched = false;
-  let maxSegmentsMatched = 0; // best run: count of leading segments matched consecutively
-
-  // Try every possible starting position for the first segment
-  let searchFrom = 0;
-  while (searchFrom <= lineInfos.length - segmentLineSets[0].length) {
-    // Find the first segment
-    const firstMatch = findSegmentInLines(lineInfos, segmentLineSets[0], searchFrom);
-    if (!firstMatch) break;
-    headEverMatched = true;
-
-    // Try to match remaining segments sequentially after the first
-    let valid = true;
-    let segmentsMatched = 1;
-    let lastEndLineIdx = firstMatch.endLineIdx;
-    for (let s = 1; s < segmentLineSets.length; s++) {
-      const nextMatch = findSegmentInLines(lineInfos, segmentLineSets[s], lastEndLineIdx);
-      if (!nextMatch) {
-        valid = false;
-        break;
-      }
-      segmentsMatched++;
-      lastEndLineIdx = nextMatch.endLineIdx;
-    }
-    maxSegmentsMatched = Math.max(maxSegmentsMatched, segmentsMatched);
-
-    if (valid) {
-      allMatches.push({
-        startIndex: lineInfos[firstMatch.startLineIdx].start,
-        endIndex: lineInfos[lastEndLineIdx - 1].end,
-      });
-    }
-
-    // Continue searching from the next line after this match's start
-    searchFrom = firstMatch.startLineIdx + 1;
-  }
-
-  if (allMatches.length > 0) {
-    return { type: 'gap', count: allMatches.length, matches: allMatches };
-  }
-
-  if (!headEverMatched) {
-    return {
-      type: 'none',
-      diagnostic: `Gap pattern did not match: the head anchor (starting ${JSON.stringify(
-        segmentLineSets[0][0],
-      )}) was not found in the file. Recheck the first anchor's exact text.`,
-    };
-  }
-
-  const failedSegmentFirstLine = segmentLineSets[maxSegmentsMatched]?.[0] ?? '';
-  return {
-    type: 'none',
-    diagnostic: `Gap pattern did not match: the head anchor matched, but the next anchor (starting ${JSON.stringify(
-      failedSegmentFirstLine,
-    )}) was not found after it. Recheck that anchor's text and that anchors appear in order.`,
-  };
-}
-
-/**
- * Find matches in content using exact matching first, then relaxed matching.
- * Returns detailed match information including positions for replacement.
- */
-function findMatchesInContent(content: string, searchContent: string): MatchInfo {
-  // 0. Check for gap markers first — delegate to gap matching
-  if (containsGapMarker(searchContent)) {
-    return findGapMatches(content, searchContent);
-  }
-
-  // 1. Try exact match first
-  let matchCount = 0;
-  let index = content.indexOf(searchContent);
-  while (index !== -1) {
-    matchCount++;
-    index = content.indexOf(searchContent, index + 1);
-  }
-
-  if (matchCount > 0) {
-    return { type: 'exact', count: matchCount };
-  }
-
-  // 2. Try relaxed match (whitespace-insensitive line matching)
-  const searchLines = searchContent.split(/\r?\n/).map((l) => l.trim());
-  const lineInfos = parseFileLines(content);
-
-  const matches: { startIndex: number; endIndex: number }[] = [];
-  for (let i = 0; i <= lineInfos.length - searchLines.length; i++) {
-    let isMatch = true;
-    for (let j = 0; j < searchLines.length; j++) {
-      if (lineInfos[i + j].trimmed !== searchLines[j]) {
-        isMatch = false;
-        break;
-      }
-    }
-    if (isMatch) {
-      matches.push({
-        startIndex: lineInfos[i].start,
-        endIndex: lineInfos[i + searchLines.length - 1].end,
-      });
-    }
-  }
-
-  if (matches.length > 0) {
-    return { type: 'relaxed', count: matches.length, matches };
-  }
-
-  // 3. Try normalized whitespace match (collapse whitespace differences)
-  const normalizedSearch = normalizeWhitespace(searchContent);
-  if (normalizedSearch.length > 0) {
-    const { normalized: normalizedContent, indexMap } = normalizeWhitespaceWithMap(content);
-    const normalizedMatches: { startIndex: number; endIndex: number }[] = [];
-    let normalizedIndex = normalizedContent.indexOf(normalizedSearch);
-    while (normalizedIndex !== -1) {
-      const beforeIndex = normalizedIndex - 1;
-      const afterIndex = normalizedIndex + normalizedSearch.length;
-      const beforeChar = beforeIndex >= 0 ? normalizedContent[beforeIndex] : '';
-      const afterChar = afterIndex < normalizedContent.length ? normalizedContent[afterIndex] : '';
-      const hasLeadingBoundary = beforeIndex < 0 || beforeChar === ' ';
-      const hasTrailingBoundary = afterIndex >= normalizedContent.length || afterChar === ' ';
-
-      if (!hasLeadingBoundary || !hasTrailingBoundary) {
-        normalizedIndex = normalizedContent.indexOf(normalizedSearch, normalizedIndex + 1);
-        continue;
-      }
-
-      const startIndex = indexMap[normalizedIndex];
-      const endIndex = indexMap[normalizedIndex + normalizedSearch.length - 1] + 1;
-      normalizedMatches.push({ startIndex, endIndex });
-      normalizedIndex = normalizedContent.indexOf(normalizedSearch, normalizedIndex + 1);
-    }
-
-    if (normalizedMatches.length > 0) {
-      return {
-        type: 'normalized',
-        count: normalizedMatches.length,
-        matches: normalizedMatches,
-      };
-    }
-  }
-
-  return { type: 'none' };
-}
-
-function prepareMatchContext(
-  operation: SearchReplaceFullOperation,
-  content: string,
-  editCache: SearchReplaceEditCache,
-): { eol: string; normalizedSearchContent: string; matchInfo: MatchInfo; fromCache: boolean } {
-  const cachedEdit = editCache.get(operation, content);
-  if (cachedEdit) {
-    const normalizedSearchContent = normalizeToEOL(
-      removeLeadingFilepathComment(operation.search_content, operation.path),
-      cachedEdit.eol,
-    );
-    return {
-      eol: cachedEdit.eol,
-      normalizedSearchContent,
-      matchInfo: cachedEdit.matchInfo,
-      fromCache: true,
-    };
-  }
-
-  const eol = detectEOL(content);
-  const normalizedSearchContent = normalizeToEOL(
-    removeLeadingFilepathComment(operation.search_content, operation.path),
-    eol,
-  );
-  const matchInfo = findMatchesInContent(content, normalizedSearchContent);
-  editCache.set(operation, matchInfo, content, eol);
-
-  return {
-    eol,
-    normalizedSearchContent,
-    matchInfo,
-    fromCache: false,
-  };
+  return content.includes('<...>');
 }
 
 function evaluateApprovalForMatch(
@@ -568,13 +134,17 @@ function evaluateApprovalForMatch(
     return insideCwd ? false : true;
   }
 
-  return false;
+  loggingService.debug(`search_replace validation: ${matchInfo.type} match found`, {
+    path: filePath,
+    count: matchInfo.count,
+  });
+  return insideCwd ? false : true;
 }
 
 interface ReplacementExecutionSuccess {
   success: true;
   newContent: string;
-  matchType: 'exact' | 'relaxed' | 'normalized' | 'gap';
+  matchType: Exclude<MatchInfo['type'], 'none'>;
   replacedCount: number;
 }
 
@@ -724,7 +294,7 @@ export function createSearchReplaceToolDefinition(deps: {
   return {
     name: 'search_replace',
     description:
-      'Replace text in a file using exact or relaxed matching.\n' +
+      'Replace text in a file using layered, deterministic matching. Exact matching is preferred; conservative fallbacks tolerate line-ending, indentation, whitespace, escaped-text, and minor anchored multi-line differences. Fallbacks must identify one unique match, and oversized fuzzy spans are rejected.\n' +
       'Gap matching: put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span (both anchors plus everything between them) is what gets replaced, so a mis-placed anchor silently deletes a large region. Choose anchors that are distinctive and unambiguous — prefer a few lines of real, unique code; never anchor on a single generic line like "}", "return", or a blank line. Use this to edit or DELETE a large block without reproducing it. To delete the block including the anchors, omit them from replace_content; to delete only the middle, repeat the anchors in replace_content.\n' +
       'Use this tool for precise edits where you know the content to be replaced.',
     parameters: searchReplaceParametersSchema,
@@ -889,10 +459,7 @@ export function createSearchReplaceToolDefinition(deps: {
             healingFailureReason = healingResult.failureReason;
 
             if (healingResult.wasModified) {
-              normalizedSearchContent = normalizeToEOL(
-                removeLeadingFilepathComment(healingResult.params.search_content, filePath),
-                eol,
-              );
+              normalizedSearchContent = normalizeSearchContent(healingResult.params.search_content, filePath, eol);
               matchInfo = findMatchesInContent(content, normalizedSearchContent);
               matchTypeAfterHealing = matchInfo.type;
               if (matchInfo.type !== 'none') {

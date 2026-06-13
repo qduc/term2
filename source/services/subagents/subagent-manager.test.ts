@@ -2324,3 +2324,18 @@ test.serial('run() aborted subagent retains toolsUsed and filesChanged', async (
   t.is(result.toolsUsed[0].toolName, 'create_file');
   t.deepEqual(result.filesChanged, ['test.ts']);
 });
+
+test.serial('run() returns failed result when createClient factory is not provided', async (t) => {
+  const manager = new RealSubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': 'openai',
+    }),
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  const result = await manager.run({ role: 'explorer', task: 'some task' });
+  t.is(result.status, 'failed');
+  t.is(result.error, 'SubagentManager: createClient factory not provided');
+});

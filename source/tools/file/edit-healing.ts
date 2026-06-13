@@ -179,7 +179,11 @@ async function runHealingPrompt(
     name: 'EditHealer',
     model,
     instructions,
-    modelSettings: { reasoning: { effort: 'none' }, temperature: 0, retry: { maxRetries: 0 } },
+    modelSettings: {
+      reasoning: { effort: 'none' },
+      temperature: 0,
+      retry: { maxRetries: settingsService.get<number>('agent.retryAttempts') ?? 2 },
+    },
   });
 
   const options: any = {

@@ -599,7 +599,7 @@ registerProvider({
     const openAIClient = new OpenAI({
       apiKey: 'placeholder',
       baseURL: 'https://chatgpt.com/backend-api/codex',
-      maxRetries: 0,
+      maxRetries: settingsService.get('agent.retryAttempts') ?? 2,
       fetch: createProviderFetch({
         providerId: 'codex',
         defaultModel,

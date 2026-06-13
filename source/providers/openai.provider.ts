@@ -192,7 +192,7 @@ registerProvider({
     const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
     const openAIClient = new OpenAI({
       apiKey: apiKey || 'placeholder',
-      maxRetries: 0,
+      maxRetries: settingsService.get('agent.retryAttempts') ?? 2,
       fetch: createProviderFetch({
         providerId: 'openai',
         defaultModel,

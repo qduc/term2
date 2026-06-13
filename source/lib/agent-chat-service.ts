@@ -117,7 +117,7 @@ export class AgentChatService {
 
       if (options.model || options.reasoningEffort || options.instructions || options.provider) {
         const modelSettings: any = {
-          retry: { maxRetries: 0 },
+          retry: { maxRetries: settings.get<number>('agent.retryAttempts') ?? 2 },
         };
 
         let effectiveEffort = tempEffort;
@@ -196,7 +196,7 @@ export class AgentChatService {
       const tempModel = options.model || agentConfig.getModel();
       const tempEffort = options.reasoningEffort || agentConfig.reasoningEffort;
       const modelSettings: any = {
-        retry: { maxRetries: 0 },
+        retry: { maxRetries: settings.get<number>('agent.retryAttempts') ?? 2 },
       };
 
       let effectiveEffort = tempEffort;

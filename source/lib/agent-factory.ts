@@ -217,7 +217,7 @@ function buildModelSettings({
   // 'default') was provided. 'default' means we should not pass the
   // effort param and allow the underlying API to choose the default.
   const modelSettings: Record<string, any> = {
-    retry: { maxRetries: 0 },
+    retry: { maxRetries: deps.settings.get<number>('agent.retryAttempts') ?? 2 },
   };
   if (reasoningEffort && reasoningEffort !== 'default') {
     modelSettings.reasoning = {

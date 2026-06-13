@@ -63,7 +63,7 @@ export class ExecutionSubagentRunner {
     });
 
     const modelSettings: any = {
-      retry: { maxRetries: 0 },
+      retry: { maxRetries: this.#settings.get<number>('agent.retryAttempts') ?? 2 },
     };
     if (definition.reasoningEffort && definition.reasoningEffort !== 'default') {
       modelSettings.reasoning = { effort: definition.reasoningEffort, summary: 'auto' };

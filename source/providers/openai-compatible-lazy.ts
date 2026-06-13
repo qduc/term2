@@ -37,6 +37,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
                 defaultModel: settingsService.get('agent.model') || '',
                 loggingService,
                 sessionContextService,
+                settingsService,
               });
             }
             return cachedProvider.getModel(modelName);

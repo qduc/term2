@@ -11,6 +11,7 @@ export interface FormatShellExecutionOutputParams {
   exitCode: number | null;
   timedOut: boolean;
   maxOutputLength?: number;
+  durationMs?: number;
 }
 
 export interface FormatShellExecutionOutputResult {
@@ -28,6 +29,7 @@ function buildArtifactContents(params: {
   stderr: string;
   exitCode: number | null;
   timedOut: boolean;
+  durationMs?: number;
 }): string {
   const statusLine = params.timedOut ? 'timeout' : `exit ${params.exitCode ?? 'null'}`;
 
@@ -35,6 +37,7 @@ function buildArtifactContents(params: {
     `Command: ${params.command}`,
     `Working directory: ${params.cwd}`,
     `Status: ${statusLine}`,
+    typeof params.durationMs === 'number' ? `Runtime: ${params.durationMs}ms` : undefined,
     `Timed out: ${params.timedOut ? 'yes' : 'no'}`,
     '',
     'STDOUT:',
@@ -61,6 +64,7 @@ export async function formatShellExecutionOutput({
   exitCode,
   timedOut,
   maxOutputLength,
+  durationMs,
 }: FormatShellExecutionOutputParams): Promise<FormatShellExecutionOutputResult> {
   const stdoutTrimmedOutput = trimOutput(stdout, undefined, maxOutputLength);
   const stderrTrimmedOutput = trimOutput(stderr, undefined, maxOutputLength);
@@ -70,12 +74,13 @@ export async function formatShellExecutionOutput({
   const stderrTruncated = stderrTrimmedOutput !== stderr;
   const combinedOutput = [stdoutTrimmed, stderrTrimmed].filter(Boolean).join('\n').trimEnd();
   const statusLine = timedOut ? 'timeout' : `exit ${exitCode ?? 'null'}`;
+  const runtimeLine = typeof durationMs === 'number' ? `Runtime: ${durationMs}ms` : '';
   const emptyOutputNote = combinedOutput === '' && !timedOut && exitCode === 0 ? '(No output)' : '';
 
   let artifactPath: string | undefined;
   if (stdoutTruncated || stderrTruncated) {
     artifactPath = await saveShellOutputArtifact(
-      buildArtifactContents({ command, cwd, stdout, stderr, exitCode, timedOut }),
+      buildArtifactContents({ command, cwd, stdout, stderr, exitCode, timedOut, durationMs }),
     );
   }
 
@@ -84,7 +89,7 @@ export async function formatShellExecutionOutput({
     : '';
 
   return {
-    text: [statusLine, combinedOutput, emptyOutputNote, truncationNote].filter(Boolean).join('\n'),
+    text: [statusLine, runtimeLine, combinedOutput, emptyOutputNote, truncationNote].filter(Boolean).join('\n'),
     truncated: Boolean(artifactPath),
     artifactPath,
   };

@@ -213,11 +213,13 @@ export function createShellToolDefinition(deps: {
   // Create command logger function with dependencies
   const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
 
+  const shellDescription = orchestratorMode
+    ? "Execute a single shell command to verify state (e.g., run tests, check git status, or verify a subagent's work). Long output is saved to a file; search that file instead of rerunning the command just to change filters or add a `| grep` pipeline. For performing complex operations or making changes, prefer delegating to a `worker` subagent via `run_subagent`."
+    : 'Execute a single shell command. Long output is saved to a file; search that file instead of rerunning the command just to change filters or add a `| grep` pipeline.';
+
   return {
     name: 'shell',
-    description: orchestratorMode
-      ? "Execute a single shell command to verify state (e.g., run tests, check git status, or verify a subagent's work). For performing complex operations or making changes, prefer delegating to a `worker` subagent via `run_subagent`."
-      : 'Execute a single shell command. Use this to run a terminal command.',
+    description: shellDescription,
     parameters: shellParametersSchema,
     needsApproval: async (params) => {
       try {
@@ -250,6 +252,7 @@ export function createShellToolDefinition(deps: {
       const sshService = executionContext?.getSSHService();
       const previousCorrelationId = loggingService.getCorrelationId();
       const correlationId = randomUUID();
+      const startedAt = Date.now();
 
       // Set correlation ID for tracking related operations
       loggingService.setCorrelationId(correlationId);
@@ -342,6 +345,7 @@ export function createShellToolDefinition(deps: {
           exitCode,
           timedOut: outcome.type === 'timeout',
           maxOutputLength,
+          durationMs: Date.now() - startedAt,
         });
 
         return formattedOutput.text;

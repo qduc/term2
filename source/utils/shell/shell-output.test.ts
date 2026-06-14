@@ -14,11 +14,13 @@ test('formatShellExecutionOutput saves the full output when truncation occurs', 
     exitCode: 0,
     timedOut: false,
     maxOutputLength: 120,
+    durationMs: 1234,
   });
 
   t.true(result.truncated);
   t.truthy(result.artifactPath);
   t.true(result.text.includes('exit 0'));
+  t.true(result.text.includes('Runtime: 1234ms'));
   t.true(result.text.includes('Full shell output saved to'));
   t.true(
     result.text.includes(
@@ -32,6 +34,7 @@ test('formatShellExecutionOutput saves the full output when truncation occurs', 
 
   t.true(artifactContents.includes('Command: demo --long-output'));
   t.true(artifactContents.includes('Working directory: /workspace'));
+  t.true(artifactContents.includes('Runtime: 1234ms'));
   t.true(artifactContents.includes('STDOUT:'));
   t.true(artifactContents.includes('STDERR:'));
   t.true(artifactContents.includes('FULL-ONLY-SENTINEL'));
@@ -48,10 +51,11 @@ test('formatShellExecutionOutput leaves short output unchanged', async (t) => {
     exitCode: 0,
     timedOut: false,
     maxOutputLength: 1000,
+    durationMs: 42,
   });
 
   t.false(result.truncated);
   t.is(result.artifactPath, undefined);
   t.false(result.text.includes('Full shell output saved to'));
-  t.is(result.text, 'exit 0\nhello');
+  t.is(result.text, 'exit 0\nRuntime: 42ms\nhello');
 });

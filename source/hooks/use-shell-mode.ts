@@ -101,6 +101,7 @@ export const useShellMode = ({
       const timeout = timeoutValue != null ? timeoutValue : undefined;
       const maxOutputLengthValue = settingsService.get<number>('shell.maxOutputChars');
       const maxOutputLength = maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
+      const startedAt = Date.now();
 
       setInput('');
 
@@ -119,6 +120,7 @@ export const useShellMode = ({
         exitCode: result.exitCode,
         timedOut: result.timedOut,
         maxOutputLength,
+        durationMs: Date.now() - startedAt,
       });
 
       addShellMessage(commandText, formattedOutput.text, result.exitCode, result.timedOut);

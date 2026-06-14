@@ -56,12 +56,25 @@ test.serial('shell execute appends spill-file guidance when output is truncated'
   });
 
   t.true(output.includes('Full shell output saved to'));
+  t.true(/Runtime: \d+ms/.test(output));
   t.true(
     output.includes(
       'Search that file for what you need instead of rerunning the command or changing the filter criteria with a `| grep` pipeline.',
     ),
   );
   t.false(output.includes('FULL-ONLY-SENTINEL'));
+});
+
+test('shell description mentions saved long output and avoiding reruns', (t) => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+  });
+
+  t.true(tool.description.includes('Long output is saved to a file'));
+  t.true(
+    tool.description.includes('instead of rerunning the command just to change filters or add a `| grep` pipeline'),
+  );
 });
 
 test.serial('shell execute restores previous correlation id after command execution', async (t) => {

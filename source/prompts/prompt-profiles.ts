@@ -53,6 +53,11 @@ export const PROMPT_PROFILES: PromptProfile[] = [
     matches: ({ normalizedModel }) => normalizedModel.includes('gpt-5'),
   },
   {
+    id: 'kimi',
+    basePromptFile: 'kimi.md',
+    matches: ({ normalizedModel }) => normalizedModel.includes('kimi-k'),
+  },
+  {
     id: 'default',
     basePromptFile: 'simple.md',
     matches: () => true,

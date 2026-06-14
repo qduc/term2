@@ -7,6 +7,7 @@ import {
   RuntimeLogSchema,
   buildRuntimeLogRecord,
   parseCategoryFilter,
+  resolveLogCategory,
   shouldIncludeVerbosePayload,
   shouldLogForCategory,
   shouldSampleLog,
@@ -350,7 +351,19 @@ export class LoggingService {
 
       this.writeProviderTrafficArtifact(runtimeRecord, message);
 
-      const category = (runtimeRecord.category as LogCategory) ?? 'general';
+      // Strip internal wiring fields that leak into runtime logs
+      delete runtimeRecord.modelClass;
+      delete runtimeRecord.modelWrapperClass;
+      if ('attempt' in runtimeRecord && 'retryAttempt' in runtimeRecord) {
+        delete runtimeRecord.attempt;
+      }
+      if ('rawEvent' in runtimeRecord) {
+        delete runtimeRecord.rawEvent;
+      }
+
+      // category no longer appears in the record; derive it from eventType for filtering
+      const eventType = typeof runtimeRecord.eventType === 'string' ? runtimeRecord.eventType : '';
+      const category = resolveLogCategory({ eventType });
       if (!shouldLogForCategory({ level, category, enabledCategories: this.enabledCategories })) {
         return;
       }

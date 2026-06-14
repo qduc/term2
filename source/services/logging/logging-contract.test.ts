@@ -16,7 +16,6 @@ test('buildRuntimeLogRecord produces canonical required fields', (t) => {
     correlationId: 'trace-123',
     meta: {
       eventType: 'stream.started',
-      phase: 'request_start',
       sessionId: 'session-1',
       provider: 'openai',
       model: 'gpt-5',
@@ -27,8 +26,47 @@ test('buildRuntimeLogRecord produces canonical required fields', (t) => {
   const parsed = RuntimeLogSchema.parse(record);
   t.is(parsed.traceId, 'trace-123');
   t.is(parsed.eventType, 'stream.started');
-  t.is(parsed.phase, 'request_start');
-  t.is(parsed.category, 'stream');
+  t.is(parsed.traceId, 'trace-123');
+  t.false('category' in record, 'category should be stripped');
+  t.false('phase' in record, 'phase should be stripped');
+});
+
+test('buildRuntimeLogRecord omits sentinel-valued fields', (t) => {
+  const record = buildRuntimeLogRecord({
+    level: 'warn',
+    meta: {
+      eventType: 'log.message',
+      messageId: 'msg-1',
+    },
+  });
+
+  t.false('provider' in record, 'unknown provider omitted');
+  t.false('model' in record, 'unknown model omitted');
+  t.false('sessionId' in record, 'session-unknown omitted');
+  t.false('traceId' in record, 'trace-unknown omitted');
+  t.false('category' in record, 'category stripped');
+  t.false('phase' in record, 'phase stripped');
+  const parsed = RuntimeLogSchema.parse(record);
+  t.is(parsed.eventType, 'log.message');
+});
+
+test('buildRuntimeLogRecord preserves valid provider/model/session/trace', (t) => {
+  const record = buildRuntimeLogRecord({
+    level: 'info',
+    meta: {
+      eventType: 'provider.response.failed',
+      provider: 'openai',
+      model: 'gpt-5',
+      sessionId: 'abc-123',
+      traceId: '550e8400-e29b-41d4-a716-446655440000',
+      messageId: 'msg-1',
+    },
+  });
+
+  t.is(record.provider, 'openai');
+  t.is(record.model, 'gpt-5');
+  t.is(record.sessionId, 'abc-123');
+  t.is(record.traceId, '550e8400-e29b-41d4-a716-446655440000');
 });
 
 test('parseCategoryFilter parses valid comma-separated categories', (t) => {

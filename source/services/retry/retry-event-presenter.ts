@@ -33,11 +33,8 @@ export class RetryEventPresenter {
         const logMessage = 'Flex service tier timed out, retrying with standard service tier';
         const logFields = {
           eventType: 'retry.flex_service_tier',
-          category: 'retry',
-          phase: 'retry',
           retryType: 'flex_service_tier',
           retryAttempt: 1,
-          attempt: 1,
           maxRetries: 1,
           errorMessage,
         };
@@ -60,11 +57,8 @@ export class RetryEventPresenter {
             : 'Transient upstream error detected, retrying turn';
         const logFields = {
           eventType: 'retry.transient',
-          category: 'retry',
-          phase: 'retry',
           retryType: 'upstream',
           retryAttempt: failure.attempt,
-          attempt: failure.attempt,
           maxRetries: maxTransientRetries,
           errorMessage,
           delayMs: failure.delayMs,
@@ -84,11 +78,8 @@ export class RetryEventPresenter {
         const logMessage = 'Transient upstream error exhausted WS retries, forcing HTTP fallback';
         const logFields = {
           eventType: 'retry.transport_fallback',
-          category: 'retry',
-          phase: 'retry',
           retryType: 'upstream',
           retryAttempt: 1,
-          attempt: 1,
           maxRetries: 1,
           errorMessage,
         };
@@ -107,11 +98,8 @@ export class RetryEventPresenter {
         const logMessage = 'Recoverable model error detected, retrying';
         const logFields = {
           eventType: 'retry.model_error',
-          category: 'retry',
-          phase: 'retry',
           retryType: 'hallucination',
           retryAttempt: 1,
-          attempt: 1,
           maxRetries: maxModelRetries ?? 3,
           errorMessage,
         };
@@ -131,11 +119,8 @@ export class RetryEventPresenter {
         const logMessage = 'Unknown retry decision';
         const logFields = {
           eventType: 'retry.unknown',
-          category: 'retry',
-          phase: 'retry',
           retryType: 'upstream',
           retryAttempt: 1,
-          attempt: 1,
           maxRetries: maxTransientRetries,
           errorMessage,
         };

@@ -3,29 +3,16 @@ import { z } from 'zod';
 export const LOG_CATEGORIES = ['provider', 'tool', 'stream', 'approval', 'retry', 'general'] as const;
 export type LogCategory = (typeof LOG_CATEGORIES)[number];
 
-const LOG_PHASES = [
-  'request_start',
-  'provider_response',
-  'normalization',
-  'validation',
-  'approval',
-  'execution',
-  'retry',
-  'abort',
-  'runtime',
-] as const;
-
 export const RuntimeLogSchema = z
   .object({
     timestamp: z.string().min(1),
     level: z.string().min(1),
     eventType: z.string().min(1),
-    traceId: z.string().min(1),
-    sessionId: z.string().min(1),
+    traceId: z.string().min(1).optional(),
+    sessionId: z.string().min(1).optional(),
     messageId: z.string().min(1),
-    provider: z.string().min(1),
-    model: z.string().min(1),
-    phase: z.enum(LOG_PHASES),
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
     toolName: z.string().min(1).optional(),
     toolCallId: z.string().min(1).optional(),
     retryType: z.string().min(1).optional(),
@@ -33,7 +20,6 @@ export const RuntimeLogSchema = z
     errorCode: z.string().min(1).optional(),
     errorMessage: z.string().min(1).optional(),
     payloadRef: z.string().min(1).optional(),
-    category: z.enum(LOG_CATEGORIES).optional(),
   })
   .passthrough();
 
@@ -80,13 +66,6 @@ const toNonEmptyString = (value: unknown, fallback: string): string => {
   return fallback;
 };
 
-const toPhase = (value: unknown): (typeof LOG_PHASES)[number] => {
-  if (typeof value === 'string' && (LOG_PHASES as readonly string[]).includes(value)) {
-    return value as (typeof LOG_PHASES)[number];
-  }
-  return 'runtime';
-};
-
 const buildMessageId = (meta: Record<string, unknown>): string => {
   const candidate = meta.messageId;
   if (typeof candidate === 'string' && candidate.trim()) {
@@ -106,29 +85,32 @@ export const buildRuntimeLogRecord = ({
   correlationId?: string;
   meta?: Record<string, unknown>;
 }): Record<string, unknown> => {
-  const traceCandidate = toNonEmptyString((meta.traceId as string | undefined) ?? correlationId, 'trace-unknown');
   const eventType = toNonEmptyString(meta.eventType, 'log.message');
-  const category = resolveLogCategory({ eventType, explicitCategory: meta.category });
-  const provider = toNonEmptyString(meta.provider, 'unknown');
-  const model = toNonEmptyString(meta.model, 'unknown');
+  const rawProvider = toNonEmptyString(meta.provider, 'unknown');
+  const rawModel = toNonEmptyString(meta.model, 'unknown');
+  const rawSessionId = toNonEmptyString(meta.sessionId, 'session-unknown');
+  const rawTraceId = toNonEmptyString((meta.traceId as string | undefined) ?? correlationId, 'trace-unknown');
 
   const record: Record<string, unknown> = {
     ...meta,
     timestamp: timestamp ?? new Date().toISOString(),
     level,
     eventType,
-    traceId: traceCandidate,
-    sessionId: toNonEmptyString(meta.sessionId, 'session-unknown'),
     messageId: buildMessageId(meta),
-    provider,
-    model,
-    phase: toPhase(meta.phase),
-    category,
   };
 
-  if (!looksLikeUuid(traceCandidate) && correlationId && looksLikeUuid(correlationId)) {
-    record.traceId = correlationId;
+  if (rawProvider !== 'unknown') record.provider = rawProvider;
+  if (rawModel !== 'unknown') record.model = rawModel;
+  if (rawSessionId !== 'session-unknown') record.sessionId = rawSessionId;
+
+  let finalTrace = rawTraceId;
+  if (!looksLikeUuid(rawTraceId) && correlationId && looksLikeUuid(correlationId)) {
+    finalTrace = correlationId;
   }
+  if (finalTrace !== 'trace-unknown') record.traceId = finalTrace;
+
+  delete record.category;
+  delete record.phase;
 
   return record;
 };
@@ -226,8 +208,6 @@ export const createInvalidToolCallDiagnostic = ({
 }): Record<string, unknown> => {
   return {
     eventType: 'tool_call.parse_failed',
-    category: 'tool',
-    phase: 'validation',
     errorCode: 'INVALID_TOOL_CALL_FORMAT',
     errorMessage: 'Invalid tool call argument payload',
     toolName,

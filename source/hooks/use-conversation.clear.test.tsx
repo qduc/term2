@@ -152,9 +152,6 @@ test.serial('useConversation filters duplicate stack trace from rawEvent when lo
   const meta = loggedErrors[0];
   t.is(meta.error, 'Test error');
   t.truthy(meta.stack);
-  t.truthy(meta.rawEvent);
-  t.is(meta.rawEvent.stack, undefined);
-  t.is(meta.rawEvent.message, 'Test error');
 });
 
 test.serial('useConversation exposes transient thinking state only while hidden reasoning is active', async (t) => {

@@ -30,11 +30,8 @@ test('RetryEventPresenter handles transient retry (initial source)', (t) => {
   t.is(presentation.logMessage, 'Transient upstream error detected, retrying turn');
   t.deepEqual(presentation.logFields, {
     eventType: 'retry.transient',
-    category: 'retry',
-    phase: 'retry',
     retryType: 'upstream',
     retryAttempt: 2,
-    attempt: 2,
     maxRetries: 5,
     errorMessage: 'Upstream down',
     delayMs: 1000,
@@ -69,11 +66,8 @@ test('RetryEventPresenter handles transient retry (continuation source)', (t) =>
   t.is(presentation.logMessage, 'Transient error in continuation, retrying');
   t.deepEqual(presentation.logFields, {
     eventType: 'retry.transient',
-    category: 'retry',
-    phase: 'retry',
     retryType: 'upstream',
     retryAttempt: 3,
-    attempt: 3,
     maxRetries: 5,
     errorMessage: 'String error message',
     delayMs: 2000,
@@ -106,11 +100,8 @@ test('RetryEventPresenter handles service-tier fallback', (t) => {
   t.is(presentation.logMessage, 'Flex service tier timed out, retrying with standard service tier');
   t.deepEqual(presentation.logFields, {
     eventType: 'retry.flex_service_tier',
-    category: 'retry',
-    phase: 'retry',
     retryType: 'flex_service_tier',
     retryAttempt: 1,
-    attempt: 1,
     maxRetries: 1,
     errorMessage: 'Flex timeout',
   });
@@ -142,11 +133,8 @@ test('RetryEventPresenter handles transport downgrade', (t) => {
   t.is(presentation.logMessage, 'Transient upstream error exhausted WS retries, forcing HTTP fallback');
   t.deepEqual(presentation.logFields, {
     eventType: 'retry.transport_fallback',
-    category: 'retry',
-    phase: 'retry',
     retryType: 'upstream',
     retryAttempt: 1,
-    attempt: 1,
     maxRetries: 1,
     errorMessage: 'WS connection closed',
   });
@@ -179,11 +167,8 @@ test('RetryEventPresenter handles model retry', (t) => {
   t.is(presentation.logMessage, 'Recoverable model error detected, retrying');
   t.deepEqual(presentation.logFields, {
     eventType: 'retry.model_error',
-    category: 'retry',
-    phase: 'retry',
     retryType: 'hallucination',
     retryAttempt: 1,
-    attempt: 1,
     maxRetries: 4,
     errorMessage: 'Model hallucinated tool call',
   });

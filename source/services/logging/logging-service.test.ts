@@ -394,11 +394,11 @@ test.serial('emits canonical contract fields on logs', async (t) => {
 
   t.truthy(entry.timestamp);
   t.is(entry.eventType, 'stream.started');
-  t.truthy(entry.traceId);
   t.is(entry.sessionId, 'session-contract');
   t.is(entry.provider, 'openai');
   t.is(entry.model, 'gpt-5');
-  t.is(entry.phase, 'request_start');
+  t.false('phase' in entry, 'phase field removed');
+  t.false('category' in entry, 'category field removed');
 });
 
 test.serial('truncates base64 image data in provider.request.started', async (t) => {

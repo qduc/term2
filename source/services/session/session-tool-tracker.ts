@@ -55,6 +55,15 @@ export class SessionToolTracker {
   }
 
   /**
+   * Returns the id of the turn currently in progress, or 'turn-0' if no turn
+   * has begun yet. Exposed for the journal and logger to tag entries with a
+   * stable turn identifier that survives approval continuations.
+   */
+  getCurrentTurnId(): string {
+    return this.toolLedger.getCurrentTurnId();
+  }
+
+  /**
    * Export the current ledger state.
    */
   export(): SavedToolExecution[] {

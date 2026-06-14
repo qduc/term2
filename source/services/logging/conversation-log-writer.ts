@@ -10,7 +10,19 @@ import {
 } from './conversation-log-events.js';
 import { saveLastConversation } from '../conversation/conversation-persistence.js';
 
-const FSYNC_EVENTS = new Set<LogEvent['type']>(['user_message', 'assistant_turn', 'undo', 'session_init']);
+const FSYNC_EVENTS = new Set<LogEvent['type']>([
+  'user_message',
+  'assistant_turn',
+  'undo',
+  'session_init',
+  // Critical recovery markers. Tool lifecycle and approval boundaries must
+  // survive a crash; provider-backed journal items must not be replayed twice
+  // by the next resumed request.
+  'tool_started',
+  'tool_result',
+  'approval_required',
+  'assistant_journal_item',
+]);
 const MAX_EVENT_BYTES = 256 * 1024;
 
 export interface ConversationLogWriter {

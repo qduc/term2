@@ -331,3 +331,46 @@ test('dispatchEventToLog logs event-specific records', (t) => {
     state: { previousResponseId: null },
   });
 });
+
+test('dispatchEventToLog forwards text and reasoning deltas to the journal', (t) => {
+  const { logger } = makeLoggingService();
+  const sinkEvents: any[] = [];
+  const turnAccumulator = new TurnItemAccumulator();
+  const journalDeltas: Array<{ kind: 'text' | 'reasoning'; delta: string }> = [];
+  const conversationLogger = new ConversationLogger({
+    turnAccumulator,
+    logger,
+    getAssistantTurnState: () => ({ previousResponseId: null }),
+    getJournal: () =>
+      ({
+        recordTextDelta: (delta: string) => journalDeltas.push({ kind: 'text', delta }),
+        recordReasoningDelta: (delta: string) => journalDeltas.push({ kind: 'reasoning', delta }),
+      } as any),
+  });
+  conversationLogger.setLogSink((event) => sinkEvents.push(event));
+
+  conversationLogger.dispatchEventToLog({ type: 'reasoning_delta', delta: 'think' });
+  conversationLogger.dispatchEventToLog({ type: 'text_delta', delta: 'hi' });
+
+  t.deepEqual(journalDeltas, [
+    { kind: 'reasoning', delta: 'think' },
+    { kind: 'text', delta: 'hi' },
+  ]);
+});
+
+test('dispatchEventToLog is a no-op for the journal when no journal is registered', (t) => {
+  const { logger } = makeLoggingService();
+  const sinkEvents: any[] = [];
+  const turnAccumulator = new TurnItemAccumulator();
+  const conversationLogger = new ConversationLogger({
+    turnAccumulator,
+    logger,
+    getAssistantTurnState: () => ({ previousResponseId: null }),
+  });
+  conversationLogger.setLogSink((event) => sinkEvents.push(event));
+
+  // Should not throw.
+  conversationLogger.dispatchEventToLog({ type: 'reasoning_delta', delta: 'x' });
+  conversationLogger.dispatchEventToLog({ type: 'text_delta', delta: 'y' });
+  t.deepEqual(sinkEvents, []);
+});

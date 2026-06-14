@@ -69,6 +69,9 @@ export class ConversationService {
   setLogSink(sink: ((event: LogEvent) => void) | null): void {
     this.#logSink = sink;
     this.#bundle.conversationLogger.setLogSink(sink);
+    if (sink && this.#bundle.ensureJournal) {
+      this.#bundle.ensureJournal(sink);
+    }
   }
 
   getCurrentSnapshot(): StateSnapshot {

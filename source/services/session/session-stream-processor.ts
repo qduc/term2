@@ -5,6 +5,7 @@ import type { ConversationLogger } from '../logging/conversation-logger.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { AgentStream } from '../agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
+import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import { createStreamAccumulator, processStreamEvents, type StreamAccumulator } from '../stream-event-processor.js';
 import { extractReplaySnapshot, extractFinalizationSnapshot, type StreamReplaySnapshot } from '../stream-snapshot.js';
 import { collectDuplicateToolCallResultPairs } from '../input-surge-guard.js';
@@ -75,6 +76,8 @@ export interface SessionStreamProcessorDeps {
   conversationLogger: ConversationLogger;
   providerContinuity: ProviderContinuity;
   generationGuard: GenerationGuard;
+  /** Optional journal; when present, every raw run item is fed into it. */
+  journal?: AssistantTurnJournal;
 }
 
 export interface StreamProcessOptions {
@@ -147,6 +150,11 @@ export class SessionStreamProcessor {
                 });
               }
             }
+          });
+        },
+        onRunItem: (item) => {
+          this.deps.generationGuard.runIfCurrent(options.gen, () => {
+            this.deps.journal?.recordRunItem(item);
           });
         },
       },

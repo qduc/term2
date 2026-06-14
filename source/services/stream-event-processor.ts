@@ -68,6 +68,13 @@ export interface StreamProcessorOptions {
   onFunctionCallItem?: (item: unknown) => void;
   /** Optional durable recovery hook for provider function_call_result/output items. */
   onFunctionResultItem?: (item: unknown) => void;
+  /**
+   * Optional generic recovery hook invoked for every raw run item
+   * (`run_item_stream_event.item`). Used by the journal to capture
+   * provider-backed transcript items even when no matching
+   * function_call/result hook fires (e.g. assistant messages, reasoning).
+   */
+  onRunItem?: (item: unknown) => void;
 }
 
 export interface StreamProcessorDeps {
@@ -344,6 +351,11 @@ export async function* processStreamEvents(
       const eventItem = event?.item;
       const eventItemRecord = asRecord(eventItem);
       captureToolCallArguments(eventItem, toolCallArgumentsById);
+
+      // Generic journal hook: every raw run item (function call, tool result,
+      // assistant message, reasoning, ...) is fed into the durable journal so
+      // it can be replayed on resume after a crash.
+      opts.onRunItem?.(eventItem);
 
       const rawItem = asRecord(eventItemRecord?.rawItem) ?? eventItemRecord;
       if (getString(rawItem, 'type') === 'function_call') {

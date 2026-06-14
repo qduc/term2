@@ -68,6 +68,50 @@ interface InFlightToolCall {
   toolName: string;
 }
 
+/**
+ * Per-turn journal state collected during event application. Used to
+ * reconstruct interrupted turns (no final `assistant_turn`) and to
+ * deduplicate completed turns (final takes precedence over journal).
+ */
+interface TurnJournal {
+  /** Persisted items emitted as `assistant_journal_item`, in arrival order. */
+  items: PersistedAssistantTurnItem[];
+  /** Coalesced text fragment for the current turn, or null if none. */
+  textFragment: string | null;
+  /** Coalesced reasoning fragment for the current turn, or null if none. */
+  reasoningFragment: string | null;
+  /** Set when at least one `assistant_journal_item` event was observed. */
+  sawItem: boolean;
+  /** Set when a final `assistant_turn` event was applied for this turn. */
+  sawFinalTurn: boolean;
+  /** Set when an approval was required but never resolved this turn. */
+  approvalPending: boolean;
+  /** Set when an approval was resolved this turn. */
+  approvalResolved: boolean;
+  /** Map of callId -> toolName for `tool_started` events that lack a matching journal item. */
+  toolStartedByCall: Map<string, string>;
+  /** Map of callId -> tool name for `approval_required` events seen this turn. */
+  approvalByCall: Map<string, string>;
+  /** Last-seen approval event arguments, used when reconstructing pending approval. */
+  lastApprovalArguments?: string;
+  lastApprovalAgentName?: string;
+  /** When the turn started (set on first user_message or first tool_started). */
+  startedAt: string;
+}
+
+const createEmptyTurnJournal = (ts: string): TurnJournal => ({
+  items: [],
+  textFragment: null,
+  reasoningFragment: null,
+  sawItem: false,
+  sawFinalTurn: false,
+  approvalPending: false,
+  approvalResolved: false,
+  toolStartedByCall: new Map(),
+  approvalByCall: new Map(),
+  startedAt: ts,
+});
+
 interface ReplayState {
   id: string;
   createdAt: string;
@@ -87,6 +131,12 @@ interface ReplayState {
   trailingUserMessage: boolean;
   inFlightToolCalls: Map<string, InFlightToolCall>;
   warnings: string[];
+  /** Index of the most recent user message; the next turn's journal is keyed on the user-turn index. */
+  pendingTurnIndex: number;
+  /** Journal entries keyed by user-turn index, applied only when an `assistant_turn` is not present. */
+  pendingJournals: Map<number, TurnJournal>;
+  /** Command messages added during streaming that may overlap with journal tool results. */
+  pendingCommandMessages: SavedMessage[];
 }
 
 const makeHistoryItemForToolCall = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>): unknown => {
@@ -100,6 +150,23 @@ const makeHistoryItemForToolCall = (item: Extract<PersistedAssistantTurnItem, { 
     name: item.toolName,
     arguments: item.arguments,
   };
+};
+
+/**
+ * Returns the journal slot for the current user turn, allocating it on
+ * first use. Journals are keyed by the number of user messages seen so
+ * far so an `assistant_turn` for turn N correlates with journal entries
+ * that arrived between user message N and (N+1).
+ */
+const getOrCreateJournal = (state: ReplayState, ts: string): TurnJournal => {
+  const userTurnCount = state.messages.filter((message) => message.sender === 'user').length;
+  state.pendingTurnIndex = userTurnCount;
+  let journal = state.pendingJournals.get(userTurnCount);
+  if (!journal) {
+    journal = createEmptyTurnJournal(ts);
+    state.pendingJournals.set(userTurnCount, journal);
+  }
+  return journal;
 };
 
 const makeHistoryItemForToolResult = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_result' }>): unknown => {
@@ -424,6 +491,22 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       });
       return;
     }
+    case 'assistant_journal_delta': {
+      const journal = getOrCreateJournal(state, ts);
+      // Coalesce same-kind fragments; the latest delta wins for that kind.
+      if (event.kind === 'text') {
+        journal.textFragment = (journal.textFragment ?? '') + event.delta;
+      } else {
+        journal.reasoningFragment = (journal.reasoningFragment ?? '') + event.delta;
+      }
+      return;
+    }
+    case 'assistant_journal_item': {
+      const journal = getOrCreateJournal(state, ts);
+      journal.sawItem = true;
+      journal.items.push(cloneValue(event.item));
+      return;
+    }
     case 'tool_started': {
       state.inFlightToolCalls.set(event.toolCallId, { callId: event.toolCallId, toolName: event.toolName });
       const existing = state.toolLedger.find((e) => e.callId === event.toolCallId);
@@ -437,6 +520,8 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
           startedAt: ts,
         });
       }
+      const journal = getOrCreateJournal(state, ts);
+      journal.toolStartedByCall.set(event.toolCallId, event.toolName);
       return;
     }
     case 'tool_result': {
@@ -461,7 +546,11 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       return;
     }
     case 'command_message': {
-      state.messages.push(cloneMessage(event.message as unknown as SavedMessage));
+      // Record for dedup: a `command_message` may be a poorer rendering of a
+      // `tool_result` event the journal will later also reconstruct.
+      const msg = event.message as unknown as SavedMessage;
+      state.pendingCommandMessages.push(cloneMessage(msg));
+      state.messages.push(cloneMessage(msg));
       return;
     }
     case 'approval_required': {
@@ -469,9 +558,19 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       if (callId && !state.inFlightToolCalls.has(callId)) {
         state.inFlightToolCalls.set(callId, { callId, toolName: event.approval.toolName });
       }
+      const journal = getOrCreateJournal(state, ts);
+      journal.approvalPending = true;
+      if (callId) {
+        journal.approvalByCall.set(callId, event.approval.toolName);
+      }
+      journal.lastApprovalArguments = event.approval.argumentsText;
+      journal.lastApprovalAgentName = event.approval.agentName;
       return;
     }
     case 'approval_resolved': {
+      const journal = getOrCreateJournal(state, ts);
+      journal.approvalResolved = true;
+      journal.approvalPending = false;
       return;
     }
     case 'subagent_started': {
@@ -553,6 +652,13 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       state.snapshotProvider = compactState.provider ?? state.snapshotProvider;
       state.trailingUserMessage = false;
       state.inFlightToolCalls.clear();
+      // Mark the journal as finalized for this turn; any items already
+      // recorded are dropped in favor of the authoritative assistant_turn
+      // transcript (deduplication rule from the plan).
+      const finalizedJournal = state.pendingJournals.get(state.pendingTurnIndex);
+      if (finalizedJournal) {
+        finalizedJournal.sawFinalTurn = true;
+      }
       return;
     }
     case 'undo': {
@@ -583,6 +689,259 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
   }
 }
 
+/**
+ * Reconstructs saved messages and history items for any turn that did not
+ * produce a final `assistant_turn` event. Each pending journal either:
+ * - contributed at least one provider-backed item (preferred), or
+ * - contributed only text/reasoning fragments (fallback).
+ *
+ * Dedup rules (per the plan):
+ * - Provider-backed `assistant_journal_item` items win over fragment-only deltas.
+ * - Finalized `assistant_turn` already cleared `sawFinalTurn`, so we never
+ *   double-apply.
+ * - Command messages added during streaming that overlap with a journal tool
+ *   result for the same callId are dropped in favor of the richer persisted
+ *   shape.
+ */
+function applyInterruptedTurnJournals(state: ReplayState): void {
+  if (state.pendingJournals.size === 0) {
+    return;
+  }
+  for (const [turnIndex, journal] of state.pendingJournals) {
+    if (journal.sawFinalTurn) {
+      continue;
+    }
+    if (journal.items.length === 0 && !journal.textFragment && !journal.reasoningFragment) {
+      continue;
+    }
+
+    const turnId = `journal-turn-${turnIndex}-${journal.startedAt}`;
+    const newMessages = buildMessagesFromJournal(journal, turnId);
+    if (newMessages.length === 0) {
+      continue;
+    }
+
+    // Find the position right after the corresponding user message; if the
+    // user message was the last entry we already added during event
+    // application, splice after that. Otherwise, append to the end.
+    const userIndices: number[] = [];
+    for (let i = 0; i < state.messages.length; i++) {
+      if (state.messages[i].sender === 'user') {
+        userIndices.push(i);
+      }
+    }
+    const insertAfterIndex = userIndices[turnIndex - 1];
+    if (insertAfterIndex !== undefined) {
+      state.messages.splice(insertAfterIndex + 1, 0, ...newMessages);
+    } else {
+      for (const m of newMessages) {
+        state.messages.push(m);
+      }
+    }
+
+    // Drop any pre-existing `command_message` entries for these callIds
+    // because the journal we just applied produced richer versions of
+    // the same tool. The newly inserted messages live in a contiguous
+    // range right after the user message; everything before that range
+    // is a candidate for filtering.
+    const richerCallIds = new Set<string>();
+    for (const item of journal.items) {
+      if (item.type === 'tool_result') {
+        richerCallIds.add(item.callId);
+      }
+    }
+    if (richerCallIds.size > 0 && insertAfterIndex !== undefined) {
+      const dropBefore = insertAfterIndex + 1 + newMessages.length;
+      state.messages = state.messages.filter((message, index) => {
+        if (index < dropBefore) {
+          return true;
+        }
+        if (message.sender === 'command' && typeof (message as any).callId === 'string') {
+          return !richerCallIds.has((message as any).callId);
+        }
+        return true;
+      });
+    }
+
+    // Append corresponding history items (tool call / tool result) so the
+    // next resumed request sees them. Also rehydrate the tool ledger so
+    // existing recovery semantics keep working.
+    for (const item of journal.items) {
+      if (item.type === 'tool_call') {
+        const historyItem = makeHistoryItemForToolCall(item);
+        if (historyItem != null) {
+          state.history.push(historyItem as AgentInputItem);
+        }
+        let existing = state.toolLedger.find((entry) => entry.callId === item.callId);
+        if (!existing) {
+          state.toolLedger.push({
+            turnId: `turn-${turnIndex}`,
+            callId: item.callId,
+            toolName: item.toolName,
+            arguments: item.arguments,
+            status: 'started',
+            startedAt: journal.startedAt,
+            historyItems: [historyItem].filter(Boolean) as unknown[],
+          });
+        }
+      } else if (item.type === 'tool_result') {
+        const historyItem = makeHistoryItemForToolResult(item);
+        if (historyItem != null) {
+          state.history.push(historyItem as AgentInputItem);
+        }
+        let existing = state.toolLedger.find((entry) => entry.callId === item.callId);
+        if (!existing) {
+          existing = {
+            turnId: `turn-${turnIndex}`,
+            callId: item.callId,
+            toolName: item.toolName,
+            status: 'started',
+            startedAt: journal.startedAt,
+          };
+          state.toolLedger.push(existing);
+        }
+        existing.status = item.status;
+        existing.output = item.output;
+        existing.completedAt = journal.startedAt;
+        const callHistoryItem = existing.historyItems?.find((historyItem) => {
+          const record =
+            historyItem && typeof historyItem === 'object' ? (historyItem as Record<string, unknown>) : null;
+          return record?.type === 'function_call';
+        });
+        existing.historyItems = callHistoryItem
+          ? ([callHistoryItem, historyItem].filter(Boolean) as unknown[])
+          : ([historyItem].filter(Boolean) as unknown[]);
+      }
+    }
+    if (journal.reasoningFragment) {
+      state.history.push({
+        type: 'reasoning',
+        content: [{ type: 'reasoning_text', text: journal.reasoningFragment }],
+        rawContent: [{ type: 'reasoning_text', text: journal.reasoningFragment }],
+      } as unknown as AgentInputItem);
+    }
+    if (journal.textFragment) {
+      state.history.push({
+        role: 'assistant',
+        type: 'message',
+        status: 'completed',
+        content: [{ type: 'output_text', text: journal.textFragment }],
+      } as AgentInputItem);
+    }
+  }
+}
+
+/**
+ * Builds the SavedMessage list for a single journal turn. Mirrors the
+ * rendering used by `replayAssistantTurn` so the UI sees the same shapes.
+ */
+function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMessage[] {
+  const messages: SavedMessage[] = [];
+  let index = 0;
+  const items = journal.items;
+
+  for (const item of items) {
+    if (item.type === 'reasoning') {
+      messages.push({
+        id: `reasoning-${turnId}-${index++}`,
+        sender: 'reasoning',
+        status: 'finalized',
+        text: item.text,
+      });
+      continue;
+    }
+    if (item.type === 'assistant_text') {
+      messages.push({
+        id: `bot-${turnId}-${index++}`,
+        sender: 'bot',
+        status: 'finalized',
+        text: item.text,
+      });
+      continue;
+    }
+    if (item.type === 'tool_call') {
+      const parsedArgs: unknown =
+        typeof item.arguments === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(item.arguments);
+              } catch {
+                return item.arguments;
+              }
+            })()
+          : item.arguments;
+      const command =
+        typeof parsedArgs === 'object' && parsedArgs !== null
+          ? (parsedArgs as Record<string, unknown>).command ??
+            (parsedArgs as Record<string, unknown>).question ??
+            (parsedArgs as Record<string, unknown>).pattern ??
+            (parsedArgs as Record<string, unknown>).query ??
+            (parsedArgs as Record<string, unknown>).path ??
+            (parsedArgs as Record<string, unknown>).task ??
+            ''
+          : typeof parsedArgs === 'string'
+          ? parsedArgs
+          : '';
+      messages.push({
+        id: `command-${item.callId}`,
+        sender: 'command',
+        status: 'running',
+        command: command || item.toolName,
+        output: '',
+        toolName: item.toolName,
+        toolArgs: parsedArgs,
+        callId: item.callId,
+      } as SavedMessage);
+      continue;
+    }
+    if (item.type === 'tool_result') {
+      const existing = messages.find((m) => m.sender === 'command' && m.callId === item.callId);
+      if (existing) {
+        existing.status = item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed';
+        existing.output = typeof item.output === 'string' ? item.output : JSON.stringify(item.output);
+        if (item.status === 'failed') {
+          existing.success = false;
+        } else if (item.status === 'completed') {
+          existing.success = true;
+        }
+      } else {
+        messages.push({
+          id: `command-${item.callId}`,
+          sender: 'command',
+          status: item.status === 'failed' || item.status === 'aborted' ? item.status : 'completed',
+          command: item.toolName,
+          output: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
+          success: item.status === 'completed',
+          toolName: item.toolName,
+          callId: item.callId,
+        } as SavedMessage);
+      }
+    }
+  }
+
+  // Fallback for fragment-only journals.
+  if (items.length === 0) {
+    if (journal.reasoningFragment) {
+      messages.push({
+        id: `reasoning-${turnId}-${index++}`,
+        sender: 'reasoning',
+        status: 'finalized',
+        text: journal.reasoningFragment,
+      });
+    }
+    if (journal.textFragment) {
+      messages.push({
+        id: `bot-${turnId}-${index++}`,
+        sender: 'bot',
+        status: 'finalized',
+        text: journal.textFragment,
+      });
+    }
+  }
+
+  return messages;
+}
+
 export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
   const usage = createUsageAccumulator();
   const subagentUsage = createUsageAccumulator();
@@ -596,6 +955,9 @@ export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
     trailingUserMessage: false,
     inFlightToolCalls: new Map(),
     warnings: [],
+    pendingTurnIndex: 0,
+    pendingJournals: new Map(),
+    pendingCommandMessages: [],
   };
 
   for (const envelope of envelopes) {
@@ -608,6 +970,11 @@ export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
     }
     applyEvent(state, envelope.event, envelope.ts);
   }
+
+  // Reconstruct transcript / ledger for any turn that did not produce a
+  // finalized `assistant_turn` event. This covers the crash-after-streaming
+  // and crash-after-partial-text cases called out in the plan.
+  applyInterruptedTurnJournals(state);
 
   // Mid-turn crash handling
   if (state.trailingUserMessage || state.inFlightToolCalls.size > 0) {

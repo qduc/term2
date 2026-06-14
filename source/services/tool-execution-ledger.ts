@@ -175,6 +175,15 @@ export class ToolExecutionLedger {
     return this.#currentTurnId;
   }
 
+  /**
+   * Returns the id of the turn currently in progress, or 'turn-0' if no turn
+   * has begun yet. Used by the journal and logger to tag entries with a stable
+   * turn identifier that survives approval continuations.
+   */
+  getCurrentTurnId(): string {
+    return this.#currentTurnId;
+  }
+
   import(entries: readonly SavedToolExecution[] | undefined): void {
     this.#entries = Array.isArray(entries) ? clone(entries) : [];
     this.#turnCounter = this.#entries.length;

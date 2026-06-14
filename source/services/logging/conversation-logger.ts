@@ -7,6 +7,7 @@ import type {
   PersistedAssistantTurnItem,
 } from '../conversation/conversation-persistence-types.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
+import type { AssistantTurnJournal } from './assistant-turn-journal.js';
 
 export class ConversationLogger {
   private logSink: ((event: LogEvent) => void) | null = null;
@@ -14,17 +15,20 @@ export class ConversationLogger {
   private logger: ILoggingService;
   private getAssistantTurnState: () => AssistantTurnState;
   private getToolLedger?: () => SavedToolExecution[];
+  private getJournal?: () => AssistantTurnJournal | undefined;
 
   constructor(opts: {
     turnAccumulator: TurnItemAccumulator;
     logger: ILoggingService;
     getAssistantTurnState: () => AssistantTurnState;
     getToolLedger?: () => SavedToolExecution[];
+    getJournal?: () => AssistantTurnJournal | undefined;
   }) {
     this.turnAccumulator = opts.turnAccumulator;
     this.logger = opts.logger;
     this.getAssistantTurnState = opts.getAssistantTurnState;
     this.getToolLedger = opts.getToolLedger;
+    this.getJournal = opts.getJournal;
   }
 
   setLogSink(sink: ((event: LogEvent) => void) | null): void {
@@ -50,6 +54,7 @@ export class ConversationLogger {
 
   dispatchEventToLog(event: ConversationEvent): void {
     if (!this.logSink) return;
+    const journal = this.getJournal?.();
     switch (event.type) {
       case 'usage_update':
         this.turnAccumulator.setDisplayUsage(event.usage);
@@ -59,12 +64,14 @@ export class ConversationLogger {
           this.turnAccumulator.flushReasoningItem();
         }
         this.turnAccumulator.appendTextDelta(event.delta);
+        journal?.recordTextDelta(event.delta);
         return;
       case 'reasoning_delta':
         if (this.turnAccumulator.hasTextBuffer()) {
           this.turnAccumulator.flushAssistantTextItem();
         }
         this.turnAccumulator.appendReasoningDelta(event.delta);
+        journal?.recordReasoningDelta(event.delta);
         return;
       case 'tool_started':
         this.turnAccumulator.recordToolCallItem(event.toolCallId, event.toolName, event.arguments);

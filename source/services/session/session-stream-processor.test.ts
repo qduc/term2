@@ -456,3 +456,121 @@ test('SessionStreamProcessor.finalize() - interrupted stream returns partial, up
   t.is(providerContinuity.previousResponseId, 'resp-123');
   t.is(conversationStore.getHistory().length, 0); // Should not commit history
 });
+
+test('SessionStreamProcessor.process() feeds every raw run item into the journal', async (t) => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const conversationLogger = { hasSink: () => false } as unknown as ConversationLogger;
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+  const token = generationGuard.capture();
+
+  const journalItems: unknown[] = [];
+  const journal = {
+    recordRunItem: (item: unknown) => {
+      journalItems.push(item);
+    },
+  } as any;
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    providerContinuity,
+    generationGuard,
+    journal,
+  });
+
+  const stream = makeStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' },
+      },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: { type: 'function_call_result', callId: 'call-1', name: 'shell', output: 'ok' },
+      },
+    },
+  ]);
+
+  for await (const _ of processor.process(stream, {
+    gen: token,
+    source: 'continueRunStream',
+    preserveExistingToolArgs: false,
+  })) {
+    // drain
+  }
+
+  // Both raw run items should have been fed to the journal.
+  t.is(journalItems.length, 2);
+  t.is((journalItems[0] as any).rawItem.type, 'function_call');
+  t.is((journalItems[1] as any).rawItem.type, 'function_call_result');
+});
+
+test('SessionStreamProcessor.process() drops journal writes after generation invalidation', async (t) => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+  const conversationLogger = { hasSink: () => false } as unknown as ConversationLogger;
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+
+  const journalItems: unknown[] = [];
+  const journal = {
+    recordRunItem: (item: unknown) => {
+      journalItems.push(item);
+    },
+  } as any;
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    providerContinuity,
+    generationGuard,
+    journal,
+  });
+
+  const token = generationGuard.capture();
+  const stream = makeStream([
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' },
+      },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: { type: 'function_call_result', callId: 'call-1', name: 'shell', output: 'ok' },
+      },
+    },
+  ]);
+
+  const generator = processor.process(stream, {
+    gen: token,
+    source: 'continueRunStream',
+    preserveExistingToolArgs: false,
+  });
+
+  // Drain the first event (tool_started).
+  await generator.next();
+  // Invalidate the generation so subsequent journal writes are dropped.
+  generationGuard.invalidate();
+  // Drain the rest. The second run_item_stream_event is processed after
+  // invalidation and must not be fed to the journal.
+  while (true) {
+    const r = await generator.next();
+    if (r.done) break;
+  }
+
+  // Only the first raw item was committed to the journal; the second was dropped.
+  t.is(journalItems.length, 1);
+  t.is((journalItems[0] as any).rawItem.type, 'function_call');
+});

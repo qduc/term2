@@ -7,7 +7,7 @@ import { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resol
 import { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import { SessionToolTracker } from './session-tool-tracker.js';
 import { ConversationLogger } from '../logging/conversation-logger.js';
-import type { AssistantTurnState } from '../logging/conversation-log-events.js';
+import type { AssistantTurnState, LogEvent } from '../logging/conversation-log-events.js';
 import type {
   AskUserAnswerSink,
   ConversationAgentClient,
@@ -36,6 +36,7 @@ import { TurnAttemptFactory } from './turn-attempt-factory.js';
 import { InitialInputPreparer } from './initial-input-preparer.js';
 import { InitialStreamCycle } from './initial-stream-cycle.js';
 import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
+import { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -93,6 +94,11 @@ export type ConversationSessionComposition = {
   turnAccumulator: TurnItemAccumulator;
   initialTurnRunner: InitialTurnRunner;
   freshStartRetriesAllowed: boolean;
+  /**
+   * Lazily constructs the assistant turn journal once a log sink is
+   * available. Idempotent: subsequent calls return the same journal.
+   */
+  ensureJournal: (sink: (event: LogEvent) => void) => AssistantTurnJournal;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -128,6 +134,7 @@ export type ConversationSessionBundle = Pick<
   | 'toolTracker'
   | 'inputPlanner'
   | 'dispose'
+  | 'ensureJournal'
 >;
 
 // ── Composition factory ───────────────────────────────────────────
@@ -189,6 +196,8 @@ export function createConversationSessionComposition(
     providerContinuity,
   });
 
+  let journal: AssistantTurnJournal | null = null;
+
   const conversationLogger = new ConversationLogger({
     turnAccumulator: resolvedTurnAccumulator,
     logger,
@@ -203,6 +212,7 @@ export function createConversationSessionComposition(
       } satisfies AssistantTurnState;
     },
     getToolLedger: () => toolTracker.export(),
+    getJournal: () => journal ?? undefined,
   });
 
   const approvalFlow = new ApprovalFlowCoordinator({
@@ -237,6 +247,9 @@ export function createConversationSessionComposition(
     conversationLogger,
     providerContinuity,
     generationGuard,
+    get journal(): AssistantTurnJournal | undefined {
+      return journal ?? undefined;
+    },
   });
 
   const breakChaining = (): void => {
@@ -383,6 +396,26 @@ export function createConversationSessionComposition(
     inputPlanner,
   });
 
+  const ensureJournal = (sink: (event: LogEvent) => void): AssistantTurnJournal => {
+    if (!journal) {
+      journal = new AssistantTurnJournal({
+        getCurrentTurnId: () => toolTracker.getCurrentTurnId(),
+        sink: (event) => {
+          try {
+            sink(event);
+          } catch (err) {
+            logger.warn('Journal sink threw', {
+              eventType: 'conversation_log.sink_failed',
+              category: 'persistence',
+              errorMessage: err instanceof Error ? err.message : String(err),
+            });
+          }
+        },
+      });
+    }
+    return journal;
+  };
+
   const runtimeController = new SessionRuntimeController({
     agentClient,
     state,
@@ -445,6 +478,7 @@ export function createConversationSessionComposition(
     turnAccumulator: resolvedTurnAccumulator,
     initialTurnRunner,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
+    ensureJournal,
   };
 }
 

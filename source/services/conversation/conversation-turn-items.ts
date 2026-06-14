@@ -285,6 +285,69 @@ const pushToolResultItem = (target: PersistedAssistantTurnItem[], item: unknown)
   target.push(toolResultItem);
 };
 
+/**
+ * Normalize a single raw provider run item into zero or more persisted item
+ * shapes. Returns an empty array if the item is not a recognized
+ * assistant-produced shape.
+ *
+ * The push helpers may produce multiple items (e.g. a reasoning fragment
+ * followed by an assistant message or tool call), so callers that need the
+ * full set should use this instead of `buildPersistedAssistantItemFromRaw`.
+ */
+export function buildPersistedAssistantItemsFromRaw(item: unknown): PersistedAssistantTurnItem[] {
+  const raw = rawItem(item);
+  if (!raw) {
+    return [];
+  }
+
+  const role = getString(raw.role);
+  const type = getString(raw.type) ?? '';
+
+  if (type === 'reasoning') {
+    const reasoningItem = makeReasoningItem(item);
+    return reasoningItem ? [reasoningItem] : [];
+  }
+
+  if (role === 'assistant' && type === 'message') {
+    const target: PersistedAssistantTurnItem[] = [];
+    pushAssistantMessageItems(target, item);
+    return target;
+  }
+
+  if (type === 'function_call' || type === 'apply_patch_call') {
+    const target: PersistedAssistantTurnItem[] = [];
+    pushToolCallItem(target, item);
+    return target;
+  }
+
+  if (
+    type === 'function_call_result' ||
+    type === 'function_call_output' ||
+    type === 'function_call_output_result' ||
+    type === 'tool_call_output_item' ||
+    type === 'apply_patch_call_output'
+  ) {
+    const target: PersistedAssistantTurnItem[] = [];
+    pushToolResultItem(target, item);
+    return target;
+  }
+
+  return [];
+}
+
+/**
+ * Normalize a single raw provider run item into a persisted item shape.
+ * Returns `null` if the item is not a recognized assistant-produced shape
+ * (tool call, tool result, assistant message, or reasoning).
+ *
+ * When the raw item maps to multiple persisted items (e.g. reasoning +
+ * text), only the first is returned. Prefer `buildPersistedAssistantItemsFromRaw`
+ * when you need the full set.
+ */
+export function buildPersistedAssistantItemFromRaw(item: unknown): PersistedAssistantTurnItem | null {
+  return buildPersistedAssistantItemsFromRaw(item)[0] ?? null;
+}
+
 export function buildPersistedAssistantTurnItems(items: readonly unknown[] | undefined): PersistedAssistantTurnItem[] {
   if (!Array.isArray(items) || items.length === 0) {
     return [];

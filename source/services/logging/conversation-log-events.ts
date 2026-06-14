@@ -7,6 +7,7 @@ import type {
   SavedAppMode,
   SavedMessage,
   PersistedAssistantTurn,
+  PersistedAssistantTurnItem,
 } from '../conversation/conversation-persistence-types.js';
 
 export const LOG_ENVELOPE_VERSION = 3;
@@ -86,6 +87,37 @@ export interface ApprovalResolvedLogEvent {
   rejectionReason?: string;
 }
 
+/**
+ * Streaming fragment of assistant output (text or reasoning) that has not yet
+ * been materialized as a durable persisted item. These entries are intentionally
+ * non-critical (no fsync) so we can keep per-token write cost down while still
+ * surviving a crash with at-most-fragment granularity.
+ */
+export interface AssistantJournalDeltaLogEvent {
+  type: 'assistant_journal_delta';
+  turnId: string;
+  /** Per-turn monotonic sequence number; resets when a new turn begins. */
+  seq: number;
+  /** 'text' for assistant text, 'reasoning' for reasoning fragments. */
+  kind: 'text' | 'reasoning';
+  delta: string;
+}
+
+/**
+ * Durable provider-backed item that has materialized during streaming. These
+ * entries ARE critical recovery events: the next resumed request must not see
+ * them again from the provider, so we fsync them and use them as the preferred
+ * transcript source for any interrupted turn.
+ */
+export interface AssistantJournalItemLogEvent {
+  type: 'assistant_journal_item';
+  turnId: string;
+  /** Per-turn monotonic sequence number; resets when a new turn begins. */
+  seq: number;
+  /** Normalized item shape so journal replay can rehydrate the transcript. */
+  item: PersistedAssistantTurnItem;
+}
+
 export interface SubagentStartedLogEvent {
   type: 'subagent_started';
   agentId: string;
@@ -150,6 +182,8 @@ export type LogEvent =
   | SubagentCompletedLogEvent
   | ErrorLogEvent
   | AssistantTurnEvent
+  | AssistantJournalDeltaLogEvent
+  | AssistantJournalItemLogEvent
   | UndoEvent
   | SessionClearedEvent;
 

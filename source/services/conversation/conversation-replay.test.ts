@@ -970,3 +970,209 @@ test('replayEvents: assistant_turn rebuilds structured assistant history for res
     content: [{ type: 'output_text', text: 'Done.' }],
   });
 });
+
+test('replayEvents: assistant_journal_delta restores partial assistant text on crash before final', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'tell me a story' } }),
+    env({
+      type: 'assistant_journal_delta',
+      turnId: 'turn-1',
+      seq: 1,
+      kind: 'reasoning',
+      delta: 'Let me think',
+    }),
+    env({
+      type: 'assistant_journal_delta',
+      turnId: 'turn-1',
+      seq: 2,
+      kind: 'text',
+      delta: 'Once upon a time',
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  // Reasoning and assistant text fragments surface as visible messages.
+  t.true(restored.messages.some((m) => m.sender === 'reasoning' && m.text === 'Let me think'));
+  t.true(restored.messages.some((m) => m.sender === 'bot' && m.text === 'Once upon a time'));
+  // History was reconstructed from the fragments so the next resumed request can see them.
+  t.true(restored.history.some((h: any) => h.type === 'reasoning' && h.content?.[0]?.text === 'Let me think'));
+  t.true(restored.history.some((h: any) => h.role === 'assistant' && h.content?.[0]?.text === 'Once upon a time'));
+});
+
+test('replayEvents: assistant_journal_item restores history and ledger on interrupted turn', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'tool_call',
+        callId: 'call-1',
+        toolName: 'shell',
+        arguments: '{"command":"pwd"}',
+        providerItem: {
+          type: 'function_call',
+          callId: 'call-1',
+          name: 'shell',
+          arguments: '{"command":"pwd"}',
+        },
+      },
+    }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 2,
+      item: {
+        type: 'tool_result',
+        callId: 'call-1',
+        toolName: 'shell',
+        status: 'completed',
+        output: '/repo',
+        providerItem: {
+          type: 'function_call_result',
+          callId: 'call-1',
+          name: 'shell',
+          output: '/repo',
+        },
+      },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  // Tool call/result were pushed into history for the next resumed request.
+  t.true(restored.history.some((h: any) => h.type === 'function_call' && h.callId === 'call-1' && h.name === 'shell'));
+  t.true(
+    restored.history.some(
+      (h: any) => h.type === 'function_call_result' && h.callId === 'call-1' && h.output === '/repo',
+    ),
+  );
+  // The corresponding command message in the UI shows the completed output.
+  const commandMsg = restored.messages.find((m: any) => m.sender === 'command' && m.callId === 'call-1');
+  t.truthy(commandMsg);
+  t.is(commandMsg?.status, 'completed');
+  t.is(commandMsg?.output, '/repo');
+});
+
+test('replayEvents: approval_required without final turn restores open tool state', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'rm -rf /' } }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'tool_call',
+        callId: 'call-1',
+        toolName: 'shell',
+        arguments: '{"command":"rm -rf /"}',
+        providerItem: {
+          type: 'function_call',
+          callId: 'call-1',
+          name: 'shell',
+          arguments: '{"command":"rm -rf /"}',
+        },
+      },
+    }),
+    env({
+      type: 'approval_required',
+      approval: { callId: 'call-1', toolName: 'shell', argumentsText: 'rm -rf /', agentName: 'assistant' },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  // Approval is still pending -> the in-flight tool call must remain
+  // visible in the recovery state (toolLedger carries the started entry)
+  // instead of being marked aborted.
+  t.true(restored.toolLedger.length > 0);
+  t.true(restored.history.some((h: any) => h.type === 'function_call' && h.callId === 'call-1'));
+  t.is(restored.previousResponseId, null);
+});
+
+test('replayEvents: completed turn prefers assistant_turn over earlier journal fragments', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'do it' } }),
+    // Coarse journal fragments: an older draft the model streamed and replaced.
+    env({
+      type: 'assistant_journal_delta',
+      turnId: 'turn-1',
+      seq: 1,
+      kind: 'text',
+      delta: 'draft ',
+    }),
+    env({
+      type: 'assistant_journal_delta',
+      turnId: 'turn-1',
+      seq: 2,
+      kind: 'text',
+      delta: 'text',
+    }),
+    // Final assistant_turn supersedes the journal transcript.
+    env({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: 'final' }] },
+      state: { previousResponseId: 'r1' },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  // The draft "draft text" must NOT appear in messages or history; only "final" should.
+  t.false(restored.messages.some((m: any) => m.sender === 'bot' && m.text === 'draft text'));
+  t.true(restored.messages.some((m: any) => m.sender === 'bot' && m.text === 'final'));
+  t.false(restored.history.some((h: any) => h.role === 'assistant' && h.content?.[0]?.text === 'draft text'));
+});
+
+test('replayEvents: command_message tool output is deduped when a richer tool result exists', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } }),
+    // Coarse command_message emitted during streaming: "running" placeholder.
+    env({
+      type: 'command_message',
+      message: {
+        id: 'cmd-1',
+        sender: 'command',
+        status: 'running',
+        command: 'pwd',
+        output: '',
+        callId: 'call-1',
+        toolName: 'shell',
+      },
+    }),
+    // Journal tool_result with the real, richer output.
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'tool_result',
+        callId: 'call-1',
+        toolName: 'shell',
+        status: 'completed',
+        output: '/repo',
+        providerItem: {
+          type: 'function_call_result',
+          callId: 'call-1',
+          name: 'shell',
+          output: '/repo',
+        },
+      },
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  // The journal's richer tool result wins; the running placeholder is gone.
+  const commandMsgs = restored.messages.filter((m: any) => m.sender === 'command' && m.callId === 'call-1');
+  t.is(commandMsgs.length, 1);
+  t.is(commandMsgs[0].status, 'completed');
+  t.is(commandMsgs[0].output, '/repo');
+});

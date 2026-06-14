@@ -1157,3 +1157,77 @@ test.serial('ensureConversationsDir: migrated conversations are not resurrected 
     fs.rmSync(dbDir, { recursive: true, force: true });
   }
 });
+
+test.serial('writer + loadConversation: round-trips a crash-after-partial-text journal', (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'say hi' } });
+  // Simulate streamed reasoning + text deltas that landed before a crash.
+  writer.append({
+    type: 'assistant_journal_delta',
+    turnId: 'turn-1',
+    seq: 1,
+    kind: 'reasoning',
+    delta: 'think',
+  });
+  writer.append({
+    type: 'assistant_journal_delta',
+    turnId: 'turn-1',
+    seq: 2,
+    kind: 'text',
+    delta: 'hi there',
+  });
+  void writer.close();
+
+  const restored = persistenceModule.loadConversation(id);
+  t.truthy(restored);
+  t.true(restored!.messages.some((m) => m.sender === 'reasoning' && m.text === 'think'));
+  t.true(restored!.messages.some((m) => m.sender === 'bot' && m.text === 'hi there'));
+  t.is(restored!.previousResponseId, null);
+});
+
+test.serial('writer + loadConversation: round-trips a crash-after-tool-start journal', (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } });
+  writer.append({
+    type: 'assistant_journal_item',
+    turnId: 'turn-1',
+    seq: 1,
+    item: {
+      type: 'tool_call',
+      callId: 'call-1',
+      toolName: 'shell',
+      arguments: { command: 'pwd' },
+      providerItem: {
+        type: 'function_call',
+        callId: 'call-1',
+        name: 'shell',
+        arguments: JSON.stringify({ command: 'pwd' }),
+      },
+    },
+  });
+  void writer.close();
+
+  const restored = persistenceModule.loadConversation(id);
+  t.truthy(restored);
+  // Tool call survives the crash and is visible in the tool ledger.
+  t.true(restored!.toolLedger.some((e) => e.callId === 'call-1'));
+  t.true(restored!.history.some((h: any) => h.type === 'function_call' && h.callId === 'call-1'));
+});
+
+test.serial('writer + loadConversation: old logs without journal entries still load', (t) => {
+  const id = persistenceModule.generateId();
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z', model: 'gpt-4o' });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } });
+  writer.append(assistantTurn('hello', 'r1'));
+  void writer.close();
+
+  const restored = persistenceModule.loadConversation(id);
+  t.is(restored!.previousResponseId, 'r1');
+  t.is(restored!.model, 'gpt-4o');
+  t.true(restored!.messages.some((m) => m.sender === 'bot' && m.text === 'hello'));
+});

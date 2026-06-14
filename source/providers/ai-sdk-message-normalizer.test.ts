@@ -45,7 +45,7 @@ test('mergeAssistantMessages folds assistant reasoning into following assistant 
   ]);
 });
 
-test('mergeAssistantMessages drops reasoning-only assistant messages with no content or tool calls', (t) => {
+test('mergeAssistantMessages preserves reasoning-only assistant messages that still need to be replayed', (t) => {
   const messages = [
     { role: 'user', content: 'show package json' },
     {
@@ -59,6 +59,12 @@ test('mergeAssistantMessages drops reasoning-only assistant messages with no con
 
   t.deepEqual(mergeAssistantMessages(messages), [
     { role: 'user', content: 'show package json' },
+    {
+      role: 'assistant',
+      content: '',
+      reasoning_content: 'I should inspect the file.',
+      reasoning_details: [{ type: 'reasoning.text', text: 'I should inspect the file.' }],
+    },
     { role: 'user', content: 'retry after failed hallucinated tool call' },
   ]);
 });

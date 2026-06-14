@@ -46,6 +46,16 @@ function sanitizeOpenAICompatibleMessages(messages: any[]): any[] {
   });
 }
 
+function hasReasoningPayload(message: any): boolean {
+  const candidates = [message, message?.providerData, message?.provider_data].filter(Boolean);
+  return candidates.some(
+    (candidate: any) =>
+      typeof candidate.reasoning === 'string' ||
+      typeof candidate.reasoning_content === 'string' ||
+      (Array.isArray(candidate.reasoning_details) && candidate.reasoning_details.length > 0),
+  );
+}
+
 export function sanitizeResponsesApiBody(body: any): any {
   if (!body || typeof body !== 'object' || !Array.isArray(body.input)) {
     return body;
@@ -59,6 +69,10 @@ export function sanitizeResponsesApiBody(body: any): any {
 
     const isMessage = rawItem.type === 'message' || (rawItem.role && rawItem.content !== undefined);
     if (!isMessage) {
+      return true;
+    }
+
+    if (hasReasoningPayload(rawItem)) {
       return true;
     }
 

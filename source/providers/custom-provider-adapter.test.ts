@@ -45,7 +45,7 @@ test('createCustomProviderModelProvider uses native responses OpenAIProvider for
   t.true(model instanceof OpenAIResponsesModel, 'openai type must use the Responses API');
 });
 
-test('sanitizeResponsesApiBody removes empty replayed response messages', (t) => {
+test('sanitizeResponsesApiBody preserves empty replayed response messages that still carry reasoning', (t) => {
   const body = sanitizeResponsesApiBody({
     input: [
       { role: 'user', type: 'message', content: 'start' },
@@ -64,6 +64,14 @@ test('sanitizeResponsesApiBody removes empty replayed response messages', (t) =>
 
   t.deepEqual(body.input, [
     { role: 'user', type: 'message', content: 'start' },
+    {
+      role: 'assistant',
+      type: 'message',
+      content: [],
+      provider_data: {
+        reasoning_content: 'Thinking only item from provider replay.',
+      },
+    },
     { type: 'function_call', call_id: 'call_1', name: 'shell', arguments: '{}' },
     { role: 'user', type: 'message', content: [{ type: 'input_text', text: 'continue' }] },
   ]);

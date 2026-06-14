@@ -138,7 +138,7 @@ test('addCacheControlToLastTwoMessages() skips messages with no text content blo
   t.deepEqual(messages[1].content, [{ type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } }]);
 });
 
-test('buildMessagesFromRequest() omits assistant messages without content or tool calls', (t) => {
+test('buildMessagesFromRequest() preserves assistant messages that only carry reasoning metadata', (t) => {
   const messages = buildMessagesFromRequest({
     input: [
       { role: 'user', type: 'message', content: 'read package json' },
@@ -154,6 +154,10 @@ test('buildMessagesFromRequest() omits assistant messages without content or too
 
   t.deepEqual(messages, [
     { role: 'user', content: 'read package json' },
+    {
+      role: 'assistant',
+      reasoning_content: 'I should inspect the file.',
+    },
     { role: 'user', content: 'retry after failed hallucinated tool call' },
   ]);
 });

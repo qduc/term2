@@ -144,6 +144,17 @@ function hasAssistantPayload(message: any): boolean {
     return true;
   }
 
+  const candidates = [message, message?.providerData, message?.provider_data].filter(Boolean);
+  const hasReasoningPayload = candidates.some(
+    (candidate: any) =>
+      typeof candidate.reasoning === 'string' ||
+      typeof candidate.reasoning_content === 'string' ||
+      (Array.isArray(candidate.reasoning_details) && candidate.reasoning_details.length > 0),
+  );
+  if (hasReasoningPayload) {
+    return true;
+  }
+
   return message.content !== null && message.content !== undefined && message.content !== '';
 }
 

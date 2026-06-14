@@ -10,6 +10,20 @@ function hasContent(content: any): boolean {
   return content !== null && content !== undefined && content !== '';
 }
 
+function hasReasoningPayload(message: any): boolean {
+  if (message?.role !== 'assistant') {
+    return false;
+  }
+
+  const candidates = [message, message?.providerData, message?.provider_data].filter(Boolean);
+  return candidates.some(
+    (candidate: any) =>
+      typeof candidate.reasoning === 'string' ||
+      typeof candidate.reasoning_content === 'string' ||
+      (Array.isArray(candidate.reasoning_details) && candidate.reasoning_details.length > 0),
+  );
+}
+
 function hasAssistantPayload(message: any): boolean {
   if (message?.role !== 'assistant') {
     return true;
@@ -19,11 +33,15 @@ function hasAssistantPayload(message: any): boolean {
     return true;
   }
 
+  if (hasReasoningPayload(message)) {
+    return true;
+  }
+
   if (!Array.isArray(message.content)) {
     return hasContent(message.content);
   }
 
-  return message.content.some((part: any) => part?.type !== 'reasoning');
+  return message.content.length > 0;
 }
 
 function contentToParts(content: any): any[] {

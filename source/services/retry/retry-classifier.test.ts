@@ -118,7 +118,7 @@ test('classify returns unrecoverable for 400 status error', (t) => {
   t.deepEqual(result, { kind: 'unrecoverable' });
 });
 
-test('classify returns transient for previous_response_not_found websocket 400 payload', (t) => {
+test('classify returns transport_downgrade for previous_response_not_found websocket 400 payload', (t) => {
   const classifier = makeClassifier();
   const error = Object.assign(
     new Error(
@@ -127,7 +127,7 @@ test('classify returns transient for previous_response_not_found websocket 400 p
     { status: 400 },
   );
 
-  t.is(classifier.classify(baseContext({ error })).kind, 'transient');
+  t.is(classifier.classify(baseContext({ error })).kind, 'transport_downgrade');
 });
 
 test('classify leaves unrelated websocket 400 errors unrecoverable', (t) => {

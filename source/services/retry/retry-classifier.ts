@@ -1,5 +1,5 @@
 import { decideRetry } from './conversation-retry-policy.js';
-import { isRetryableTransportError } from './retry-error-classification.js';
+import { isPreviousResponseNotFoundError, isRetryableTransportError } from './retry-error-classification.js';
 import type { ClassificationContext, ClassifiedFailure } from './retry-contracts.js';
 import { extractHistoryLength } from '../stream-snapshot.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
@@ -36,6 +36,14 @@ export class DefaultRetryClassifier {
           : undefined,
         retryEvent: hallucinationDecision.retryEvent,
       };
+    }
+
+    if (isPreviousResponseNotFoundError(error)) {
+      const nextAttempt = retryCounts.transientRetryCount + 1;
+      if (nextAttempt > maxTransientRetries) {
+        return { kind: 'unrecoverable' };
+      }
+      return { kind: 'transport_downgrade' };
     }
 
     if (isRetryableTransportError(error).retryable) {

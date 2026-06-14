@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { describeError } from '../utils/error-helpers.js';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
 import type { ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
+import { isPreviousResponseNotFoundError } from '../services/retry/retry-error-classification.js';
 import { computeUpstreamRetryDelayMs } from '../services/retry/upstream-retry-policy.js';
 
 type TrafficLogger = Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId'>;
@@ -247,6 +248,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   private readonly codexPreviousResponseIds = new Map<string, string>();
   private readonly warmupSleep: (delayMs: number) => Promise<void>;
   private readonly warmupRandom: () => number;
+  #serverHistoryReuseDisabled = false;
 
   constructor(
     client: any,
@@ -463,6 +465,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   }
 
   #getRememberedCodexResponseIdForRequest(request: any): string | undefined {
+    if (this.#serverHistoryReuseDisabled) {
+      return undefined;
+    }
     const key = this.#getCodexServerHistoryKey();
     if (!key || hasGenerateFalse(request)) {
       return undefined;
@@ -527,10 +532,16 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       return;
     }
 
+    this.#serverHistoryReuseDisabled = false;
     const key = this.#getCodexServerHistoryKey();
     if (key) {
       this.codexPreviousResponseIds.set(key, responseId);
     }
+  }
+
+  #forgetCodexResponseId(): void {
+    this.#serverHistoryReuseDisabled = true;
+    this.codexPreviousResponseIds.clear();
   }
 
   #getCodexServerHistoryKey(): string | null {
@@ -554,13 +565,26 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
 
   override async getResponse(request: any): Promise<any> {
     const run = async () => {
-      const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
-      const warmupResponseId = await this.#warmupCodexUnary(preparedRequest.warmupRequest);
-      const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
+      try {
+        const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
+        const warmupResponseId = await this.#warmupCodexUnary(preparedRequest.warmupRequest);
+        const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
 
-      const response = await super.getResponse(effectiveRequest);
-      this.#rememberCodexResponseId(getResponseIdFromResponse(response));
-      return response;
+        const response = await super.getResponse(effectiveRequest);
+        this.#rememberCodexResponseId(getResponseIdFromResponse(response));
+        return response;
+      } catch (error) {
+        const message =
+          typeof error === 'string'
+            ? error
+            : error && typeof error === 'object' && 'message' in error
+            ? String((error as { message?: unknown }).message ?? '')
+            : '';
+        if (isPreviousResponseNotFoundError(error) || message.includes('previous_response_not_found')) {
+          this.#forgetCodexResponseId();
+        }
+        throw error;
+      }
     };
 
     const currentTrace = getCurrentTrace();
@@ -571,13 +595,26 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   }
 
   override async *getStreamedResponse(request: any): AsyncIterable<any> {
-    const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
-    const warmupResponseId = await this.#warmupCodexStream(preparedRequest.warmupRequest);
-    const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
+    try {
+      const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
+      const warmupResponseId = await this.#warmupCodexStream(preparedRequest.warmupRequest);
+      const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
 
-    for await (const event of super.getStreamedResponse(effectiveRequest)) {
-      this.#rememberCodexResponseId(getResponseIdFromStreamEvent(event));
-      yield event;
+      for await (const event of super.getStreamedResponse(effectiveRequest)) {
+        this.#rememberCodexResponseId(getResponseIdFromStreamEvent(event));
+        yield event;
+      }
+    } catch (error) {
+      const message =
+        typeof error === 'string'
+          ? error
+          : error && typeof error === 'object' && 'message' in error
+          ? String((error as { message?: unknown }).message ?? '')
+          : '';
+      if (isPreviousResponseNotFoundError(error) || message.includes('previous_response_not_found')) {
+        this.#forgetCodexResponseId();
+      }
+      throw error;
     }
   }
 

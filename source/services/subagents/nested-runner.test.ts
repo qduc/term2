@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { Agent, RunContext, Runner, RunState, tool as createTool } from '@openai/agents';
 import type { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents-core';
 import { z } from 'zod';
-import { NestedSubagentRunner, type CachedRoleTool } from './nested-runner.js';
+import { NestedSubagentRunner, incrementSubagentTurnCount, type CachedRoleTool } from './nested-runner.js';
 import { SubagentToolPolicy, SubagentToolFactory } from './tool-policy.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
@@ -607,4 +607,37 @@ test.serial('NestedSubagentRunner does not resume approved nested work after par
     { name: 'AbortError' },
   );
   t.false(fs.existsSync(path.join(tmpDir, 'approved.txt')));
+});
+
+test('incrementSubagentTurnCount reads turnCount from the unwrapped user context', (t) => {
+  // Regression test: the OpenAI Agents SDK passes the user context unwrapped
+  // to callModelInputFilter (see applyCallModelInputFilter in
+  // @openai/agents-core/dist/runner/conversation.js, which sets
+  // `context: context.context`). The filter must therefore read
+  // `args.context.turnCount`, not `args.context.context.turnCount`.
+  //
+  // The earlier bug accessed `args.context.context.turnCount`, which is
+  // always undefined, so turnCount never advanced and the turn-limit warning
+  // was never injected into nested subagent tool output.
+
+  const modelData = { input: [] };
+  const userContext = { turnCount: 0, maxTurns: 20 };
+
+  // The SDK calls the filter with the unwrapped user context as args.context.
+  t.is(incrementSubagentTurnCount({ context: userContext, modelData }), modelData);
+  t.is(userContext.turnCount, 1);
+
+  t.is(incrementSubagentTurnCount({ context: userContext, modelData }), modelData);
+  t.is(userContext.turnCount, 2);
+});
+
+test('incrementSubagentTurnCount is a no-op when context is missing or non-object', (t) => {
+  // Defensive: the filter must tolerate the SDK passing no context, an
+  // undefined context, or a non-object context without throwing.
+  const modelData = { input: [] };
+
+  t.is(incrementSubagentTurnCount({ context: undefined, modelData }), modelData);
+  t.is(incrementSubagentTurnCount({ context: null, modelData }), modelData);
+  t.is(incrementSubagentTurnCount({ modelData }), modelData);
+  t.is(incrementSubagentTurnCount({ context: 'not-an-object', modelData }), modelData);
 });

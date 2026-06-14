@@ -28,6 +28,25 @@ export type CachedRoleTool = {
 
 const AGENT_TOOL_ERROR_PREFIX = 'An error occurred while running the tool. Please try again. Error:';
 
+/**
+ * Increments the subagent's turn counter on every model call.
+ *
+ * The OpenAI Agents SDK invokes `callModelInputFilter` with `args.context` set
+ * to the **unwrapped** user context (see `applyCallModelInputFilter` in
+ * `@openai/agents-core/dist/runner/conversation.js`, which passes
+ * `context: context.context`). Earlier versions of this code read
+ * `args.context.context.turnCount`, which is always `undefined` and caused the
+ * counter to never advance, preventing the turn-limit warning from ever
+ * being injected into nested subagent tool output.
+ */
+export function incrementSubagentTurnCount(args: { context?: unknown; modelData: any }): any {
+  const context = args.context as { turnCount?: number } | undefined;
+  if (context && typeof context === 'object') {
+    context.turnCount = (context.turnCount ?? 0) + 1;
+  }
+  return args.modelData;
+}
+
 function parseNestedSubagentResult(raw: unknown): SubagentResult & { interrupted?: boolean } {
   const output = String(raw);
   if (output.startsWith(AGENT_TOOL_ERROR_PREFIX)) {
@@ -205,12 +224,7 @@ export class NestedSubagentRunner {
       ...(runConfig ? { runConfig } : {}),
       runOptions: {
         maxTurns: definition.maxTurns,
-        callModelInputFilter: (args: any) => {
-          if (args.context?.context) {
-            args.context.context.turnCount = (args.context.context.turnCount ?? 0) + 1;
-          }
-          return args.modelData;
-        },
+        callModelInputFilter: incrementSubagentTurnCount,
       },
       resumeState: { contextStrategy: 'merge' },
       customOutputExtractor: (completedResult: any) => {

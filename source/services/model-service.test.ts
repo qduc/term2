@@ -258,3 +258,69 @@ test('filterModels matches by id or name and limits results', (t) => {
   const fuzzy = filterModels(models, 'gpt');
   t.is(fuzzy.length, 2);
 });
+
+test.serial('fetchModels logs and throws the error with cause details if present', async (t) => {
+  const settingsService = createMockSettingsService();
+  const warnCalls: any[] = [];
+  const loggingService = {
+    warn: (msg: string, meta?: any) => {
+      warnCalls.push({ msg, meta });
+    },
+  } as any;
+
+  const errorWithCause = new Error('fetch failed', {
+    cause: new Error('connect ECONNREFUSED 127.0.0.1:443'),
+  });
+  const fakeFetch = async () => {
+    throw errorWithCause;
+  };
+
+  const err = await t.throwsAsync(
+    fetchModels(
+      {
+        settingsService,
+        loggingService,
+      },
+      'openai',
+      fakeFetch as any,
+    ),
+  );
+
+  t.is(err, errorWithCause);
+  t.is(err?.message, 'fetch failed (cause: connect ECONNREFUSED 127.0.0.1:443)');
+  t.is(warnCalls.length, 1);
+  t.is(warnCalls[0].msg, 'Failed to fetch models');
+  t.is(warnCalls[0].meta.error, 'fetch failed (cause: connect ECONNREFUSED 127.0.0.1:443)');
+});
+
+test.serial('fetchModels logs and throws the standard error message when there is no cause', async (t) => {
+  const settingsService = createMockSettingsService();
+  const warnCalls: any[] = [];
+  const loggingService = {
+    warn: (msg: string, meta?: any) => {
+      warnCalls.push({ msg, meta });
+    },
+  } as any;
+
+  const errorWithoutCause = new Error('Some standard error');
+  const fakeFetch = async () => {
+    throw errorWithoutCause;
+  };
+
+  const err = await t.throwsAsync(
+    fetchModels(
+      {
+        settingsService,
+        loggingService,
+      },
+      'openai',
+      fakeFetch as any,
+    ),
+  );
+
+  t.is(err, errorWithoutCause);
+  t.is(err?.message, 'Some standard error');
+  t.is(warnCalls.length, 1);
+  t.is(warnCalls[0].msg, 'Failed to fetch models');
+  t.is(warnCalls[0].meta.error, 'Some standard error');
+});

@@ -44,10 +44,24 @@ export async function fetchModels(
     cache.set(cacheKey, models);
     return models;
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    let detailedError = message;
+    if (error instanceof Error && error.cause) {
+      const causeMessage = error.cause instanceof Error ? error.cause.message : String(error.cause);
+      if (causeMessage && causeMessage !== message) {
+        detailedError = `${message} (cause: ${causeMessage})`;
+      }
+    }
+
     loggingService.warn('Failed to fetch models', {
       provider,
-      error: error instanceof Error ? error.message : String(error),
+      error: detailedError,
     });
+
+    if (error instanceof Error && error.cause) {
+      error.message = detailedError;
+    }
+
     throw error;
   }
 }

@@ -1,14 +1,19 @@
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
-import React, { useEffect } from 'react';
+import React, { act, useEffect } from 'react';
 import { Text } from 'ink';
 import { render } from 'ink-testing-library';
 import { InputProvider, useInputContext } from './InputContext.js';
 
 // Helper to flush asynchronous React/Ink updates
 const flushReactUpdates = async (iterations = 5) => {
-  for (let i = 0; i < iterations; i++) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
+  await act(async () => {
+    for (let i = 0; i < iterations; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  });
 };
 
 let thrownError: Error | null = null;

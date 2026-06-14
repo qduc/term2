@@ -1,3 +1,6 @@
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
 import React, { act, useEffect } from 'react';
 import { render } from 'ink-testing-library';
@@ -5,9 +8,11 @@ import { useStdin } from 'ink';
 import LargeUncachedConfirmationPrompt from './LargeUncachedConfirmationPrompt.js';
 
 const flushReactUpdates = async (iterations = 1) => {
-  for (let i = 0; i < iterations; i++) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
+  await act(async () => {
+    for (let i = 0; i < iterations; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  });
 };
 
 const useCaptureInputEmitter = (setEmitter: (emitter: any) => void) => {

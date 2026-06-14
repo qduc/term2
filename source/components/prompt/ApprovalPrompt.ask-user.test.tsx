@@ -1,5 +1,8 @@
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
-import React from 'react';
+import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import ApprovalPrompt from './ApprovalPrompt.js';
 import type { ApprovalDescriptor } from '../../contracts/conversation.js';
@@ -10,13 +13,17 @@ import {
 } from '../../tools/agent/ask-user-constants.js';
 
 const flushReactUpdates = async (iterations = 1) => {
-  for (let i = 0; i < iterations; i++) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
+  await act(async () => {
+    for (let i = 0; i < iterations; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  });
 };
 
 const writeInput = async (stdin: { write: (input: string) => void }, input: string) => {
-  stdin.write(input);
+  await act(async () => {
+    stdin.write(input);
+  });
   await flushReactUpdates(2);
 };
 

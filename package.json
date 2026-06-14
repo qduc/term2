@@ -33,7 +33,7 @@
     "start": "node dist/cli.js",
     "build": "tsc && npm run post-build",
     "dev": "tsc --watch",
-    "test": "bash -c 'DISABLE_LOGGING=1 ava --reporter=min \"$@\" | grep -v \"✔\"; exit ${PIPESTATUS[0]}' --",
+    "test": "ava --reporter=min",
     "test:verbose": "tsc && ava",
     "lint": "prettier --check .",
     "lint-fix": "prettier --write .",

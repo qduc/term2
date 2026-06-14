@@ -1,3 +1,6 @@
+// @ts-ignore
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
 import React, { useEffect, useRef, act } from 'react';
 import { render } from 'ink-testing-library';
@@ -77,13 +80,17 @@ const getCursorFromFrame = (frame: string | undefined): number | null => {
 };
 
 const flushReactUpdates = async (iterations = 1) => {
-  for (let i = 0; i < iterations; i++) {
-    await new Promise((resolve) => setImmediate(resolve));
-  }
+  await act(async () => {
+    for (let i = 0; i < iterations; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  });
 };
 
 const writeInput = async (stdin: { write: (input: string) => void }, input: string) => {
-  stdin.write(input);
+  await act(async () => {
+    stdin.write(input);
+  });
   await flushReactUpdates(2);
 };
 

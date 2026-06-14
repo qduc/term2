@@ -7,12 +7,12 @@ import { validateCommandSafety } from '../../utils/shell/command-safety/index.js
 import { logValidationError as logValidationErrorUtil } from '../../utils/shell/command-logger.js';
 import { executeShellCommand } from '../../utils/shell/execute-shell.js';
 import {
-  trimOutput,
   setTrimConfig,
   getTrimConfig,
   DEFAULT_TRIM_CONFIG,
   type OutputTrimConfig,
 } from '../../utils/output/output-trim.js';
+import { formatShellExecutionOutput } from '../../utils/shell/shell-output.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import {
@@ -198,6 +198,7 @@ export function createShellToolDefinition(deps: {
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
   rtkInstaller?: typeof ensureRtkInstalled;
+  executeShellCommandImpl?: typeof executeShellCommand;
   orchestratorMode?: boolean;
 }): ToolDefinition<ShellToolParams> {
   const {
@@ -205,6 +206,7 @@ export function createShellToolDefinition(deps: {
     settingsService,
     executionContext,
     rtkInstaller = ensureRtkInstalled,
+    executeShellCommandImpl = executeShellCommand,
     orchestratorMode = false,
   } = deps;
 
@@ -290,7 +292,7 @@ export function createShellToolDefinition(deps: {
           }
         }
 
-        const result = await executeShellCommand(commandToRun, {
+        const result = await executeShellCommandImpl(commandToRun, {
           cwd,
           timeout,
           maxBuffer: 1024 * 1024, // 1MB max buffer
@@ -332,17 +334,17 @@ export function createShellToolDefinition(deps: {
           timeoutCount: outcome.type === 'timeout' ? 1 : 0,
         });
 
-        const stdoutTrimmed = trimOutput(stdout, undefined, maxOutputLength).trimEnd();
-        const stderrTrimmed = trimOutput(stderr, undefined, maxOutputLength).trimEnd();
-        const combinedOutput = [stdoutTrimmed, stderrTrimmed].filter(Boolean).join('\n').trimEnd();
+        const formattedOutput = await formatShellExecutionOutput({
+          command: optimizedCommand,
+          cwd,
+          stdout,
+          stderr,
+          exitCode,
+          timedOut: outcome.type === 'timeout',
+          maxOutputLength,
+        });
 
-        const statusLine = outcome.type === 'timeout' ? 'timeout' : `exit ${outcome.exitCode ?? 'null'}`;
-
-        // Add helpful note when command succeeds with no output
-        const emptyOutputNote =
-          combinedOutput === '' && outcome.type === 'exit' && outcome.exitCode === 0 ? '(No output)' : '';
-
-        return [statusLine, combinedOutput, emptyOutputNote].filter(Boolean).join('\n');
+        return formattedOutput.text;
       } finally {
         if (previousCorrelationId) {
           loggingService.setCorrelationId(previousCorrelationId);

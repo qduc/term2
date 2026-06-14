@@ -35,6 +35,35 @@ function createFakeRtk(t: any): string {
   return rtkPath;
 }
 
+test.serial('shell execute appends spill-file guidance when output is truncated', async (t) => {
+  const longStdout = `${'x'.repeat(6000)}FULL-ONLY-SENTINEL${'y'.repeat(6000)}`;
+
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+    executeShellCommandImpl: async () => ({
+      stdout: longStdout,
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    }),
+  });
+
+  const output = await tool.execute({
+    command: 'demo --long-output',
+    timeout_ms: 60000,
+    max_output_length: 120,
+  });
+
+  t.true(output.includes('Full shell output saved to'));
+  t.true(
+    output.includes(
+      'Search that file for what you need instead of rerunning the command or changing the filter criteria with a `| grep` pipeline.',
+    ),
+  );
+  t.false(output.includes('FULL-ONLY-SENTINEL'));
+});
+
 test.serial('shell execute restores previous correlation id after command execution', async (t) => {
   let clearCorrelationCalls = 0;
   let currentCorrelationId: string | undefined = 'trace-parent';

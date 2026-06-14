@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
+import process from 'process';
 import type { ConversationService } from '../services/conversation/conversation-service.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { ISSHService } from '../services/service-interfaces.js';
 import { executeShellCommand } from '../utils/shell/execute-shell.js';
-import { trimOutput } from '../utils/output/output-trim.js';
+import { formatShellExecutionOutput } from '../utils/shell/shell-output.js';
 import { SHELL_CONTEXT_PREFIX } from '../services/conversation/conversation-store.js';
 
 const SHELL_MAX_BUFFER = 1024 * 1024;
@@ -110,16 +111,22 @@ export const useShellMode = ({
         cwd: sshInfo?.remoteDir,
       });
 
-      const stdoutTrimmed = trimOutput(result.stdout ?? '', undefined, maxOutputLength).trimEnd();
-      const stderrTrimmed = trimOutput(result.stderr ?? '', undefined, maxOutputLength).trimEnd();
-      const combinedOutput = [stdoutTrimmed, stderrTrimmed].filter(Boolean).join('\n').trimEnd();
+      const formattedOutput = await formatShellExecutionOutput({
+        command: commandText,
+        cwd: sshInfo?.remoteDir ?? process.cwd(),
+        stdout: result.stdout ?? '',
+        stderr: result.stderr ?? '',
+        exitCode: result.exitCode,
+        timedOut: result.timedOut,
+        maxOutputLength,
+      });
 
-      addShellMessage(commandText, combinedOutput, result.exitCode, result.timedOut);
+      addShellMessage(commandText, formattedOutput.text, result.exitCode, result.timedOut);
       setShellHistory((prev) => [
         ...prev,
         {
           command: commandText,
-          output: combinedOutput,
+          output: formattedOutput.text,
           exitCode: result.exitCode,
           timedOut: result.timedOut,
         },

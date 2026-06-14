@@ -174,6 +174,54 @@ test('wrapCodexStream keeps empty output empty when no items were streamed', asy
   t.is(completed.response.output.length, 0);
 });
 
+test('wrapCodexStream backfills function_call call_id from function_call_arguments.done event', async (t) => {
+  const expectedCallId = 'call_backfilled';
+
+  // Simulate Codex sending function_call_arguments.done with the call_id
+  // followed by output_item.done WITHOUT a call_id field.
+  const item = {
+    type: 'function_call',
+    id: 'fc_backfill',
+    name: 'shell',
+    arguments: '{}',
+    status: 'completed',
+    // NO call_id — Codex sometimes omits it here
+  };
+
+  const events = await collect(
+    wrapCodexStream(
+      makeStream([
+        {
+          type: 'response.function_call_arguments.done',
+          item_id: 'fc_backfill',
+          call_id: expectedCallId,
+          name: 'shell',
+          arguments: '{}',
+        },
+        { type: 'response.output_item.done', output_index: 0, item },
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp_backfill',
+            output: [],
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          },
+        },
+      ]),
+    ),
+  );
+
+  const completed = events.find((e: any) => e.type === 'response.completed') as any;
+  t.truthy(completed);
+  t.is(completed.response.output.length, 1);
+  t.is(
+    completed.response.output[0].call_id,
+    expectedCallId,
+    'call_id should be backfilled from function_call_arguments.done',
+  );
+  t.is(completed.response.output[0].id, 'fc_backfill');
+});
+
 test('wrapCodexStream survives a frozen response object by cloning', async (t) => {
   const item = { type: 'message', id: 'msg_frozen' };
   const frozenResponse = Object.freeze({ id: 'resp_f', output: [], usage: {} });

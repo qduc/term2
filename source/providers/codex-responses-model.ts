@@ -730,6 +730,11 @@ async function fetchAndReconstructUnaryResponse(
 
 export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: DiagnosticLogger): AsyncIterable<any> {
   let accumulatedItems: any[] = [];
+  // Track call_id values from function_call_arguments events keyed by item_id,
+  // since the Codex server may omit call_id on output_item.done for function_calls
+  // while still expecting it on continuation requests.
+  const itemCallIds = new Map<string, string>();
+
   for await (let event of source) {
     const type = event?.type;
     if (type === 'response.error') {
@@ -741,9 +746,37 @@ export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: Diag
       throw new Error(`Codex provider stream error: ${errMsg}`);
     }
 
+    if (
+      type === 'response.function_call_arguments.done' &&
+      typeof event.call_id === 'string' &&
+      typeof event.item_id === 'string'
+    ) {
+      // Capture the authoritative call_id from the arguments-done event.
+      itemCallIds.set(event.item_id, event.call_id);
+    }
+
     if (type === 'response.output_item.done' && event.item) {
+      const item = event.item;
+      const itemRecord = asRecord(item);
+      // If the accumulated function_call item is missing call_id, backfill it
+      // from the itemCallIds map so the SDK's convertToOutputItem picks up the
+      // correct identifier and the continuation request sends the right call_id.
+      if (
+        itemRecord?.type === 'function_call' &&
+        !stringValue(itemRecord?.call_id) &&
+        typeof itemRecord?.id === 'string'
+      ) {
+        const knownCallId = itemCallIds.get(itemRecord.id);
+        if (knownCallId) {
+          // Clone the item with the backfilled call_id.
+          event = { ...event, item: { ...itemRecord, call_id: knownCallId } };
+        }
+      }
       accumulatedItems.push(event.item);
     } else if (TERMINAL_RESPONSE_EVENT_TYPES.has(type) && event.response) {
+      // Clear the per-turn map on terminal events so we don't leak IDs across responses.
+      itemCallIds.clear();
+
       const output = event.response.output;
       const isMissingOrEmptyOutput = output === undefined || (Array.isArray(output) && output.length === 0);
       if (isMissingOrEmptyOutput && accumulatedItems.length > 0) {

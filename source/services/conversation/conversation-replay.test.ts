@@ -1058,6 +1058,54 @@ test('replayEvents: assistant_journal_item restores history and ledger on interr
   t.is(commandMsg?.output, '/repo');
 });
 
+test('replayEvents: mixed journal items and fragments preserve partial assistant output', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'tool_call',
+        callId: 'call-1',
+        toolName: 'shell',
+        arguments: '{"command":"pwd"}',
+        providerItem: {
+          type: 'function_call',
+          callId: 'call-1',
+          name: 'shell',
+          arguments: '{"command":"pwd"}',
+        },
+      },
+    }),
+    env({
+      type: 'assistant_journal_delta',
+      turnId: 'turn-1',
+      seq: 2,
+      kind: 'reasoning',
+      delta: 'checking the workspace',
+    }),
+    env({
+      type: 'assistant_journal_delta',
+      turnId: 'turn-1',
+      seq: 3,
+      kind: 'text',
+      delta: 'I found the file',
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+
+  t.true(restored.messages.some((m: any) => m.sender === 'command' && m.callId === 'call-1'));
+  t.true(restored.messages.some((m: any) => m.sender === 'reasoning' && m.text === 'checking the workspace'));
+  t.true(restored.messages.some((m: any) => m.sender === 'bot' && m.text === 'I found the file'));
+  t.true(
+    restored.history.some((h: any) => h.type === 'reasoning' && h.content?.[0]?.text === 'checking the workspace'),
+  );
+  t.true(restored.history.some((h: any) => h.role === 'assistant' && h.content?.[0]?.text === 'I found the file'));
+});
+
 test('replayEvents: approval_required without final turn restores open tool state', (t) => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),

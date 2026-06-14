@@ -90,6 +90,45 @@ test('plain success', async (t) => {
   t.is(attempt.closed, true);
 });
 
+test('a fresh user turn resets the assistant journal sequence', async (t) => {
+  const stream = new MockStream([{ type: 'response.output_text.delta', delta: 'hello response' }]);
+  stream.finalOutput = 'hello response';
+
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream() {
+      return stream;
+    },
+  };
+
+  const { runner, composition } = setupRunner(mockClient);
+  const journal = composition.ensureJournal(() => undefined);
+  let resetCalls = 0;
+  const originalReset = journal.resetForNewTurn.bind(journal);
+  journal.resetForNewTurn = () => {
+    resetCalls++;
+    return originalReset();
+  };
+
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'hello' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialLedgerSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  const it = runner.run(attempt);
+  for await (const _ of it) {
+    // drain
+  }
+
+  t.is(resetCalls, 1);
+});
+
 test('input-surge block and user-message rollback', async (t) => {
   const mockClient = {
     getProvider() {

@@ -14,6 +14,7 @@ import type { InitialInputPreparer } from './initial-input-preparer.js';
 import type { InitialStreamCycle } from './initial-stream-cycle.js';
 import type { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import type { AbortedApprovalContext } from '../approval/approval-state.js';
+import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 
 export type InitialTurnOutcome =
   | { kind: 'response'; terminal: ConversationTerminal }
@@ -45,6 +46,7 @@ export interface InitialTurnRunnerDeps {
   inputPreparer: InitialInputPreparer;
   streamCycle: InitialStreamCycle;
   recoveryHandler: InitialTurnRecoveryHandler;
+  getJournal?: () => AssistantTurnJournal | undefined;
 }
 
 export class InitialTurnRunner {
@@ -93,6 +95,7 @@ export class InitialTurnRunner {
       }
 
       this.deps.toolTracker.ledger.beginTurn();
+      this.deps.getJournal?.()?.resetForNewTurn();
 
       while (true) {
         // 1. Check generation token validity

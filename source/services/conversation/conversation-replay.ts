@@ -74,6 +74,10 @@ interface InFlightToolCall {
  * deduplicate completed turns (final takes precedence over journal).
  */
 interface TurnJournal {
+  /** Turn id from the log when available, otherwise undefined for legacy logs. */
+  turnId?: string;
+  /** User-turn ordinal used to place reconstructed output back into message order. */
+  userTurnIndex: number;
   /** Persisted items emitted as `assistant_journal_item`, in arrival order. */
   items: PersistedAssistantTurnItem[];
   /** Coalesced text fragment for the current turn, or null if none. */
@@ -99,7 +103,9 @@ interface TurnJournal {
   startedAt: string;
 }
 
-const createEmptyTurnJournal = (ts: string): TurnJournal => ({
+const createEmptyTurnJournal = (ts: string, userTurnIndex: number, turnId?: string): TurnJournal => ({
+  turnId,
+  userTurnIndex,
   items: [],
   textFragment: null,
   reasoningFragment: null,
@@ -131,10 +137,8 @@ interface ReplayState {
   trailingUserMessage: boolean;
   inFlightToolCalls: Map<string, InFlightToolCall>;
   warnings: string[];
-  /** Index of the most recent user message; the next turn's journal is keyed on the user-turn index. */
-  pendingTurnIndex: number;
-  /** Journal entries keyed by user-turn index, applied only when an `assistant_turn` is not present. */
-  pendingJournals: Map<number, TurnJournal>;
+  /** Journal entries keyed by turn id when present, otherwise by legacy user-turn index. */
+  pendingJournals: Map<string, TurnJournal>;
   /** Command messages added during streaming that may overlap with journal tool results. */
   pendingCommandMessages: SavedMessage[];
 }
@@ -158,13 +162,20 @@ const makeHistoryItemForToolCall = (item: Extract<PersistedAssistantTurnItem, { 
  * far so an `assistant_turn` for turn N correlates with journal entries
  * that arrived between user message N and (N+1).
  */
-const getOrCreateJournal = (state: ReplayState, ts: string): TurnJournal => {
+const journalKeyForEvent = (event: { turnId?: string }, state: ReplayState): string => {
+  if (typeof event.turnId === 'string' && event.turnId) {
+    return `turn:${event.turnId}`;
+  }
   const userTurnCount = state.messages.filter((message) => message.sender === 'user').length;
-  state.pendingTurnIndex = userTurnCount;
-  let journal = state.pendingJournals.get(userTurnCount);
+  return `legacy:${userTurnCount}`;
+};
+
+const getOrCreateJournal = (state: ReplayState, ts: string, key: string, turnId?: string): TurnJournal => {
+  const userTurnCount = state.messages.filter((message) => message.sender === 'user').length;
+  let journal = state.pendingJournals.get(key);
   if (!journal) {
-    journal = createEmptyTurnJournal(ts);
-    state.pendingJournals.set(userTurnCount, journal);
+    journal = createEmptyTurnJournal(ts, userTurnCount, turnId);
+    state.pendingJournals.set(key, journal);
   }
   return journal;
 };
@@ -182,7 +193,12 @@ const makeHistoryItemForToolResult = (item: Extract<PersistedAssistantTurnItem, 
   };
 };
 
-function mergeAssistantTurnIntoLedger(state: ReplayState, turn: PersistedAssistantTurn, ts: string): void {
+function mergeAssistantTurnIntoLedger(
+  state: ReplayState,
+  turn: PersistedAssistantTurn,
+  ts: string,
+  turnId?: string,
+): void {
   const calls = new Map<string, Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>>();
   for (const item of turn.items) {
     if (item.type === 'tool_call') {
@@ -190,7 +206,7 @@ function mergeAssistantTurnIntoLedger(state: ReplayState, turn: PersistedAssista
       const existing = state.toolLedger.find((entry) => entry.callId === item.callId);
       if (!existing) {
         state.toolLedger.push({
-          turnId: `turn-${state.messages.filter((message) => message.sender === 'user').length || 1}`,
+          turnId: turnId ?? `turn-${state.messages.filter((message) => message.sender === 'user').length || 1}`,
           callId: item.callId,
           toolName: item.toolName,
           arguments: item.arguments,
@@ -216,7 +232,7 @@ function mergeAssistantTurnIntoLedger(state: ReplayState, turn: PersistedAssista
     if (!existing) {
       const call = calls.get(item.callId);
       existing = {
-        turnId: `turn-${state.messages.filter((message) => message.sender === 'user').length || 1}`,
+        turnId: turnId ?? `turn-${state.messages.filter((message) => message.sender === 'user').length || 1}`,
         callId: item.callId,
         toolName: item.toolName,
         arguments: call?.arguments,
@@ -492,7 +508,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       return;
     }
     case 'assistant_journal_delta': {
-      const journal = getOrCreateJournal(state, ts);
+      const journal = getOrCreateJournal(state, ts, journalKeyForEvent(event, state), event.turnId);
       // Coalesce same-kind fragments; the latest delta wins for that kind.
       if (event.kind === 'text') {
         journal.textFragment = (journal.textFragment ?? '') + event.delta;
@@ -502,7 +518,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       return;
     }
     case 'assistant_journal_item': {
-      const journal = getOrCreateJournal(state, ts);
+      const journal = getOrCreateJournal(state, ts, journalKeyForEvent(event, state), event.turnId);
       journal.sawItem = true;
       journal.items.push(cloneValue(event.item));
       return;
@@ -512,7 +528,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       const existing = state.toolLedger.find((e) => e.callId === event.toolCallId);
       if (!existing) {
         state.toolLedger.push({
-          turnId: 'turn-interrupted',
+          turnId: event.turnId ?? 'turn-interrupted',
           callId: event.toolCallId,
           toolName: event.toolName,
           arguments: event.arguments,
@@ -520,7 +536,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
           startedAt: ts,
         });
       }
-      const journal = getOrCreateJournal(state, ts);
+      const journal = getOrCreateJournal(state, ts, journalKeyForEvent(event, state), event.turnId);
       journal.toolStartedByCall.set(event.toolCallId, event.toolName);
       return;
     }
@@ -529,7 +545,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       let existing = state.toolLedger.find((e) => e.callId === event.callId);
       if (!existing) {
         existing = {
-          turnId: 'turn-interrupted',
+          turnId: event.turnId ?? 'turn-interrupted',
           callId: event.callId,
           toolName: event.toolName,
           status: 'started',
@@ -558,7 +574,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       if (callId && !state.inFlightToolCalls.has(callId)) {
         state.inFlightToolCalls.set(callId, { callId, toolName: event.approval.toolName });
       }
-      const journal = getOrCreateJournal(state, ts);
+      const journal = getOrCreateJournal(state, ts, journalKeyForEvent(event, state), event.turnId);
       journal.approvalPending = true;
       if (callId) {
         journal.approvalByCall.set(callId, event.approval.toolName);
@@ -568,7 +584,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       return;
     }
     case 'approval_resolved': {
-      const journal = getOrCreateJournal(state, ts);
+      const journal = getOrCreateJournal(state, ts, journalKeyForEvent(event, state), event.turnId);
       journal.approvalResolved = true;
       journal.approvalPending = false;
       return;
@@ -628,6 +644,7 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
       return;
     }
     case 'assistant_turn': {
+      const currentUserTurnIndex = state.messages.filter((message) => message.sender === 'user').length;
       const lastUserIndex = state.messages.map((m) => m.sender).lastIndexOf('user');
       if (lastUserIndex !== -1) {
         state.messages = state.messages.slice(0, lastUserIndex + 1);
@@ -645,19 +662,29 @@ function applyEvent(state: ReplayState, event: LogEvent, ts: string): void {
         const snap = cloneSnapshot(event.snapshot);
         state.toolLedger = snap.toolLedger;
       } else {
-        mergeAssistantTurnIntoLedger(state, event.turn, ts);
+        mergeAssistantTurnIntoLedger(state, event.turn, ts, event.turnId);
       }
       state.previousResponseId = compactState.previousResponseId;
       state.snapshotModel = compactState.model ?? state.snapshotModel;
       state.snapshotProvider = compactState.provider ?? state.snapshotProvider;
       state.trailingUserMessage = false;
       state.inFlightToolCalls.clear();
-      // Mark the journal as finalized for this turn; any items already
+      // Mark matching journals as finalized for this turn; any items already
       // recorded are dropped in favor of the authoritative assistant_turn
-      // transcript (deduplication rule from the plan).
-      const finalizedJournal = state.pendingJournals.get(state.pendingTurnIndex);
-      if (finalizedJournal) {
-        finalizedJournal.sawFinalTurn = true;
+      // transcript (deduplication rule from the plan). We match by turn id
+      // when available and fall back to the current user-turn index for
+      // legacy logs that never stamped turn ids.
+      const exactJournalKey = typeof event.turnId === 'string' && event.turnId ? `turn:${event.turnId}` : null;
+      if (exactJournalKey) {
+        const finalizedJournal = state.pendingJournals.get(exactJournalKey);
+        if (finalizedJournal) {
+          finalizedJournal.sawFinalTurn = true;
+        }
+      }
+      for (const journal of state.pendingJournals.values()) {
+        if (journal.userTurnIndex === currentUserTurnIndex) {
+          journal.sawFinalTurn = true;
+        }
       }
       return;
     }
@@ -707,7 +734,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
   if (state.pendingJournals.size === 0) {
     return;
   }
-  for (const [turnIndex, journal] of state.pendingJournals) {
+  for (const [journalKey, journal] of state.pendingJournals) {
     if (journal.sawFinalTurn) {
       continue;
     }
@@ -715,7 +742,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
       continue;
     }
 
-    const turnId = `journal-turn-${turnIndex}-${journal.startedAt}`;
+    const turnId = `journal-${journal.turnId ?? journalKey}-${journal.startedAt}`;
     const newMessages = buildMessagesFromJournal(journal, turnId);
     if (newMessages.length === 0) {
       continue;
@@ -730,7 +757,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
         userIndices.push(i);
       }
     }
-    const insertAfterIndex = userIndices[turnIndex - 1];
+    const insertAfterIndex = userIndices[journal.userTurnIndex - 1];
     if (insertAfterIndex !== undefined) {
       state.messages.splice(insertAfterIndex + 1, 0, ...newMessages);
     } else {
@@ -775,7 +802,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
         let existing = state.toolLedger.find((entry) => entry.callId === item.callId);
         if (!existing) {
           state.toolLedger.push({
-            turnId: `turn-${turnIndex}`,
+            turnId: journal.turnId ?? `turn-${journal.userTurnIndex}`,
             callId: item.callId,
             toolName: item.toolName,
             arguments: item.arguments,
@@ -792,7 +819,7 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
         let existing = state.toolLedger.find((entry) => entry.callId === item.callId);
         if (!existing) {
           existing = {
-            turnId: `turn-${turnIndex}`,
+            turnId: journal.turnId ?? `turn-${journal.userTurnIndex}`,
             callId: item.callId,
             toolName: item.toolName,
             status: 'started',
@@ -839,9 +866,12 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
   const messages: SavedMessage[] = [];
   let index = 0;
   const items = journal.items;
+  let sawReasoningItem = false;
+  let sawAssistantTextItem = false;
 
   for (const item of items) {
     if (item.type === 'reasoning') {
+      sawReasoningItem = true;
       messages.push({
         id: `reasoning-${turnId}-${index++}`,
         sender: 'reasoning',
@@ -851,6 +881,7 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
       continue;
     }
     if (item.type === 'assistant_text') {
+      sawAssistantTextItem = true;
       messages.push({
         id: `bot-${turnId}-${index++}`,
         sender: 'bot',
@@ -919,24 +950,21 @@ function buildMessagesFromJournal(journal: TurnJournal, turnId: string): SavedMe
     }
   }
 
-  // Fallback for fragment-only journals.
-  if (items.length === 0) {
-    if (journal.reasoningFragment) {
-      messages.push({
-        id: `reasoning-${turnId}-${index++}`,
-        sender: 'reasoning',
-        status: 'finalized',
-        text: journal.reasoningFragment,
-      });
-    }
-    if (journal.textFragment) {
-      messages.push({
-        id: `bot-${turnId}-${index++}`,
-        sender: 'bot',
-        status: 'finalized',
-        text: journal.textFragment,
-      });
-    }
+  if (journal.reasoningFragment && !sawReasoningItem) {
+    messages.push({
+      id: `reasoning-${turnId}-${index++}`,
+      sender: 'reasoning',
+      status: 'finalized',
+      text: journal.reasoningFragment,
+    });
+  }
+  if (journal.textFragment && !sawAssistantTextItem) {
+    messages.push({
+      id: `bot-${turnId}-${index++}`,
+      sender: 'bot',
+      status: 'finalized',
+      text: journal.textFragment,
+    });
   }
 
   return messages;
@@ -955,7 +983,6 @@ export function replayEvents(envelopes: LogEnvelope[]): RestoredState {
     trailingUserMessage: false,
     inFlightToolCalls: new Map(),
     warnings: [],
-    pendingTurnIndex: 0,
     pendingJournals: new Map(),
     pendingCommandMessages: [],
   };

@@ -480,7 +480,7 @@ test('SessionStreamProcessor.process() feeds every raw run item into the journal
     conversationLogger,
     providerContinuity,
     generationGuard,
-    journal,
+    getJournal: () => journal,
   });
 
   const stream = makeStream([
@@ -534,7 +534,7 @@ test('SessionStreamProcessor.process() drops journal writes after generation inv
     conversationLogger,
     providerContinuity,
     generationGuard,
-    journal,
+    getJournal: () => journal,
   });
 
   const token = generationGuard.capture();

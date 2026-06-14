@@ -52,6 +52,7 @@ export interface UserMessageEvent {
 
 export interface ToolStartedLogEvent {
   type: 'tool_started';
+  turnId?: string;
   toolCallId: string;
   toolName: string;
   arguments: unknown;
@@ -59,6 +60,7 @@ export interface ToolStartedLogEvent {
 
 export interface ToolResultLogEvent {
   type: 'tool_result';
+  turnId?: string;
   callId: string;
   toolName: string;
   status: 'completed' | 'failed' | 'aborted';
@@ -73,6 +75,7 @@ export interface CommandMessageLogEvent {
 
 export interface ApprovalRequiredLogEvent {
   type: 'approval_required';
+  turnId?: string;
   approval: {
     callId?: string;
     toolName: string;
@@ -83,6 +86,7 @@ export interface ApprovalRequiredLogEvent {
 
 export interface ApprovalResolvedLogEvent {
   type: 'approval_resolved';
+  turnId?: string;
   answer: 'y' | 'n';
   rejectionReason?: string;
 }
@@ -148,6 +152,7 @@ export interface ErrorLogEvent {
 
 export interface AssistantTurnEvent {
   type: 'assistant_turn';
+  turnId?: string;
   turn: PersistedAssistantTurn;
   /** Whole-run cumulative usage for this assistant turn. */
   usage?: NormalizedUsage;

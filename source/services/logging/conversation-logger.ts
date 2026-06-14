@@ -14,6 +14,7 @@ export class ConversationLogger {
   private turnAccumulator: TurnItemAccumulator;
   private logger: ILoggingService;
   private getAssistantTurnState: () => AssistantTurnState;
+  private getCurrentTurnId?: () => string;
   private getToolLedger?: () => SavedToolExecution[];
   private getJournal?: () => AssistantTurnJournal | undefined;
 
@@ -21,12 +22,14 @@ export class ConversationLogger {
     turnAccumulator: TurnItemAccumulator;
     logger: ILoggingService;
     getAssistantTurnState: () => AssistantTurnState;
+    getCurrentTurnId?: () => string;
     getToolLedger?: () => SavedToolExecution[];
     getJournal?: () => AssistantTurnJournal | undefined;
   }) {
     this.turnAccumulator = opts.turnAccumulator;
     this.logger = opts.logger;
     this.getAssistantTurnState = opts.getAssistantTurnState;
+    this.getCurrentTurnId = opts.getCurrentTurnId;
     this.getToolLedger = opts.getToolLedger;
     this.getJournal = opts.getJournal;
   }
@@ -42,7 +45,7 @@ export class ConversationLogger {
   log(event: LogEvent): void {
     if (!this.logSink) return;
     try {
-      this.logSink(event);
+      this.logSink(this.#withTurnId(event));
     } catch (err: any) {
       this.logger.warn('Conversation log sink threw', {
         eventType: 'conversation_log.sink_failed',
@@ -196,6 +199,24 @@ export class ConversationLogger {
       }
       default:
         return;
+    }
+  }
+
+  #withTurnId(event: LogEvent): LogEvent {
+    const turnId = this.getCurrentTurnId?.();
+    if (!turnId) {
+      return event;
+    }
+
+    switch (event.type) {
+      case 'tool_started':
+      case 'tool_result':
+      case 'approval_required':
+      case 'approval_resolved':
+      case 'assistant_turn':
+        return { ...event, turnId };
+      default:
+        return event;
     }
   }
 }

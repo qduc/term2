@@ -211,6 +211,7 @@ export function createConversationSessionComposition(
         ...(provider ? { provider } : {}),
       } satisfies AssistantTurnState;
     },
+    getCurrentTurnId: () => toolTracker.getCurrentTurnId(),
     getToolLedger: () => toolTracker.export(),
     getJournal: () => journal ?? undefined,
   });
@@ -247,9 +248,7 @@ export function createConversationSessionComposition(
     conversationLogger,
     providerContinuity,
     generationGuard,
-    get journal(): AssistantTurnJournal | undefined {
-      return journal ?? undefined;
-    },
+    getJournal: () => journal ?? undefined,
   });
 
   const breakChaining = (): void => {
@@ -376,6 +375,7 @@ export function createConversationSessionComposition(
     inputPreparer,
     streamCycle,
     recoveryHandler,
+    getJournal: () => journal ?? undefined,
   });
 
   const turnCoordinator = new TurnCoordinator({

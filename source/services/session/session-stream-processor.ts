@@ -76,8 +76,8 @@ export interface SessionStreamProcessorDeps {
   conversationLogger: ConversationLogger;
   providerContinuity: ProviderContinuity;
   generationGuard: GenerationGuard;
-  /** Optional journal; when present, every raw run item is fed into it. */
-  journal?: AssistantTurnJournal;
+  /** Optional journal resolver; when present, every raw run item is fed into it. */
+  getJournal?: () => AssistantTurnJournal | undefined;
 }
 
 export interface StreamProcessOptions {
@@ -154,7 +154,7 @@ export class SessionStreamProcessor {
         },
         onRunItem: (item) => {
           this.deps.generationGuard.runIfCurrent(options.gen, () => {
-            this.deps.journal?.recordRunItem(item);
+            this.deps.getJournal?.()?.recordRunItem(item);
           });
         },
       },

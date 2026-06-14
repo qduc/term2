@@ -79,6 +79,50 @@ test('log warns when the sink throws', (t) => {
   });
 });
 
+test('log stamps the current turn id on operational events', (t) => {
+  const { logger } = makeLoggingService();
+  const sinkEvents: any[] = [];
+  const conversationLogger = new ConversationLogger({
+    turnAccumulator: new TurnItemAccumulator(),
+    logger,
+    getAssistantTurnState: () => ({ previousResponseId: null }),
+    getCurrentTurnId: () => 'turn-9',
+  });
+
+  conversationLogger.setLogSink((event) => sinkEvents.push(event));
+  conversationLogger.log({
+    type: 'tool_started',
+    toolCallId: 'call-1',
+    toolName: 'shell',
+    arguments: { command: 'pwd' },
+  });
+  conversationLogger.log({
+    type: 'tool_result',
+    callId: 'call-1',
+    toolName: 'shell',
+    status: 'completed',
+    output: 'ok',
+  });
+  conversationLogger.log({
+    type: 'approval_required',
+    approval: { toolName: 'shell', argumentsText: 'pwd', agentName: 'assistant', callId: 'call-1' },
+  });
+  conversationLogger.log({
+    type: 'approval_resolved',
+    answer: 'y',
+  });
+  conversationLogger.log({
+    type: 'assistant_turn',
+    turn: { items: [] },
+    state: { previousResponseId: null },
+  });
+
+  t.deepEqual(
+    sinkEvents.map((event) => event.turnId),
+    ['turn-9', 'turn-9', 'turn-9', 'turn-9', 'turn-9'],
+  );
+});
+
 test('dispatchEventToLog accumulates turn items and logs the final assistant turn', (t) => {
   const { logger, warnings } = makeLoggingService();
   const sinkEvents: any[] = [];

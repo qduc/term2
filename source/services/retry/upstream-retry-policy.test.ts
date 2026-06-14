@@ -1,5 +1,6 @@
 import test from 'ava';
-import { OpenAICompatibleError, OpenRouterError } from '../../providers/common/provider-errors.js';
+import { RateLimitError } from 'openai';
+import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../../providers/common/provider-errors.js';
 import {
   classifyUpstreamRetryableError,
   computeUpstreamRetryDelayMs,
@@ -97,6 +98,41 @@ test('computeUpstreamRetryDelayMs uses session attempt numbers for bounded jitte
 
   t.is(computeUpstreamRetryDelayMs({ attemptNumber: 1, random }), 450);
   t.is(computeUpstreamRetryDelayMs({ attemptNumber: 3, random }), 2200);
+});
+
+test('classifyUpstreamRetryableError marks RateLimitExceededError non-retryable', (t) => {
+  t.like(classifyUpstreamRetryableError(new LongRetryDelayError(120)), {
+    retryable: false,
+    reason: 'long-retry-delay',
+  });
+  t.like(classifyUpstreamRetryableError(new LongRetryDelayError(300)), {
+    retryable: false,
+    reason: 'long-retry-delay',
+  });
+});
+
+test('classifyUpstreamRetryableError marks RateLimitError with retry-after > 60s non-retryable', (t) => {
+  const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => '120' } as any);
+  t.like(classifyUpstreamRetryableError(err), {
+    retryable: false,
+    reason: 'long-retry-delay',
+  });
+});
+
+test('classifyUpstreamRetryableError marks RateLimitError with retry-after <= 60s retryable', (t) => {
+  const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => '30' } as any);
+  t.like(classifyUpstreamRetryableError(err), {
+    retryable: true,
+    reason: 'openai-sdk',
+  });
+});
+
+test('classifyUpstreamRetryableError marks RateLimitError without retry-after retryable', (t) => {
+  const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => null } as any);
+  t.like(classifyUpstreamRetryableError(err), {
+    retryable: true,
+    reason: 'openai-sdk',
+  });
 });
 
 test('classifyUpstreamRetryableError parses retry-after from generic error headers', (t) => {

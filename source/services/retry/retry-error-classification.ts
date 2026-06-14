@@ -1,5 +1,6 @@
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
-import { OpenAICompatibleError, OpenRouterError } from '../../providers/common/provider-errors.js';
+import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../../providers/common/provider-errors.js';
+import { getRetryAfterMs } from './upstream-retry-policy.js';
 import type { ILoggingService } from '../service-interfaces.js';
 
 export type RetryableTransportDecision = {
@@ -279,11 +280,20 @@ export const isRetryableTransportError = (
  * connection timeout) that is worth retrying automatically.
  */
 export const isTransientRetryableError = (error: unknown, logger?: Pick<ILoggingService, 'info'>): boolean => {
+  // Rate-limit with retry-after > 60s — never retry automatically
+  if (error instanceof LongRetryDelayError) {
+    return false;
+  }
+
+  if (error instanceof RateLimitError) {
+    const retryAfterMs = getRetryAfterMs(error);
+    return retryAfterMs === undefined || retryAfterMs <= 60_000;
+  }
+
   if (
     error instanceof APIConnectionError ||
     error instanceof APIConnectionTimeoutError ||
-    error instanceof InternalServerError ||
-    error instanceof RateLimitError
+    error instanceof InternalServerError
   ) {
     return true;
   }

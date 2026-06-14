@@ -1,7 +1,7 @@
 import test from 'ava';
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
 import { ModelBehaviorError } from '@openai/agents';
-import { OpenAICompatibleError, OpenRouterError } from '../../providers/common/provider-errors.js';
+import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../../providers/common/provider-errors.js';
 import {
   isNetworkProtocolError,
   isRetryableTransportError,
@@ -191,6 +191,26 @@ test('isTransientRetryableError: terminated errors are retryable', (t) => {
   t.true(isTransientRetryableError('terminated: other side closed'));
   t.true(isTransientRetryableError(new Error('terminated')));
   t.true(isTransientRetryableError(new Error('terminated: other side closed')));
+});
+
+test('isTransientRetryableError: RateLimitExceededError is never retryable', (t) => {
+  t.false(isTransientRetryableError(new LongRetryDelayError(120)));
+  t.false(isTransientRetryableError(new LongRetryDelayError(300)));
+});
+
+test('isTransientRetryableError: RateLimitError with retry-after > 60s is not retryable', (t) => {
+  const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => '120' } as any);
+  t.false(isTransientRetryableError(err));
+});
+
+test('isTransientRetryableError: RateLimitError with retry-after <= 60s is retryable', (t) => {
+  const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => '30' } as any);
+  t.true(isTransientRetryableError(err));
+});
+
+test('isTransientRetryableError: RateLimitError without retry-after is retryable', (t) => {
+  const err = new RateLimitError(429, 'rate limited', 'rate limited', { get: () => null } as any);
+  t.true(isTransientRetryableError(err));
 });
 
 test('isTransientRetryableError: non-retryable errors return false', (t) => {

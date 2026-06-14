@@ -7,7 +7,7 @@
  * user-initiated /retry command flow.
  */
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
-import { OpenAICompatibleError, OpenRouterError } from '../../providers/common/provider-errors.js';
+import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../../providers/common/provider-errors.js';
 
 export type UpstreamRetryClassification = {
   retryable: boolean;
@@ -81,11 +81,28 @@ export const getRetryAfterMs = (source: unknown): number | undefined => {
 };
 
 export function classifyUpstreamRetryableError(error: unknown): UpstreamRetryClassification {
+  if (error instanceof LongRetryDelayError) {
+    // Retry-after > 60s — don't retry, the user would wait too long
+    return { retryable: false, reason: 'long-retry-delay' };
+  }
+
+  if (error instanceof RateLimitError) {
+    const retryAfterMs = getRetryAfterMs(error);
+    if (retryAfterMs !== undefined && retryAfterMs > 60_000) {
+      return { retryable: false, retryAfterMs, reason: 'long-retry-delay' };
+    }
+    return {
+      retryable: true,
+      status: parseStatus((error as any).status),
+      retryAfterMs,
+      reason: 'openai-sdk',
+    };
+  }
+
   if (
     error instanceof APIConnectionError ||
     error instanceof APIConnectionTimeoutError ||
-    error instanceof InternalServerError ||
-    error instanceof RateLimitError
+    error instanceof InternalServerError
   ) {
     return {
       retryable: true,

@@ -2,6 +2,8 @@ import test from 'ava';
 import { composeFetch, FetchMiddleware } from './compose.js';
 import { createLoggingMiddleware, CreateLoggingMiddlewareOptions } from './logging-middleware.js';
 import { createProviderFetch } from './composer.js';
+import { createRateLimitMiddleware } from './rate-limit-middleware.js';
+
 import type { ISessionContextService } from '../../services/service-interfaces.js';
 
 // ---------------------------------------------------------------------------
@@ -91,6 +93,136 @@ test('composeFetch propagates error from baseFetch', async (t) => {
   await t.throwsAsync(() => composed('https://example.test/'), {
     message: 'base fetch error',
   });
+});
+
+// ---------------------------------------------------------------------------
+// createRateLimitMiddleware tests
+// ---------------------------------------------------------------------------
+
+test('createRateLimitMiddleware passes through non-429 responses', async (t) => {
+  const middleware = createRateLimitMiddleware();
+
+  const baseFetch: typeof fetch = async () => new Response('ok', { status: 200 });
+  const composed = composeFetch(baseFetch, [middleware]);
+
+  const res = await composed('https://example.test/');
+  t.is(res.status, 200);
+  t.is(await res.text(), 'ok');
+});
+
+test('createRateLimitMiddleware passes through 429 with retry-after <= 60s', async (t) => {
+  const middleware = createRateLimitMiddleware();
+
+  const baseFetch: typeof fetch = async () =>
+    new Response('rate limited', { status: 429, headers: { 'retry-after': '30' } });
+  const composed = composeFetch(baseFetch, [middleware]);
+
+  const res = await composed('https://example.test/');
+  t.is(res.status, 429);
+  t.is(await res.text(), 'rate limited');
+});
+
+test('createRateLimitMiddleware passes through 429 with no retry-after header', async (t) => {
+  const middleware = createRateLimitMiddleware();
+
+  const baseFetch: typeof fetch = async () => new Response('rate limited', { status: 429 });
+  const composed = composeFetch(baseFetch, [middleware]);
+
+  const res = await composed('https://example.test/');
+  t.is(res.status, 429);
+});
+
+test('createRateLimitMiddleware returns 429 with x-should-retry: false when retry-after > 60s (seconds)', async (t) => {
+  const middleware = createRateLimitMiddleware();
+
+  const baseFetch: typeof fetch = async () =>
+    new Response('rate limited', { status: 429, headers: { 'retry-after': '120' } });
+  const composed = composeFetch(baseFetch, [middleware]);
+
+  const res = await composed('https://example.test/');
+  t.is(res.status, 429);
+  t.is(res.headers.get('x-should-retry'), 'false');
+});
+
+test('createRateLimitMiddleware returns 429 with x-should-retry: false when retry-after > 60s (HTTP-date)', async (t) => {
+  const middleware = createRateLimitMiddleware();
+
+  const futureDate = new Date(Date.now() + 90_000); // 90s from now
+  const baseFetch: typeof fetch = async () =>
+    new Response('rate limited', {
+      status: 429,
+      headers: { 'retry-after': futureDate.toUTCString() },
+    });
+  const composed = composeFetch(baseFetch, [middleware]);
+
+  const res = await composed('https://example.test/');
+  t.is(res.status, 429);
+  t.is(res.headers.get('x-should-retry'), 'false');
+});
+
+test('createRateLimitMiddleware passes through 429 with invalid retry-after', async (t) => {
+  const middleware = createRateLimitMiddleware();
+
+  const baseFetch: typeof fetch = async () =>
+    new Response('rate limited', { status: 429, headers: { 'retry-after': 'garbage' } });
+  const composed = composeFetch(baseFetch, [middleware]);
+
+  const res = await composed('https://example.test/');
+  t.is(res.status, 429);
+  t.is(await res.text(), 'rate limited');
+});
+
+test('createProviderFetch with rate-limit middleware returns 429 with x-should-retry: false on retry-after > 60s', async (t) => {
+  const composed = createProviderFetch({
+    providerId: 'openai',
+    defaultModel: 'gpt-4',
+    deps: {
+      loggingService: makeLoggingService(),
+      sessionContextService: makeSessionContextService(null),
+    },
+    fetchImpl: async () => new Response('rate limited', { status: 429, headers: { 'retry-after': '180' } }),
+  });
+
+  const res = await composed('https://example.test/', {
+    method: 'POST',
+    body: JSON.stringify({ model: 'gpt-4', messages: [] }),
+  });
+  t.is(res.status, 429);
+  t.is(res.headers.get('x-should-retry'), 'false');
+});
+
+test('createProviderFetch long retry-after 429 is logged and response returned with x-should-retry: false', async (t) => {
+  const logs: Array<{ message: string; meta: any }> = [];
+
+  const composed = createProviderFetch({
+    providerId: 'openai',
+    defaultModel: 'gpt-4',
+    deps: {
+      loggingService: makeLoggingService({
+        debug: (message: string, meta?: any) => {
+          logs.push({ message, meta });
+        },
+        error: (message: string, meta?: any) => {
+          logs.push({ message, meta });
+        },
+      }),
+      sessionContextService: makeSessionContextService(null),
+    },
+    fetchImpl: async () => new Response('rate limited', { status: 429, headers: { 'retry-after': '180' } }),
+  });
+
+  const res = await composed('https://example.test/', {
+    method: 'POST',
+    body: JSON.stringify({ model: 'gpt-4', messages: [] }),
+  });
+  t.is(res.status, 429);
+  t.is(res.headers.get('x-should-retry'), 'false');
+
+  // Allow fire-and-forget to flush
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const requestLog = logs.find((l) => l.message === 'openai ai sdk request');
+  t.truthy(requestLog);
 });
 
 // ---------------------------------------------------------------------------
@@ -340,7 +472,7 @@ test('createLoggingMiddleware uses request model from body over default model', 
 // createProviderFetch tests
 // ---------------------------------------------------------------------------
 
-test('createProviderFetch injects the logging middleware last', async (t) => {
+test('createProviderFetch injects the logging and rate-limit middlewares', async (t) => {
   const logs: Array<{ message: string; meta: any }> = [];
   const mwOrder: string[] = [];
 

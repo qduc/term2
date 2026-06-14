@@ -25,3 +25,18 @@ export class OpenAICompatibleError extends Error {
     this.responseBody = responseBody;
   }
 }
+
+/**
+ * Thrown by the fetch rate-limit middleware when a 429 response has a
+ * retry-after header exceeding 60 seconds. Prevents the SDK from waiting
+ * for an excessively long retry window without the user's awareness.
+ */
+export class LongRetryDelayError extends Error {
+  retryAfter: number;
+
+  constructor(retryAfter: number) {
+    super(`Rate limited with retry-after=${retryAfter}s (>60s threshold). Aborting to prevent excessively long wait.`);
+    this.name = 'LongRetryDelayError';
+    this.retryAfter = retryAfter;
+  }
+}

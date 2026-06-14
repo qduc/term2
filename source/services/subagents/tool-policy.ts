@@ -24,7 +24,7 @@ import { createCreateFileToolDefinition } from '../../tools/file/create-file.js'
 import { createShellToolDefinition } from '../../tools/system/shell.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { trimToolOutput } from '../../utils/output/trim-tool-output.js';
-import { injectWarningIntoToolOutput } from '../../utils/inject-warning-into-tool-output.js';
+import { injectTurnLimitWarning } from '../../utils/inject-warning-into-tool-output.js';
 import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../utils/shell/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../approval/shell-auto-approval-evaluator.js';
@@ -555,18 +555,8 @@ export class SubagentToolFactory {
             const maxOutputLength = this.#settings.get<number | undefined>('shell.maxOutputChars');
             const result = await definition.execute(params, _context, details);
             options.onToolComplete?.(definition.name, result, _context, details);
-            let trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
-
-            const userContext: any = _context?.context;
-            if (userContext && typeof userContext.turnCount === 'number' && typeof userContext.maxTurns === 'number') {
-              const turnsLeft = userContext.maxTurns - userContext.turnCount;
-              if (turnsLeft >= 0 && turnsLeft <= 5) {
-                const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
-                trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
-              }
-            }
-
-            return trimmedResult;
+            const trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
+            return injectTurnLimitWarning(trimmedResult, _context?.context);
           },
         }),
         definition.parameters,

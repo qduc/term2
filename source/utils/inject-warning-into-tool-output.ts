@@ -1,3 +1,27 @@
+const MAX_TURNS_LEFT_THRESHOLD = 5;
+
+export function buildTurnLimitWarning(turnsLeft: number): string {
+  return `
+
+[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
+}
+
+export interface TurnLimitContext {
+  turnCount?: number;
+  maxTurns?: number;
+}
+
+export function injectTurnLimitWarning(output: string, context: unknown): string {
+  const limitContext = context as TurnLimitContext | undefined;
+  if (limitContext && typeof limitContext.turnCount === 'number' && typeof limitContext.maxTurns === 'number') {
+    const turnsLeft = limitContext.maxTurns - limitContext.turnCount;
+    if (turnsLeft >= 0 && turnsLeft <= MAX_TURNS_LEFT_THRESHOLD) {
+      return injectWarningIntoToolOutput(output, buildTurnLimitWarning(turnsLeft));
+    }
+  }
+  return output;
+}
+
 export const injectWarningIntoToolOutput = (output: string, warning: string): string => {
   if (!output) {
     return warning;

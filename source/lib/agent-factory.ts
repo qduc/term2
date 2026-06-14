@@ -7,7 +7,7 @@ import { normalizeToolInput, toolErrorFunction, wrapNeedsApproval, wrapToolInvok
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { trimToolOutput } from '../utils/output/trim-tool-output.js';
-import { injectWarningIntoToolOutput } from '../utils/inject-warning-into-tool-output.js';
+import { injectTurnLimitWarning } from '../utils/inject-warning-into-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 import {
   shouldUseNativePatchTool as shouldUseNativePatchToolPolicy,
@@ -112,19 +112,8 @@ function buildAgentTools({
             }
 
             const result = await definition.execute(params, _context, details);
-            let trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
-
-            // Inject warning when turns are approaching maxTurns
-            const userContext: any = _context?.context;
-            if (userContext && typeof userContext.turnCount === 'number' && typeof userContext.maxTurns === 'number') {
-              const turnsLeft = userContext.maxTurns - userContext.turnCount;
-              if (turnsLeft >= 0 && turnsLeft <= 5) {
-                const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
-                trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
-              }
-            }
-
-            return trimmedResult;
+            const trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+            return injectTurnLimitWarning(trimmedResult, _context?.context);
           },
         }),
         definition.parameters,
@@ -173,19 +162,8 @@ function buildAgentTools({
         }
         const maxOutputLengthValue = deps.settings.get<number | undefined>('shell.maxOutputChars');
         const result = await originalInvoke.call(nativePatchTool, runContext, normalizedInput, details);
-        let trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
-
-        // Inject warning when turns are approaching maxTurns
-        const userContext: any = runContext?.context;
-        if (userContext && typeof userContext.turnCount === 'number' && typeof userContext.maxTurns === 'number') {
-          const turnsLeft = userContext.maxTurns - userContext.turnCount;
-          if (turnsLeft >= 0 && turnsLeft <= 5) {
-            const warning = `\n\n[Warning: You are approaching the maximum turn limit. You have ${turnsLeft} turns left. Please prepare to wrap up your work and provide a situation update message describing what has been completed and what remains to be done.]`;
-            trimmedResult = injectWarningIntoToolOutput(trimmedResult, warning);
-          }
-        }
-
-        return trimmedResult;
+        const trimmedResult = trimToolOutput(result, undefined, maxOutputLengthValue ?? undefined);
+        return injectTurnLimitWarning(trimmedResult, runContext?.context);
       };
     }
 

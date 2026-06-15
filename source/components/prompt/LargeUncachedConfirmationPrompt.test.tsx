@@ -7,7 +7,7 @@ import { renderInAct } from '../../test-helpers/ink-testing.js';
 import LargeUncachedConfirmationPrompt from './LargeUncachedConfirmationPrompt.js';
 
 const flushReactUpdates = async (iterations = 1) => {
-  act(async () => {
+  await act(async () => {
     for (let i = 0; i < iterations; i++) {
       await new Promise((resolve) => setImmediate(resolve));
     }
@@ -15,7 +15,7 @@ const flushReactUpdates = async (iterations = 1) => {
 };
 
 const pressDecline = async (stdin: { write: (input: string) => void }) => {
-  act(async () => {
+  await act(async () => {
     stdin.write('n');
   });
 

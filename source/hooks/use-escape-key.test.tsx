@@ -222,7 +222,7 @@ test.serial('pressing ESC in slash_commands mode clears input and switches to te
   t.false(frame.includes('/cle'), 'Input trigger text should be cleared');
 });
 
-test('pressing ESC in path_completion mode keeps input and switches to text mode', async (t) => {
+test.serial('pressing ESC in path_completion mode keeps input and switches to text mode', async (t) => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const PathTestComponent = () => {
     const [value, onChange] = useState('@src/foo');
@@ -265,7 +265,7 @@ test('pressing ESC in path_completion mode keeps input and switches to text mode
   t.true(frame.includes('Value: @src/foo'), 'Inline path trigger text must be preserved when cancelling the popup');
 });
 
-test('pressing ESC in settings_completion mode clears input and switches to text mode', async (t) => {
+test.serial('pressing ESC in settings_completion mode clears input and switches to text mode', async (t) => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const SettingsTestComponent = () => {
     const [value, onChange] = useState('/settings ');
@@ -308,136 +308,145 @@ test('pressing ESC in settings_completion mode clears input and switches to text
   t.false(frame.includes('/settings'), 'Input trigger text should be cleared');
 });
 
-test('pressing ESC in model_selection mode with settings-backed model setting restores settings menu', async (t) => {
-  let settingsOpenArgs: { startIndex: number; initialSelectionKey: string } | null = null;
-  let modelsClosed = false;
-  let cursorOverrides: (number | null)[] = [];
-  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+test.serial(
+  'pressing ESC in model_selection mode with settings-backed model setting restores settings menu',
+  async (t) => {
+    let settingsOpenArgs: { startIndex: number; initialSelectionKey: string } | null = null;
+    let modelsClosed = false;
+    let cursorOverrides: (number | null)[] = [];
+    let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
 
-  const SettingsBackedModelComponent = () => {
-    const [value, onChange] = useState('/settings agent.model ');
-    const [mode, setMode] = useState<InputMode>('model_selection');
-    const dismissedCompletionRef = { current: null } as any;
-    const inputRevisionRef = { current: 0 };
-    const [cursorOverride, setCursorOverride] = useState<number | null>(null);
+    const SettingsBackedModelComponent = () => {
+      const [value, onChange] = useState('/settings agent.model ');
+      const [mode, setMode] = useState<InputMode>('model_selection');
+      const dismissedCompletionRef = { current: null } as any;
+      const inputRevisionRef = { current: 0 };
+      const [cursorOverride, setCursorOverride] = useState<number | null>(null);
 
-    cursorOverrides.push(cursorOverride);
-    useCaptureInputEmitter((emitter) => {
-      inputEmitter = emitter;
-    });
+      cursorOverrides.push(cursorOverride);
+      useCaptureInputEmitter((emitter) => {
+        inputEmitter = emitter;
+      });
 
-    const mockModels = {
-      modelSettingConfig: { modelKey: 'agent.model' },
-      close: () => {
-        modelsClosed = true;
-      },
+      const mockModels = {
+        modelSettingConfig: { modelKey: 'agent.model' },
+        close: () => {
+          modelsClosed = true;
+        },
+      };
+
+      useEscapeKey({
+        mode,
+        setMode,
+        value,
+        onChange,
+        settings: {
+          open: (startIndex: number, initialSelectionKey?: string) => {
+            settingsOpenArgs = { startIndex, initialSelectionKey: initialSelectionKey || '' };
+          },
+        } as any,
+        settingsValue: { settingKey: null, close: () => {} } as any,
+        models: mockModels,
+        providerSelection: { goBack: () => {} } as any,
+        setCursorOverride,
+        dismissedCompletionRef,
+        inputRevisionRef,
+      });
+
+      return (
+        <Box flexDirection="column">
+          <Text>Mode: {mode}</Text>
+          <Text>Value: {value}</Text>
+        </Box>
+      );
     };
 
-    useEscapeKey({
-      mode,
-      setMode,
-      value,
-      onChange,
-      settings: {
-        open: (startIndex: number, initialSelectionKey?: string) => {
-          settingsOpenArgs = { startIndex, initialSelectionKey: initialSelectionKey || '' };
-        },
-      } as any,
-      settingsValue: { settingKey: null, close: () => {} } as any,
-      models: mockModels,
-      providerSelection: { goBack: () => {} } as any,
-      setCursorOverride,
-      dismissedCompletionRef,
-      inputRevisionRef,
-    });
+    const { lastFrame } = await renderAndFlush(<SettingsBackedModelComponent />, t);
 
-    return (
-      <Box flexDirection="column">
-        <Text>Mode: {mode}</Text>
-        <Text>Value: {value}</Text>
-      </Box>
+    const initialFrame = lastFrame()!;
+    t.true(initialFrame.includes('Mode: model_selection'), 'Initial mode should be model_selection');
+    t.true(initialFrame.includes('Value: /settings agent.model'), 'Initial value should contain settings trigger');
+
+    // Press ESC
+    await pressEscape(inputEmitter!);
+
+    const frame = lastFrame()!;
+    t.log('Frame after ESC:', frame);
+    t.log('Settings open args:', settingsOpenArgs);
+    t.log('Models closed:', modelsClosed);
+
+    // Should NOT switch to text mode - should keep settings_completion or similar
+    t.false(frame.includes('Mode: text'), 'Mode should not switch to text for settings-backed model');
+
+    // Should close models menu
+    t.true(modelsClosed, 'Models menu should be closed');
+
+    // Should call settings.open with the model key
+    const hasArgs = settingsOpenArgs !== null;
+    t.true(hasArgs, 'settings.open should have been called');
+    if (hasArgs) {
+      // settingsOpenArgs is narrowed to non-null here by TypeScript
+      t.is(settingsOpenArgs!.initialSelectionKey, 'agent.model', 'Settings should open with agent.model key');
+      t.is(settingsOpenArgs!.startIndex, SETTINGS_TRIGGER.length, 'Settings should open at trigger length');
+    }
+  },
+);
+
+test.serial(
+  'pressing ESC in non-settings settings_value_completion mode keeps trigger text and switches to text mode',
+  async (t) => {
+    let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+    const SettingsValueTestComponent = () => {
+      const [value, onChange] = useState('/effort ');
+      const [mode, setMode] = useState<InputMode>('settings_value_completion');
+      const dismissedCompletionRef = { current: null } as any;
+      const inputRevisionRef = { current: 0 };
+      const [, setCursorOverride] = useState<number | null>(null);
+      useCaptureInputEmitter((emitter) => {
+        inputEmitter = emitter;
+      });
+
+      useEscapeKey({
+        mode,
+        setMode,
+        value,
+        onChange,
+        settings: { open: () => {} } as any,
+        // settingKey is null because this completion was opened from a non-/settings command
+        settingsValue: { settingKey: null, close: () => {} } as any,
+        providerSelection: { goBack: () => {} } as any,
+        setCursorOverride,
+        dismissedCompletionRef,
+        inputRevisionRef,
+      });
+
+      return (
+        <Box flexDirection="column">
+          <Text>Mode: {mode}</Text>
+          <Text>Value: {value}</Text>
+        </Box>
+      );
+    };
+
+    const { lastFrame } = await renderAndFlush(<SettingsValueTestComponent />, t);
+
+    t.true(
+      lastFrame()!.includes('Mode: settings_value_completion'),
+      'Initial mode should be settings_value_completion',
     );
-  };
 
-  const { lastFrame } = await renderAndFlush(<SettingsBackedModelComponent />, t);
+    await pressEscape(inputEmitter!);
 
-  const initialFrame = lastFrame()!;
-  t.true(initialFrame.includes('Mode: model_selection'), 'Initial mode should be model_selection');
-  t.true(initialFrame.includes('Value: /settings agent.model'), 'Initial value should contain settings trigger');
-
-  // Press ESC
-  await pressEscape(inputEmitter!);
-
-  const frame = lastFrame()!;
-  t.log('Frame after ESC:', frame);
-  t.log('Settings open args:', settingsOpenArgs);
-  t.log('Models closed:', modelsClosed);
-
-  // Should NOT switch to text mode - should keep settings_completion or similar
-  t.false(frame.includes('Mode: text'), 'Mode should not switch to text for settings-backed model');
-
-  // Should close models menu
-  t.true(modelsClosed, 'Models menu should be closed');
-
-  // Should call settings.open with the model key
-  const hasArgs = settingsOpenArgs !== null;
-  t.true(hasArgs, 'settings.open should have been called');
-  if (hasArgs) {
-    // settingsOpenArgs is narrowed to non-null here by TypeScript
-    t.is(settingsOpenArgs!.initialSelectionKey, 'agent.model', 'Settings should open with agent.model key');
-    t.is(settingsOpenArgs!.startIndex, SETTINGS_TRIGGER.length, 'Settings should open at trigger length');
-  }
-});
-
-test('pressing ESC in non-settings settings_value_completion mode keeps trigger text and switches to text mode', async (t) => {
-  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
-  const SettingsValueTestComponent = () => {
-    const [value, onChange] = useState('/effort ');
-    const [mode, setMode] = useState<InputMode>('settings_value_completion');
-    const dismissedCompletionRef = { current: null } as any;
-    const inputRevisionRef = { current: 0 };
-    const [, setCursorOverride] = useState<number | null>(null);
-    useCaptureInputEmitter((emitter) => {
-      inputEmitter = emitter;
-    });
-
-    useEscapeKey({
-      mode,
-      setMode,
-      value,
-      onChange,
-      settings: { open: () => {} } as any,
-      // settingKey is null because this completion was opened from a non-/settings command
-      settingsValue: { settingKey: null, close: () => {} } as any,
-      providerSelection: { goBack: () => {} } as any,
-      setCursorOverride,
-      dismissedCompletionRef,
-      inputRevisionRef,
-    });
-
-    return (
-      <Box flexDirection="column">
-        <Text>Mode: {mode}</Text>
-        <Text>Value: {value}</Text>
-      </Box>
+    const frame = lastFrame()!;
+    t.true(frame.includes('Mode: text'), 'Mode should switch to text');
+    t.true(
+      frame.includes('Value: /effort'),
+      'Inline settings-value trigger text must be preserved when cancelling the popup',
     );
-  };
+  },
+);
 
-  const { lastFrame } = await renderAndFlush(<SettingsValueTestComponent />, t);
-
-  t.true(lastFrame()!.includes('Mode: settings_value_completion'), 'Initial mode should be settings_value_completion');
-
-  await pressEscape(inputEmitter!);
-
-  const frame = lastFrame()!;
-  t.true(frame.includes('Mode: text'), 'Mode should switch to text');
-  t.true(
-    frame.includes('Value: /effort'),
-    'Inline settings-value trigger text must be preserved when cancelling the popup',
-  );
-});
-
-test('pressing ESC in provider_selection calls goBack', async (t) => {
+test.serial('pressing ESC in provider_selection calls goBack', async (t) => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   let goBackCalls = 0;
 
@@ -481,68 +490,71 @@ test('pressing ESC in provider_selection calls goBack', async (t) => {
   t.true(lastFrame()!.includes('Mode: provider_selection'));
 });
 
-test('pressing ESC in provider_selection calls the LATEST goBack function (verifying ref is not stale)', async (t) => {
-  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
-  let lastGoBackCalledWith: number | null = null;
-  let triggerUpdate: (() => void) | null = null;
+test.serial(
+  'pressing ESC in provider_selection calls the LATEST goBack function (verifying ref is not stale)',
+  async (t) => {
+    let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+    let lastGoBackCalledWith: number | null = null;
+    let triggerUpdate: (() => void) | null = null;
 
-  const ProviderSelectionStaleClosureHarness = () => {
-    const [value, onChange] = useState('');
-    const [mode, setMode] = useState<InputMode>('provider_selection');
-    const [version, setVersion] = useState(1);
-    const dismissedCompletionRef = { current: null } as any;
-    const inputRevisionRef = { current: 0 };
-    const [, setCursorOverride] = useState<number | null>(null);
+    const ProviderSelectionStaleClosureHarness = () => {
+      const [value, onChange] = useState('');
+      const [mode, setMode] = useState<InputMode>('provider_selection');
+      const [version, setVersion] = useState(1);
+      const dismissedCompletionRef = { current: null } as any;
+      const inputRevisionRef = { current: 0 };
+      const [, setCursorOverride] = useState<number | null>(null);
 
-    triggerUpdate = () => setVersion((v) => v + 1);
+      triggerUpdate = () => setVersion((v) => v + 1);
 
-    useCaptureInputEmitter((emitter) => {
-      inputEmitter = emitter;
-    });
+      useCaptureInputEmitter((emitter) => {
+        inputEmitter = emitter;
+      });
 
-    useEscapeKey({
-      mode,
-      setMode,
-      value,
-      onChange,
-      settings: { open: () => {} } as any,
-      settingsValue: { settingKey: null, close: () => {} } as any,
-      providerSelection: {
-        goBack: () => {
-          lastGoBackCalledWith = version;
+      useEscapeKey({
+        mode,
+        setMode,
+        value,
+        onChange,
+        settings: { open: () => {} } as any,
+        settingsValue: { settingKey: null, close: () => {} } as any,
+        providerSelection: {
+          goBack: () => {
+            lastGoBackCalledWith = version;
+          },
         },
-      },
-      setCursorOverride,
-      dismissedCompletionRef,
-      inputRevisionRef,
+        setCursorOverride,
+        dismissedCompletionRef,
+        inputRevisionRef,
+      });
+
+      return (
+        <Box flexDirection="column">
+          <Text>Mode: {mode}</Text>
+          <Text>Version: {version}</Text>
+        </Box>
+      );
+    };
+
+    const { lastFrame } = await renderAndFlush(<ProviderSelectionStaleClosureHarness />, t);
+    t.true(lastFrame()!.includes('Mode: provider_selection'));
+    t.true(lastFrame()!.includes('Version: 1'));
+
+    // Trigger re-render to change providerSelection identity and implementation
+    await act(async () => {
+      triggerUpdate!();
     });
+    await flushReactUpdates(5);
 
-    return (
-      <Box flexDirection="column">
-        <Text>Mode: {mode}</Text>
-        <Text>Version: {version}</Text>
-      </Box>
+    t.true(lastFrame()!.includes('Version: 2'));
+
+    // Press ESC
+    await pressEscape(inputEmitter!);
+
+    t.is(
+      lastGoBackCalledWith as any,
+      2,
+      'Should call the goBack function from the latest render, not the initial render',
     );
-  };
-
-  const { lastFrame } = await renderAndFlush(<ProviderSelectionStaleClosureHarness />, t);
-  t.true(lastFrame()!.includes('Mode: provider_selection'));
-  t.true(lastFrame()!.includes('Version: 1'));
-
-  // Trigger re-render to change providerSelection identity and implementation
-  await act(async () => {
-    triggerUpdate!();
-  });
-  await flushReactUpdates(5);
-
-  t.true(lastFrame()!.includes('Version: 2'));
-
-  // Press ESC
-  await pressEscape(inputEmitter!);
-
-  t.is(
-    lastGoBackCalledWith as any,
-    2,
-    'Should call the goBack function from the latest render, not the initial render',
-  );
-});
+  },
+);

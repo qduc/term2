@@ -19,7 +19,7 @@ import { registerProvider, unregisterProvider } from '../providers/index.js';
 import { clearModelCache } from '../services/model-service.js';
 import { useModelSelection } from '../hooks/use-model-selection.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
-import { renderInAct } from '../test-helpers/ink-testing.js';
+import { renderInAct, toVisibleText } from '../test-helpers/ink-testing.js';
 
 // Mock slash commands
 const mockSlashCommands: SlashCommand[] = [
@@ -438,11 +438,12 @@ test.serial('settings-backed model selection restores settings menu after submit
   );
 
   const frame = await waitFor(lastFrame, (f) => f.includes('agent.model'));
+  const visibleFrame = toVisibleText(frame);
 
   t.is(settingsService.get('agent.model'), 'gpt-test');
   t.is(settingsService.get('agent.provider'), mockProviderId);
-  t.true(frame.includes('Input:/settings '), `Input should be restored to settings trigger, got: ${frame}`);
-  t.true(frame.includes('▶ agent.model'), `Selection should target agent.model, got: ${frame}`);
+  t.true(visibleFrame.includes('Input:/settings '), `Input should be restored to settings trigger, got: ${frame}`);
+  t.true(visibleFrame.includes('▶ agent.model'), `Selection should target agent.model, got: ${frame}`);
 });
 
 test.serial('command-backed model selection still submits after selection', async (t) => {
@@ -498,13 +499,14 @@ test.serial('settings value completion saves setting and reopens settings menu t
   );
 
   const frame = await waitFor(lastFrame, (f) => f.includes('shell.timeout'));
+  const visibleFrame = toVisibleText(frame);
 
   // The setting should be updated to 60000
   t.is(settingsService.get('shell.timeout'), 60000);
 
   // The menu should be restored targeting 'shell.timeout'
-  t.true(frame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
-  t.true(frame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
+  t.true(visibleFrame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
+  t.true(visibleFrame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
 });
 
 test.serial('settings value completion resets setting and reopens settings menu targeting the reset key', async (t) => {
@@ -520,13 +522,14 @@ test.serial('settings value completion resets setting and reopens settings menu 
   );
 
   const frame = await waitFor(lastFrame, (f) => f.includes('shell.timeout'));
+  const visibleFrame = toVisibleText(frame);
 
   // The setting should be reset to default (120000)
   t.is(settingsService.get('shell.timeout'), 120000);
 
   // The menu should be restored targeting 'shell.timeout'
-  t.true(frame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
-  t.true(frame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
+  t.true(visibleFrame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
+  t.true(visibleFrame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
 });
 
 test.serial(
@@ -742,8 +745,12 @@ test.serial('settings value completion shows current custom settings value in su
   // Write trigger value to enter settings value completion mode
   await writeInput(stdin, '/settings agent.maxTurns ');
   const frame = await waitFor(lastFrame, (f) => f.includes('Current value'), { timeoutMs: 5000 });
+  const visibleFrame = toVisibleText(frame);
 
-  t.true(frame.includes('35 — Current value'), `Should show current custom value in completion list, got:\n${frame}`);
+  t.true(
+    visibleFrame.includes('35 — Current value'),
+    `Should show current custom value in completion list, got:\n${frame}`,
+  );
 });
 
 test.serial('InputBox allows backspace and delete keys to modify input in provider wizard phases', async (t) => {

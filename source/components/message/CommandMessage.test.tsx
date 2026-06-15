@@ -3,7 +3,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import avaTest from 'ava';
 import React, { act } from 'react';
-import { renderInAct } from '../../test-helpers/ink-testing.js';
+import { renderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import CommandMessage from './CommandMessage.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 
@@ -478,7 +478,7 @@ test('CommandMessage renders successfully completed shell command on a single li
   };
 
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
-  const output = lastFrame() ?? '';
+  const output = toVisibleText(lastFrame() ?? '');
 
   t.true(output.includes('✔'), `Expected success icon in output: ${output}`);
   t.true(output.includes('$ npm test'), `Expected command in output: ${output}`);
@@ -500,7 +500,7 @@ test('CommandMessage renders running shell command on a single line in concise m
     ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
     await advanceClockInAct(clock, 1100);
 
-    const output = lastFrame?.() ?? '';
+    const output = toVisibleText(lastFrame?.() ?? '');
 
     t.true(output.includes('▶'), `Expected running icon in output: ${output}`);
     t.true(output.includes('$ npm run dev'), `Expected command in output: ${output}`);
@@ -521,7 +521,7 @@ test('CommandMessage renders failed command on two lines in concise mode', async
   };
 
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
-  const output = lastFrame() ?? '';
+  const output = toVisibleText(lastFrame() ?? '');
 
   // Expect two lines
   const lines = output.trim().split('\n');

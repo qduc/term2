@@ -227,7 +227,7 @@ test.serial('toggleProvider uses the configured provider immediately after openi
   });
 });
 
-test('exposes modelSettingConfig for settings-backed triggers', async (t) => {
+test.serial('exposes modelSettingConfig for settings-backed triggers', async (t) => {
   let capturedModels: any;
   clearModelCache();
   const testProvider = `setting-backed-provider-${Date.now()}-${Math.random()}`;
@@ -273,7 +273,7 @@ test('exposes modelSettingConfig for settings-backed triggers', async (t) => {
   }
 });
 
-test('modelSettingConfig is undefined for command-backed triggers', async (t) => {
+test.serial('modelSettingConfig is undefined for command-backed triggers', async (t) => {
   let capturedModels: any;
   clearModelCache();
   const testProvider = `command-backed-provider-${Date.now()}-${Math.random()}`;

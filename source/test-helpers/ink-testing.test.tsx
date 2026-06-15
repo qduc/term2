@@ -4,7 +4,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import test from 'ava';
 import React, { useEffect } from 'react';
 import { Box, Text } from 'ink';
-import { renderInAct, rerenderInAct } from './ink-testing.js';
+import { renderInAct, rerenderInAct, toVisibleText } from './ink-testing.js';
+
+test('toVisibleText removes terminal styling without changing visible content', (t) => {
+  t.is(toVisibleText('\u001B[32m▶ \u001B[1magent.model\u001B[0m'), '▶ agent.model');
+});
 
 test.serial('renderInAct renders ink output inside act', async (t) => {
   const { lastFrame } = await renderInAct(

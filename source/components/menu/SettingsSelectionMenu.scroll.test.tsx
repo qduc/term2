@@ -3,7 +3,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
 import React from 'react';
-import { renderInAct, rerenderInAct } from '../../test-helpers/ink-testing.js';
+import { renderInAct, rerenderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import SettingsSelectionMenu from './SettingsSelectionMenu.js';
 import type { SettingCompletionItem } from '../../hooks/use-settings-completion.js';
 
@@ -96,7 +96,7 @@ test.serial('SettingsSelectionMenu keeps task tabs on one row', async (t) => {
     t,
   );
 
-  const lines = (lastFrame() ?? '').split('\n');
+  const lines = toVisibleText(lastFrame() ?? '').split('\n');
   t.true(lines[0]?.includes('Tab/←→ → switch section'));
   t.false(lines[0]?.includes('STab/←→ → switch section'));
   t.true(lines[1]?.startsWith('╭'));

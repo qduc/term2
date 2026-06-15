@@ -1,3 +1,6 @@
+// @ts-ignore
+global.IS_REACT_ACT_ENVIRONMENT = true;
+
 import test from 'ava';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';

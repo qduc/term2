@@ -11,6 +11,7 @@ import { AgentClient } from './lib/agent-client.js';
 import { ConversationService } from './services/conversation/conversation-service.js';
 import { SettingsService, buildEnvOverrides } from './services/settings/settings-service.js';
 import { SessionContextService } from './services/session/session-context-service.js';
+import { SkillsService } from './services/skills/skills-service.js';
 import { getAllProviders, getProviderIds } from './providers/index.js';
 import { LoggingService } from './services/logging/logging-service.js';
 import { HistoryService } from './services/history-service.js';
@@ -534,6 +535,9 @@ const history = new HistoryService({
   settingsService: settings,
 });
 
+const skillsService = new SkillsService(logger, executionContext.getCwd());
+skillsService.discoverSkills();
+
 const usedModel = settings.get('agent.model');
 const usedReasoningEffort = settings.get('agent.reasoningEffort');
 
@@ -547,6 +551,7 @@ const agentClient = new AgentClient({
     settings: settings,
     executionContext: executionContext,
     sessionContextService,
+    skillsService,
   },
 });
 

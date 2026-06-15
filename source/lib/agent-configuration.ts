@@ -9,6 +9,7 @@ import type { AgentFactoryDeps } from './agent-factory.js';
 import { buildAgent } from './agent-factory.js';
 import { createEditorImpl } from './editor-impl.js';
 import { getProvider } from '../providers/index.js';
+import { SkillsService } from '../services/skills/skills-service.js';
 
 /** Narrow capability interface consumed by AgentRunOrchestrator and AgentChatService. */
 export interface AgentSource {
@@ -28,6 +29,7 @@ export interface AgentConfigurationDeps {
   getSubagentBridge: () => SubagentBridge | null;
   /** Called when agent is about to be rebuilt — for side effects like cache clearing */
   onConfigChanged?: (changedKey?: string) => void;
+  skillsService?: SkillsService;
 }
 
 export class AgentConfiguration implements AgentSource {
@@ -50,6 +52,7 @@ export class AgentConfiguration implements AgentSource {
   #askUserAnswerStore: AskUserAnswerStore;
   #getSubagentBridge: () => SubagentBridge | null;
   #serviceTierOverrideForNextRequest: 'standard' | null = null;
+  #skillsService?: SkillsService;
 
   constructor(
     config: {
@@ -69,6 +72,7 @@ export class AgentConfiguration implements AgentSource {
     this.#askUserAnswerStore = deps.askUserAnswerStore;
     this.#getSubagentBridge = deps.getSubagentBridge;
     this.#onConfigChanged = deps.onConfigChanged;
+    this.#skillsService = deps.skillsService;
 
     // Create editor
     this.#editor = createEditorImpl({
@@ -139,6 +143,7 @@ export class AgentConfiguration implements AgentSource {
       },
       checkToolInterceptors: (name, params, toolCallId) =>
         this.#toolInterceptorRegistry.check(name, params, toolCallId),
+      skillsService: this.#skillsService,
     };
   }
 

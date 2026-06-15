@@ -10,6 +10,7 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import type { ExecutionContext } from '../services/execution-context.js';
 import { AskUserAnswerStore } from './ask-user-answer-store.js';
 import { AgentConfiguration } from './agent-configuration.js';
+import { SkillsService } from '../services/skills/skills-service.js';
 
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 import { SubagentBridge } from './subagent-bridge.js';
@@ -73,6 +74,7 @@ export class AgentClient {
       settings: ISettingsService;
       executionContext?: ExecutionContext;
       sessionContextService: ISessionContextService;
+      skillsService?: SkillsService;
     };
   }) {
     this.#logger = deps.logger;
@@ -92,6 +94,7 @@ export class AgentClient {
         toolInterceptorRegistry: this.#toolInterceptorRegistry,
         askUserAnswerStore: this.#askUserAnswerStore,
         getSubagentBridge: () => this.#subagentBridge,
+        skillsService: deps.skillsService,
         onConfigChanged: (changedKey?: string) => {
           // Runner invalidation for specific keys
           if (changedKey === 'agent.transport' || changedKey === 'agent.retryAttempts') {

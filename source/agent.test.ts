@@ -614,3 +614,46 @@ test('getAgentDefinition omits worktree hygiene fragment in lite mode', (t) => {
 
   t.false(definition.instructions.includes(WORKTREE_HYGIENE_FRAGMENT_MARKER));
 });
+
+test('getAgentDefinition registers activate_skill tool and includes catalog when skills exist', (t) => {
+  const mockSkillsService = {
+    getAvailableSkillsForModel: () => [
+      {
+        name: 'test-skill',
+        description: 'Test skill description',
+        location: '/path/to/SKILL.md',
+        isProjectLevel: true,
+        body: 'Body',
+        rawContent: 'Raw',
+      },
+    ],
+    getSkillCatalog: () => '<available_skills>Mock Catalog</available_skills>',
+  } as any;
+
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+    skillsService: mockSkillsService,
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  t.true(toolNames.includes('activate_skill'));
+  t.true(definition.instructions.includes('<available_skills>Mock Catalog</available_skills>'));
+});
+
+test('getAgentDefinition omits activate_skill tool and catalog when skills do not exist', (t) => {
+  const mockSkillsService = {
+    getAvailableSkillsForModel: () => [],
+    getSkillCatalog: () => '',
+  } as any;
+
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+    skillsService: mockSkillsService,
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  t.false(toolNames.includes('activate_skill'));
+  t.false(definition.instructions.includes('<available_skills>'));
+});

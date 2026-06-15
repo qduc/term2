@@ -7,6 +7,7 @@ import { normalizeToolInput, toolErrorFunction, wrapNeedsApproval, wrapToolInvok
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { trimToolOutput } from '../utils/output/trim-tool-output.js';
+import { SkillsService } from '../services/skills/skills-service.js';
 import { injectTurnLimitWarning } from '../utils/inject-warning-into-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 import {
@@ -26,6 +27,7 @@ export interface AgentFactoryDeps {
   runSubagent: (params: { role: string; task: string }) => Promise<{ finalText: string }>;
   getAskUserAnswer: (callId?: string) => string | undefined;
   checkToolInterceptors: (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
+  skillsService?: SkillsService;
 }
 
 export interface AgentBuildResult {
@@ -259,6 +261,7 @@ export function buildAgent(
       askMentor: deps.createMentor,
       runSubagent: deps.runSubagent,
       getAskUserAnswer: deps.getAskUserAnswer,
+      skillsService: deps.skillsService,
     },
     resolvedModel,
   );

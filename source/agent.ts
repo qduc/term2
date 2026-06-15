@@ -25,6 +25,8 @@ import type { ISettingsService, ILoggingService } from './services/service-inter
 import { ExecutionContext } from './services/execution-context.js';
 import { buildPromptSpec } from './prompts/prompt-constructor.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
+import { SkillsService } from './services/skills/skills-service.js';
+import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, './prompts');
 
@@ -276,10 +278,12 @@ export const getAgentDefinition = (
     askMentor?: (question: string) => Promise<string>;
     runSubagent?: (params: { role: string; task: string }, context?: unknown, details?: unknown) => Promise<any>;
     getAskUserAnswer?: (callId?: string) => string | undefined;
+    skillsService?: SkillsService;
   },
   model?: string,
 ): AgentDefinition => {
-  const { settingsService, loggingService, executionContext, askMentor, runSubagent, getAskUserAnswer } = deps;
+  const { settingsService, loggingService, executionContext, askMentor, runSubagent, getAskUserAnswer, skillsService } =
+    deps;
   const defaultModel = settingsService.get<string>('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
 
@@ -327,6 +331,14 @@ export const getAgentDefinition = (
   const skipAgentsMd = isLiteEnv || (executionContext?.isRemote() ?? false);
   const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
 
+  let skillsInstructions = '';
+  if (skillsService) {
+    const catalog = skillsService.getSkillCatalog();
+    if (catalog) {
+      skillsInstructions = `\n\n${catalog}`;
+    }
+  }
+
   if (orchestratorMode) {
     if (!runSubagent) {
       throw new Error(
@@ -350,7 +362,7 @@ export const getAgentDefinition = (
 
     return {
       name: 'Agent',
-      instructions: `${prompt}\n\nEnvironment: ${envInfo}${agentsInstructions}`,
+      instructions: `${prompt}\n\nEnvironment: ${envInfo}${agentsInstructions}${skillsInstructions}`,
       tools,
       model: resolvedModel,
     };
@@ -367,6 +379,10 @@ export const getAgentDefinition = (
       loggingService,
     }),
   ];
+
+  if (skillsService && skillsService.getAvailableSkillsForModel().length > 0) {
+    tools.push(createActivateSkillToolDefinition(skillsService));
+  }
 
   if (getAskUserAnswer) {
     const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
@@ -439,7 +455,7 @@ export const getAgentDefinition = (
 
   return {
     name: 'Terminal Assistant',
-    instructions: `${prompt}\n\nEnvironment: ${envInfo}${agentsInstructions}`,
+    instructions: `${prompt}\n\nEnvironment: ${envInfo}${agentsInstructions}${skillsInstructions}`,
     tools,
     model: resolvedModel,
   };

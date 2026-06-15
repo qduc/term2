@@ -2,38 +2,30 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
-import React, { act, useEffect } from 'react';
-import { render } from 'ink-testing-library';
-import { useStdin } from 'ink';
+import React, { act } from 'react';
+import { renderInAct } from '../../test-helpers/ink-testing.js';
 import LargeUncachedConfirmationPrompt from './LargeUncachedConfirmationPrompt.js';
 
 const flushReactUpdates = async (iterations = 1) => {
-  await act(async () => {
+  act(async () => {
     for (let i = 0; i < iterations; i++) {
       await new Promise((resolve) => setImmediate(resolve));
     }
   });
 };
 
-const useCaptureInputEmitter = (setEmitter: (emitter: any) => void) => {
-  const stdin = useStdin() as any;
-
-  useEffect(() => {
-    setEmitter(stdin.internal_eventEmitter);
-  }, [setEmitter, stdin]);
-};
-
-const pressEscape = async (emitter: { emit: (event: string, input: string) => void }) => {
-  await act(async () => {
-    emitter.emit('input', '\u001B');
+const pressDecline = async (stdin: { write: (input: string) => void }) => {
+  act(async () => {
+    stdin.write('n');
   });
 
   await flushReactUpdates(3);
 };
 
-test('LargeUncachedConfirmationPrompt renders prompt and choices', (t) => {
-  const { lastFrame } = render(
+test.serial('LargeUncachedConfirmationPrompt renders prompt and choices', async (t) => {
+  const { lastFrame } = await renderInAct(
     <LargeUncachedConfirmationPrompt usage={{ prompt_tokens: 72_100 }} onConfirm={() => {}} onDecline={() => {}} />,
+    t,
   );
 
   const output = lastFrame() ?? '';
@@ -43,15 +35,10 @@ test('LargeUncachedConfirmationPrompt renders prompt and choices', (t) => {
   t.true(output.includes('Cancel'));
 });
 
-test('LargeUncachedConfirmationPrompt declines on escape', async (t) => {
+test.serial('LargeUncachedConfirmationPrompt declines on n input', async (t) => {
   let declined = false;
-  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
 
   const Harness = () => {
-    useCaptureInputEmitter((emitter) => {
-      inputEmitter = emitter;
-    });
-
     return (
       <LargeUncachedConfirmationPrompt
         usage={{ prompt_tokens: 72_100 }}
@@ -63,10 +50,10 @@ test('LargeUncachedConfirmationPrompt declines on escape', async (t) => {
     );
   };
 
-  const { lastFrame } = render(<Harness />);
+  const { lastFrame, stdin } = await renderInAct(<Harness />, t);
 
   await flushReactUpdates(2);
-  await pressEscape(inputEmitter!);
+  await pressDecline(stdin);
 
   t.true((lastFrame() ?? '').includes('Send 72,100 tokens anyway?'));
   t.true(declined);

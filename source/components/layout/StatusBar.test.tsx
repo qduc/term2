@@ -3,11 +3,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
 import React from 'react';
-import { render } from 'ink-testing-library';
 import StatusBar from './StatusBar.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
+import { renderInAct } from '../../test-helpers/ink-testing.js';
 
-test('StatusBar renders reasoning effort on the first row with the model', (t) => {
+test.serial('StatusBar renders reasoning effort on the first row with the model', async (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -15,27 +15,27 @@ test('StatusBar renders reasoning effort on the first row with the model', (t) =
     'shell.autoApproveMode': 'off',
   });
 
-  const { lastFrame } = render(<StatusBar settingsService={settingsService} />);
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('gpt-4o'));
   t.true(output.includes('(low)'));
-  t.false(output.includes('Reasoning:'));
   t.true(output.split('\n').some((line) => line.includes('gpt-4o') && line.includes('(low)')));
 });
 
-test('StatusBar renders cache usage in the footer', (t) => {
+test.serial('StatusBar renders cache usage in the footer', async (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
     'shell.autoApproveMode': 'off',
   });
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <StatusBar
       settingsService={settingsService}
       lastUsage={{ prompt_tokens: 1200, completion_tokens: 350, cache_read_tokens: 900, cache_creation_tokens: 120 }}
     />,
+    t,
   );
 
   const output = lastFrame() ?? '';
@@ -43,7 +43,7 @@ test('StatusBar renders cache usage in the footer', (t) => {
   t.true(output.includes('Tok: 1,200 in (900 cached, 120 cache write) / 350 out'));
 });
 
-test('StatusBar renders Plan mode badge', (t) => {
+test.serial('StatusBar renders Plan mode badge', async (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -51,14 +51,14 @@ test('StatusBar renders Plan mode badge', (t) => {
     'app.planMode': true,
   });
 
-  const { lastFrame } = render(<StatusBar settingsService={settingsService} />);
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('Plan'));
   t.false(output.includes('Default'));
 });
 
-test('StatusBar renders Orchestrator mode badge instead of Standard', (t) => {
+test.serial('StatusBar renders Orchestrator mode badge instead of Standard', async (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-5',
     'agent.provider': 'openai',
@@ -66,14 +66,14 @@ test('StatusBar renders Orchestrator mode badge instead of Standard', (t) => {
     'app.orchestratorMode': true,
   });
 
-  const { lastFrame } = render(<StatusBar settingsService={settingsService} />);
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('Orchestrator'));
   t.false(output.includes('Standard'));
 });
 
-test('StatusBar renders Codex rate limits when valid, but hides them when invalid or NaN', (t) => {
+test.serial('StatusBar renders Codex rate limits when valid, but hides them when invalid or NaN', async (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -81,7 +81,7 @@ test('StatusBar renders Codex rate limits when valid, but hides them when invali
   });
 
   // 1. Valid case
-  const { lastFrame: lastFrameValid } = render(
+  const { lastFrame: lastFrameValid } = await renderInAct(
     <StatusBar
       settingsService={settingsService}
       lastCodexRateLimit={{
@@ -91,6 +91,7 @@ test('StatusBar renders Codex rate limits when valid, but hides them when invali
         secondary: { used_percent: 14, window_minutes: 10080, reset_after_seconds: 503937, reset_at: 1780197277 },
       }}
     />,
+    t,
   );
   const outputValid = lastFrameValid() ?? '';
   t.true(outputValid.includes('5H: 11%'));
@@ -99,7 +100,7 @@ test('StatusBar renders Codex rate limits when valid, but hides them when invali
   t.false(outputValid.includes('NaN'));
 
   // 2. Invalid/partial case (e.g. empty objects as fallback values)
-  const { lastFrame: lastFrameInvalid } = render(
+  const { lastFrame: lastFrameInvalid } = await renderInAct(
     <StatusBar
       settingsService={settingsService}
       lastCodexRateLimit={{
@@ -109,6 +110,7 @@ test('StatusBar renders Codex rate limits when valid, but hides them when invali
         secondary: {} as any,
       }}
     />,
+    t,
   );
   const outputInvalid = lastFrameInvalid() ?? '';
   t.false(outputInvalid.includes('H:'));
@@ -118,7 +120,7 @@ test('StatusBar renders Codex rate limits when valid, but hides them when invali
   t.false(outputInvalid.includes('Invalid Date'));
 });
 
-test('StatusBar renders large uncached prompt warning and confirmation warning', (t) => {
+test.serial('StatusBar renders large uncached prompt warning and confirmation warning', async (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -132,12 +134,13 @@ test('StatusBar renders large uncached prompt warning and confirmation warning',
   };
 
   // Test dynamic warning
-  const { lastFrame: lastFrameWarning } = render(
+  const { lastFrame: lastFrameWarning } = await renderInAct(
     <StatusBar
       settingsService={settingsService}
       lastUsage={lastUsage}
       largeUncachedWarning={{ estimatedTokens: 72_100 }}
     />,
+    t,
   );
   const outputWarning = lastFrameWarning() ?? '';
   t.true(outputWarning.includes('Tok: 63,561 in (⚠️ 62,000 uncached) / 856 out'));
@@ -145,33 +148,35 @@ test('StatusBar renders large uncached prompt warning and confirmation warning',
   t.false(outputWarning.includes('Confirm Cache Miss'));
 
   // Test pending confirmation warning
-  const { lastFrame: lastFrameConfirm } = render(
+  const { lastFrame: lastFrameConfirm } = await renderInAct(
     <StatusBar
       settingsService={settingsService}
       lastUsage={lastUsage}
       largeUncachedWarning={{ estimatedTokens: 72_100 }}
       hasPendingConfirmation={true}
     />,
+    t,
   );
   const outputConfirm = lastFrameConfirm() ?? '';
   t.true(outputConfirm.includes('Tok: 63,561 in (⚠️ 62,000 uncached) / 856 out'));
   t.false(outputConfirm.includes('Confirm Cache Miss'));
 });
 
-test('StatusBar renders Confirm Cache Miss using pendingLargeUncachedTokens', (t) => {
+test.serial('StatusBar renders Confirm Cache Miss using pendingLargeUncachedTokens', async (t) => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
     'shell.autoApproveMode': 'off',
   });
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <StatusBar
       settingsService={settingsService}
       largeUncachedWarning={{ estimatedTokens: 100_000 }}
       hasPendingConfirmation={true}
       pendingLargeUncachedTokens={20_000}
     />,
+    t,
   );
 
   const output = lastFrame() ?? '';

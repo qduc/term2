@@ -4,8 +4,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import test from 'ava';
 import React, { act, useState } from 'react';
 import { Text } from 'ink';
-import { render } from 'ink-testing-library';
 import { useConversation } from './use-conversation.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 const loggingService = {
   debug() {},
@@ -47,9 +47,7 @@ test.serial('useConversation triggers onClear and resets messages/sessionId', as
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<Harness />));
-  });
+  ({ lastFrame } = await renderInAct(<Harness />, t));
   t.truthy(lastFrame);
   t.is(lastFrame!(), 'old-session-id|1');
 
@@ -86,9 +84,7 @@ test.serial('useConversation fallback clear resets with a fresh session id', asy
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<Harness />));
-  });
+  ({ lastFrame } = await renderInAct(<Harness />, t));
   t.truthy(lastFrame);
   t.is(lastFrame!(), '1');
 
@@ -136,9 +132,7 @@ test.serial('useConversation filters duplicate stack trace from rawEvent when lo
     return <Text>Harness</Text>;
   };
 
-  await act(async () => {
-    render(<Harness />);
-  });
+  await renderInAct(<Harness />, t);
 
   await act(async () => {
     try {
@@ -183,9 +177,7 @@ test.serial('useConversation exposes transient thinking state only while hidden 
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<Harness />));
-  });
+  ({ lastFrame } = await renderInAct(<Harness />, t));
 
   t.is(lastFrame!(), 'idle');
 

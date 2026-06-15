@@ -3,16 +3,16 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
 import React, { act } from 'react';
-import { render } from 'ink-testing-library';
 import { useConversationMessages } from './use-conversation-messages.js';
 import type { Message } from '../types/message.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 type HarnessProps = { initialMessages?: Message[]; maxMessageCount?: number };
 type HookResult = ReturnType<typeof useConversationMessages>;
 
 // Box holds a fresh reference on every render so the caller always sees the
 // latest hook return value. Tests are serial to avoid overlapping act() calls.
-const renderHarness = async (props: HarnessProps = {}) => {
+const renderHarness = async (t: Parameters<typeof renderInAct>[1], props: HarnessProps = {}) => {
   const box: { current: HookResult | null } = { current: null };
   const Harness = () => {
     box.current = useConversationMessages({
@@ -21,9 +21,7 @@ const renderHarness = async (props: HarnessProps = {}) => {
     });
     return null;
   };
-  await act(async () => {
-    render(<Harness />);
-  });
+  await renderInAct(<Harness />, t);
   if (!box.current) {
     throw new Error('Hook did not mount in time');
   }
@@ -41,12 +39,12 @@ const run = async (callback: () => void) => {
 };
 
 test.serial('initializes with empty messages by default', async (t) => {
-  const box = await renderHarness();
+  const box = await renderHarness(t);
   t.is(box.current.messages.length, 0);
 });
 
 test.serial('initializes with provided initial messages', async (t) => {
-  const box = await renderHarness({
+  const box = await renderHarness(t, {
     initialMessages: [
       { id: '1', sender: 'user', text: 'hello' } as Message,
       { id: '2', sender: 'bot', text: 'hi there' } as Message,
@@ -56,7 +54,7 @@ test.serial('initializes with provided initial messages', async (t) => {
 });
 
 test.serial('appendMessages adds messages', async (t) => {
-  const box = await renderHarness();
+  const box = await renderHarness(t);
 
   await run(() => {
     box.current.appendMessages([{ id: '1', sender: 'user', text: 'hello' } as Message]);
@@ -67,7 +65,7 @@ test.serial('appendMessages adds messages', async (t) => {
 });
 
 test.serial('appendMessages ignores empty additions', async (t) => {
-  const box = await renderHarness();
+  const box = await renderHarness(t);
 
   await run(() => {
     box.current.appendMessages([]);
@@ -77,7 +75,7 @@ test.serial('appendMessages ignores empty additions', async (t) => {
 });
 
 test.serial('trimMessages enforces maxMessageCount', async (t) => {
-  const box = await renderHarness({ maxMessageCount: 3 });
+  const box = await renderHarness(t, { maxMessageCount: 3 });
 
   await run(() => {
     box.current.appendMessages([
@@ -93,7 +91,7 @@ test.serial('trimMessages enforces maxMessageCount', async (t) => {
 });
 
 test.serial('addSystemMessage adds a system message', async (t) => {
-  const box = await renderHarness();
+  const box = await renderHarness(t);
 
   await run(() => {
     box.current.addSystemMessage('system instruction');
@@ -105,7 +103,7 @@ test.serial('addSystemMessage adds a system message', async (t) => {
 });
 
 test.serial('addShellMessage adds a completed command message', async (t) => {
-  const box = await renderHarness();
+  const box = await renderHarness(t);
 
   await run(() => {
     box.current.addShellMessage('echo hi', 'hi', 0, false);
@@ -122,7 +120,7 @@ test.serial('addShellMessage adds a completed command message', async (t) => {
 });
 
 test.serial('addShellMessage adds a failed command message', async (t) => {
-  const box = await renderHarness();
+  const box = await renderHarness(t);
 
   await run(() => {
     box.current.addShellMessage('false', '', 1, false);
@@ -135,7 +133,7 @@ test.serial('addShellMessage adds a failed command message', async (t) => {
 });
 
 test.serial('addShellMessage adds a timed-out command message', async (t) => {
-  const box = await renderHarness();
+  const box = await renderHarness(t);
 
   await run(() => {
     box.current.addShellMessage('sleep 100', '', null, true);
@@ -148,7 +146,7 @@ test.serial('addShellMessage adds a timed-out command message', async (t) => {
 });
 
 test.serial('addShellMessage handles null exitCode (error)', async (t) => {
-  const box = await renderHarness();
+  const box = await renderHarness(t);
 
   await run(() => {
     box.current.addShellMessage('bad-cmd', '', null, false);
@@ -159,7 +157,7 @@ test.serial('addShellMessage handles null exitCode (error)', async (t) => {
 });
 
 test.serial('getUserMessages returns user messages with indices', async (t) => {
-  const box = await renderHarness({
+  const box = await renderHarness(t, {
     initialMessages: [
       { id: '1', sender: 'user', text: 'first' } as Message,
       { id: '2', sender: 'bot', text: 'response' } as Message,
@@ -176,7 +174,7 @@ test.serial('getUserMessages returns user messages with indices', async (t) => {
 });
 
 test.serial('getUserMessages returns empty for no user messages', async (t) => {
-  const box = await renderHarness({
+  const box = await renderHarness(t, {
     initialMessages: [{ id: '1', sender: 'bot', text: 'only bot' } as Message],
   });
 
@@ -184,7 +182,7 @@ test.serial('getUserMessages returns empty for no user messages', async (t) => {
 });
 
 test.serial('setMessages updates messages directly', async (t) => {
-  const box = await renderHarness();
+  const box = await renderHarness(t);
 
   await run(() => {
     box.current.setMessages([{ id: '1', sender: 'user', text: 'direct' } as Message]);

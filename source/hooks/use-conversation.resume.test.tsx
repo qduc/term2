@@ -4,9 +4,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import test from 'ava';
 import React from 'react';
 import { Text } from 'ink';
-import { render } from 'ink-testing-library';
 
 import { useConversation, type Message } from './use-conversation.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 const loggingService = {
   debug() {},
@@ -31,21 +31,22 @@ const Harness = ({ initialMessages }: { initialMessages: Message[] }) => {
   );
 };
 
-test('useConversation initializes with restored messages', (t) => {
-  const { lastFrame } = render(
+test.serial('useConversation initializes with restored messages', async (t) => {
+  const { lastFrame } = await renderInAct(
     <Harness
       initialMessages={[
         { id: 'user-1', sender: 'user', text: 'previous question' },
         { id: 'bot-1', sender: 'bot', text: 'previous answer', status: 'finalized' },
       ]}
     />,
+    t,
   );
 
   t.is(lastFrame(), 'previous question|previous answer\nnull');
 });
 
-test('useConversation initializes lastUsage from the last restored assistant message', (t) => {
-  const { lastFrame } = render(
+test.serial('useConversation initializes lastUsage from the last restored assistant message', async (t) => {
+  const { lastFrame } = await renderInAct(
     <Harness
       initialMessages={[
         {
@@ -65,6 +66,7 @@ test('useConversation initializes lastUsage from the last restored assistant mes
         },
       ]}
     />,
+    t,
   );
 
   t.is(

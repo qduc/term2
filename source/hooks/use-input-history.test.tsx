@@ -3,8 +3,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
 import React, { act } from 'react';
-import { render } from 'ink-testing-library';
 import { useInputHistory } from './use-input-history.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 type TestHistoryService = {
   getTurns: () => Array<{
@@ -23,7 +23,7 @@ const HookHarness = ({ historyService }: { historyService: TestHistoryService })
   return null;
 };
 
-test('useInputHistory preserves image attachments when navigating back to the draft', async (t) => {
+test.serial('useInputHistory preserves image attachments when navigating back to the draft', async (t) => {
   hookControls = null;
 
   const draftImage = {
@@ -48,9 +48,7 @@ test('useInputHistory preserves image attachments when navigating back to the dr
     getMessages: () => ['Look at this'],
   };
 
-  await act(async () => {
-    render(<HookHarness historyService={historyService} />);
-  });
+  await renderInAct(<HookHarness historyService={historyService} />, t);
 
   t.truthy(hookControls);
 

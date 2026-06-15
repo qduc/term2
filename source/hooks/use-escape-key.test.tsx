@@ -3,11 +3,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
 import React, { act, useEffect, useState } from 'react';
-import { render } from 'ink-testing-library';
 import { useEscapeKey } from './use-escape-key.js';
 import type { InputMode } from '../context/InputContext.js';
 import { SETTINGS_TRIGGER } from '../components/input/triggers.js';
 import { Box, Text, useInput, useStdin } from 'ink';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as InputMode }) => {
   const [value, onChange] = useState(initialValue);
@@ -46,8 +46,8 @@ const flushReactUpdates = async (iterations = 1) => {
   });
 };
 
-const renderAndFlush = async (element: React.ReactElement) => {
-  const result = render(element);
+const renderAndFlush = async (element: React.ReactElement, context: Parameters<typeof renderInAct>[1]) => {
+  const result = await renderInAct(element, context);
   await flushReactUpdates(10);
   return result;
 };
@@ -68,7 +68,7 @@ const pressEscape = async (emitter: { emit: (event: string, input: string) => vo
   await flushReactUpdates(3);
 };
 
-test('pressing ESC once shows hint, second time clears input', async (t) => {
+test.serial('pressing ESC once shows hint, second time clears input', async (t) => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
 
   const TestHarness = () => {
@@ -78,7 +78,7 @@ test('pressing ESC once shows hint, second time clears input', async (t) => {
     return <TestComponent />;
   };
 
-  const { lastFrame } = await renderAndFlush(<TestHarness />);
+  const { lastFrame } = await renderAndFlush(<TestHarness />, t);
 
   // Initial state
   t.true(lastFrame()!.includes('Value: some text'));
@@ -102,7 +102,7 @@ test('pressing ESC once shows hint, second time clears input', async (t) => {
   t.false(finalFrame.includes('some text'), 'Value should be cleared');
 });
 
-test('useInput fires ESC in non-text mode', async (t) => {
+test.serial('useInput fires ESC in non-text mode', async (t) => {
   // Minimal test: verify useInput fires ESC when mode starts as model_selection
   let inputFired = false;
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
@@ -116,12 +116,12 @@ test('useInput fires ESC in non-text mode', async (t) => {
     return <Text>test</Text>;
   };
 
-  await renderAndFlush(<MinimalComponent />);
+  await renderAndFlush(<MinimalComponent />, t);
   await pressEscape(inputEmitter!);
   t.true(inputFired, 'useInput should fire on ESC');
 });
 
-test('pressing ESC in model_selection mode clears input and switches to text mode', async (t) => {
+test.serial('pressing ESC in model_selection mode clears input and switches to text mode', async (t) => {
   let modes: InputMode[] = [];
   let values: string[] = [];
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
@@ -159,7 +159,7 @@ test('pressing ESC in model_selection mode clears input and switches to text mod
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<ModelSelectionTestComponent />);
+  const { lastFrame } = await renderAndFlush(<ModelSelectionTestComponent />, t);
 
   const initialFrame = lastFrame()!;
   t.log('Initial frame:', JSON.stringify(initialFrame));
@@ -179,7 +179,7 @@ test('pressing ESC in model_selection mode clears input and switches to text mod
   t.false(frame.includes('/model'), 'Input trigger text should be cleared');
 });
 
-test('pressing ESC in slash_commands mode clears input and switches to text mode', async (t) => {
+test.serial('pressing ESC in slash_commands mode clears input and switches to text mode', async (t) => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const SlashTestComponent = () => {
     const [value, onChange] = useState('/cle');
@@ -211,7 +211,7 @@ test('pressing ESC in slash_commands mode clears input and switches to text mode
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<SlashTestComponent />);
+  const { lastFrame } = await renderAndFlush(<SlashTestComponent />, t);
 
   t.true(lastFrame()!.includes('Mode: slash_commands'), 'Initial mode should be slash_commands');
 
@@ -254,7 +254,7 @@ test('pressing ESC in path_completion mode keeps input and switches to text mode
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<PathTestComponent />);
+  const { lastFrame } = await renderAndFlush(<PathTestComponent />, t);
 
   t.true(lastFrame()!.includes('Mode: path_completion'), 'Initial mode should be path_completion');
 
@@ -297,7 +297,7 @@ test('pressing ESC in settings_completion mode clears input and switches to text
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<SettingsTestComponent />);
+  const { lastFrame } = await renderAndFlush(<SettingsTestComponent />, t);
 
   t.true(lastFrame()!.includes('Mode: settings_completion'), 'Initial mode should be settings_completion');
 
@@ -359,7 +359,7 @@ test('pressing ESC in model_selection mode with settings-backed model setting re
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<SettingsBackedModelComponent />);
+  const { lastFrame } = await renderAndFlush(<SettingsBackedModelComponent />, t);
 
   const initialFrame = lastFrame()!;
   t.true(initialFrame.includes('Mode: model_selection'), 'Initial mode should be model_selection');
@@ -423,7 +423,7 @@ test('pressing ESC in non-settings settings_value_completion mode keeps trigger 
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<SettingsValueTestComponent />);
+  const { lastFrame } = await renderAndFlush(<SettingsValueTestComponent />, t);
 
   t.true(lastFrame()!.includes('Mode: settings_value_completion'), 'Initial mode should be settings_value_completion');
 
@@ -472,7 +472,7 @@ test('pressing ESC in provider_selection calls goBack', async (t) => {
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<ProviderSelectionTestComponent />);
+  const { lastFrame } = await renderAndFlush(<ProviderSelectionTestComponent />, t);
   t.true(lastFrame()!.includes('Mode: provider_selection'));
 
   await pressEscape(inputEmitter!);
@@ -525,7 +525,7 @@ test('pressing ESC in provider_selection calls the LATEST goBack function (verif
     );
   };
 
-  const { lastFrame } = await renderAndFlush(<ProviderSelectionStaleClosureHarness />);
+  const { lastFrame } = await renderAndFlush(<ProviderSelectionStaleClosureHarness />, t);
   t.true(lastFrame()!.includes('Mode: provider_selection'));
   t.true(lastFrame()!.includes('Version: 1'));
 

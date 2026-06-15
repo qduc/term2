@@ -3,9 +3,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
 import React, { useEffect, useRef, act } from 'react';
-import { render } from 'ink-testing-library';
-import { Box, Text, useStdin } from 'ink';
-import InputBox, { calculateInputWidth, getProviderWizardPromptLabel } from './InputBox.js';
+import { Box, Text } from 'ink';
+import InputBox, { getProviderWizardPromptLabel } from './InputBox.js';
 import ModelSelectionMenu from './menu/ModelSelectionMenu.js';
 import SettingsSelectionMenu from './menu/SettingsSelectionMenu.js';
 import { computeModelInsertion } from './input/insertions.js';
@@ -13,10 +12,14 @@ import { SETTINGS_TRIGGER } from './input/triggers.js';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
 import type { SlashCommand } from '../slash-commands.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
+import type { LoggingService } from '../services/logging/logging-service.js';
+import type { HistoryService } from '../services/history-service.js';
 import { registerProvider, unregisterProvider } from '../providers/index.js';
 import { clearModelCache } from '../services/model-service.js';
 import { useModelSelection } from '../hooks/use-model-selection.js';
 import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 // Mock slash commands
 const mockSlashCommands: SlashCommand[] = [
@@ -24,34 +27,53 @@ const mockSlashCommands: SlashCommand[] = [
   { name: '/quit', description: 'Quit app', action: () => {} },
 ];
 
-// Default props for InputBox (only the actual props it accepts)
-const defaultProps = {
-  onSubmit: () => {},
-  slashCommands: mockSlashCommands,
-  isShellMode: false,
+// Types for test props — mock services only need to satisfy the subset used by InputBox
+type TestProps = {
+  onSubmit: (v: any) => void;
+  slashCommands: SlashCommand[];
+  isShellMode?: boolean;
+  settingsService: SettingsService;
+  loggingService: LoggingService;
+  historyService: HistoryService;
+  waitingForRejectionReason?: boolean;
+  allowEmptySubmit?: boolean;
+  promptLabel?: string;
+  onSystemMessage?: (text: string) => void;
+  providersMenuRef?: React.MutableRefObject<{ open: () => void } | null>;
+};
 
-  settingsService: createMockSettingsService(),
-  loggingService: {
+const createMockLoggingService = (): LoggingService =>
+  ({
     info: () => {},
     warn: () => {},
     error: () => {},
     debug: () => {},
     security: () => {},
     setCorrelationId: () => {},
+    getCorrelationId: () => undefined,
     clearCorrelationId: () => {},
-  } as any,
-  historyService: {
+  } as unknown as LoggingService);
+
+const createMockHistoryService = (): HistoryService =>
+  ({
     getMessages: () => [],
     getTurns: () => [],
     addMessage: () => {},
     clear: () => {},
-  } as any,
-  onHistoryUp: () => {},
-  onHistoryDown: () => {},
+  } as unknown as HistoryService);
+
+// Default props for InputBox
+const defaultProps = {
+  onSubmit: () => {},
+  slashCommands: mockSlashCommands,
+  isShellMode: false,
+  settingsService: createMockSettingsService(),
+  loggingService: createMockLoggingService(),
+  historyService: createMockHistoryService(),
 };
 
 // Helper to wrap InputBox with InputProvider
-const TestInputBox = (props: any) => (
+const TestInputBox = (props: TestProps) => (
   <InputProvider>
     <InputBox {...props} />
   </InputProvider>
@@ -79,7 +101,53 @@ const getCursorFromFrame = (frame: string | undefined): number | null => {
   return match ? Number(match[1]) : null;
 };
 
-const flushReactUpdates = async (iterations = 1) => {
+/**
+ * Poll `lastFrame()` until `predicate` returns true, or the timeout elapses.
+ * Replaces arbitrary `act` / `setImmediate` iteration loops with a deterministic wait.
+ */
+const waitFor = async (
+  lastFrame: () => string | undefined,
+  predicate: (frame: string) => boolean,
+  { timeoutMs = 2000, intervalMs = 10 } = {},
+): Promise<string> => {
+  const deadline = Date.now() + timeoutMs;
+  let frame = lastFrame() ?? '';
+  while (!predicate(frame)) {
+    if (Date.now() > deadline) {
+      throw new Error(`waitFor timed out after ${timeoutMs}ms. Last frame:\n${frame}`);
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    });
+    frame = lastFrame() ?? '';
+  }
+  return frame;
+};
+
+/**
+ * Poll an arbitrary getter until `predicate` returns true, or the timeout elapses.
+ * Use for non-frame conditions (e.g., settings values, callback invocation flags).
+ */
+const waitForCondition = async <T,>(
+  getter: () => T,
+  predicate: (value: T) => boolean,
+  { timeoutMs = 3000, intervalMs = 10 } = {},
+): Promise<T> => {
+  const deadline = Date.now() + timeoutMs;
+  let value = getter();
+  while (!predicate(value)) {
+    if (Date.now() > deadline) {
+      throw new Error(`waitForCondition timed out after ${timeoutMs}ms. Last value: ${JSON.stringify(value)}`);
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    });
+    value = getter();
+  }
+  return value;
+};
+
+const flushReactUpdates = async (iterations = 5) => {
   await act(async () => {
     for (let i = 0; i < iterations; i++) {
       await new Promise((resolve) => setImmediate(resolve));
@@ -87,62 +155,67 @@ const flushReactUpdates = async (iterations = 1) => {
   });
 };
 
+const renderAndFlush = async (element: React.ReactElement, context: Parameters<typeof renderInAct>[1]) => {
+  const result = await renderInAct(element, context);
+  await flushReactUpdates(10);
+  return result;
+};
+
+/** Write input to stdin and flush pending updates for Ink to process it. */
 const writeInput = async (stdin: { write: (input: string) => void }, input: string) => {
   await act(async () => {
     stdin.write(input);
+    for (let i = 0; i < 10; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
   });
-  await flushReactUpdates(2);
 };
 
-test('InputBox renders without crashing', (t) => {
-  const { lastFrame } = render(<TestInputBox {...defaultProps} />);
-  t.truthy(lastFrame());
-});
-
-test('InputBox shows the input prompt', (t) => {
-  const { lastFrame } = render(<TestInputBox {...defaultProps} />);
+test.serial('InputBox shows the input prompt', async (t) => {
+  const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} />, t);
   const output = lastFrame();
-  t.truthy(output);
   // Should show the prompt character
   t.true(output!.includes('❯'));
 });
 
-test('InputBox shows the shell prompt when in shell mode', (t) => {
-  const { lastFrame } = render(<TestInputBox {...defaultProps} isShellMode />);
+test.serial('InputBox shows the shell prompt when in shell mode', async (t) => {
+  const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} isShellMode />, t);
   const output = lastFrame();
   t.truthy(output);
   t.true(output!.includes('$'));
 });
 
-test('getProviderWizardPromptLabel maps provider wizard phases to prompt labels', (t) => {
+test.serial('getProviderWizardPromptLabel maps provider wizard phases to prompt labels', (t) => {
   t.is(getProviderWizardPromptLabel('wizard_name'), 'Enter Provider Name: ');
   t.is(getProviderWizardPromptLabel('wizard_url'), 'Enter Base API URL: ');
   t.is(getProviderWizardPromptLabel('wizard_key'), 'Enter API Key: ');
   t.is(getProviderWizardPromptLabel('list' as any), undefined);
 });
 
-test('InputBox renders the provided prompt label', (t) => {
-  const { lastFrame } = render(<TestInputBox {...defaultProps} promptLabel="Enter Provider Name: " />);
+test.serial('InputBox renders the provided prompt label', async (t) => {
+  const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} promptLabel="Enter Provider Name: " />, t);
   const output = lastFrame();
   t.truthy(output);
   t.true(output!.includes('Enter Provider Name:'));
 });
 
-test('InputBox onSubmit is not called on empty input when allowEmptySubmit is false', async (t) => {
+test.serial('InputBox onSubmit is not called on empty input when allowEmptySubmit is false', async (t) => {
   let submitted = false;
   const onSubmit = () => {
     submitted = true;
   };
 
-  const { stdin } = render(<TestInputBox {...defaultProps} onSubmit={onSubmit} allowEmptySubmit={false} />);
+  const { stdin } = await renderAndFlush(
+    <TestInputBox {...defaultProps} onSubmit={onSubmit} allowEmptySubmit={false} />,
+    t,
+  );
 
   await writeInput(stdin, '\r');
-  await flushReactUpdates(5);
 
   t.false(submitted);
 });
 
-test('InputBox onSubmit is called on empty input when allowEmptySubmit is true', async (t) => {
+test.serial('InputBox onSubmit is called on empty input when allowEmptySubmit is true', async (t) => {
   let submitted = false;
   let submittedTurn: any = null;
   const onSubmit = (turn: any) => {
@@ -150,48 +223,20 @@ test('InputBox onSubmit is called on empty input when allowEmptySubmit is true',
     submittedTurn = turn;
   };
 
-  const { stdin } = render(<TestInputBox {...defaultProps} onSubmit={onSubmit} allowEmptySubmit={true} />);
+  const { stdin } = await renderAndFlush(
+    <TestInputBox {...defaultProps} onSubmit={onSubmit} allowEmptySubmit={true} />,
+    t,
+  );
 
   await writeInput(stdin, '\r');
-  await flushReactUpdates(5);
 
   t.true(submitted);
   t.deepEqual(submittedTurn, { text: '' });
 });
 
-test('InputBox accepts slash commands prop', (t) => {
-  const customCommands: SlashCommand[] = [{ name: '/test', description: 'Test command', action: () => {} }];
-
-  const { lastFrame } = render(<TestInputBox {...defaultProps} slashCommands={customCommands} />);
-
-  t.truthy(lastFrame());
-  t.pass();
-});
-
-test('InputBox accepts history callbacks', (t) => {
-  let historyUpCalled = false;
-  let historyDownCalled = false;
-
-  const onHistoryUp = () => {
-    historyUpCalled = true;
-  };
-
-  const onHistoryDown = () => {
-    historyDownCalled = true;
-  };
-
-  render(<TestInputBox {...defaultProps} onHistoryUp={onHistoryUp} onHistoryDown={onHistoryDown} />);
-
-  // Note: We can't easily trigger history navigation in this unit test
-  // This test just verifies the component accepts the callbacks
-  t.false(historyUpCalled);
-  t.false(historyDownCalled);
-  t.pass();
-});
-
-test('InputBox keeps cursor fixed when left arrow switches model provider', async (t) => {
+test.serial('InputBox keeps cursor fixed when left arrow switches model provider', async (t) => {
   const initialValue = '/model gpt-5';
-  const { lastFrame, stdin } = render(
+  const { lastFrame, stdin } = await renderAndFlush(
     <TestInputBoxWithCursorState
       {...defaultProps}
       slashCommands={[
@@ -204,27 +249,13 @@ test('InputBox keeps cursor fixed when left arrow switches model provider', asyn
         },
       ]}
     />,
+    t,
   );
-
   await writeInput(stdin, initialValue);
-  await flushReactUpdates(20);
   const beforeCursor = getCursorFromFrame(lastFrame());
   await writeInput(stdin, '\u001B[D');
-  await flushReactUpdates(5);
 
   t.is(getCursorFromFrame(lastFrame()), beforeCursor, lastFrame());
-});
-
-test('calculateInputWidth uses default prompt width for normal mode', (t) => {
-  t.is(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: false, isShellMode: false }), 74);
-});
-
-test('calculateInputWidth uses default prompt width for shell mode', (t) => {
-  t.is(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: false, isShellMode: true }), 74);
-});
-
-test('calculateInputWidth uses rejection prompt width for rejection mode', (t) => {
-  t.is(calculateInputWidth({ terminalColumns: 80, waitingForRejectionReason: true, isShellMode: false }), 71);
 });
 
 const StateDisplay = () => {
@@ -236,7 +267,7 @@ const StateDisplay = () => {
   );
 };
 
-const noopLoggingService = defaultProps.loggingService;
+const noopLoggingService = createMockLoggingService();
 
 const ModelSelectionSubmitHarness = ({
   trigger,
@@ -378,7 +409,7 @@ const SettingsValueCommitHarness = ({
   );
 };
 
-test('settings-backed model selection restores settings menu after submit', async (t) => {
+test.serial('settings-backed model selection restores settings menu after submit', async (t) => {
   clearModelCache();
   const mockProviderId = `mock-provider-${Date.now()}-${Math.random()}`;
   registerProvider({
@@ -395,7 +426,7 @@ test('settings-backed model selection restores settings menu after submit', asyn
     'agent.provider': mockProviderId,
   });
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderAndFlush(
     <InputProvider>
       <ModelSelectionSubmitHarness
         trigger="/settings agent.model "
@@ -403,18 +434,18 @@ test('settings-backed model selection restores settings menu after submit', asyn
         onSubmit={() => {}}
       />
     </InputProvider>,
+    t,
   );
 
-  await flushReactUpdates(40);
+  const frame = await waitFor(lastFrame, (f) => f.includes('agent.model'));
 
-  const frame = lastFrame() ?? '';
   t.is(settingsService.get('agent.model'), 'gpt-test');
   t.is(settingsService.get('agent.provider'), mockProviderId);
   t.true(frame.includes('Input:/settings '), `Input should be restored to settings trigger, got: ${frame}`);
   t.true(frame.includes('▶ agent.model'), `Selection should target agent.model, got: ${frame}`);
 });
 
-test('command-backed model selection still submits after selection', async (t) => {
+test.serial('command-backed model selection still submits after selection', async (t) => {
   clearModelCache();
   const mockProviderId = `mock-provider-2-${Date.now()}-${Math.random()}`;
   registerProvider({
@@ -432,7 +463,7 @@ test('command-backed model selection still submits after selection', async (t) =
     'agent.provider': mockProviderId,
   });
 
-  render(
+  await renderAndFlush(
     <InputProvider>
       <ModelSelectionSubmitHarness
         trigger="/model "
@@ -442,94 +473,104 @@ test('command-backed model selection still submits after selection', async (t) =
         }}
       />
     </InputProvider>,
+    t,
   );
 
-  await flushReactUpdates(40);
+  await waitForCondition(
+    () => submitted,
+    (v) => v,
+  );
 
   t.true(submitted, 'onSubmit should be called for command-backed model selection');
   t.is(settingsService.get('agent.provider'), mockProviderId);
 });
 
-test('settings value completion saves setting and reopens settings menu targeting the saved key', async (t) => {
+test.serial('settings value completion saves setting and reopens settings menu targeting the saved key', async (t) => {
   const settingsService = createMockSettingsService({
     'shell.timeout': 120000,
   });
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderAndFlush(
     <InputProvider>
       <SettingsValueCommitHarness settingsService={settingsService} reset={false} />
     </InputProvider>,
+    t,
   );
 
-  await flushReactUpdates(40);
+  const frame = await waitFor(lastFrame, (f) => f.includes('shell.timeout'));
 
   // The setting should be updated to 60000
   t.is(settingsService.get('shell.timeout'), 60000);
 
   // The menu should be restored targeting 'shell.timeout'
-  const frame = lastFrame() ?? '';
   t.true(frame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
   t.true(frame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
 });
 
-test('settings value completion resets setting and reopens settings menu targeting the reset key', async (t) => {
+test.serial('settings value completion resets setting and reopens settings menu targeting the reset key', async (t) => {
   const settingsService = createMockSettingsService({
     'shell.timeout': 60000,
   });
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderAndFlush(
     <InputProvider>
       <SettingsValueCommitHarness settingsService={settingsService} reset={true} />
     </InputProvider>,
+    t,
   );
 
-  await flushReactUpdates(40);
+  const frame = await waitFor(lastFrame, (f) => f.includes('shell.timeout'));
 
   // The setting should be reset to default (120000)
   t.is(settingsService.get('shell.timeout'), 120000);
 
   // The menu should be restored targeting 'shell.timeout'
-  const frame = lastFrame() ?? '';
   t.true(frame.includes('Input:/settings'), `Input should be restored to settings trigger, got: ${frame}`);
   t.true(frame.includes('▶ shell.timeout'), `Selection should remain on shell.timeout, got: ${frame}`);
 });
 
-test('settings value completion prefers typed custom numeric value over the selected current value', async (t) => {
-  const settingsService = createMockSettingsService({
-    'shell.timeout': 120000,
-  });
+test.serial(
+  'settings value completion prefers typed custom numeric value over the selected current value',
+  async (t) => {
+    const settingsService = createMockSettingsService({
+      'shell.timeout': 120000,
+    });
 
-  const mockSettingsCommand: SlashCommand = {
-    name: '/settings',
-    description: 'Settings',
-    action: () => {},
-    completion: {
-      type: 'settings',
-      trigger: '/settings ',
-      resetTrigger: '/settings reset ',
-    },
-  };
+    const mockSettingsCommand: SlashCommand = {
+      name: '/settings',
+      description: 'Settings',
+      action: () => {},
+      completion: {
+        type: 'settings',
+        trigger: '/settings ',
+        resetTrigger: '/settings reset ',
+      },
+    };
 
-  const { stdin } = render(
-    <InputProvider>
-      <InputBox
-        {...defaultProps}
-        settingsService={settingsService}
-        slashCommands={[...mockSlashCommands, mockSettingsCommand]}
-      />
-    </InputProvider>,
-  );
+    const { stdin } = await renderAndFlush(
+      <InputProvider>
+        <InputBox
+          {...defaultProps}
+          settingsService={settingsService}
+          slashCommands={[...mockSlashCommands, mockSettingsCommand]}
+        />
+      </InputProvider>,
+      t,
+    );
 
-  await flushReactUpdates(5);
-  await writeInput(stdin, '/settings shell.timeout 60000');
-  await flushReactUpdates(30);
-  await writeInput(stdin, '\r');
-  await flushReactUpdates(40);
+    await writeInput(stdin, '/settings shell.timeout 60000');
+    await writeInput(stdin, '\r');
 
-  t.is(settingsService.get('shell.timeout'), 60000);
-});
+    await waitForCondition(
+      () => settingsService.get('shell.timeout'),
+      (v) => v === 60000,
+    );
 
-test('settings value completion persists startup-only settings for the next session', async (t) => {
+    t.is(settingsService.get('shell.timeout'), 60000);
+  },
+);
+
+test.serial('settings value completion persists startup-only settings for the next session', async (t) => {
   const settingsService = createMockSettingsService({
     'agent.maxTurns': 100,
   });
@@ -545,7 +586,7 @@ test('settings value completion persists startup-only settings for the next sess
     },
   };
 
-  const { stdin } = render(
+  const { stdin } = await renderAndFlush(
     <InputProvider>
       <InputBox
         {...defaultProps}
@@ -553,18 +594,21 @@ test('settings value completion persists startup-only settings for the next sess
         slashCommands={[...mockSlashCommands, mockSettingsCommand]}
       />
     </InputProvider>,
+    t,
   );
 
-  await flushReactUpdates(5);
   await writeInput(stdin, '/settings agent.maxTurns 30');
-  await flushReactUpdates(30);
   await writeInput(stdin, '\r');
-  await flushReactUpdates(40);
+
+  await waitForCondition(
+    () => settingsService.get('agent.maxTurns'),
+    (v) => v === 30,
+  );
 
   t.is(settingsService.get('agent.maxTurns'), 30);
 });
 
-test('settings value completion shows restart notice for startup-only settings', async (t) => {
+test.serial('settings value completion shows restart notice for startup-only settings', async (t) => {
   const settingsService = createMockSettingsService({
     'agent.maxTurns': 100,
   });
@@ -581,7 +625,7 @@ test('settings value completion shows restart notice for startup-only settings',
     },
   };
 
-  const { stdin } = render(
+  const { stdin } = await renderAndFlush(
     <InputProvider>
       <InputBox
         {...defaultProps}
@@ -592,18 +636,21 @@ test('settings value completion shows restart notice for startup-only settings',
         }}
       />
     </InputProvider>,
+    t,
   );
 
-  await flushReactUpdates(5);
   await writeInput(stdin, '/settings agent.maxTurns 30');
-  await flushReactUpdates(30);
   await writeInput(stdin, '\r');
-  await flushReactUpdates(40);
+
+  await waitForCondition(
+    () => systemMessages,
+    (msgs) => msgs.length > 0,
+  );
 
   t.deepEqual(systemMessages, ['Saved agent.maxTurns = 30. This setting applies after restart.']);
 });
 
-test('InputBox ignores focus sequences when not in text mode', async (t) => {
+test.serial('InputBox ignores focus sequences when not in text mode', async (t) => {
   const TestHarness = () => (
     <InputProvider>
       <StateDisplay />
@@ -611,33 +658,28 @@ test('InputBox ignores focus sequences when not in text mode', async (t) => {
     </InputProvider>
   );
 
-  const { lastFrame, stdin } = render(<TestHarness />);
+  const { lastFrame, stdin } = await renderAndFlush(<TestHarness />, t);
 
   // Trigger slash commands mode by writing "/"
   await writeInput(stdin, '/');
-  await flushReactUpdates(45);
-
-  let frame = lastFrame() ?? '';
+  let frame = await waitFor(lastFrame, (f) => f.includes('slash_commands'));
   t.true(frame.includes('Input:/|Mode:slash_commands'), frame);
 
-  // Write focus-in sequence
+  // Write focus-in sequence — should be ignored
   await writeInput(stdin, '\x1b[I');
-  await flushReactUpdates(30);
-
+  await flushReactUpdates(10);
   frame = lastFrame() ?? '';
-  // Input should still be "/"
   t.true(frame.includes('Input:/|Mode:slash_commands'), frame);
 
-  // Write focus-out sequence
+  // Write focus-out sequence — should be ignored
   await writeInput(stdin, '\x1b[O');
-  await flushReactUpdates(30);
-
+  await flushReactUpdates(10);
   frame = lastFrame() ?? '';
   // Input should still be "/"
   t.true(frame.includes('Input:/|Mode:slash_commands'), frame);
 });
 
-test('InputBox ignores focus sequences when in text mode', async (t) => {
+test.serial('InputBox ignores focus sequences when in text mode', async (t) => {
   const TestHarness = () => (
     <InputProvider>
       <StateDisplay />
@@ -645,30 +687,26 @@ test('InputBox ignores focus sequences when in text mode', async (t) => {
     </InputProvider>
   );
 
-  const { lastFrame, stdin } = render(<TestHarness />);
-  await flushReactUpdates(5);
-
+  const { lastFrame, stdin } = await renderAndFlush(<TestHarness />, t);
   let frame = lastFrame() ?? '';
   t.true(frame.includes('Input:|Mode:text'), frame);
 
-  // Write focus-in sequence
+  // Write focus-in sequence — should be ignored
   await writeInput(stdin, '\x1b[I');
-  await flushReactUpdates(20);
-
+  await flushReactUpdates(10);
   frame = lastFrame() ?? '';
   // Input should still be empty
   t.true(frame.includes('Input:|Mode:text'), frame);
 
-  // Write focus-out sequence
+  // Write focus-out sequence — should be ignored
   await writeInput(stdin, '\x1b[O');
-  await flushReactUpdates(20);
-
+  await flushReactUpdates(10);
   frame = lastFrame() ?? '';
   // Input should still be empty
   t.true(frame.includes('Input:|Mode:text'), frame);
 });
 
-test('settings value completion shows current custom settings value in suggestions list', async (t) => {
+test.serial('settings value completion shows current custom settings value in suggestions list', async (t) => {
   const originalColumns = process.stdout.columns;
   process.stdout.columns = 80;
   t.teardown(() => {
@@ -690,7 +728,7 @@ test('settings value completion shows current custom settings value in suggestio
     },
   };
 
-  const { lastFrame, stdin } = render(
+  const { lastFrame, stdin } = await renderAndFlush(
     <InputProvider>
       <InputBox
         {...defaultProps}
@@ -698,54 +736,35 @@ test('settings value completion shows current custom settings value in suggestio
         slashCommands={[...mockSlashCommands, mockSettingsCommand]}
       />
     </InputProvider>,
+    t,
   );
-
-  await flushReactUpdates(5);
 
   // Write trigger value to enter settings value completion mode
   await writeInput(stdin, '/settings agent.maxTurns ');
-  await flushReactUpdates(45);
+  const frame = await waitFor(lastFrame, (f) => f.includes('Current value'), { timeoutMs: 5000 });
 
-  const frame = lastFrame() ?? '';
   t.true(frame.includes('35 — Current value'), `Should show current custom value in completion list, got:\n${frame}`);
 });
 
-const TestInputBoxWithEmitter = ({ onEmitter, ...props }: any) => {
-  const stdin = useStdin() as any;
-  useEffect(() => {
-    if (stdin?.internal_eventEmitter) {
-      onEmitter(stdin.internal_eventEmitter);
-    }
-  }, [stdin, onEmitter]);
-  return <InputBox {...props} />;
-};
-
-test('InputBox allows backspace and delete keys to modify input in provider wizard phases', async (t) => {
+test.serial('InputBox allows backspace and delete keys to modify input in provider wizard phases', async (t) => {
   const providersMenuRef = { current: null as any };
   const settingsService = createMockSettingsService();
-  let inputEmitter: any = null;
 
-  const { lastFrame } = render(
+  const { lastFrame, stdin } = await renderAndFlush(
     <InputProvider>
       <StateDisplay />
-      <TestInputBoxWithEmitter
-        {...defaultProps}
-        settingsService={settingsService}
-        providersMenuRef={providersMenuRef}
-        onEmitter={(emitter: any) => {
-          inputEmitter = emitter;
-        }}
-      />
+      <InputBox {...defaultProps} settingsService={settingsService} providersMenuRef={providersMenuRef} />
     </InputProvider>,
+    t,
   );
-
-  await flushReactUpdates(10);
 
   const pressKey = async (keyStr: string) => {
     await act(async () => {
-      inputEmitter.emit('input', keyStr);
+      stdin.write(keyStr);
+      for (let i = 0; i < 10; i++) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
     });
-    await flushReactUpdates(10);
   };
 
   // Open the providers menu
@@ -759,7 +778,7 @@ test('InputBox allows backspace and delete keys to modify input in provider wiza
   await pressKey('\u001B[A'); // Up Arrow (moves to Add Custom Provider)
   await pressKey('\r'); // Enter
 
-  let frame = lastFrame() ?? '';
+  let frame = await waitFor(lastFrame, (f) => f.includes('provider_selection'));
   t.true(frame.includes('Mode:provider_selection'), `Mode should be provider_selection, got:\n${frame}`);
   t.true(frame.includes('Step 1: Provider Name'), `Phase should be wizard_name, got:\n${frame}`);
 

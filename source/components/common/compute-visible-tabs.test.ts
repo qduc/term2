@@ -76,7 +76,7 @@ test('sets hasLeftScroll when tabs before the visible window exist', (t) => {
   // So visible = [d, e] with hasLeftScroll=true
   const result = computeVisibleTabs(items, 'd', 50, width);
   t.true(result.hasLeftScroll);
-  t.false(result.hasLeftScroll ? result.startIndex === 0 : true); // start is not 0
+  t.not(result.startIndex, 0);
 });
 
 test('sets hasRightScroll when tabs after the visible window exist', (t) => {

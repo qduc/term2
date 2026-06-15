@@ -2,10 +2,10 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
-import React, { act, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Text } from 'ink';
-import { render } from 'ink-testing-library';
 import { useTriggerDetection } from './use-trigger-detection.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 import type { InputMode } from '../context/InputContext.js';
 import type { SlashCommand } from '../slash-commands.js';
 
@@ -58,7 +58,7 @@ const TestComponent = ({ counts, mode, value, cursorOffset, slashCommands = [] }
   return <Text>test</Text>;
 };
 
-test('useTriggerDetection keeps model selection open when cursor moves before the model trigger', async (t) => {
+test.serial('useTriggerDetection keeps model selection open when cursor moves before the model trigger', async (t) => {
   const counts: Counts = {};
   const slashCommands: SlashCommand[] = [
     {
@@ -69,28 +69,25 @@ test('useTriggerDetection keeps model selection open when cursor moves before th
     },
   ];
 
-  await act(async () => {
-    render(
-      <TestComponent
-        counts={counts}
-        mode="model_selection"
-        value="/model gpt-5"
-        cursorOffset={1}
-        slashCommands={slashCommands}
-      />,
-    );
-  });
+  await renderInAct(
+    <TestComponent
+      counts={counts}
+      mode="model_selection"
+      value="/model gpt-5"
+      cursorOffset={1}
+      slashCommands={slashCommands}
+    />,
+    t,
+  );
 
   t.is(counts['models.close'] ?? 0, 0);
   t.is(counts['models.open'] ?? 0, 0);
 });
 
-test('useTriggerDetection closes model selection on none outside model mode', async (t) => {
+test.serial('useTriggerDetection closes model selection on none outside model mode', async (t) => {
   const counts: Counts = {};
 
-  await act(async () => {
-    render(<TestComponent counts={counts} mode="text" value="/model gpt-5" cursorOffset={1} />);
-  });
+  await renderInAct(<TestComponent counts={counts} mode="text" value="/model gpt-5" cursorOffset={1} />, t);
 
   t.is(counts['models.close'], 1);
 });

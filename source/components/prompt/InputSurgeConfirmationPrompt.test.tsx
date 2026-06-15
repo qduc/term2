@@ -2,38 +2,14 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
-import React, { act, useEffect } from 'react';
-import { render } from 'ink-testing-library';
-import { useStdin } from 'ink';
+import React, { act } from 'react';
+import { renderInAct } from '../../test-helpers/ink-testing.js';
 import InputSurgeConfirmationPrompt from './InputSurgeConfirmationPrompt.js';
 
-const flushReactUpdates = async (iterations = 1) => {
-  await act(async () => {
-    for (let i = 0; i < iterations; i++) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
-  });
-};
-
-const useCaptureInputEmitter = (setEmitter: (emitter: any) => void) => {
-  const stdin = useStdin() as any;
-
-  useEffect(() => {
-    setEmitter(stdin.internal_eventEmitter);
-  }, [setEmitter, stdin]);
-};
-
-const pressEscape = async (emitter: { emit: (event: string, input: string) => void }) => {
-  await act(async () => {
-    emitter.emit('input', '\u001B');
-  });
-
-  await flushReactUpdates(3);
-};
-
-test('InputSurgeConfirmationPrompt renders prompt and choices', (t) => {
-  const { lastFrame } = render(
+test.serial('InputSurgeConfirmationPrompt renders prompt and choices', async (t) => {
+  const { lastFrame, unmount } = await renderInAct(
     <InputSurgeConfirmationPrompt reason="Outgoing message count jumped" onConfirm={() => {}} onDecline={() => {}} />,
+    t,
   );
 
   const output = lastFrame() ?? '';
@@ -41,33 +17,33 @@ test('InputSurgeConfirmationPrompt renders prompt and choices', (t) => {
   t.true(output.includes('Send request anyway?'));
   t.true(output.includes('Send anyway'));
   t.true(output.includes('Cancel'));
+  act(() => {
+    unmount();
+  });
 });
 
-test('InputSurgeConfirmationPrompt declines on escape', async (t) => {
+test.serial('InputSurgeConfirmationPrompt declines on n input', async (t) => {
   let declined = false;
-  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
 
-  const Harness = () => {
-    useCaptureInputEmitter((emitter) => {
-      inputEmitter = emitter;
-    });
+  const { lastFrame, stdin, unmount } = await renderInAct(
+    <InputSurgeConfirmationPrompt
+      reason="Outgoing message count jumped"
+      onConfirm={() => {}}
+      onDecline={() => {
+        declined = true;
+      }}
+    />,
+    t,
+  );
 
-    return (
-      <InputSurgeConfirmationPrompt
-        reason="Outgoing message count jumped"
-        onConfirm={() => {}}
-        onDecline={() => {
-          declined = true;
-        }}
-      />
-    );
-  };
-
-  const { lastFrame } = render(<Harness />);
-
-  await flushReactUpdates(2);
-  await pressEscape(inputEmitter!);
+  act(() => {
+    stdin.write('n');
+  });
+  await new Promise((resolve) => setImmediate(resolve));
 
   t.true((lastFrame() ?? '').includes('Input Surge Warning: Outgoing message count jumped'));
   t.true(declined);
+  act(() => {
+    unmount();
+  });
 });

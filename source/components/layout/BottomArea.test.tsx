@@ -2,7 +2,7 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
-import React from 'react';
+import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import { InputProvider } from '../../context/InputContext.js';
 import BottomArea, { type BottomAreaProps } from './BottomArea.js';
@@ -38,24 +38,35 @@ const baseProps: BottomAreaProps = {
   onReject: () => {},
 };
 
-const renderBottomArea = (props: typeof baseProps) =>
-  render(
-    <InputProvider>
-      <BottomArea {...props} />
-    </InputProvider>,
-  );
+const renderBottomArea = async (props: typeof baseProps) => {
+  let result: ReturnType<typeof render>;
 
-test('BottomArea shows input when idle', (t) => {
-  const { lastFrame, unmount } = renderBottomArea(baseProps);
+  await act(async () => {
+    result = render(
+      <InputProvider>
+        <BottomArea {...props} />
+      </InputProvider>,
+    );
+
+    await Promise.resolve();
+  });
+
+  return result!;
+};
+
+test.serial('BottomArea shows input when idle', async (t) => {
+  const { lastFrame, unmount } = await renderBottomArea(baseProps);
   const output = lastFrame() ?? '';
   t.true(output.includes('❯'));
   t.false(output.includes('processing'));
   t.false(output.includes('Allow this action?'));
-  unmount();
+  act(() => {
+    unmount();
+  });
 });
 
-test('BottomArea shows approval prompt when waiting for approval', (t) => {
-  const { lastFrame, unmount } = renderBottomArea({
+test.serial('BottomArea shows approval prompt when waiting for approval', async (t) => {
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingApproval: {
       agentName: 'Agent',
@@ -70,11 +81,13 @@ test('BottomArea shows approval prompt when waiting for approval', (t) => {
   t.true(output.includes('Approve'));
   t.true(output.includes('Reject'));
   t.false(output.includes('processing'));
-  unmount();
+  act(() => {
+    unmount();
+  });
 });
 
-test('BottomArea shows processing indicator when busy', (t) => {
-  const { lastFrame, unmount } = renderBottomArea({
+test.serial('BottomArea shows processing indicator when busy', async (t) => {
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
   });
@@ -82,14 +95,16 @@ test('BottomArea shows processing indicator when busy', (t) => {
   t.true(output.includes('processing.'));
   t.false(output.includes('Allow this action?'));
   t.false(output.includes('❯'));
-  unmount();
+  act(() => {
+    unmount();
+  });
 });
 
-test('BottomArea shows thinking timer when reasoning is active', (t) => {
+test.serial('BottomArea shows thinking timer when reasoning is active', async (t) => {
   const originalNow = Date.now;
   Date.now = () => 12_000;
 
-  const { lastFrame, unmount } = renderBottomArea({
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
     thinkingStartedAt: 0,
@@ -99,12 +114,14 @@ test('BottomArea shows thinking timer when reasoning is active', (t) => {
   t.true(output.includes('Thinking... 12s'));
   t.false(output.includes('processing'));
 
-  unmount();
+  act(() => {
+    unmount();
+  });
   Date.now = originalNow;
 });
 
-test('BottomArea shows handoff confirmation prompt when handoffState is confirm_model', (t) => {
-  const { lastFrame, unmount } = renderBottomArea({
+test.serial('BottomArea shows handoff confirmation prompt when handoffState is confirm_model', async (t) => {
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     handoffState: {
       capturedText: 'some test code',
@@ -116,11 +133,13 @@ test('BottomArea shows handoff confirmation prompt when handoffState is confirm_
   t.true(output.includes('Yes'));
   t.true(output.includes('No'));
   t.false(output.includes('Allow this action?'));
-  unmount();
+  act(() => {
+    unmount();
+  });
 });
 
-test('BottomArea shows large uncached confirmation prompt when pending turn exists', (t) => {
-  const { lastFrame, unmount } = renderBottomArea({
+test.serial('BottomArea shows large uncached confirmation prompt when pending turn exists', async (t) => {
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingLargeUncachedTurn: { text: 'Describe this', images: [] },
     pendingLargeUncachedTokens: 72_100,
@@ -133,11 +152,13 @@ test('BottomArea shows large uncached confirmation prompt when pending turn exis
   t.true(output.includes('Send'));
   t.true(output.includes('Cancel'));
   t.false(output.includes('Allow this action?'));
-  unmount();
+  act(() => {
+    unmount();
+  });
 });
 
-test('BottomArea shows input with handoff message prompt when handoffState is entering_message', (t) => {
-  const { lastFrame, unmount } = renderBottomArea({
+test.serial('BottomArea shows input with handoff message prompt when handoffState is entering_message', async (t) => {
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     handoffState: {
       capturedText: 'some test code',
@@ -148,11 +169,13 @@ test('BottomArea shows input with handoff message prompt when handoffState is en
   t.true(output.includes('Handoff message (enter to use default message):'));
   t.false(output.includes('Allow this action?'));
   t.false(output.includes('processing'));
-  unmount();
+  act(() => {
+    unmount();
+  });
 });
 
-test('BottomArea shows tool call streaming indicator when toolCallStreamingInfo is set', (t) => {
-  const { lastFrame, unmount } = renderBottomArea({
+test.serial('BottomArea shows tool call streaming indicator when toolCallStreamingInfo is set', async (t) => {
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
     toolCallStreamingInfo: { toolName: 'shell', argumentCharCount: 150 },
@@ -163,11 +186,13 @@ test('BottomArea shows tool call streaming indicator when toolCallStreamingInfo 
   t.true(output.includes('150 chars'));
   t.false(output.includes('processing'));
   t.false(output.includes('Thinking'));
-  unmount();
+  act(() => {
+    unmount();
+  });
 });
 
-test('BottomArea shows tool call streaming indicator without tool name', (t) => {
-  const { lastFrame, unmount } = renderBottomArea({
+test.serial('BottomArea shows tool call streaming indicator without tool name', async (t) => {
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
     toolCallStreamingInfo: { argumentCharCount: 42 },
@@ -177,11 +202,13 @@ test('BottomArea shows tool call streaming indicator without tool name', (t) => 
   t.true(output.includes('tool'));
   t.true(output.includes('42 chars'));
   t.false(output.includes('processing'));
-  unmount();
+  act(() => {
+    unmount();
+  });
 });
 
-test('BottomArea falls back to processing when toolCallStreamingInfo is null', (t) => {
-  const { lastFrame, unmount } = renderBottomArea({
+test.serial('BottomArea falls back to processing when toolCallStreamingInfo is null', async (t) => {
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
     toolCallStreamingInfo: null,
@@ -189,14 +216,16 @@ test('BottomArea falls back to processing when toolCallStreamingInfo is null', (
   const output = lastFrame() ?? '';
   t.true(output.includes('processing'));
   t.false(output.includes('Calling'));
-  unmount();
+  act(() => {
+    unmount();
+  });
 });
 
-test('BottomArea shows tool call streaming over thinking when both are active', (t) => {
+test.serial('BottomArea shows tool call streaming over thinking when both are active', async (t) => {
   const originalNow = Date.now;
   Date.now = () => 5000;
 
-  const { lastFrame, unmount } = renderBottomArea({
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
     thinkingStartedAt: 0,
@@ -208,12 +237,14 @@ test('BottomArea shows tool call streaming over thinking when both are active', 
   t.true(output.includes('shell'));
   t.false(output.includes('Thinking'));
 
-  unmount();
+  act(() => {
+    unmount();
+  });
   Date.now = originalNow;
 });
 
-test('BottomArea shows input surge confirmation prompt when pending surge turn exists', (t) => {
-  const { lastFrame, unmount } = renderBottomArea({
+test.serial('BottomArea shows input surge confirmation prompt when pending surge turn exists', async (t) => {
+  const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingSurgeTurn: { text: 'Some massive text', images: [] },
     pendingSurgeReason: 'Outgoing message count jumped',
@@ -224,5 +255,7 @@ test('BottomArea shows input surge confirmation prompt when pending surge turn e
   t.true(output.includes('Send request anyway?'));
   t.true(output.includes('Send anyway'));
   t.true(output.includes('Cancel'));
-  unmount();
+  act(() => {
+    unmount();
+  });
 });

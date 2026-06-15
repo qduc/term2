@@ -3,13 +3,13 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
 import React from 'react';
-import { render } from 'ink-testing-library';
+import { renderInAct } from '../../test-helpers/ink-testing.js';
 import DiffView from './DiffView.js';
 
-test('DiffView renders small diff without collapsing', (t) => {
+test.serial('DiffView renders small diff without collapsing', async (t) => {
   const diff = [' line 1', ' line 2', '-old line', '+new line', ' line 3', ' line 4'].join('\n');
 
-  const { lastFrame } = render(<DiffView diff={diff} />);
+  const { lastFrame } = await renderInAct(<DiffView diff={diff} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('line 1'));
@@ -19,7 +19,7 @@ test('DiffView renders small diff without collapsing', (t) => {
   t.false(output.includes('unchanged lines'));
 });
 
-test('DiffView collapses large number of consecutive unchanged lines', (t) => {
+test.serial('DiffView collapses large number of consecutive unchanged lines', async (t) => {
   const diff = [
     ' line 1',
     ' line 2',
@@ -35,7 +35,7 @@ test('DiffView collapses large number of consecutive unchanged lines', (t) => {
     ' line 10',
   ].join('\n');
 
-  const { lastFrame } = render(<DiffView diff={diff} />);
+  const { lastFrame } = await renderInAct(<DiffView diff={diff} />, t);
   const output = lastFrame() ?? '';
 
   // The first 8 lines are unchanged. Max context is 3. So it should show:

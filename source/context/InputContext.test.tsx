@@ -4,8 +4,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import test from 'ava';
 import React, { act, useEffect } from 'react';
 import { Text } from 'ink';
-import { render } from 'ink-testing-library';
 import { InputProvider, useInputContext } from './InputContext.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 // Helper to flush asynchronous React/Ink updates
 const flushReactUpdates = async (iterations = 5) => {
@@ -37,22 +37,22 @@ const TestComponentInsideProvider = ({ onMount }: { onMount: (ctx: any) => void 
   return null;
 };
 
-test('useInputContext throws error when used outside InputProvider', (t) => {
+test.serial('useInputContext throws error when used outside InputProvider', async (t) => {
   // Suppress console.error for React hook warnings/errors
   const originalError = console.error;
   console.error = () => {};
 
-  render(<TestComponentOutsideProvider />);
+  await renderInAct(<TestComponentOutsideProvider />, t);
   t.truthy(thrownError);
   t.is(thrownError!.message, 'useInputContext must be used within an InputProvider');
 
   console.error = originalError;
 });
 
-test('InputProvider provides context with default values', (t) => {
+test.serial('InputProvider provides context with default values', async (t) => {
   let capturedContext: any;
 
-  render(
+  await renderInAct(
     <InputProvider>
       <TestComponentInsideProvider
         onMount={(ctx) => {
@@ -60,6 +60,7 @@ test('InputProvider provides context with default values', (t) => {
         }}
       />
     </InputProvider>,
+    t,
   );
 
   t.truthy(capturedContext);
@@ -69,10 +70,10 @@ test('InputProvider provides context with default values', (t) => {
   t.is(capturedContext.triggerIndex, null);
 });
 
-test('InputProvider provides all required setter functions', (t) => {
+test.serial('InputProvider provides all required setter functions', async (t) => {
   let capturedContext: any;
 
-  render(
+  await renderInAct(
     <InputProvider>
       <TestComponentInsideProvider
         onMount={(ctx) => {
@@ -80,6 +81,7 @@ test('InputProvider provides all required setter functions', (t) => {
         }}
       />
     </InputProvider>,
+    t,
   );
 
   t.truthy(capturedContext);
@@ -89,7 +91,7 @@ test('InputProvider provides all required setter functions', (t) => {
   t.is(typeof capturedContext.setTriggerIndex, 'function');
 });
 
-test('setInput updates input value', async (t) => {
+test.serial('setInput updates input value', async (t) => {
   const TestUpdater = () => {
     const { input, setInput } = useInputContext();
 
@@ -100,10 +102,11 @@ test('setInput updates input value', async (t) => {
     return <Text>{input || 'EMPTY'}</Text>;
   };
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
+    t,
   );
 
   await flushReactUpdates(5);
@@ -113,7 +116,7 @@ test('setInput updates input value', async (t) => {
   t.true(output!.includes('hello world'));
 });
 
-test('setInput accepts empty strings', async (t) => {
+test.serial('setInput accepts empty strings', async (t) => {
   const TestUpdater = () => {
     const { input, setInput } = useInputContext();
 
@@ -124,10 +127,11 @@ test('setInput accepts empty strings', async (t) => {
     return <Text>{input || 'EMPTY'}</Text>;
   };
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
+    t,
   );
 
   await flushReactUpdates(5);
@@ -135,7 +139,7 @@ test('setInput accepts empty strings', async (t) => {
   t.true(lastFrame()!.includes('EMPTY'));
 });
 
-test('setInput accepts strings with special characters', async (t) => {
+test.serial('setInput accepts strings with special characters', async (t) => {
   const TestUpdater = () => {
     const { input, setInput } = useInputContext();
 
@@ -146,10 +150,11 @@ test('setInput accepts strings with special characters', async (t) => {
     return <Text>{input || 'EMPTY'}</Text>;
   };
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
+    t,
   );
 
   await flushReactUpdates(5);
@@ -158,7 +163,7 @@ test('setInput accepts strings with special characters', async (t) => {
   t.true(lastFrame()!.includes('/settings @path/to/file.ts'));
 });
 
-test('setMode accepts all mode values', async (t) => {
+test.serial('setMode accepts all mode values', async (t) => {
   const TestUpdater = () => {
     const { mode, setMode } = useInputContext();
 
@@ -172,10 +177,11 @@ test('setMode accepts all mode values', async (t) => {
     return <Text>{mode || 'EMPTY'}</Text>;
   };
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
+    t,
   );
 
   await flushReactUpdates(5);
@@ -184,7 +190,7 @@ test('setMode accepts all mode values', async (t) => {
   t.true(lastFrame()!.includes('text'));
 });
 
-test('setCursorOffset accepts positive values', async (t) => {
+test.serial('setCursorOffset accepts positive values', async (t) => {
   const TestUpdater = () => {
     const { cursorOffset, setCursorOffset } = useInputContext();
 
@@ -195,10 +201,11 @@ test('setCursorOffset accepts positive values', async (t) => {
     return <Text>{cursorOffset.toString()}</Text>;
   };
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
+    t,
   );
 
   await flushReactUpdates(5);
@@ -206,7 +213,7 @@ test('setCursorOffset accepts positive values', async (t) => {
   t.true(lastFrame()!.includes('42'));
 });
 
-test('setCursorOffset accepts zero', async (t) => {
+test.serial('setCursorOffset accepts zero', async (t) => {
   const TestUpdater = () => {
     const { cursorOffset, setCursorOffset } = useInputContext();
 
@@ -217,10 +224,11 @@ test('setCursorOffset accepts zero', async (t) => {
     return <Text>{cursorOffset.toString()}</Text>;
   };
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
+    t,
   );
 
   await flushReactUpdates(5);
@@ -228,7 +236,7 @@ test('setCursorOffset accepts zero', async (t) => {
   t.true(lastFrame()!.includes('0'));
 });
 
-test('setTriggerIndex accepts null value', async (t) => {
+test.serial('setTriggerIndex accepts null value', async (t) => {
   const TestUpdater = () => {
     const { triggerIndex, setTriggerIndex } = useInputContext();
 
@@ -239,10 +247,11 @@ test('setTriggerIndex accepts null value', async (t) => {
     return <Text>{triggerIndex === null ? 'NULL' : triggerIndex.toString()}</Text>;
   };
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
+    t,
   );
 
   await flushReactUpdates(5);
@@ -250,7 +259,7 @@ test('setTriggerIndex accepts null value', async (t) => {
   t.true(lastFrame()!.includes('NULL'));
 });
 
-test('setTriggerIndex accepts index values', async (t) => {
+test.serial('setTriggerIndex accepts index values', async (t) => {
   const TestUpdater = () => {
     const { triggerIndex, setTriggerIndex } = useInputContext();
 
@@ -261,10 +270,11 @@ test('setTriggerIndex accepts index values', async (t) => {
     return <Text>{triggerIndex === null ? 'NULL' : triggerIndex.toString()}</Text>;
   };
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <InputProvider>
       <TestUpdater />
     </InputProvider>,
+    t,
   );
 
   await flushReactUpdates(5);
@@ -272,7 +282,7 @@ test('setTriggerIndex accepts index values', async (t) => {
   t.true(lastFrame()!.includes('10'));
 });
 
-test('Multiple components can use the context', (t) => {
+test.serial('Multiple components can use the context', async (t) => {
   const Component1 = () => {
     const { input } = useInputContext();
     return <Text>{input || 'C1'}</Text>;
@@ -283,11 +293,12 @@ test('Multiple components can use the context', (t) => {
     return <Text>{mode || 'C2'}</Text>;
   };
 
-  const { lastFrame } = render(
+  const { lastFrame } = await renderInAct(
     <InputProvider>
       <Component1 />
       <Component2 />
     </InputProvider>,
+    t,
   );
 
   t.truthy(lastFrame());

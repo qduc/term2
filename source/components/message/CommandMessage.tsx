@@ -162,7 +162,9 @@ const CommandMessage: FC<Props> = ({
 
   useEffect(() => {
     if (!isRunning) {
-      setIsVisible(true);
+      if (!isVisible) {
+        setIsVisible(true);
+      }
       return;
     }
 

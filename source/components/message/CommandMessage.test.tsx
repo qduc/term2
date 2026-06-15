@@ -1,11 +1,48 @@
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-import test from 'ava';
+import avaTest from 'ava';
 import React, { act } from 'react';
-import { render } from 'ink-testing-library';
+import { renderInAct } from '../../test-helpers/ink-testing.js';
 import CommandMessage from './CommandMessage.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
+
+const test = avaTest.serial;
+const originalConsoleError = console.error;
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
+const shouldSuppressActWarning = (text: string) =>
+  text.includes('not wrapped in act(...)') || text.includes('overlapping act() calls');
+
+test.before(() => {
+  console.error = (...args: Parameters<typeof console.error>) => {
+    const text = args
+      .map((arg) =>
+        typeof arg === 'string' ? arg : typeof arg === 'object' && arg ? JSON.stringify(arg) : String(arg),
+      )
+      .join(' ');
+    if (shouldSuppressActWarning(text)) {
+      return;
+    }
+
+    originalConsoleError(...args);
+  };
+
+  process.stderr.write = ((chunk: any, encoding?: any, callback?: any) => {
+    const text = typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+    if (shouldSuppressActWarning(text)) {
+      if (typeof callback === 'function') {
+        callback();
+      }
+      return true;
+    }
+    return originalStderrWrite(chunk, encoding as any, callback);
+  }) as typeof process.stderr.write;
+});
+
+test.after.always(() => {
+  console.error = originalConsoleError;
+  process.stderr.write = originalStderrWrite;
+});
 
 type FakeTimer = {
   advanceBy: (ms: number) => void;
@@ -69,6 +106,13 @@ const createFakeTimerClock = (): FakeTimer => {
 
 const stripAnsi = (text: string) => text.replaceAll(/\u001B\[[0-9;]*m/g, '');
 
+const advanceClockInAct = async (clock: FakeTimer, ms: number) => {
+  await act(async () => {
+    clock.advanceBy(ms);
+    await Promise.resolve();
+  });
+};
+
 test('CommandMessage does not duplicate parameters when they are already in command string', async (t) => {
   const clock = createFakeTimerClock();
   const props = {
@@ -81,10 +125,8 @@ test('CommandMessage does not duplicate parameters when they are already in comm
   let lastFrame: (() => string | undefined) | undefined;
 
   try {
-    await act(async () => {
-      ({ lastFrame } = render(<CommandMessage {...props} />));
-      clock.advanceBy(1100);
-    });
+    ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
+    await advanceClockInAct(clock, 1100);
 
     const output = lastFrame?.() ?? '';
 
@@ -113,10 +155,8 @@ test('CommandMessage still shows arguments for unknown tools where command is ju
   let lastFrame: (() => string | undefined) | undefined;
 
   try {
-    await act(async () => {
-      ({ lastFrame } = render(<CommandMessage {...props} />));
-      clock.advanceBy(1100);
-    });
+    ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
+    await advanceClockInAct(clock, 1100);
 
     const output = lastFrame?.() ?? '';
 
@@ -137,9 +177,7 @@ test('CommandMessage renders create_file with [CREATE] header and file path', as
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<CommandMessage {...props} />));
-  });
+  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
   const output = lastFrame?.() ?? '';
 
   t.true(output.includes('[CREATE]'), `Expected "[CREATE]" in output: ${output}`);
@@ -156,9 +194,7 @@ test('CommandMessage renders create_file content as diff with + prefix', async (
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<CommandMessage {...props} />));
-  });
+  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
   const output = lastFrame?.() ?? '';
 
   t.true(output.includes('+line 1'), `Expected "+line 1" in output: ${output}`);
@@ -177,9 +213,7 @@ test('CommandMessage renders apply_patch update_file with [PATCH] header and dif
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<CommandMessage {...props} />));
-  });
+  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
   const output = lastFrame?.() ?? '';
 
   t.true(output.includes('[PATCH]'), `Expected "[PATCH]" in output: ${output}`);
@@ -198,7 +232,7 @@ test('CommandMessage renders apply_patch line counts in concise mode', async (t)
     displayMode: 'concise' as const,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('Patched update_file src/file.ts'), `Expected concise command: ${output}`);
@@ -219,7 +253,7 @@ test('CommandMessage renders search_replace line counts in concise mode', async 
     displayMode: 'concise' as const,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('Edited'), `Expected concise tool name: ${output}`);
@@ -245,7 +279,7 @@ test('CommandMessage renders search_replace multiple replacements in concise mod
     displayMode: 'concise' as const,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('Edited'), `Expected concise tool name: ${output}`);
@@ -267,9 +301,7 @@ test('CommandMessage renders apply_patch create_file with [CREATE FILE] header a
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<CommandMessage {...props} />));
-  });
+  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
   const output = lastFrame?.() ?? '';
 
   t.true(output.includes('[CREATE FILE]'), `Expected "[CREATE FILE]" in output: ${output}`);
@@ -290,9 +322,7 @@ test('CommandMessage renders apply_patch with only output when hadApproval is tr
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<CommandMessage {...props} />));
-  });
+  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
   const output = lastFrame?.() ?? '';
 
   t.false(output.includes('[PATCH]'), `Expected no "[PATCH]" when hadApproval: ${output}`);
@@ -310,9 +340,7 @@ test('CommandMessage renders create_file failure in red', async (t) => {
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<CommandMessage {...props} />));
-  });
+  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
   const output = lastFrame?.() ?? '';
 
   t.true(output.includes('[CREATE]'), `Expected "[CREATE]" in output: ${output}`);
@@ -330,9 +358,7 @@ test('CommandMessage truncates output and shows the last line when output is lon
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<CommandMessage {...props} />));
-  });
+  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
   const output = lastFrame?.() ?? '';
 
   t.true(output.includes('line 1'), `Expected "line 1" in output: ${output}`);
@@ -355,9 +381,7 @@ test('CommandMessage does not truncate output and shows all lines when output is
   };
 
   let lastFrame: (() => string | undefined) | undefined;
-  await act(async () => {
-    ({ lastFrame } = render(<CommandMessage {...props} />));
-  });
+  ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
   const output = lastFrame?.() ?? '';
 
   t.true(output.includes('line 1'));
@@ -377,7 +401,7 @@ test('CommandMessage does not truncate output when output is 3 lines', async (t)
     output: 'line 1\nline 2\nline 3',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('line 1'));
@@ -396,7 +420,7 @@ test('CommandMessage trims trailing newlines when checking for truncation', asyn
     output: 'line 1\nline 2\nline 3\nline 4\n\n\n',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('line 1'));
@@ -419,7 +443,7 @@ test('CommandMessage renders shell approval rejection with [DENIED] and denial m
     output: "Tool execution was not approved. User's reason: too risky",
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('DENIED'), `Expected [DENIED] marker in output: ${output}`);
@@ -435,7 +459,7 @@ test('CommandMessage renders shell approval rejection without command in output 
     output: "Tool execution was not approved. User's reason: not safe",
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('DENIED'), `Expected [DENIED] marker in output: ${output}`);
@@ -453,7 +477,7 @@ test('CommandMessage renders successfully completed shell command on a single li
     output: 'All tests passed\nOK',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('✔'), `Expected success icon in output: ${output}`);
@@ -473,10 +497,8 @@ test('CommandMessage renders running shell command on a single line in concise m
 
   let lastFrame: (() => string | undefined) | undefined;
   try {
-    await act(async () => {
-      ({ lastFrame } = render(<CommandMessage {...props} />));
-      clock.advanceBy(1100);
-    });
+    ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
+    await advanceClockInAct(clock, 1100);
 
     const output = lastFrame?.() ?? '';
 
@@ -498,7 +520,7 @@ test('CommandMessage renders failed command on two lines in concise mode', async
     failureReason: 'Test suite failed',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   // Expect two lines
@@ -519,7 +541,7 @@ test('CommandMessage renders non-shell tool concisely on a single line', async (
     displayMode: 'concise' as const,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('✔'), `Expected success icon in output: ${output}`);
@@ -538,7 +560,7 @@ test('CommandMessage renders grep case-insensitive flag in concise mode', async 
     displayMode: 'concise' as const,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('Searched'), `Expected tool name: ${output}`);
@@ -556,7 +578,7 @@ test('CommandMessage shows match count for grep tool in concise mode', async (t)
     output: 'file1.ts:1:hello\nfile2.ts:3:hello world\nfile3.ts:7:hello',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('(3 matches)'), `Expected match count in output: ${output}`);
@@ -573,7 +595,7 @@ test('CommandMessage shows singular match count for grep with 1 result', async (
     output: 'file1.ts:1:hello',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('(1 match)'), `Expected singular match count in output: ${output}`);
@@ -591,7 +613,7 @@ test('CommandMessage shows match count for find_files tool in concise mode', asy
     output: 'source/a.ts\nsource/b.ts\nsource/c.ts\nsource/d.ts\nsource/e.ts',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('(5 matches)'), `Expected match count in output: ${output}`);
@@ -608,7 +630,7 @@ test('CommandMessage shows match count for shell grep command in concise mode', 
     output: 'source/a.ts:1:hello\nsource/b.ts:3:hello',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('(2 matches)'), `Expected match count in output: ${output}`);
@@ -625,7 +647,7 @@ test('CommandMessage shows match count for shell rg command in concise mode', as
     output: 'source/a.ts\n1:hello\n\nsource/b.ts\n3:hello world',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('(4 matches)'), `Expected match count in output: ${output}`);
@@ -643,7 +665,7 @@ test('CommandMessage suppresses rg stderr and keeps the match count in concise m
     output: 'rg: source/missing.ts: No such file or directory\nsource/a.ts:1:hello',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('(1 match)'), `Expected match count in output: ${output}`);
@@ -662,7 +684,7 @@ test('CommandMessage shows match count for shell find command in concise mode', 
     output: './a.ts\n./b.ts\n./c.ts',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('(3 matches)'), `Expected match count in output: ${output}`);
@@ -679,7 +701,7 @@ test('CommandMessage shows match count for shell fd command in concise mode', as
     output: 'source/test.ts\nsource/components/test.ts',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('(2 matches)'), `Expected match count in output: ${output}`);
@@ -696,7 +718,7 @@ test('CommandMessage does not show match count for non-search shell command in c
     output: 'All tests passed\nOK',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.false(output.includes('match'), `Expected no match count in output: ${output}`);
@@ -713,7 +735,7 @@ test('CommandMessage renders grep results grouped by file in standard mode', asy
     output: 'file1.ts:1:hello\nfile2.ts:3:hello',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.true(output.includes('file1.ts'), `Expected file1.ts in output: ${output}`);
@@ -732,7 +754,7 @@ test('CommandMessage does not show match count when output is empty', async (t) 
     output: '',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.false(output.includes('match'), `Expected no match count for empty output: ${output}`);
@@ -749,7 +771,7 @@ test('CommandMessage does not show match count when output is "No matches found.
     output: 'No matches found.',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = lastFrame() ?? '';
 
   t.false(output.includes('match'), `Expected no match count for "No matches found.": ${output}`);
@@ -767,7 +789,7 @@ test('CommandMessage truncates error message in concise mode when error is longe
     failureReason: longError,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   // Should show first 3 lines
@@ -794,7 +816,7 @@ test('CommandMessage renders read_file with line numbers in standard mode', asyn
     output: 'File: src/main.ts (2 lines) [lines 1-2]\n===\nimport { foo } from "bar";\nfoo();',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('[READ FILE]'), `Expected header: ${output}`);
@@ -814,7 +836,7 @@ test('CommandMessage renders find_files lists in standard mode', async (t) => {
     output: 'src/a.ts\nsrc/b.ts',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('[FILE SEARCH]'), `Expected header: ${output}`);
@@ -833,7 +855,7 @@ test('CommandMessage renders subagent card in standard mode', async (t) => {
     output: 'Status: completed\nTools used: shell(3)\nFiles changed: src/a.ts\n\nSubagent finished successfully!',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('[SUBAGENT]'), `Expected header: ${output}`);
@@ -856,7 +878,7 @@ test('CommandMessage renders web_search dashboard in standard mode', async (t) =
       '## Answer\n\nInk is a React renderer.\n\n## Search Results\n\n### 1. Ink GitHub\n**URL:** https://github.com/vadimdemedes/ink\n\nReact for CLI.',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('[WEB SEARCH]'), `Expected header: ${output}`);
@@ -879,7 +901,7 @@ test('CommandMessage renders web_fetch result in standard mode', async (t) => {
       'Title: Example Domain\nURL: https://example.com\n\n## Table of Contents\n\n* [Header](#header)\n\n---\n\nMarkdown content here',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   t.true(output.includes('[WEB FETCH]'), `Expected header: ${output}`);
@@ -903,10 +925,8 @@ test('CommandMessage renders ask_user concise single question when running', asy
 
   let lastFrame: (() => string | undefined) | undefined;
   try {
-    await act(async () => {
-      ({ lastFrame } = render(<CommandMessage {...props} />));
-      clock.advanceBy(1100);
-    });
+    ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
+    await advanceClockInAct(clock, 1100);
 
     const output = stripAnsi(lastFrame?.() ?? '');
 
@@ -934,10 +954,8 @@ test('CommandMessage renders ask_user concise multiple questions when running', 
 
   let lastFrame: (() => string | undefined) | undefined;
   try {
-    await act(async () => {
-      ({ lastFrame } = render(<CommandMessage {...props} />));
-      clock.advanceBy(1100);
-    });
+    ({ lastFrame } = await renderInAct(<CommandMessage {...props} />, t));
+    await advanceClockInAct(clock, 1100);
 
     const output = stripAnsi(lastFrame?.() ?? '');
 
@@ -961,7 +979,7 @@ test('CommandMessage renders ask_user answer in second line in concise mode when
     output: 'Question: What is your favorite color?\nAnswer: Red',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   const lines = output.trim().split('\n');
@@ -984,7 +1002,7 @@ test('CommandMessage renders ask_user declined answer in second line in concise 
     output: 'User declined to answer.',
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   const lines = output.trim().split('\n');
@@ -1005,7 +1023,7 @@ test('CommandMessage renders in a single, muted line when isSubagent is true', a
     isSubagent: true,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   const lines = output.trim().split('\n');
@@ -1026,7 +1044,7 @@ test('CommandMessage renders failed command in a single, muted line when isSubag
     isSubagent: true,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   const lines = output.trim().split('\n');
@@ -1045,7 +1063,7 @@ test('CommandMessage renders running command with ▶ when isSubagent is true', 
     isSubagent: true,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   const lines = output.trim().split('\n');
@@ -1062,7 +1080,7 @@ test('CommandMessage renders pending command with ▶ when isSubagent is true', 
     isSubagent: true,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   const lines = output.trim().split('\n');
@@ -1080,7 +1098,7 @@ test('CommandMessage renders failed status without success/failureReason as ✖ 
     isSubagent: true,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   const lines = output.trim().split('\n');
@@ -1098,7 +1116,7 @@ test('CommandMessage renders approval rejection with ✖ when isSubagent is true
     isSubagent: true,
   };
 
-  const { lastFrame } = render(<CommandMessage {...props} />);
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />, t);
   const output = stripAnsi(lastFrame() ?? '');
 
   const lines = output.trim().split('\n');

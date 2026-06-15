@@ -70,12 +70,16 @@ export const useTriggerDetection = ({
     switch (active.type) {
       case 'model':
         closeAll([slash, path, settings, settingsValue]);
-        models.open(active.startIndex);
+        if (mode !== 'model_selection') {
+          models.open(active.startIndex);
+        }
         return;
 
       case 'settings':
         closeAll([slash, path, settingsValue, models]);
-        settings.open(active.startIndex);
+        if (mode !== 'settings_completion') {
+          settings.open(active.startIndex);
+        }
         return;
 
       case 'settings_value': {
@@ -88,13 +92,17 @@ export const useTriggerDetection = ({
         }
 
         closeAll([slash, path, settings, models]);
-        settingsValue.open(active.key, active.startIndex);
+        if (mode !== 'settings_value_completion') {
+          settingsValue.open(active.key, active.startIndex);
+        }
         return;
       }
 
       case 'slash':
         closeAll([path, settings, settingsValue, models]);
-        slash.open();
+        if (mode !== 'slash_commands') {
+          slash.open();
+        }
         return;
 
       case 'path': {
@@ -107,7 +115,9 @@ export const useTriggerDetection = ({
         }
 
         closeAll([slash, settings, settingsValue, models]);
-        path.open(active.trigger.start);
+        if (mode !== 'path_completion') {
+          path.open(active.trigger.start);
+        }
         return;
       }
 

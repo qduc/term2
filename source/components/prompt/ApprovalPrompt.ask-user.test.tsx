@@ -3,7 +3,6 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
 import React, { act } from 'react';
-import { render } from 'ink-testing-library';
 import ApprovalPrompt from './ApprovalPrompt.js';
 import type { ApprovalDescriptor } from '../../contracts/conversation.js';
 import {
@@ -11,20 +10,13 @@ import {
   ASK_USER_DECLINE_LABEL,
   ASK_USER_DECLINE_RESULT,
 } from '../../tools/agent/ask-user-constants.js';
-
-const flushReactUpdates = async (iterations = 1) => {
-  await act(async () => {
-    for (let i = 0; i < iterations; i++) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
-  });
-};
+import { renderInAct } from '../../test-helpers/ink-testing.js';
 
 const writeInput = async (stdin: { write: (input: string) => void }, input: string) => {
   await act(async () => {
     stdin.write(input);
   });
-  await flushReactUpdates(2);
+  await new Promise((resolve) => setImmediate(resolve));
 };
 
 const baseApproval: ApprovalDescriptor = {
@@ -41,10 +33,12 @@ const baseApproval: ApprovalDescriptor = {
   rawInterruption: { type: 'ask_user' },
 };
 
-test('ApprovalPrompt renders ask_user question and options', (t) => {
-  const { lastFrame, unmount } = render(
+test.serial('ApprovalPrompt renders ask_user question and options', async (t) => {
+  const result = await renderInAct(
     <ApprovalPrompt approval={baseApproval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
+    t,
   );
+  const { lastFrame } = result;
 
   const output = lastFrame() ?? '';
   t.true(output.includes('Which option should I use?'));
@@ -54,25 +48,24 @@ test('ApprovalPrompt renders ask_user question and options', (t) => {
   t.true(output.includes(ASK_USER_DECLINE_LABEL));
   t.false(output.includes('Allow this action?'));
   t.false(output.includes('Approve'));
-  unmount();
 });
 
-test('ApprovalPrompt ask_user navigation wraps around menu items', async (t) => {
-  const { lastFrame, stdin, unmount } = render(
+test.serial('ApprovalPrompt ask_user navigation wraps around menu items', async (t) => {
+  const { lastFrame, stdin } = await renderInAct(
     <ApprovalPrompt approval={baseApproval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
+    t,
   );
 
-  await writeInput(stdin, '\u001B[A');
-  t.true((lastFrame() ?? '').includes(`❯ ${ASK_USER_DECLINE_LABEL}`));
+  await writeInput(stdin, '\u001b[A');
+  t.true((lastFrame() ?? '').includes(`\u276f ${ASK_USER_DECLINE_LABEL}`));
 
-  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\u001b[B');
   t.true((lastFrame() ?? '').includes('❯ Use the safe default (recommended)'));
-  unmount();
 });
 
-test('ApprovalPrompt ask_user Enter on an option calls onApprove with the option text', async (t) => {
+test.serial('ApprovalPrompt ask_user Enter on an option calls onApprove with the option text', async (t) => {
   let approved: string | undefined;
-  const { stdin, unmount } = render(
+  const { stdin } = await renderInAct(
     <ApprovalPrompt
       approval={baseApproval}
       onApprove={(answer) => {
@@ -81,16 +74,16 @@ test('ApprovalPrompt ask_user Enter on an option calls onApprove with the option
       onReject={() => {}}
       onTypeAnswer={() => {}}
     />,
+    t,
   );
 
   await writeInput(stdin, '\r');
   t.is(approved, 'Use the safe default');
-  unmount();
 });
 
-test('ApprovalPrompt ask_user Enter on Decline to answer calls the decline approval value', async (t) => {
+test.serial('ApprovalPrompt ask_user Enter on Decline to answer calls the decline approval value', async (t) => {
   let approved: string | undefined;
-  const { stdin, unmount } = render(
+  const { stdin } = await renderInAct(
     <ApprovalPrompt
       approval={baseApproval}
       onApprove={(answer) => {
@@ -99,16 +92,16 @@ test('ApprovalPrompt ask_user Enter on Decline to answer calls the decline appro
       onReject={() => {}}
       onTypeAnswer={() => {}}
     />,
+    t,
   );
 
-  await writeInput(stdin, '\u001B[A');
+  await writeInput(stdin, '\u001b[A');
   await writeInput(stdin, '\r');
 
   t.is(approved, ASK_USER_DECLINE_RESULT);
-  unmount();
 });
 
-test('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAnswer', async (t) => {
+test.serial('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAnswer', async (t) => {
   let typedAnswer = 0;
   const approval: ApprovalDescriptor = {
     ...baseApproval,
@@ -122,7 +115,7 @@ test('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAnswer', a
     }),
   };
 
-  const { stdin, unmount } = render(
+  const { stdin } = await renderInAct(
     <ApprovalPrompt
       approval={approval}
       onApprove={() => {}}
@@ -131,6 +124,7 @@ test('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAnswer', a
         typedAnswer += 1;
       }}
     />,
+    t,
   );
 
   // Menu: Option 0, Option 1, Type custom answer...(index 2), Decline(index 3)
@@ -139,13 +133,12 @@ test('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAnswer', a
   await writeInput(stdin, '\r');
 
   t.is(typedAnswer, 1);
-  unmount();
 });
 
-test('ApprovalPrompt ignores y and n keys for ask_user', async (t) => {
+test.serial('ApprovalPrompt ignores y and n keys for ask_user', async (t) => {
   let approveCount = 0;
   let rejectCount = 0;
-  const { stdin, unmount } = render(
+  const { stdin } = await renderInAct(
     <ApprovalPrompt
       approval={baseApproval}
       onApprove={() => {
@@ -156,6 +149,7 @@ test('ApprovalPrompt ignores y and n keys for ask_user', async (t) => {
       }}
       onTypeAnswer={() => {}}
     />,
+    t,
   );
 
   await writeInput(stdin, 'y');
@@ -163,29 +157,31 @@ test('ApprovalPrompt ignores y and n keys for ask_user', async (t) => {
 
   t.is(approveCount, 0);
   t.is(rejectCount, 0);
-  unmount();
 });
 
-test('ApprovalPrompt ask_user still shows custom answer and decline options without predefined options', (t) => {
-  const approval: ApprovalDescriptor = {
-    ...baseApproval,
-    argumentsText: JSON.stringify({
-      questions: [{ question: 'Please answer this question' }],
-    }),
-  };
+test.serial(
+  'ApprovalPrompt ask_user still shows custom answer and decline options without predefined options',
+  async (t) => {
+    const approval: ApprovalDescriptor = {
+      ...baseApproval,
+      argumentsText: JSON.stringify({
+        questions: [{ question: 'Please answer this question' }],
+      }),
+    };
 
-  const { lastFrame, unmount } = render(
-    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
-  );
+    const { lastFrame } = await renderInAct(
+      <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
+      t,
+    );
 
-  const output = lastFrame() ?? '';
-  t.true(output.includes('Please answer this question'));
-  t.true(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL));
-  t.true(output.includes(ASK_USER_DECLINE_LABEL));
-  unmount();
-});
+    const output = lastFrame() ?? '';
+    t.true(output.includes('Please answer this question'));
+    t.true(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL));
+    t.true(output.includes(ASK_USER_DECLINE_LABEL));
+  },
+);
 
-test('ApprovalPrompt renders multi-select options with checkboxes', (t) => {
+test.serial('ApprovalPrompt renders multi-select options with checkboxes', async (t) => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'ask_user',
@@ -201,8 +197,9 @@ test('ApprovalPrompt renders multi-select options with checkboxes', (t) => {
     rawInterruption: { type: 'ask_user' },
   };
 
-  const { lastFrame, unmount } = render(
+  const { lastFrame } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
+    t,
   );
 
   const output = lastFrame() ?? '';
@@ -210,10 +207,9 @@ test('ApprovalPrompt renders multi-select options with checkboxes', (t) => {
   t.true(output.includes('[ ] npm'));
   t.true(output.includes('[ ] cargo'));
   t.true(output.includes('[Confirm selections]'));
-  unmount();
 });
 
-test('ApprovalPrompt toggles multi-select options and submits on Confirm', async (t) => {
+test.serial('ApprovalPrompt toggles multi-select options and submits on Confirm', async (t) => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'ask_user',
@@ -230,7 +226,7 @@ test('ApprovalPrompt toggles multi-select options and submits on Confirm', async
   };
 
   let approved: string | undefined;
-  const { lastFrame, stdin, unmount } = render(
+  const { lastFrame, stdin } = await renderInAct(
     <ApprovalPrompt
       approval={approval}
       onApprove={(answer) => {
@@ -239,28 +235,27 @@ test('ApprovalPrompt toggles multi-select options and submits on Confirm', async
       onReject={() => {}}
       onTypeAnswer={() => {}}
     />,
+    t,
   );
 
   // Toggle first option (git)
   await writeInput(stdin, '\r');
   t.true((lastFrame() ?? '').includes('[x] git'));
-
   // Move down to second option (npm) and toggle it
-  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\u001b[B');
   await writeInput(stdin, '\r');
   t.true((lastFrame() ?? '').includes('[x] npm'));
 
   // Move down to "[Confirm selections]" (which is at index 3: git at 0, npm at 1, cargo at 2, Confirm selections at 3)
   // Currently we are at index 1 (npm). Move down twice to reach index 3.
-  await writeInput(stdin, '\u001B[B');
-  await writeInput(stdin, '\u001B[B');
+  await writeInput(stdin, '\u001b[B');
+  await writeInput(stdin, '\u001b[B');
   await writeInput(stdin, '\r');
 
   t.deepEqual(JSON.parse(approved || '[]'), ['git', 'npm']);
-  unmount();
 });
 
-test('ApprovalPrompt renders question index prefix for multiple questions', (t) => {
+test.serial('ApprovalPrompt renders question index prefix for multiple questions', async (t) => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'ask_user',
@@ -270,7 +265,7 @@ test('ApprovalPrompt renders question index prefix for multiple questions', (t) 
     rawInterruption: { type: 'ask_user' },
   };
 
-  const { lastFrame, unmount } = render(
+  const { lastFrame } = await renderInAct(
     <ApprovalPrompt
       approval={approval}
       onApprove={() => {}}
@@ -278,33 +273,36 @@ test('ApprovalPrompt renders question index prefix for multiple questions', (t) 
       onTypeAnswer={() => {}}
       currentQuestionIndex={1}
     />,
+    t,
   );
 
   const output = lastFrame() ?? '';
   t.true(output.includes('[Question 2/2] Second question'));
-  unmount();
 });
 
-test('ApprovalPrompt displays custom typing message and suppresses keys when waitingForAskUserAnswer is true', async (t) => {
-  let approved: string | undefined;
-  const { lastFrame, stdin, unmount } = render(
-    <ApprovalPrompt
-      approval={baseApproval}
-      onApprove={(answer) => {
-        approved = answer;
-      }}
-      onReject={() => {}}
-      onTypeAnswer={() => {}}
-      waitingForAskUserAnswer={true}
-    />,
-  );
+test.serial(
+  'ApprovalPrompt displays custom typing message and suppresses keys when waitingForAskUserAnswer is true',
+  async (t) => {
+    let approved: string | undefined;
+    const { lastFrame, stdin } = await renderInAct(
+      <ApprovalPrompt
+        approval={baseApproval}
+        onApprove={(answer) => {
+          approved = answer;
+        }}
+        onReject={() => {}}
+        onTypeAnswer={() => {}}
+        waitingForAskUserAnswer={true}
+      />,
+      t,
+    );
 
-  const output = lastFrame() ?? '';
-  t.true(output.includes('Type your custom answer in the prompt below'));
-  t.false(output.includes('Use the safe default'));
+    const output = lastFrame() ?? '';
+    t.true(output.includes('Type your custom answer in the prompt below'));
+    t.false(output.includes('Use the safe default'));
 
-  // Pressing Enter should do nothing because key input is suppressed
-  await writeInput(stdin, '\r');
-  t.is(approved, undefined);
-  unmount();
-});
+    // Pressing Enter should do nothing because key input is suppressed
+    await writeInput(stdin, '\r');
+    t.is(approved, undefined);
+  },
+);

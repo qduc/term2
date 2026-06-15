@@ -2,7 +2,7 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
-import React from 'react';
+import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import type { Message } from './use-conversation.js';
 import { createCopySlashCommand } from '../commands/copy-command.js';
@@ -12,13 +12,14 @@ import { createUsageSlashCommand } from '../commands/usage-command.js';
 import { useAppCommands } from './use-app-commands.js';
 import { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
 }
 
-test('getLastFinalAssistantText returns the response from the latest assistant turn', (t) => {
+test.serial('getLastFinalAssistantText returns the response from the latest assistant turn', (t) => {
   const messages: Message[] = [
     { id: '1', sender: 'user', text: 'Hi' },
     { id: '2', sender: 'bot', text: 'First answer' },
@@ -29,7 +30,7 @@ test('getLastFinalAssistantText returns the response from the latest assistant t
   t.is(getLastFinalAssistantText(messages), 'Final answer');
 });
 
-test('getLastFinalAssistantText combines contiguous bot messages to return the full message', (t) => {
+test.serial('getLastFinalAssistantText combines contiguous bot messages to return the full message', (t) => {
   const messages: Message[] = [
     { id: '1', sender: 'user', text: 'Tell me a story' },
     { id: '2', sender: 'bot', text: 'Paragraph 1\n\n' },
@@ -40,7 +41,7 @@ test('getLastFinalAssistantText combines contiguous bot messages to return the f
   t.is(getLastFinalAssistantText(messages), 'Paragraph 1\n\nParagraph 2\n\nParagraph 3');
 });
 
-test('getLastFinalAssistantText ignores reasoning and system messages', (t) => {
+test.serial('getLastFinalAssistantText ignores reasoning and system messages', (t) => {
   const messages: Message[] = [
     { id: '1', sender: 'bot', text: 'Earlier answer' },
     { id: '2', sender: 'reasoning', text: 'hidden chain of thought' },
@@ -50,7 +51,7 @@ test('getLastFinalAssistantText ignores reasoning and system messages', (t) => {
   t.is(getLastFinalAssistantText(messages), 'Earlier answer');
 });
 
-test('getLastFinalAssistantText returns null when no bot message exists', (t) => {
+test.serial('getLastFinalAssistantText returns null when no bot message exists', (t) => {
   const messages: Message[] = [
     { id: '1', sender: 'user', text: 'Hi' },
     { id: '2', sender: 'reasoning', text: 'thinking' },
@@ -60,14 +61,14 @@ test('getLastFinalAssistantText returns null when no bot message exists', (t) =>
   t.is(getLastFinalAssistantText(messages), null);
 });
 
-test('parseModelProviderArg supports provider names with spaces for /model', (t) => {
+test.serial('parseModelProviderArg supports provider names with spaces for /model', (t) => {
   t.deepEqual(parseModelProviderArg('deepseek-v4-flash --provider=opencode go'), {
     modelId: 'deepseek-v4-flash',
     provider: 'opencode go',
   });
 });
 
-test('createUsageSlashCommand shows current session usage', (t) => {
+test.serial('createUsageSlashCommand shows current session usage', (t) => {
   const messages: string[] = [];
   const command = createUsageSlashCommand(
     (text) => messages.push(text),
@@ -79,7 +80,7 @@ test('createUsageSlashCommand shows current session usage', (t) => {
   t.deepEqual(messages, ['Token usage: 20,000 input (1,000,000 cached), 20,000 output']);
 });
 
-test('createCopySlashCommand returns immediately and reports success after async clipboard copy', async (t) => {
+test.serial('createCopySlashCommand returns immediately and reports success after async clipboard copy', async (t) => {
   const systemMessages: string[] = [];
   let resolveCopy: (() => void) | undefined;
   const command = createCopySlashCommand({
@@ -100,7 +101,7 @@ test('createCopySlashCommand returns immediately and reports success after async
   t.deepEqual(systemMessages, ['Copied the latest assistant response to the clipboard.']);
 });
 
-test('createCopySlashCommand reports clipboard failures asynchronously', async (t) => {
+test.serial('createCopySlashCommand reports clipboard failures asynchronously', async (t) => {
   const systemMessages: string[] = [];
   const command = createCopySlashCommand({
     messages: [{ id: '1', sender: 'bot', text: 'hello' }],
@@ -116,7 +117,7 @@ test('createCopySlashCommand reports clipboard failures asynchronously', async (
   t.deepEqual(systemMessages, ['Failed to copy to clipboard: clipboard unavailable']);
 });
 
-test('createUndoSlashCommand opens undo menu when no args', (t) => {
+test.serial('createUndoSlashCommand opens undo menu when no args', (t) => {
   let menuOpened = false;
   const command = createUndoSlashCommand({
     undoLastUserMessage: () => ({ text: 'Previous message' }),
@@ -132,7 +133,7 @@ test('createUndoSlashCommand opens undo menu when no args', (t) => {
   t.true(menuOpened);
 });
 
-test('createUndoSlashCommand with "last" arg restores last user message to input and returns false', (t) => {
+test.serial('createUndoSlashCommand with "last" arg restores last user message to input and returns false', (t) => {
   let input = '';
   let undoRedraws = 0;
   const command = createUndoSlashCommand({
@@ -154,26 +155,29 @@ test('createUndoSlashCommand with "last" arg restores last user message to input
   t.is(undoRedraws, 1);
 });
 
-test('createUndoSlashCommand shows system message via undoLastUserMessage when nothing to undo with "last" arg', (t) => {
-  const systemMessages: string[] = [];
-  let undoRedraws = 0;
-  const command = createUndoSlashCommand({
-    undoLastUserMessage: () => null,
-    setInput: () => {},
-    addSystemMessage: (text) => systemMessages.push(text),
-    openUndoMenu: () => {},
-    onUndo: () => {
-      undoRedraws++;
-    },
-  });
+test.serial(
+  'createUndoSlashCommand shows system message via undoLastUserMessage when nothing to undo with "last" arg',
+  (t) => {
+    const systemMessages: string[] = [];
+    let undoRedraws = 0;
+    const command = createUndoSlashCommand({
+      undoLastUserMessage: () => null,
+      setInput: () => {},
+      addSystemMessage: (text) => systemMessages.push(text),
+      openUndoMenu: () => {},
+      onUndo: () => {
+        undoRedraws++;
+      },
+    });
 
-  const result = command.action('last');
-  t.is(result, true);
-  t.deepEqual(systemMessages, ['Nothing to undo.']);
-  t.is(undoRedraws, 0);
-});
+    const result = command.action('last');
+    t.is(result, true);
+    t.deepEqual(systemMessages, ['Nothing to undo.']);
+    t.is(undoRedraws, 0);
+  },
+);
 
-test('createRetrySlashCommand undoes and re-sends the last user message', async (t) => {
+test.serial('createRetrySlashCommand undoes and re-sends the last user message', async (t) => {
   const systemMessages: string[] = [];
   let undoCalled = false;
   let sentText: string | null = null;
@@ -204,7 +208,7 @@ test('createRetrySlashCommand undoes and re-sends the last user message', async 
   t.deepEqual(systemMessages, []);
 });
 
-test('createRetrySlashCommand shows system message when nothing to retry', (t) => {
+test.serial('createRetrySlashCommand shows system message when nothing to retry', (t) => {
   const systemMessages: string[] = [];
   let undoCalled = false;
 
@@ -224,7 +228,7 @@ test('createRetrySlashCommand shows system message when nothing to retry', (t) =
   t.deepEqual(systemMessages, ['Nothing to retry.']);
 });
 
-test('createRetrySlashCommand retries when previous turn included images', async (t) => {
+test.serial('createRetrySlashCommand retries when previous turn included images', async (t) => {
   const systemMessages: string[] = [];
   let undoCalled = false;
   let sentInput: any = null;
@@ -293,12 +297,12 @@ const TestHookWrapper = ({
   return null;
 };
 
-test('useAppCommands togglePlanMode toggles plan mode', (t) => {
+test.serial('useAppCommands togglePlanMode toggles plan mode', async (t) => {
   const settings = new Map<string, any>();
   const applied: string[] = [];
   let hookResult: any;
 
-  render(
+  await renderInAct(
     React.createElement(TestHookWrapper, {
       settings,
       onHookResult: (res) => {
@@ -309,24 +313,29 @@ test('useAppCommands togglePlanMode toggles plan mode', (t) => {
         settings.set(key, value);
       },
     }),
+    t,
   );
 
   // Toggle planMode ON
-  hookResult.togglePlanMode();
+  await act(async () => {
+    hookResult.togglePlanMode();
+  });
   t.true(settings.get('app.planMode'));
   t.true(applied.includes('app.planMode'));
 
   // Toggle planMode OFF
-  hookResult.togglePlanMode();
+  await act(async () => {
+    hookResult.togglePlanMode();
+  });
   t.false(settings.get('app.planMode'));
 });
 
-test('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard', (t) => {
+test.serial('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard', async (t) => {
   const settings = new Map<string, any>();
   const applied: string[] = [];
   let hookResult: any;
 
-  render(
+  await renderInAct(
     React.createElement(TestHookWrapper, {
       settings,
       onHookResult: (res) => {
@@ -337,21 +346,26 @@ test('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard', (t) => 
         settings.set(key, value);
       },
     }),
+    t,
   );
 
   // Starts in Standard (planMode false)
   t.falsy(settings.get('app.planMode'));
 
   // Standard -> Plan
-  hookResult.cycleAppModes();
+  await act(async () => {
+    hookResult.cycleAppModes();
+  });
   t.true(settings.get('app.planMode'));
 
   // Plan -> Standard
-  hookResult.cycleAppModes();
+  await act(async () => {
+    hookResult.cycleAppModes();
+  });
   t.false(settings.get('app.planMode'));
 });
 
-test('useAppCommands /orchestrator enables exclusive orchestrator mode', (t) => {
+test.serial('useAppCommands /orchestrator enables exclusive orchestrator mode', async (t) => {
   const settings = new Map<string, any>([
     ['app.liteMode', true],
     ['app.mentorMode', true],
@@ -359,7 +373,7 @@ test('useAppCommands /orchestrator enables exclusive orchestrator mode', (t) => 
   ]);
   let hookResult: any;
 
-  render(
+  await renderInAct(
     React.createElement(TestHookWrapper, {
       settings,
       onHookResult: (res) => {
@@ -367,9 +381,12 @@ test('useAppCommands /orchestrator enables exclusive orchestrator mode', (t) => 
       },
       onApply: (key: string, value: any) => settings.set(key, value),
     }),
+    t,
   );
 
-  hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
+  await act(async () => {
+    hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
+  });
 
   t.true(settings.get('app.orchestratorMode'));
   t.false(settings.get('app.liteMode'));
@@ -377,12 +394,12 @@ test('useAppCommands /orchestrator enables exclusive orchestrator mode', (t) => 
   t.false(settings.get('app.planMode'));
 });
 
-test('useAppCommands blocks /orchestrator when the session has non-system history', (t) => {
+test.serial('useAppCommands blocks /orchestrator when the session has non-system history', async (t) => {
   const settings = new Map<string, any>();
   const systemMessages: string[] = [];
   let hookResult: any;
 
-  render(
+  await renderInAct(
     React.createElement(TestHookWrapper, {
       settings,
       messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
@@ -391,37 +408,46 @@ test('useAppCommands blocks /orchestrator when the session has non-system histor
         hookResult = res;
       },
     }),
+    t,
   );
 
-  hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
+  await act(async () => {
+    hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
+  });
 
   t.falsy(settings.get('app.orchestratorMode'));
   t.true(systemMessages.some((message) => message.includes('/clear')));
 });
 
-test('useAppCommands blocks orchestrator settings changes when the session has non-system history', (t) => {
-  const settings = new Map<string, any>();
-  const systemMessages: string[] = [];
-  let hookResult: any;
+test.serial(
+  'useAppCommands blocks orchestrator settings changes when the session has non-system history',
+  async (t) => {
+    const settings = new Map<string, any>();
+    const systemMessages: string[] = [];
+    let hookResult: any;
 
-  render(
-    React.createElement(TestHookWrapper, {
-      settings,
-      messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
-      onSystemMessage: (text: string) => systemMessages.push(text),
-      onHookResult: (res) => {
-        hookResult = res;
-      },
-    }),
-  );
+    await renderInAct(
+      React.createElement(TestHookWrapper, {
+        settings,
+        messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
+        onSystemMessage: (text: string) => systemMessages.push(text),
+        onHookResult: (res) => {
+          hookResult = res;
+        },
+      }),
+      t,
+    );
 
-  hookResult.slashCommands.find((command: any) => command.name === 'settings').action('app.orchestratorMode true');
+    await act(async () => {
+      hookResult.slashCommands.find((command: any) => command.name === 'settings').action('app.orchestratorMode true');
+    });
 
-  t.falsy(settings.get('app.orchestratorMode'));
-  t.true(systemMessages.some((message) => message.includes('/clear')));
-});
+    t.falsy(settings.get('app.orchestratorMode'));
+    t.true(systemMessages.some((message) => message.includes('/clear')));
+  },
+);
 
-test('useAppCommands enabling orchestrator disables all of: lite, plan, mentor', (t) => {
+test.serial('useAppCommands enabling orchestrator disables all of: lite, plan, mentor', async (t) => {
   const settings = new Map<string, any>([
     ['app.liteMode', true],
     ['app.planMode', true],
@@ -430,7 +456,7 @@ test('useAppCommands enabling orchestrator disables all of: lite, plan, mentor',
   ]);
   let hookResult: any;
 
-  render(
+  await renderInAct(
     React.createElement(TestHookWrapper, {
       settings,
       onHookResult: (res) => {
@@ -438,9 +464,12 @@ test('useAppCommands enabling orchestrator disables all of: lite, plan, mentor',
       },
       onApply: (key: string, value: any) => settings.set(key, value),
     }),
+    t,
   );
 
-  hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
+  await act(async () => {
+    hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
+  });
 
   t.true(settings.get('app.orchestratorMode'));
   t.false(settings.get('app.liteMode'));
@@ -448,7 +477,7 @@ test('useAppCommands enabling orchestrator disables all of: lite, plan, mentor',
   t.false(settings.get('app.mentorMode'));
 });
 
-test('useAppCommands enabling plan disables all of: lite, orchestrator, mentor', (t) => {
+test.serial('useAppCommands enabling plan disables all of: lite, orchestrator, mentor', async (t) => {
   const settings = new Map<string, any>([
     ['app.liteMode', true],
     ['app.orchestratorMode', true],
@@ -457,7 +486,7 @@ test('useAppCommands enabling plan disables all of: lite, orchestrator, mentor',
   ]);
   let hookResult: any;
 
-  render(
+  await renderInAct(
     React.createElement(TestHookWrapper, {
       settings,
       onHookResult: (res) => {
@@ -465,9 +494,12 @@ test('useAppCommands enabling plan disables all of: lite, orchestrator, mentor',
       },
       onApply: (key: string, value: any) => settings.set(key, value),
     }),
+    t,
   );
 
-  hookResult.slashCommands.find((command: any) => command.name === 'plan').action();
+  await act(async () => {
+    hookResult.slashCommands.find((command: any) => command.name === 'plan').action();
+  });
 
   t.true(settings.get('app.planMode'));
   t.false(settings.get('app.liteMode'));
@@ -475,14 +507,14 @@ test('useAppCommands enabling plan disables all of: lite, orchestrator, mentor',
   t.false(settings.get('app.mentorMode'));
 });
 
-test('useAppCommands cycleAppModes when in mentor mode switches to plan and disables mentor', (t) => {
+test.serial('useAppCommands cycleAppModes when in mentor mode switches to plan and disables mentor', async (t) => {
   const settings = new Map<string, any>([
     ['app.mentorMode', true],
     ['app.planMode', false],
   ]);
   let hookResult: any;
 
-  render(
+  await renderInAct(
     React.createElement(TestHookWrapper, {
       settings,
       onHookResult: (res) => {
@@ -490,20 +522,23 @@ test('useAppCommands cycleAppModes when in mentor mode switches to plan and disa
       },
       onApply: (key: string, value: any) => settings.set(key, value),
     }),
+    t,
   );
 
-  hookResult.cycleAppModes();
+  await act(async () => {
+    hookResult.cycleAppModes();
+  });
 
   t.true(settings.get('app.planMode'));
   t.false(settings.get('app.mentorMode'));
 });
 
-test('useAppCommands /handoff when no assistant response exists shows system message', (t) => {
+test.serial('useAppCommands /handoff when no assistant response exists shows system message', async (t) => {
   const settings = new Map<string, any>();
   const systemMessages: string[] = [];
   let hookResult: any;
 
-  render(
+  await renderInAct(
     React.createElement(TestHookWrapper, {
       settings,
       messages: [{ id: 'msg-1', sender: 'user', text: 'hello' }],
@@ -512,65 +547,83 @@ test('useAppCommands /handoff when no assistant response exists shows system mes
         hookResult = res;
       },
     }),
+    t,
   );
 
   const command = hookResult.slashCommands.find((c: any) => c.name === 'handoff');
   t.truthy(command);
-  const result = command.action();
+  let result = false;
+  await act(async () => {
+    result = command.action();
+  });
   t.is(result, true);
   t.deepEqual(systemMessages, ['No assistant response available to hand off.']);
 });
 
-test('useAppCommands /handoff when assistant response exists copies, clears, message, and calls onHandoff', async (t) => {
-  const settings = new Map<string, any>();
-  const systemMessages: string[] = [];
-  let clearCalled = false;
-  let handoffText: string | null = null;
-  let hookResult: any;
+test.serial(
+  'useAppCommands /handoff when assistant response exists copies, clears, message, and calls onHandoff',
+  async (t) => {
+    const settings = new Map<string, any>();
+    const systemMessages: string[] = [];
+    let clearCalled = false;
+    let handoffText: string | null = null;
+    let hookResult: any;
 
-  const messages: Message[] = [
-    { id: '1', sender: 'user', text: 'please write a plan' },
-    { id: '2', sender: 'bot', text: 'my plan' },
-  ];
+    const messages: Message[] = [
+      { id: '1', sender: 'user', text: 'please write a plan' },
+      { id: '2', sender: 'bot', text: 'my plan' },
+    ];
 
-  const TestWrapper = () => {
-    hookResult = useAppCommands({
-      settingsService: {
-        get: (key: string) => settings.get(key) ?? false,
-        set: (key: string, value: any) => settings.set(key, value),
-      } as any,
-      addSystemMessage: (text: string) => systemMessages.push(text),
-      applyRuntimeSetting: () => {},
-      setInput: () => {},
-      clearConversation: () => {
-        clearCalled = true;
-      },
-      getSessionUsage: () => '',
-      exit: () => {},
-      messages,
-      setModel: () => {},
-      undoLastUserMessage: () => null,
-      openUndoMenu: () => {},
-      openProvidersMenu: () => {},
-      onHandoff: (text) => {
-        handoffText = text;
-      },
-      sendUserMessage: async () => {},
-      listUserTurns: () => [],
+    const TestWrapper = () => {
+      hookResult = useAppCommands({
+        settingsService: {
+          get: (key: string) => settings.get(key) ?? false,
+          set: (key: string, value: any) => settings.set(key, value),
+        } as any,
+        addSystemMessage: (text: string) => systemMessages.push(text),
+        applyRuntimeSetting: () => {},
+        setInput: () => {},
+        clearConversation: () => {
+          clearCalled = true;
+        },
+        getSessionUsage: () => '',
+        exit: () => {},
+        messages,
+        setModel: () => {},
+        undoLastUserMessage: () => null,
+        openUndoMenu: () => {},
+        openProvidersMenu: () => {},
+        onHandoff: (text) => {
+          handoffText = text;
+        },
+        sendUserMessage: async () => {},
+        listUserTurns: () => [],
+      });
+      return null;
+    };
+
+    let unmount: () => void;
+
+    await act(async () => {
+      ({ unmount } = render(React.createElement(TestWrapper)));
+      await Promise.resolve();
     });
-    return null;
-  };
 
-  render(React.createElement(TestWrapper));
+    const command = hookResult.slashCommands.find((c: any) => c.name === 'handoff');
+    t.truthy(command);
+    let result = false;
+    await act(async () => {
+      result = command.action();
+      await flushMicrotasks();
+    });
+    t.is(result, true);
+    t.false(clearCalled);
 
-  const command = hookResult.slashCommands.find((c: any) => c.name === 'handoff');
-  t.truthy(command);
-  const result = command.action();
-  t.is(result, true);
-  t.false(clearCalled);
+    t.is(handoffText as any, 'my plan');
+    t.deepEqual(systemMessages, []);
 
-  await flushMicrotasks();
-
-  t.is(handoffText as any, 'my plan');
-  t.deepEqual(systemMessages, []);
-});
+    await act(async () => {
+      unmount();
+    });
+  },
+);

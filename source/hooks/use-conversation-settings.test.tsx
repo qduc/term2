@@ -3,9 +3,9 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import test from 'ava';
 import React, { act } from 'react';
-import { render } from 'ink-testing-library';
 import { useConversationSettings } from './use-conversation-settings.js';
 import type { ConversationService } from '../services/conversation/conversation-service.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 type HookResult = ReturnType<typeof useConversationSettings>;
 
@@ -24,9 +24,9 @@ const Harness = ({ service }: { service: ConversationService }) => {
   return null;
 };
 
-const renderHarness = async (conversationService: ConversationService) => {
+const renderHarness = async (conversationService: ConversationService, context: Parameters<typeof renderInAct>[1]) => {
   outerBox.current = null;
-  const { rerender } = render(<Harness service={conversationService} />);
+  const { rerender } = await renderInAct(<Harness service={conversationService} />, context);
   if (!outerBox.current) {
     throw new Error('Hook did not mount');
   }
@@ -40,7 +40,7 @@ test.serial('setModel delegates to conversationService.setModel', async (t) => {
     calledWith = m;
   };
 
-  await renderHarness(service);
+  await renderHarness(service, t);
   outerBox.current!.setModel('gpt-4o');
   t.is(calledWith, 'gpt-4o');
 });
@@ -52,7 +52,7 @@ test.serial('setReasoningEffort delegates to conversationService.setReasoningEff
     calledWith = e;
   };
 
-  await renderHarness(service);
+  await renderHarness(service, t);
   outerBox.current!.setReasoningEffort('high');
   t.is(calledWith, 'high');
 });
@@ -64,14 +64,14 @@ test.serial('setTemperature delegates to conversationService.setTemperature', as
     calledWith = temp;
   };
 
-  await renderHarness(service);
+  await renderHarness(service, t);
   outerBox.current!.setTemperature(0.7);
   t.is(calledWith, 0.7);
 });
 
 test.serial('callback identity is stable across rerenders with the same conversationService', async (t) => {
   const service = createMockConversationService();
-  const { rerender } = await renderHarness(service);
+  const { rerender } = await renderHarness(service, t);
 
   const initialSetModel = outerBox.current!.setModel;
   const initialSetReasoningEffort = outerBox.current!.setReasoningEffort;
@@ -90,7 +90,7 @@ test.serial('callback identity is stable across rerenders with the same conversa
 test.serial('callbacks are updated when a new conversationService is provided', async (t) => {
   const service1 = createMockConversationService();
   const service2 = createMockConversationService();
-  const { rerender } = await renderHarness(service1);
+  const { rerender } = await renderHarness(service1, t);
 
   const initialSetModel = outerBox.current!.setModel;
 

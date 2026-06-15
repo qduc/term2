@@ -3,17 +3,17 @@ import test from 'ava';
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import React, { useEffect } from 'react';
-import { render } from 'ink-testing-library';
 import { Text } from 'ink';
 import { useRuntimeSettings } from './use-runtime-settings.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 
 const flushEffects = async () => {
   await Promise.resolve();
   await Promise.resolve();
 };
 
-test('useRuntimeSettings routes agent.provider changes through switchProvider', async (t) => {
+test.serial('useRuntimeSettings routes agent.provider changes through switchProvider', async (t) => {
   const calls: string[] = [];
   const settingsService = createMockSettingsService({
     'agent.provider': 'openai',
@@ -43,10 +43,8 @@ test('useRuntimeSettings routes agent.provider changes through switchProvider', 
     return <Text>runtime</Text>;
   };
 
-  const app = render(<Harness />);
+  await renderInAct(<Harness />, t);
   await flushEffects();
 
   t.deepEqual(calls, ['switch:openrouter']);
-
-  app.unmount();
 });

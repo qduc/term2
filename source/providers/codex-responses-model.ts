@@ -121,19 +121,89 @@ const summarizeWebsocketResponse = (response: unknown): Record<string, unknown> 
   const outputTypes = output
     .map((item) => stringValue(asRecord(item)?.type) ?? 'unknown')
     .filter((type, index, array) => array.indexOf(type) === index);
-  const firstMessage = output.find((item) => stringValue(asRecord(item)?.type) === 'message');
-  const messageRecord = asRecord(firstMessage);
-  const content = Array.isArray(messageRecord?.content) ? messageRecord.content : [];
-  const text = content
-    .map((item) => asRecord(item))
-    .find((item) => stringValue(item?.type) === 'output_text' && typeof item?.text === 'string')?.text;
+
+  // Extract text content from assistant message items
+  const messageTexts: string[] = [];
+  for (const item of output) {
+    const itemRec = asRecord(item);
+    if (itemRec?.type === 'message' && itemRec.role === 'assistant') {
+      const content = itemRec.content;
+      if (Array.isArray(content)) {
+        for (const part of content) {
+          const partRec = asRecord(part);
+          if ((partRec?.type === 'output_text' || partRec?.type === 'text') && typeof partRec.text === 'string') {
+            messageTexts.push(partRec.text);
+          }
+        }
+      } else if (typeof content === 'string') {
+        messageTexts.push(content);
+      }
+    }
+  }
+  const text = messageTexts.length > 0 ? messageTexts.join('\n') : undefined;
+
+  // Extract reasoning content from reasoning items
+  const reasoningTexts: string[] = [];
+  for (const item of output) {
+    const itemRec = asRecord(item);
+    if (itemRec?.type === 'reasoning') {
+      const reasoningVal =
+        stringValue(itemRec.text) ??
+        stringValue(itemRec.delta) ??
+        stringValue(itemRec.summary) ??
+        stringValue(itemRec.reasoning_content);
+      if (reasoningVal) {
+        reasoningTexts.push(reasoningVal);
+      }
+    }
+  }
+  const reasoning = reasoningTexts.length > 0 ? reasoningTexts.join('\n') : undefined;
+
+  // Extract tool calls
+  const toolCalls: any[] = [];
+  for (const item of output) {
+    const itemRec = asRecord(item);
+    if (itemRec?.type === 'function_call') {
+      const name = stringValue(itemRec.name);
+      const args = stringValue(itemRec.arguments) ?? '{}';
+      toolCalls.push({
+        id: stringValue(itemRec.id) ?? stringValue(itemRec.call_id),
+        type: 'function',
+        function: {
+          ...(name !== undefined ? { name } : {}),
+          arguments: args,
+        },
+      });
+    }
+  }
+
+  const payload: Record<string, unknown> = {
+    choices: [
+      {
+        delta: {
+          ...(text !== undefined ? { content: text } : {}),
+          ...(reasoning !== undefined ? { reasoning } : {}),
+          ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+        },
+      },
+    ],
+  };
+
+  const responseId = stringValue(record.id);
+  if (responseId) {
+    payload.id = responseId;
+  }
+  if (record.usage) {
+    payload.usage = record.usage;
+  }
 
   return {
     transport: 'websocket',
     status: stringValue(record.status) ?? 'completed',
-    responseId: stringValue(record.id),
+    responseId: responseId,
     outputCount: output.length,
     outputTypes,
+    payload,
     ...(text ? { text } : {}),
     ...(record.usage ? { usage: record.usage } : {}),
   };

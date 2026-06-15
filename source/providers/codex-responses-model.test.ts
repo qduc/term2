@@ -569,6 +569,110 @@ test.serial('CodexResponsesWSModel emits traffic logs for websocket streamed res
   }
 });
 
+test.serial(
+  'CodexResponsesWSModel logs reasoning and tool calls in choice payload matching HTTP/SSE logs',
+  async (t) => {
+    const logs: any[] = [];
+    const original = (OpenAIResponsesWSModel.prototype as any)._fetchResponse;
+
+    (OpenAIResponsesWSModel.prototype as any)._fetchResponse = async function () {
+      return makeStream([
+        { type: 'response.created', response: { id: 'resp_ws_reasoning_tool' } },
+        {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: {
+            type: 'reasoning',
+            id: 'rs_123',
+            text: 'Let me think about this request.',
+            summary: [],
+          },
+        },
+        {
+          type: 'response.output_item.done',
+          output_index: 1,
+          item: {
+            type: 'function_call',
+            id: 'fc_123',
+            call_id: 'fc_123',
+            name: 'shell',
+            arguments: '{"command":"ls"}',
+          },
+        },
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp_ws_reasoning_tool',
+            output: [],
+            usage: { input_tokens: 5, output_tokens: 6, total_tokens: 11 },
+          },
+        },
+      ]);
+    };
+
+    const loggingService = {
+      debug: (message: string, meta?: any) => logs.push({ level: 'debug', message, meta }),
+      error: (message: string, meta?: any) => logs.push({ level: 'error', message, meta }),
+      getCorrelationId: () => 'trace-log-2',
+    };
+    const sessionContextService = {
+      getContext: () => ({
+        sessionId: 'sess_ws_2',
+        sessionStartedAt: '2025-01-01T00:00:00.000Z',
+        firstUserMessagePreview: 'hello ws 2',
+        mode: 'websocket',
+        traceId: 'trace-session-2',
+      }),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    };
+    const tokenManager = {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+    };
+
+    try {
+      const model = new CodexResponsesWSModel(
+        { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+        'gpt-5-codex',
+        tokenManager as any,
+        undefined,
+        loggingService as any,
+        sessionContextService as any,
+      );
+      const request: any = { input: [], tracing: false, modelSettings: {}, tools: [], handoffs: [] };
+
+      await collect(model.getStreamedResponse(request));
+
+      t.is(logs.length, 2);
+      const receivedPayload = logs[1].meta.payload;
+      t.is(receivedPayload.transport, 'websocket');
+      t.is(receivedPayload.responseId, 'resp_ws_reasoning_tool');
+      t.deepEqual(receivedPayload.outputTypes, ['reasoning', 'function_call']);
+
+      // Check unified payload matching HTTP/SSE structure
+      t.truthy(receivedPayload.payload);
+      t.is(receivedPayload.payload.id, 'resp_ws_reasoning_tool');
+      t.deepEqual(receivedPayload.payload.usage, { input_tokens: 5, output_tokens: 6, total_tokens: 11 });
+      t.is(receivedPayload.payload.choices.length, 1);
+
+      const delta = receivedPayload.payload.choices[0].delta;
+      t.is(delta.reasoning, 'Let me think about this request.');
+      t.deepEqual(delta.tool_calls, [
+        {
+          id: 'fc_123',
+          type: 'function',
+          function: {
+            name: 'shell',
+            arguments: '{"command":"ls"}',
+          },
+        },
+      ]);
+    } finally {
+      (OpenAIResponsesWSModel.prototype as any)._fetchResponse = original;
+    }
+  },
+);
+
 test.serial('CodexResponsesModel.getResponse (unary) intercepts and runs as stream under the hood', async (t) => {
   const original = (OpenAIResponsesModel.prototype as any)._fetchResponse;
   let receivedStreamArg = false;

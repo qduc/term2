@@ -105,10 +105,21 @@ test('search_replace schema validates path and replacements array structure', (t
     settingsService: createMockSettingsService(),
   });
 
+  const omittedMatchAll = tool.parameters.safeParse({
+    path: 'a.ts',
+    replacements: [{ search_content: 'old', replace_content: 'new' }],
+  });
+  t.true(omittedMatchAll.success);
+  if (omittedMatchAll.success) {
+    const parsed = omittedMatchAll.data as {
+      replacements: Array<{ match_all: boolean }>;
+    };
+    t.false(parsed.replacements[0].match_all);
+  }
   t.true(
     tool.parameters.safeParse({
       path: 'a.ts',
-      replacements: [{ search_content: 'old', replace_content: 'new' }],
+      replacements: [{ search_content: 'old', replace_content: 'new', match_all: true }],
     }).success,
   );
   t.false(
@@ -121,6 +132,12 @@ test('search_replace schema validates path and replacements array structure', (t
     tool.parameters.safeParse({
       path: 'a.ts',
       replacements: [{ search_content: null, replace_content: 'new' }],
+    }).success,
+  );
+  t.false(
+    tool.parameters.safeParse({
+      path: 'a.ts',
+      replacements: [{ search_content: 'old', replace_content: 'new', match_all: null }],
     }).success,
   );
 });

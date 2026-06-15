@@ -130,7 +130,7 @@ test.serial('execute replaces only a unique exact match', async (t) => {
   });
 });
 
-test.serial('execute fails when multiple exact matches are found', async (t) => {
+test.serial('execute fails with a match_all hint when multiple exact matches are found', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'content.txt';
@@ -150,9 +150,37 @@ test.serial('execute fails when multiple exact matches are found', async (t) => 
     const parsed = JSON.parse(result);
     t.false(parsed.output[0].success);
     t.regex(parsed.output[0].error, /Found 3 exact matches/);
+    t.regex(parsed.output[0].error, /Set match_all to true to replace all matches/);
 
     const updated = await fs.readFile(absPath, 'utf8');
     t.is(updated, 'foo foo foo');
+  });
+});
+
+test.serial('execute replaces all exact matches when match_all is true', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'foo foo foo');
+
+    const result = await tool.execute({
+      path: filePath,
+      replacements: [
+        {
+          search_content: 'foo',
+          replace_content: 'bar',
+          match_all: true,
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+    t.regex(parsed.output[0].message, /3 exact matches/);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'bar bar bar');
   });
 });
 
@@ -206,6 +234,33 @@ test.serial('execute fails when multiple relaxed matches are found', async (t) =
 
     const unchanged = await fs.readFile(absPath, 'utf8');
     t.is(unchanged, '  foo  \n\tbar\n---\n  foo  \n\tbar\n');
+  });
+});
+
+test.serial('execute replaces all relaxed matches when match_all is true', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    const filePath = 'content.txt';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, '  foo  \n\tbar\n---\n  foo  \n\tbar\n');
+
+    const result = await tool.execute({
+      path: filePath,
+      replacements: [
+        {
+          search_content: 'foo\nbar',
+          replace_content: 'replacement\n',
+          match_all: true,
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(result);
+    t.true(parsed.output[0].success);
+    t.regex(parsed.output[0].message, /2 relaxed matches/);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'replacement\n---\nreplacement\n');
   });
 });
 

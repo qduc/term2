@@ -5,7 +5,7 @@ export const GAP_MARKER = '<...>';
 export type IndexedMatch = { startIndex: number; endIndex: number };
 
 export type MatchInfo =
-  | { type: 'exact'; count: number }
+  | { type: 'exact'; count: number; matches: IndexedMatch[] }
   | { type: 'relaxed' | 'normalized' | 'anchor' | 'escaped' | 'boundary'; count: number; matches: IndexedMatch[] }
   | { type: 'gap'; count: number; matches: IndexedMatch[] }
   | { type: 'none'; diagnostic?: string };
@@ -354,7 +354,7 @@ export function findMatchesInContent(content: string, searchContent: string): Ma
   }
 
   const exactMatches = findExactMatches(content, searchContent);
-  if (exactMatches.length > 0) return { type: 'exact', count: exactMatches.length };
+  if (exactMatches.length > 0) return { type: 'exact', count: exactMatches.length, matches: exactMatches };
 
   const relaxedMatches = findRelaxedMatches(content, searchContent);
   if (relaxedMatches.length > 0) return { type: 'relaxed', count: relaxedMatches.length, matches: relaxedMatches };

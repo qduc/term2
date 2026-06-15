@@ -53,6 +53,11 @@ const searchReplaceOperationSchema = z.object({
       'The exact content to search for. Put <...> on its own line to match (and replace) everything between a head anchor and a tail anchor — lets you edit or delete a large block without reproducing it. The whole span between anchors is replaced, so use distinctive multi-line anchors (never a single generic line) to avoid deleting the wrong region. Omit the anchors from replace_content to delete them too.',
     ),
   replace_content: z.string().describe('The content to replace it with'),
+  match_all: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Replace every non-overlapping match. Defaults to false, which requires exactly one match.'),
 });
 
 const searchReplaceParametersSchema = z.object({
@@ -60,13 +65,14 @@ const searchReplaceParametersSchema = z.object({
   replacements: z.array(searchReplaceOperationSchema).min(1).describe('The list of replacements to apply to the file'),
 });
 
-export type SearchReplaceOperation = z.infer<typeof searchReplaceOperationSchema>;
-export type SearchReplaceToolParams = z.infer<typeof searchReplaceParametersSchema>;
+export type SearchReplaceOperation = z.input<typeof searchReplaceOperationSchema>;
+export type SearchReplaceToolParams = z.input<typeof searchReplaceParametersSchema>;
 
 export interface SearchReplaceFullOperation {
   path: string;
   search_content: string;
   replace_content: string;
+  match_all?: boolean;
 }
 
 function getSearchReplaceOperations(params: SearchReplaceToolParams): SearchReplaceFullOperation[] {
@@ -74,6 +80,7 @@ function getSearchReplaceOperations(params: SearchReplaceToolParams): SearchRepl
     path: params.path,
     search_content: rep.search_content,
     replace_content: rep.replace_content,
+    match_all: rep.match_all ?? false,
   }));
 }
 
@@ -83,6 +90,7 @@ function containsGapMarker(content: string): boolean {
 
 function evaluateApprovalForMatch(
   matchInfo: MatchInfo,
+  matchAll: boolean,
   insideCwd: boolean,
   filePath: string,
   loggingService: ILoggingService,
@@ -94,7 +102,7 @@ function evaluateApprovalForMatch(
     return false;
   }
 
-  if (matchInfo.count > 1) {
+  if (matchInfo.count > 1 && !matchAll) {
     loggingService.warn(`search_replace validation: multiple ${matchInfo.type} matches - will fail in execute`, {
       path: filePath,
       count: matchInfo.count,
@@ -159,12 +167,30 @@ function replaceIndexedMatches(
   content: string,
   matches: { startIndex: number; endIndex: number }[],
   replaceContent: string,
+  matchAll: boolean,
 ): { newContent: string; replacedCount: number } {
-  const match = matches[0];
+  const selectedMatches = matchAll ? selectNonOverlappingMatches(matches) : matches.slice(0, 1);
+  let newContent = content;
+  for (const match of [...selectedMatches].reverse()) {
+    newContent = newContent.substring(0, match.startIndex) + replaceContent + newContent.substring(match.endIndex);
+  }
   return {
-    newContent: content.substring(0, match.startIndex) + replaceContent + content.substring(match.endIndex),
-    replacedCount: 1,
+    newContent,
+    replacedCount: selectedMatches.length,
   };
+}
+
+function selectNonOverlappingMatches(
+  matches: { startIndex: number; endIndex: number }[],
+): { startIndex: number; endIndex: number }[] {
+  const selected: { startIndex: number; endIndex: number }[] = [];
+  let previousEnd = -1;
+  for (const match of matches) {
+    if (match.startIndex < previousEnd) continue;
+    selected.push(match);
+    previousEnd = match.endIndex;
+  }
+  return selected;
 }
 
 function executeReplacement(
@@ -172,8 +198,8 @@ function executeReplacement(
   content: string,
   eol: string,
   options: {
-    normalizedSearchContent: string;
     replaceContent: string;
+    matchAll: boolean;
   },
 ): ReplacementExecutionResult {
   const normalizedReplaceContent = normalizeToEOL(options.replaceContent, eol);
@@ -185,27 +211,14 @@ function executeReplacement(
     };
   }
 
-  if (matchInfo.count > 1) {
+  if (matchInfo.count > 1 && !options.matchAll) {
     return {
       success: false,
-      error: `Found ${matchInfo.count} ${matchInfo.type} matches. Search content must match exactly once.`,
+      error: `Found ${matchInfo.count} ${matchInfo.type} matches. Search content must match exactly once. Set match_all to true to replace all matches.`,
     };
   }
 
-  if (matchInfo.type === 'exact') {
-    const firstIndex = content.indexOf(options.normalizedSearchContent);
-    return {
-      success: true,
-      newContent:
-        content.substring(0, firstIndex) +
-        normalizedReplaceContent +
-        content.substring(firstIndex + options.normalizedSearchContent.length),
-      matchType: 'exact',
-      replacedCount: 1,
-    };
-  }
-
-  const replaced = replaceIndexedMatches(content, matchInfo.matches, normalizedReplaceContent);
+  const replaced = replaceIndexedMatches(content, matchInfo.matches, normalizedReplaceContent, options.matchAll);
   return {
     success: true,
     newContent: replaced.newContent,
@@ -294,7 +307,7 @@ export function createSearchReplaceToolDefinition(deps: {
   return {
     name: 'search_replace',
     description:
-      'Replace text in a file using layered, deterministic matching. Exact matching is preferred; conservative fallbacks tolerate line-ending, indentation, whitespace, escaped-text, and minor anchored multi-line differences. Fallbacks must identify one unique match, and oversized fuzzy spans are rejected.\n' +
+      'Replace text in a file using layered, deterministic matching. Exact matching is preferred; conservative fallbacks tolerate line-ending, indentation, whitespace, escaped-text, and minor anchored multi-line differences. Matches must be unique unless match_all is true, and oversized fuzzy spans are rejected.\n' +
       'Gap matching: put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span (both anchors plus everything between them) is what gets replaced, so a mis-placed anchor silently deletes a large region. Choose anchors that are distinctive and unambiguous — prefer a few lines of real, unique code; never anchor on a single generic line like "}", "return", or a blank line. Use this to edit or DELETE a large block without reproducing it. To delete the block including the anchors, omit them from replace_content; to delete only the middle, repeat the anchors in replace_content.\n' +
       'Use this tool for precise edits where you know the content to be replaced.',
     parameters: searchReplaceParametersSchema,
@@ -378,7 +391,7 @@ export function createSearchReplaceToolDefinition(deps: {
         // Detect EOL, normalize search content, find matches, and cache result
         const { matchInfo } = prepareMatchContext(operation, content, editCache);
 
-        return evaluateApprovalForMatch(matchInfo, insideCwd, filePath, loggingService);
+        return evaluateApprovalForMatch(matchInfo, operation.match_all ?? false, insideCwd, filePath, loggingService);
       } catch (error: any) {
         loggingService.error('search_replace needsApproval error', {
           error: error?.message || String(error),
@@ -407,7 +420,7 @@ export function createSearchReplaceToolDefinition(deps: {
       });
 
       const applyToContent = async (operation: SearchReplaceFullOperation, content: string) => {
-        const { path: filePath, search_content, replace_content } = operation;
+        const { path: filePath, search_content, replace_content, match_all } = operation;
 
         if (search_content === '') {
           return fail(
@@ -491,8 +504,8 @@ export function createSearchReplaceToolDefinition(deps: {
         }
 
         const replacementResult = executeReplacement(matchInfo, content, eol, {
-          normalizedSearchContent,
           replaceContent: replace_content,
+          matchAll: match_all ?? false,
         });
 
         if (!replacementResult.success) {

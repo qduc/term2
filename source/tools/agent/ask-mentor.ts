@@ -2,6 +2,9 @@ import { z } from 'zod';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
 
+const ASK_MENTOR_DESCRIPTION =
+  'Ask a mentor (a smarter model) for advice or clarification on a problem. The mentor does not see your thinking, files you have read, or conversation context - you must fully explain the situation in your question.';
+
 const askMentorSchema = z.object({
   question: z.string().describe('The question to ask the mentor.'),
   context: z.string().optional().describe('Additional context for the question.'),
@@ -35,8 +38,7 @@ export const createAskMentorToolDefinition = (
   askMentor: (question: string) => Promise<string>,
 ): ToolDefinition<AskMentorParams> => ({
   name: 'ask_mentor',
-  description:
-    'Ask a mentor (a smarter model) for advice or clarification on a problem. The mentor does not see your thinking, files you have read, or conversation context - you must fully explain the situation in your question.',
+  description: ASK_MENTOR_DESCRIPTION,
   parameters: askMentorSchema,
   needsApproval: () => false,
   execute: async ({ question, context }) => {

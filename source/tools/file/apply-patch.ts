@@ -156,6 +156,51 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
   return messages;
 };
 
+const APPLY_PATCH_DESCRIPTION =
+  'Apply file changes using headerless V4A diff format. Supports creating, updating files.\n\n' +
+  '## CRITICAL RULES:\n' +
+  '1. Each line MUST start with exactly one character: space, +, or - (followed by the line content)\n' +
+  '2. Use @@ markers to provide context anchors when needed\n' +
+  '3. Context lines (unchanged) start with a SPACE character\n' +
+  '4. Added lines start with + character\n' +
+  '5. Removed lines start with - character\n' +
+  '6. DO NOT include line numbers or @@ -n,m +n,m @@ headers (headerless format)\n\n' +
+  '## CREATE_FILE:\n' +
+  'Every line must start with + (no context or - lines):\n' +
+  '```\n' +
+  '+line 1\n' +
+  '+line 2\n' +
+  '+line 3\n' +
+  '```\n\n' +
+  '## UPDATE_FILE:\n' +
+  'Provide context (space-prefixed lines) around changes. Include 2-3 lines of context before and after:\n' +
+  '```\n' +
+  '@@ function calculate\n' +
+  ' function calculate(x) {\n' +
+  '-  return x * 2;\n' +
+  '+  return x * 3;\n' +
+  ' }\n' +
+  '```\n\n' +
+  '## Context Anchors:\n' +
+  'Use @@ markers to help locate code in the file:\n' +
+  '- For classes: @@ class ClassName\n' +
+  '- For functions: @@ function functionName\n' +
+  '- For unique lines: @@ distinctive text from the line\n' +
+  'Stack multiple @@ for nested structures:\n' +
+  '```\n' +
+  '@@ class MyClass\n' +
+  '@@ method doSomething\n' +
+  ' def doSomething(self):\n' +
+  '-    old code\n' +
+  '+    new code\n' +
+  '```\n\n' +
+  '## Common Mistakes to Avoid:\n' +
+  '- Missing space/+/- prefix on lines\n' +
+  '- Including line numbers like "@@ -1,3 +1,4 @@"\n' +
+  '- Not providing enough context (need 2-3 lines before/after)\n' +
+  '- Context lines not starting with space character\n' +
+  '- Using tabs instead of spaces for indentation matching';
+
 export function createApplyPatchToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
@@ -165,50 +210,7 @@ export function createApplyPatchToolDefinition(deps: {
 
   return {
     name: 'apply_patch',
-    description:
-      'Apply file changes using headerless V4A diff format. Supports creating, updating files.\n\n' +
-      '## CRITICAL RULES:\n' +
-      '1. Each line MUST start with exactly one character: space, +, or - (followed by the line content)\n' +
-      '2. Use @@ markers to provide context anchors when needed\n' +
-      '3. Context lines (unchanged) start with a SPACE character\n' +
-      '4. Added lines start with + character\n' +
-      '5. Removed lines start with - character\n' +
-      '6. DO NOT include line numbers or @@ -n,m +n,m @@ headers (headerless format)\n\n' +
-      '## CREATE_FILE:\n' +
-      'Every line must start with + (no context or - lines):\n' +
-      '```\n' +
-      '+line 1\n' +
-      '+line 2\n' +
-      '+line 3\n' +
-      '```\n\n' +
-      '## UPDATE_FILE:\n' +
-      'Provide context (space-prefixed lines) around changes. Include 2-3 lines of context before and after:\n' +
-      '```\n' +
-      '@@ function calculate\n' +
-      ' function calculate(x) {\n' +
-      '-  return x * 2;\n' +
-      '+  return x * 3;\n' +
-      ' }\n' +
-      '```\n\n' +
-      '## Context Anchors:\n' +
-      'Use @@ markers to help locate code in the file:\n' +
-      '- For classes: @@ class ClassName\n' +
-      '- For functions: @@ function functionName\n' +
-      '- For unique lines: @@ distinctive text from the line\n' +
-      'Stack multiple @@ for nested structures:\n' +
-      '```\n' +
-      '@@ class MyClass\n' +
-      '@@ method doSomething\n' +
-      ' def doSomething(self):\n' +
-      '-    old code\n' +
-      '+    new code\n' +
-      '```\n\n' +
-      '## Common Mistakes to Avoid:\n' +
-      '- Missing space/+/- prefix on lines\n' +
-      '- Including line numbers like "@@ -1,3 +1,4 @@"\n' +
-      '- Not providing enough context (need 2-3 lines before/after)\n' +
-      '- Context lines not starting with space character\n' +
-      '- Using tabs instead of spaces for indentation matching',
+    description: APPLY_PATCH_DESCRIPTION,
     parameters: applyPatchParametersSchema,
     needsApproval: async (params) => {
       try {

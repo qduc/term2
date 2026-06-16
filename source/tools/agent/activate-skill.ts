@@ -5,6 +5,8 @@ import type { ToolDefinition } from '../types.js';
 import type { SkillsService } from '../../services/skills/skills-service.js';
 import { getCallIdFromItem, getOutputText, normalizeToolArguments, createBaseMessage } from '../format-helpers.js';
 
+const ACTIVATE_SKILL_DESCRIPTION = 'Load the full instructions for a specified skill to perform a specialized task.';
+
 const ALWAYS_IGNORE = ['.git', 'node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.cache', '.DS_Store'];
 
 export const createActivateSkillToolDefinition = (skillsService: SkillsService): ToolDefinition => {
@@ -22,7 +24,7 @@ export const createActivateSkillToolDefinition = (skillsService: SkillsService):
 
   return {
     name: 'activate_skill',
-    description: 'Load the full instructions for a specified skill to perform a specialized task.',
+    description: ACTIVATE_SKILL_DESCRIPTION,
     parameters: activateSkillSchema,
     needsApproval: () => false, // Safe operation
     execute: async (params) => {

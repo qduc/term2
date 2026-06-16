@@ -11,6 +11,14 @@ import {
 } from '../format-helpers.js';
 import type { SubagentResult } from '../../services/subagents/types.js';
 
+const RUN_SUBAGENT_DESCRIPTION =
+  'Delegate a bounded task to a specialized subagent. The subagent runs synchronously and returns a structured result. ' +
+  'The subagent runs in its own context and returns only a summary, preserving your context. ' +
+  '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
+  '## Task Requirements\n' +
+  'The task must be fully self-contained. Include all context, constraints, and the expected output format. ' +
+  'The subagent has no access to your conversation history or reasoning.';
+
 const runSubagentSchema = z.object({
   role: z
     .enum(['explorer', 'worker', 'researcher', 'mentor'])
@@ -205,13 +213,7 @@ export const createRunSubagentToolDefinition = (
   runSubagent: (params: RunSubagentParams, context?: unknown, details?: unknown) => Promise<SubagentResult>,
 ): ToolDefinition<RunSubagentParams> => ({
   name: 'run_subagent',
-  description:
-    'Delegate a bounded task to a specialized subagent. The subagent runs synchronously and returns a structured result. ' +
-    'The subagent runs in its own context and returns only a summary, preserving your context. ' +
-    '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
-    '## Task Requirements\n' +
-    'The task must be fully self-contained. Include all context, constraints, and the expected output format. ' +
-    'The subagent has no access to your conversation history or reasoning.',
+  description: RUN_SUBAGENT_DESCRIPTION,
   parameters: runSubagentSchema,
   needsApproval: () => false,
   execute: async (params, context, details) => {

@@ -14,6 +14,9 @@ import { getOutputText, normalizeToolArguments, createBaseMessage } from './form
 
 const execPromise = util.promisify(exec);
 
+const GREP_DESCRIPTION =
+  'Search for text in the codebase using ripgrep (rg) if available, falling back to grep. Useful for exploring code, finding usages, etc.';
+
 const searchParametersSchema = z.object({
   pattern: z.string().describe('The text or regex pattern to search for'),
   path: z.string().describe('The directory or file to search in. Use "." for current directory.'),
@@ -80,8 +83,7 @@ const formatSearchCommandMessage: FormatCommandMessage = (item, index, _toolCall
 
 export const grepToolDefinition: ToolDefinition<SearchToolParams> = {
   name: 'grep',
-  description:
-    'Search for text in the codebase using ripgrep (rg) if available, falling back to grep. Useful for exploring code, finding usages, etc.',
+  description: GREP_DESCRIPTION,
   parameters: searchParametersSchema,
   needsApproval: () => false, // Search is read-only and safe
   execute: async (params) => {

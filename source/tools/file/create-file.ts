@@ -9,6 +9,9 @@ import type { ILoggingService, ISettingsService, ISSHService } from '../../servi
 import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 
+const CREATE_FILE_DESCRIPTION =
+  'Create a new file with the specified content. Existing files require an overwrite confirmation flow.';
+
 const createFileParametersSchema = z.object({
   path: z.string().describe('The absolute or relative path to the new file'),
   content: z.string().describe('The initial content for the new file'),
@@ -89,7 +92,7 @@ export function createCreateFileToolDefinition(deps: {
 
   return {
     name: TOOL_NAME_CREATE_FILE,
-    description: 'Create a new file with the specified content. Existing files require an overwrite confirmation flow.',
+    description: CREATE_FILE_DESCRIPTION,
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {
       try {

@@ -6,6 +6,9 @@ import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
 import type { ISettingsService, ILoggingService } from '../../services/service-interfaces.js';
 
+const WEB_FETCH_DESCRIPTION =
+  'Fetch a web page and convert its HTML content to Markdown format with intelligent content extraction. When content exceeds max_chars, the full content is saved to a temporary file for searching.';
+
 const DEFAULT_MAX_CHARS = 10000;
 const MAX_CHARS_LIMIT = 200000;
 
@@ -64,8 +67,7 @@ export const createWebFetchToolDefinition = (deps: {
 
   return {
     name: 'web_fetch',
-    description:
-      'Fetch a web page and convert its HTML content to Markdown format with intelligent content extraction. When content exceeds max_chars, the full content is saved to a temporary file for searching.',
+    description: WEB_FETCH_DESCRIPTION,
     parameters: webFetchSchema,
     needsApproval: () => false,
     execute: async (params) => {

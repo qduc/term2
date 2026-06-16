@@ -98,6 +98,11 @@ export const formatFindFilesCommandMessage: FormatCommandMessage = (item, index,
   ];
 };
 
+const FIND_FILES_DESCRIPTION =
+  'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files.';
+const FIND_FILES_DESCRIPTION_OUTSIDE =
+  'Search for files by name on the filesystem. Useful for finding files by pattern, exploring directory structure, or locating specific files.';
+
 export const createFindFilesToolDefinition = (
   deps: {
     executionContext?: ExecutionContext;
@@ -108,9 +113,7 @@ export const createFindFilesToolDefinition = (
   const { executionContext, allowOutsideWorkspace = false, forceFindFallback = false } = deps;
   return {
     name: 'find_files',
-    description: allowOutsideWorkspace
-      ? 'Search for files by name on the filesystem. Useful for finding files by pattern, exploring directory structure, or locating specific files.'
-      : 'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files.',
+    description: allowOutsideWorkspace ? FIND_FILES_DESCRIPTION_OUTSIDE : FIND_FILES_DESCRIPTION,
     parameters: findFilesParametersSchema,
     needsApproval: () => false, // Search is read-only and safe
     execute: async (params) => {

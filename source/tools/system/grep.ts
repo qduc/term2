@@ -154,15 +154,18 @@ async function checkRgAvailability(executionContext?: ExecutionContext): Promise
   }
 }
 
+const GREP_DESCRIPTION =
+  'Search for text in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching.';
+const GREP_DESCRIPTION_ORCHESTRATOR =
+  'Search for a known symbol or string when you already have a target in mind (e.g., confirm a subagent\'s reference, locate a specific identifier). Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. For broad codebase exploration or "where is X used" investigations, prefer delegating to an `explorer` subagent via `run_subagent`.';
+
 export const createGrepToolDefinition = (
   deps: { executionContext?: ExecutionContext; orchestratorMode?: boolean } = {},
 ): ToolDefinition<SearchToolParams> => {
   const { executionContext, orchestratorMode = false } = deps;
   return {
     name: 'grep',
-    description: orchestratorMode
-      ? 'Search for a known symbol or string when you already have a target in mind (e.g., confirm a subagent\'s reference, locate a specific identifier). Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. For broad codebase exploration or "where is X used" investigations, prefer delegating to an `explorer` subagent via `run_subagent`.'
-      : 'Search for text in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching.',
+    description: orchestratorMode ? GREP_DESCRIPTION_ORCHESTRATOR : GREP_DESCRIPTION,
     parameters: searchParametersSchema,
     argumentParsing: 'strict',
     needsApproval: () => false, // Search is read-only and safe

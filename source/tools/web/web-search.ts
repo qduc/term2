@@ -9,6 +9,11 @@ import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFrom
 import { getConfiguredWebSearchProvider, type WebSearchResponse } from '../../providers/web-search/index.js';
 import type { ISettingsService, ILoggingService } from '../../services/service-interfaces.js';
 
+const WEB_SEARCH_DESCRIPTION =
+  'Search the web for current information. Use this when you need up-to-date information ' +
+  'that may not be in your training data, such as recent news, current events, ' +
+  'documentation updates, or any time-sensitive information.';
+
 const webSearchSchema = z.object({
   query: z.string().min(1).describe('The search query to look up on the web.'),
 });
@@ -84,10 +89,7 @@ export const createWebSearchToolDefinition = (deps: {
 
   return {
     name: 'web_search',
-    description:
-      'Search the web for current information. Use this when you need up-to-date information ' +
-      'that may not be in your training data, such as recent news, current events, ' +
-      'documentation updates, or any time-sensitive information.',
+    description: WEB_SEARCH_DESCRIPTION,
     parameters: webSearchSchema,
     needsApproval: () => false, // Web search is read-only, safe operation
     execute: async (params) => {

@@ -8,6 +8,11 @@ import {
   ASK_USER_RESERVED_OPTION_LABELS,
 } from './ask-user-constants.js';
 
+const ASK_USER_DESCRIPTION =
+  'Ask the user clarifying questions when missing user decisions block correct progress. ' +
+  'Returns the answers selected/entered by the user. ' +
+  'Example: { questions: [{ question: "Which approach?", options: ["Option A", "Option B"] }, { question: "Any other notes?" }] }';
+
 const reservedOptionLabels = new Set<string>(ASK_USER_RESERVED_OPTION_LABELS);
 
 const askUserTextSchema = z.string().trim().min(1);
@@ -57,10 +62,7 @@ export const createAskUserToolDefinition = (
   getAskUserAnswer: (callId?: string) => string | undefined,
 ): ToolDefinition => ({
   name: TOOL_NAME_ASK_USER,
-  description:
-    'Ask the user clarifying questions when missing user decisions block correct progress. ' +
-    'Returns the answers selected/entered by the user. ' +
-    'Example: { questions: [{ question: "Which approach?", options: ["Option A", "Option B"] }, { question: "Any other notes?" }] }',
+  description: ASK_USER_DESCRIPTION,
   parameters: askUserSchema,
   needsApproval: () => true,
   execute: async (_params, _context, details) => {

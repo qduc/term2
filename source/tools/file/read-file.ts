@@ -5,6 +5,13 @@ import { trimOutput } from '../../utils/output/output-trim.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
 
+const READ_FILE_DESCRIPTION =
+  'Read file content from the workspace (like cat command). Supports reading specific line ranges. Avoid reading tiny repeated chunk (e.g. 50 lines a time). If you need more context, read the full file if under 1000 lines or read a larger window.';
+const READ_FILE_DESCRIPTION_OUTSIDE =
+  'Read file content from the filesystem (like cat command). Supports reading specific line ranges. Avoid reading tiny repeated chunk (e.g. 50 lines a time). If you need more context, read the full file if under 1000 lines or read a larger window.';
+const READ_FILE_DESCRIPTION_ORCHESTRATOR =
+  "Read file content to verify a specific claim about a known location (e.g., confirm a subagent's edit landed, check a referenced symbol). For exploring unfamiliar code or understanding files you have not seen, prefer delegating to an `explorer` subagent via `run_subagent`. Supports line ranges — read the smallest relevant range.";
+
 const readFileParametersSchema = z.object({
   path: z.string().describe('File path relative to workspace root'),
   start_line: relaxedNumber
@@ -65,10 +72,10 @@ export const createReadFileToolDefinition = (
   return {
     name: 'read_file',
     description: orchestratorMode
-      ? "Read file content to verify a specific claim about a known location (e.g., confirm a subagent's edit landed, check a referenced symbol). For exploring unfamiliar code or understanding files you have not seen, prefer delegating to an `explorer` subagent via `run_subagent`. Supports line ranges — read the smallest relevant range."
+      ? READ_FILE_DESCRIPTION_ORCHESTRATOR
       : allowOutsideWorkspace
-      ? 'Read file content from the filesystem (like cat command). Supports reading specific line ranges. Avoid reading tiny repeated chunk (e.g. 50 lines a time). If you need more context, read the full file if under 1000 lines or read a larger window.'
-      : 'Read file content from the workspace (like cat command). Supports reading specific line ranges. Avoid reading tiny repeated chunk (e.g. 50 lines a time). If you need more context, read the full file if under 1000 lines or read a larger window.',
+      ? READ_FILE_DESCRIPTION_OUTSIDE
+      : READ_FILE_DESCRIPTION,
     parameters: readFileParametersSchema,
     needsApproval: () => false, // Read-only operation, safe
     execute: async (params) => {

@@ -72,6 +72,10 @@ export type ReadCodeOutlineToolParams = z.infer<typeof readCodeOutlineParameters
 export type CodeContextSearchToolParams = z.infer<typeof codeContextSearchParametersSchema>;
 
 const IMPORTER_EXTENSIONS = [...TS_EXTENSIONS, ...JS_EXTENSIONS];
+const READ_CODE_OUTLINE_DESCRIPTION = 'Compact outline of one file: imports, exports, declarations. No bodies.';
+const CODE_CONTEXT_SEARCH_DESCRIPTION =
+  'Bounded just-in-time search for related files (by path) or symbol declarations (by name). Plain text, fixed relation tokens.';
+
 const SKIP_DIRS = ['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt', '.cache', 'out', 'vendor'];
 const MAX_TARGET_BYTES = 512 * 1024;
 const MAX_FILES_SEARCHED = 10_000;
@@ -103,7 +107,7 @@ export const createReadCodeOutlineToolDefinition = (
   const { executionContext } = deps;
   return {
     name: 'read_code_outline',
-    description: 'Compact outline of one file: imports, exports, declarations. No bodies.',
+    description: READ_CODE_OUTLINE_DESCRIPTION,
     parameters: readCodeOutlineParametersSchema,
     needsApproval: () => false,
     execute: async ({ path: filePath }) => {
@@ -137,8 +141,7 @@ export const createCodeContextSearchToolDefinition = (
   const { executionContext } = deps;
   return {
     name: 'code_context_search',
-    description:
-      'Bounded just-in-time search for related files (by path) or symbol declarations (by name). Plain text, fixed relation tokens.',
+    description: CODE_CONTEXT_SEARCH_DESCRIPTION,
     parameters: codeContextSearchParametersSchema,
     needsApproval: () => false,
     execute: async (params) => {

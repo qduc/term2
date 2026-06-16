@@ -106,6 +106,39 @@ test('reconcileHistoryWithToolLedger appends completed pairs once and drops inco
   t.is(second.history.length, first.history.length);
 });
 
+test('reconcileHistoryWithToolLedger restores reasoning items stored with recovered call pairs', (t) => {
+  const history = [{ role: 'user', type: 'message', content: 'continue' }];
+  const ledger: SavedToolExecution[] = [
+    {
+      turnId: 'turn-1',
+      callId: 'call-read',
+      toolName: 'read_file',
+      arguments: '{}',
+      status: 'completed',
+      startedAt: '2026-05-26T00:00:00.000Z',
+      completedAt: '2026-05-26T00:00:01.000Z',
+      historyItems: [
+        {
+          type: 'reasoning',
+          content: [{ type: 'reasoning_text', text: 'I should inspect the file.' }],
+          rawContent: [{ type: 'reasoning_text', text: 'I should inspect the file.' }],
+        },
+        { type: 'function_call', id: 'fc_1', callId: 'call-read', name: 'read_file', arguments: '{}' },
+        { type: 'function_call_result', id: 'fcr_1', callId: 'call-read', output: 'contents' },
+      ],
+    },
+  ];
+
+  const result = reconcileHistoryWithToolLedger(history, ledger);
+
+  t.is(result.addedCompletedPairs, 1);
+  t.is(result.history.length, 4);
+  t.is((result.history[1] as any).type, 'reasoning');
+  t.is((result.history[1] as any).content[0].text, 'I should inspect the file.');
+  t.is((result.history[2] as any).type, 'function_call');
+  t.is((result.history[3] as any).type, 'function_call_result');
+});
+
 test('recordFunctionCall preserves existing historyItems on a duplicate call', (t) => {
   const ledger = new ToolExecutionLedger();
 

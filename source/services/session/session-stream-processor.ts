@@ -120,6 +120,8 @@ export class SessionStreamProcessor {
         this.deps.toolTracker.invalidPackets.add(packet);
       }
     };
+    let pendingLedgerReasoningText = '';
+    let consumedLedgerReasoningLength = 0;
 
     const generator = processStreamEvents(
       stream,
@@ -130,6 +132,13 @@ export class SessionStreamProcessor {
         preserveExistingToolArgs: true,
         onFunctionCallItem: (item) => {
           this.deps.generationGuard.runIfCurrent(options.gen, () => {
+            const reasoningText =
+              pendingLedgerReasoningText || acc.reasoningOutput.slice(consumedLedgerReasoningLength);
+            if (reasoningText) {
+              this.deps.toolTracker.recordReasoningText(reasoningText);
+              consumedLedgerReasoningLength = acc.reasoningOutput.length;
+              pendingLedgerReasoningText = '';
+            }
             this.deps.toolTracker.recordFunctionCall(item);
           });
         },
@@ -184,6 +193,9 @@ export class SessionStreamProcessor {
         }
 
         this.deps.generationGuard.runIfCurrent(options.gen, commitWorkingCaches);
+        if (next.value.type === 'reasoning_delta') {
+          pendingLedgerReasoningText = acc.reasoningOutput.slice(consumedLedgerReasoningLength);
+        }
         const filtered = this.deps.toolTracker.dedupeToolStarted(next.value);
         if (filtered) {
           yield filtered;

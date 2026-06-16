@@ -105,6 +105,85 @@ test('SessionStreamProcessor.process() streams events and updates toolTracker', 
   t.is(loggedEvents[0].output, 'file1.txt');
 });
 
+test('SessionStreamProcessor.process() preserves reasoning before recovered tool call history', async (t) => {
+  const conversationStore = new ConversationStore();
+  const toolTracker = new SessionToolTracker(conversationStore);
+
+  const loggedEvents: any[] = [];
+  const conversationLogger = {
+    hasSink: () => true,
+    log: (event: any) => loggedEvents.push(event),
+  } as unknown as ConversationLogger;
+
+  const providerContinuity = new ProviderContinuity();
+  const generationGuard = new GenerationGuard();
+  const token = generationGuard.capture();
+
+  const processor = new SessionStreamProcessor({
+    logger,
+    sessionId: 'test-session',
+    toolTracker,
+    conversationStore,
+    conversationLogger,
+    providerContinuity,
+    generationGuard,
+  });
+
+  const stream = makeStream([
+    {
+      type: 'raw_model_stream_event',
+      data: { type: 'model', event: { choices: [{ delta: { reasoning_content: 'I should inspect.' } }] } },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call',
+          callId: 'call-1',
+          name: 'read_file',
+          arguments: JSON.stringify({ path: 'package.json' }),
+        },
+      },
+    },
+    {
+      type: 'run_item_stream_event',
+      item: {
+        rawItem: {
+          type: 'function_call_result',
+          callId: 'call-1',
+          name: 'read_file',
+          output: 'contents',
+        },
+      },
+    },
+  ]);
+
+  const events: ConversationEvent[] = [];
+  const generator = processor.process(stream, {
+    gen: token,
+    source: 'continueRunStream',
+    preserveExistingToolArgs: false,
+  });
+  for (;;) {
+    const result = await generator.next();
+    if (result.done) break;
+    events.push(result.value);
+  }
+
+  t.true(events.some((event) => event.type === 'reasoning_delta'));
+  t.deepEqual(
+    events.map((event) => event.type),
+    ['reasoning_delta', 'tool_started', 'command_message'],
+  );
+  const historyItems = toolTracker.export()[0].historyItems as Array<Record<string, any>>;
+  t.deepEqual(
+    historyItems.map((item) => item.type),
+    ['reasoning', 'function_call', 'function_call_result'],
+  );
+  t.is(historyItems[0].content[0].text, 'I should inspect.');
+  t.deepEqual(loggedEvents[0].historyItems, historyItems);
+});
+
 test('SessionStreamProcessor.process() does not log tool results for startStream source', async (t) => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);

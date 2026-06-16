@@ -164,10 +164,33 @@ const hasRecoverableCallPair = (entry: SavedToolExecution): boolean =>
 const isCompleteLedgerEntry = (entry: SavedToolExecution): boolean =>
   entry.status === 'completed' && hasRecoverableCallPair(entry);
 
+const hasReasoningHistoryItem = (items: readonly unknown[] | undefined): boolean =>
+  Array.isArray(items) && items.some((item) => typeOf(item) === 'reasoning');
+
+const isResultHistoryItem = (item: unknown): boolean => {
+  const type = typeOf(item);
+  return (
+    type === 'function_call_result' ||
+    type === 'function_call_output' ||
+    type === 'function_call_output_result' ||
+    type === 'tool_call_output_item'
+  );
+};
+
+const hasResultHistoryItem = (items: readonly unknown[] | undefined, callId: string): boolean =>
+  Array.isArray(items) && items.some((item) => callIdOf(item) === callId && isResultHistoryItem(item));
+
+const reasoningHistoryItem = (text: string): unknown => ({
+  type: 'reasoning',
+  content: [{ type: 'reasoning_text', text }],
+  rawContent: [{ type: 'reasoning_text', text }],
+});
+
 export class ToolExecutionLedger {
   #entries: SavedToolExecution[] = [];
   #turnCounter = 0;
   #currentTurnId = 'turn-0';
+  #pendingReasoningHistoryItems: unknown[] = [];
 
   beginTurn(): string {
     this.#turnCounter++;
@@ -194,6 +217,13 @@ export class ToolExecutionLedger {
     return clone(this.#entries);
   }
 
+  recordReasoningText(text: string): void {
+    if (!text) {
+      return;
+    }
+    this.#pendingReasoningHistoryItems = [reasoningHistoryItem(text)];
+  }
+
   recordFunctionCall(item: unknown): void {
     if (typeOf(item) !== 'function_call') {
       return;
@@ -209,8 +239,11 @@ export class ToolExecutionLedger {
       existing.arguments = argumentsOf(item);
       existing.status = 'started';
       if (!existing.historyItems || existing.historyItems.length === 0) {
-        existing.historyItems = [normalizedRawItem(item)];
+        existing.historyItems = [...this.#pendingReasoningHistoryItems, normalizedRawItem(item)];
+      } else if (this.#pendingReasoningHistoryItems.length > 0 && !hasReasoningHistoryItem(existing.historyItems)) {
+        existing.historyItems = [...this.#pendingReasoningHistoryItems, ...existing.historyItems];
       }
+      this.#pendingReasoningHistoryItems = [];
       return;
     }
 
@@ -221,8 +254,9 @@ export class ToolExecutionLedger {
       arguments: argumentsOf(item),
       status: 'started',
       startedAt: new Date().toISOString(),
-      historyItems: [normalizedRawItem(item)],
+      historyItems: [...this.#pendingReasoningHistoryItems, normalizedRawItem(item)],
     });
+    this.#pendingReasoningHistoryItems = [];
   }
 
   recordFunctionResult(item: unknown): void {
@@ -258,7 +292,10 @@ export class ToolExecutionLedger {
     entry.status = 'completed';
     entry.output = outputOf(item);
     entry.completedAt = new Date().toISOString();
-    entry.historyItems = callItem ? [callItem, resultItem] : [resultItem];
+    const previousHistoryItems = entry.historyItems ?? (callItem ? [callItem] : []);
+    entry.historyItems = hasResultHistoryItem(previousHistoryItems, callId)
+      ? previousHistoryItems
+      : [...previousHistoryItems, resultItem];
   }
 
   markOpenCallsAborted(reason: string): void {
@@ -291,14 +328,17 @@ export class ToolExecutionLedger {
       entry.failureReason = reason;
       entry.completedAt = new Date().toISOString();
       entry.output = output;
-      entry.historyItems = [
-        callItem,
-        {
-          type: 'function_call_output',
-          callId: entry.callId,
-          output,
-        },
-      ];
+      const previousHistoryItems = entry.historyItems ?? [callItem];
+      entry.historyItems = hasResultHistoryItem(previousHistoryItems, entry.callId)
+        ? previousHistoryItems
+        : [
+            ...previousHistoryItems,
+            {
+              type: 'function_call_output',
+              callId: entry.callId,
+              output,
+            },
+          ];
     }
   }
 

@@ -3,6 +3,7 @@ import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { createUsageAccumulator } from '../../utils/ai/token-usage.js';
 import {
   ToolExecutionLedger,
+  callIdOf,
   reconcileHistoryWithToolLedger,
   type SavedToolExecution,
 } from '../tool-execution-ledger.js';
@@ -193,6 +194,57 @@ const makeHistoryItemForToolResult = (item: Extract<PersistedAssistantTurnItem, 
   };
 };
 
+const makeHistoryItemForReasoning = (item: Extract<PersistedAssistantTurnItem, { type: 'reasoning' }>): unknown => {
+  const providerData = item.providerMetadata ? cloneValue(item.providerMetadata) : undefined;
+  if (providerData && 'reasoning_content' in providerData) {
+    delete providerData.reasoning_content;
+  }
+
+  return {
+    type: 'reasoning',
+    ...(item.providerItemId ? { id: item.providerItemId } : {}),
+    content: item.text ? [{ type: 'reasoning_text', text: item.text }] : [],
+    rawContent: item.text ? [{ type: 'reasoning_text', text: item.text }] : [],
+    ...(providerData && Object.keys(providerData).length > 0 ? { providerData } : {}),
+  };
+};
+
+const historyItemType = (item: unknown): string => {
+  const record = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
+  const raw =
+    record?.rawItem && typeof record.rawItem === 'object' ? (record.rawItem as Record<string, unknown>) : record;
+  return typeof raw?.type === 'string' ? raw.type : '';
+};
+
+const withMissingReasoningPrefix = (historyItems: unknown[] | undefined, reasoningItems: unknown[]): unknown[] => {
+  const existing = historyItems ?? [];
+  if (reasoningItems.length === 0 || existing.some((item) => historyItemType(item) === 'reasoning')) {
+    return existing;
+  }
+  return [...reasoningItems, ...existing];
+};
+
+const hasToolResultForCall = (historyItems: readonly unknown[], callId: string): boolean =>
+  historyItems.some((item) => {
+    const type = historyItemType(item);
+    return (
+      callIdOf(item) === callId &&
+      (type === 'function_call_result' ||
+        type === 'function_call_output' ||
+        type === 'function_call_output_result' ||
+        type === 'tool_call_output_item')
+    );
+  });
+
+const appendToolResultIfMissing = (
+  historyItems: unknown[] | undefined,
+  callId: string,
+  resultItem: unknown,
+): unknown[] => {
+  const existing = historyItems ?? [];
+  return hasToolResultForCall(existing, callId) ? existing : [...existing, resultItem];
+};
+
 function mergeAssistantTurnIntoLedger(
   state: ReplayState,
   turn: PersistedAssistantTurn,
@@ -200,9 +252,16 @@ function mergeAssistantTurnIntoLedger(
   turnId?: string,
 ): void {
   const calls = new Map<string, Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>>();
+  let pendingReasoningHistoryItems: unknown[] = [];
   for (const item of turn.items) {
+    if (item.type === 'reasoning') {
+      pendingReasoningHistoryItems.push(makeHistoryItemForReasoning(item));
+      continue;
+    }
+
     if (item.type === 'tool_call') {
       calls.set(item.callId, item);
+      const callHistoryItem = makeHistoryItemForToolCall(item);
       const existing = state.toolLedger.find((entry) => entry.callId === item.callId);
       if (!existing) {
         state.toolLedger.push({
@@ -212,17 +271,22 @@ function mergeAssistantTurnIntoLedger(
           arguments: item.arguments,
           status: 'started',
           startedAt: ts,
-          historyItems: [makeHistoryItemForToolCall(item)],
+          historyItems: [...pendingReasoningHistoryItems, callHistoryItem],
         });
       } else {
         existing.toolName = item.toolName;
         existing.arguments = item.arguments;
         if (!existing.historyItems || existing.historyItems.length === 0) {
-          existing.historyItems = [makeHistoryItemForToolCall(item)];
+          existing.historyItems = [...pendingReasoningHistoryItems, callHistoryItem];
+        } else {
+          existing.historyItems = withMissingReasoningPrefix(existing.historyItems, pendingReasoningHistoryItems);
         }
       }
+      pendingReasoningHistoryItems = [];
       continue;
     }
+
+    pendingReasoningHistoryItems = [];
 
     if (item.type !== 'tool_result') {
       continue;
@@ -251,9 +315,12 @@ function mergeAssistantTurnIntoLedger(
     existing.status = item.status;
     existing.output = item.output;
     existing.completedAt = ts;
-    existing.historyItems = callHistoryItem
-      ? [callHistoryItem, makeHistoryItemForToolResult(item)]
-      : [makeHistoryItemForToolResult(item)];
+    const previousHistoryItems = existing.historyItems ?? (callHistoryItem ? [callHistoryItem] : []);
+    existing.historyItems = appendToolResultIfMissing(
+      previousHistoryItems,
+      item.callId,
+      makeHistoryItemForToolResult(item),
+    );
   }
 }
 
@@ -793,7 +860,15 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
     // Append corresponding history items (tool call / tool result) so the
     // next resumed request sees them. Also rehydrate the tool ledger so
     // existing recovery semantics keep working.
+    let pendingReasoningHistoryItems: unknown[] = [];
     for (const item of journal.items) {
+      if (item.type === 'reasoning') {
+        const historyItem = makeHistoryItemForReasoning(item);
+        state.history.push(historyItem as AgentInputItem);
+        pendingReasoningHistoryItems.push(historyItem);
+        continue;
+      }
+
       if (item.type === 'tool_call') {
         const historyItem = makeHistoryItemForToolCall(item);
         if (historyItem != null) {
@@ -808,10 +883,16 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
             arguments: item.arguments,
             status: 'started',
             startedAt: journal.startedAt,
-            historyItems: [historyItem].filter(Boolean) as unknown[],
+            historyItems: [...pendingReasoningHistoryItems, historyItem].filter(Boolean) as unknown[],
           });
+        } else if (existing && (!existing.historyItems || existing.historyItems.length === 0)) {
+          existing.historyItems = [...pendingReasoningHistoryItems, historyItem].filter(Boolean) as unknown[];
+        } else if (existing) {
+          existing.historyItems = withMissingReasoningPrefix(existing.historyItems, pendingReasoningHistoryItems);
         }
+        pendingReasoningHistoryItems = [];
       } else if (item.type === 'tool_result') {
+        pendingReasoningHistoryItems = [];
         const historyItem = makeHistoryItemForToolResult(item);
         if (historyItem != null) {
           state.history.push(historyItem as AgentInputItem);
@@ -835,9 +916,12 @@ function applyInterruptedTurnJournals(state: ReplayState): void {
             historyItem && typeof historyItem === 'object' ? (historyItem as Record<string, unknown>) : null;
           return record?.type === 'function_call';
         });
-        existing.historyItems = callHistoryItem
-          ? ([callHistoryItem, historyItem].filter(Boolean) as unknown[])
-          : ([historyItem].filter(Boolean) as unknown[]);
+        const previousHistoryItems = existing.historyItems ?? (callHistoryItem ? [callHistoryItem] : []);
+        existing.historyItems = appendToolResultIfMissing(previousHistoryItems, item.callId, historyItem).filter(
+          Boolean,
+        ) as unknown[];
+      } else {
+        pendingReasoningHistoryItems = [];
       }
     }
     if (journal.reasoningFragment) {

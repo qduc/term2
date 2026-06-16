@@ -1010,6 +1010,18 @@ test('replayEvents: assistant_journal_item restores history and ledger on interr
       turnId: 'turn-1',
       seq: 1,
       item: {
+        type: 'reasoning',
+        text: 'I should check the current directory.',
+        providerMetadata: {
+          reasoning_content: 'I should check the current directory.',
+        },
+      },
+    }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 2,
+      item: {
         type: 'tool_call',
         callId: 'call-1',
         toolName: 'shell',
@@ -1025,7 +1037,7 @@ test('replayEvents: assistant_journal_item restores history and ledger on interr
     env({
       type: 'assistant_journal_item',
       turnId: 'turn-1',
-      seq: 2,
+      seq: 3,
       item: {
         type: 'tool_result',
         callId: 'call-1',
@@ -1044,18 +1056,99 @@ test('replayEvents: assistant_journal_item restores history and ledger on interr
 
   const restored = replayEvents(envelopes);
 
-  // Tool call/result were pushed into history for the next resumed request.
-  t.true(restored.history.some((h: any) => h.type === 'function_call' && h.callId === 'call-1' && h.name === 'shell'));
-  t.true(
-    restored.history.some(
-      (h: any) => h.type === 'function_call_result' && h.callId === 'call-1' && h.output === '/repo',
-    ),
+  // Reasoning, tool call, and result were pushed into history for the next resumed request.
+  const reasoningIndex = restored.history.findIndex((h: any) => h.type === 'reasoning');
+  const callIndex = restored.history.findIndex((h: any) => h.type === 'function_call' && h.callId === 'call-1');
+  const resultIndex = restored.history.findIndex(
+    (h: any) => h.type === 'function_call_result' && h.callId === 'call-1',
   );
+  t.true(reasoningIndex > -1);
+  t.true(callIndex > reasoningIndex);
+  t.true(resultIndex > callIndex);
+  t.is((restored.history[reasoningIndex] as any).content[0].text, 'I should check the current directory.');
+  t.is((restored.history[callIndex] as any).name, 'shell');
+  t.is((restored.history[resultIndex] as any).output, '/repo');
+  t.is((restored.toolLedger[0].historyItems?.[0] as any).type, 'reasoning');
+  t.is((restored.toolLedger[0].historyItems?.[1] as any).type, 'function_call');
+  t.is((restored.toolLedger[0].historyItems?.[2] as any).type, 'function_call_result');
   // The corresponding command message in the UI shows the completed output.
   const commandMsg = restored.messages.find((m: any) => m.sender === 'command' && m.callId === 'call-1');
   t.truthy(commandMsg);
   t.is(commandMsg?.status, 'completed');
   t.is(commandMsg?.output, '/repo');
+});
+
+test('replayEvents: journal reasoning is preserved when tool_result already populated ledger history', (t) => {
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run pwd' } }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 1,
+      item: {
+        type: 'reasoning',
+        text: 'I should check pwd.',
+        providerMetadata: { reasoning_content: 'I should check pwd.' },
+      },
+    }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 2,
+      item: {
+        type: 'tool_call',
+        callId: 'call-1',
+        toolName: 'shell',
+        arguments: '{"command":"pwd"}',
+        providerItem: {
+          type: 'function_call',
+          callId: 'call-1',
+          name: 'shell',
+          arguments: '{"command":"pwd"}',
+        },
+      },
+    }),
+    env({
+      type: 'assistant_journal_item',
+      turnId: 'turn-1',
+      seq: 3,
+      item: {
+        type: 'tool_result',
+        callId: 'call-1',
+        toolName: 'shell',
+        status: 'completed',
+        output: '/repo',
+        providerItem: {
+          type: 'function_call_result',
+          callId: 'call-1',
+          name: 'shell',
+          output: '/repo',
+        },
+      },
+    }),
+    env({
+      type: 'tool_result',
+      turnId: 'turn-1',
+      callId: 'call-1',
+      toolName: 'shell',
+      status: 'completed',
+      output: '/repo',
+      historyItems: [
+        { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{"command":"pwd"}' },
+        { type: 'function_call_result', callId: 'call-1', name: 'shell', output: '/repo' },
+      ],
+    }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const historyItems = restored.toolLedger[0].historyItems as Array<Record<string, unknown>>;
+
+  t.deepEqual(
+    historyItems.map((item) => item.type),
+    ['reasoning', 'function_call', 'function_call_result'],
+  );
+  t.is((historyItems[0].content as any[])[0].text, 'I should check pwd.');
 });
 
 test('replayEvents: mixed journal items and fragments preserve partial assistant output', (t) => {

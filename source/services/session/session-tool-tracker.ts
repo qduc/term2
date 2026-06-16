@@ -85,6 +85,13 @@ export class SessionToolTracker {
   }
 
   /**
+   * Record reasoning that should be replayed before the next tool call.
+   */
+  recordReasoningText(text: string): void {
+    this.toolLedger.recordReasoningText(text);
+  }
+
+  /**
    * Record a function result in the ledger.
    */
   recordFunctionResult(item: unknown): void {

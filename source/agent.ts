@@ -178,18 +178,7 @@ export function getProjectTreeForPrompt(cwd: string, options: ProjectTreeOptions
   }
 
   try {
-    const lines = [
-      'Project structure:',
-      '.',
-      ...walk(cwd, 1, ''),
-      '',
-      'Project structure notes:',
-      `- Root: ${cwd}`,
-      `- Max depth: ${maxDepth}`,
-      `- Max entries per directory: ${maxEntriesPerDir}`,
-      `- Max total entries: ${maxTotalEntries}`,
-      `- Ignored via defaults and .gitignore`,
-    ];
+    const lines = ['Project structure:', '.', ...walk(cwd, 1, ''), ''];
 
     if (omittedByLimit > 0) {
       lines.push(`- Omitted due to limits: ${omittedByLimit}`);
@@ -225,10 +214,10 @@ export function getEnvInfo(
   // So if remote, we skip that part.
   let topLevel = '';
   if (!executionContext?.isRemote()) {
-    topLevel = `; top-level: ${getProjectTreeForPrompt(cwd)}`;
+    topLevel = `${getProjectTreeForPrompt(cwd)}`;
   }
 
-  return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd: ${cwd}${topLevel}; date: ${now}`;
+  return `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}; cwd: ${cwd}; date: ${now}\n${topLevel}\n\n`;
 }
 
 export function getAgentsInstructions(cwd: string): string {

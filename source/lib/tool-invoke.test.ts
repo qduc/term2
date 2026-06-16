@@ -463,3 +463,13 @@ test('normalizeObjectParams filters string sentinels on optional fields', (t) =>
   const result = normalizeObjectParams({ path: '/a', start: 'None' }, schema) as Record<string, unknown>;
   t.false('start' in (result as object));
 });
+
+test('normalizeObjectParams filters "undefined" string sentinel on optional fields', (t) => {
+  const schema = z.object({
+    path: z.string(),
+    code: z.string().optional(),
+  });
+
+  const result = normalizeObjectParams({ path: '/a', code: 'undefined' }, schema) as Record<string, unknown>;
+  t.false('code' in (result as object));
+});

@@ -222,7 +222,7 @@ export const normalizeObjectParams = (params: unknown, schema?: z.ZodTypeAny): u
 
     // 1. Optional field sentinels: "null", "None", "" or null -> undefined (omit)
     if (fieldSchema.safeParse(undefined).success) {
-      if (value === 'null' || value === 'None' || value === '' || value === null) {
+      if (value === 'null' || value === 'None' || value === '' || value === 'undefined' || value === null) {
         delete result[key];
         modified = true;
         continue;

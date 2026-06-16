@@ -1,19 +1,36 @@
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { mkdir, writeFile } from 'fs/promises';
+import { access, mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { resolveWorkspacePath } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_CREATE_FILE } from '../tool-names.js';
-import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
+import type { ILoggingService, ISettingsService, ISSHService } from '../../services/service-interfaces.js';
 import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 
 const createFileParametersSchema = z.object({
   path: z.string().describe('The absolute or relative path to the new file'),
   content: z.string().describe('The initial content for the new file'),
+  overwrite: z.boolean().optional().default(false).describe('Whether to overwrite an existing file'),
+  confirmOverwriteCode: z
+    .string()
+    .optional()
+    .transform((v) => (v === 'undefined' ? undefined : v))
+    .describe(
+      'The confirmation code from a previous failed attempt. Only use this param when you have received an error telling you to set it',
+    ),
 });
 
-export type CreateFileToolParams = z.infer<typeof createFileParametersSchema>;
+export type CreateFileToolParams = z.input<typeof createFileParametersSchema>;
+
+type PendingOverwrite = {
+  path: string;
+  targetPath: string;
+  content: string;
+  code: string;
+  createdAt: number;
+};
 
 export const formatCreateFileCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
   const parsedOutput = safeJsonParse(getOutputText(item));
@@ -42,10 +59,38 @@ export function createCreateFileToolDefinition(deps: {
   executionContext?: ExecutionContext;
 }): ToolDefinition<CreateFileToolParams> {
   const { loggingService, settingsService, executionContext } = deps;
+  const pendingOverwrites = new Map<string, PendingOverwrite>();
+  const pendingOverwriteTtlMs = 10 * 60 * 1000;
+
+  const purgeStalePendingOverwrites = (now = Date.now()) => {
+    for (const [targetPath, pending] of pendingOverwrites.entries()) {
+      if (now - pending.createdAt > pendingOverwriteTtlMs) {
+        pendingOverwrites.delete(targetPath);
+      }
+    }
+  };
+
+  const fileExists = async (targetPath: string, sshService?: ISSHService) => {
+    if (sshService) {
+      try {
+        await sshService.readFile(targetPath);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    try {
+      await access(targetPath);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   return {
     name: TOOL_NAME_CREATE_FILE,
-    description: 'Create a new file with the specified content. Fails if the file already exists.',
+    description: 'Create a new file with the specified content. Existing files require an overwrite confirmation flow.',
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {
       try {
@@ -67,18 +112,83 @@ export function createCreateFileToolDefinition(deps: {
     execute: async (params) => {
       const enableFileLogging = settingsService.get<boolean>('tools.logFileOperations');
       try {
-        const { path: filePath, content } = params;
+        const { path: filePath, content, overwrite = false } = params;
         const cwd = executionContext?.getCwd() || process.cwd();
         const targetPath = resolveWorkspacePath(filePath, cwd);
 
         const sshService = executionContext?.getSSHService();
         const isRemote = executionContext?.isRemote() && !!sshService;
 
+        purgeStalePendingOverwrites();
+
         if (enableFileLogging) {
           loggingService.debug(`File operation started: create_file`, {
             path: filePath,
             targetPath,
           });
+        }
+
+        const exists = await fileExists(targetPath, isRemote ? sshService : undefined);
+
+        if (exists && !overwrite) {
+          const code = randomBytes(3).toString('hex');
+          pendingOverwrites.set(targetPath, {
+            path: filePath,
+            targetPath,
+            content,
+            code,
+            createdAt: Date.now(),
+          });
+
+          return JSON.stringify({
+            success: false,
+            error: `Warning: File already exists, call this tool again with the same file path, \`overwrite\` set to true, and \`confirmOverwriteCode\` set to ${code} to confirm overwriting.`,
+          });
+        }
+
+        if (exists && overwrite) {
+          const pending = pendingOverwrites.get(targetPath);
+
+          // Validate confirmation code only when one is explicitly provided
+          // (i.e. completing the two-step flow). When overwrite=true is used
+          // without a code, overwrite directly regardless of stale pending entries.
+          if (params.confirmOverwriteCode) {
+            if (!pending || params.confirmOverwriteCode !== pending.code) {
+              return JSON.stringify({
+                success: false,
+                error: `Error: No matching overwrite confirmation exists for ${filePath}.`,
+              });
+            }
+          }
+
+          // Use pending content when completing the two-step flow, otherwise use provided content
+          const contentToWrite = params.confirmOverwriteCode && pending ? pending.content : content;
+
+          const parentDir = path.dirname(targetPath);
+          if (isRemote && sshService) {
+            await sshService.mkdir(parentDir, { recursive: true });
+            await sshService.writeFile(targetPath, contentToWrite);
+          } else {
+            await mkdir(parentDir, { recursive: true });
+            await writeFile(targetPath, contentToWrite, { encoding: 'utf8' });
+          }
+
+          // Invalidate pending code after successful write
+          pendingOverwrites.delete(targetPath);
+
+          if (enableFileLogging) {
+            loggingService.debug('File overwritten', { path: filePath });
+          }
+
+          return JSON.stringify({
+            success: true,
+            path: filePath,
+            message: `Overwrote ${filePath}`,
+          });
+        }
+
+        if (!exists) {
+          pendingOverwrites.delete(targetPath);
         }
 
         // Ensure parent directory exists
@@ -111,7 +221,7 @@ export function createCreateFileToolDefinition(deps: {
 
         let errorMessage = error.message || String(error);
         if (error.code === 'EEXIST') {
-          errorMessage = `Error: File already exists at ${params.path}. Use search_replace to modify existing files.`;
+          errorMessage = `Error: File already exists at ${params.path}. Use the overwrite confirmation flow to replace it.`;
         }
 
         return JSON.stringify({

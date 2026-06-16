@@ -16,7 +16,6 @@ const createFileParametersSchema = z.object({
   confirmOverwriteCode: z
     .string()
     .optional()
-    .transform((v) => (v === 'undefined' ? undefined : v))
     .describe(
       'The confirmation code from a previous failed attempt. Only use this param when you have received an error telling you to set it',
     ),
@@ -152,8 +151,9 @@ export function createCreateFileToolDefinition(deps: {
           // Validate confirmation code only when one is explicitly provided
           // (i.e. completing the two-step flow). When overwrite=true is used
           // without a code, overwrite directly regardless of stale pending entries.
-          if (params.confirmOverwriteCode) {
-            if (!pending || params.confirmOverwriteCode !== pending.code) {
+          const confirmCode = params.confirmOverwriteCode === 'undefined' ? undefined : params.confirmOverwriteCode;
+          if (confirmCode) {
+            if (!pending || confirmCode !== pending.code) {
               return JSON.stringify({
                 success: false,
                 error: `Error: No matching overwrite confirmation exists for ${filePath}.`,
@@ -162,7 +162,7 @@ export function createCreateFileToolDefinition(deps: {
           }
 
           // Use pending content when completing the two-step flow, otherwise use provided content
-          const contentToWrite = params.confirmOverwriteCode && pending ? pending.content : content;
+          const contentToWrite = confirmCode && pending ? pending.content : content;
 
           const parentDir = path.dirname(targetPath);
           if (isRemote && sshService) {

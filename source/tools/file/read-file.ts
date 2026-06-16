@@ -67,8 +67,8 @@ export const createReadFileToolDefinition = (
     description: orchestratorMode
       ? "Read file content to verify a specific claim about a known location (e.g., confirm a subagent's edit landed, check a referenced symbol). For exploring unfamiliar code or understanding files you have not seen, prefer delegating to an `explorer` subagent via `run_subagent`. Supports line ranges — read the smallest relevant range."
       : allowOutsideWorkspace
-      ? 'Read file content from the filesystem (like cat command). Supports reading specific line ranges.'
-      : 'Read file content from the workspace (like cat command). Supports reading specific line ranges.',
+      ? 'Read file content from the filesystem (like cat command). Supports reading specific line ranges. Avoid reading tiny repeated chunk (e.g. 50 lines a time). If you need more context, read the full file if under 1000 lines or read a larger window.'
+      : 'Read file content from the workspace (like cat command). Supports reading specific line ranges. Avoid reading tiny repeated chunk (e.g. 50 lines a time). If you need more context, read the full file if under 1000 lines or read a larger window.',
     parameters: readFileParametersSchema,
     needsApproval: () => false, // Read-only operation, safe
     execute: async (params) => {

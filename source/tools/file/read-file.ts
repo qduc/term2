@@ -6,11 +6,21 @@ import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
 
 const READ_FILE_DESCRIPTION =
-  'Read file content from the workspace (like cat command). Supports reading specific line ranges. Avoid reading tiny repeated chunk (e.g. 50 lines a time). If you need more context, read the full file if under 1000 lines or read a larger window.';
+  'Read file content from the workspace (like cat command). Supports reading specific line ranges. ' +
+  'Use this to inspect a known file or verify a specific claim about a location. ' +
+  'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
+  'Do NOT use this to search for text across files (use grep) or to explore unfamiliar code (use run_subagent with an explorer). ' +
+  'Returns the file path, total line count, and the requested lines.';
 const READ_FILE_DESCRIPTION_OUTSIDE =
-  'Read file content from the filesystem (like cat command). Supports reading specific line ranges. Avoid reading tiny repeated chunk (e.g. 50 lines a time). If you need more context, read the full file if under 1000 lines or read a larger window.';
+  'Read file content from the filesystem (like cat command). Supports reading specific line ranges. ' +
+  'Use this to inspect a known file or verify a specific claim about a location. ' +
+  'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
+  'Returns the file path, total line count, and the requested lines.';
 const READ_FILE_DESCRIPTION_ORCHESTRATOR =
-  "Read file content to verify a specific claim about a known location (e.g., confirm a subagent's edit landed, check a referenced symbol). For exploring unfamiliar code or understanding files you have not seen, prefer delegating to an `explorer` subagent via `run_subagent`. Supports line ranges — read the smallest relevant range.";
+  "Read file content to verify a specific claim about a known location (e.g., confirm a subagent's edit landed, check a referenced symbol). " +
+  'For exploring unfamiliar code or understanding files you have not seen, prefer delegating to an `explorer` subagent via `run_subagent`. ' +
+  'Supports line ranges — read the smallest relevant range. ' +
+  'Returns the file path, total line count, and the requested lines.';
 
 const readFileParametersSchema = z.object({
   path: z.string().describe('File path relative to workspace root'),

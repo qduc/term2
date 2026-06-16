@@ -17,7 +17,8 @@ const RUN_SUBAGENT_DESCRIPTION =
   '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
   '## Task Requirements\n' +
   'The task must be fully self-contained. Include all context, constraints, and the expected output format. ' +
-  'The subagent has no access to your conversation history or reasoning.';
+  'The subagent has no access to your conversation history or reasoning.\n\n' +
+  'Returns a summary with status (completed, failed, or cancelled), any final text, a list of tools used, and files changed.';
 
 const runSubagentSchema = z.object({
   role: z

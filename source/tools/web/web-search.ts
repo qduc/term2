@@ -10,9 +10,10 @@ import { getConfiguredWebSearchProvider, type WebSearchResponse } from '../../pr
 import type { ISettingsService, ILoggingService } from '../../services/service-interfaces.js';
 
 const WEB_SEARCH_DESCRIPTION =
-  'Search the web for current information. Use this when you need up-to-date information ' +
-  'that may not be in your training data, such as recent news, current events, ' +
-  'documentation updates, or any time-sensitive information.';
+  'Search the web for current information. ' +
+  'Use this when you need up-to-date information that may not be in your training data, such as recent news, current events, documentation updates, or any time-sensitive information. ' +
+  'Do NOT use this to read a specific known page; use web_fetch. ' +
+  'Returns a markdown summary with an answer box (when available) and a numbered list of results.';
 
 const webSearchSchema = z.object({
   query: z.string().min(1).describe('The search query to look up on the web.'),

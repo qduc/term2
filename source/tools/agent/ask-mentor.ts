@@ -3,7 +3,11 @@ import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
 
 const ASK_MENTOR_DESCRIPTION =
-  'Ask a mentor (a smarter model) for advice or clarification on a problem. The mentor does not see your thinking, files you have read, or conversation context - you must fully explain the situation in your question.';
+  'Ask a mentor model for advice or clarification on a hard problem. ' +
+  'Use this for architecture trade-offs, design review, debugging strategy, or when you need a second opinion. ' +
+  'The mentor does not see your thinking, files, or conversation context—fully explain the situation in your question. ' +
+  'Do NOT use this to perform actions, read files, or run commands; use the standard tools for those. ' +
+  'Returns the mentor answer as text.';
 
 const askMentorSchema = z.object({
   question: z.string().describe('The question to ask the mentor.'),

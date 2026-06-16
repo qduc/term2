@@ -2,14 +2,14 @@ import { z } from 'zod';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { resolveWorkspacePath } from '../utils.js';
-import type { ToolDefinition, CommandMessage, FormatCommandMessage } from '../types.js';
+import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import {
   getOutputText,
   safeJsonParse,
   normalizeToolArguments,
   createBaseMessage,
-  pickPatchOutputItemText,
+  formatPatchOutputItems,
 } from '../format-helpers.js';
 import { healSearchReplaceParams } from './edit-healing.js';
 import { ExecutionContext } from '../../services/execution-context.js';
@@ -52,7 +52,7 @@ const searchReplaceOperationSchema = z.object({
     .describe(
       'The exact content to search for. Put <...> on its own line to match (and replace) everything between a head anchor and a tail anchor — lets you edit or delete a large block without reproducing it. The whole span between anchors is replaced, so use distinctive multi-line anchors (never a single generic line) to avoid deleting the wrong region. Omit the anchors from replace_content to delete them too.',
     ),
-  replace_content: z.string().describe('The content to replace it with'),
+  replace_content: z.string().describe('The content to replace the matched search_content with.'),
   match_all: z
     .boolean()
     .optional()
@@ -228,77 +228,44 @@ function executeReplacement(
 }
 
 export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
-  const parsedOutput = safeJsonParse(getOutputText(item));
-  const replaceOutputItems = parsedOutput?.output ?? [];
+  const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
+  const args = normalizeToolArguments(normalizedArgs) ?? {};
+  const replacements = Array.isArray(args?.replacements) ? args.replacements : [];
+  const firstReplacement = replacements[0] ?? {};
+  const filePath = args?.path ?? 'unknown';
+  const searchContent = firstReplacement.search_content ?? '';
+  const replaceContent = firstReplacement.replace_content ?? '';
 
-  function getFormattedOperationArgs(item: any, replaceIndex = 0) {
-    const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
-    const args = normalizeToolArguments(normalizedArgs) ?? {};
-    const replaceResult = replaceOutputItems[replaceIndex];
-    const filePath = args?.path ?? replaceResult?.path ?? 'unknown';
-    const replacements = args?.replacements ?? [];
-    const operationArgs = replacements[replaceIndex] ?? {};
-    const searchContent = operationArgs?.search_content ?? '';
-    const replaceContent = operationArgs?.replace_content ?? '';
-    return { filePath, searchContent, replaceContent };
+  const rawOutput = getOutputText(item) || 'No output';
+  // Backward compatibility: old outputs were JSON strings with an output array.
+  const parsedOutput = rawOutput.startsWith('{') ? safeJsonParse(rawOutput) : undefined;
+  let output: string;
+  if (Array.isArray(parsedOutput?.output) && parsedOutput.output.length > 0) {
+    output = formatPatchOutputItems(parsedOutput.output) || rawOutput;
+  } else {
+    output = rawOutput;
   }
+  const success = !output.startsWith('Error:');
 
-  // If JSON parsing failed or no output array, create error message
-  if (replaceOutputItems.length === 0) {
-    const { filePath, searchContent, replaceContent } = getFormattedOperationArgs(item, 0);
-    const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
-    const output = getOutputText(item) || 'No output';
-    const success = false;
-
-    return [
-      createBaseMessage(item, index, 0, false, {
-        command,
-        output,
-        success,
-        toolName: 'search_replace',
-        toolArgs: {
-          path: filePath,
-          search_content: searchContent,
-          replace_content: replaceContent,
-        },
-      }),
-    ];
-  }
-
-  // Search replace tool can have multiple operation outputs
-  const messages: CommandMessage[] = [];
-  for (const [replaceIndex, replaceResult] of replaceOutputItems.entries()) {
-    const { filePath, searchContent, replaceContent } = getFormattedOperationArgs(item, replaceIndex);
-
-    const command = `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`;
-    const isHealed = replaceResult?.healed === true;
-    let output = pickPatchOutputItemText(replaceResult) || 'No output';
-    if (isHealed && !String(output).includes('healed')) {
-      output = `${output} (healed)`;
-    }
-    const success = replaceResult?.success ?? false;
-
-    messages.push(
-      createBaseMessage(item, index, replaceIndex, false, {
-        command,
-        output,
-        success,
-        toolName: 'search_replace',
-        toolArgs: {
-          path: filePath,
-          search_content: searchContent,
-          replace_content: replaceContent,
-        },
-      }),
-    );
-  }
-  return messages;
+  return [
+    createBaseMessage(item, index, 0, false, {
+      command: `search_replace "${searchContent}" → "${replaceContent}" "${filePath}"`,
+      output,
+      success,
+      toolName: 'search_replace',
+      toolArgs: {
+        path: filePath,
+        search_content: searchContent,
+        replace_content: replaceContent,
+      },
+    }),
+  ];
 };
 
 const SEARCH_REPLACE_DESCRIPTION =
   'Replace text in a file using layered, deterministic matching. Exact matching is preferred; conservative fallbacks tolerate line-ending, indentation, whitespace, escaped-text, and minor anchored multi-line differences. Matches must be unique unless match_all is true, and oversized fuzzy spans are rejected.\n' +
-  'Gap matching: put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span (both anchors plus everything between them) is what gets replaced, so a mis-placed anchor silently deletes a large region. Choose anchors that are distinctive and unambiguous — prefer a few lines of real, unique code; never anchor on a single generic line like "}", "return", or a blank line. Use this to edit or DELETE a large block without reproducing it. To delete the block including the anchors, omit them from replace_content; to delete only the middle, repeat the anchors in replace_content.\n' +
-  'Use this tool for precise edits where you know the content to be replaced.';
+  'Gap matching: When rewriting large chunks of text, put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span—both anchors and everything between them—is replaced, so a misplaced anchor silently deletes a large region. Choose distinctive, unambiguous anchors: prefer a few lines of real, unique code. Never anchor on a single generic line like }, return, or a blank line. Use this to edit or delete a large block without reproducing it: Delete the block including anchors: omit them from replace_content. Delete only the middle: repeat the anchors in replace_content.\n' +
+  'Do NOT use this to create files from scratch; use create_file. Returns a plain-text summary with one line per replacement: Updated <path> or Error: <reason>.';
 
 export function createSearchReplaceToolDefinition(deps: {
   loggingService: ILoggingService;
@@ -619,9 +586,14 @@ export function createSearchReplaceToolDefinition(deps: {
           });
         }
 
-        return JSON.stringify({
-          output: output.filter(Boolean),
-        });
+        return output
+          .filter(Boolean)
+          .map((item: any) =>
+            item.success
+              ? item.message || `Updated ${item.path ?? params.path}`
+              : `Error: ${(item.error || 'unknown error').replace(/\n/g, ' ')}`,
+          )
+          .join('\n');
       } catch (error: any) {
         if (enableFileLogging) {
           loggingService.error('File operation failed', {
@@ -630,14 +602,7 @@ export function createSearchReplaceToolDefinition(deps: {
             error: error instanceof Error ? error.message : String(error),
           });
         }
-        return JSON.stringify({
-          output: [
-            {
-              success: false,
-              error: error.message || String(error),
-            },
-          ],
-        });
+        return `Error: ${(error.message || String(error)).replace(/\n/g, ' ')}`;
       }
     },
     formatCommandMessage: formatSearchReplaceCommandMessage,

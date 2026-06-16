@@ -72,9 +72,16 @@ export type ReadCodeOutlineToolParams = z.infer<typeof readCodeOutlineParameters
 export type CodeContextSearchToolParams = z.infer<typeof codeContextSearchParametersSchema>;
 
 const IMPORTER_EXTENSIONS = [...TS_EXTENSIONS, ...JS_EXTENSIONS];
-const READ_CODE_OUTLINE_DESCRIPTION = 'Compact outline of one file: imports, exports, declarations. No bodies.';
+const READ_CODE_OUTLINE_DESCRIPTION =
+  'Compact outline of one file: imports, exports, declarations. No bodies. ' +
+  'Use this to orient yourself before reading a file in full. ' +
+  'Do NOT use this when you need the full file content; use read_file. ' +
+  'Returns the compact outline.';
 const CODE_CONTEXT_SEARCH_DESCRIPTION =
-  'Bounded just-in-time search for related files (by path) or symbol declarations (by name). Plain text, fixed relation tokens.';
+  'Find related files for a given path or declarations for a symbol name. ' +
+  'Use this to discover code that depends on or is related to a file, or to locate where a symbol is declared. ' +
+  'Do NOT use this for plain text search across files (use grep) or for listing files by name (use find_files). ' +
+  'Returns up to max_results related files or symbol declarations with relation tokens.';
 
 const SKIP_DIRS = ['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt', '.cache', 'out', 'vendor'];
 const MAX_TARGET_BYTES = 512 * 1024;

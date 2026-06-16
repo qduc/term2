@@ -10,17 +10,19 @@ import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage
 import { ExecutionContext } from '../../services/execution-context.js';
 
 const CREATE_FILE_DESCRIPTION =
-  'Create a new file with the specified content. Existing files require an overwrite confirmation flow.';
+  'Create a new file with the specified content. Replace existing files requires setting overwrite=true. ' +
+  'Do NOT use this to edit existing files; use search_replace instead. ' +
+  'Returns Created <path>, Overwrote <path>, or Error: <reason>.';
 
 const createFileParametersSchema = z.object({
-  path: z.string().describe('The absolute or relative path to the new file'),
-  content: z.string().describe('The initial content for the new file'),
-  overwrite: z.boolean().optional().default(false).describe('Whether to overwrite an existing file'),
+  path: z.string().describe('The absolute or relative path to the new file.'),
+  content: z.string().describe('The initial content for the new file.'),
+  overwrite: z.boolean().optional().default(false).describe('Whether to overwrite an existing file.'),
   confirmOverwriteCode: z
     .string()
     .optional()
     .describe(
-      'The confirmation code from a previous failed attempt. Only use this param when you have received an error telling you to set it',
+      'The confirmation code from a previous failed attempt. Only use this param when you have received an error telling you to set it.',
     ),
 });
 
@@ -35,14 +37,22 @@ type PendingOverwrite = {
 };
 
 export const formatCreateFileCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
-  const parsedOutput = safeJsonParse(getOutputText(item));
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
   const args = normalizeToolArguments(normalizedArgs) ?? {};
 
-  const filePath = args?.path ?? parsedOutput?.path ?? 'unknown';
+  const filePath = args?.path ?? 'unknown';
   const command = `create_file "${filePath}"`;
-  const output = parsedOutput?.message ?? parsedOutput?.error ?? (getOutputText(item) || 'No output');
-  const success = parsedOutput?.success ?? !output.startsWith('Error:');
+  const rawOutput = getOutputText(item) || 'No output';
+
+  // Backward compatibility: old outputs were JSON strings.
+  const parsedOutput = rawOutput.startsWith('{') ? safeJsonParse(rawOutput) : undefined;
+  const output =
+    typeof parsedOutput?.message === 'string'
+      ? parsedOutput.message
+      : typeof parsedOutput?.error === 'string'
+      ? parsedOutput.error
+      : rawOutput;
+  const success = typeof parsedOutput?.success === 'boolean' ? parsedOutput.success : !output.startsWith('Error:');
 
   return [
     createBaseMessage(item, index, 0, false, {
@@ -142,10 +152,7 @@ export function createCreateFileToolDefinition(deps: {
             createdAt: Date.now(),
           });
 
-          return JSON.stringify({
-            success: false,
-            error: `Warning: File already exists, call this tool again with the same file path, \`overwrite\` set to true, and \`confirmOverwriteCode\` set to ${code} to confirm overwriting.`,
-          });
+          return `Error: File already exists at ${filePath}. To overwrite, call create_file again with overwrite=true and confirmOverwriteCode=${code}.`;
         }
 
         if (exists && overwrite) {
@@ -157,10 +164,7 @@ export function createCreateFileToolDefinition(deps: {
           const confirmCode = params.confirmOverwriteCode === 'undefined' ? undefined : params.confirmOverwriteCode;
           if (confirmCode) {
             if (!pending || confirmCode !== pending.code) {
-              return JSON.stringify({
-                success: false,
-                error: `Error: No matching overwrite confirmation exists for ${filePath}.`,
-              });
+              return `Error: No matching overwrite confirmation exists for ${filePath}.`;
             }
           }
 
@@ -183,11 +187,7 @@ export function createCreateFileToolDefinition(deps: {
             loggingService.debug('File overwritten', { path: filePath });
           }
 
-          return JSON.stringify({
-            success: true,
-            path: filePath,
-            message: `Overwrote ${filePath}`,
-          });
+          return `Overwrote ${filePath}`;
         }
 
         if (!exists) {
@@ -209,11 +209,7 @@ export function createCreateFileToolDefinition(deps: {
           loggingService.debug('File created', { path: filePath });
         }
 
-        return JSON.stringify({
-          success: true,
-          path: filePath,
-          message: `Created ${filePath}`,
-        });
+        return `Created ${filePath}`;
       } catch (error: any) {
         if (enableFileLogging) {
           loggingService.error('File operation failed: create_file', {
@@ -227,10 +223,7 @@ export function createCreateFileToolDefinition(deps: {
           errorMessage = `Error: File already exists at ${params.path}. Use the overwrite confirmation flow to replace it.`;
         }
 
-        return JSON.stringify({
-          success: false,
-          error: errorMessage,
-        });
+        return `Error: ${errorMessage}`;
       }
     },
     formatCommandMessage: formatCreateFileCommandMessage,

@@ -7,6 +7,20 @@ import { ExecutionContext } from '../../services/execution-context.js';
 import type { ISSHService, ILoggingService } from '../../services/service-interfaces.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 
+function parsePlainResult(result: string): any {
+  const lines = result.split('\n').filter(Boolean);
+  if (lines.length === 0) {
+    return { success: false, error: 'No output', output: [{ success: false, error: 'No output' }] };
+  }
+  const output = lines.map((line) => {
+    if (line.startsWith('Error: ')) {
+      return { success: false, error: line.slice(7) };
+    }
+    return { success: true, message: line };
+  });
+  return { ...output[0], output };
+}
+
 // Helper to create a temp dir and change cwd to it
 async function withTempDir(run: (dir: string) => Promise<void>) {
   const originalCwd = process.cwd;
@@ -123,9 +137,9 @@ test.serial('execute creates a new file and returns success', async (t) => {
       content: content,
     });
 
-    const parsed = JSON.parse(result);
-    t.true(parsed.success);
-    t.is(parsed.path, filePath);
+    const parsed = parsePlainResult(result);
+    t.true(parsed.output[0].success);
+    t.true(parsed.output[0].message!.includes(filePath));
 
     const createdContent = await fs.readFile(absPath, 'utf8');
     t.is(createdContent, content);
@@ -144,10 +158,10 @@ test.serial('execute returns overwrite confirmation and preserves existing file'
       content: 'new content',
     });
 
-    const parsed = JSON.parse(result);
-    t.false(parsed.success);
-    t.true(parsed.error.includes('confirm'));
-    const code = extractOverwriteCode(parsed.error);
+    const parsed = parsePlainResult(result);
+    t.false(parsed.output[0].success);
+    t.true(parsed.output[0].error.includes('confirm'));
+    const code = extractOverwriteCode(parsed.output[0].error);
     t.is(code.length, 6);
 
     const content = await fs.readFile(absPath, 'utf8');
@@ -167,8 +181,8 @@ test.serial('execute overwrites using the confirmation code and original content
       content: 'replacement content',
     });
 
-    const firstParsed = JSON.parse(firstResult);
-    const code = extractOverwriteCode(firstParsed.error);
+    const firstParsed = parsePlainResult(firstResult);
+    const code = extractOverwriteCode(firstParsed.output[0].error);
 
     const secondResult = await tool.execute({
       path: filePath,
@@ -177,9 +191,9 @@ test.serial('execute overwrites using the confirmation code and original content
       confirmOverwriteCode: code,
     });
 
-    const secondParsed = JSON.parse(secondResult);
-    t.true(secondParsed.success);
-    t.true(secondParsed.message.includes('Overwrote'));
+    const secondParsed = parsePlainResult(secondResult);
+    t.true(secondParsed.output[0].success);
+    t.true(secondParsed.output[0].message.includes('Overwrote'));
 
     const fileContent = await fs.readFile(absPath, 'utf8');
     t.is(fileContent, 'replacement content');
@@ -198,8 +212,8 @@ test.serial('execute rejects a wrong overwrite code and preserves the file', asy
       content: 'replacement content',
     });
 
-    const firstParsed = JSON.parse(firstResult);
-    const code = extractOverwriteCode(firstParsed.error);
+    const firstParsed = parsePlainResult(firstResult);
+    const code = extractOverwriteCode(firstParsed.output[0].error);
 
     const secondResult = await tool.execute({
       path: filePath,
@@ -208,9 +222,9 @@ test.serial('execute rejects a wrong overwrite code and preserves the file', asy
       confirmOverwriteCode: code === 'ffffff' ? '000000' : 'ffffff',
     });
 
-    const secondParsed = JSON.parse(secondResult);
-    t.false(secondParsed.success);
-    t.true(secondParsed.error.includes('confirmation'));
+    const secondParsed = parsePlainResult(secondResult);
+    t.false(secondParsed.output[0].success);
+    t.true(secondParsed.output[0].error.includes('confirmation'));
 
     const content = await fs.readFile(absPath, 'utf8');
     t.is(content, 'original');
@@ -229,8 +243,8 @@ test.serial('execute treats confirmOverwriteCode string "undefined" as absent', 
       path: filePath,
       content: 'replacement content',
     });
-    const firstParsed = JSON.parse(firstResult);
-    t.false(firstParsed.success);
+    const firstParsed = parsePlainResult(firstResult);
+    t.false(firstParsed.output[0].success);
 
     // LLM sends confirmOverwriteCode as the string "undefined" instead of omitting it.
     // normalizeObjectParams strips the "undefined" sentinel so the tool sees it as
@@ -246,8 +260,8 @@ test.serial('execute treats confirmOverwriteCode string "undefined" as absent', 
     t.is(normalized.confirmOverwriteCode, undefined, 'string "undefined" should be stripped');
 
     const secondResult = await tool.execute(normalized);
-    const secondParsed = JSON.parse(secondResult);
-    t.true(secondParsed.success);
+    const secondParsed = parsePlainResult(secondResult);
+    t.true(secondParsed.output[0].success);
     const diskContent = await fs.readFile(absPath, 'utf8');
     t.is(diskContent, 'replacement content');
   });
@@ -266,9 +280,9 @@ test.serial('execute overwrites directly when overwrite=true without confirmatio
       overwrite: true,
     });
 
-    const parsed = JSON.parse(result);
-    t.true(parsed.success);
-    t.true(parsed.message.includes('Overwrote'));
+    const parsed = parsePlainResult(result);
+    t.true(parsed.output[0].success);
+    t.true(parsed.output[0].message.includes('Overwrote'));
 
     const content = await fs.readFile(absPath, 'utf8');
     t.is(content, 'replacement content');
@@ -287,7 +301,7 @@ test.serial('execute invalidates pending code after successful overwrite', async
       path: filePath,
       content: 'replacement content',
     });
-    const code = extractOverwriteCode(JSON.parse(firstResult).error);
+    const code = extractOverwriteCode(parsePlainResult(firstResult).error);
 
     // Step 2: overwrite directly (no code)
     const secondResult = await tool.execute({
@@ -295,7 +309,7 @@ test.serial('execute invalidates pending code after successful overwrite', async
       content: 'new content',
       overwrite: true,
     });
-    t.true(JSON.parse(secondResult).success);
+    t.true(parsePlainResult(secondResult).success);
 
     // Step 3: the old confirmation code should no longer work
     const thirdResult = await tool.execute({
@@ -304,7 +318,7 @@ test.serial('execute invalidates pending code after successful overwrite', async
       overwrite: true,
       confirmOverwriteCode: code,
     });
-    const thirdParsed = JSON.parse(thirdResult);
+    const thirdParsed = parsePlainResult(thirdResult);
     t.false(thirdParsed.success);
     t.true(thirdParsed.error.includes('No matching overwrite confirmation'));
 
@@ -326,9 +340,9 @@ test.serial('execute overwrites directly even when stale pending entry exists fr
       path: filePath,
       content: 'stale content',
     });
-    const firstParsed = JSON.parse(firstResult);
-    t.false(firstParsed.success);
-    t.true(firstParsed.error.includes('confirm'));
+    const firstParsed = parsePlainResult(firstResult);
+    t.false(firstParsed.output[0].success);
+    t.true(firstParsed.output[0].error.includes('confirm'));
 
     // Step 2: agent skips the code and overwrites directly with new content
     const secondResult = await tool.execute({
@@ -337,8 +351,8 @@ test.serial('execute overwrites directly even when stale pending entry exists fr
       overwrite: true,
     });
 
-    const secondParsed = JSON.parse(secondResult);
-    t.true(secondParsed.success);
+    const secondParsed = parsePlainResult(secondResult);
+    t.true(secondParsed.output[0].success);
 
     const content = await fs.readFile(absPath, 'utf8');
     t.is(content, 'new content');
@@ -357,8 +371,8 @@ test.serial('execute creates a new file even when overwrite is true', async (t) 
       overwrite: true,
     });
 
-    const parsed = JSON.parse(result);
-    t.true(parsed.success);
+    const parsed = parsePlainResult(result);
+    t.true(parsed.output[0].success);
 
     const content = await fs.readFile(absPath, 'utf8');
     t.is(content, 'fresh content');
@@ -377,8 +391,8 @@ test.serial('execute overwrites a remote existing file after confirmation', asyn
     content: 'replacement content',
   });
 
-  const firstParsed = JSON.parse(firstResult);
-  const code = extractOverwriteCode(firstParsed.error);
+  const firstParsed = parsePlainResult(firstResult);
+  const code = extractOverwriteCode(firstParsed.output[0].error);
   t.is(files.get(absPath), 'original');
 
   const secondResult = await tool.execute({
@@ -388,8 +402,8 @@ test.serial('execute overwrites a remote existing file after confirmation', asyn
     confirmOverwriteCode: code,
   });
 
-  const secondParsed = JSON.parse(secondResult);
-  t.true(secondParsed.success);
+  const secondParsed = parsePlainResult(secondResult);
+  t.true(secondParsed.output[0].success);
   t.is(files.get(absPath), 'replacement content');
 });
 
@@ -405,8 +419,8 @@ test.serial('execute creates parent directories automatically', async (t) => {
       content: content,
     });
 
-    const parsed = JSON.parse(result);
-    t.true(parsed.success);
+    const parsed = parsePlainResult(result);
+    t.true(parsed.output[0].success);
 
     const createdContent = await fs.readFile(absPath, 'utf8');
     t.is(createdContent, content);
@@ -421,11 +435,7 @@ test.serial('formatCommandMessage returns correct base message structure', async
     rawItem: {
       arguments: JSON.stringify(callArgs),
     },
-    output: JSON.stringify({
-      success: true,
-      path: 'new.txt',
-      message: 'Created new.txt',
-    }),
+    output: 'Created new.txt',
   };
 
   const messages = tool.formatCommandMessage(item, 0, new Map());

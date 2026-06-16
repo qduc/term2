@@ -174,6 +174,20 @@ export class SubagentToolPolicy {
 
   extractSuccessfulWritePaths(result: unknown): string[] {
     if (typeof result !== 'string') return [];
+
+    // New plain-text outputs: "Created <path>", "Overwrote <path>", "Updated <path>", "Deleted <path>".
+    const successLines = result.split('\n').filter((line) => /^(Created|Overwrote|Updated|Deleted)\s+/.test(line));
+    if (successLines.length > 0) {
+      const paths = successLines.map((line) =>
+        line
+          .replace(/^(Created|Overwrote|Updated|Deleted)\s+/, '')
+          .replace(/\s*\(new file\)\s*$/, '')
+          .trim(),
+      );
+      return paths.filter((p) => p.length > 0);
+    }
+
+    // Legacy JSON outputs (kept for backward compatibility with old sessions/tests).
     try {
       const parsed = JSON.parse(result);
       if (Array.isArray(parsed?.output)) {
@@ -185,7 +199,7 @@ export class SubagentToolPolicy {
         return [parsed.path];
       }
     } catch {
-      return [];
+      // Ignore JSON parse errors.
     }
     return [];
   }
@@ -344,27 +358,13 @@ export class SubagentToolPolicy {
 
         for (const filePath of paths) {
           if (!this.isWithinWriteBoundary(filePath, cwd)) {
-            return JSON.stringify({
-              output: [
-                {
-                  success: false,
-                  error: `Write rejected: path "${filePath}" is outside the allowed write boundary.`,
-                },
-              ],
-            });
+            return `Error: Write rejected: path "${filePath}" is outside the allowed write boundary.`;
           }
         }
 
         const releaseWorkerLocks = this.tryAcquireWorkerWriteLocks(paths, cwd);
         if (!releaseWorkerLocks) {
-          return JSON.stringify({
-            output: [
-              {
-                success: false,
-                error: 'Write rejected: one or more target files are already being modified by another worker.',
-              },
-            ],
-          });
+          return 'Error: Write rejected: one or more target files are already being modified by another worker.';
         }
 
         try {

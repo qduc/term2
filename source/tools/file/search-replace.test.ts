@@ -6,6 +6,20 @@ import { createSearchReplaceToolDefinition } from './search-replace.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 
+function parsePlainResult(result: string): any {
+  const lines = result.split('\n').filter(Boolean);
+  if (lines.length === 0) {
+    return { success: false, error: 'No output', output: [{ success: false, error: 'No output' }] };
+  }
+  const output = lines.map((line) => {
+    if (line.startsWith('Error: ')) {
+      return { success: false, error: line.slice(7) };
+    }
+    return { success: true, message: line };
+  });
+  return { ...output[0], output };
+}
+
 // Helper to create a temp dir and change cwd to it
 async function withTempDir(run: (dir: string) => Promise<void>) {
   const originalCwd = process.cwd;
@@ -122,7 +136,7 @@ test.serial('execute replaces only a unique exact match', async (t) => {
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -147,7 +161,7 @@ test.serial('execute fails with a match_all hint when multiple exact matches are
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.regex(parsed.output[0].error, /Found 3 exact matches/);
     t.regex(parsed.output[0].error, /Set match_all to true to replace all matches/);
@@ -175,7 +189,7 @@ test.serial('execute replaces all exact matches when match_all is true', async (
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
     t.regex(parsed.output[0].message, /3 exact matches/);
 
@@ -201,7 +215,7 @@ test.serial('execute performs relaxed match replacement when exact match is not 
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -226,7 +240,7 @@ test.serial('execute fails when multiple relaxed matches are found', async (t) =
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(
       parsed.output[0].error.includes('relaxed matches') || parsed.output[0].error.includes('Found 2 relaxed matches'),
@@ -255,7 +269,7 @@ test.serial('execute replaces all relaxed matches when match_all is true', async
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
     t.regex(parsed.output[0].message, /2 relaxed matches/);
 
@@ -280,7 +294,7 @@ test.serial('execute creates a new file when search_content is empty and file is
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const createdContent = await fs.readFile(absPath, 'utf8');
@@ -311,7 +325,7 @@ test.serial('execute preserves parallel edits to different regions of the same f
     );
 
     for (const result of results) {
-      const parsed = JSON.parse(result);
+      const parsed = parsePlainResult(result);
       t.true(parsed.output[0].success);
     }
 
@@ -344,12 +358,10 @@ test.serial('execute applies batched replacements to one file with a single resu
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output.every((item: { success: boolean }) => item.success));
-    t.deepEqual(
-      parsed.output.map((item: { path: string }) => item.path),
-      [filePath, filePath],
-    );
+    t.is(parsed.output.length, 2);
+    t.true(parsed.output.every((item: { message?: string }) => item.message?.includes(filePath)));
 
     const updated = await fs.readFile(absPath, 'utf8');
     t.is(updated, 'ALPHA\nbeta\nGAMMA\n');
@@ -382,7 +394,7 @@ test.serial('execute keeps successful batched replacements when another replacem
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
     t.false(parsed.output[1].success);
     t.true(parsed.output[2].success);
@@ -410,7 +422,7 @@ test.serial('execute reports failure when search string is not found', async (t)
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
 
     const unchanged = await fs.readFile(absPath, 'utf8');
@@ -443,7 +455,7 @@ test.serial('execute heals search content when no match is found', async (t) => 
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
     t.true(parsed.output[0].message.includes('auto healing'));
 
@@ -475,9 +487,8 @@ test.serial('execute includes auto-healing failure reason when healing does not 
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
-    t.is(parsed.output[0].healing_failure_reason, 'model returned NO_MATCH');
     t.true(parsed.output[0].error.includes('model returned NO_MATCH'));
   });
 });
@@ -500,7 +511,7 @@ test.serial('execute treats special regex characters literally', async (t) => {
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -525,7 +536,7 @@ test.serial('execute deletes content when replacement is empty string', async (t
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -550,7 +561,7 @@ test.serial('execute performs exact multi-line match without whitespace normaliz
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -575,7 +586,7 @@ test.serial('execute handles leading/trailing whitespace differences in relaxed 
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -600,7 +611,7 @@ test.serial('execute performs normalized whitespace match across line breaks', a
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -625,7 +636,7 @@ test.serial('execute matches escaped newline sequences in search content', async
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -650,7 +661,7 @@ test.serial('execute trims whitespace around the whole search string as a fallba
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -692,7 +703,7 @@ test.serial(
         ],
       });
 
-      const parsed = JSON.parse(result);
+      const parsed = parsePlainResult(result);
       t.true(parsed.output[0].success);
 
       const updated = await fs.readFile(absPath, 'utf8');
@@ -766,7 +777,7 @@ test.serial(
         ],
       });
 
-      const parsed = JSON.parse(result);
+      const parsed = parsePlainResult(result);
       t.false(parsed.output[0].success);
 
       const unchanged = await fs.readFile(absPath, 'utf8');
@@ -792,7 +803,7 @@ test.serial('execute rejects multiple normalized matches', async (t) => {
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('normalized matches'));
 
@@ -819,7 +830,7 @@ test.serial('execute does not match substrings in relaxed mode', async (t) => {
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
 
     const unchanged = await fs.readFile(absPath, 'utf8');
@@ -844,7 +855,7 @@ test.serial('execute normalizes CRLF search content to match LF file', async (t)
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -869,7 +880,7 @@ test.serial('execute normalizes LF search content to match CRLF file', async (t)
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -894,7 +905,7 @@ test.serial('execute preserves CRLF in replacement content when file uses CRLF',
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -919,7 +930,7 @@ test.serial('execute strips leading filepath comment from search content', async
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -944,7 +955,7 @@ test.serial('execute strips leading hash filepath comment from search content', 
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -969,7 +980,7 @@ test.serial('execute does not strip non-filepath leading comments', async (t) =>
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -994,7 +1005,7 @@ test.serial('execute rejects search content with "Lines X-Y omitted" marker', as
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('omitted'));
   });
@@ -1017,7 +1028,7 @@ test.serial('execute rejects search content with ellipsis marker {…}', async (
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('ellipsis'));
   });
@@ -1040,7 +1051,7 @@ test.serial('execute rejects search content with /*...*/ marker', async (t) => {
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('/*...*/'));
   });
@@ -1063,7 +1074,7 @@ test.serial('execute rejects search content with // ... marker', async (t) => {
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('// ...'));
   });
@@ -1086,7 +1097,7 @@ test.serial('execute rejects search content when search and replace content are 
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.regex(parsed.output[0].error, /identical/i);
   });
@@ -1133,7 +1144,7 @@ test.serial('execute performs gap match: head <...> tail replaces entire region'
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
     t.true(parsed.output[0].message.includes('gap'));
 
@@ -1159,7 +1170,7 @@ test.serial('execute performs gap match with single-line head and tail', async (
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -1184,7 +1195,7 @@ test.serial('execute performs gap match with adjacent head and tail (no actual g
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -1212,7 +1223,7 @@ test.serial('execute performs gap match with multiple <...> markers', async (t) 
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -1237,7 +1248,7 @@ test.serial('execute gap match fails when head is not found', async (t) => {
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
   });
 });
@@ -1259,7 +1270,7 @@ test.serial('execute gap match fails when tail is not found after head', async (
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
   });
 });
@@ -1286,7 +1297,7 @@ test.serial(
         ],
       });
 
-      const parsed = JSON.parse(result);
+      const parsed = parsePlainResult(result);
       t.false(parsed.output[0].success);
       t.is(healingCalls, 0);
       t.regex(parsed.output[0].error, /head anchor/i);
@@ -1315,7 +1326,7 @@ test.serial('execute gap diagnostic identifies the anchor that failed after the 
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.regex(parsed.output[0].error, /not found after/i);
   });
@@ -1338,7 +1349,7 @@ test.serial('execute gap match rejects multiple matches', async (t) => {
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('gap'));
   });
@@ -1361,7 +1372,7 @@ test.serial('execute gap match works with relaxed whitespace matching in segment
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -1390,6 +1401,32 @@ test.serial('needsApproval handles gap match', async (t) => {
   });
 });
 
+test.serial('execute falls back to literal match when gap matching fails with standalone <...>', async (t) => {
+  await withTempDir(async (dir) => {
+    const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
+    const filePath = 'literal-standalone-gap-fallback.txt';
+    const absPath = path.join(dir, filePath);
+    // File has <...> on its own line as literal text, without matching head anchors
+    await fs.writeFile(absPath, 'prefix\n<...>\nsuffix\n');
+
+    const result = await tool.execute({
+      path: filePath,
+      replacements: [
+        {
+          search_content: `<...>\nsuffix`,
+          replace_content: 'replacement',
+        },
+      ],
+    });
+
+    const parsed = parsePlainResult(result);
+    t.true(parsed.output[0].success);
+
+    const updated = await fs.readFile(absPath, 'utf8');
+    t.is(updated, 'prefix\nreplacement\n');
+  });
+});
+
 test.serial('execute matches literal <...> when not on a standalone line', async (t) => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
@@ -1407,7 +1444,7 @@ test.serial('execute matches literal <...> when not on a standalone line', async
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -1432,7 +1469,7 @@ test.serial('execute performs gap match when input has literal \\n sequences', a
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -1457,7 +1494,7 @@ test.serial('execute gap match preserves blank lines inside anchors', async (t) 
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');
@@ -1482,7 +1519,7 @@ test.serial('execute gap match works with normalized whitespace within lines', a
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const updated = await fs.readFile(absPath, 'utf8');

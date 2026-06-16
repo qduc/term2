@@ -3,14 +3,14 @@ import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { applyDiff } from '@openai/agents';
 import { resolveWorkspacePath } from '../utils.js';
-import type { ToolDefinition, CommandMessage, FormatCommandMessage } from '../types.js';
+import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import {
   getOutputText,
   safeJsonParse,
   normalizeToolArguments,
   createBaseMessage,
-  pickPatchOutputItemText,
+  formatPatchOutputItems,
 } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import { withFileLock } from './file-locks.js';
@@ -27,9 +27,9 @@ export class PatchValidationError extends Error {
 }
 
 const applyPatchOperationSchema = z.object({
-  type: z.enum(['create_file', 'update_file']),
-  path: z.string().min(1, 'File path cannot be empty'),
-  diff: z.string().describe('Unified diff content for create/update operations'),
+  type: z.enum(['create_file', 'update_file']).describe('Operation type: create_file or update_file.'),
+  path: z.string().min(1, 'File path cannot be empty').describe('The absolute or relative path to the file.'),
+  diff: z.string().describe('Headerless unified diff content for create/update operations.'),
 });
 
 const applyPatchParametersSchema = z
@@ -83,8 +83,6 @@ function getApplyPatchOperations(params: ApplyPatchToolParams): ApplyPatchOperat
 }
 
 export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
-  const parsedOutput = safeJsonParse(getOutputText(item));
-  const patchOutputItems = Array.isArray(parsedOutput?.output) ? parsedOutput.output : [];
   const rawItem = item?.rawItem ?? item;
   const callId =
     rawItem?.callId ??
@@ -100,60 +98,57 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
   const argsFromMap = callId ? toolCallArgumentsById.get(callId) : undefined;
   const normalizedArgs =
     normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments ?? argsFromMap ?? rawItem?.operation) ?? {};
-  const operationType = normalizedArgs?.type ?? rawItem?.operation?.type ?? 'unknown';
-  const filePath = normalizedArgs?.path ?? rawItem?.operation?.path ?? 'unknown';
   const isNativePatchResult = rawItem?.type === 'apply_patch_call_output' || item?.type === 'apply_patch_call_output';
   const rawStatus = rawItem?.status ?? item?.status;
 
-  if (patchOutputItems.length === 0) {
-    const command = `apply_patch ${operationType} ${filePath}`;
-    const output = getOutputText(item) || 'No output';
-    const success = isNativePatchResult
+  const operations = Array.isArray(normalizedArgs?.operations)
+    ? normalizedArgs.operations
+    : normalizedArgs?.type
+    ? [normalizedArgs]
+    : [];
+  const firstOperation = operations[0] ?? {};
+  const operationType = firstOperation.type ?? rawItem?.operation?.type ?? 'unknown';
+  const filePath = firstOperation.path ?? rawItem?.operation?.path ?? 'unknown';
+
+  const rawOutput = getOutputText(item) || 'No output';
+  // Backward compatibility: old outputs were JSON strings with an output array.
+  const parsedOutput = rawOutput.startsWith('{') ? safeJsonParse(rawOutput) : undefined;
+  let output: string;
+  let parsedSuccess: boolean | undefined;
+  if (Array.isArray(parsedOutput?.output) && parsedOutput.output.length > 0) {
+    output = formatPatchOutputItems(parsedOutput.output) || rawOutput;
+    parsedSuccess = parsedOutput.output.every((entry: any) => entry?.success === true);
+  } else if (isNativePatchResult) {
+    output = rawOutput;
+  } else {
+    output = rawOutput;
+    if (typeof parsedOutput?.success === 'boolean') {
+      parsedSuccess = parsedOutput.success;
+    }
+  }
+  const success =
+    typeof parsedSuccess === 'boolean'
+      ? parsedSuccess
+      : isNativePatchResult
       ? rawStatus !== 'failed' &&
         !output.startsWith('Invalid patch') &&
         !output.startsWith('Cannot update') &&
         !output.startsWith('Error:')
-      : false;
+      : !output.startsWith('Error:');
 
-    return [
-      createBaseMessage(item, index, 0, false, {
-        command,
-        output,
-        success,
-        toolName: TOOL_NAME_APPLY_PATCH,
-        toolArgs: {
-          path: filePath,
-          diff: normalizedArgs?.diff ?? '',
-          type: operationType,
-        },
-      }),
-    ];
-  }
-
-  // Apply patch tool can have multiple operation outputs
-  const messages: CommandMessage[] = [];
-  for (const [patchIndex, patchResult] of patchOutputItems.entries()) {
-    const operationArgs = Array.isArray(normalizedArgs?.operations)
-      ? normalizedArgs.operations[patchIndex]
-      : normalizedArgs;
-    const operationType = operationArgs?.type ?? patchResult?.operation ?? 'unknown';
-    const filePath = operationArgs?.path ?? patchResult?.path ?? 'unknown';
-
-    const command = `apply_patch ${operationType} ${filePath}`;
-    const output = pickPatchOutputItemText(patchResult) || 'No output';
-    const success = patchResult?.success ?? false;
-
-    messages.push(
-      createBaseMessage(item, index, patchIndex, false, {
-        command,
-        output,
-        success,
-        toolName: TOOL_NAME_APPLY_PATCH,
-        toolArgs: { path: filePath, diff: operationArgs?.diff ?? '', type: operationType },
-      }),
-    );
-  }
-  return messages;
+  return [
+    createBaseMessage(item, index, 0, false, {
+      command: `apply_patch ${operationType} ${filePath}`,
+      output,
+      success,
+      toolName: TOOL_NAME_APPLY_PATCH,
+      toolArgs: {
+        path: filePath,
+        diff: firstOperation.diff ?? rawItem?.operation?.diff ?? '',
+        type: operationType,
+      },
+    }),
+  ];
 };
 
 const APPLY_PATCH_DESCRIPTION =
@@ -199,7 +194,8 @@ const APPLY_PATCH_DESCRIPTION =
   '- Including line numbers like "@@ -1,3 +1,4 @@"\n' +
   '- Not providing enough context (need 2-3 lines before/after)\n' +
   '- Context lines not starting with space character\n' +
-  '- Using tabs instead of spaces for indentation matching';
+  '- Using tabs instead of spaces for indentation matching\n\n' +
+  'Returns a plain-text summary with one line per operation: Created <path>, Updated <path>, or Error: <reason>.';
 
 export function createApplyPatchToolDefinition(deps: {
   loggingService: ILoggingService;
@@ -481,7 +477,13 @@ export function createApplyPatchToolDefinition(deps: {
           }
         }
 
-        return JSON.stringify({ output });
+        return output
+          .map((item) =>
+            item.success
+              ? item.message || `Updated ${item.path ?? params.path}`
+              : `Error: ${(item.error || 'unknown error').replace(/\n/g, ' ')}`,
+          )
+          .join('\n');
       } catch (error: any) {
         if (enableFileLogging) {
           loggingService.error('File operation failed', {
@@ -490,14 +492,7 @@ export function createApplyPatchToolDefinition(deps: {
             error: error instanceof Error ? error.message : String(error),
           });
         }
-        return JSON.stringify({
-          output: [
-            {
-              success: false,
-              error: error.message || String(error),
-            },
-          ],
-        });
+        return `Error: ${(error.message || String(error)).replace(/\n/g, ' ')}`;
       }
     },
     formatCommandMessage: formatApplyPatchCommandMessage,

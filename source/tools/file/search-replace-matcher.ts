@@ -349,8 +349,18 @@ function unescapeSearchContent(content: string): string {
 
 export function findMatchesInContent(content: string, searchContent: string): MatchInfo {
   const unescapedSearch = unescapeSearchContent(searchContent);
+  let gapDiagnostic: string | undefined;
+
   if (containsGapMarkerLine(unescapedSearch)) {
-    return findGapMatches(content, unescapedSearch);
+    // 2-pass approach: first try gap matching (<...> as gap marker).
+    // If it fails, fall through to literal matching strategies — <...> might be
+    // literal text in the file content rather than a gap marker.
+    const gapMatchInfo = findGapMatches(content, unescapedSearch);
+    if (gapMatchInfo.type !== 'none') {
+      return gapMatchInfo;
+    }
+    // Preserve gap diagnostic in case all strategies fail
+    gapDiagnostic = gapMatchInfo.diagnostic;
   }
 
   const exactMatches = findExactMatches(content, searchContent);
@@ -382,7 +392,7 @@ export function findMatchesInContent(content: string, searchContent: string): Ma
     }
   }
 
-  return { type: 'none' };
+  return { type: 'none', diagnostic: gapDiagnostic };
 }
 
 export function prepareMatchContext(

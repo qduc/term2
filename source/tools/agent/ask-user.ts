@@ -10,6 +10,8 @@ import {
 
 const ASK_USER_DESCRIPTION =
   'Ask the user clarifying questions when missing user decisions block correct progress. ' +
+  'Use this when you need a decision, preference, or missing detail from the user before you can proceed correctly. ' +
+  'Do NOT use this for information you can find yourself with tools. ' +
   'Returns the answers selected/entered by the user. ' +
   'Example: { questions: [{ question: "Which approach?", options: ["Option A", "Option B"] }, { question: "Any other notes?" }] }';
 

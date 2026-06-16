@@ -6,6 +6,20 @@ import { createApplyPatchToolDefinition } from './apply-patch.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 
+function parsePlainResult(result: string): any {
+  const lines = result.split('\n').filter(Boolean);
+  if (lines.length === 0) {
+    return { success: false, error: 'No output', output: [{ success: false, error: 'No output' }] };
+  }
+  const output = lines.map((line) => {
+    if (line.startsWith('Error: ')) {
+      return { success: false, error: line.slice(7) };
+    }
+    return { success: true, message: line };
+  });
+  return { ...output[0], output };
+}
+
 // Helper to create a temp dir and change cwd to it
 async function withTempDir(run: (dir: string) => Promise<void>) {
   const originalCwd = process.cwd;
@@ -52,9 +66,9 @@ test.serial('create_file: creates a new file with content', async (t) => {
       diff,
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
-    t.is(parsed.output[0].operation, 'create_file');
+    t.true(parsed.output[0].message!.startsWith('Created'));
 
     const content = await fs.readFile(path.join(dir, filePath), 'utf8');
     t.is(content.trim(), 'Hello World');
@@ -76,7 +90,7 @@ test.serial('update_file: updates an existing file', async (t) => {
       diff,
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output[0].success);
 
     const content = await fs.readFile(absPath, 'utf8');
@@ -103,7 +117,7 @@ test.serial('update_file: preserves parallel patches to different regions of the
     );
 
     for (const result of results) {
-      const parsed = JSON.parse(result);
+      const parsed = parsePlainResult(result);
       t.true(parsed.output[0].success);
     }
 
@@ -134,12 +148,11 @@ test.serial('execute: applies batched patch operations in order', async (t) => {
       ],
     });
 
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.true(parsed.output.every((item: { success: boolean }) => item.success));
-    t.deepEqual(
-      parsed.output.map((item: { operation: string }) => item.operation),
-      ['create_file', 'update_file'],
-    );
+    const messages = parsed.output.map((item: { message?: string }) => item.message ?? '');
+    t.true(messages.some((message: string) => message.startsWith('Created')));
+    t.true(messages.some((message: string) => message.startsWith('Updated')));
 
     const content = await fs.readFile(path.join(dir, 'batch.txt'), 'utf8');
     t.is(content, 'Hello\nUniverse\n');
@@ -158,7 +171,7 @@ test.serial('execute: applies batched patch operations in order', async (t) => {
 //             diff: '', // diff is ignored for delete
 //         });
 
-//         const parsed = JSON.parse(result);
+//         const parsed = parsePlainResult(result);
 //         t.true(parsed.output[0].success);
 
 //         await t.throwsAsync(fs.readFile(absPath));
@@ -247,7 +260,7 @@ test.serial('execute: rejects invalid diffs with proper error', async (t) => {
       path: 'test.txt',
       diff: 'garbage',
     });
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('Invalid patch'));
   });
@@ -261,7 +274,7 @@ test.serial('execute: detailed error for unified diff headers', async (t) => {
       path: 'test.txt',
       diff: '--- a/test.txt\n+++ b/test.txt\n+Hello',
     });
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('Remove standard file headers'));
   });
@@ -279,7 +292,7 @@ test.serial('execute: detailed error for chunk headers with line numbers', async
       path: filePath,
       diff: '@@ -1,2 +1,2 @@\n Hello\n-World\n+Universe\n line missing',
     });
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('Remove line numbers from "@@" headers'));
   });
@@ -293,7 +306,7 @@ test.serial('execute: detailed error for leading line numbers', async (t) => {
       path: 'test.txt',
       diff: '10: +Hello',
     });
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('Remove leading line numbers'));
   });
@@ -307,7 +320,7 @@ test.serial('execute: detailed error for invalid line prefix', async (t) => {
       path: 'test.txt',
       diff: 'Hello',
     });
-    const parsed = JSON.parse(result);
+    const parsed = parsePlainResult(result);
     t.false(parsed.output[0].success);
     t.true(parsed.output[0].error.includes('Use only space, +, -, or @@ prefixes'));
   });
@@ -326,7 +339,7 @@ test.serial('execute: detailed error for context block mismatch', async (t) => {
       path: filePath,
       diff: '@@\n line one\n line missing\n line three',
     });
-    const parsed1 = JSON.parse(result1);
+    const parsed1 = parsePlainResult(result1);
     t.false(parsed1.output[0].success);
     t.true(parsed1.output[0].error.includes('context block was not found'));
 
@@ -336,7 +349,7 @@ test.serial('execute: detailed error for context block mismatch', async (t) => {
       path: filePath,
       diff: '@@\n line one\n line two\n line missing\n line three', // diff has 0 spaces for 'line two', file has 2 spaces
     });
-    const parsed2 = JSON.parse(result2);
+    const parsed2 = parsePlainResult(result2);
     t.false(parsed2.output[0].success);
     t.true(parsed2.output[0].error.includes('Mismatch details'));
   });

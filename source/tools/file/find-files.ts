@@ -99,9 +99,15 @@ export const formatFindFilesCommandMessage: FormatCommandMessage = (item, index,
 };
 
 const FIND_FILES_DESCRIPTION =
-  'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files.';
+  'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files. ' +
+  'Use this when you know the file name or extension. ' +
+  'Do NOT use this to search file contents (use grep) or to find related code from a symbol (use code_context_search). ' +
+  'Returns up to max_results matching file paths, one per line, or a note if truncated.';
 const FIND_FILES_DESCRIPTION_OUTSIDE =
-  'Search for files by name on the filesystem. Useful for finding files by pattern, exploring directory structure, or locating specific files.';
+  'Search for files by name on the filesystem. Useful for finding files by pattern, exploring directory structure, or locating specific files. ' +
+  'Use this when you know the file name or extension. ' +
+  'Do NOT use this to search file contents (use grep). ' +
+  'Returns up to max_results matching file paths, one per line, or a note if truncated.';
 
 export const createFindFilesToolDefinition = (
   deps: {

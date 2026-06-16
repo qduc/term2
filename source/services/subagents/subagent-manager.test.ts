@@ -850,8 +850,7 @@ test.serial('worker write tool rejects paths outside workspace', async (t) => {
     }),
     {},
   );
-  const insideParsed = JSON.parse(insideResult);
-  const insideError: string | undefined = insideParsed?.output?.[0]?.error;
+  const insideError = insideResult.startsWith('Error:') ? insideResult : undefined;
   t.true(!insideError || !insideError.includes('outside the allowed write boundary'));
 
   // Call with a path outside the boundary — should be rejected
@@ -864,9 +863,8 @@ test.serial('worker write tool rejects paths outside workspace', async (t) => {
     }),
     {},
   );
-  const outsideParsed = JSON.parse(outsideResult);
-  t.true(outsideParsed?.output?.[0]?.error?.includes('outside the allowed write boundary'));
-  t.false(outsideParsed?.output?.[0]?.success ?? true);
+  t.true(outsideResult.includes('outside the allowed write boundary'));
+  t.true(outsideResult.startsWith('Error:'));
 
   const outsideNeedsApproval = await applyPatch.needsApproval(
     {},
@@ -914,9 +912,8 @@ test.serial('worker write tool rejects paths outside workspace', async (t) => {
     }),
     {},
   );
-  const batchOutsideParsed = JSON.parse(batchOutsideResult);
-  t.true(batchOutsideParsed?.output?.[0]?.error?.includes('outside the allowed write boundary'));
-  t.false(batchOutsideParsed?.output?.[0]?.success ?? true);
+  t.true(batchOutsideResult.includes('outside the allowed write boundary'));
+  t.true(batchOutsideResult.startsWith('Error:'));
 });
 
 test.serial('worker writes are auto-approved within the workspace', async (t) => {
@@ -990,9 +987,8 @@ test.serial('worker cannot write outside the workspace', async (t) => {
   t.truthy(createFile);
 
   const outsideResult = await createFile.invoke({}, JSON.stringify({ path: '../outside.ts', content: 'x' }), {});
-  const outsideParsed = JSON.parse(outsideResult);
-  t.true(outsideParsed?.output?.[0]?.error?.includes('outside the allowed write boundary'));
-  t.false(outsideParsed?.output?.[0]?.success ?? true);
+  t.true(outsideResult.includes('outside the allowed write boundary'));
+  t.true(outsideResult.startsWith('Error:'));
 });
 
 test.serial('worker filesChanged tracks only successful writes for batch operations', async (t) => {
@@ -1145,11 +1141,11 @@ test.serial('worker write lock rejects concurrent create_file for same path with
 
   const result = await manager.run({ role: 'worker', task: 'concurrent writes' });
   const parsed = JSON.parse(result.finalText);
-  const first = JSON.parse(parsed.first);
-  const second = JSON.parse(parsed.second);
+  const first = parsed.first;
+  const second = parsed.second;
 
-  const allErrors = [first?.error, second?.error, first?.output?.[0]?.error, second?.output?.[0]?.error]
-    .filter(Boolean)
+  const allErrors = [first, second]
+    .filter((text: string) => typeof text === 'string' && text.startsWith('Error:'))
     .join(' ');
   t.true(allErrors.includes('already being modified'));
 });

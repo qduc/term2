@@ -7,7 +7,11 @@ import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFrom
 import type { ISettingsService, ILoggingService } from '../../services/service-interfaces.js';
 
 const WEB_FETCH_DESCRIPTION =
-  'Fetch a web page and convert its HTML content to Markdown format with intelligent content extraction. When content exceeds max_chars, the full content is saved to a temporary file for searching.';
+  'Fetch a web page and convert its HTML content to Markdown. ' +
+  'Use this when you need the full content of a specific URL referenced by web_search or the user. ' +
+  'Do NOT use this for broad queries; use web_search. ' +
+  'Returns the page title, URL, table of contents, and extracted Markdown. ' +
+  'Initial fetches are truncated to max_chars; the full content is saved to a temporary file when exceeded.';
 
 const DEFAULT_MAX_CHARS = 10000;
 const MAX_CHARS_LIMIT = 200000;

@@ -5,7 +5,11 @@ import type { ToolDefinition } from '../types.js';
 import type { SkillsService } from '../../services/skills/skills-service.js';
 import { getCallIdFromItem, getOutputText, normalizeToolArguments, createBaseMessage } from '../format-helpers.js';
 
-const ACTIVATE_SKILL_DESCRIPTION = 'Load the full instructions for a specified skill to perform a specialized task.';
+const ACTIVATE_SKILL_DESCRIPTION =
+  'Load the full instructions for a specified skill to perform a specialized task. ' +
+  "Use this when the user's request matches one of the available skills (e.g., refactoring, testing guidance, prompt writing). " +
+  'Do NOT use this if no skill is relevant—use the standard tools instead. ' +
+  'Returns the skill instructions, directory, and any referenced resource files.';
 
 const ALWAYS_IGNORE = ['.git', 'node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.cache', '.DS_Store'];
 

@@ -3,7 +3,6 @@ import { createFindFilesToolDefinition } from './file/find-files.js';
 import { createReadFileToolDefinition } from './file/read-file.js';
 import { createShellToolDefinition } from './system/shell.js';
 import { createGrepToolDefinition } from './system/grep.js';
-import { grepToolDefinition as searchToolDefinition } from './search.js';
 import { createWebFetchToolDefinition } from './web/web-fetch.js';
 import { createAskMentorToolDefinition } from './agent/ask-mentor.js';
 import { createSearchReplaceToolDefinition } from './file/search-replace.js';
@@ -54,28 +53,6 @@ test('grep schema uses optional file_pattern instead of nullable', (t) => {
 
   t.true(tool.parameters.safeParse({ pattern: 'foo', path: '.' }).success);
   t.false(tool.parameters.safeParse({ pattern: 'foo', path: '.', file_pattern: null }).success);
-});
-
-test('search schema uses optional params instead of nullable', (t) => {
-  t.true(searchToolDefinition.parameters.safeParse({ pattern: 'foo', path: '.', case_sensitive: true }).success);
-  t.true(searchToolDefinition.parameters.safeParse({ pattern: 'foo', path: '.' }).success);
-  t.false(searchToolDefinition.parameters.safeParse({ pattern: 'foo', path: '.', case_sensitive: null }).success);
-  t.false(
-    searchToolDefinition.parameters.safeParse({ pattern: 'foo', path: '.', case_sensitive: true, file_pattern: null })
-      .success,
-  );
-  t.false(
-    searchToolDefinition.parameters.safeParse({
-      pattern: 'foo',
-      path: '.',
-      case_sensitive: true,
-      exclude_pattern: null,
-    }).success,
-  );
-  t.false(
-    searchToolDefinition.parameters.safeParse({ pattern: 'foo', path: '.', case_sensitive: true, max_results: null })
-      .success,
-  );
 });
 
 test('web_fetch schema uses optional continuation_token instead of nullable', (t) => {

@@ -532,7 +532,11 @@ it('Codex fetchModels appends correct client_version from cache/resolver', async
     expect(fetchUrl).toBe('https://chatgpt.com/backend-api/codex/models?client_version=1.2.3-test');
   } finally {
     process.env.CHATGPT_LOCAL_HOME = origHome;
-    process.env.TERM2_CACHE_DIR = origCacheDir;
+    if (origCacheDir !== undefined) {
+      process.env.TERM2_CACHE_DIR = origCacheDir;
+    } else {
+      delete process.env.TERM2_CACHE_DIR;
+    }
     try {
       fs.unlinkSync(path.join(TEST_DIR, 'auth.json'));
     } catch {}
